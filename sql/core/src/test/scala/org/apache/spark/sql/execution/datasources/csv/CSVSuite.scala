@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils  with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -1281,16 +1281,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     )
   }
 
-  val sampledTestData = (value: java.lang.Long) => {
-    val predefinedSample = Set[Long](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
-      57, 62, 68, 72)
-    if (predefinedSample.contains(value)) {
-      value.toString
-    } else {
-      (value.toDouble + 0.1).toString
-    }
-  }
-
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
     // Set default values for the DataSource parameters to make sure
     // that whole test file is mapped to only one partition. This will guarantee
@@ -1299,7 +1289,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
       "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
     )(withTempPath { path =>
-      val ds = spark.range(0, 100, 1, 1).map(sampledTestData)
+      val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
 
       val readback = spark.read
@@ -1310,7 +1300,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
-    val ds = spark.range(0, 100, 1, 1).map(sampledTestData)
+    val ds = sampledTestData.coalesce(1)
     val readback = spark.read
       .option("inferSchema", true).option("samplingRatio", 0.1)
       .csv(ds)
