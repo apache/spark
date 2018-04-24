@@ -70,6 +70,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
+        new FallBackFileDataSourceToV1(session) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
