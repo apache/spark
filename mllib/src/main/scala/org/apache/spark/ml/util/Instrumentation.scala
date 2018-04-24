@@ -19,6 +19,8 @@ package org.apache.spark.ml.util
 
 import java.util.UUID
 
+import scala.reflect.ClassTag
+
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -40,7 +42,8 @@ import org.apache.spark.sql.Dataset
  * @tparam E the type of the estimator
  */
 private[spark] class Instrumentation[E <: Estimator[_]] private (
-    estimator: E, dataset: RDD[_]) extends Logging {
+    val estimator: E,
+    val dataset: RDD[_]) extends Logging {
 
   private val id = UUID.randomUUID()
   private val prefix = {
@@ -201,7 +204,7 @@ private[spark] object OptionalInstrumentation {
    */
   def create[E <: Estimator[_]](instr: Instrumentation[E]): OptionalInstrumentation = {
     new OptionalInstrumentation(Some(instr),
-      classOf[E].getName.stripSuffix("$"))
+      instr.estimator.getClass.getName.stripSuffix("$"))
   }
 
   /**
