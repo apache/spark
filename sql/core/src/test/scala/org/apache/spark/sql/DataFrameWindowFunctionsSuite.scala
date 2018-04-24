@@ -21,6 +21,7 @@ import org.scalatest.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
+import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -679,6 +680,20 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         Row("S1", "P1", 700, 800, 800),
         Row("S2", "P1", 200, 200, 500),
         Row("S2", "P2", 300, 300, 500)))
+  }
 
+  test("SPARK-24066: Only one SortExec when there is a subset in adjacent window operator.") {
+    val df = Seq(
+      ("a", "p1", 10.0, 20.0),
+      ("a", "p2", 20.0, 10.0)).toDF("key", "value", "value1", "value2")
+    val df1 =
+      df.select(
+        $"key",
+        max("value1").over(Window.partitionBy("key").orderBy("value", "value1")),
+        sum("value2").over(Window.partitionBy("key").orderBy("value")))
+    val result = Seq(Row("a", 10.0, 20.0), Row("a", 20.0, 30.0))
+    checkAnswer(df1, result)
+    assert(
+      df1.queryExecution.executedPlan.collect { case e: SortExec => true }.size == 1)
   }
 }

@@ -120,7 +120,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
       RewriteDistinctAggregates,
-      ReplaceDeduplicateWithAggregate) ::
+      ReplaceDeduplicateWithAggregate,
+      ExchangeWindowWithOrderField) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -721,6 +722,19 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
+  }
+}
+
+/**
+ * Exchanged the adjacent logical window operator according to the order field of window.
+ */
+object ExchangeWindowWithOrderField extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case w1 @ Window(_, ps1, os1, w2 @ Window(_, ps2, os2, grandChild))
+      if w1.references.intersect(w2.windowOutputSet).isEmpty
+        && ps1 == ps2 && os1.size > os2.size =>
+      val newWindow = w1.copy(child = grandChild)
+      w2.copy(child = newWindow)
   }
 }
 
