@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, JaninoRuntimeException, SimpleCompiler}
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
@@ -60,10 +60,24 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  */
 case class ExprCode(
     var code: String,
-    var isNull: String,
-    var value: String,
+    var isNull: ExprValue,
+    var value: ExprValue,
     var inputRow: String = null,
     var inputVars: Seq[ExprInputVar] = Seq.empty)
+
+object ExprCode {
+  def apply(isNull: ExprValue, value: ExprValue): ExprCode = {
+    ExprCode(code = "", isNull, value)
+  }
+
+  def forNullValue(dataType: DataType): ExprCode = {
+    ExprCode(code = "", isNull = TrueLiteral, JavaCode.defaultLiteral(dataType))
+  }
+
+  def forNonNullValue(value: ExprValue): ExprCode = {
+    ExprCode(code = "", isNull = FalseLiteral, value = value)
+  }
+}
 
 /**
  * Represents an input variable [[ExprCode]] to an evaluation of an [[Expression]].
@@ -82,7 +96,7 @@ case class ExprInputVar(exprCode: ExprCode, dataType: DataType, nullable: Boolea
  * @param value A term for a value of a common sub-expression. Not valid if `isNull`
  *              is set to `true`.
  */
-case class SubExprEliminationState(isNull: String, value: String)
+case class SubExprEliminationState(isNull: ExprValue, value: ExprValue)
 
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
@@ -115,6 +129,8 @@ private[codegen] case class NewFunctionSpec(
  */
 class CodegenContext {
 
+  import CodeGenerator._
+
   /**
    * Holding a list of objects that could be used passed into generated class.
    */
@@ -125,28 +141,14 @@ class CodegenContext {
    *
    * Returns the code to access it.
    *
-   * This is for minor objects not to store the object into field but refer it from the references
-   * field at the time of use because number of fields in class is limited so we should reduce it.
+   * This does not to store the object into field but refer it from the references field at the
+   * time of use because number of fields in class is limited so we should reduce it.
    */
-  def addReferenceMinorObj(obj: Any, className: String = null): String = {
+  def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
     val clsName = Option(className).getOrElse(obj.getClass.getName)
-    s"(($clsName) references[$idx])"
-  }
-
-  /**
-   * Add an object to `references`, create a class member to access it.
-   *
-   * Returns the name of class member.
-   */
-  def addReferenceObj(name: String, obj: Any, className: String = null): String = {
-    val term = freshName(name)
-    val idx = references.length
-    references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
-    addMutableState(clsName, term, s"$term = ($clsName) references[$idx];")
-    term
+    s"(($clsName) references[$idx] /* $objName */)"
   }
 
   /**
@@ -158,7 +160,7 @@ class CodegenContext {
    * `currentVars` to null, or set `currentVars(i)` to null for certain columns, before calling
    * `Expression.genCode`.
    */
-  final var INPUT_ROW = "i"
+  var INPUT_ROW = "i"
 
   /**
    * Holding a list of generated columns as input of current operator, will be used by
@@ -167,22 +169,83 @@ class CodegenContext {
   var currentVars: Seq[ExprCode] = null
 
   /**
-   * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
-   * 3-tuple: java type, variable name, code to init it.
-   * As an example, ("int", "count", "count = 0;") will produce code:
+   * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
+   * 2-tuple: java type, variable name.
+   * As an example, ("int", "count") will produce code:
    * {{{
    *   private int count;
    * }}}
-   * as a member variable, and add
-   * {{{
-   *   count = 0;
-   * }}}
-   * to the constructor.
+   * as a member variable
    *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
+   *
+   * Exposed for tests only.
    */
-  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
-    mutable.ArrayBuffer.empty[(String, String, String)]
+  private[catalyst] val inlinedMutableStates: mutable.ArrayBuffer[(String, String)] =
+    mutable.ArrayBuffer.empty[(String, String)]
+
+  /**
+   * The mapping between mutable state types and corrseponding compacted arrays.
+   * The keys are java type string. The values are [[MutableStateArrays]] which encapsulates
+   * the compacted arrays for the mutable states with the same java type.
+   *
+   * Exposed for tests only.
+   */
+  private[catalyst] val arrayCompactedMutableStates: mutable.Map[String, MutableStateArrays] =
+    mutable.Map.empty[String, MutableStateArrays]
+
+  // An array holds the code that will initialize each state
+  // Exposed for tests only.
+  private[catalyst] val mutableStateInitCode: mutable.ArrayBuffer[String] =
+    mutable.ArrayBuffer.empty[String]
+
+  // Tracks the names of all the mutable states.
+  private val mutableStateNames: mutable.HashSet[String] = mutable.HashSet.empty
+
+  /**
+   * This class holds a set of names of mutableStateArrays that is used for compacting mutable
+   * states for a certain type, and holds the next available slot of the current compacted array.
+   */
+  class MutableStateArrays {
+    val arrayNames = mutable.ListBuffer.empty[String]
+    createNewArray()
+
+    private[this] var currentIndex = 0
+
+    private def createNewArray() = {
+      val newArrayName = freshName("mutableStateArray")
+      mutableStateNames += newArrayName
+      arrayNames.append(newArrayName)
+    }
+
+    def getCurrentIndex: Int = currentIndex
+
+    /**
+     * Returns the reference of next available slot in current compacted array. The size of each
+     * compacted array is controlled by the constant `MUTABLESTATEARRAY_SIZE_LIMIT`.
+     * Once reaching the threshold, new compacted array is created.
+     */
+    def getNextSlot(): String = {
+      if (currentIndex < MUTABLESTATEARRAY_SIZE_LIMIT) {
+        val res = s"${arrayNames.last}[$currentIndex]"
+        currentIndex += 1
+        res
+      } else {
+        createNewArray()
+        currentIndex = 1
+        s"${arrayNames.last}[0]"
+      }
+    }
+
+  }
+
+  /**
+   * A map containing the mutable states which have been defined so far using
+   * `addImmutableStateIfNotExists`. Each entry contains the name of the mutable state as key and
+   * its Java type and init code as value.
+   */
+  private val immutableStates: mutable.Map[String, (String, String)] =
+    mutable.Map.empty[String, (String, String)]
 
   /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
@@ -193,11 +256,85 @@ class CodegenContext {
    *                 the list of default imports available.
    *                 Also, generic type arguments are accepted but ignored.
    * @param variableName Name of the field.
-   * @param initCode The statement(s) to put into the init() method to initialize this field.
+   * @param initFunc Function includes statement(s) to put into the init() method to initialize
+   *                 this field. The argument is the name of the mutable state variable.
    *                 If left blank, the field will be default-initialized.
+   * @param forceInline whether the declaration and initialization code may be inlined rather than
+   *                    compacted. Please set `true` into forceInline for one of the followings:
+   *                    1. use the original name of the status
+   *                    2. expect to non-frequently generate the status
+   *                       (e.g. not much sort operators in one stage)
+   * @param useFreshName If this is false and the mutable state ends up inlining in the outer
+   *                     class, the name is not changed
+   * @return the name of the mutable state variable, which is the original name or fresh name if
+   *         the variable is inlined to the outer class, or an array access if the variable is to
+   *         be stored in an array of variables of the same type.
+   *         A variable will be inlined into the outer class when one of the following conditions
+   *         are satisfied:
+   *         1. forceInline is true
+   *         2. its type is primitive type and the total number of the inlined mutable variables
+   *            is less than `OUTER_CLASS_VARIABLES_THRESHOLD`
+   *         3. its type is multi-dimensional array
+   *         When a variable is compacted into an array, the max size of the array for compaction
+   *         is given by `MUTABLESTATEARRAY_SIZE_LIMIT`.
    */
-  def addMutableState(javaType: String, variableName: String, initCode: String = ""): Unit = {
-    mutableStates += ((javaType, variableName, initCode))
+  def addMutableState(
+      javaType: String,
+      variableName: String,
+      initFunc: String => String = _ => "",
+      forceInline: Boolean = false,
+      useFreshName: Boolean = true): String = {
+
+    // want to put a primitive type variable at outerClass for performance
+    val canInlinePrimitive = isPrimitiveType(javaType) &&
+      (inlinedMutableStates.length < OUTER_CLASS_VARIABLES_THRESHOLD)
+    if (forceInline || canInlinePrimitive || javaType.contains("[][]")) {
+      val varName = if (useFreshName) freshName(variableName) else variableName
+      val initCode = initFunc(varName)
+      inlinedMutableStates += ((javaType, varName))
+      mutableStateInitCode += initCode
+      mutableStateNames += varName
+      varName
+    } else {
+      val arrays = arrayCompactedMutableStates.getOrElseUpdate(javaType, new MutableStateArrays)
+      val element = arrays.getNextSlot()
+
+      val initCode = initFunc(element)
+      mutableStateInitCode += initCode
+      element
+    }
+  }
+
+  /**
+   * Add an immutable state as a field to the generated class only if it does not exist yet a field
+   * with that name. This helps reducing the number of the generated class' fields, since the same
+   * variable can be reused by many functions.
+   *
+   * Even though the added variables are not declared as final, they should never be reassigned in
+   * the generated code to prevent errors and unexpected behaviors.
+   *
+   * Internally, this method calls `addMutableState`.
+   *
+   * @param javaType Java type of the field.
+   * @param variableName Name of the field.
+   * @param initFunc Function includes statement(s) to put into the init() method to initialize
+   *                 this field. The argument is the name of the mutable state variable.
+   */
+  def addImmutableStateIfNotExists(
+      javaType: String,
+      variableName: String,
+      initFunc: String => String = _ => ""): Unit = {
+    val existingImmutableState = immutableStates.get(variableName)
+    if (existingImmutableState.isEmpty) {
+      addMutableState(javaType, variableName, initFunc, useFreshName = false, forceInline = true)
+      immutableStates(variableName) = (javaType, initFunc(variableName))
+    } else {
+      val (prevJavaType, prevInitCode) = existingImmutableState.get
+      assert(prevJavaType == javaType, s"$variableName has already been defined with type " +
+        s"$prevJavaType and now it is tried to define again with type $javaType.")
+      assert(prevInitCode == initFunc(variableName), s"$variableName has already been defined " +
+        s"with different initialization statements.")
+    }
   }
 
   /**
@@ -206,28 +343,49 @@ class CodegenContext {
    * data types like: UTF8String, ArrayData, MapData & InternalRow.
    */
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
-    val value = freshName(variableName)
-    addMutableState(javaType(dataType), value, "")
+    val value = addMutableState(javaType(dataType), variableName)
     val code = dataType match {
       case StringType => s"$value = $initCode.clone();"
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
       case _ => s"$value = $initCode;"
     }
-    ExprCode(code, "false", value)
+    ExprCode(code, FalseLiteral, JavaCode.global(value, dataType))
   }
 
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map { case (javaType, variableName, _) =>
+    val inlinedStates = inlinedMutableStates.distinct.map { case (javaType, variableName) =>
       s"private $javaType $variableName;"
-    }.mkString("\n")
+    }
+
+    val arrayStates = arrayCompactedMutableStates.flatMap { case (javaType, mutableStateArrays) =>
+      val numArrays = mutableStateArrays.arrayNames.size
+      mutableStateArrays.arrayNames.zipWithIndex.map { case (arrayName, index) =>
+        val length = if (index + 1 == numArrays) {
+          mutableStateArrays.getCurrentIndex
+        } else {
+          MUTABLESTATEARRAY_SIZE_LIMIT
+        }
+        if (javaType.contains("[]")) {
+          // initializer had an one-dimensional array variable
+          val baseType = javaType.substring(0, javaType.length - 2)
+          s"private $javaType[] $arrayName = new $baseType[$length][];"
+        } else {
+          // initializer had a scalar variable
+          s"private $javaType[] $arrayName = new $javaType[$length];"
+        }
+      }
+    }
+
+    (inlinedStates ++ arrayStates).mkString("\n")
   }
 
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    val initCodes = mutableStates.distinct.map(_._3 + "\n")
+    val initCodes = mutableStateInitCode.distinct.map(_ + "\n")
+
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
     splitExpressions(expressions = initCodes, funcName = "init", arguments = Nil)
@@ -263,7 +421,7 @@ class CodegenContext {
   val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
-  val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
+  var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
 
   // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
@@ -336,7 +494,7 @@ class CodegenContext {
       inlineToOuterClass: Boolean): NewFunctionSpec = {
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
-    } else if (currClassSize > CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD) {
+    } else if (currClassSize > GENERATED_CLASS_SIZE_THRESHOLD) {
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
 
@@ -405,14 +563,6 @@ class CodegenContext {
     extraClasses.append(code)
   }
 
-  final val JAVA_BOOLEAN = "boolean"
-  final val JAVA_BYTE = "byte"
-  final val JAVA_SHORT = "short"
-  final val JAVA_INT = "int"
-  final val JAVA_LONG = "long"
-  final val JAVA_FLOAT = "float"
-  final val JAVA_DOUBLE = "double"
-
   /**
    * The map from a variable name to it's next ID.
    */
@@ -438,209 +588,10 @@ class CodegenContext {
     } else {
       s"${freshNamePrefix}_$name"
     }
-    if (freshNameIds.contains(fullName)) {
-      val id = freshNameIds(fullName)
-      freshNameIds(fullName) = id + 1
-      s"$fullName$id"
-    } else {
-      freshNameIds += fullName -> 1
-      fullName
-    }
+    val id = freshNameIds.getOrElse(fullName, 0)
+    freshNameIds(fullName) = id + 1
+    s"${fullName}_$id"
   }
-
-  /**
-   * Returns the specialized code to access a value from `inputRow` at `ordinal`.
-   */
-  def getValue(input: String, dataType: DataType, ordinal: String): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
-      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-      case StringType => s"$input.getUTF8String($ordinal)"
-      case BinaryType => s"$input.getBinary($ordinal)"
-      case CalendarIntervalType => s"$input.getInterval($ordinal)"
-      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
-      case _: ArrayType => s"$input.getArray($ordinal)"
-      case _: MapType => s"$input.getMap($ordinal)"
-      case NullType => "null"
-      case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
-      case _ => s"($jt)$input.get($ordinal, null)"
-    }
-  }
-
-  /**
-   * Returns the code to update a column in Row for a given DataType.
-   */
-  def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
-      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
-      case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
-      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
-      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
-      case StringType | _: StructType | _: ArrayType | _: MapType =>
-        s"$row.update($ordinal, $value.copy())"
-      case _ => s"$row.update($ordinal, $value)"
-    }
-  }
-
-  /**
-   * Update a column in MutableRow from ExprCode.
-   *
-   * @param isVectorized True if the underlying row is of type `ColumnarBatch.Row`, false otherwise
-   */
-  def updateColumn(
-      row: String,
-      dataType: DataType,
-      ordinal: Int,
-      ev: ExprCode,
-      nullable: Boolean,
-      isVectorized: Boolean = false): String = {
-    if (nullable) {
-      // Can't call setNullAt on DecimalType, because we need to keep the offset
-      if (!isVectorized && dataType.isInstanceOf[DecimalType]) {
-        s"""
-           if (!${ev.isNull}) {
-             ${setColumn(row, dataType, ordinal, ev.value)};
-           } else {
-             ${setColumn(row, dataType, ordinal, "null")};
-           }
-         """
-      } else {
-        s"""
-           if (!${ev.isNull}) {
-             ${setColumn(row, dataType, ordinal, ev.value)};
-           } else {
-             $row.setNullAt($ordinal);
-           }
-         """
-      }
-    } else {
-      s"""${setColumn(row, dataType, ordinal, ev.value)};"""
-    }
-  }
-
-  /**
-   * Returns the specialized code to set a given value in a column vector for a given `DataType`.
-   */
-  def setValue(vector: String, rowId: String, dataType: DataType, value: String): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) =>
-        s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
-      case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
-      case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
-      case _ =>
-        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
-    }
-  }
-
-  /**
-   * Returns the specialized code to set a given value in a column vector for a given `DataType`
-   * that could potentially be nullable.
-   */
-  def updateColumn(
-      vector: String,
-      rowId: String,
-      dataType: DataType,
-      ev: ExprCode,
-      nullable: Boolean): String = {
-    if (nullable) {
-      s"""
-         if (!${ev.isNull}) {
-           ${setValue(vector, rowId, dataType, ev.value)}
-         } else {
-           $vector.putNull($rowId);
-         }
-       """
-    } else {
-      s"""${setValue(vector, rowId, dataType, ev.value)};"""
-    }
-  }
-
-  /**
-   * Returns the specialized code to access a value from a column vector for a given `DataType`.
-   */
-  def getValue(vector: String, rowId: String, dataType: DataType): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) =>
-        s"$vector.get${primitiveTypeName(jt)}($rowId)"
-      case t: DecimalType =>
-        s"$vector.getDecimal($rowId, ${t.precision}, ${t.scale})"
-      case StringType =>
-        s"$vector.getUTF8String($rowId)"
-      case _ =>
-        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
-    }
-  }
-
-  /**
-   * Returns the name used in accessor and setter for a Java primitive type.
-   */
-  def primitiveTypeName(jt: String): String = jt match {
-    case JAVA_INT => "Int"
-    case _ => boxedType(jt)
-  }
-
-  def primitiveTypeName(dt: DataType): String = primitiveTypeName(javaType(dt))
-
-  /**
-   * Returns the Java type for a DataType.
-   */
-  def javaType(dt: DataType): String = dt match {
-    case BooleanType => JAVA_BOOLEAN
-    case ByteType => JAVA_BYTE
-    case ShortType => JAVA_SHORT
-    case IntegerType | DateType => JAVA_INT
-    case LongType | TimestampType => JAVA_LONG
-    case FloatType => JAVA_FLOAT
-    case DoubleType => JAVA_DOUBLE
-    case dt: DecimalType => "Decimal"
-    case BinaryType => "byte[]"
-    case StringType => "UTF8String"
-    case CalendarIntervalType => "CalendarInterval"
-    case _: StructType => "InternalRow"
-    case _: ArrayType => "ArrayData"
-    case _: MapType => "MapData"
-    case udt: UserDefinedType[_] => javaType(udt.sqlType)
-    case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
-    case ObjectType(cls) => cls.getName
-    case _ => "Object"
-  }
-
-  /**
-   * Returns the boxed type in Java.
-   */
-  def boxedType(jt: String): String = jt match {
-    case JAVA_BOOLEAN => "Boolean"
-    case JAVA_BYTE => "Byte"
-    case JAVA_SHORT => "Short"
-    case JAVA_INT => "Integer"
-    case JAVA_LONG => "Long"
-    case JAVA_FLOAT => "Float"
-    case JAVA_DOUBLE => "Double"
-    case other => other
-  }
-
-  def boxedType(dt: DataType): String = boxedType(javaType(dt))
-
-  /**
-   * Returns the representation of default value for a given Java Type.
-   */
-  def defaultValue(jt: String): String = jt match {
-    case JAVA_BOOLEAN => "false"
-    case JAVA_BYTE => "(byte)-1"
-    case JAVA_SHORT => "(short)-1"
-    case JAVA_INT => "-1"
-    case JAVA_LONG => "-1L"
-    case JAVA_FLOAT => "-1.0f"
-    case JAVA_DOUBLE => "-1.0"
-    case _ => "null"
-  }
-
-  def defaultValue(dt: DataType): String = defaultValue(javaType(dt))
 
   /**
    * Generates code for equal expression in Java.
@@ -684,6 +635,7 @@ class CodegenContext {
       val isNullB = freshName("isNullB")
       val compareFunc = freshName("compareArray")
       val minLength = freshName("minLength")
+      val jt = javaType(elementType)
       val funcCode: String =
         s"""
           public int $compareFunc(ArrayData a, ArrayData b) {
@@ -705,8 +657,8 @@ class CodegenContext {
               } else if ($isNullB) {
                 return 1;
               } else {
-                ${javaType(elementType)} $elementA = ${getValue("a", elementType, "i")};
-                ${javaType(elementType)} $elementB = ${getValue("b", elementType, "i")};
+                $jt $elementA = ${getValue("a", elementType, "i")};
+                $jt $elementB = ${getValue("b", elementType, "i")};
                 int comp = ${genComp(elementType, elementA, elementB)};
                 if (comp != 0) {
                   return comp;
@@ -759,6 +711,40 @@ class CodegenContext {
   }
 
   /**
+   * Generates code for updating `partialResult` if `item` is smaller than it.
+   *
+   * @param dataType data type of the expressions
+   * @param partialResult `ExprCode` representing the partial result which has to be updated
+   * @param item `ExprCode` representing the new expression to evaluate for the result
+   */
+  def reassignIfSmaller(dataType: DataType, partialResult: ExprCode, item: ExprCode): String = {
+    s"""
+       |if (!${item.isNull} && (${partialResult.isNull} ||
+       |  ${genGreater(dataType, partialResult.value, item.value)})) {
+       |  ${partialResult.isNull} = false;
+       |  ${partialResult.value} = ${item.value};
+       |}
+      """.stripMargin
+  }
+
+  /**
+   * Generates code for updating `partialResult` if `item` is greater than it.
+   *
+   * @param dataType data type of the expressions
+   * @param partialResult `ExprCode` representing the partial result which has to be updated
+   * @param item `ExprCode` representing the new expression to evaluate for the result
+   */
+  def reassignIfGreater(dataType: DataType, partialResult: ExprCode, item: ExprCode): String = {
+    s"""
+       |if (!${item.isNull} && (${partialResult.isNull} ||
+       |  ${genGreater(dataType, item.value, partialResult.value)})) {
+       |  ${partialResult.isNull} = false;
+       |  ${partialResult.value} = ${item.value};
+       |}
+      """.stripMargin
+  }
+
+  /**
    * Generates code to do null safe execution, i.e. only execute the code when the input is not
    * null by adding null check if necessary.
    *
@@ -779,38 +765,50 @@ class CodegenContext {
   }
 
   /**
-   * List of java data types that have special accessors and setters in [[InternalRow]].
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
+   * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
+   * instead, because classes have a constant pool limit of 65,536 named values.
+   *
+   * Note that different from `splitExpressions`, we will extract the current inputs of this
+   * context and pass them to the generated functions. The input is `INPUT_ROW` for normal codegen
+   * path, and `currentVars` for whole stage codegen path. Whole stage codegen path is not
+   * supported yet.
+   *
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param extraArguments the list of (type, name) of the arguments of the split function,
+   *                       except for the current inputs like `ctx.INPUT_ROW`.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
    */
-  val primitiveTypes =
-    Seq(JAVA_BOOLEAN, JAVA_BYTE, JAVA_SHORT, JAVA_INT, JAVA_LONG, JAVA_FLOAT, JAVA_DOUBLE)
-
-  /**
-   * Returns true if the Java type has a special accessor and setter in [[InternalRow]].
-   */
-  def isPrimitiveType(jt: String): Boolean = primitiveTypes.contains(jt)
-
-  def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
+  def splitExpressionsWithCurrentInputs(
+      expressions: Seq[String],
+      funcName: String = "apply",
+      extraArguments: Seq[(String, String)] = Nil,
+      returnType: String = "void",
+      makeSplitFunction: String => String = identity,
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
+    // TODO: support whole stage codegen
+    if (INPUT_ROW == null || currentVars != null) {
+      expressions.mkString("\n")
+    } else {
+      splitExpressions(
+        expressions,
+        funcName,
+        ("InternalRow", INPUT_ROW) +: extraArguments,
+        returnType,
+        makeSplitFunction,
+        foldFunctions)
+    }
+  }
 
   /**
    * Splits the generated code of expressions into multiple functions, because function has
    * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
    * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
    * instead, because classes have a constant pool limit of 65,536 named values.
-   *
-   * @param row the variable name of row that is used by expressions
-   * @param expressions the codes to evaluate expressions.
-   */
-  def splitExpressions(row: String, expressions: Seq[String]): String = {
-    if (row == null || currentVars != null) {
-      // Cannot split these expressions because they are not created from a row object.
-      return expressions.mkString("\n")
-    }
-    splitExpressions(expressions, funcName = "apply", arguments = ("InternalRow", row) :: Nil)
-  }
-
-  /**
-   * Splits the generated code of expressions into multiple functions, because function has
-   * 64kb code size limit in JVM
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
@@ -832,6 +830,15 @@ class CodegenContext {
       // inline execution if only one block
       blocks.head
     } else {
+      if (Utils.isTesting) {
+        // Passing global variables to the split method is dangerous, as any mutating to it is
+        // ignored and may lead to unexpected behavior.
+        arguments.foreach { case (_, name) =>
+          assert(!mutableStateNames.contains(name),
+            s"split function argument $name cannot be a global variable.")
+        }
+      }
+
       val func = freshName(funcName)
       val argString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
@@ -867,7 +874,7 @@ class CodegenContext {
    *
    * @param expressions the codes to evaluate expressions.
    */
-  def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
+  private def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     var length = 0
@@ -927,7 +934,7 @@ class CodegenContext {
         // for performance reasons, the functions are prepended, instead of appended,
         // thus here they are in reversed order
         val orderedFunctions = innerClassFunctions.reverse
-        if (orderedFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
+        if (orderedFunctions.size > MERGE_SPLIT_METHODS_THRESHOLD) {
           // Adding a new function to each inner class which contains the invocation of all the
           // ones which have been added to that inner class. For example,
           //   private class NestedClass {
@@ -962,14 +969,12 @@ class CodegenContext {
       newSubExprEliminationExprs: Map[Expression, SubExprEliminationState])(
       f: => Seq[ExprCode]): Seq[ExprCode] = {
     val oldsubExprEliminationExprs = subExprEliminationExprs
-    subExprEliminationExprs.clear
-    newSubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+    subExprEliminationExprs = newSubExprEliminationExprs
 
     val genCodes = f
 
     // Restore previous subExprEliminationExprs
-    subExprEliminationExprs.clear
-    oldsubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+    subExprEliminationExprs = oldsubExprEliminationExprs
     genCodes
   }
 
@@ -983,7 +988,7 @@ class CodegenContext {
   def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
     // Create a clear EquivalentExpressions and SubExprEliminationState mapping
     val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
-    val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
+    val localSubExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree)
@@ -996,10 +1001,10 @@ class CodegenContext {
       // Generate the code for this expression tree.
       val eval = expr.genCode(this)
       val state = SubExprEliminationState(eval.isNull, eval.value)
-      e.foreach(subExprEliminationExprs.put(_, state))
+      e.foreach(localSubExprEliminationExprs.put(_, state))
       eval.code.trim
     }
-    SubExprCodes(codes, subExprEliminationExprs.toMap)
+    SubExprCodes(codes, localSubExprEliminationExprs.toMap)
   }
 
   /**
@@ -1016,13 +1021,13 @@ class CodegenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     commonExprs.foreach { e =>
       val expr = e.head
-      val fnName = freshName("evalExpr")
+      val fnName = freshName("subExpr")
       val isNull = if (expr.nullable) {
-        s"${fnName}IsNull"
+        addMutableState(JAVA_BOOLEAN, "subExprIsNull")
       } else {
         ""
       }
-      val value = s"${fnName}Value"
+      val value = addMutableState(javaType(expr.dataType), "subExprValue")
 
       // Generate the code for this expression tree and wrap it in a function.
       val eval = expr.genCode(this)
@@ -1053,18 +1058,18 @@ class CodegenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-      if (expr.nullable) {
-        addMutableState(JAVA_BOOLEAN, isNull)
-      }
-      addMutableState(javaType(expr.dataType), value)
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
       val state = if (expr.nullable) {
-        SubExprEliminationState(isNull, value)
+        SubExprEliminationState(
+          JavaCode.isNullGlobal(isNull),
+          JavaCode.global(value, expr.dataType))
       } else {
-        SubExprEliminationState("false", value)
+        SubExprEliminationState(
+          FalseLiteral,
+          JavaCode.global(value, expr.dataType))
       }
-      e.foreach(subExprEliminationExprs.put(_, state))
+      subExprEliminationExprs ++= e.map(_ -> state).toMap
     }
   }
 
@@ -1087,14 +1092,29 @@ class CodegenContext {
 
   /**
    * Register a comment and return the corresponding place holder
+   *
+   * @param placeholderId an optionally specified identifier for the comment's placeholder.
+   *                      The caller should make sure this identifier is unique within the
+   *                      compilation unit. If this argument is not specified, a fresh identifier
+   *                      will be automatically created and used as the placeholder.
+   * @param force whether to force registering the comments
    */
-  def registerComment(text: => String): String = {
+   def registerComment(
+       text: => String,
+       placeholderId: String = "",
+       force: Boolean = false): String = {
     // By default, disable comments in generated code because computing the comments themselves can
     // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
     // inputs with wide schemas. For more details on the performance issues that motivated this
     // flat, see SPARK-15680.
-    if (SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
-      val name = freshName("c")
+    if (force ||
+      SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+      val name = if (placeholderId != "") {
+        assert(!placeHolderToComments.contains(placeholderId))
+        placeholderId
+      } else {
+        freshName("c")
+      }
       val comment = if (text.contains("\n") || text.contains("\r")) {
         text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
       } else {
@@ -1172,17 +1192,29 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 object CodeGenerator extends Logging {
 
   // This is the value of HugeMethodLimit in the OpenJDK JVM settings
-  val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+  final val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+
+  // The max valid length of method parameters in JVM.
+  final val MAX_JVM_METHOD_PARAMS_LENGTH = 255
 
   // This is the threshold over which the methods in an inner class are grouped in a single
   // method which is going to be called by the outer class instead of the many small ones
-  val MERGE_SPLIT_METHODS_THRESHOLD = 3
+  final val MERGE_SPLIT_METHODS_THRESHOLD = 3
 
   // The number of named constants that can exist in the class is limited by the Constant Pool
   // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
   // threshold of 1000k bytes to determine when a function should be inlined to a private, inner
   // class.
-  val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
+  final val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
+
+  // This is the threshold for the number of global variables, whose types are primitive type or
+  // complex type (e.g. more than one-dimensional array), that will be placed at the outer class
+  final val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
+
+  // This is the maximum number of array elements to keep global variables in one Java array
+  // 32767 is the maximum integer value that does not require a constant pool entry in a Java
+  // bytecode instruction
+  final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
   /**
    * Compile the Java source code into a Java class, using Janino.
@@ -1245,12 +1277,12 @@ object CodeGenerator extends Logging {
       evaluator.cook("generated.java", code.body)
       updateAndGetCompilationStats(evaluator)
     } catch {
-      case e: JaninoRuntimeException =>
+      case e: InternalCompilerException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
         val maxLines = SQLConf.get.loggingMaxLinesForCodegen
         logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
-        throw new JaninoRuntimeException(msg, e)
+        throw new InternalCompilerException(msg, e)
       case e: CompileException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
@@ -1327,4 +1359,267 @@ object CodeGenerator extends Logging {
           result
         }
       })
+
+  /**
+   * Name of Java primitive data type
+   */
+  final val JAVA_BOOLEAN = "boolean"
+  final val JAVA_BYTE = "byte"
+  final val JAVA_SHORT = "short"
+  final val JAVA_INT = "int"
+  final val JAVA_LONG = "long"
+  final val JAVA_FLOAT = "float"
+  final val JAVA_DOUBLE = "double"
+
+  /**
+   * List of java primitive data types
+   */
+  val primitiveTypes =
+    Seq(JAVA_BOOLEAN, JAVA_BYTE, JAVA_SHORT, JAVA_INT, JAVA_LONG, JAVA_FLOAT, JAVA_DOUBLE)
+
+  /**
+   * Returns true if a Java type is Java primitive primitive type
+   */
+  def isPrimitiveType(jt: String): Boolean = primitiveTypes.contains(jt)
+
+  def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
+
+  /**
+   * Returns the specialized code to access a value from `inputRow` at `ordinal`.
+   */
+  def getValue(input: String, dataType: DataType, ordinal: String): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
+      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+      case StringType => s"$input.getUTF8String($ordinal)"
+      case BinaryType => s"$input.getBinary($ordinal)"
+      case CalendarIntervalType => s"$input.getInterval($ordinal)"
+      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
+      case _: ArrayType => s"$input.getArray($ordinal)"
+      case _: MapType => s"$input.getMap($ordinal)"
+      case NullType => "null"
+      case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
+      case _ => s"($jt)$input.get($ordinal, null)"
+    }
+  }
+
+  /**
+   * Returns the code to update a column in Row for a given DataType.
+   */
+  def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
+      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
+      case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
+      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
+      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
+      case StringType | _: StructType | _: ArrayType | _: MapType =>
+        s"$row.update($ordinal, $value.copy())"
+      case _ => s"$row.update($ordinal, $value)"
+    }
+  }
+
+  /**
+   * Update a column in MutableRow from ExprCode.
+   *
+   * @param isVectorized True if the underlying row is of type `ColumnarBatch.Row`, false otherwise
+   */
+  def updateColumn(
+      row: String,
+      dataType: DataType,
+      ordinal: Int,
+      ev: ExprCode,
+      nullable: Boolean,
+      isVectorized: Boolean = false): String = {
+    if (nullable) {
+      // Can't call setNullAt on DecimalType, because we need to keep the offset
+      if (!isVectorized && dataType.isInstanceOf[DecimalType]) {
+        s"""
+           |if (!${ev.isNull}) {
+           |  ${setColumn(row, dataType, ordinal, ev.value)};
+           |} else {
+           |  ${setColumn(row, dataType, ordinal, "null")};
+           |}
+         """.stripMargin
+      } else {
+        s"""
+           |if (!${ev.isNull}) {
+           |  ${setColumn(row, dataType, ordinal, ev.value)};
+           |} else {
+           |  $row.setNullAt($ordinal);
+           |}
+         """.stripMargin
+      }
+    } else {
+      s"""${setColumn(row, dataType, ordinal, ev.value)};"""
+    }
+  }
+
+  /**
+   * Returns the specialized code to set a given value in a column vector for a given `DataType`.
+   */
+  def setValue(vector: String, rowId: String, dataType: DataType, value: String): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) =>
+        s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
+      case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
+      case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
+      case _ =>
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+    }
+  }
+
+  /**
+   * Returns the specialized code to set a given value in a column vector for a given `DataType`
+   * that could potentially be nullable.
+   */
+  def updateColumn(
+      vector: String,
+      rowId: String,
+      dataType: DataType,
+      ev: ExprCode,
+      nullable: Boolean): String = {
+    if (nullable) {
+      s"""
+         |if (!${ev.isNull}) {
+         |  ${setValue(vector, rowId, dataType, ev.value)}
+         |} else {
+         |  $vector.putNull($rowId);
+         |}
+       """.stripMargin
+    } else {
+      s"""${setValue(vector, rowId, dataType, ev.value)};"""
+    }
+  }
+
+  /**
+   * Returns the specialized code to access a value from a column vector for a given `DataType`.
+   */
+  def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
+    if (dataType.isInstanceOf[StructType]) {
+      // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
+      // `ordinal` parameter.
+      s"$vector.getStruct($rowId)"
+    } else {
+      getValue(vector, dataType, rowId)
+    }
+  }
+
+  /**
+   * Returns the name used in accessor and setter for a Java primitive type.
+   */
+  def primitiveTypeName(jt: String): String = jt match {
+    case JAVA_INT => "Int"
+    case _ => boxedType(jt)
+  }
+
+  def primitiveTypeName(dt: DataType): String = primitiveTypeName(javaType(dt))
+
+  /**
+   * Returns the Java type for a DataType.
+   */
+  def javaType(dt: DataType): String = dt match {
+    case BooleanType => JAVA_BOOLEAN
+    case ByteType => JAVA_BYTE
+    case ShortType => JAVA_SHORT
+    case IntegerType | DateType => JAVA_INT
+    case LongType | TimestampType => JAVA_LONG
+    case FloatType => JAVA_FLOAT
+    case DoubleType => JAVA_DOUBLE
+    case _: DecimalType => "Decimal"
+    case BinaryType => "byte[]"
+    case StringType => "UTF8String"
+    case CalendarIntervalType => "CalendarInterval"
+    case _: StructType => "InternalRow"
+    case _: ArrayType => "ArrayData"
+    case _: MapType => "MapData"
+    case udt: UserDefinedType[_] => javaType(udt.sqlType)
+    case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
+    case ObjectType(cls) => cls.getName
+    case _ => "Object"
+  }
+
+  def javaClass(dt: DataType): Class[_] = dt match {
+    case BooleanType => java.lang.Boolean.TYPE
+    case ByteType => java.lang.Byte.TYPE
+    case ShortType => java.lang.Short.TYPE
+    case IntegerType | DateType => java.lang.Integer.TYPE
+    case LongType | TimestampType => java.lang.Long.TYPE
+    case FloatType => java.lang.Float.TYPE
+    case DoubleType => java.lang.Double.TYPE
+    case _: DecimalType => classOf[Decimal]
+    case BinaryType => classOf[Array[Byte]]
+    case StringType => classOf[UTF8String]
+    case CalendarIntervalType => classOf[CalendarInterval]
+    case _: StructType => classOf[InternalRow]
+    case _: ArrayType => classOf[ArrayData]
+    case _: MapType => classOf[MapData]
+    case udt: UserDefinedType[_] => javaClass(udt.sqlType)
+    case ObjectType(cls) => cls
+    case _ => classOf[Object]
+  }
+
+  /**
+   * Returns the boxed type in Java.
+   */
+  def boxedType(jt: String): String = jt match {
+    case JAVA_BOOLEAN => "Boolean"
+    case JAVA_BYTE => "Byte"
+    case JAVA_SHORT => "Short"
+    case JAVA_INT => "Integer"
+    case JAVA_LONG => "Long"
+    case JAVA_FLOAT => "Float"
+    case JAVA_DOUBLE => "Double"
+    case other => other
+  }
+
+  def boxedType(dt: DataType): String = boxedType(javaType(dt))
+
+  /**
+   * Returns the representation of default value for a given Java Type.
+   * @param jt the string name of the Java type
+   * @param typedNull if true, for null literals, return a typed (with a cast) version
+   */
+  def defaultValue(jt: String, typedNull: Boolean): String = jt match {
+    case JAVA_BOOLEAN => "false"
+    case JAVA_BYTE => "(byte)-1"
+    case JAVA_SHORT => "(short)-1"
+    case JAVA_INT => "-1"
+    case JAVA_LONG => "-1L"
+    case JAVA_FLOAT => "-1.0f"
+    case JAVA_DOUBLE => "-1.0"
+    case _ => if (typedNull) s"(($jt)null)" else "null"
+  }
+
+  def defaultValue(dt: DataType, typedNull: Boolean = false): String =
+    defaultValue(javaType(dt), typedNull)
+
+  /**
+   * Returns the length of parameters for a Java method descriptor. `this` contributes one unit
+   * and a parameter of type long or double contributes two units. Besides, for nullable parameter,
+   * we also need to pass a boolean parameter for the null status.
+   */
+  def calculateParamLength(params: Seq[Expression]): Int = {
+    def paramLengthForExpr(input: Expression): Int = {
+      val javaParamLength = javaType(input.dataType) match {
+        case JAVA_LONG | JAVA_DOUBLE => 2
+        case _ => 1
+      }
+      // For a nullable expression, we need to pass in an extra boolean parameter.
+      (if (input.nullable) 1 else 0) + javaParamLength
+    }
+    // Initial value is 1 for `this`.
+    1 + params.map(paramLengthForExpr).sum
+  }
+
+  /**
+   * In Java, a method descriptor is valid only if it represents method parameters with a total
+   * length less than a pre-defined constant.
+   */
+  def isValidParamLength(paramLength: Int): Boolean = {
+    paramLength <= MAX_JVM_METHOD_PARAMS_LENGTH
+  }
 }

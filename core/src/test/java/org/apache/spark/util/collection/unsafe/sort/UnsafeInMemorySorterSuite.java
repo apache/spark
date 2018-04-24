@@ -98,8 +98,10 @@ public class UnsafeInMemorySorterSuite {
       public int compare(
         Object leftBaseObject,
         long leftBaseOffset,
+        int leftBaseLength,
         Object rightBaseObject,
-        long rightBaseOffset) {
+        long rightBaseOffset,
+        int rightBaseLength) {
         return 0;
       }
     };
@@ -164,8 +166,10 @@ public class UnsafeInMemorySorterSuite {
       public int compare(
               Object leftBaseObject,
               long leftBaseOffset,
+              int leftBaseLength,
               Object rightBaseObject,
-              long rightBaseOffset) {
+              long rightBaseOffset,
+              int rightBaseLength) {
         return 0;
       }
     };

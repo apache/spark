@@ -195,23 +195,13 @@ object ExpressionCodegen {
   }
 
   /**
-   * Helper function to calculate the size of an expression as function parameter.
-   */
-  def calculateParamLength(ctx: CodegenContext, input: ExprInputVar): Int = {
-    (if (input.nullable) 1 else 0) + ctx.javaType(input.dataType) match {
-      case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => 2
-      case _ => 1
-    }
-  }
-
-  /**
-   * In Java, a method descriptor is valid only if it represents method parameters with a total
-   * length of 255 or less. `this` contributes one unit and a parameter of type long or double
-   * contributes two units.
+   * Determines the parameter length in a Java method for given parameters.
    */
   def getParamLength(ctx: CodegenContext, inputs: Seq[ExprInputVar]): Int = {
-    // Initial value is 1 for `this`.
-    1 + inputs.map(calculateParamLength(ctx, _)).sum
+    // Method parameter length only depends on data type and nullability. Make fake catalyst
+    // expressions for calculation.
+    val exprs = inputs.map(inputVar => BoundReference(1, inputVar.dataType, inputVar.nullable))
+    CodeGenerator.calculateParamLength(exprs)
   }
 
   /**
@@ -227,8 +217,8 @@ object ExpressionCodegen {
       val ev = inputVar.exprCode
 
       // Only include the expression value if it is not a literal.
-      if (!isLiteral(ev)) {
-        val argType = ctx.javaType(inputVar.dataType)
+      if (!ev.value.isInstanceOf[LiteralValue]) {
+        val argType = CodeGenerator.javaType(inputVar.dataType)
         params += ((ev.value, s"$argType ${ev.value}"))
       }
 
@@ -239,26 +229,6 @@ object ExpressionCodegen {
 
       params
     }.distinct
-  }
-
-  /**
-   * Only applied to the `ExprCode` in `ctx.currentVars`.
-   * Returns true if this value is a literal.
-   */
-  def isLiteral(exprCode: ExprCode): Boolean = {
-    assert(exprCode.value.nonEmpty, "ExprCode.value can't be empty string.")
-
-    if (exprCode.value == "true" || exprCode.value == "false" || exprCode.value == "null") {
-      true
-    } else {
-      // The valid characters for the first character of a Java variable is [a-zA-Z_$].
-      exprCode.value.head match {
-        case v if v >= 'a' && v <= 'z' => false
-        case v if v >= 'A' && v <= 'Z' => false
-        case '_' | '$' => false
-        case _ => true
-      }
-    }
   }
 
   /**

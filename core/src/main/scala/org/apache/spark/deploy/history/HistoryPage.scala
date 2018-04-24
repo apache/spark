@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
@@ -30,12 +31,14 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val requestedIncomplete =
       Option(UIUtils.stripXSS(request.getParameter("showIncomplete"))).getOrElse("false").toBoolean
 
-    val allAppsSize = parent.getApplicationList().count(_.completed != requestedIncomplete)
+    val allAppsSize = parent.getApplicationList()
+      .count(isApplicationCompleted(_) != requestedIncomplete)
     val eventLogsUnderProcessCount = parent.getEventLogsUnderProcess()
     val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()
     val content =
-      <script src={UIUtils.prependBaseUri("/static/historypage-common.js")}></script>
+      <script src={UIUtils.prependBaseUri("/static/historypage-common.js")}></script> ++
+      <script src={UIUtils.prependBaseUri("/static/utils.js")}></script>
       <div>
           <div class="container-fluid">
             <ul class="unstyled">
@@ -56,10 +59,13 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             }
 
             {
+            <p>Client local time zone: <span id="time-zone"></span></p>
+            }
+
+            {
             if (allAppsSize > 0) {
               <script src={UIUtils.prependBaseUri("/static/dataTables.rowsGroup.js")}></script> ++
                 <div id="history-summary" class="row-fluid"></div> ++
-                <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
                 <script src={UIUtils.prependBaseUri("/static/historypage.js")}></script> ++
                 <script>setAppLimit({parent.maxApplications})</script>
             } else if (requestedIncomplete) {
@@ -87,5 +93,9 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
   private def makePageLink(showIncomplete: Boolean): String = {
     UIUtils.prependBaseUri("/?" + "showIncomplete=" + showIncomplete)
+  }
+
+  private def isApplicationCompleted(appInfo: ApplicationInfo): Boolean = {
+    appInfo.attempts.nonEmpty && appInfo.attempts.head.completed
   }
 }

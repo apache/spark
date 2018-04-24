@@ -37,6 +37,53 @@ test_that("SerDe of primitive types", {
   expect_equal(class(x), "character")
 })
 
+test_that("SerDe of multi-element primitive vectors inside R data.frame", {
+  # vector of integers embedded in R data.frame
+  indices <- 1L:3L
+  myDf <- data.frame(indices)
+  myDf$data <- list(rep(0L, 3L))
+  mySparkDf <- as.DataFrame(myDf)
+  myResultingDf <- collect(mySparkDf)
+  myDfListedData <- data.frame(indices)
+  myDfListedData$data <- list(as.list(rep(0L, 3L)))
+  expect_equal(myResultingDf, myDfListedData)
+  expect_equal(class(myResultingDf[["data"]][[1]]), "list")
+  expect_equal(class(myResultingDf[["data"]][[1]][[1]]), "integer")
+
+  # vector of numeric embedded in R data.frame
+  myDf <- data.frame(indices)
+  myDf$data <- list(rep(0, 3L))
+  mySparkDf <- as.DataFrame(myDf)
+  myResultingDf <- collect(mySparkDf)
+  myDfListedData <- data.frame(indices)
+  myDfListedData$data <- list(as.list(rep(0, 3L)))
+  expect_equal(myResultingDf, myDfListedData)
+  expect_equal(class(myResultingDf[["data"]][[1]]), "list")
+  expect_equal(class(myResultingDf[["data"]][[1]][[1]]), "numeric")
+
+  # vector of logical embedded in R data.frame
+  myDf <- data.frame(indices)
+  myDf$data <- list(rep(TRUE, 3L))
+  mySparkDf <- as.DataFrame(myDf)
+  myResultingDf <- collect(mySparkDf)
+  myDfListedData <- data.frame(indices)
+  myDfListedData$data <- list(as.list(rep(TRUE, 3L)))
+  expect_equal(myResultingDf, myDfListedData)
+  expect_equal(class(myResultingDf[["data"]][[1]]), "list")
+  expect_equal(class(myResultingDf[["data"]][[1]][[1]]), "logical")
+
+  # vector of character embedded in R data.frame
+  myDf <- data.frame(indices)
+  myDf$data <- list(rep("abc", 3L))
+  mySparkDf <- as.DataFrame(myDf)
+  myResultingDf <- collect(mySparkDf)
+  myDfListedData <- data.frame(indices)
+  myDfListedData$data <- list(as.list(rep("abc", 3L)))
+  expect_equal(myResultingDf, myDfListedData)
+  expect_equal(class(myResultingDf[["data"]][[1]]), "list")
+  expect_equal(class(myResultingDf[["data"]][[1]][[1]]), "character")
+})
+
 test_that("SerDe of list of primitive types", {
   x <- list(1L, 2L, 3L)
   y <- callJStatic("SparkRHandler", "echo", x)

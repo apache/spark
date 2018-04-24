@@ -72,8 +72,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * left AND right AND joined is equivalent to full.
    *
    * Note that left and right do not necessarily contain *all* conjuncts which satisfy
-   * their condition. Any conjuncts after the first nondeterministic one are treated as
-   * nondeterministic for purposes of the split.
+   * their condition.
    *
    * @param leftSideOnly Deterministic conjuncts which reference only the left side of the join.
    * @param rightSideOnly Deterministic conjuncts which reference only the right side of the join.
@@ -111,7 +110,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           // Span rather than partition, because nondeterministic expressions don't commute
           // across AND.
           val (deterministicConjuncts, nonDeterministicConjuncts) =
-            splitConjunctivePredicates(condition.get).span(_.deterministic)
+            splitConjunctivePredicates(condition.get).partition(_.deterministic)
 
           val (leftConjuncts, nonLeftConjuncts) = deterministicConjuncts.partition { cond =>
             cond.references.subsetOf(left.outputSet)
@@ -204,7 +203,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   /**
    * A custom RDD that allows partitions to be "zipped" together, while ensuring the tasks'
    * preferred location is based on which executors have the required join state stores already
-   * loaded. This is class is a modified verion of [[ZippedPartitionsRDD2]].
+   * loaded. This is class is a modified version of [[ZippedPartitionsRDD2]].
    */
   class StateStoreAwareZipPartitionsRDD[A: ClassTag, B: ClassTag, V: ClassTag](
       sc: SparkContext,

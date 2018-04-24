@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -63,6 +63,7 @@ object ScalaReflection extends ScalaReflection {
 
   private def dataTypeFor(tpe: `Type`): DataType = cleanUpReflectionObjects {
     tpe.dealias match {
+      case t if t <:< definitions.NullTpe => NullType
       case t if t <:< definitions.IntTpe => IntegerType
       case t if t <:< definitions.LongTpe => LongType
       case t if t <:< definitions.DoubleTpe => DoubleType
@@ -381,22 +382,22 @@ object ScalaReflection extends ScalaReflection {
           val clsName = getClassNameFromType(fieldType)
           val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           // For tuples, we based grab the inner fields by ordinal instead of name.
-          if (cls.getName startsWith "scala.Tuple") {
+          val constructor = if (cls.getName startsWith "scala.Tuple") {
             deserializerFor(
               fieldType,
               Some(addToPathOrdinal(i, dataType, newTypePath)),
               newTypePath)
           } else {
-            val constructor = deserializerFor(
+            deserializerFor(
               fieldType,
               Some(addToPath(fieldName, dataType, newTypePath)),
               newTypePath)
+          }
 
-            if (!nullable) {
-              AssertNotNull(constructor, newTypePath)
-            } else {
-              constructor
-            }
+          if (!nullable) {
+            AssertNotNull(constructor, newTypePath)
+          } else {
+            constructor
           }
         }
 
@@ -712,6 +713,9 @@ object ScalaReflection extends ScalaReflection {
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = cleanUpReflectionObjects {
     tpe.dealias match {
+      // this must be the first case, since all objects in scala are instances of Null, therefore
+      // Null type would wrongly match the first of them, which is Option as of now
+      case t if t <:< definitions.NullTpe => Schema(NullType, nullable = true)
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         Schema(udt, nullable = true)
@@ -790,6 +794,52 @@ object ScalaReflection extends ScalaReflection {
     "interface", "long", "native", "new", "null", "package", "private", "protected", "public",
     "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw",
     "throws", "transient", "true", "try", "void", "volatile", "while")
+
+  val typeJavaMapping = Map[DataType, Class[_]](
+    BooleanType -> classOf[Boolean],
+    ByteType -> classOf[Byte],
+    ShortType -> classOf[Short],
+    IntegerType -> classOf[Int],
+    LongType -> classOf[Long],
+    FloatType -> classOf[Float],
+    DoubleType -> classOf[Double],
+    StringType -> classOf[UTF8String],
+    DateType -> classOf[DateType.InternalType],
+    TimestampType -> classOf[TimestampType.InternalType],
+    BinaryType -> classOf[BinaryType.InternalType],
+    CalendarIntervalType -> classOf[CalendarInterval]
+  )
+
+  val typeBoxedJavaMapping = Map[DataType, Class[_]](
+    BooleanType -> classOf[java.lang.Boolean],
+    ByteType -> classOf[java.lang.Byte],
+    ShortType -> classOf[java.lang.Short],
+    IntegerType -> classOf[java.lang.Integer],
+    LongType -> classOf[java.lang.Long],
+    FloatType -> classOf[java.lang.Float],
+    DoubleType -> classOf[java.lang.Double],
+    DateType -> classOf[java.lang.Integer],
+    TimestampType -> classOf[java.lang.Long]
+  )
+
+  def dataTypeJavaClass(dt: DataType): Class[_] = {
+    dt match {
+      case _: DecimalType => classOf[Decimal]
+      case _: StructType => classOf[InternalRow]
+      case _: ArrayType => classOf[ArrayData]
+      case _: MapType => classOf[MapData]
+      case ObjectType(cls) => cls
+      case _ => typeJavaMapping.getOrElse(dt, classOf[java.lang.Object])
+    }
+  }
+
+  def expressionJavaClasses(arguments: Seq[Expression]): Seq[Class[_]] = {
+    if (arguments != Nil) {
+      arguments.map(e => dataTypeJavaClass(e.dataType))
+    } else {
+      Seq.empty
+    }
+  }
 }
 
 /**

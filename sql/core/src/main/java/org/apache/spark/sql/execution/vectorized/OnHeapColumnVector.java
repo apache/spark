@@ -22,6 +22,7 @@ import java.util.Arrays;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * A column backed by an in memory JVM array. This stores the NULLs as a byte per value
@@ -68,7 +69,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   private float[] floatData;
   private double[] doubleData;
 
-  // Only set if type is Array.
+  // Only set if type is Array or Map.
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
@@ -106,7 +107,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public void putNull(int rowId) {
     nulls[rowId] = (byte)1;
     ++numNulls;
-    anyNullsSet = true;
   }
 
   @Override
@@ -114,13 +114,12 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)1;
     }
-    anyNullsSet = true;
     numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (!anyNullsSet) return;
+    if (!hasNull()) return;
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
     }
@@ -201,6 +200,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     byte[] array = new byte[count];
     System.arraycopy(byteData, rowId, array, 0, count);
     return array;
+  }
+
+  @Override
+  protected UTF8String getBytesAsUTF8String(int rowId, int count) {
+    return UTF8String.fromBytes(byteData, rowId, count);
   }
 
   //
@@ -484,12 +488,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     arrayLengths[rowId] = length;
   }
 
-  @Override
-  public void loadBytes(ColumnarArray array) {
-    array.byteArray = byteData;
-    array.byteArrayOffset = array.offset;
-  }
-
   //
   // APIs dealing with Byte Arrays
   //
@@ -505,7 +503,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
+    if (isArray() || type instanceof MapType) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {
@@ -558,7 +556,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
         if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, capacity);
         doubleData = newData;
       }
-    } else if (resultStruct != null) {
+    } else if (childColumns != null) {
       // Nothing to store.
     } else {
       throw new RuntimeException("Unhandled " + type);

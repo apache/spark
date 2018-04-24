@@ -60,6 +60,7 @@ trait SharedSparkSession
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   protected def createSparkSession: TestSparkSession = {
+    SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(sparkConf)
   }
 
@@ -92,11 +93,22 @@ trait SharedSparkSession
    * Stop the underlying [[org.apache.spark.SparkContext]], if any.
    */
   protected override def afterAll(): Unit = {
-    super.afterAll()
-    if (_spark != null) {
-      _spark.sessionState.catalog.reset()
-      _spark.stop()
-      _spark = null
+    try {
+      super.afterAll()
+    } finally {
+      try {
+        if (_spark != null) {
+          try {
+            _spark.sessionState.catalog.reset()
+          } finally {
+            _spark.stop()
+            _spark = null
+          }
+        }
+      } finally {
+        SparkSession.clearActiveSession()
+        SparkSession.clearDefaultSession()
+      }
     }
   }
 
@@ -111,7 +123,7 @@ trait SharedSparkSession
     spark.sharedState.cacheManager.clearCache()
     // files can be closed from other threads, so wait a bit
     // normally this doesn't take more than 1s
-    eventually(timeout(10.seconds)) {
+    eventually(timeout(10.seconds), interval(2.seconds)) {
       DebugFilesystem.assertNoOpenStreams()
     }
   }

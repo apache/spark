@@ -190,17 +190,15 @@ abstract class AggregateFunction extends Expression {
   def defaultResult: Option[Literal] = None
 
   /**
-   * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] because
-   * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
-   * and the flag indicating if this aggregation is distinct aggregation or not.
-   * An [[AggregateFunction]] should not be used without being wrapped in
-   * an [[AggregateExpression]].
+   * Creates [[AggregateExpression]] with `isDistinct` flag disabled.
+   *
+   * @see `toAggregateExpression(isDistinct: Boolean)` for detailed description
    */
   def toAggregateExpression(): AggregateExpression = toAggregateExpression(isDistinct = false)
 
   /**
-   * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] and set isDistinct
-   * field of the [[AggregateExpression]] to the given value because
+   * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] and sets `isDistinct`
+   * flag of the [[AggregateExpression]] to the given value because
    * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
    * and the flag indicating if this aggregation is distinct aggregation or not.
    * An [[AggregateFunction]] should not be used without being wrapped in

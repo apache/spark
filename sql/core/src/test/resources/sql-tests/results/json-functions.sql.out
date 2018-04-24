@@ -129,7 +129,7 @@ select to_json()
 struct<>
 -- !query 12 output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function to_json; line 1 pos 7
+Invalid number of arguments for function to_json. Expected: one of 1, 2 and 3; Found: 0; line 1 pos 7
 
 
 -- !query 13
@@ -225,7 +225,7 @@ select from_json()
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function from_json; line 1 pos 7
+Invalid number of arguments for function from_json. Expected: one of 2, 3 and 4; Found: 0; line 1 pos 7
 
 
 -- !query 22

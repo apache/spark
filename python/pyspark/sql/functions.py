@@ -18,7 +18,6 @@
 """
 A collections of builtin functions
 """
-import math
 import sys
 import functools
 import warnings
@@ -28,10 +27,10 @@ if sys.version < "3":
 
 from pyspark import since, SparkContext
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
+# Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
 
@@ -106,18 +105,15 @@ _functions = {
 
 _functions_1_4 = {
     # unary math functions
-    'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' +
-            '0.0 through pi.',
-    'asin': 'Computes the sine inverse of the given value; the returned angle is in the range' +
-            '-pi/2 through pi/2.',
-    'atan': 'Computes the tangent inverse of the given value; the returned angle is in the range' +
-            '-pi/2 through pi/2',
+    'acos': ':return: inverse cosine of `col`, as if computed by `java.lang.Math.acos()`',
+    'asin': ':return: inverse sine of `col`, as if computed by `java.lang.Math.asin()`',
+    'atan': ':return: inverse tangent of `col`, as if computed by `java.lang.Math.atan()`',
     'cbrt': 'Computes the cube-root of the given value.',
     'ceil': 'Computes the ceiling of the given value.',
-    'cos': """Computes the cosine of the given value.
-
-           :param col: :class:`DoubleType` column, units in radians.""",
-    'cosh': 'Computes the hyperbolic cosine of the given value.',
+    'cos': """:param col: angle in radians
+           :return: cosine of the angle, as if computed by `java.lang.Math.cos()`.""",
+    'cosh': """:param col: hyperbolic angle
+           :return: hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh()`""",
     'exp': 'Computes the exponential of the given value.',
     'expm1': 'Computes the exponential of the given value minus one.',
     'floor': 'Computes the floor of the given value.',
@@ -127,17 +123,30 @@ _functions_1_4 = {
     'rint': 'Returns the double value that is closest in value to the argument and' +
             ' is equal to a mathematical integer.',
     'signum': 'Computes the signum of the given value.',
-    'sin': """Computes the sine of the given value.
-
-           :param col: :class:`DoubleType` column, units in radians.""",
-    'sinh': 'Computes the hyperbolic sine of the given value.',
-    'tan': """Computes the tangent of the given value.
-
-           :param col: :class:`DoubleType` column, units in radians.""",
-    'tanh': 'Computes the hyperbolic tangent of the given value.',
+    'sin': """:param col: angle in radians
+           :return: sine of the angle, as if computed by `java.lang.Math.sin()`""",
+    'sinh': """:param col: hyperbolic angle
+           :return: hyperbolic sine of the given value,
+                    as if computed by `java.lang.Math.sinh()`""",
+    'tan': """:param col: angle in radians
+           :return: tangent of the given value, as if computed by `java.lang.Math.tan()`""",
+    'tanh': """:param col: hyperbolic angle
+            :return: hyperbolic tangent of the given value,
+                     as if computed by `java.lang.Math.tanh()`""",
     'toDegrees': '.. note:: Deprecated in 2.1, use :func:`degrees` instead.',
     'toRadians': '.. note:: Deprecated in 2.1, use :func:`radians` instead.',
     'bitwiseNOT': 'Computes bitwise not.',
+}
+
+_functions_2_4 = {
+    'asc_nulls_first': 'Returns a sort expression based on the ascending order of the given' +
+                       ' column name, and null values return before non-null values.',
+    'asc_nulls_last': 'Returns a sort expression based on the ascending order of the given' +
+                      ' column name, and null values appear after non-null values.',
+    'desc_nulls_first': 'Returns a sort expression based on the descending order of the given' +
+                        ' column name, and null values appear before non-null values.',
+    'desc_nulls_last': 'Returns a sort expression based on the descending order of the given' +
+                       ' column name, and null values appear after non-null values',
 }
 
 _collect_list_doc = """
@@ -173,16 +182,31 @@ _functions_1_6 = {
 
 _functions_2_1 = {
     # unary math functions
-    'degrees': 'Converts an angle measured in radians to an approximately equivalent angle ' +
-               'measured in degrees.',
-    'radians': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
-               'measured in radians.',
+    'degrees': """
+               Converts an angle measured in radians to an approximately equivalent angle
+               measured in degrees.
+               :param col: angle in radians
+               :return: angle in degrees, as if computed by `java.lang.Math.toDegrees()`
+               """,
+    'radians': """
+               Converts an angle measured in degrees to an approximately equivalent angle
+               measured in radians.
+               :param col: angle in degrees
+               :return: angle in radians, as if computed by `java.lang.Math.toRadians()`
+               """,
 }
 
 # math functions that take two arguments as input
 _binary_mathfunctions = {
-    'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
-             'polar coordinates (r, theta). Units in radians.',
+    'atan2': """
+             :param col1: coordinate on y-axis
+             :param col2: coordinate on x-axis
+             :return: the `theta` component of the point
+                (`r`, `theta`)
+                in polar coordinates that corresponds to the point
+                (`x`, `y`) in Cartesian coordinates,
+                as if computed by `java.lang.Math.atan2()`
+             """,
     'hypot': 'Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.',
     'pow': 'Returns the value of the first argument raised to the power of the second argument.',
 }
@@ -237,6 +261,8 @@ for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 for _name, _message in _functions_deprecated.items():
     globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
+for _name, _doc in _functions_2_4.items():
+    globals()[_name] = since(2.4)(_create_function(_name, _doc))
 del _name, _doc
 
 
@@ -809,6 +835,36 @@ def ntile(n):
     return Column(sc._jvm.functions.ntile(int(n)))
 
 
+@since(2.4)
+def unboundedPreceding():
+    """
+    Window function: returns the special frame boundary that represents the first row
+    in the window partition.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.unboundedPreceding())
+
+
+@since(2.4)
+def unboundedFollowing():
+    """
+    Window function: returns the special frame boundary that represents the last row
+    in the window partition.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.unboundedFollowing())
+
+
+@since(2.4)
+def currentRow():
+    """
+    Window function: returns the special frame boundary that represents the current row
+    in the window partition.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.currentRow())
+
+
 # ---------------------- Date/Timestamp functions ------------------------------
 
 @since(1.5)
@@ -1099,7 +1155,7 @@ def trunc(date, format):
     """
     Returns date truncated to the unit specified by the format.
 
-    :param format: 'year', 'YYYY', 'yy' or 'month', 'mon', 'mm'
+    :param format: 'year', 'yyyy', 'yy' or 'month', 'mon', 'mm'
 
     >>> df = spark.createDataFrame([('1997-02-28',)], ['d'])
     >>> df.select(trunc(df.d, 'year').alias('year')).collect()
@@ -1109,6 +1165,24 @@ def trunc(date, format):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
+
+
+@since(2.3)
+def date_trunc(format, timestamp):
+    """
+    Returns timestamp truncated to the unit specified by the format.
+
+    :param format: 'year', 'yyyy', 'yy', 'month', 'mon', 'mm',
+        'day', 'dd', 'hour', 'minute', 'second', 'week', 'quarter'
+
+    >>> df = spark.createDataFrame([('1997-02-28 05:02:11',)], ['t'])
+    >>> df.select(date_trunc('year', df.t).alias('year')).collect()
+    [Row(year=datetime.datetime(1997, 1, 1, 0, 0))]
+    >>> df.select(date_trunc('mon', df.t).alias('month')).collect()
+    [Row(month=datetime.datetime(1997, 2, 1, 0, 0))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.date_trunc(format, _to_java_column(timestamp)))
 
 
 @since(1.5)
@@ -1340,7 +1414,6 @@ _string_functions = {
                'uppercase. Words are delimited by whitespace.',
     'lower': 'Converts a string column to lower case.',
     'upper': 'Converts a string column to upper case.',
-    'reverse': 'Reverses the string column and returns it as a new string column.',
     'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',
@@ -1356,7 +1429,8 @@ del _name, _doc
 @ignore_unicode_prefix
 def concat(*cols):
     """
-    Concatenates multiple input string columns together into a single string column.
+    Concatenates multiple input columns together into a single column.
+    If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
 
     >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
     >>> df.select(concat(df.s, df.d).alias('s')).collect()
@@ -1686,10 +1760,12 @@ def unhex(col):
 @ignore_unicode_prefix
 @since(1.5)
 def length(col):
-    """Calculates the length of a string or binary expression.
+    """Computes the character length of string data or number of bytes of binary data.
+    The length of character data includes the trailing spaces. The length of binary data
+    includes binary zeros.
 
-    >>> spark.createDataFrame([('ABC',)], ['a']).select(length('a').alias('length')).collect()
-    [Row(length=3)]
+    >>> spark.createDataFrame([('ABC ',)], ['a']).select(length('a').alias('length')).collect()
+    [Row(length=4)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.length(_to_java_column(col)))
@@ -1718,8 +1794,8 @@ def translate(srcCol, matching, replace):
 def create_map(*cols):
     """Creates a new map column.
 
-    :param cols: list of column names (string) or list of :class:`Column` expressions that grouped
-        as key-value pairs, e.g. (key1, value1, key2, value2, ...).
+    :param cols: list of column names (string) or list of :class:`Column` expressions that are
+        grouped as key-value pairs, e.g. (key1, value1, key2, value2, ...).
 
     >>> df.select(create_map('name', 'age').alias("map")).collect()
     [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
@@ -1830,14 +1906,14 @@ def explode_outer(col):
     +---+----------+----+-----+
 
     >>> df.select("id", "a_map", explode_outer("an_array")).show()
-    +---+-------------+----+
-    | id|        a_map| col|
-    +---+-------------+----+
-    |  1|Map(x -> 1.0)| foo|
-    |  1|Map(x -> 1.0)| bar|
-    |  2|        Map()|null|
-    |  3|         null|null|
-    +---+-------------+----+
+    +---+----------+----+
+    | id|     a_map| col|
+    +---+----------+----+
+    |  1|[x -> 1.0]| foo|
+    |  1|[x -> 1.0]| bar|
+    |  2|        []|null|
+    |  3|      null|null|
+    +---+----------+----+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.explode_outer(_to_java_column(col))
@@ -1862,14 +1938,14 @@ def posexplode_outer(col):
     |  3|      null|null|null| null|
     +---+----------+----+----+-----+
     >>> df.select("id", "a_map", posexplode_outer("an_array")).show()
-    +---+-------------+----+----+
-    | id|        a_map| pos| col|
-    +---+-------------+----+----+
-    |  1|Map(x -> 1.0)|   0| foo|
-    |  1|Map(x -> 1.0)|   1| bar|
-    |  2|        Map()|null|null|
-    |  3|         null|null|null|
-    +---+-------------+----+----+
+    +---+----------+----+----+
+    | id|     a_map| pos| col|
+    +---+----------+----+----+
+    |  1|[x -> 1.0]|   0| foo|
+    |  1|[x -> 1.0]|   1| bar|
+    |  2|        []|null|null|
+    |  3|      null|null|null|
+    +---+----------+----+----+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.posexplode_outer(_to_java_column(col))
@@ -2003,6 +2079,36 @@ def size(col):
     return Column(sc._jvm.functions.size(_to_java_column(col)))
 
 
+@since(2.4)
+def array_min(col):
+    """
+    Collection function: returns the minimum value of the array.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
+    >>> df.select(array_min(df.data).alias('min')).collect()
+    [Row(min=1), Row(min=-1)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_min(_to_java_column(col)))
+
+
+@since(2.4)
+def array_max(col):
+    """
+    Collection function: returns the maximum value of the array.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
+    >>> df.select(array_max(df.data).alias('max')).collect()
+    [Row(max=3), Row(max=10)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_max(_to_java_column(col)))
+
+
 @since(1.5)
 def sort_array(col, asc=True):
     """
@@ -2016,9 +2122,28 @@ def sort_array(col, asc=True):
     [Row(r=[1, 2, 3]), Row(r=[1]), Row(r=[])]
     >>> df.select(sort_array(df.data, asc=False).alias('r')).collect()
     [Row(r=[3, 2, 1]), Row(r=[1]), Row(r=[])]
-     """
+    """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
+
+
+@since(1.5)
+@ignore_unicode_prefix
+def reverse(col):
+    """
+    Collection function: returns a reversed string or an array with reverse order of elements.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([('Spark SQL',)], ['data'])
+    >>> df.select(reverse(df.data).alias('s')).collect()
+    [Row(s=u'LQS krapS')]
+    >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
+    >>> df.select(reverse(df.data).alias('r')).collect()
+    [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
+     """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.reverse(_to_java_column(col)))
 
 
 @since(2.3)
@@ -2066,25 +2191,35 @@ def map_values(col):
 class PandasUDFType(object):
     """Pandas UDF Types. See :meth:`pyspark.sql.functions.pandas_udf`.
     """
-    SCALAR = PythonEvalType.SQL_PANDAS_SCALAR_UDF
+    SCALAR = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
-    GROUP_MAP = PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF
+    GROUPED_MAP = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
+    GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
 
 @since(1.3)
 def udf(f=None, returnType=StringType()):
     """Creates a user defined function (UDF).
 
-    .. note:: The user-defined functions must be deterministic. Due to optimization,
-        duplicate invocations may be eliminated or the function may even be invoked more times than
-        it is present in the query.
+    .. note:: The user-defined functions are considered deterministic by default. Due to
+        optimization, duplicate invocations may be eliminated or the function may even be invoked
+        more times than it is present in the query. If your function is not deterministic, call
+        `asNondeterministic` on the user defined function. E.g.:
 
-    .. note:: The user-defined functions do not support conditional expressions or short curcuiting
+    >>> from pyspark.sql.types import IntegerType
+    >>> import random
+    >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
+
+    .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
+    .. note:: The user-defined functions do not take keyword arguments on the calling side.
+
     :param f: python function if used as a standalone function
-    :param returnType: a :class:`pyspark.sql.types.DataType` object
+    :param returnType: the return type of the user-defined function. The value can be either a
+        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
@@ -2124,7 +2259,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     Creates a vectorized user defined function (UDF).
 
     :param f: user-defined function. A python function if used as a standalone function
-    :param returnType: a :class:`pyspark.sql.types.DataType` object
+    :param returnType: the return type of the user-defined function. The value can be either a
+        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
 
@@ -2133,7 +2269,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     1. SCALAR
 
        A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
-       The returnType should be a primitive data type, e.g., `DoubleType()`.
+       The returnType should be a primitive data type, e.g., :class:`DoubleType`.
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
 
        Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
@@ -2141,16 +2277,17 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> from pyspark.sql.types import IntegerType, StringType
-       >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
-       >>> @pandas_udf(StringType())
+       >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())  # doctest: +SKIP
+       >>> @pandas_udf(StringType())  # doctest: +SKIP
        ... def to_upper(s):
        ...     return s.str.upper()
        ...
-       >>> @pandas_udf("integer", PandasUDFType.SCALAR)
+       >>> @pandas_udf("integer", PandasUDFType.SCALAR)  # doctest: +SKIP
        ... def add_one(x):
        ...     return x + 1
        ...
-       >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+       >>> df = spark.createDataFrame([(1, "John Doe", 21)],
+       ...                            ("id", "name", "age"))  # doctest: +SKIP
        >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")) \\
        ...     .show()  # doctest: +SKIP
        +----------+--------------+------------+
@@ -2159,20 +2296,25 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |         8|      JOHN DOE|          22|
        +----------+--------------+------------+
 
-    2. GROUP_MAP
+       .. note:: The length of `pandas.Series` within a scalar UDF is not that of the whole input
+           column, but is the length of an internal batch used for each call to the function.
+           Therefore, this can be used, for example, to ensure the length of each returned
+           `pandas.Series`, and can not be used as the column length.
 
-       A group map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
+    2. GROUPED_MAP
+
+       A grouped map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
        The returnType should be a :class:`StructType` describing the schema of the returned
        `pandas.DataFrame`.
        The length of the returned `pandas.DataFrame` can be arbitrary.
 
-       Group map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
+       Grouped map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> df = spark.createDataFrame(
        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-       ...     ("id", "v"))
-       >>> @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)
+       ...     ("id", "v"))  # doctest: +SKIP
+       >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
        ... def normalize(pdf):
        ...     v = pdf.v
        ...     return pdf.assign(v=(v - v.mean()) / v.std())
@@ -2187,13 +2329,79 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  2| 1.1094003924504583|
        +---+-------------------+
 
+       Alternatively, the user can define a function that takes two arguments.
+       In this case, the grouping key will be passed as the first argument and the data will
+       be passed as the second argument. The grouping key will be passed as a tuple of numpy
+       data types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in
+       as a `pandas.DataFrame` containing all columns from the original Spark DataFrame.
+       This is useful when the user does not want to hardcode grouping key in the function.
+
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+       >>> import pandas as pd  # doctest: +SKIP
+       >>> df = spark.createDataFrame(
+       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+       ...     ("id", "v"))  # doctest: +SKIP
+       >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
+       ... def mean_udf(key, pdf):
+       ...     # key is a tuple of one numpy.int64, which is the value
+       ...     # of 'id' for the current group
+       ...     return pd.DataFrame([key + (pdf.v.mean(),)])
+       >>> df.groupby('id').apply(mean_udf).show()  # doctest: +SKIP
+       +---+---+
+       | id|  v|
+       +---+---+
+       |  1|1.5|
+       |  2|6.0|
+       +---+---+
+
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 
-    .. note:: The user-defined function must be deterministic.
+    3. GROUPED_AGG
 
-    .. note:: The user-defined functions do not support conditional expressions or short curcuiting
+       A grouped aggregate UDF defines a transformation: One or more `pandas.Series` -> A scalar
+       The `returnType` should be a primitive data type, e.g., :class:`DoubleType`.
+       The returned scalar can be either a python primitive type, e.g., `int` or `float`
+       or a numpy data type, e.g., `numpy.int64` or `numpy.float64`.
+
+       :class:`ArrayType`, :class:`MapType` and :class:`StructType` are currently not supported as
+       output types.
+
+       Group aggregate UDFs are used with :meth:`pyspark.sql.GroupedData.agg`
+
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+       >>> df = spark.createDataFrame(
+       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+       ...     ("id", "v"))
+       >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
+       ... def mean_udf(v):
+       ...     return v.mean()
+       >>> df.groupby("id").agg(mean_udf(df['v'])).show()  # doctest: +SKIP
+       +---+-----------+
+       | id|mean_udf(v)|
+       +---+-----------+
+       |  1|        1.5|
+       |  2|        6.0|
+       +---+-----------+
+
+       .. seealso:: :meth:`pyspark.sql.GroupedData.agg`
+
+    .. note:: The user-defined functions are considered deterministic by default. Due to
+        optimization, duplicate invocations may be eliminated or the function may even be invoked
+        more times than it is present in the query. If your function is not deterministic, call
+        `asNondeterministic` on the user defined function. E.g.:
+
+    >>> @pandas_udf('double', PandasUDFType.SCALAR)  # doctest: +SKIP
+    ... def random(v):
+    ...     import numpy as np
+    ...     import pandas as pd
+    ...     return pd.Series(np.random.randn(len(v))
+    >>> random = random.asNondeterministic()  # doctest: +SKIP
+
+    .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
+
+    .. note:: The user-defined functions do not take keyword arguments on the calling side.
     """
     # decorator @pandas_udf(returnType, functionType)
     is_decorator = f is None or isinstance(f, (str, DataType))
@@ -2212,20 +2420,21 @@ def pandas_udf(f=None, returnType=None, functionType=None):
             eval_type = returnType
         else:
             # @pandas_udf(dataType) or @pandas_udf(returnType=dataType)
-            eval_type = PythonEvalType.SQL_PANDAS_SCALAR_UDF
+            eval_type = PythonEvalType.SQL_SCALAR_PANDAS_UDF
     else:
         return_type = returnType
 
         if functionType is not None:
             eval_type = functionType
         else:
-            eval_type = PythonEvalType.SQL_PANDAS_SCALAR_UDF
+            eval_type = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
     if return_type is None:
         raise ValueError("Invalid returnType: returnType can not be None")
 
-    if eval_type not in [PythonEvalType.SQL_PANDAS_SCALAR_UDF,
-                         PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF]:
+    if eval_type not in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
         raise ValueError("Invalid functionType: "
                          "functionType must be one the values from PandasUDFType")
 
@@ -2259,7 +2468,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

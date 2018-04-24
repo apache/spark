@@ -165,11 +165,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
 
     if (notifyDriver && driver.nonEmpty) {
-      driver.get.ask[Boolean](
-        RemoveExecutor(executorId, new ExecutorLossReason(reason))
-      ).failed.foreach(e =>
-        logWarning(s"Unable to notify the driver due to " + e.getMessage, e)
-      )(ThreadUtils.sameThread)
+      driver.get.send(RemoveExecutor(executorId, new ExecutorLossReason(reason)))
     }
 
     System.exit(code)
@@ -217,11 +213,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
-      if (driverConf.contains("spark.yarn.credentials.file")) {
-        logInfo("Will periodically update credentials from: " +
-          driverConf.get("spark.yarn.credentials.file"))
-        SparkHadoopUtil.get.startCredentialUpdater(driverConf)
-      }
 
       cfg.hadoopDelegationCreds.foreach { tokens =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
@@ -236,7 +227,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.rpcEnv.awaitTermination()
-      SparkHadoopUtil.get.stopCredentialUpdater()
     }
   }
 

@@ -22,7 +22,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -84,7 +84,7 @@ case class SortExec(
     }
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
-    val sorter = new UnsafeExternalRowSorter(
+    val sorter = UnsafeExternalRowSorter.create(
       schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
 
     if (testSpillFrequency > 0) {
@@ -133,20 +133,19 @@ case class SortExec(
   override def needStopCheck: Boolean = false
 
   override protected def doProduce(ctx: CodegenContext): String = {
-    val needToSort = ctx.freshName("needToSort")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, needToSort, s"$needToSort = true;")
+    val needToSort =
+      ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "needToSort", v => s"$v = true;")
 
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.
     val thisPlan = ctx.addReferenceObj("plan", this)
-    sorterVariable = ctx.freshName("sorter")
-    ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, sorterVariable,
-      s"$sorterVariable = $thisPlan.createSorter();")
-    val metrics = ctx.freshName("metrics")
-    ctx.addMutableState(classOf[TaskMetrics].getName, metrics,
-      s"$metrics = org.apache.spark.TaskContext.get().taskMetrics();")
-    val sortedIterator = ctx.freshName("sortedIter")
-    ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", sortedIterator, "")
+    // Inline mutable state since not many Sort operations in a task
+    sorterVariable = ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, "sorter",
+      v => s"$v = $thisPlan.createSorter();", forceInline = true)
+    val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",
+      v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();", forceInline = true)
+    val sortedIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "sortedIter",
+      forceInline = true)
 
     val addToSorter = ctx.freshName("addToSorter")
     val addToSorterFuncName = ctx.addNewFunction(addToSorter,

@@ -23,6 +23,7 @@ import gc
 import itertools
 import operator
 import random
+import sys
 
 import pyspark.heapq3 as heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
@@ -810,4 +811,4 @@ if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

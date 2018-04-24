@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -85,13 +89,25 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyze empty table") {
     val table = "emptyTable"
     withTable(table) {
-      sql(s"CREATE TABLE $table (key STRING, value STRING) USING PARQUET")
+      val df = Seq.empty[Int].toDF("key")
+      df.write.format("json").saveAsTable(table)
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS noscan")
       val fetchedStats1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
       assert(fetchedStats1.get.sizeInBytes == 0)
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
       val fetchedStats2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
       assert(fetchedStats2.get.sizeInBytes == 0)
+
+      val expectedColStat =
+        "key" -> CatalogColumnStat(Some(0), None, None, Some(0),
+          Some(IntegerType.defaultSize), Some(IntegerType.defaultSize))
+
+      // There won't be histogram for empty column.
+      Seq("true", "false").foreach { histogramEnabled =>
+        withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
+          checkColStats(df, mutable.LinkedHashMap(expectedColStat))
+        }
+      }
     }
   }
 
@@ -145,7 +161,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     Seq(stats, statsWithHgms).foreach { s =>
       s.zip(df.schema).foreach { case ((k, v), field) =>
         withClue(s"column $k with type ${field.dataType}") {
-          val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
+          val roundtrip = CatalogColumnStat.fromMap("table_is_foo", field.name, v.toMap(k))
           assert(roundtrip == Some(v))
         }
       }
@@ -176,9 +192,16 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }.mkString(", "))
 
     val expectedColStats = dataTypes.map { case (tpe, idx) =>
-      (s"col$idx", ColumnStat(0, None, None, 1, tpe.defaultSize.toLong, tpe.defaultSize.toLong))
+      (s"col$idx", CatalogColumnStat(Some(0), None, None, Some(1),
+        Some(tpe.defaultSize.toLong), Some(tpe.defaultSize.toLong)))
     }
-    checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+
+    // There won't be histograms for null columns.
+    Seq("true", "false").foreach { histogramEnabled =>
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
+        checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+      }
+    }
   }
 
   test("number format in statistics") {
@@ -222,6 +245,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
+    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier(table)))
     Seq(false, true).foreach { autoUpdate =>
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
@@ -249,6 +273,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
               assert(fetched3.get.sizeInBytes == fetched1.get.sizeInBytes)
             } else {
               checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+              // SPARK-19724: clean up the previous table location.
+              waitForTasksToFinish()
+              Utils.deleteRecursively(tableLoc)
             }
           }
         }

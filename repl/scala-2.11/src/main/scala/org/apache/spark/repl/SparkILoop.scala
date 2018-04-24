@@ -35,6 +35,10 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def this(in0: BufferedReader, out: JPrintWriter) = this(Some(in0), out)
   def this() = this(None, new JPrintWriter(Console.out, true))
 
+  override def createInterpreter(): Unit = {
+    intp = new SparkILoopInterpreter(settings, out)
+  }
+
   val initializationCommands: Seq[String] = Seq(
     """
     @transient val spark = if (org.apache.spark.repl.Main.sparkSession != null) {

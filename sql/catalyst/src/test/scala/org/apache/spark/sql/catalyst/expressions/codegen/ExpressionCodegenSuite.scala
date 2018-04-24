@@ -39,8 +39,12 @@ class ExpressionCodegenSuite extends SparkFunSuite {
       Add(Literal(1), AttributeReference("a", IntegerType, nullable = false)()), // non-nullable
       Add(Literal(2), AttributeReference("b", IntegerType, nullable = true)()))  // nullable
 
-    ctx.subExprEliminationExprs.put(subExprs(0), SubExprEliminationState("false", "value1"))
-    ctx.subExprEliminationExprs.put(subExprs(1), SubExprEliminationState("isNull2", "value2"))
+    ctx.subExprEliminationExprs += (subExprs(0) ->
+      SubExprEliminationState(FalseLiteral, JavaCode.variable("value1", IntegerType)))
+    ctx.subExprEliminationExprs += (subExprs(1) ->
+      SubExprEliminationState(
+        JavaCode.isNullVariable("isNull2"),
+        JavaCode.variable("value2", IntegerType)))
 
     val subExprCodes = ExpressionCodegen.getSubExprCodes(ctx, subExprs)
     val subVars = subExprs.zip(subExprCodes).map { case (expr, exprCode) =>
@@ -56,9 +60,18 @@ class ExpressionCodegenSuite extends SparkFunSuite {
   test("Returns input variables for expression: current variables") {
     val ctx = new CodegenContext()
     val currentVars = Seq(
-      ExprCode("", isNull = "false", value = "value1"),             // evaluated
-      ExprCode("", isNull = "isNull2", value = "value2"),           // evaluated
-      ExprCode("fake code;", isNull = "isNull3", value = "value3")) // not evaluated
+      // evaluated
+      ExprCode("",
+        isNull = FalseLiteral,
+        value = JavaCode.variable("value1", IntegerType)),
+      // evaluated
+      ExprCode("",
+        isNull = JavaCode.isNullVariable("isNull2"),
+        value = JavaCode.variable("value2", IntegerType)),
+      // not evaluated
+      ExprCode("fake code;",
+        isNull = JavaCode.isNullVariable("isNull3"),
+        value = JavaCode.variable("value3", IntegerType)))
     ctx.currentVars = currentVars
     ctx.INPUT_ROW = null
 
@@ -87,10 +100,15 @@ class ExpressionCodegenSuite extends SparkFunSuite {
 
     // The referred column is not evaluated yet. But it depends on an evaluated column from
     // other operator.
-    val currentVars = Seq(ExprCode("fake code;", isNull = "isNull1", value = "value1"))
+    val currentVars = Seq(ExprCode("fake code;",
+      isNull = JavaCode.isNullVariable("isNull1"),
+      value = JavaCode.variable("value1", IntegerType)))
 
     // currentVars(0) depends on this evaluated column.
-    currentVars(0).inputVars = Seq(ExprInputVar(ExprCode("", isNull = "isNull2", value = "value2"),
+    currentVars(0).inputVars = Seq(
+      ExprInputVar(ExprCode("",
+        isNull = JavaCode.isNullVariable("isNull2"),
+        value = JavaCode.variable("value2", IntegerType)),
       dataType = IntegerType, nullable = true))
     ctx.currentVars = currentVars
     ctx.INPUT_ROW = null
@@ -123,7 +141,9 @@ class ExpressionCodegenSuite extends SparkFunSuite {
 
     // The referred column is not evaluated yet. But it depends on an input row from
     // other operator.
-    val currentVars = Seq(ExprCode("fake code;", isNull = "isNull1", value = "value1"))
+    val currentVars = Seq(ExprCode("fake code;",
+      isNull = JavaCode.isNullVariable("isNull1"),
+      value = JavaCode.variable("value1", IntegerType)))
     currentVars(0).inputRow = "inputadaptor_row1"
     ctx.currentVars = currentVars
     ctx.INPUT_ROW = null
@@ -144,19 +164,33 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     //     value4 depends on a not evaluated yet column from other operator.
     //   1 null indicating to use input row "i".
     val currentVars = Seq(
-      ExprCode("", isNull = "false", value = "value1"),
-      ExprCode("fake code;", isNull = "isNull2", value = "value2"),
-      ExprCode("fake code;", isNull = "isNull3", value = "value3"),
-      ExprCode("fake code;", isNull = "isNull4", value = "value4"),
+      ExprCode("",
+        isNull = FalseLiteral,
+        value = JavaCode.variable("value1", IntegerType)),
+      ExprCode("fake code;",
+        isNull = JavaCode.isNullVariable("isNull2"),
+        value = JavaCode.variable("value2", IntegerType)),
+      ExprCode("fake code;",
+        isNull = JavaCode.isNullVariable("isNull3"),
+        value = JavaCode.variable("value3", IntegerType)),
+      ExprCode("fake code;",
+        isNull = JavaCode.isNullVariable("isNull4"),
+        value = JavaCode.variable("value4", IntegerType)),
       null)
     // value2 depends on this evaluated column.
-    currentVars(1).inputVars = Seq(ExprInputVar(ExprCode("", isNull = "isNull5", value = "value5"),
+    currentVars(1).inputVars = Seq(
+      ExprInputVar(ExprCode("",
+        isNull = JavaCode.isNullVariable("isNull5"),
+        value = JavaCode.variable("value5", IntegerType)),
       dataType = IntegerType, nullable = true))
     // value3 depends on an input row "inputadaptor_row1".
     currentVars(2).inputRow = "inputadaptor_row1"
     // value4 depends on another not evaluated yet column.
-    currentVars(3).inputVars = Seq(ExprInputVar(ExprCode("fake code;",
-      isNull = "isNull6", value = "value6"), dataType = IntegerType, nullable = true))
+    currentVars(3).inputVars = Seq(
+      ExprInputVar(ExprCode("fake code;",
+        isNull = JavaCode.isNullVariable("isNull6"),
+        value = JavaCode.variable("value6", IntegerType)),
+      dataType = IntegerType, nullable = true))
     ctx.currentVars = currentVars
     ctx.INPUT_ROW = "i"
 
@@ -184,37 +218,5 @@ class ExpressionCodegenSuite extends SparkFunSuite {
     assert(inputVarParams(0) == Tuple2("value1", "int value1"))
     assert(inputVarParams(1) == Tuple2("value5", "int value5"))
     assert(inputVarParams(2) == Tuple2("isNull5", "boolean isNull5"))
-  }
-
-  test("isLiteral: literals") {
-    val literals = Seq(
-      ExprCode("", "", "true"),
-      ExprCode("", "", "false"),
-      ExprCode("", "", "1"),
-      ExprCode("", "", "-1"),
-      ExprCode("", "", "1L"),
-      ExprCode("", "", "-1L"),
-      ExprCode("", "", "1.0f"),
-      ExprCode("", "", "-1.0f"),
-      ExprCode("", "", "0.1f"),
-      ExprCode("", "", "-0.1f"),
-      ExprCode("", "", """"string""""),
-      ExprCode("", "", "(byte)-1"),
-      ExprCode("", "", "(short)-1"),
-      ExprCode("", "", "null"))
-
-    literals.foreach(l => assert(ExpressionCodegen.isLiteral(l) == true))
-  }
-
-  test("isLiteral: non literals") {
-    val variables = Seq(
-      ExprCode("", "", "var1"),
-      ExprCode("", "", "_var2"),
-      ExprCode("", "", "$var3"),
-      ExprCode("", "", "v1a2r3"),
-      ExprCode("", "", "_1v2a3r"),
-      ExprCode("", "", "$1v2a3r"))
-
-    variables.foreach(v => assert(ExpressionCodegen.isLiteral(v) == false))
   }
 }

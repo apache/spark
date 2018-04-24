@@ -27,6 +27,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -620,23 +621,30 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-18207: Compute hash for a lot of expressions") {
+    def checkResult(schema: StructType, input: InternalRow): Unit = {
+      val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
+        BoundReference(i, f.dataType, true)
+      }
+      val murmur3HashExpr = Murmur3Hash(exprs, 42)
+      val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
+      val murmursHashEval = Murmur3Hash(exprs, 42).eval(input)
+      assert(murmur3HashPlan(input).getInt(0) == murmursHashEval)
+
+      val hiveHashExpr = HiveHash(exprs)
+      val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))
+      val hiveHashEval = HiveHash(exprs).eval(input)
+      assert(hiveHashPlan(input).getInt(0) == hiveHashEval)
+    }
+
     val N = 1000
     val wideRow = new GenericInternalRow(
       Seq.tabulate(N)(i => UTF8String.fromString(i.toString)).toArray[Any])
-    val schema = StructType((1 to N).map(i => StructField("", StringType)))
+    val schema = StructType((1 to N).map(i => StructField(i.toString, StringType)))
+    checkResult(schema, wideRow)
 
-    val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
-      BoundReference(i, f.dataType, true)
-    }
-    val murmur3HashExpr = Murmur3Hash(exprs, 42)
-    val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
-    val murmursHashEval = Murmur3Hash(exprs, 42).eval(wideRow)
-    assert(murmur3HashPlan(wideRow).getInt(0) == murmursHashEval)
-
-    val hiveHashExpr = HiveHash(exprs)
-    val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))
-    val hiveHashEval = HiveHash(exprs).eval(wideRow)
-    assert(hiveHashPlan(wideRow).getInt(0) == hiveHashEval)
+    val nestedRow = InternalRow(wideRow)
+    val nestedSchema = new StructType().add("nested", schema)
+    checkResult(nestedSchema, nestedRow)
   }
 
   test("SPARK-22284: Compute hash for nested structs") {

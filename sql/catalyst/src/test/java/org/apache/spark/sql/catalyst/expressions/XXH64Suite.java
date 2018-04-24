@@ -24,6 +24,8 @@ import java.util.Random;
 import java.util.Set;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -74,9 +76,6 @@ public class XXH64Suite {
     Assert.assertEquals(0x739840CB819FA723L,
             XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 1, PRIME));
 
-    // These tests currently fail in a big endian environment because the test data and expected
-    // answers are generated with little endian the assumptions. We could revisit this when Platform
-    // becomes endian aware.
     if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
       Assert.assertEquals(0x9256E58AA397AEF1L,
               hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 4));
@@ -93,6 +92,23 @@ public class XXH64Suite {
       Assert.assertEquals(0x0EAB543384F878ADL,
               hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, SIZE));
       Assert.assertEquals(0xCAA65939306F1E21L,
+              XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, SIZE, PRIME));
+    } else {
+      Assert.assertEquals(0x7F875412350ADDDCL,
+              hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 4));
+      Assert.assertEquals(0x564D279F524D8516L,
+              XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 4, PRIME));
+      Assert.assertEquals(0x7D9F07E27E0EB006L,
+              hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 8));
+      Assert.assertEquals(0x893CEF564CB7858L,
+              XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 8, PRIME));
+      Assert.assertEquals(0xC6198C4C9CC49E17L,
+              hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 14));
+      Assert.assertEquals(0x4E21BEF7164D4BBL,
+              XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 14, PRIME));
+      Assert.assertEquals(0xBCF5FAEDEE1F2B5AL,
+              hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, SIZE));
+      Assert.assertEquals(0x6F680C877A358FE5L,
               XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, SIZE, PRIME));
     }
   }
@@ -128,13 +144,13 @@ public class XXH64Suite {
       int byteArrSize = rand.nextInt(100) * 8;
       byte[] bytes = new byte[byteArrSize];
       rand.nextBytes(bytes);
+      MemoryBlock mb = ByteArrayMemoryBlock.fromArray(bytes);
 
       Assert.assertEquals(
-              hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
-              hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+              hasher.hashUnsafeWordsBlock(mb),
+              hasher.hashUnsafeWordsBlock(mb));
 
-      hashcodes.add(hasher.hashUnsafeWords(
-              bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+      hashcodes.add(hasher.hashUnsafeWordsBlock(mb));
     }
 
     // A very loose bound.
@@ -151,13 +167,13 @@ public class XXH64Suite {
       byte[] strBytes = String.valueOf(i).getBytes(StandardCharsets.UTF_8);
       byte[] paddedBytes = new byte[byteArrSize];
       System.arraycopy(strBytes, 0, paddedBytes, 0, strBytes.length);
+      MemoryBlock mb = ByteArrayMemoryBlock.fromArray(paddedBytes);
 
       Assert.assertEquals(
-              hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
-              hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+              hasher.hashUnsafeWordsBlock(mb),
+              hasher.hashUnsafeWordsBlock(mb));
 
-      hashcodes.add(hasher.hashUnsafeWords(
-              paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+      hashcodes.add(hasher.hashUnsafeWordsBlock(mb));
     }
 
     // A very loose bound.
