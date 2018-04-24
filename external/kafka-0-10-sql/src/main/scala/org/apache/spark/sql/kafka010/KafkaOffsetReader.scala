@@ -79,7 +79,11 @@ private[kafka010] class KafkaOffsetReader(
 
   protected def consumer: Consumer[Array[Byte], Array[Byte]] = synchronized {
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
-    if (_consumer == null) createConsumer()
+    if (_consumer == null) {
+      val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
+      newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
+      _consumer = consumerStrategy.createConsumer(newKafkaParams)
+    }
     _consumer
   }
 
@@ -308,17 +312,6 @@ private[kafka010] class KafkaOffsetReader(
     }
   }
 
-  /**
-   * Create a consumer using the new generated group id. We always use a new consumer to avoid
-   * just using a broken consumer to retry on Kafka errors, which likely will fail again.
-   */
-  private def createConsumer(): Consumer[Array[Byte], Array[Byte]] = synchronized {
-    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
-    val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
-    newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
-    consumerStrategy.createConsumer(newKafkaParams)
-  }
-
   private def stopConsumer(): Unit = synchronized {
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
     if (_consumer != null) _consumer.close()
@@ -326,7 +319,7 @@ private[kafka010] class KafkaOffsetReader(
 
   private def resetConsumer(): Unit = synchronized {
     stopConsumer()
-    _consumer = createConsumer()
+    _consumer = null  // will automatically get reinitialized again
   }
 }
 
