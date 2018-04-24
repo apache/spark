@@ -3036,6 +3036,26 @@ class SQLTests(ReusedSQLTestCase):
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
+    @classmethod
+    def setUpClass(cls):
+        # get a SparkContext to check for availability of Hive
+        sc = SparkContext('local[4]', cls.__name__)
+        cls.hive_available = True
+        try:
+            sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        except py4j.protocol.Py4JError:
+            cls.hive_available = False
+        except TypeError:
+            cls.hive_available = False
+        finally:
+            # we don't need this SparkContext for the test
+            sc.stop()
+
+    def setUp(self):
+        super(HiveSparkSubmitTests, self).setUp()
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
+
     def test_hivecontext(self):
         # This test checks that HiveContext is using Hive metastore (SPARK-16224).
         # It sets a metastore url and checks if there is a derby dir created by
