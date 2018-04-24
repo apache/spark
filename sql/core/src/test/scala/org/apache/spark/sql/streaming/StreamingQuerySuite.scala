@@ -542,7 +542,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
     testStream(streamInput1.toDF().union(streamInput2.toDF()), useV2Sink = true)(
       AddData(streamInput1, 1, 2, 3),
-      CheckAnswer(1, 2, 3),
+      CheckLastBatch(1, 2, 3),
       AssertOnQuery { q =>
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)
@@ -550,6 +550,17 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(lastProgress.get.sources.length == 2)
         assert(lastProgress.get.sources(0).numInputRows == 3)
         assert(lastProgress.get.sources(1).numInputRows == 0)
+        true
+      },
+      AddData(streamInput2, 4, 5),
+      CheckLastBatch(4, 5),
+      AssertOnQuery { q =>
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.numInputRows == 2)
+        assert(lastProgress.get.sources.length == 2)
+        assert(lastProgress.get.sources(0).numInputRows == 0)
+        assert(lastProgress.get.sources(1).numInputRows == 2)
         true
       }
     )
