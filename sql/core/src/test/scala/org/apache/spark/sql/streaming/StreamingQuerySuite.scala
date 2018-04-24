@@ -466,12 +466,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("input row calculation with same V1 source used twice in query (self-union)") {
+  test("input row calculation with same V1 source used twice in self-join") {
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
 
-    val progress = getFirstProgress(streamingInputDF.union(streamingInputDF))
-    assert(progress.numInputRows === 20)
+    val progress = getFirstProgress(streamingInputDF.join(streamingInputDF, "value"))
+    assert(progress.numInputRows === 20) // data is read multiple times in self-joins
     assert(progress.sources.size === 1)
     assert(progress.sources(0).numInputRows === 20)
   }
@@ -502,7 +502,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(progress.sources(0).numInputRows === 10)
   }
 
-  test("input row calculation with same V2 source used twice in query (self-union)") {
+  test("input row calculation with same V2 source used twice in self-union") {
     val streamInput = MemoryStream[Int]
 
     testStream(streamInput.toDF().union(streamInput.toDF()), useV2Sink = true)(
@@ -519,7 +519,24 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
   }
 
-  test("input row calculation with trigger having data for one of two V2 sources") {
+  test("input row calculation with same V2 source used twice in self-join") {
+    val streamInput = MemoryStream[Int]
+    val df = streamInput.toDF()
+    testStream(df.join(df, "value"), useV2Sink = true)(
+      AddData(streamInput, 1, 2, 3),
+      CheckAnswer(1, 2, 3),
+      AssertOnQuery { q =>
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.numInputRows == 6)
+        assert(lastProgress.get.sources.length == 1)
+        assert(lastProgress.get.sources(0).numInputRows == 6)
+        true
+      }
+    )
+  }
+
+  test("input row calculation with trigger having data for only one of two V2 sources") {
     val streamInput1 = MemoryStream[Int]
     val streamInput2 = MemoryStream[Int]
 
