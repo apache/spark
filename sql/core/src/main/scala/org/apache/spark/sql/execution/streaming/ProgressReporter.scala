@@ -143,7 +143,7 @@ trait ProgressReporter extends Logging {
     }
     logDebug(s"Execution stats: $executionStats")
 
-    val sourceProgress = sources.map { source =>
+    val sourceProgress = sources.distinct.map { source =>
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
       new SourceProgress(
         description = source.toString,
@@ -226,10 +226,6 @@ trait ProgressReporter extends Logging {
   /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(): Map[BaseStreamingSource, Long] = {
 
-    def sumRows(tuples: Seq[(BaseStreamingSource, Long)]): Map[BaseStreamingSource, Long] = {
-      tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
-    }
-
     val onlyDataSourceV2Sources = {
       // Check whether the streaming query's logical plan has only V2 data sources
       val allStreamingLeaves =
@@ -239,14 +235,14 @@ trait ProgressReporter extends Logging {
 
     if (onlyDataSourceV2Sources) {
       val streamingExecLeaves = lastExecution.executedPlan.collect {
-        case s: DataSourceV2ScanExec if (s.reader.isInstanceOf[MicroBatchReader]) => s
+        case s: DataSourceV2ScanExec if (s.reader.isInstanceOf[BaseStreamingSource]) => s
       }
-      val sourceToInputRowsTuples = streamingExecLeaves.map { execLeaf =>
+      val sourceToInputRows = streamingExecLeaves.map { execLeaf =>
         val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-        execLeaf.reader.asInstanceOf[MicroBatchReader] -> numRows
-      }
-      logDebug("Source -> # input rows\n" + sourceToInputRowsTuples.mkString("\n"))
-      sumRows(sourceToInputRowsTuples)
+        execLeaf.reader.asInstanceOf[BaseStreamingSource] -> numRows
+      }.toMap
+      logDebug("Source -> # input rows\n" + sourceToInputRows.mkString("\n"))
+      sourceToInputRows
     } else {
 
       // We want to associate execution plan leaves to sources that generate them, so that we match
@@ -276,11 +272,11 @@ trait ProgressReporter extends Logging {
         val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
           case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
         }
-        val sourceToInputRowsTuples = execLeafToSource.map { case (execLeaf, source) =>
+        val sourceToInputRows = execLeafToSource.map { case (execLeaf, source) =>
           val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
           source -> numRows
-        }
-        sumRows(sourceToInputRowsTuples)
+        }.toMap
+        sourceToInputRows
       } else {
         if (!metricWarningLogged) {
           def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"

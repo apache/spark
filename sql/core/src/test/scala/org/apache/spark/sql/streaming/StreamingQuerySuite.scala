@@ -466,6 +466,16 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("input row calculation with same V1 source used twice in query (self-union)") {
+    val streamingTriggerDF = spark.createDataset(1 to 10).toDF
+    val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
+
+    val progress = getFirstProgress(streamingInputDF.union(streamingInputDF))
+    assert(progress.numInputRows === 20)
+    assert(progress.sources.size === 1)
+    assert(progress.sources(0).numInputRows === 20)
+  }
+
   test("input row calculation with mixed batch and streaming V1 sources") {
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
@@ -492,6 +502,22 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(progress.sources(0).numInputRows === 10)
   }
 
+  test("input row calculation with same V2 source used twice in query (self-union)") {
+    val streamInput = MemoryStream[Int]
+
+    testStream(streamInput.toDF().union(streamInput.toDF()), useV2Sink = true)(
+      AddData(streamInput, 1, 2, 3),
+      CheckAnswer(1, 1, 2, 2, 3, 3),
+      AssertOnQuery { q =>
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.numInputRows == 6)
+        assert(lastProgress.get.sources.length == 1)
+        assert(lastProgress.get.sources(0).numInputRows == 6)
+        true
+      }
+    )
+  }
 
   test("input row calculation with trigger having data for one of two V2 sources") {
     val streamInput1 = MemoryStream[Int]
@@ -804,10 +830,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  /** Returns the last query progress from query.recentProgress where numInputRows > 0 */
   def getLastProgressWithData(q: StreamingQuery): Option[StreamingQueryProgress] = {
     q.recentProgress.filter(_.numInputRows > 0).lastOption
   }
-
 
   /**
    * A [[StreamAction]] to test the behavior of `StreamingQuery.awaitTermination()`.
