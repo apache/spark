@@ -50,7 +50,12 @@ case class SaveIntoDataSourceCommand(
   }
 
   override def simpleString: String = {
-    val redacted = Utils.redact(SparkEnv.get.conf, options.toSeq).toMap
+    // Redact the options according to the current session's config. If for some reason there
+    // is no current session, be paranoid and don't show any options.
+    val redacted = SparkSession.getActiveSession.map(_.sessionState.conf).map { conf =>
+      conf.redactOptions(options)
+    }.getOrElse(Map())
+
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
   }
 }
