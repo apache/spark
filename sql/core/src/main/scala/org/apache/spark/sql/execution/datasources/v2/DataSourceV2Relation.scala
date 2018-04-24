@@ -121,6 +121,8 @@ case class StreamingDataSourceV2Relation(
 
   override def simpleString: String = "Streaming RelationV2 " + metadataString
 
+  override def pushedFilters: Seq[Expression] = Nil
+
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
@@ -237,11 +239,16 @@ object DataSourceV2Relation {
         // the data source cannot guarantee the rows returned can pass the filter.
         // As a result we must return it so Spark can plan an extra filter operator.
         val unhandledFilters = filterSupport.pushFilters(translatedMap.values.toArray).toSet
-        val (unhandledPredicates, pushedPredicates) = translatedMap.partition { case (_, f) =>
+        val unhandledPredicates = translatedMap.filter { case (_, f) =>
           unhandledFilters.contains(f)
-        }
+        }.keys
+        // The filters which are marked as pushed to this data source
+        val pushedFilters = filterSupport.pushedFilters()
+        val pushedPredicates = translatedMap.filter { case (_, f) =>
+          pushedFilters.contains(f)
+        }.keys.toSeq
 
-        (nonConvertiblePredicates ++ unhandledPredicates.keys, pushedPredicates.keys.toSeq)
+        (nonConvertiblePredicates ++ unhandledPredicates, pushedPredicates)
 
       case _ => (filters, Nil)
     }
