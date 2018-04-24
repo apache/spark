@@ -977,7 +977,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(
       taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec-1", "host-1", 1))).flatten.isEmpty)
 
-    val remainingTasks = (0 until 10).toSet.diff(finalAttemptPendingPartitions).toIndexedSeq.sorted
+    val remainingTasks = finalAttemptLaunchedPartitions.toIndexedSeq.sorted
 
     // finally, if we finish the remaining partitions from a mix of tasksets, all attempts should be
     // marked as zombie.
