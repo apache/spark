@@ -192,7 +192,7 @@ NULL
 #' @param value A value to compute on.
 #'          \itemize{
 #'          \item \code{array_contains}: a value to be checked if contained in the column.
-#'          \item \code{array_position}: a value to to locate in the given array.
+#'          \item \code{array_position}: a value to locate in the given array.
 #'          }
 #' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
 #'            additional named properties to control how it is converted, accepts the same
