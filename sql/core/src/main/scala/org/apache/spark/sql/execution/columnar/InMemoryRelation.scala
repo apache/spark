@@ -48,7 +48,7 @@ case class CachedRDDBuilder(
     storageLevel: StorageLevel,
     @transient cachedPlan: SparkPlan,
     tableName: Option[String])(
-    @transient private[sql] var _cachedColumnBuffers: RDD[CachedBatch] = null) {
+    @transient private var _cachedColumnBuffers: RDD[CachedBatch] = null) {
 
   val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
 

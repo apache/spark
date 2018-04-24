@@ -796,12 +796,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
-  private def isMaterialized(df: DataFrame): Boolean = {
-    val nodes = df.queryExecution.executedPlan.collect { case c: InMemoryTableScanExec => c }
-    assert(nodes.nonEmpty, "DataFrame is not cached\n" + df.queryExecution.analyzed)
-    nodes.forall(_.relation.cacheBuilder._cachedColumnBuffers != null)
-  }
-
   private def checkIfNoJobTriggered(f: => DataFrame): DataFrame = {
     var numJobTrigered = 0
     val jobListener = new SparkListener {
@@ -821,12 +815,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
   test("SPARK-23880 table cache should be lazy and don't trigger any jobs") {
     val cachedDf = checkIfNoJobTriggered {
-      val df = spark.range(3L).selectExpr("id", "id AS value")
-        .filter('id > 0).orderBy('id.asc).cache()
-      assert(!isMaterialized(df))
-      df
+      spark.range(3L).selectExpr("id", "id AS value").filter('id > 0).orderBy('id.asc).cache()
     }
     checkAnswer(cachedDf, Row(1L, 1L) :: Row(2L, 2L) :: Nil)
-    assert(isMaterialized(cachedDf))
   }
 }
