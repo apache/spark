@@ -882,8 +882,7 @@ class DataFrameWriter(OptionUtils):
                                           the quote character. If None is set, the default value is
                                           escape character when escape and quote characters are
                                           different, ``\0`` otherwise..
-        :param samplingRatio: defines fraction of rows (when ``multiLine`` is ``false``) or fraction
-                              of files (when ``multiLine`` is ``true``) used for schema inferring.
+        :param samplingRatio: defines fraction of rows used for schema inferring.
                               If None is set, it uses the default value, ``1.0``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))

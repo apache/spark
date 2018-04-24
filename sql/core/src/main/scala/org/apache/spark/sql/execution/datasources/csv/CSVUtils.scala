@@ -150,7 +150,7 @@ object CSVUtils {
   /**
    * Sample CSV RDD as configured by `samplingRatio`.
    */
-  def sample(csv: RDD[PortableDataStream], options: CSVOptions): RDD[PortableDataStream] = {
+  def sample(csv: RDD[Array[String]], options: CSVOptions): RDD[Array[String]] = {
     require(options.samplingRatio > 0,
       s"samplingRatio (${options.samplingRatio}) should be greater than 0")
     if (options.samplingRatio > 0.99) {
