@@ -984,27 +984,28 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression, startFromZero
        |final int $structsOffset = $calculateHeader($numElements) + $numElements * $longSize;
        |if ($byteArraySize > $MAX_ARRAY_LENGTH) {
        |  ${genCodeForAnyElements(ctx, childVariableName, arrayData, numElements)}
-       |}
-       |final byte[] $data = new byte[(int)$byteArraySize];
-       |UnsafeArrayData $unsafeArrayData = new UnsafeArrayData();
-       |Platform.putLong($data, $baseOffset, $numElements);
-       |$unsafeArrayData.pointTo($data, $baseOffset, (int)$byteArraySize);
-       |UnsafeRow $unsafeRow = new UnsafeRow(2);
-       |for (int z = 0; z < $numElements; z++) {
-       |  long offset = $structsOffset + z * $structSize;
-       |  $unsafeArrayData.setLong(z, (offset << 32) + $structSize);
-       |  $unsafeRow.pointTo($data, $baseOffset + offset, $structSize);
-       |  if ($childVariableName.isNullAt(z)) {
-       |    $unsafeRow.setNullAt($valuePosition);
-       |  } else {
-       |    $unsafeRow.set$primitiveValueTypeName(
-       |      $valuePosition,
-       |      ${CodeGenerator.getValue(childVariableName, childArrayType.elementType, "z")}
-       |    );
+       |} else {
+       |  final byte[] $data = new byte[(int)$byteArraySize];
+       |  UnsafeArrayData $unsafeArrayData = new UnsafeArrayData();
+       |  Platform.putLong($data, $baseOffset, $numElements);
+       |  $unsafeArrayData.pointTo($data, $baseOffset, (int)$byteArraySize);
+       |  UnsafeRow $unsafeRow = new UnsafeRow(2);
+       |  for (int z = 0; z < $numElements; z++) {
+       |    long offset = $structsOffset + z * $structSize;
+       |    $unsafeArrayData.setLong(z, (offset << 32) + $structSize);
+       |    $unsafeRow.pointTo($data, $baseOffset + offset, $structSize);
+       |    if ($childVariableName.isNullAt(z)) {
+       |      $unsafeRow.setNullAt($valuePosition);
+       |    } else {
+       |      $unsafeRow.set$primitiveValueTypeName(
+       |        $valuePosition,
+       |        ${CodeGenerator.getValue(childVariableName, childArrayType.elementType, "z")}
+       |      );
+       |    }
+       |    $unsafeRow.setInt($indexPosition, $idxGen);
        |  }
-       |  $unsafeRow.setInt($indexPosition, $idxGen);
+       |  $arrayData = $unsafeArrayData;
        |}
-       |$arrayData = $unsafeArrayData;
      """.stripMargin
   }
 
