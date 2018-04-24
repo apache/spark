@@ -223,7 +223,7 @@ object ExpressionCodegen {
       }
 
       // If it is a nullable expression and `isNull` is not a literal.
-      if (inputVar.nullable && ev.isNull != "true" && ev.isNull != "false") {
+      if (inputVar.nullable && !ev.isNull.isInstanceOf[LiteralValue]) {
         params += ((ev.isNull, s"boolean ${ev.isNull}"))
       }
 
