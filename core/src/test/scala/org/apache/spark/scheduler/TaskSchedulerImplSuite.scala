@@ -940,15 +940,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       val offers = (0 until 10).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
       taskScheduler.resourceOffers(offers)
       assert(tsm.runningTasks === 10)
-      if (stageAttempt < 2) {
-        // fail attempt
-        tsm.handleFailedTask(tsm.taskAttempts.head.head.taskId, TaskState.FAILED,
-          FetchFailed(null, 0, 0, 0, "fetch failed"))
-        // the attempt is a zombie, but the tasks are still running (this could be true even if
-        // we actively killed those tasks, as killing is best-effort)
-        assert(tsm.isZombie)
-        assert(tsm.runningTasks === 9)
-      }
+      // fail attempt
+      tsm.handleFailedTask(tsm.taskAttempts.head.head.taskId, TaskState.FAILED,
+        FetchFailed(null, 0, 0, 0, "fetch failed"))
+      // the attempt is a zombie, but the tasks are still running (this could be true even if
+      // we actively killed those tasks, as killing is best-effort)
+      assert(tsm.isZombie)
+      assert(tsm.runningTasks === 9)
       tsm
     }
 
@@ -979,8 +977,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(
       taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec-1", "host-1", 1))).flatten.isEmpty)
 
-    val allTaskSets = zombieAttempts ++ Seq(finalTsm)
-    val remainingTasks = (0 until 10).toSet.diff(finalAttemptPendingPartitions)
+    val remainingTasks = (0 until 10).toSet.diff(finalAttemptPendingPartitions).toIndexedSeq.sorted
 
     // finally, if we finish the remaining partitions from a mix of tasksets, all attempts should be
     // marked as zombie.
