@@ -53,7 +53,7 @@ private[kafka010] class KafkaOffsetReader(
    */
   val kafkaReaderThread = Executors.newSingleThreadExecutor(new ThreadFactory {
     override def newThread(r: Runnable): Thread = {
-      val t = new UninterruptibleThread(s"Kafka-Offset-Reader-$driverGroupIdPrefix") {
+      val t = new UninterruptibleThread(s"Kafka Offset Reader") {
         override def run(): Unit = {
           r.run()
         }
@@ -75,7 +75,13 @@ private[kafka010] class KafkaOffsetReader(
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
    */
-  @volatile protected var consumer: Consumer[Array[Byte], Array[Byte]] = null
+  @volatile protected var _consumer: Consumer[Array[Byte], Array[Byte]] = null
+
+  protected def consumer: Consumer[Array[Byte], Array[Byte]] = synchronized {
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
+    if (_consumer == null) createConsumer()
+    _consumer
+  }
 
   private val maxOffsetFetchAttempts =
     readerOptions.getOrElse("fetchOffset.numRetries", "3").toInt
@@ -95,9 +101,7 @@ private[kafka010] class KafkaOffsetReader(
    * Closes the connection to Kafka, and cleans up state.
    */
   def close(): Unit = {
-    if (consumer != null) {  // check this outside runUninterruptibly as that initializes consumer
-      runUninterruptibly { consumer.close() }
-    }
+    if (_consumer != null) runUninterruptibly { stopConsumer() }
     kafkaReaderThread.shutdown()
   }
 
@@ -239,7 +243,6 @@ private[kafka010] class KafkaOffsetReader(
    */
   private def runUninterruptibly[T](body: => T): T = {
     if (!Thread.currentThread.isInstanceOf[UninterruptibleThread]) {
-      if (consumer == null) createConsumer()
       val future = Future {
         body
       }(execContext)
@@ -310,16 +313,20 @@ private[kafka010] class KafkaOffsetReader(
    * just using a broken consumer to retry on Kafka errors, which likely will fail again.
    */
   private def createConsumer(): Consumer[Array[Byte], Array[Byte]] = synchronized {
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
     val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
     newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
     consumerStrategy.createConsumer(newKafkaParams)
   }
 
+  private def stopConsumer(): Unit = synchronized {
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
+    if (_consumer != null) _consumer.close()
+  }
+
   private def resetConsumer(): Unit = synchronized {
-    if (consumer != null) {
-      consumer.close()
-    }
-    consumer = createConsumer()
+    stopConsumer()
+    _consumer = createConsumer()
   }
 }
 
