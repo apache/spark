@@ -799,7 +799,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
         new LinearRegressionModel(metadata.uid, coefficients, intercept, scale)
       }
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
