@@ -846,19 +846,6 @@ object ScalaReflection extends ScalaReflection {
     }
   }
 
-  def javaBoxedType(dt: DataType): Class[_] = dt match {
-    case _: DecimalType => classOf[Decimal]
-    case BinaryType => classOf[Array[Byte]]
-    case StringType => classOf[UTF8String]
-    case CalendarIntervalType => classOf[CalendarInterval]
-    case _: StructType => classOf[InternalRow]
-    case _: ArrayType => classOf[ArrayType]
-    case _: MapType => classOf[MapType]
-    case udt: UserDefinedType[_] => javaBoxedType(udt.sqlType)
-    case ObjectType(cls) => cls
-    case _ => ScalaReflection.typeBoxedJavaMapping.getOrElse(dt, classOf[java.lang.Object])
-  }
-
   def expressionJavaClasses(arguments: Seq[Expression]): Seq[Class[_]] = {
     if (arguments != Nil) {
       arguments.map(e => dataTypeJavaClass(e.dataType))

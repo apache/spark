@@ -746,7 +746,7 @@ private class InternalLinearRegressionModelWriter
 
 /** A writer for LinearRegression that handles the "pmml" format */
 private class PMMLLinearRegressionModelWriter
-  extends MLWriterFormat with MLFormatRegister {
+    extends MLWriterFormat with MLFormatRegister {
 
   override def format(): String = "pmml"
 

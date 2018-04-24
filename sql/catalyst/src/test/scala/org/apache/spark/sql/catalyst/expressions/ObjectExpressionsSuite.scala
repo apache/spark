@@ -21,13 +21,12 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.encoders._
@@ -38,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, Generic
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 
 class InvokeTargetClass extends Serializable {
   def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
@@ -297,7 +296,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
     val getRowField = GetExternalRowField(inputObject, index = 0, fieldName = "c0")
     Seq((Row(1), 1), (Row(3), 3)).foreach { case (input, expected) =>
-      checkObjectExprEvaluation(getRowField, expected, InternalRow.fromSeq(Seq(input)))
+      checkEvaluation(getRowField, expected, InternalRow.fromSeq(Seq(input)))
     }
 
     // If an input row or a field are null, a runtime exception will be thrown
@@ -472,140 +471,6 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val data = Map[Int, String](0 -> "v0", 1 -> "v1", 2 -> null, 3 -> "v3")
     val deserializer = toMapExpr.copy(inputData = Literal.create(data))
     checkObjectExprEvaluation(deserializer, expected = data)
-  }
-
-  test("SPARK-23595 ValidateExternalType should support interpreted execution") {
-    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
-    Seq(
-      (true, BooleanType),
-      (2.toByte, ByteType),
-      (5.toShort, ShortType),
-      (23, IntegerType),
-      (61L, LongType),
-      (1.0f, FloatType),
-      (10.0, DoubleType),
-      ("abcd".getBytes, BinaryType),
-      ("abcd", StringType),
-      (BigDecimal.valueOf(10), DecimalType.IntDecimal),
-      (CalendarInterval.fromString("interval 3 day"), CalendarIntervalType),
-      (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
-      (Array(3, 2, 1), ArrayType(IntegerType))
-    ).foreach { case (input, dt) =>
-      val validateType = ValidateExternalType(
-        GetExternalRowField(inputObject, index = 0, fieldName = "c0"), dt)
-      checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
-    }
-
-    checkExceptionInExpression[RuntimeException](
-      ValidateExternalType(
-        GetExternalRowField(inputObject, index = 0, fieldName = "c0"), DoubleType),
-      InternalRow.fromSeq(Seq(Row(1))),
-      "java.lang.Integer is not a valid external type for schema of double")
-  }
-
-  private def javaMapSerializerFor(
-      keyClazz: Class[_],
-      valueClazz: Class[_])(inputObject: Expression): Expression = {
-
-    def kvSerializerFor(inputObject: Expression, clazz: Class[_]): Expression = clazz match {
-      case c if c == classOf[java.lang.Integer] =>
-        Invoke(inputObject, "intValue", IntegerType)
-      case c if c == classOf[java.lang.String] =>
-        StaticInvoke(
-          classOf[UTF8String],
-          StringType,
-          "fromString",
-          inputObject :: Nil,
-          returnNullable = false)
-    }
-
-    ExternalMapToCatalyst(
-      inputObject,
-      ObjectType(keyClazz),
-      kvSerializerFor(_, keyClazz),
-      keyNullable = true,
-      ObjectType(valueClazz),
-      kvSerializerFor(_, valueClazz),
-      valueNullable = true
-    )
-  }
-
-  private def scalaMapSerializerFor[T: TypeTag, U: TypeTag](inputObject: Expression): Expression = {
-    import org.apache.spark.sql.catalyst.ScalaReflection._
-
-    val curId = new java.util.concurrent.atomic.AtomicInteger()
-
-    def kvSerializerFor[V: TypeTag](inputObject: Expression): Expression =
-         localTypeOf[V].dealias match {
-       case t if t <:< localTypeOf[java.lang.Integer] =>
-         Invoke(inputObject, "intValue", IntegerType)
-       case t if t <:< localTypeOf[String] =>
-        StaticInvoke(
-          classOf[UTF8String],
-          StringType,
-          "fromString",
-          inputObject :: Nil,
-          returnNullable = false)
-       case _ =>
-         inputObject
-    }
-
-    ExternalMapToCatalyst(
-      inputObject,
-      dataTypeFor[T],
-      kvSerializerFor[T],
-      keyNullable = !localTypeOf[T].typeSymbol.asClass.isPrimitive,
-      dataTypeFor[U],
-      kvSerializerFor[U],
-      valueNullable = !localTypeOf[U].typeSymbol.asClass.isPrimitive
-    )
-  }
-
-  test("SPARK-23589 ExternalMapToCatalyst should support interpreted execution") {
-    // Simple test
-    val scalaMap = scala.collection.Map[Int, String](0 -> "v0", 1 -> "v1", 2 -> null, 3 -> "v3")
-    val javaMap = new java.util.HashMap[java.lang.Integer, java.lang.String]() {
-      {
-        put(0, "v0")
-        put(1, "v1")
-        put(2, null)
-        put(3, "v3")
-      }
-    }
-    val expected = CatalystTypeConverters.convertToCatalyst(scalaMap)
-
-    // Java Map
-    val serializer1 = javaMapSerializerFor(classOf[java.lang.Integer], classOf[java.lang.String])(
-      Literal.fromObject(javaMap))
-    checkEvaluation(serializer1, expected)
-
-    // Scala Map
-    val serializer2 = scalaMapSerializerFor[Int, String](Literal.fromObject(scalaMap))
-    checkEvaluation(serializer2, expected)
-
-    // NULL key test
-    val scalaMapHasNullKey = scala.collection.Map[java.lang.Integer, String](
-      null.asInstanceOf[java.lang.Integer] -> "v0", new java.lang.Integer(1) -> "v1")
-    val javaMapHasNullKey = new java.util.HashMap[java.lang.Integer, java.lang.String]() {
-      {
-        put(null, "v0")
-        put(1, "v1")
-      }
-    }
-
-    // Java Map
-    val serializer3 =
-      javaMapSerializerFor(classOf[java.lang.Integer], classOf[java.lang.String])(
-        Literal.fromObject(javaMapHasNullKey))
-    checkExceptionInExpression[RuntimeException](
-      serializer3, EmptyRow, "Cannot use null as map key!")
-
-    // Scala Map
-    val serializer4 = scalaMapSerializerFor[java.lang.Integer, String](
-      Literal.fromObject(scalaMapHasNullKey))
-
-    checkExceptionInExpression[RuntimeException](
-      serializer4, EmptyRow, "Cannot use null as map key!")
   }
 }
 

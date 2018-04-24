@@ -1427,6 +1427,21 @@ del _name, _doc
 
 @since(1.5)
 @ignore_unicode_prefix
+def concat(*cols):
+    """
+    Concatenates multiple input columns together into a single column.
+    If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
+
+    >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
+    >>> df.select(concat(df.s, df.d).alias('s')).collect()
+    [Row(s=u'abcd123')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.concat(_to_seq(sc, cols, _to_java_column)))
+
+
+@since(1.5)
+@ignore_unicode_prefix
 def concat_ws(sep, *cols):
     """
     Concatenates multiple input string columns together into a single string column,
@@ -1828,25 +1843,6 @@ def array_contains(col, value):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
-
-
-@since(1.5)
-@ignore_unicode_prefix
-def concat(*cols):
-    """
-    Concatenates multiple input columns together into a single column.
-    The function works with strings, binary and compatible array columns.
-
-    >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
-    >>> df.select(concat(df.s, df.d).alias('s')).collect()
-    [Row(s=u'abcd123')]
-
-    >>> df = spark.createDataFrame([([1, 2], [3, 4], [5]), ([1, 2], None, [3])], ['a', 'b', 'c'])
-    >>> df.select(concat(df.a, df.b, df.c).alias("arr")).collect()
-    [Row(arr=[1, 2, 3, 4, 5]), Row(arr=None)]
-    """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.concat(_to_seq(sc, cols, _to_java_column)))
 
 
 @since(2.4)

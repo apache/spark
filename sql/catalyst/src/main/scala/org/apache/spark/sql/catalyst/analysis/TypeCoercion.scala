@@ -520,14 +520,6 @@ object TypeCoercion {
           case None => a
         }
 
-      case c @ Concat(children) if children.forall(c => ArrayType.acceptsType(c.dataType)) &&
-        !haveSameType(children) =>
-        val types = children.map(_.dataType)
-        findWiderCommonType(types) match {
-          case Some(finalDataType) => Concat(children.map(Cast(_, finalDataType)))
-          case None => c
-        }
-
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
         (!haveSameType(m.keys) || !haveSameType(m.values)) =>
         val newKeys = if (haveSameType(m.keys)) {

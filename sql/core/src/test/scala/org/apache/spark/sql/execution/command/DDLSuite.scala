@@ -1742,8 +1742,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("DESCRIBE FUNCTION 'concat'"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
-        Row("Usage: concat(col1, col2, ..., colN) - " +
-            "Returns the concatenation of col1, col2, ..., colN.") :: Nil
+        Row("Usage: concat(str1, str2, ..., strN) - " +
+            "Returns the concatenation of str1, str2, ..., strN.") :: Nil
     )
     // extended mode
     checkAnswer(

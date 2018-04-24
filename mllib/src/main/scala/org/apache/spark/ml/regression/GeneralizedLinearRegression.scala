@@ -471,10 +471,6 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[regression] val epsilon: Double = 1E-16
 
-  private[regression] def ylogy(y: Double, mu: Double): Double = {
-    if (y == 0) 0.0 else y * math.log(y / mu)
-  }
-
   /**
    * Wrapper of family and link combination used in the model.
    */
@@ -729,6 +725,10 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def variance(mu: Double): Double = mu * (1.0 - mu)
 
+    private def ylogy(y: Double, mu: Double): Double = {
+      if (y == 0) 0.0 else y * math.log(y / mu)
+    }
+
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
       2.0 * weight * (ylogy(y, mu) + ylogy(1.0 - y, 1.0 - mu))
     }
@@ -783,7 +783,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def variance(mu: Double): Double = mu
 
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      2.0 * weight * (ylogy(y, mu) - (y - mu))
+      2.0 * weight * (y * math.log(y / mu) - (y - mu))
     }
 
     override def aic(

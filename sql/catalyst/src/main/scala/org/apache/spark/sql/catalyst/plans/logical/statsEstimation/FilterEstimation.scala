@@ -392,10 +392,6 @@ case class FilterEstimation(plan: Filter) extends Logging {
     val dataType = attr.dataType
     var newNdv = ndv
 
-    if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty)  {
-      return Some(0.0)
-    }
-
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>

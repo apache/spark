@@ -357,17 +357,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 3)
   }
 
-  test("evaluateInSet with all zeros") {
-    validateEstimatedStats(
-      Filter(InSet(attrString, Set(3, 4, 5)),
-        StatsTestPlan(Seq(attrString), 0,
-          AttributeMap(Seq(attrString ->
-            ColumnStat(distinctCount = Some(0), min = None, max = None,
-              nullCount = Some(0), avgLen = Some(0), maxLen = Some(0)))))),
-      Seq(attrString -> ColumnStat(distinctCount = Some(0))),
-      expectedRowCount = 0)
-  }
-
   test("cint NOT IN (3, 4, 5)") {
     validateEstimatedStats(
       Filter(Not(InSet(attrInt, Set(3, 4, 5))), childStatsTestPlan(Seq(attrInt), 10L)),

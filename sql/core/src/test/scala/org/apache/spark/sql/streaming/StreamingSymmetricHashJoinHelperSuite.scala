@@ -35,14 +35,8 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   val rightColC = new Column(rightAttributeC)
   val rightColD = new Column(rightAttributeD)
 
-  var left: LocalTableScanExec = _
-  var right: LocalTableScanExec = _
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    left = new LocalTableScanExec(Seq(leftAttributeA, leftAttributeB), Seq())
-    right = new LocalTableScanExec(Seq(rightAttributeC, rightAttributeD), Seq())
-  }
+  val left = new LocalTableScanExec(Seq(leftAttributeA, leftAttributeB), Seq())
+  val right = new LocalTableScanExec(Seq(rightAttributeC, rightAttributeD), Seq())
 
   test("empty") {
     val split = JoinConditionSplitPredicates(None, left, right)
@@ -129,5 +123,4 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     assert(split.bothSides.contains((leftColA === rightColC && randCol > lit(0)).expr))
     assert(split.full.contains(predicate))
   }
-
 }

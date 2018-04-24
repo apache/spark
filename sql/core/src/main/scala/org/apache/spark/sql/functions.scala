@@ -2229,6 +2229,16 @@ object functions {
   def base64(e: Column): Column = withExpr { Base64(e.expr) }
 
   /**
+   * Concatenates multiple input columns together into a single column.
+   * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
+
+  /**
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
@@ -3027,16 +3037,6 @@ object functions {
   def array_contains(column: Column, value: Any): Column = withExpr {
     ArrayContains(column.expr, Literal(value))
   }
-
-  /**
-   * Concatenates multiple input columns together into a single column.
-   * The function works with strings, binary and compatible array columns.
-   *
-   * @group collection_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
 
   /**
    * Locates the position of the first occurrence of the value in the given array as long.

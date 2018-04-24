@@ -637,11 +637,13 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * constraints. These filters are currently inserted to the existing conditions in the Filter
  * operators and on either side of Join operators.
  *
- * Note: While this optimization is applicable to a lot of types of join, it primarily benefits
- * Inner and LeftSemi joins.
+ * In addition, for left/right outer joins, infer predicate from the preserved side of the Join
+ * operator and push the inferred filter over to the null-supplying side. For example, if the
+ * preserved side has constraints of the form 'a > 5' and the join condition is 'a = b', in
+ * which 'b' is an attribute from the null-supplying side, a [[Filter]] operator of 'b > 5' will
+ * be applied to the null-supplying side.
  */
-object InferFiltersFromConstraints extends Rule[LogicalPlan]
-  with PredicateHelper with ConstraintHelper {
+object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (SQLConf.get.constraintPropagationEnabled) {
@@ -662,51 +664,52 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       }
 
     case join @ Join(left, right, joinType, conditionOpt) =>
-      joinType match {
-        // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
-        // inner join, it just drops the right side in the final output.
-        case _: InnerLike | LeftSemi =>
-          val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newLeft = inferNewFilter(left, allConstraints)
-          val newRight = inferNewFilter(right, allConstraints)
-          join.copy(left = newLeft, right = newRight)
-
-        // For right outer join, we can only infer additional filters for left side.
-        case RightOuter =>
-          val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newLeft = inferNewFilter(left, allConstraints)
-          join.copy(left = newLeft)
-
-        // For left join, we can only infer additional filters for right side.
-        case LeftOuter | LeftAnti =>
-          val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newRight = inferNewFilter(right, allConstraints)
-          join.copy(right = newRight)
-
-        case _ => join
+      // Only consider constraints that can be pushed down completely to either the left or the
+      // right child
+      val constraints = join.allConstraints.filter { c =>
+        c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
       }
-  }
+      // Remove those constraints that are already enforced by either the left or the right child
+      val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
+      val newConditionOpt = conditionOpt match {
+        case Some(condition) =>
+          val newFilters = additionalConstraints -- splitConjunctivePredicates(condition)
+          if (newFilters.nonEmpty) Option(And(newFilters.reduce(And), condition)) else conditionOpt
+        case None =>
+          additionalConstraints.reduceOption(And)
+      }
+      // Infer filter for left/right outer joins
+      val newLeftOpt = joinType match {
+        case RightOuter if newConditionOpt.isDefined =>
+          val inferredConstraints = left.getRelevantConstraints(
+            left.constraints
+              .union(right.constraints)
+              .union(splitConjunctivePredicates(newConditionOpt.get).toSet))
+          val newFilters = inferredConstraints
+            .filterNot(left.constraints.contains)
+            .reduceLeftOption(And)
+          newFilters.map(Filter(_, left))
+        case _ => None
+      }
+      val newRightOpt = joinType match {
+        case LeftOuter if newConditionOpt.isDefined =>
+          val inferredConstraints = right.getRelevantConstraints(
+            right.constraints
+              .union(left.constraints)
+              .union(splitConjunctivePredicates(newConditionOpt.get).toSet))
+          val newFilters = inferredConstraints
+            .filterNot(right.constraints.contains)
+            .reduceLeftOption(And)
+          newFilters.map(Filter(_, right))
+        case _ => None
+      }
 
-  private def getAllConstraints(
-      left: LogicalPlan,
-      right: LogicalPlan,
-      conditionOpt: Option[Expression]): Set[Expression] = {
-    val baseConstraints = left.constraints.union(right.constraints)
-      .union(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil).toSet)
-    baseConstraints.union(inferAdditionalConstraints(baseConstraints))
-  }
-
-  private def inferNewFilter(plan: LogicalPlan, constraints: Set[Expression]): LogicalPlan = {
-    val newPredicates = constraints
-      .union(constructIsNotNullConstraints(constraints, plan.output))
-      .filter { c =>
-        c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
-      } -- plan.constraints
-    if (newPredicates.isEmpty) {
-      plan
-    } else {
-      Filter(newPredicates.reduce(And), plan)
-    }
+      if ((newConditionOpt.isDefined && (newConditionOpt ne conditionOpt))
+        || newLeftOpt.isDefined || newRightOpt.isDefined) {
+        Join(newLeftOpt.getOrElse(left), newRightOpt.getOrElse(right), joinType, newConditionOpt)
+      } else {
+        join
+      }
   }
 }
 

@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -1041,13 +1040,11 @@ case class CatalystToExternalMap private(
   private lazy val valueConverter =
     CatalystTypeConverters.createToScalaConverter(inputMapType.valueType)
 
-  private lazy val (newMapBuilderMethod, moduleField) = {
-    val clazz = Utils.classForName(collClass.getCanonicalName + "$")
-    (clazz.getMethod("newBuilder"), clazz.getField("MODULE$").get(null))
-  }
-
   private def newMapBuilder(): Builder[AnyRef, AnyRef] = {
-    newMapBuilderMethod.invoke(moduleField).asInstanceOf[Builder[AnyRef, AnyRef]]
+    val clazz = Utils.classForName(collClass.getCanonicalName + "$")
+    val module = clazz.getField("MODULE$").get(null)
+    val method = clazz.getMethod("newBuilder")
+    method.invoke(module).asInstanceOf[Builder[AnyRef, AnyRef]]
   }
 
   override def eval(input: InternalRow): Any = {
@@ -1255,64 +1252,8 @@ case class ExternalMapToCatalyst private(
   override def dataType: MapType = MapType(
     keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
-  private lazy val mapCatalystConverter: Any => (Array[Any], Array[Any]) = child.dataType match {
-    case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
-      (input: Any) => {
-        val data = input.asInstanceOf[java.util.Map[Any, Any]]
-        val keys = new Array[Any](data.size)
-        val values = new Array[Any](data.size)
-        val iter = data.entrySet().iterator()
-        var i = 0
-        while (iter.hasNext) {
-          val entry = iter.next()
-          val (key, value) = (entry.getKey, entry.getValue)
-          keys(i) = if (key != null) {
-            keyConverter.eval(InternalRow.fromSeq(key :: Nil))
-          } else {
-            throw new RuntimeException("Cannot use null as map key!")
-          }
-          values(i) = if (value != null) {
-            valueConverter.eval(InternalRow.fromSeq(value :: Nil))
-          } else {
-            null
-          }
-          i += 1
-        }
-        (keys, values)
-      }
-
-    case ObjectType(cls) if classOf[scala.collection.Map[_, _]].isAssignableFrom(cls) =>
-      (input: Any) => {
-        val data = input.asInstanceOf[scala.collection.Map[Any, Any]]
-        val keys = new Array[Any](data.size)
-        val values = new Array[Any](data.size)
-        var i = 0
-        for ((key, value) <- data) {
-          keys(i) = if (key != null) {
-            keyConverter.eval(InternalRow.fromSeq(key :: Nil))
-          } else {
-            throw new RuntimeException("Cannot use null as map key!")
-          }
-          values(i) = if (value != null) {
-            valueConverter.eval(InternalRow.fromSeq(value :: Nil))
-          } else {
-            null
-          }
-          i += 1
-        }
-        (keys, values)
-      }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val result = child.eval(input)
-    if (result != null) {
-      val (keys, values) = mapCatalystConverter(result)
-      new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values))
-    } else {
-      null
-    }
-  }
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputMap = child.genCode(ctx)
@@ -1729,35 +1670,12 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
   override def nullable: Boolean = child.nullable
 
-  override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
+  override def dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
-
-  private lazy val checkType: (Any) => Boolean = expected match {
-    case _: DecimalType =>
-      (value: Any) => {
-        value.isInstanceOf[java.math.BigDecimal] || value.isInstanceOf[scala.math.BigDecimal] ||
-          value.isInstanceOf[Decimal]
-      }
-    case _: ArrayType =>
-      (value: Any) => {
-        value.getClass.isArray || value.isInstanceOf[Seq[_]]
-      }
-    case _ =>
-      val dataTypeClazz = ScalaReflection.javaBoxedType(dataType)
-      (value: Any) => {
-        dataTypeClazz.isInstance(value)
-      }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val result = child.eval(input)
-    if (checkType(result)) {
-      result
-    } else {
-      throw new RuntimeException(s"${result.getClass.getName}$errMsg")
-    }
-  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
@@ -1771,7 +1689,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
           .map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
       case _: ArrayType =>
-        s"$obj.getClass().isArray() || $obj instanceof ${classOf[Seq[_]].getName}"
+        s"$obj instanceof ${classOf[Seq[_]].getName} || $obj.getClass().isArray()"
       case _ =>
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }
