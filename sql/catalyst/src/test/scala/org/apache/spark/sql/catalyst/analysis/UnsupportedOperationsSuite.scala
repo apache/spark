@@ -787,7 +787,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       UnsupportedOperationChecker.checkForContinuous(plan, outputMode)
     }
   }
-      /**
+
+  /**
    * Assert that the logical plan is not supported inside a streaming plan.
    *
    * To test this correctly, the given logical plan is wrapped in a fake operator that makes the
