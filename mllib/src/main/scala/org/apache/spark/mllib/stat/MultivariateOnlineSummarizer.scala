@@ -56,7 +56,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   private var nnz: Array[Long] = _
   private var currMax: Array[Double] = _
   private var currMin: Array[Double] = _
-  private var currSum: Array[Double] = _
 
   /**
    * Add a new sample to this summarizer, and update the statistical summary.
@@ -83,7 +82,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       nnz = Array.ofDim[Long](n)
       currMax = Array.fill[Double](n)(Double.MinValue)
       currMin = Array.fill[Double](n)(Double.MaxValue)
-      currSum = Array.ofDim[Double](n)
     }
 
     require(n == instance.size, s"Dimensions mismatch when adding new sample." +
@@ -97,7 +95,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val localNumNonzeros = nnz
     val localCurrMax = currMax
     val localCurrMin = currMin
-    val localCurrSum = currSum
     instance.foreachActive { (index, value) =>
       if (value != 0.0) {
         if (localCurrMax(index) < value) {
@@ -113,7 +110,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
         localCurrM2(index) += weight * value * value
         localCurrL1(index) += weight * math.abs(value)
-        localCurrSum(index) += weight * value
 
         localWeightSum(index) += weight
         localNumNonzeros(index) += 1
@@ -160,7 +156,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
           // merge max and min
           currMax(i) = math.max(currMax(i), other.currMax(i))
           currMin(i) = math.min(currMin(i), other.currMin(i))
-          currSum(i) = currSum(i) + other.currSum(i)
         }
         weightSum(i) = totalNnz
         nnz(i) = totalCnnz
@@ -179,7 +174,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       this.nnz = other.nnz.clone()
       this.currMax = other.currMax.clone()
       this.currMin = other.currMin.clone()
-      this.currSum = other.currSum.clone()
     }
     this
   }
@@ -316,6 +310,14 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   override def sum: Vector = {
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
-    Vectors.dense(currSum)
+    val realSum = Array.ofDim[Double](n)
+
+    var i = 0
+    val len = currMean.length
+    while (i < len) {
+      realSum(i) = currMean(i) * weightSum(i)
+      i += 1
+    }
+    Vectors.dense(realSum)
   }
 }

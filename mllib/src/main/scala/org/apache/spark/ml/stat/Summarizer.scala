@@ -258,7 +258,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
     ("min", Min, vectorUDT, Seq(ComputeMin, ComputeNNZ)),
     ("normL2", NormL2, vectorUDT, Seq(ComputeM2)),
     ("normL1", NormL1, vectorUDT, Seq(ComputeL1)),
-    ("sum", Sum, vectorUDT, Seq(ComputeSum))
+    ("sum", Sum, vectorUDT, Seq(ComputeMean, ComputeWeightSum))
   )
 
   /**
@@ -289,7 +289,6 @@ private[ml] object SummaryBuilderImpl extends Logging {
   private[stat] case object ComputeNNZ extends ComputeMetric
   private[stat] case object ComputeMax extends ComputeMetric
   private[stat] case object ComputeMin extends ComputeMetric
-  private[stat] case object ComputeSum extends ComputeMetric
 
   private[stat] class SummarizerBuffer(
       requestedMetrics: Seq[Metric],
@@ -308,13 +307,12 @@ private[ml] object SummaryBuilderImpl extends Logging {
     private var nnz: Array[Long] = null
     private var currMax: Array[Double] = null
     private var currMin: Array[Double] = null
-    private var currSum: Array[Double] = null
 
     def this() {
       this(
         Seq(Mean, Variance, Count, NumNonZeros, Max, Min, NormL2, NormL1, Sum),
         Seq(ComputeMean, ComputeM2n, ComputeM2, ComputeL1,
-          ComputeWeightSum, ComputeNNZ, ComputeMax, ComputeMin, ComputeSum)
+          ComputeWeightSum, ComputeNNZ, ComputeMax, ComputeMin)
       )
     }
 
@@ -341,7 +339,6 @@ private[ml] object SummaryBuilderImpl extends Logging {
         if (requestedCompMetrics.contains(ComputeMin)) {
           currMin = Array.fill[Double](n)(Double.MaxValue)
         }
-        if (requestedCompMetrics.contains(ComputeSum)) { currSum = Array.ofDim[Double](n) }
       }
 
       require(n == instance.size, s"Dimensions mismatch when adding new sample." +
@@ -355,7 +352,6 @@ private[ml] object SummaryBuilderImpl extends Logging {
       val localNumNonzeros = nnz
       val localCurrMax = currMax
       val localCurrMin = currMin
-      val localCurrSum = currSum
       instance.foreachActive { (index, value) =>
         if (value != 0.0) {
           if (localCurrMax != null && localCurrMax(index) < value) {
@@ -387,10 +383,6 @@ private[ml] object SummaryBuilderImpl extends Logging {
 
           if (localNumNonzeros != null) {
             localNumNonzeros(index) += 1
-          }
-
-          if (localCurrSum != null) {
-            localCurrSum(index) += (weight * value)
           }
         }
       }
@@ -447,7 +439,6 @@ private[ml] object SummaryBuilderImpl extends Logging {
           if (currMax != null) { currMax(i) = math.max(currMax(i), other.currMax(i)) }
           if (currMin != null) { currMin(i) = math.min(currMin(i), other.currMin(i)) }
           if (nnz != null) { nnz(i) = nnz(i) + other.nnz(i) }
-          if (currSum != null) { currSum(i) = currSum(i) + other.currSum(i) }
           i += 1
         }
       } else if (totalWeightSum == 0.0 && other.totalWeightSum != 0.0) {
@@ -463,7 +454,6 @@ private[ml] object SummaryBuilderImpl extends Logging {
         if (other.nnz != null) { this.nnz = other.nnz.clone() }
         if (other.currMax != null) { this.currMax = other.currMax.clone() }
         if (other.currMin != null) { this.currMin = other.currMin.clone() }
-        if (other.currSum != null) { this.currSum = other.currSum.clone() }
       }
       this
     }
@@ -591,7 +581,14 @@ private[ml] object SummaryBuilderImpl extends Logging {
       require(requestedMetrics.contains(Sum))
       require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
-      Vectors.dense(currSum)
+      val realSum = Array.ofDim[Double](n)
+      var i = 0
+      val len = currMean.length
+      while (i < len) {
+        realSum(i) = currMean(i) * weightSum(i)
+        i += 1
+      }
+      Vectors.dense(realSum)
     }
   }
 
