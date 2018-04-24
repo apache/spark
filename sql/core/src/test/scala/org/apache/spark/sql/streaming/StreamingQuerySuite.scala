@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
+import org.apache.spark.sql.sources.v2.reader.InputPartition
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
@@ -227,10 +227,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+      override def planUnsafeInputPartitions(): ju.List[InputPartition[UnsafeRow]] = {
         synchronized {
           clock.waitTillTime(1350)
-          super.createUnsafeRowReaderFactories()
+          super.planUnsafeInputPartitions()
         }
       }
     }
@@ -290,13 +290,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
       AdvanceManualClock(100), // time = 1150 to unblock getEndOffset
       AssertClockTime(1150),
-      AssertStreamExecThreadIsWaitingForTime(1350), // will block on createReadTasks that needs 1350
+      // will block on planInputPartitions that needs 1350
+      AssertStreamExecThreadIsWaitingForTime(1350),
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      AdvanceManualClock(200), // time = 1350 to unblock createReadTasks
+      AdvanceManualClock(200), // time = 1350 to unblock planInputPartitions
       AssertClockTime(1350),
       AssertStreamExecThreadIsWaitingForTime(1500), // will block on map task that needs 1500
       AssertOnQuery(_.status.isDataAvailable === true),
