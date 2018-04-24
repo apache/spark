@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 
 private[spark] case class AccumulatorMetadata(
@@ -211,7 +212,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
 /**
  * An internal class used to track accumulators by Spark itself.
  */
-private[spark] object AccumulatorContext {
+private[spark] object AccumulatorContext extends Logging {
 
   /**
    * This global map holds the original accumulator objects that are created on the driver.
@@ -259,7 +260,16 @@ private[spark] object AccumulatorContext {
    */
   def get(id: Long): Option[AccumulatorV2[_, _]] = {
     val ref = originals.get(id)
-    Option(if (ref != null) ref.get else null)
+    if (ref eq null) {
+      None
+    } else {
+      // Since we are storing weak references, warn when the underlying data is not valid.
+      val acc = ref.get
+      if (acc eq null) {
+        logWarning(s"Attempted to access garbage collected accumulator $id")
+      }
+      Option(acc)
+    }
   }
 
   /**
