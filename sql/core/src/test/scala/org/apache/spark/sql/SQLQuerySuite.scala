@@ -903,9 +903,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |SELECT map(1, 2), 'str'
           |UNION ALL
           |SELECT map(1, 2, 3, NULL), 1""".stripMargin),
-      Row.fromSeq(Seq(Map(1 -> 2), "str"))::
-      Row.fromSeq(Seq(Map(1 -> 2, 3 -> null), "1"))::
-      Nil
+      Row(Map(1 -> 2), "str") :: Row(Map(1 -> 2, 3 -> null), "1") :: Nil
+    )
+    checkAnswer(
+      sql(
+        """
+          |SELECT array(1), 'str'
+          |UNION ALL
+          |SELECT array(1, 2, 3, NULL), 1""".stripMargin),
+      Row(Array(1), "str") :: Row(Array(1, 2, 3, null), "1") :: Nil
     )
   }
 
