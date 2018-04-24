@@ -662,6 +662,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 1 -> 400)),
       (null, Map[Int, Int](3 -> 300, 4 -> 400))
     ).toDF("map1", "map2")
+
     checkAnswer(
       df1.selectExpr("map_concat(map1, map2)"),
       Seq(
@@ -674,12 +675,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df2 = Seq(
       (Map[Int, Int](1 -> 100, 2 -> 200), Map[String, Int]("3" -> 300, "4" -> 400))
     ).toDF("map1", "map2")
+
     assert(intercept[AnalysisException] {
       df2.selectExpr("map_concat(map1, map2)").collect()
     }.getMessage().contains("input maps of function map_concat should all be the same type"))
+
     assert(intercept[AnalysisException] {
       df2.selectExpr("map_concat(map1, 12)").collect()
     }.getMessage().contains("input of function map_concat should all be of type map"))
+
     assert(intercept[AnalysisException] {
       df2.selectExpr("map_concat()").collect()
     }.getMessage().contains("expects at least two input maps"))

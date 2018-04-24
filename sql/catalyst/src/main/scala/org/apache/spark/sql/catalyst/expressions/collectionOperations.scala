@@ -601,7 +601,6 @@ case class MapConcat(children: Seq[Expression]) extends Expression
     val vaName = ctx.freshName("va")
     val keyName = ctx.freshName("key")
     val valueName = ctx.freshName("value")
-    val isNullCheckName = ctx.freshName("isNull")
 
     val mapMerge =
       s"""
@@ -629,8 +628,8 @@ case class MapConcat(children: Seq[Expression]) extends Expression
         |for (int $index1Name = 0; $index1Name < $entrySetName.length; $index1Name++) {
         |  $entryClass<Object, Object> entry =
         |     ($entryClass<Object, Object>) $entrySetName[$index1Name];
-        |  $mergedKeyArrayName[$index1Name] = (Object) entry.getKey();
-        |  $mergedValueArrayName[$index1Name] = (Object) entry.getValue();
+        |  $mergedKeyArrayName[$index1Name] = entry.getKey();
+        |  $mergedValueArrayName[$index1Name] = entry.getValue();
         |}
         |${ev.value} =
         |  new $arrayBasedMapDataClass(new $genericArrayDataClass($mergedKeyArrayName),
@@ -640,7 +639,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression
       s"""
         |$init
         |$assignments
-        | if (!${ev.isNull}) {
+        |if (!${ev.isNull}) {
         |  $mapMerge
         |  $createMapData
         |}
