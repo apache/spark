@@ -83,7 +83,9 @@ trait SharedSparkSession
    * Make sure the [[TestSparkSession]] is initialized before any tests are run.
    */
   protected override def beforeAll(): Unit = {
-    initializeSession()
+    this.synchronized {
+      initializeSession()
+    }
 
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()
@@ -97,12 +99,14 @@ trait SharedSparkSession
       super.afterAll()
     } finally {
       try {
-        if (_spark != null) {
-          try {
-            _spark.sessionState.catalog.reset()
-          } finally {
-            _spark.stop()
-            _spark = null
+        this.synchronized {
+          if (_spark != null) {
+            try {
+              _spark.sessionState.catalog.reset()
+            } finally {
+              _spark.stop()
+              _spark = null
+            }
           }
         }
       } finally {
