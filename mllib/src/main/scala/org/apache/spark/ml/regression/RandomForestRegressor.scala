@@ -34,6 +34,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -121,10 +122,13 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
 
-    val instr = Instrumentation.create(this, oldDataset)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(labelCol, featuresCol, predictionCol, impurity, numTrees,
       featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, seed, subsamplingRate, cacheNodeIds, checkpointInterval)
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    if (handlePersistence) oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
 
     val trees = RandomForest
       .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
@@ -132,6 +136,9 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
     val numFeatures = oldDataset.first().features.size
     val m = new RandomForestRegressionModel(uid, trees, numFeatures)
+
+    if (handlePersistence) oldDataset.unpersist()
+
     instr.logSuccess(m)
     m
   }

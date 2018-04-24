@@ -38,6 +38,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Params for Generalized Linear Regression.
@@ -421,10 +422,17 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
       val optimizer = new IterativelyReweightedLeastSquares(initialModel,
         familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
+
+      val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+      if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+
       val irlsModel = optimizer.fit(instances)
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
           .setParent(this))
+
+      if (handlePersistence) instances.unpersist()
+
       val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
         irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
       model.setSummary(Some(trainingSummary))

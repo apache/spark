@@ -44,6 +44,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
@@ -909,6 +910,10 @@ class LDA @Since("1.6.0") (
       .setOptimizer(getOldOptimizer)
     // TODO: persist here, or in old LDA?
     val oldData = LDA.getOldDataset(dataset, $(featuresCol))
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    if (handlePersistence) oldData.persist(StorageLevel.MEMORY_AND_DISK)
+
     val oldModel = oldLDA.run(oldData)
     val newModel = oldModel match {
       case m: OldLocalLDAModel =>
@@ -916,6 +921,8 @@ class LDA @Since("1.6.0") (
       case m: OldDistributedLDAModel =>
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sparkSession, None)
     }
+
+    if (handlePersistence) oldData.unpersist()
 
     instr.logNumFeatures(newModel.vocabSize)
     val model = copyValues(newModel).setParent(this)

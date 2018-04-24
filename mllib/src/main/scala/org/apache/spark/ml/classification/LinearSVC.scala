@@ -38,6 +38,8 @@ import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.storage.StorageLevel
+
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
@@ -170,7 +172,10 @@ class LinearSVC @Since("2.2.0") (
           Instance(label, weight, features)
       }
 
-    val instr = Instrumentation.create(this, instances)
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(regParam, maxIter, fitIntercept, tol, standardization, threshold,
       aggregationDepth)
 
@@ -274,6 +279,9 @@ class LinearSVC @Since("2.2.0") (
     }
 
     val model = copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
+
+    if (handlePersistence) instances.unpersist()
+
     instr.logSuccess(model)
     model
   }
