@@ -30,6 +30,8 @@ import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
 
 private[clustering] case class TestRow(features: Vector)
 
@@ -198,6 +200,42 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(e.getCause.isInstanceOf[AssertionError])
     assert(e.getCause.getMessage.contains("Cosine distance is not defined"))
   }
+
+  test("KMean with Array input") {
+    val featuresColNameD = "array_double_features"
+    val featuresColNameF = "array_float_features"
+
+    val doubleUDF = udf { (features: Vector) =>
+      val featureArray = Array.fill[Double](features.size)(0.0)
+      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
+      featureArray
+    }
+    val floatUDF = udf { (features: Vector) =>
+      val featureArray = Array.fill[Float](features.size)(0.0f)
+      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
+      featureArray
+    }
+
+    val newdatasetD = dataset.withColumn(featuresColNameD, doubleUDF(col("features")))
+      .drop("features")
+    val newdatasetF = dataset.withColumn(featuresColNameF, floatUDF(col("features")))
+      .drop("features")
+    assert(newdatasetD.schema(featuresColNameD).dataType.equals(new ArrayType(DoubleType, false)))
+    assert(newdatasetF.schema(featuresColNameF).dataType.equals(new ArrayType(FloatType, false)))
+
+    val kmeansD = new KMeans().setK(k).setMaxIter(1).setFeaturesCol(featuresColNameD).setSeed(1)
+    val kmeansF = new KMeans().setK(k).setMaxIter(1).setFeaturesCol(featuresColNameF).setSeed(1)
+    val modelD = kmeansD.fit(newdatasetD)
+    val modelF = kmeansF.fit(newdatasetF)
+    val transformedD = modelD.transform(newdatasetD)
+    val transformedF = modelF.transform(newdatasetF)
+
+    val predictDifference = transformedD.select("prediction")
+      .except(transformedF.select("prediction"))
+    assert(predictDifference.count() == 0)
+    assert(modelD.computeCost(newdatasetD) == modelF.computeCost(newdatasetF) )
+  }
+
 
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
