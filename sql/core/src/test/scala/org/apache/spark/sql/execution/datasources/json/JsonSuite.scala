@@ -2164,7 +2164,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }.getMessage
     assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
 
-    val sampled = spark.read.option("samplingRatio", 10).json(ds)
+    val sampled = spark.read.option("samplingRatio", 1.0).json(ds)
     assert(sampled.count() == ds.count())
   }
 }
