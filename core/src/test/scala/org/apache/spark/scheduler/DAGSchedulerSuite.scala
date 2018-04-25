@@ -2403,7 +2403,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    * This tests the case where origin task success after speculative task got FetchFailed
    * before.
    */
-  test("SPARK-23811: ShuffleMapStage failed by FetchFailed should ignore following" +
+  test("SPARK-23811: ShuffleMapStage failed by FetchFailed should ignore following " +
     "successful tasks") {
     // Create 3 RDDs with shuffle dependencies on each other: rddA <--- rddB <--- rddC
     val rddA = new MyRDD(sc, 2, Nil)
@@ -2443,7 +2443,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mapOutputTracker.findMissingPartitions(shuffleDepB.shuffleId).get.size === 1)
   }
 
-  test("SPARK-23811: check ResultStage failed by FetchFailed can ignore following" +
+  test("SPARK-23811: check ResultStage failed by FetchFailed can ignore following " +
     "successful tasks") {
     val rddA = new MyRDD(sc, 2, Nil)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(2))
@@ -2468,6 +2468,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       taskSets(1).tasks(1),
       FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0, 0, "ignored"),
       null))
+    // Make sure failedStage is not empty now
+    assert(scheduler.failedStages.nonEmpty)
     // The second result task self success soon.
     assert(taskSets(1).tasks(1).isInstanceOf[ResultTask[_, _]])
     runEvent(makeCompletionEvent(
