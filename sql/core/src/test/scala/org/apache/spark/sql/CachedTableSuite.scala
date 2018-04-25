@@ -796,7 +796,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
-  private def checkIfNoJobTriggered(f: => DataFrame): DataFrame = {
+  private def checkIfNoJobTriggered[T](f: => T): T = {
     var numJobTrigered = 0
     val jobListener = new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -805,18 +805,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
     sparkContext.addSparkListener(jobListener)
     try {
-      val df = f
+      val result = f
+      sparkContext.listenerBus.waitUntilEmpty(10000L)
       assert(numJobTrigered === 0)
-      df
+      result
     } finally {
       sparkContext.removeSparkListener(jobListener)
     }
   }
 
   test("SPARK-23880 table cache should be lazy and don't trigger any jobs") {
-    val cachedDf = checkIfNoJobTriggered {
-      spark.range(3L).selectExpr("id", "id AS value").filter('id > 0).orderBy('id.asc).cache()
+    val cachedData = checkIfNoJobTriggered {
+      spark.range(1002).filter('id > 1000).orderBy('id.desc).cache()
     }
-    checkAnswer(cachedDf, Row(1L, 1L) :: Row(2L, 2L) :: Nil)
+    assert(cachedData.collect === Seq(1001))
   }
 }

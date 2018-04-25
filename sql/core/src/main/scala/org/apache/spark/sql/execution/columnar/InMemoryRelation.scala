@@ -168,7 +168,7 @@ case class InMemoryRelation(
 
   @transient val partitionStatistics = new PartitionStatistics(output)
 
-  val cachedPlan: SparkPlan = cacheBuilder.cachedPlan
+  def cachedPlan: SparkPlan = cacheBuilder.cachedPlan
 
   override def computeStats(): Statistics = {
     if (cacheBuilder.sizeInBytesStats.value == 0L) {
