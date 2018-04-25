@@ -2365,9 +2365,9 @@ case class ArrayRemove(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3));
        [1,2,3,null]
-             """, since = "2.4.0")
+  """, since = "2.4.0")
 case class ArrayDistinct(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
@@ -2377,6 +2377,55 @@ case class ArrayDistinct(child: Expression)
     val elementType = child.dataType.asInstanceOf[ArrayType].elementType
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType).distinct
     new GenericArrayData(data.asInstanceOf[Array[Any]])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val elementType = dataType.asInstanceOf[ArrayType].elementType
+    nullSafeCodeGen(ctx, ev, (array) => {
+      val arrayClass = classOf[GenericArrayData].getName
+      val tempArray = ctx.freshName("tempArray")
+      val distinctArray = ctx.freshName("distinctArray")
+      val i = ctx.freshName("i")
+      val j = ctx.freshName("j")
+      val pos = ctx.freshName("arrayPosition")
+      val getValue1 = CodeGenerator.getValue(array, elementType, i)
+      val getValue2 = CodeGenerator.getValue(array, elementType, j)
+      s"""
+         |int $pos = 0;
+         |Object[] $tempArray = new Object[$array.numElements()];
+         |for (int $i = 0; $i < $array.numElements(); $i ++) {
+         |  if ($array.isNullAt($i)) {
+         |     int $j;
+         |     for ($j = 0; $j < $i; $j ++) {
+         |       if ($array.isNullAt($j))
+         |         break;
+         |     }
+         |     if ($i == $j) {
+         |       $tempArray[$pos]  = null;
+         |       $pos = $pos + 1;
+         |     }
+         |  }
+         |  else {
+         |    int $j;
+         |    for ($j = 0; $j < $i; $j ++) {
+         |     if (${ctx.genEqual(elementType, getValue1, getValue2)})
+         |       break;
+         |    }
+         |    if ($i == $j) {
+         |     $tempArray[$pos] = ${CodeGenerator.getValue(array, elementType, s"$i")};
+         |     $pos = $pos + 1;
+         |    }
+         |  }
+         |}
+         |
+         |Object[] $distinctArray = new Object[$pos];
+         |for (int $i = 0; $i < $pos; $i ++) {
+         |  $distinctArray[$i] = $tempArray[$i];
+         |}
+         |
+         |${ev.value} = new $arrayClass($distinctArray);
+       """.stripMargin
+    })
   }
 
   override def prettyName: String = "array_distinct"
