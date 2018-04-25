@@ -123,6 +123,8 @@ private[continuous] class EpochCoordinator(
     override val rpcEnv: RpcEnv)
   extends ThreadSafeRpcEndpoint with Logging {
 
+  private val maxEpochBacklog = session.sqlContext.conf.maxEpochBacklog
+
   private var queryWritesStopped: Boolean = false
 
   private var numReaderPartitions: Int = _
@@ -153,9 +155,14 @@ private[continuous] class EpochCoordinator(
       // If not, add the epoch being currently processed to epochs waiting to be committed,
       // otherwise commit it.
       if (lastCommittedEpoch != epoch - 1) {
-        logDebug(s"Epoch $epoch has received commits from all partitions " +
-          s"and is waiting for epoch ${epoch - 1} to be committed first.")
-        epochsWaitingToBeCommitted.add(epoch)
+        if (epochsWaitingToBeCommitted.size == maxEpochBacklog) {
+          logError("Epochs queue has reached maximum epoch backlog. " +
+            "Not remembering this and further epochs until size of the queue decreases.")
+        } else {
+          logDebug(s"Epoch $epoch has received commits from all partitions " +
+            s"and is waiting for epoch ${epoch - 1} to be committed first.")
+          epochsWaitingToBeCommitted.add(epoch)
+        }
       } else {
         commitEpoch(epoch, thisEpochCommits)
         lastCommittedEpoch = epoch

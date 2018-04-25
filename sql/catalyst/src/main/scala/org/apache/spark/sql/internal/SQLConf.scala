@@ -1271,6 +1271,14 @@ object SQLConf {
       .intConf
       .createWithDefault(Int.MaxValue)
 
+  val MAX_EPOCH_BACKLOG = buildConf("spark.sql.streaming.continuous.maxEpochBacklog")
+    .internal()
+    .doc("The max number of epochs to be stored in queue to wait for late epochs. " +
+      "To prevent OOM, if this parameter is exceeded by the size of the queue, " +
+      "an error is reported and further epochs are not remembered until queue size decreases.")
+    .intConf
+    .createWithDefault(10000)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1640,6 +1648,8 @@ class SQLConf extends Serializable with Logging {
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+
+  def maxEpochBacklog: Int = getConf(MAX_EPOCH_BACKLOG)
 
   /** ********************** SQLConf functionality methods ************ */
 
