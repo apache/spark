@@ -125,19 +125,6 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
     assert(offsetSeq.metadata === Some(OffsetSeqMetadata(0L, 1480981499528L)))
   }
 
-  test("assertion that number of checkpoint offsets match number of sources") {
-    val checkpointOffsets = OffsetSeq.fill(LongOffset(0), LongOffset(1))
-    class FakeUnitTestStreamingSource extends BaseStreamingSource {
-      override def stop(): Unit = {}
-    }
-    val streams = Seq(new FakeUnitTestStreamingSource())
-    val e = intercept[AssertionError] {
-      checkpointOffsets.toStreamProgress(streams)
-    }
-    assert(e.getMessage.contains("There are [2] sources in the checkpoint offsets " +
-      "and now there are [1] sources requested by the query.  Cannot continue."))
-  }
-
   private def readFromResource(dir: String): (Long, OffsetSeq) = {
     val input = getClass.getResource(s"/structured-streaming/$dir")
     val log = new OffsetSeqLog(spark, input.toString)
