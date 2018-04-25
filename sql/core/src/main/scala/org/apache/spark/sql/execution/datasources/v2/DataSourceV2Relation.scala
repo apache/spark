@@ -56,7 +56,7 @@ case class DataSourceV2Relation(
 
   lazy val (
       reader: DataSourceReader,
-      unsupportedFilters: Seq[Expression],
+      afterScanFilters: Seq[Expression],
       pushedFilters: Seq[Expression]) = {
     val newReader = userSpecifiedSchema match {
       case Some(s) =>
@@ -67,14 +67,14 @@ case class DataSourceV2Relation(
 
     DataSourceV2Relation.pushRequiredColumns(newReader, projection.toStructType)
 
-    val (remainingFilters, pushedFilters) = filters match {
+    val (afterScanFilters, pushedFilters) = filters match {
       case Some(filterSeq) =>
         DataSourceV2Relation.pushFilters(newReader, filterSeq)
       case _ =>
         (Nil, Nil)
     }
 
-    (newReader, remainingFilters, pushedFilters)
+    (newReader, afterScanFilters, pushedFilters)
   }
 
   override def doCanonicalize(): LogicalPlan = {
@@ -226,29 +226,29 @@ object DataSourceV2Relation {
         )
 
       case filterSupport: SupportsPushDownFilters =>
-        // A map from original Catalyst expressions to corresponding translated data source
-        // filters. If a predicate is not in this map, it means it cannot be pushed down.
-        val translatedMap: Map[Expression, Filter] = filters.flatMap { p =>
-          DataSourceStrategy.translateFilter(p).map(f => p -> f)
-        }.toMap
+        val translateResults: Seq[(Option[Filter], Expression)] = filters.map { p =>
+          (DataSourceStrategy.translateFilter(p), p)
+        }
 
         // Catalyst predicate expressions that cannot be converted to data source filters.
-        val nonConvertiblePredicates = filters.filterNot(translatedMap.contains)
+        val nonConvertiblePredicates = translateResults.collect {
+          case (None, p) => p
+        }
 
-        // Data source filters that cannot be pushed down. An unhandled filter means
-        // the data source cannot guarantee the rows returned can pass the filter.
+        // A map from translated data source filters to original catalyst predicate expressions.
+        val translatedMap: Map[Filter, Expression] = translateResults.collect {
+          case (Some(f), p) => (f, p)
+        }.toMap
+
+        // Data source filters that need to be evaluated again after scanning. which means
+        // the data source cannot guarantee the rows returned can pass these filters.
         // As a result we must return it so Spark can plan an extra filter operator.
-        val unhandledFilters = filterSupport.pushFilters(translatedMap.values.toArray).toSet
-        val unhandledPredicates = translatedMap.filter { case (_, f) =>
-          unhandledFilters.contains(f)
-        }.keys
+        val afterScanPredicates =
+          filterSupport.pushFilters(translatedMap.keys.toArray).map(translatedMap)
         // The filters which are marked as pushed to this data source
-        val pushedFilters = filterSupport.pushedFilters()
-        val pushedPredicates = translatedMap.filter { case (_, f) =>
-          pushedFilters.contains(f)
-        }.keys.toSeq
+        val pushedPredicates = filterSupport.pushedFilters().map(translatedMap)
 
-        (nonConvertiblePredicates ++ unhandledPredicates, pushedPredicates)
+        (nonConvertiblePredicates ++ afterScanPredicates, pushedPredicates)
 
       case _ => (filters, Nil)
     }
