@@ -52,6 +52,10 @@ abstract class FileSourceReader(options: DataSourceOptions, userSpecifiedSchema:
     false
   }
 
+  /**
+   * Returns a function that can be used to read a single file in as an [[DataReader]] of
+   * [[UnsafeRow]].
+   */
   def unsafeRowDataReader: PartitionedFile => DataReader[UnsafeRow]
 
   protected val sparkSession = SparkSession.getActiveSession
@@ -59,6 +63,7 @@ abstract class FileSourceReader(options: DataSourceOptions, userSpecifiedSchema:
   protected val hadoopConf =
     sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
   protected val sqlConf = sparkSession.sessionState.conf
+
   protected val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   protected val ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
   protected val ignoreMissingFiles = sqlConf.ignoreMissingFiles
@@ -139,7 +144,12 @@ abstract class ColumnarBatchFileSourceReader(
     userSpecifiedSchema: Option[StructType])
   extends FileSourceReader(options: DataSourceOptions, userSpecifiedSchema: Option[StructType])
   with SupportsScanColumnarBatch {
+  /**
+   * Returns a function that can be used to read a single file in as an [[DataReader]] of
+   * [[ColumnarBatch]].
+   */
   def columnarBatchDataReader: PartitionedFile => DataReader[ColumnarBatch]
+
   override def createBatchDataReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
     partitions.map { filePartition =>
       new FileReaderFactory[ColumnarBatch](filePartition, columnarBatchDataReader,

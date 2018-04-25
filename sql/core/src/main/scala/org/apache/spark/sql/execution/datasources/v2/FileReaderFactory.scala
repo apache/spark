@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.io.{FileNotFoundException, IOException}
+
 import org.apache.spark.TaskContext
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.InputFileBlockHolder
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{FilePartition, FilePartitionUtil, PartitionedFile}
 import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -34,7 +36,7 @@ case class FileReaderFactory[T](
   override def createDataReader(): DataReader[T] = {
     val taskContext = TaskContext.get()
     val iter = file.files.iterator.map(f => PartitionedFileDataReader(f, readFunction(f)))
-    FileDataReader(taskContext, iter)
+    FileDataReader(taskContext, iter, ignoreCorruptFiles, ignoreMissingFiles)
   }
 
   override def preferredLocations(): Array[String] = {
@@ -54,7 +56,9 @@ case class PartitionedFileDataReader[T](
 
 case class FileDataReader[T](
     context: TaskContext,
-    readers: Iterator[PartitionedFileDataReader[T]]) extends DataReader[T] {
+    readers: Iterator[PartitionedFileDataReader[T]],
+    ignoreCorruptFiles: Boolean,
+    ignoreMissingFiles: Boolean) extends DataReader[T] with Logging {
   private val inputMetrics = context.taskMetrics().inputMetrics
   private val existingBytesRead = inputMetrics.bytesRead
 
@@ -84,7 +88,25 @@ case class FileDataReader[T](
   private def hasNext(): Boolean = {
     if (currentFile == null) {
       if (readers.hasNext) {
-        currentFile = readers.next()
+        if (ignoreMissingFiles || ignoreCorruptFiles) {
+         try {
+           currentFile = readers.next()
+         } catch {
+           case e: FileNotFoundException if ignoreMissingFiles =>
+             logWarning(s"Skipped missing file: $currentFile", e)
+             currentFile = null
+             return false
+           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+           case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+             logWarning(
+               s"Skipped the rest of the content in the corrupted file: $currentFile", e)
+             currentFile = null
+             return false
+         }
+        } else {
+          currentFile = readers.next()
+        }
       } else {
         return false
       }
