@@ -2191,6 +2191,23 @@ def reverse(col):
     return Column(sc._jvm.functions.reverse(_to_java_column(col)))
 
 
+@since(2.4)
+def flatten(col):
+    """
+    Collection function: creates a single array from an array of arrays.
+    If a structure of nested arrays is deeper than two levels,
+    only one level of nesting is removed.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([[1, 2, 3], [4, 5], [6]],), ([None, [4, 5]],)], ['data'])
+    >>> df.select(flatten(df.data).alias('r')).collect()
+    [Row(r=[1, 2, 3, 4, 5, 6]), Row(r=None)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.flatten(_to_java_column(col)))
+
+
 @since(2.3)
 def map_keys(col):
     """

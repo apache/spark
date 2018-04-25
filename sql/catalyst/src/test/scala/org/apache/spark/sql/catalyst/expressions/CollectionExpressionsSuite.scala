@@ -280,4 +280,99 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(Concat(Seq(aa0, aa1)), Seq(Seq("a", "b"), Seq("c"), Seq("d"), Seq("e", "f")))
   }
+
+  test("Flatten") {
+    // Primitive-type test cases
+    val intArrayType = ArrayType(ArrayType(IntegerType))
+
+    // Main test cases (primitive type)
+    val aim1 = Literal.create(Seq(Seq(1, 2, 3), Seq(4, 5), Seq(6)), intArrayType)
+    val aim2 = Literal.create(Seq(Seq(1, 2, 3)), intArrayType)
+
+    checkEvaluation(Flatten(aim1), Seq(1, 2, 3, 4, 5, 6))
+    checkEvaluation(Flatten(aim2), Seq(1, 2, 3))
+
+    // Test cases with an empty array (primitive type)
+    val aie1 = Literal.create(Seq(Seq.empty, Seq(1, 2), Seq(3, 4)), intArrayType)
+    val aie2 = Literal.create(Seq(Seq(1, 2), Seq.empty, Seq(3, 4)), intArrayType)
+    val aie3 = Literal.create(Seq(Seq(1, 2), Seq(3, 4), Seq.empty), intArrayType)
+    val aie4 = Literal.create(Seq(Seq.empty, Seq.empty, Seq.empty), intArrayType)
+    val aie5 = Literal.create(Seq(Seq.empty), intArrayType)
+    val aie6 = Literal.create(Seq.empty, intArrayType)
+
+    checkEvaluation(Flatten(aie1), Seq(1, 2, 3, 4))
+    checkEvaluation(Flatten(aie2), Seq(1, 2, 3, 4))
+    checkEvaluation(Flatten(aie3), Seq(1, 2, 3, 4))
+    checkEvaluation(Flatten(aie4), Seq.empty)
+    checkEvaluation(Flatten(aie5), Seq.empty)
+    checkEvaluation(Flatten(aie6), Seq.empty)
+
+    // Test cases with null elements (primitive type)
+    val ain1 = Literal.create(Seq(Seq(null, null, null), Seq(4, null)), intArrayType)
+    val ain2 = Literal.create(Seq(Seq(null, 2, null), Seq(null, null)), intArrayType)
+    val ain3 = Literal.create(Seq(Seq(null, null), Seq(null, null)), intArrayType)
+
+    checkEvaluation(Flatten(ain1), Seq(null, null, null, 4, null))
+    checkEvaluation(Flatten(ain2), Seq(null, 2, null, null, null))
+    checkEvaluation(Flatten(ain3), Seq(null, null, null, null))
+
+    // Test cases with a null array (primitive type)
+    val aia1 = Literal.create(Seq(null, Seq(1, 2)), intArrayType)
+    val aia2 = Literal.create(Seq(Seq(1, 2), null), intArrayType)
+    val aia3 = Literal.create(Seq(null), intArrayType)
+    val aia4 = Literal.create(null, intArrayType)
+
+    checkEvaluation(Flatten(aia1), null)
+    checkEvaluation(Flatten(aia2), null)
+    checkEvaluation(Flatten(aia3), null)
+    checkEvaluation(Flatten(aia4), null)
+
+    // Non-primitive-type test cases
+    val strArrayType = ArrayType(ArrayType(StringType))
+    val arrArrayType = ArrayType(ArrayType(ArrayType(StringType)))
+
+    // Main test cases (non-primitive type)
+    val asm1 = Literal.create(Seq(Seq("a"), Seq("b", "c"), Seq("d", "e", "f")), strArrayType)
+    val asm2 = Literal.create(Seq(Seq("a", "b")), strArrayType)
+    val asm3 = Literal.create(Seq(Seq(Seq("a", "b"), Seq("c")), Seq(Seq("d", "e"))), arrArrayType)
+
+    checkEvaluation(Flatten(asm1), Seq("a", "b", "c", "d", "e", "f"))
+    checkEvaluation(Flatten(asm2), Seq("a", "b"))
+    checkEvaluation(Flatten(asm3), Seq(Seq("a", "b"), Seq("c"), Seq("d", "e")))
+
+    // Test cases with an empty array (non-primitive type)
+    val ase1 = Literal.create(Seq(Seq.empty, Seq("a", "b"), Seq("c", "d")), strArrayType)
+    val ase2 = Literal.create(Seq(Seq("a", "b"), Seq.empty, Seq("c", "d")), strArrayType)
+    val ase3 = Literal.create(Seq(Seq("a", "b"), Seq("c", "d"), Seq.empty), strArrayType)
+    val ase4 = Literal.create(Seq(Seq.empty, Seq.empty, Seq.empty), strArrayType)
+    val ase5 = Literal.create(Seq(Seq.empty), strArrayType)
+    val ase6 = Literal.create(Seq.empty, strArrayType)
+
+    checkEvaluation(Flatten(ase1), Seq("a", "b", "c", "d"))
+    checkEvaluation(Flatten(ase2), Seq("a", "b", "c", "d"))
+    checkEvaluation(Flatten(ase3), Seq("a", "b", "c", "d"))
+    checkEvaluation(Flatten(ase4), Seq.empty)
+    checkEvaluation(Flatten(ase5), Seq.empty)
+    checkEvaluation(Flatten(ase6), Seq.empty)
+
+    // Test cases with null elements (non-primitive type)
+    val asn1 = Literal.create(Seq(Seq(null, null, "c"), Seq(null, null)), strArrayType)
+    val asn2 = Literal.create(Seq(Seq(null, null, null), Seq("d", null)), strArrayType)
+    val asn3 = Literal.create(Seq(Seq(null, null), Seq(null, null)), strArrayType)
+
+    checkEvaluation(Flatten(asn1), Seq(null, null, "c", null, null))
+    checkEvaluation(Flatten(asn2), Seq(null, null, null, "d", null))
+    checkEvaluation(Flatten(asn3), Seq(null, null, null, null))
+
+    // Test cases with a null array (non-primitive type)
+    val asa1 = Literal.create(Seq(null, Seq("a", "b")), strArrayType)
+    val asa2 = Literal.create(Seq(Seq("a", "b"), null), strArrayType)
+    val asa3 = Literal.create(Seq(null), strArrayType)
+    val asa4 = Literal.create(null, strArrayType)
+
+    checkEvaluation(Flatten(asa1), null)
+    checkEvaluation(Flatten(asa2), null)
+    checkEvaluation(Flatten(asa3), null)
+    checkEvaluation(Flatten(asa4), null)
+  }
 }
