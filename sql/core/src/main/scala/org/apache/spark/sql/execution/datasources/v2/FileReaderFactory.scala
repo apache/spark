@@ -27,15 +27,14 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 
 case class FileReaderFactory[T](
     file: FilePartition,
-    readFunction: (PartitionedFile) => Iterator[InternalRow],
+    readFunction: (PartitionedFile) => DataReader[T],
     ignoreCorruptFiles: Boolean = false,
     ignoreMissingFiles: Boolean = false)
   extends DataReaderFactory[T] {
   override def createDataReader(): DataReader[T] = {
     val taskContext = TaskContext.get()
-    val iter = FilePartitionUtil.compute(file, taskContext, readFunction,
-      ignoreCorruptFiles, ignoreMissingFiles)
-    InternalRowDataReader[T](iter)
+    val iter = file.files.iterator.map(f => PartitionedFileDataReader(f, readFunction(f)))
+    FileDataReader(taskContext, iter)
   }
 
   override def preferredLocations(): Array[String] = {
@@ -43,50 +42,61 @@ case class FileReaderFactory[T](
   }
 }
 
-case class InternalRowDataReader[T](iter: Iterator[InternalRow])
-  extends DataReader[T] {
-  override def next(): Boolean = iter.hasNext
+case class PartitionedFileDataReader[T](
+    file: PartitionedFile,
+    reader: DataReader[T]) extends DataReader[T] {
+  override def next(): Boolean = reader.next()
 
-  override def get(): T = iter.next().asInstanceOf[T]
+  override def get(): T = reader.get()
 
-  override def close(): Unit = {}
+  override def close(): Unit = reader.close()
 }
 
-abstract class FileDataReader[T] extends DataReader[T] {
-  def file: PartitionedFile
-}
-
-case class FileReaderFoobar[T](
+case class FileDataReader[T](
     context: TaskContext,
-    readers: Iterator[FileDataReader[T]],
-    ignoreMissingFiles: Boolean,
-    ignoreCorruptFiles: Boolean)
-  extends DataReader[T] {
-    private val inputMetrics = context.taskMetrics().inputMetrics
-    private val existingBytesRead = inputMetrics.bytesRead
+    readers: Iterator[PartitionedFileDataReader[T]]) extends DataReader[T] {
+  private val inputMetrics = context.taskMetrics().inputMetrics
+  private val existingBytesRead = inputMetrics.bytesRead
 
-    // Find a function that will return the FileSystem bytes read by this thread. Do this before
-    // apply readFunction, because it might read some bytes.
-    private val getBytesReadCallback =
-    SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+  // Find a function that will return the FileSystem bytes read by this thread. Do this before
+  // apply readFunction, because it might read some bytes.
+  private val getBytesReadCallback =
+  SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
 
-    // We get our input bytes from thread-local Hadoop FileSystem statistics.
-    // If we do a coalesce, however, we are likely to compute multiple partitions in the same
-    // task and in the same thread, in which case we need to avoid override values written by
-    // previous partitions (SPARK-13071).
-    private def updateBytesRead(): Unit = {
-      inputMetrics.setBytesRead(existingBytesRead + getBytesReadCallback())
+  // We get our input bytes from thread-local Hadoop FileSystem statistics.
+  // If we do a coalesce, however, we are likely to compute multiple partitions in the same
+  // task and in the same thread, in which case we need to avoid override values written by
+  // previous partitions (SPARK-13071).
+  private def updateBytesRead(): Unit = {
+    inputMetrics.setBytesRead(existingBytesRead + getBytesReadCallback())
+  }
+
+  // If we can't get the bytes read from the FS stats, fall back to the file size,
+  // which may be inaccurate.
+  private def updateBytesReadWithFileSize(): Unit = {
+    if (currentFile != null) {
+      inputMetrics.incBytesRead(currentFile.file.length)
     }
+  }
 
-    // If we can't get the bytes read from the FS stats, fall back to the file size,
-    // which may be inaccurate.
-    private def updateBytesReadWithFileSize(): Unit = {
-      if (currentFile != null) {
-        inputMetrics.incBytesRead(currentFile.file.length)
+  private[this] var currentFile: PartitionedFileDataReader[T] = null
+
+  private def hasNext(): Boolean = {
+    if (currentFile == null) {
+      if (readers.hasNext) {
+        currentFile = readers.next()
+      } else {
+        return false
       }
     }
-
-    private[this] var currentFile: FileDataReader[T] = null
+    if (currentFile.next()) {
+      return true
+    } else {
+      close()
+      currentFile = null
+    }
+    hasNext()
+  }
 
   override def next(): Boolean = {
     // Kill the task in case it has been marked as killed. This logic is from
@@ -94,17 +104,7 @@ case class FileReaderFoobar[T](
     // to avoid performance overhead.
     context.killTaskIfInterrupted()
 
-    if (currentFile != null && currentFile.next()) {
-      return true
-    }
-    while (readers.hasNext) {
-      currentFile = readers.next()
-      if (currentFile.next()) {
-        return true
-      }
-    }
-
-    return false
+    hasNext()
   }
 
   override def get(): T = {

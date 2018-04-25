@@ -33,13 +33,11 @@ import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-trait FileSourceReader extends DataSourceReader
+abstract class FileSourceReader(options: DataSourceOptions, userSpecifiedSchema: Option[StructType])
+  extends DataSourceReader
   with SupportsScanUnsafeRow
   with SupportsPushDownRequiredColumns
   with SupportsPushDownCatalystFilters {
-  def options: DataSourceOptions
-  def userSpecifiedSchema: Option[StructType]
-
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
    * does not support inference, or no valid files are given should return None.  In these cases
@@ -47,14 +45,14 @@ trait FileSourceReader extends DataSourceReader
    */
   def inferSchema(files: Seq[FileStatus]): Option[StructType]
 
-  def readFunction: PartitionedFile => Iterator[InternalRow]
-
   /**
    * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(path: Path): Boolean = {
     false
   }
+
+  def unsafeRowDataReader: PartitionedFile => DataReader[UnsafeRow]
 
   protected val sparkSession = SparkSession.getActiveSession
     .getOrElse(SparkSession.getDefaultSession.get)
@@ -129,17 +127,22 @@ trait FileSourceReader extends DataSourceReader
 
   override def createUnsafeRowReaderFactories: JList[DataReaderFactory[UnsafeRow]] = {
     partitions.map { filePartition =>
-      new FileReaderFactory[UnsafeRow](filePartition, readFunction,
+      new FileReaderFactory[UnsafeRow](filePartition, unsafeRowDataReader,
         ignoreCorruptFiles, ignoreMissingFiles)
         .asInstanceOf[DataReaderFactory[UnsafeRow]]
     }.asJava
   }
 }
 
-trait ColumnarBatchFileSourceReader extends FileSourceReader with SupportsScanColumnarBatch {
+abstract class ColumnarBatchFileSourceReader(
+    options: DataSourceOptions,
+    userSpecifiedSchema: Option[StructType])
+  extends FileSourceReader(options: DataSourceOptions, userSpecifiedSchema: Option[StructType])
+  with SupportsScanColumnarBatch {
+  def columnarBatchDataReader: PartitionedFile => DataReader[ColumnarBatch]
   override def createBatchDataReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
     partitions.map { filePartition =>
-      new FileReaderFactory[ColumnarBatch](filePartition, readFunction,
+      new FileReaderFactory[ColumnarBatch](filePartition, columnarBatchDataReader,
         ignoreCorruptFiles, ignoreMissingFiles)
         .asInstanceOf[DataReaderFactory[ColumnarBatch]]
     }.asJava

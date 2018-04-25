@@ -228,10 +228,10 @@ class FallBackFileDataSourceToV1(sparkSession: SparkSession) extends Rule[Logica
       val v1FileFormat = d.source.asInstanceOf[FileDataSourceV2].fallBackFileFormat
       val v1 = DataSource.apply(
         sparkSession = sparkSession,
-        paths = Seq.empty,
+        paths = d.v2Options.paths(),
         userSpecifiedSchema = d.userSpecifiedSchema,
         className = v1FileFormat.getCanonicalName,
-        options = d.options).resolveRelation()
+        options = d.options - "path").resolveRelation()
       i.copy(table = LogicalRelation(v1))
   }
 }
