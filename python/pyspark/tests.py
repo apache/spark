@@ -236,19 +236,6 @@ class SorterTests(unittest.TestCase):
 
 class SerializationTestCase(unittest.TestCase):
 
-    def test_namedtuple(self):
-        from collections import namedtuple
-        from pickle import dumps, loads
-        P = namedtuple("P", "x y")
-        p1 = P(1, 3)
-        p2 = loads(dumps(p1, 2))
-        self.assertEqual(p1, p2)
-
-        from pyspark.cloudpickle import dumps
-        P2 = loads(dumps(P))
-        p3 = P2(1, 3)
-        self.assertEqual(p1, p3)
-
     def test_itemgetter(self):
         from operator import itemgetter
         ser = CloudPickleSerializer()
