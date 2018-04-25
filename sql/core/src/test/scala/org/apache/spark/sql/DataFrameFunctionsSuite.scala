@@ -691,6 +691,85 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("flatten function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
+    val oneRowDF = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
+
+    // Test cases with a primitive type
+    val intDF = Seq(
+      (Seq(Seq(1, 2, 3), Seq(4, 5), Seq(6))),
+      (Seq(Seq(1, 2))),
+      (Seq(Seq(1), Seq.empty)),
+      (Seq(Seq.empty, Seq(1))),
+      (Seq(Seq.empty, Seq.empty)),
+      (Seq(Seq(1), null)),
+      (Seq(null, Seq(1))),
+      (Seq(null, null))
+    ).toDF("i")
+
+    val intDFResult = Seq(
+      Row(Seq(1, 2, 3, 4, 5, 6)),
+      Row(Seq(1, 2)),
+      Row(Seq(1)),
+      Row(Seq(1)),
+      Row(Seq.empty),
+      Row(null),
+      Row(null),
+      Row(null))
+
+    checkAnswer(intDF.select(flatten($"i")), intDFResult)
+    checkAnswer(intDF.filter(dummyFilter($"i"))select(flatten($"i")), intDFResult)
+    checkAnswer(intDF.selectExpr("flatten(i)"), intDFResult)
+    checkAnswer(
+      oneRowDF.selectExpr("flatten(array(arr, array(null, 5), array(6, null)))"),
+      Seq(Row(Seq(1, 2, 3, null, 5, 6, null))))
+
+    // Test cases with non-primitive types
+    val strDF = Seq(
+      (Seq(Seq("a", "b"), Seq("c"), Seq("d", "e", "f"))),
+      (Seq(Seq("a", "b"))),
+      (Seq(Seq("a", null), Seq(null, "b"), Seq(null, null))),
+      (Seq(Seq("a"), Seq.empty)),
+      (Seq(Seq.empty, Seq("a"))),
+      (Seq(Seq.empty, Seq.empty)),
+      (Seq(Seq("a"), null)),
+      (Seq(null, Seq("a"))),
+      (Seq(null, null))
+    ).toDF("s")
+
+    val strDFResult = Seq(
+      Row(Seq("a", "b", "c", "d", "e", "f")),
+      Row(Seq("a", "b")),
+      Row(Seq("a", null, null, "b", null, null)),
+      Row(Seq("a")),
+      Row(Seq("a")),
+      Row(Seq.empty),
+      Row(null),
+      Row(null),
+      Row(null))
+
+    checkAnswer(strDF.select(flatten($"s")), strDFResult)
+    checkAnswer(strDF.filter(dummyFilter($"s")).select(flatten($"s")), strDFResult)
+    checkAnswer(strDF.selectExpr("flatten(s)"), strDFResult)
+    checkAnswer(
+      oneRowDF.selectExpr("flatten(array(array(arr, arr), array(arr)))"),
+      Seq(Row(Seq(Seq(1, 2, 3), Seq(1, 2, 3), Seq(1, 2, 3)))))
+
+    // Error test cases
+    intercept[AnalysisException] {
+      oneRowDF.select(flatten($"arr"))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.select(flatten($"i"))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.select(flatten($"s"))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("flatten(null)")
+    }
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

@@ -413,6 +413,7 @@ object FunctionRegistry {
     expression[ArrayMax]("array_max"),
     expression[Reverse]("reverse"),
     expression[Concat]("concat"),
+    expression[Flatten]("flatten"),
     CreateStruct.registryEntry,
 
     // misc functions
