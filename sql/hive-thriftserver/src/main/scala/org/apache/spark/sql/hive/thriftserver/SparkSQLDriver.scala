@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.{ArrayList => JArrayList, Arrays, List => JList}
+import java.util.{ArrayList => JArrayList, Arrays, List => JList, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -58,7 +58,9 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
   override def run(command: String): CommandProcessorResponse = {
     // TODO unify the error code
     try {
-      context.sparkContext.setJobDescription(command)
+      val statementId = UUID.randomUUID().toString
+      logInfo(s"Running query '$command' with $statementId")
+      context.sparkContext.setJobGroup(statementId, command)
       val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
       hiveResponse = SQLExecution.withNewExecutionId(context.sparkSession, execution) {
         execution.hiveResultString()
@@ -76,6 +78,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
   }
 
   override def close(): Int = {
+    context.sparkContext.clearJobGroup
     hiveResponse = null
     tableSchema = null
     0
