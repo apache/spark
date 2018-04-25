@@ -192,7 +192,8 @@ case class BroadcastHashJoinExec(
           |  $value = ${ev.value};
           |}
          """.stripMargin
-        ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType))
+        ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType),
+          inputRow = matched)
       }
     }
   }
