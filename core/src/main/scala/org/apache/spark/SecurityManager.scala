@@ -24,7 +24,7 @@ import java.security.{KeyStore, SecureRandom}
 import java.security.cert.X509Certificate
 import javax.net.ssl._
 
-import com.google.common.hash.HashCodes
+import com.google.common.hash.HashCode
 import com.google.common.io.Files
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -364,7 +364,7 @@ private[spark] class SecurityManager(
     rnd.nextBytes(secretBytes)
 
     val creds = new Credentials()
-    val secretStr = HashCodes.fromBytes(secretBytes).toString()
+    val secretStr = HashCode.fromBytes(secretBytes).toString()
     creds.addSecretKey(SECRET_LOOKUP_KEY, secretStr.getBytes(UTF_8))
     UserGroupInformation.getCurrentUser().addCredentials(creds)
   }
