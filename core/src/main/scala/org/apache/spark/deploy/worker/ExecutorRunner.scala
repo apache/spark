@@ -142,13 +142,10 @@ private[deploy] class ExecutorRunner(
   private def fetchAndRunExecutor() {
     try {
       // Launch the process
-      val subsCommand = Command(appDesc.command.mainClass,
-        appDesc.command.arguments, appDesc.command.environment,
-        appDesc.command.classPathEntries,
-        appDesc.command.libraryPathEntries,
-        appDesc.command.javaOpts.map {
-          opt => Utils.substituteAppNExecIds(opt, appId, execId.toString)
-        })
+      val subsOpts = appDesc.command.javaOpts.map {
+        opt => Utils.substituteAppNExecIds(opt, appId, execId.toString)
+      }
+      val subsCommand = appDesc.command.copy(javaOpts = subsOpts)
       val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()

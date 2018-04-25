@@ -89,7 +89,9 @@ private[spark] class BasicExecutorFeatureStep(
     val executorExtraJavaOptionsEnv = kubernetesConf
       .get(EXECUTOR_JAVA_OPTIONS)
       .map { opts =>
-        val delimitedOpts = Utils.splitCommandString(opts)
+        val subsOpts = Utils.substituteAppNExecIds(opts, kubernetesConf.appId,
+          kubernetesConf.roleSpecificConf.executorId)
+        val delimitedOpts = Utils.splitCommandString(subsOpts)
         delimitedOpts.zipWithIndex.map {
           case (opt, index) =>
             new EnvVarBuilder().withName(s"$ENV_JAVA_OPT_PREFIX$index").withValue(opt).build()
