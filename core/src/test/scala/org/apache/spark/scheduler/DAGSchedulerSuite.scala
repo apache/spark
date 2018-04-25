@@ -2403,8 +2403,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    * This tests the case where origin task success after speculative task got FetchFailed
    * before.
    */
-  test("[SPARK-23811] FetchFailed comes before Success of same task will cause child stage" +
-    " never succeed") {
+  test("SPARK-23811: ShuffleMapStage failed by FetchFailed should ignore following" +
+    "successful tasks") {
     // Create 3 RDDs with shuffle dependencies on each other: rddA <--- rddB <--- rddC
     val rddA = new MyRDD(sc, 2, Nil)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(2))
@@ -2441,6 +2441,38 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // Missing partition number should not change, otherwise it will cause child stage
     // never succeed.
     assert(mapOutputTracker.findMissingPartitions(shuffleDepB.shuffleId).get.size === 1)
+  }
+
+  test("SPARK-23811: check ResultStage failed by FetchFailed can ignore following" +
+    "successful tasks") {
+    val rddA = new MyRDD(sc, 2, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(2))
+    val shuffleIdA = shuffleDepA.shuffleId
+    val rddB = new MyRDD(sc, 2, List(shuffleDepA), tracker = mapOutputTracker)
+    submit(rddB, Array(0, 1))
+
+    // Complete both tasks in rddA.
+    assert(taskSets(0).stageId === 0 && taskSets(0).stageAttemptId === 0)
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+
+    // The first task of rddB success
+    assert(taskSets(1).tasks(0).isInstanceOf[ResultTask[_, _]])
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0), Success, makeMapStatus("hostB", 2)))
+
+    // The second task's speculative attempt fails first, but task self still running.
+    // This may caused by ExecutorLost.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0, 0, "ignored"),
+      null))
+    // The second result task self success soon.
+    assert(taskSets(1).tasks(1).isInstanceOf[ResultTask[_, _]])
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), Success, makeMapStatus("hostB", 2)))
+    assertDataStructuresEmpty()
   }
 
   /**
