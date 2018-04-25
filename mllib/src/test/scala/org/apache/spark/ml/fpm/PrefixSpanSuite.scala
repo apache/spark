@@ -25,14 +25,13 @@ class PrefixSpanSuite extends MLTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    smallDataset = Seq(Seq(Seq(1, 2), Seq(1, 2, 3))).toDF("sequence")
   }
 
-  @transient var smallDataset: DataFrame = _
-
   test("PrefixSpan projections with multiple partial starts") {
-    val result = PrefixSpan.findFrequentSequentPatterns(smallDataset, "sequence",
-      minSupport = 1.0, maxPatternLength = 2).as[(Seq[Seq[Int]], Long)].collect()
+    val smallDataset = Seq(Seq(Seq(1, 2), Seq(1, 2, 3))).toDF("sequence")
+    val result = PrefixSpan.findFrequentSequentialPatterns(smallDataset, "sequence",
+      minSupport = 1.0, maxPatternLength = 2, maxLocalProjDBSize = 32000000)
+      .as[(Seq[Seq[Int]], Long)].collect()
     val expected = Array(
       (Seq(Seq(1)), 1L),
       (Seq(Seq(1, 2)), 1L),
@@ -49,6 +48,32 @@ class PrefixSpanSuite extends MLTest {
     compareResults[Int](expected, result)
   }
 
+  /*
+  To verify expected results for `smallTestData`, create file "prefixSpanSeqs2" with content
+  (format = (transactionID, idxInTransaction, numItemsinItemset, itemset)):
+    1 1 2 1 2
+    1 2 1 3
+    2 1 1 1
+    2 2 2 3 2
+    2 3 2 1 2
+    3 1 2 1 2
+    3 2 1 5
+    4 1 1 6
+  In R, run:
+    library("arulesSequences")
+    prefixSpanSeqs = read_baskets("prefixSpanSeqs", info = c("sequenceID","eventID","SIZE"))
+    freqItemSeq = cspade(prefixSpanSeqs,
+                         parameter = 0.5, maxlen = 5 ))
+    resSeq = as(freqItemSeq, "data.frame")
+    resSeq
+
+       sequence support
+    1     <{1}>    0.75
+    2     <{2}>    0.75
+    3     <{3}>    0.50
+    4 <{1},{3}>    0.50
+    5   <{1,2}>    0.75
+ */
   val smallTestData = Seq(
     Seq(Seq(1, 2), Seq(3)),
     Seq(Seq(1), Seq(3, 2), Seq(1, 2)),
@@ -65,8 +90,18 @@ class PrefixSpanSuite extends MLTest {
 
   test("PrefixSpan Integer type, variable-size itemsets") {
     val df = smallTestData.toDF("sequence")
-    val result = PrefixSpan.findFrequentSequentPatterns(df, "sequence",
-      minSupport = 0.5, maxPatternLength = 5).as[(Seq[Seq[Int]], Long)].collect()
+    val result = PrefixSpan.findFrequentSequentialPatterns(df, "sequence",
+      minSupport = 0.5, maxPatternLength = 5, maxLocalProjDBSize = 32000000)
+      .as[(Seq[Seq[Int]], Long)].collect()
+
+    compareResults[Int](smallTestDataExpectedResult, result)
+  }
+
+  test("PrefixSpan input row with nulls") {
+    val df = (smallTestData :+ null).toDF("sequence")
+    val result = PrefixSpan.findFrequentSequentialPatterns(df, "sequence",
+      minSupport = 0.5, maxPatternLength = 5, maxLocalProjDBSize = 32000000)
+      .as[(Seq[Seq[Int]], Long)].collect()
 
     compareResults[Int](smallTestDataExpectedResult, result)
   }
@@ -76,8 +111,9 @@ class PrefixSpanSuite extends MLTest {
     val df = smallTestData
       .map(seq => seq.map(itemSet => itemSet.map(intToString)))
       .toDF("sequence")
-    val result = PrefixSpan.findFrequentSequentPatterns(df, "sequence",
-      minSupport = 0.5, maxPatternLength = 5).as[(Seq[Seq[String]], Long)].collect()
+    val result = PrefixSpan.findFrequentSequentialPatterns(df, "sequence",
+      minSupport = 0.5, maxPatternLength = 5, maxLocalProjDBSize = 32000000)
+      .as[(Seq[Seq[String]], Long)].collect()
 
     val expected = smallTestDataExpectedResult.map { case (seq, freq) =>
       (seq.map(itemSet => itemSet.map(intToString)), freq)

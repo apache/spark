@@ -21,8 +21,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.fpm.{PrefixSpan => mllibPrefixSpan}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.types.{ArrayType, LongType, StructField, StructType}
 
 /**
  * :: Experimental ::
@@ -44,26 +43,37 @@ object PrefixSpan {
    *
    * @param dataset A dataset or a dataframe containing a sequence column which is
    *                {{{Seq[Seq[_]]}}} type
-   * @param sequenceCol the name of the sequence column in dataset
+   * @param sequenceCol the name of the sequence column in dataset, rows with nulls in this column
+   *                    are ignored
    * @param minSupport the minimal support level of the sequential pattern, any pattern that
    *                   appears more than (minSupport * size-of-the-dataset) times will be output
-   *                  (default: `0.1`).
-   * @param maxPatternLength the maximal length of the sequential pattern, any pattern that appears
-   *                         less than maxPatternLength will be output (default: `10`).
+   *                  (recommended value: `0.1`).
+   * @param maxPatternLength the maximal length of the sequential pattern
+   *                         (recommended value: `10`).
    * @param maxLocalProjDBSize The maximum number of items (including delimiters used in the
    *                           internal storage format) allowed in a projected database before
    *                           local processing. If a projected database exceeds this size, another
-   *                           iteration of distributed prefix growth is run (default: `32000000`).
-   * @return A dataframe that contains columns of sequence and corresponding frequency.
+   *                           iteration of distributed prefix growth is run
+   *                           (recommended value: `32000000`).
+   * @return A `DataFrame` that contains columns of sequence and corresponding frequency.
+   *         The schema of it will be:
+   *          - `sequence: Seq[Seq[T]]` (T is the item type)
+   *          - `frequency: Long`
    */
   @Since("2.4.0")
-  def findFrequentSequentPatterns(
+  def findFrequentSequentialPatterns(
       dataset: Dataset[_],
       sequenceCol: String,
-      minSupport: Double = 0.1,
-      maxPatternLength: Int = 10,
-      maxLocalProjDBSize: Long = 32000000L): DataFrame = {
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+      minSupport: Double,
+      maxPatternLength: Int,
+      maxLocalProjDBSize: Long): DataFrame = {
+
+    val inputType = dataset.schema(sequenceCol).dataType
+    require(inputType.isInstanceOf[ArrayType] &&
+      inputType.asInstanceOf[ArrayType].elementType.isInstanceOf[ArrayType],
+      s"The input column must be ArrayType and the array element type must also be ArrayType, " +
+      s"but got $inputType.")
+
 
     val data = dataset.select(sequenceCol)
     val sequences = data.where(col(sequenceCol).isNotNull).rdd
@@ -73,18 +83,13 @@ object PrefixSpan {
       .setMinSupport(minSupport)
       .setMaxPatternLength(maxPatternLength)
       .setMaxLocalProjDBSize(maxLocalProjDBSize)
-    if (handlePersistence) {
-      sequences.persist(StorageLevel.MEMORY_AND_DISK)
-    }
+
     val rows = mllibPrefixSpan.run(sequences).freqSequences.map(f => Row(f.sequence, f.freq))
     val schema = StructType(Seq(
       StructField("sequence", dataset.schema(sequenceCol).dataType, nullable = false),
-      StructField("freq", LongType, nullable = false)))
+      StructField("frequency", LongType, nullable = false)))
     val freqSequences = dataset.sparkSession.createDataFrame(rows, schema)
 
-    if (handlePersistence) {
-      sequences.unpersist()
-    }
     freqSequences
   }
 
