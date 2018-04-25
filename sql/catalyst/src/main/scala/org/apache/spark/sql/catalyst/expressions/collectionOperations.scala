@@ -994,7 +994,7 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression, startFromZero
        |    long offset = $structsOffset + z * $structSize;
        |    $unsafeArrayData.setLong(z, (offset << 32) + $structSize);
        |    $unsafeRow.pointTo($data, $baseOffset + offset, $structSize);
-       |    if ($childVariableName.isNullAt(z)) {
+       |    if (${childArrayType.containsNull} && $childVariableName.isNullAt(z)) {
        |      $unsafeRow.setNullAt($valuePosition);
        |    } else {
        |      $unsafeRow.set$primitiveValueTypeName(
@@ -1019,7 +1019,8 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression, startFromZero
     val data = ctx.freshName("internalRowArray")
 
     val getElement = CodeGenerator.getValue(childVariableName, childArrayType.elementType, "z")
-    val elementValue = if (CodeGenerator.isPrimitiveType(childArrayType.elementType)) {
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(childArrayType.elementType)
+    val elementValue = if (childArrayType.containsNull && isPrimitiveType) {
       s"$childVariableName.isNullAt(z) ? null : (Object)$getElement"
     } else {
       getElement
