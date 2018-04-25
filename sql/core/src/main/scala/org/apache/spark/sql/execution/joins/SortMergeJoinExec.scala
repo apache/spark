@@ -76,8 +76,31 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  override def requiredChildDistribution: Seq[Distribution] =
-    HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+  private def omitExchangeIfPossible(
+      joinKeys: Seq[Expression],
+      partitioning: Partitioning): Seq[Distribution] = {
+    val selectedExprs = partitioning match {
+      case e: HashPartitioning => e.expressions
+      case e: RangePartitioning => e.ordering.map(_.child)
+      case _ =>
+        return HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+    }
+    val indices = selectedExprs.map(x => joinKeys.indexWhere(_.semanticEquals(x)))
+    HashClusteredDistribution(indices.map(leftKeys(_))) ::
+      HashClusteredDistribution(indices.map(rightKeys(_))) :: Nil
+  }
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    val leftPartitioning = left.outputPartitioning
+    val rightPartitioning = right.outputPartitioning
+    if (leftPartitioning.satisfies(ClusteredDistribution(leftKeys))) {
+      omitExchangeIfPossible(leftKeys, leftPartitioning)
+    } else if (rightPartitioning.satisfies(ClusteredDistribution(rightKeys))) {
+      omitExchangeIfPossible(rightKeys, rightPartitioning)
+    } else {
+      HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+    }
+  }
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.

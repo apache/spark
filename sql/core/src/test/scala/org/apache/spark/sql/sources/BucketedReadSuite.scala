@@ -334,8 +334,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     )
   }
 
-  // Enable it after fix https://issues.apache.org/jira/browse/SPARK-12704
-  ignore("avoid shuffle when join keys are a super-set of bucket keys") {
+  test("avoid shuffle when join keys are a super-set of bucket keys") {
     val bucketSpec = Some(BucketSpec(8, Seq("i"), Nil))
     val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
     val bucketedTableTestSpecRight = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
@@ -573,8 +572,10 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     "partitioning columns") {
 
     // join predicates is a super set of child's partitioning columns
-    val bucketedTableTestSpec1 =
-      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
+    val bucketedTableTestSpec1 = BucketedTableTestSpec(
+      Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+      numPartitions = 1,
+      expectedShuffle = false)
     testBucketing(
       bucketedTableTestSpecLeft = bucketedTableTestSpec1,
       bucketedTableTestSpecRight = bucketedTableTestSpec1,
