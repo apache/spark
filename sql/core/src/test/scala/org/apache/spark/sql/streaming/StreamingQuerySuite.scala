@@ -858,9 +858,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  /** Returns the last query progress from query.recentProgress where numInputRows > 0 */
+  /** Returns the last query progress from query.recentProgress where numInputRows is positive */
   def getLastProgressWithData(q: StreamingQuery): Option[StreamingQueryProgress] = {
-    q.recentProgress.filter { p => p.numInputRows > 0 }.lastOption
+    q.recentProgress.filter(_.numInputRows > 0).lastOption
   }
 
   /**
