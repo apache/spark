@@ -2167,28 +2167,4 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val sampled = spark.read.option("samplingRatio", 10).json(ds)
     assert(sampled.count() == ds.count())
   }
-
-  test("SPARK-23849: sampling files for schema inferring in the multiLine mode") {
-    withTempDir { dir =>
-      Files.write(Paths.get(dir.getAbsolutePath, "0.json"),
-        """{"a":"a"}""".getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE_NEW)
-      for (i <- 1 until 10) {
-        Files.write(Paths.get(dir.getAbsolutePath, s"$i.json"),
-          s"""{"a":$i}""".getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE_NEW)
-      }
-      val files = (0 until 10).map { i =>
-        val hadoopConf = spark.sessionState.newHadoopConf()
-        val hdfsPath = new Path(Paths.get(dir.getAbsolutePath, s"$i.json").toString)
-        hdfsPath.getFileSystem(hadoopConf).getFileStatus(hdfsPath)
-      }
-      // The test uses the internal method because public API cannot guarantee order of files
-      // passed to the infer method. The order is changed between runs because the temporary
-      // folder has different path which leads to different order of file statuses returned
-      // by InMemoryFileIndex.
-      val schema = MultiLineJsonDataSource.infer(
-        spark, files, new JSONOptions(Map("samplingRatio" -> "0.2"), "UTC")
-      )
-      assert(schema == new StructType().add("a", LongType))
-    }
-  }
 }
