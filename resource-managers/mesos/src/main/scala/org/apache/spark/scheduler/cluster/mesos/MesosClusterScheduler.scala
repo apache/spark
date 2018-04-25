@@ -131,6 +131,7 @@ private[spark] class MesosClusterScheduler(
   private val retainedDrivers = conf.getInt("spark.mesos.retainedDrivers", 200)
   private val maxRetryWaitTime = conf.getInt("spark.mesos.cluster.retry.wait.max", 60) // 1 minute
   private val useFetchCache = conf.getBoolean("spark.mesos.fetchCache.enable", false)
+  private val superviseMaxRetries = conf.getInt("spark.mesos.supervise.maxRetries", -1)
   private val schedulerState = engineFactory.createEngine("scheduler")
   private val stateLock = new Object()
   // Keyed by submission id
@@ -728,6 +729,28 @@ private[spark] class MesosClusterScheduler(
       state == MesosTaskState.TASK_LOST
   }
 
+  /**
+   * Check if the driver has exceed the number of retries.
+   * When "spark.mesos.driver.supervise.maxRetries" is not set,
+   * the default behavior is to retry indefinitely
+   *
+   * @param retryState Retry state of the driver
+   * @param conf Spark Context to check if it contains "spark.mesos.driver.supervise.maxRetries"
+   * @return true if driver has reached retry limit
+   *         false if driver can be retried
+   */
+  private[scheduler] def hasDriverExceededRetries(retryState: Option[MesosClusterRetryState],
+                                                  conf: SparkConf): Boolean = {
+    val maxRetries = conf.getInt("spark.mesos.driver.supervise.maxRetries", superviseMaxRetries)
+    if (maxRetries == -1 ||
+      (!retryState.isDefined && maxRetries > 1) ||
+      (retryState.isDefined && retryState.get.retries < maxRetries - 1)) {
+      false
+    } else {
+      true
+    }
+  }
+
   override def statusUpdate(driver: SchedulerDriver, status: TaskStatus): Unit = {
     val taskId = status.getTaskId.getValue
 
@@ -745,8 +768,11 @@ private[spark] class MesosClusterScheduler(
           return
         }
         val state = launchedDrivers(subId)
-        // Check if the driver is supervise enabled and can be relaunched.
-        if (state.driverDescription.supervise && shouldRelaunch(status.getState)) {
+        // Check if the driver is supervise enabled, can be relaunched and
+        // retry count has not exceed the allowable limit
+        if (state.driverDescription.supervise && shouldRelaunch(status.getState) &&
+          !hasDriverExceededRetries(state.driverDescription.retryState,
+            state.driverDescription.conf)) {
           removeFromLaunchedDrivers(subId)
           state.finishDate = Some(new Date())
           val retryState: Option[MesosClusterRetryState] = state.driverDescription.retryState

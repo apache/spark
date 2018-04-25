@@ -199,6 +199,40 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     })
   }
 
+  test("checks that driver can be retried though spark.mesos.supervise.maxRetries") {
+    setScheduler()
+
+    val driverConf = new SparkConf()
+    val retryState = mock[MesosClusterRetryState]
+    val hasDriverExceededRetries =
+      scheduler.hasDriverExceededRetries(Some(retryState), driverConf)
+    assert(hasDriverExceededRetries === false)
+  }
+
+  test("checks that driver can be retried") {
+    setScheduler(Map("spark.mesos.supervise.maxRetries" -> "1"))
+
+    val driverConf = new SparkConf()
+    driverConf.set("spark.mesos.driver.supervise.maxRetries", "3")
+    val retryState = mock[MesosClusterRetryState]
+    when(retryState.retries).thenReturn(1)
+    val hasDriverExceededRetries =
+      scheduler.hasDriverExceededRetries(Some(retryState), driverConf)
+    assert(hasDriverExceededRetries === false)
+  }
+
+  test("checks that driver cannot be retried") {
+    setScheduler(Map("spark.mesos.supervise.maxRetries" -> "1"))
+
+    val driverConf = new SparkConf()
+    driverConf.set("spark.mesos.driver.supervise.maxRetries", "3")
+    val retryState = mock[MesosClusterRetryState]
+    when(retryState.retries).thenReturn(2)
+    val hasDriverExceededRetries =
+      scheduler.hasDriverExceededRetries(Some(retryState), driverConf)
+    assert(hasDriverExceededRetries === true)
+  }
+
   test("supports spark.mesos.driverEnv.*") {
     setScheduler()
 

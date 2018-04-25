@@ -532,7 +532,14 @@ See the [configuration page](configuration.html) for information on Spark config
     for formatting information.
   </td>
 </tr>
-
+<tr>
+  <td><code>spark.mesos.driver.supervise.maxRetries</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the maximum number of times the driver should be retried in case
+    of failure. This setting takes effect only if supervise is enabled.
+  </td>
+</tr>
 <tr>
   <td>
     <code>spark.mesos.driver.secret.values</code>,
