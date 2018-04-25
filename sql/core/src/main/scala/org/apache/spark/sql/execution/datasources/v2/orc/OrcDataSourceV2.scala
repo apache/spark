@@ -49,7 +49,7 @@ class OrcDataSourceV2 extends FileDataSourceV2 with ReadSupport with ReadSupport
     new OrcDataSourceReader(options, Some(schema))
   }
 
-  override def fallBackFileFormat: Option[Class[_]] = Some(classOf[OrcFileFormat])
+  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[OrcFileFormat]
 
   override def shortName(): String = "orc"
 }
