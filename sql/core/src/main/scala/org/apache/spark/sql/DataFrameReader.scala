@@ -368,8 +368,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * per file</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
-   * <li>`samplingRatio` (default is 1.0): defines fraction of rows (when `multiLine` is `false`)
-   * or fraction of files (when `multiLine` is `true`) used for schema inferring.</li>
+   * <li>`samplingRatio` (default is 1.0): defines fraction of input JSON objects used
+   * for schema inferring.</li>
    * </ul>
    *
    * @since 2.0.0
