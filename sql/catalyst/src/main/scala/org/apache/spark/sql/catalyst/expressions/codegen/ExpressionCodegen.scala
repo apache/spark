@@ -216,14 +216,14 @@ object ExpressionCodegen {
       val params = mutable.ArrayBuffer.empty[(String, String)]
       val ev = inputVar.exprCode
 
-      // Only include the expression value if it is not a literal.
-      if (!ev.value.isInstanceOf[LiteralValue]) {
+      // Only include the expression value if it can't be accessed in a method.
+      if (!ev.value.canGlobalAccess) {
         val argType = CodeGenerator.javaType(inputVar.dataType)
         params += ((ev.value, s"$argType ${ev.value}"))
       }
 
-      // If it is a nullable expression and `isNull` is not a literal.
-      if (inputVar.nullable && !ev.isNull.isInstanceOf[LiteralValue]) {
+      // If it is a nullable expression and `isNull` can't be accessed in a method.
+      if (inputVar.nullable && !ev.isNull.canGlobalAccess) {
         params += ((ev.isNull, s"boolean ${ev.isNull}"))
       }
 
