@@ -2229,16 +2229,6 @@ object functions {
   def base64(e: Column): Column = withExpr { Base64(e.expr) }
 
   /**
-   * Concatenates multiple input columns together into a single column.
-   * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
-
-  /**
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
@@ -3039,6 +3029,41 @@ object functions {
   }
 
   /**
+   * Concatenates multiple input columns together into a single column.
+   * The function works with strings, binary and compatible array columns.
+   *
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
+
+  /**
+   * Locates the position of the first occurrence of the value in the given array as long.
+   * Returns null if either of the arguments are null.
+   *
+   * @note The position is not zero based, but 1 based index. Returns 0 if value
+   * could not be found in array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_position(column: Column, value: Any): Column = withExpr {
+    ArrayPosition(column.expr, Literal(value))
+  }
+
+  /**
+   * Returns element of array at given index in value if column is array. Returns value for
+   * the given key in value if column is map.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def element_at(column: Column, value: Any): Column = withExpr {
+    ElementAt(column.expr, Literal(value))
+  }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
@@ -3314,6 +3339,14 @@ object functions {
    * @since 1.5.0
    */
   def reverse(e: Column): Column = withExpr { Reverse(e.expr) }
+
+  /**
+   * Creates a single array from an array of arrays. If a structure of nested arrays is deeper than
+   * two levels, only one level of nesting is removed.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
 
   /**
    * Returns an unordered array containing the keys of the map.

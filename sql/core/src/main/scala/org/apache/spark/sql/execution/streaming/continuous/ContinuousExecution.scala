@@ -199,7 +199,7 @@ class ContinuousExecution(
       triggerLogicalPlan.schema,
       outputMode,
       new DataSourceOptions(extraOptions.asJava))
-    val withSink = WriteToDataSourceV2(writer, triggerLogicalPlan)
+    val withSink = WriteToContinuousDataSource(writer, triggerLogicalPlan)
 
     val reader = withSink.collect {
       case StreamingDataSourceV2Relation(_, _, _, r: ContinuousReader) => r

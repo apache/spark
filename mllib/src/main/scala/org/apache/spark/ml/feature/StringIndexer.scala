@@ -451,7 +451,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         data.getAs[Seq[Seq[String]]](0).map(_.toArray).toArray
       }
       val model = new StringIndexerModel(metadata.uid, labelsArray)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
