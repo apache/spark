@@ -76,18 +76,22 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
+  private def matchDistribution(
+      joinKeys: Seq[Expression],
+      expressions: Seq[Expression]): Seq[Distribution] = {
+    val indices = expressions.map(x => joinKeys.indexWhere(_.semanticEquals(x)))
+    HashClusteredDistribution(indices.map(leftKeys(_))) ::
+      HashClusteredDistribution(indices.map(rightKeys(_))) :: Nil
+  }
+
   private def omitExchangeIfPossible(
       joinKeys: Seq[Expression],
       partitioning: Partitioning): Seq[Distribution] = {
-    val selectedExprs = partitioning match {
-      case e: HashPartitioning => e.expressions
-      case e: RangePartitioning => e.ordering.map(_.child)
-      case _ =>
-        return HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+    partitioning match {
+      case e: HashPartitioning => matchDistribution(joinKeys, e.expressions)
+      case e: RangePartitioning => matchDistribution(joinKeys, e.ordering.map(_.child))
+      case _ => HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
     }
-    val indices = selectedExprs.map(x => joinKeys.indexWhere(_.semanticEquals(x)))
-    HashClusteredDistribution(indices.map(leftKeys(_))) ::
-      HashClusteredDistribution(indices.map(rightKeys(_))) :: Nil
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
