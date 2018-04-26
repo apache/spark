@@ -1171,6 +1171,7 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(Row(f1=[[1, 2], [2, 3]], f2=[1, 2]), df.collect()[0])
 
         from collections import namedtuple
+        global CustomRow
         CustomRow = namedtuple('CustomRow', 'field1 field2')
         rdd = self.sc.parallelize([CustomRow(field1=1, field2="row1"),
                                    CustomRow(field1=2, field2="row2"),
