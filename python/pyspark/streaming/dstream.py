@@ -249,7 +249,7 @@ class DStream(object):
         """
         return self.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x+y)
 
-    def saveAsTextFiles(self, prefix, suffix=None):
+    def saveAsTextFiles(self, prefix, suffix=None, compressionCodecClass=None):
         """
         Save each RDD in this DStream as at text file, using string
         representation of elements.
@@ -257,7 +257,7 @@ class DStream(object):
         def saveAsTextFile(t, rdd):
             path = rddToFileName(prefix, suffix, t)
             try:
-                rdd.saveAsTextFile(path)
+                rdd.saveAsTextFile(path, compressionCodecClass)
             except Py4JJavaError as e:
                 # after recovered from checkpointing, the foreachRDD may
                 # be called twice
