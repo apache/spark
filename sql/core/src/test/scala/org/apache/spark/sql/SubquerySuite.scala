@@ -955,4 +955,28 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     // before the fix this would throw AnalysisException
     spark.range(10).where("(id,id) in (select id, null from range(3))").count
   }
+
+  test("SPARK-24085 scalar subquery in partitioning expression") {
+    withTempPath { tempDir =>
+      withTable("parquet_part") {
+        sql(
+          s"""
+             |CREATE TABLE parquet_part (id_value string, id_type string)
+             |USING PARQUET
+             |OPTIONS (
+             |  path '${tempDir.toURI}'
+             |)
+             |PARTITIONED BY (id_type)
+          """.stripMargin)
+
+        sql("insert into parquet_part values ('1','a')")
+        sql("insert into parquet_part values ('2','a')")
+        sql("insert into parquet_part values ('3','b')")
+        sql("insert into parquet_part values ('4','b')")
+        checkAnswer(
+          sql("SELECT * FROM parquet_part WHERE id_type = (SELECT 'b')"),
+          Row("3", "b") :: Row("4", "b") :: Nil)
+      }
+    }
+  }
 }
