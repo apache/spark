@@ -3027,9 +3027,8 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEquals(schema, StructType([StructField("a", LongType(), True)]))
 
     def test_csv_sampling_ratio(self):
-        rdd = self.spark.sparkContext.range(0, 100)\
-            .map(lambda x: '0.1' if x == 1 else str(x))\
-            .repartition(1)
+        rdd = self.spark.sparkContext.range(0, 100, 1, 1) \
+            .map(lambda x: '0.1' if x == 1 else str(x))
         schema = self.spark.read.option('inferSchema', True)\
             .csv(rdd, samplingRatio=0.5).schema
         self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
