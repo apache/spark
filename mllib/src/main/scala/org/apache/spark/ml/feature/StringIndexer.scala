@@ -174,8 +174,7 @@ class StringIndexer @Since("1.4.0") (
     val aggregator = new StringIndexerAggregator(inputCols.length)
     implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
 
-    dataset.na.drop(inputCols)
-      .select(inputCols.map(col(_).cast(StringType)): _*)
+    dataset.select(inputCols.map(col(_).cast(StringType)): _*)
       .toDF
       .groupBy().agg(aggregator.toColumn)
       .as[Array[OpenHashMap[String, Long]]]
@@ -188,25 +187,29 @@ class StringIndexer @Since("1.4.0") (
 
     val (inputCols, _) = getInOutCols()
 
+    val filteredDF = dataset.na.drop(inputCols)
+
     // In case of equal frequency when frequencyDesc/Asc, we further sort the strings by alphabet.
     val labelsArray = $(stringOrderType) match {
       case StringIndexer.frequencyDesc =>
-        countByValue(dataset, inputCols).map { counts =>
+        countByValue(filteredDF, inputCols).map { counts =>
           counts.toSeq.sortBy(_._1).sortBy(-_._2).map(_._1).toArray
         }
       case StringIndexer.frequencyAsc =>
-        countByValue(dataset, inputCols).map { counts =>
+        countByValue(filteredDF, inputCols).map { counts =>
           counts.toSeq.sortBy(_._1).sortBy(_._2).map(_._1).toArray
         }
       case StringIndexer.alphabetDesc =>
         import dataset.sparkSession.implicits._
         inputCols.map { inputCol =>
-          dataset.select(inputCol).distinct().sort(dataset(s"$inputCol").desc).as[String].collect()
+          filteredDF.select(inputCol).distinct().sort(dataset(s"$inputCol").desc)
+            .as[String].collect()
         }
       case StringIndexer.alphabetAsc =>
         import dataset.sparkSession.implicits._
         inputCols.map { inputCol =>
-          dataset.select(inputCol).distinct().sort(dataset(s"$inputCol").asc).as[String].collect()
+          filteredDF.select(inputCol).distinct().sort(dataset(s"$inputCol").asc)
+            .as[String].collect()
         }
      }
     copyValues(new StringIndexerModel(uid, labelsArray).setParent(this))
@@ -375,7 +378,9 @@ class StringIndexerModel (
           case _ => labels
         }
         val metadata = NominalAttribute.defaultAttr
-          .withName(outputColName).withValues(filteredLabels).toMetadata()
+          .withName(outputColName)
+          .withValues(filteredLabels)
+          .toMetadata()
         val keepInvalid = (getHandleInvalid == StringIndexer.KEEP_INVALID)
 
         val indexer = getIndexer(labels, labelToIndex)
