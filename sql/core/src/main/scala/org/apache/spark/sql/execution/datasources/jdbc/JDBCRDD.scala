@@ -279,6 +279,7 @@ private[jdbc] class JDBCRDD(
     options.sessionInitStatement match {
       case Some(sql) =>
         val statement = conn.prepareStatement(sql)
+        statement.setQueryTimeout(options.queryTimeout)
         logInfo(s"Executing sessionInitStatement: $sql")
         try {
           statement.execute()
@@ -298,6 +299,7 @@ private[jdbc] class JDBCRDD(
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
+    stmt.setQueryTimeout(options.queryTimeout)
     rs = stmt.executeQuery()
     val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
 

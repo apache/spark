@@ -75,6 +75,7 @@ object JdbcUtils extends Logging {
     // the database name. Query used to find table exists can be overridden by the dialects.
     Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
+      statement.setQueryTimeout(options.queryTimeout)
       try {
         statement.executeQuery()
       } finally {
@@ -253,6 +254,7 @@ object JdbcUtils extends Logging {
 
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(options.table))
+      statement.setQueryTimeout(options.queryTimeout)
       try {
         Some(getSchema(statement.executeQuery(), dialect))
       } catch {
@@ -596,7 +598,8 @@ object JdbcUtils extends Logging {
       insertStmt: String,
       batchSize: Int,
       dialect: JdbcDialect,
-      isolationLevel: Int): Iterator[Byte] = {
+      isolationLevel: Int,
+      options: JDBCOptions): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
 
@@ -631,6 +634,7 @@ object JdbcUtils extends Logging {
         conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = conn.prepareStatement(insertStmt)
+      stmt.setQueryTimeout(options.queryTimeout)
       val setters = rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType))
       val nullTypes = rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
       val numFields = rddSchema.fields.length
@@ -819,7 +823,8 @@ object JdbcUtils extends Logging {
       case _ => df
     }
     repartitionedDF.rdd.foreachPartition(iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel)
+      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
+      options)
     )
   }
 
