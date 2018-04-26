@@ -66,12 +66,12 @@ class ContinuousSuite extends ContinuousSuiteBase {
     val input = ContinuousMemoryStream[Int]
 
     testStream(input.toDF())(
-      AddData(input, 0.to(2): _*),
-      CheckAnswer(0.to(2): _*),
+      AddData(input, 0, 1, 2),
+      CheckAnswer(0, 1, 2),
       StopStream,
-      AddData(input, 3.to(5): _*),
+      AddData(input, 3, 4, 5),
       StartStream(),
-      CheckAnswer(0.to(5): _*))
+      CheckAnswer(0, 1, 2, 3, 4, 5))
   }
 
   test("map") {
@@ -79,12 +79,12 @@ class ContinuousSuite extends ContinuousSuiteBase {
     val df = input.toDF().map(_.getInt(0) * 2)
 
     testStream(df)(
-      AddData(input, 0.to(2): _*),
-      CheckAnswer(0.to(2).map(_ * 2): _*),
+      AddData(input, 0, 1),
+      CheckAnswer(0, 2),
       StopStream,
-      AddData(input, 3.to(5): _*),
+      AddData(input, 2, 3, 4),
       StartStream(),
-      CheckAnswer(0.to(5).map(_ * 2): _*))
+      CheckAnswer(0, 2, 4, 6, 8))
   }
 
   test("flatMap") {
@@ -92,25 +92,25 @@ class ContinuousSuite extends ContinuousSuiteBase {
     val df = input.toDF().flatMap(r => Seq(0, r.getInt(0), r.getInt(0) * 2))
 
     testStream(df)(
-      AddData(input, 0.to(2): _*),
-      CheckAnswer(0.to(2).flatMap(n => Seq(0, n, n * 2)): _*),
+      AddData(input, 0, 1),
+      CheckAnswer((0 to 1).flatMap(n => Seq(0, n, n * 2)): _*),
       StopStream,
-      AddData(input, 3.to(5): _*),
+      AddData(input, 2, 3, 4),
       StartStream(),
-      CheckAnswer(0.to(5).flatMap(n => Seq(0, n, n * 2)): _*))
+      CheckAnswer((0 to 4).flatMap(n => Seq(0, n, n * 2)): _*))
   }
 
   test("filter") {
     val input = ContinuousMemoryStream[Int]
-    val df = input.toDF().where('value > 5)
+    val df = input.toDF().where('value > 2)
 
     testStream(df)(
-      AddData(input, 0.to(2): _*),
-      CheckAnswer(0.to(2).filter(_ > 5): _*),
+      AddData(input, 0, 1),
+      CheckAnswer(),
       StopStream,
-      AddData(input, 3.to(10): _*),
+      AddData(input, 2, 3, 4),
       StartStream(),
-      CheckAnswer(0.to(10).filter(_ > 5): _*))
+      CheckAnswer(3, 4))
   }
 
   test("deduplicate") {
@@ -140,15 +140,15 @@ class ContinuousSuite extends ContinuousSuiteBase {
   test("subquery alias") {
     val input = ContinuousMemoryStream[Int]
     input.toDF().createOrReplaceTempView("memory")
-    val test = spark.sql("select value from memory where value > 5")
+    val test = spark.sql("select value from memory where value > 2")
 
     testStream(test)(
-      AddData(input, 0.to(2): _*),
-      CheckAnswer(0.to(2).filter(_ > 5): _*),
+      AddData(input, 0, 1),
+      CheckAnswer(),
       StopStream,
-      AddData(input, 3.to(10): _*),
+      AddData(input, 2, 3, 4),
       StartStream(),
-      CheckAnswer(3.to(10).filter(_ > 5): _*))
+      CheckAnswer(3, 4))
   }
 
   test("repeatedly restart") {
@@ -157,8 +157,8 @@ class ContinuousSuite extends ContinuousSuiteBase {
 
     testStream(df)(
       StartStream(),
-      AddData(input, 0.to(10): _*),
-      CheckAnswer(0.to(10): _*),
+      AddData(input, 0, 1),
+      CheckAnswer(0, 1),
       StopStream,
       StartStream(),
       StopStream,
@@ -166,9 +166,9 @@ class ContinuousSuite extends ContinuousSuiteBase {
       StopStream,
       StartStream(),
       StopStream,
-      AddData(input, 11.to(20): _*),
+      AddData(input, 2, 3),
       StartStream(),
-      CheckAnswer(0.to(20): _*),
+      CheckAnswer(0, 1, 2, 3),
       StopStream)
   }
 
@@ -187,7 +187,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
     try {
       testStream(df)(
         StartStream(Trigger.Continuous(100)),
-        AddData(input, 0.to(5): _*),
+        AddData(input, 0, 1, 2, 3),
         Execute { _ =>
           // Wait until a task is started, then kill its first attempt.
           eventually(timeout(streamingTimeout)) {
