@@ -14,23 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.LocalObjectReference
+package org.apache.spark.sql.execution.streaming.continuous
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 
-class KubernetesUtilsTest extends SparkFunSuite {
-
-  test("testParseImagePullSecrets") {
-    val noSecrets = KubernetesUtils.parseImagePullSecrets(None)
-    assert(noSecrets === Nil)
-
-    val oneSecret = KubernetesUtils.parseImagePullSecrets(Some("imagePullSecret"))
-    assert(oneSecret === new LocalObjectReference("imagePullSecret") :: Nil)
-
-    val commaSeparatedSecrets = KubernetesUtils.parseImagePullSecrets(Some("s1, s2  , s3,s4"))
-    assert(commaSeparatedSecrets.map(_.getName) === "s1" :: "s2" :: "s3" :: "s4" :: Nil)
-  }
-
+/**
+ * The logical plan for writing data in a continuous stream.
+ */
+case class WriteToContinuousDataSource(
+    writer: StreamWriter, query: LogicalPlan) extends LogicalPlan {
+  override def children: Seq[LogicalPlan] = Seq(query)
+  override def output: Seq[Attribute] = Nil
 }

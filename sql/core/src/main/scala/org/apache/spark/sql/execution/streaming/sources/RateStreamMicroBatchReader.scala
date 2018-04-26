@@ -177,7 +177,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
 
   override def stop(): Unit = {}
 
-  override def toString: String = s"MicroBatchRateSource[rowsPerSecond=$rowsPerSecond, " +
+  override def toString: String = s"RateStreamV2[rowsPerSecond=$rowsPerSecond, " +
     s"rampUpTimeSeconds=$rampUpTimeSeconds, " +
     s"numPartitions=${options.get(NUM_PARTITIONS).orElse("default")}"
 }

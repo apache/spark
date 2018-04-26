@@ -2128,38 +2128,43 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("SPARK-23849: schema inferring touches less data if samplingRation < 1.0") {
-    val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
-      57, 62, 68, 72)
-    withTempPath { path =>
-      val writer = Files.newBufferedWriter(Paths.get(path.getAbsolutePath),
-        StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)
-      for (i <- 0 until 100) {
-        if (predefinedSample.contains(i)) {
-          writer.write(s"""{"f1":${i.toString}}""" + "\n")
-        } else {
-          writer.write(s"""{"f1":${(i.toDouble + 0.1).toString}}""" + "\n")
-        }
-      }
-      writer.close()
+  test("SPARK-23849: schema inferring touches less data if samplingRatio < 1.0") {
+    // Set default values for the DataSource parameters to make sure
+    // that whole test file is mapped to only one partition. This will guarantee
+    // reliable sampling of the input file.
+    withSQLConf(
+      "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
+      "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
+    )(withTempPath { path =>
+      val ds = sampledTestData.coalesce(1)
+      ds.write.text(path.getAbsolutePath)
+      val readback = spark.read.option("samplingRatio", 0.1).json(path.getCanonicalPath)
 
-      val ds = spark.read.option("samplingRatio", 0.1).json(path.getCanonicalPath)
-      assert(ds.schema == new StructType().add("f1", LongType))
-    }
+      assert(readback.schema == new StructType().add("f1", LongType))
+    })
   }
 
-  test("SPARK-23849: usage of samplingRation while parsing of dataset of strings") {
-    val dstr = spark.sparkContext.parallelize(0 until 100, 1).map { i =>
-      val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
-        57, 62, 68, 72)
-      if (predefinedSample.contains(i)) {
-        s"""{"f1":${i.toString}}""" + "\n"
-      } else {
-        s"""{"f1":${(i.toDouble + 0.1).toString}}""" + "\n"
-      }
-    }.toDS()
-    val ds = spark.read.option("samplingRatio", 0.1).json(dstr)
+  test("SPARK-23849: usage of samplingRatio while parsing a dataset of strings") {
+    val ds = sampledTestData.coalesce(1)
+    val readback = spark.read.option("samplingRatio", 0.1).json(ds)
 
-    assert(ds.schema == new StructType().add("f1", LongType))
+    assert(readback.schema == new StructType().add("f1", LongType))
+  }
+
+  test("SPARK-23849: samplingRatio is out of the range (0, 1.0]") {
+    val ds = spark.range(0, 100, 1, 1).map(_.toString)
+
+    val errorMsg0 = intercept[IllegalArgumentException] {
+      spark.read.option("samplingRatio", -1).json(ds)
+    }.getMessage
+    assert(errorMsg0.contains("samplingRatio (-1.0) should be greater than 0"))
+
+    val errorMsg1 = intercept[IllegalArgumentException] {
+      spark.read.option("samplingRatio", 0).json(ds)
+    }.getMessage
+    assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
+
+    val sampled = spark.read.option("samplingRatio", 1.0).json(ds)
+    assert(sampled.count() == ds.count())
   }
 }

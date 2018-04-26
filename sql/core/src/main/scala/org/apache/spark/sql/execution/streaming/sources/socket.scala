@@ -214,7 +214,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     }
   }
 
-  override def toString: String = s"TextSocket[host: $host, port: $port]"
+  override def toString: String = s"TextSocketV2[host: $host, port: $port]"
 }
 
 class TextSocketSourceProvider extends DataSourceV2
