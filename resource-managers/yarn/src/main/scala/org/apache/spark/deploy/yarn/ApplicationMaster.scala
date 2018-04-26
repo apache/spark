@@ -675,9 +675,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     val userThread = new Thread {
       override def run() {
         try {
-          mainMethod.invoke(null, userArgs.toArray)
-          finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
-          logDebug("Done running users class")
+          if(mainMethod == null) {
+            logError(s"Could not find main method in object ${args.userClass}")
+            finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_EXCEPTION_USER_CLASS)
+          } else {
+            mainMethod.invoke(null, userArgs.toArray)
+            finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+            logDebug("Done running user class")
+          }
         } catch {
           case e: InvocationTargetException =>
             e.getCause match {
