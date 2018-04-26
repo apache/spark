@@ -892,7 +892,8 @@ private[spark] class Client(
     // Include driver-specific java options if we are launching a driver
     if (isClusterMode) {
       sparkConf.get(DRIVER_JAVA_OPTIONS).foreach { opts =>
-        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+        javaOpts ++= Utils.splitCommandString(Utils.substituteAppId(opts, appId.toString))
+          .map(YarnSparkHadoopUtil.escapeForShell)
       }
       val libraryPaths = Seq(sparkConf.get(DRIVER_LIBRARY_PATH),
         sys.props.get("spark.driver.libraryPath")).flatten
@@ -914,7 +915,8 @@ private[spark] class Client(
             s"(was '$opts'). Use spark.yarn.am.memory instead."
           throw new SparkException(msg)
         }
-        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+        javaOpts ++= Utils.splitCommandString(Utils.substituteAppId(opts, appId.toString))
+          .map(YarnSparkHadoopUtil.escapeForShell)
       }
       sparkConf.get(AM_LIBRARY_PATH).foreach { paths =>
         prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(paths))))

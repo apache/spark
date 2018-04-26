@@ -2697,6 +2697,13 @@ private[spark] object Utils extends Logging {
   def substituteAppNExecIds(opt: String, appId: String, execId: String): String = {
     opt.replace("{{APP_ID}}", appId).replace("{{EXECUTOR_ID}}", execId)
   }
+
+  /**
+   * Replaces all the {{APP_ID}} occurrences with the App Id.
+   */
+  def substituteAppId(opt: String, appId: String): String = {
+    opt.replace("{{APP_ID}}", appId)
+  }
 }
 
 private[util] object CallerContext extends Logging {
