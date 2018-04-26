@@ -1324,28 +1324,4 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils  with T
     val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 10).csv(ds)
     assert(sampled.count() == ds.count())
   }
-
-  test("SPARK-23846: sampling files for schema inferring in the multiLine mode") {
-    withTempDir { dir =>
-      Files.write(Paths.get(dir.getAbsolutePath, "0.csv"), "0.1".getBytes,
-        StandardOpenOption.CREATE_NEW)
-      for (i <- 1 until 10) {
-        Files.write(Paths.get(dir.getAbsolutePath, s"$i.csv"), s"$i".getBytes,
-          StandardOpenOption.CREATE_NEW)
-      }
-      val files = (0 until 10).map { i =>
-        val hadoopConf = spark.sessionState.newHadoopConf()
-        val hdfsPath = new Path(Paths.get(dir.getAbsolutePath, s"$i.csv").toString)
-        hdfsPath.getFileSystem(hadoopConf).getFileStatus(hdfsPath)
-      }
-      // The test uses the internal method because public API cannot guarantee order of files
-      // passed to the infer method. The order is changed between runs because the temporary
-      // folder has different path which leads to different order of file statuses returned
-      // by InMemoryFileIndex.
-      val schema = MultiLineCSVDataSource.infer(
-        spark, files, new CSVOptions(Map("inferSchema" -> "true", "samplingRatio" -> "0.2"), "UTC")
-      )
-      assert(schema == new StructType().add("_c0", IntegerType))
-    }
-  }
 }
