@@ -137,13 +137,12 @@ case class ScriptTransformationExec(
             throw writerThread.exception.get
           }
 
-          if (!proc.isAlive) {
-            val exitCode = proc.exitValue()
-            if (exitCode != 0) {
-              logError(stderrBuffer.toString) // log the stderr circular buffer
-              throw new SparkException(s"Subprocess exited with status $exitCode. " +
-                s"Error: ${stderrBuffer.toString}", cause)
-            }
+          proc.waitFor()
+          val exitCode = proc.exitValue()
+          if (exitCode != 0) {
+            logError(stderrBuffer.toString) // log the stderr circular buffer
+            throw new SparkException(s"Subprocess exited with status $exitCode. " +
+              s"Error: ${stderrBuffer.toString}", cause)
           }
         }
 
@@ -174,7 +173,6 @@ case class ScriptTransformationExec(
                     // Ideally the proc should *not* be alive at this point but
                     // there can be a lag between EOF being written out and the process
                     // being terminated. So explicitly waiting for the process to be done.
-                    proc.waitFor()
                     checkFailureAndPropagate()
                     return false
                 }
