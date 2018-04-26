@@ -132,55 +132,72 @@ case class MapKeys(child: Expression)
   usage = """_FUNC_(a1, a2) - Returns a merged array matching N-th element of first
   array with the N-th element of second.""",
   examples = """
-    Examples
+    Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(2, 3, 4));
         [[1, 2], [2, 3], [3, 4]]
   """,
   since = "2.4.0")
-case class Zip(left: Expression, right: Expression)
+case class ZipLists(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
-  override def dataType: DataType = ArrayType(left.dataType.asInstanceOf[ArrayType].elementType)
+  override def dataType: DataType = ArrayType(StructType(
+    StructField("_1", left.dataType.asInstanceOf[ArrayType].elementType, true) ::
+    StructField("_2", right.dataType.asInstanceOf[ArrayType].elementType, true) ::
+  Nil))
+
+  override def prettyName: String = "zip_lists"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (arr1, arr2) => {
-      (arr1, arr2).zipped.map((a, b) => (a, b)).mkString("[", ",", "]")
+      val i = ctx.freshName("i")
+      val len = ctx.freshName("len1")
+      val javaType = CodeGenerator.javaType(dataType)
+      val getValue1 = CodeGenerator.getValue(arr1, left.dataType, i)
+      val getValue2 = CodeGenerator.getValue(arr2, right.dataType, i)
+      s"""
+      int $len = $arr1.numElements();
+      for (int $i = 0; $i < $len; $i ++) {
+        final Object[] mytuple = new Object[2];
+        mytuple[0] = $getValue1;
+        mytuple[1] = $getValue2;
+        ${ev.value}.update($i, mytuple);
+      }
+      """
     })
   }
 
-  override def nullSafeEval(a1: Any, a2: Any): Any = {
-    var entries = (a1.asInstanceOf[ArrayData], a2.asInstanceOf[ArrayData])
+  def extendWithNull(a1: Array[AnyRef], a2: Array[AnyRef]):
+  (Array[AnyRef], Array[AnyRef]) = {
+    val lens = (a1.length, a2.length)
 
-    var lens = (entries._1.numElements(), entries._2.numElements())
+    var arr1 = a1
+    var arr2 = a2
 
-    var types = (left.dataType.asInstanceOf[ArrayType].elementType,
-      right.dataType.asInstanceOf[ArrayType].elementType)
-
-    var arrays = (entries._1.toArray[AnyRef](types._1),
-      entries._2.toArray[AnyRef](types._2))
-
+    val diff = lens._1 - lens._2
+    if (lens._1 > lens._2) {
+      arr2 = a2 ++ Array.fill(diff)(null)
+    }
     if (lens._1 < lens._2) {
-      arrays = arrays.swap
-      lens = lens.swap
-      entries = entries.swap
-      types = types.swap
+      arr1 = a1 ++ Array.fill(-diff)(null)
     }
 
-    val zipped = Array.ofDim[(Any, Any)](lens._1)
+    (arr1, arr2)
+  }
 
-    var i = 0
-    while ( i < lens._1) {
-      if (lens._2 > i) {
-        zipped(i) = (arrays._1(i), arrays._2(i))
-      } else {
-        zipped(i) = (arrays._1(i), null)
-      }
-      i += 1
-    }
+  override def nullSafeEval(a1: Any, a2: Any): Any = {
+    val type1 = left.dataType.asInstanceOf[ArrayType].elementType
+    val type2 = right.dataType.asInstanceOf[ArrayType].elementType
 
-    new GenericArrayData(zipped.asInstanceOf[Array[(Any, Any)]])
+    val arrays = (
+      a1.asInstanceOf[ArrayData].toArray[AnyRef](type1),
+      a2.asInstanceOf[ArrayData].toArray[AnyRef](type2)
+    )
+
+    val extendedArrays = extendWithNull(arrays._1, arrays._2)
+
+    new GenericArrayData(extendedArrays.zipped.map((a, b) => InternalRow.apply(a, b)))
   }
 }
 

@@ -479,11 +479,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("array zip function") {
-    val df1 = Seq((Seq(1, 2, 3), Seq(4, 5, 6))).toDF("val1", "val2")
-    val ans1 = Row( (1, 4), (2, 5), (3, 6))
-    checkAnswer(df1.select(zip($"val1", $"val2")), ans1)
-    checkAnswer(df1.selectExpr("zip(val1, val2)"), ans1)
+  test("array zip_lists function") {
+    val df1 = Seq((Seq(9001, 9002, 9003), Seq(4, 5, 6))).toDF("val1", "val2")
+    val df2 = Seq((Seq(9001, 9002), Seq(4, 5, 6))).toDF("val1", "val2")
+    val df3 = Seq((Seq("a", "b"), Seq(4, 5, 6))).toDF("val1", "val2")
+
+    val expectedValue1 = Row(Seq(Row(9001, 4), Row(9002, 5), Row(9003, 6)))
+    checkAnswer(df1.select(zip_lists($"val1", $"val2")), expectedValue1)
+    checkAnswer(df1.selectExpr("zip_lists(val1, val2)"), expectedValue1)
+
+    val expectedValue2 = Row(Seq(Row(9001, 4), Row(9002, 5), Row(null, 6)))
+    checkAnswer(df2.select(zip_lists($"val1", $"val2")), expectedValue2)
+    checkAnswer(df2.selectExpr("zip_lists(val1, val2)"), expectedValue2)
+
+    val expectedValue3 = Row(Seq(Row("a", 4), Row("b", 5), Row(null, 6)))
+    checkAnswer(df3.select(zip_lists($"val1", $"val2")), expectedValue3)
+    checkAnswer(df3.selectExpr("zip_lists(val1, val2)"), expectedValue3)
   }
 
   test("map size function") {

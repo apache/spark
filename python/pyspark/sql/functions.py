@@ -348,10 +348,9 @@ def coalesce(*cols):
 def corr(col1, col2):
     """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1`` and ``col2``.
 
-    >>> import __builtin__
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
-    >>> df = spark.createDataFrame(__builtin__.zip(a, b), ["a", "b"])
+    >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
     >>> df.agg(corr("a", "b").alias('c')).collect()
     [Row(c=1.0)]
     """
@@ -363,10 +362,9 @@ def corr(col1, col2):
 def covar_pop(col1, col2):
     """Returns a new :class:`Column` for the population covariance of ``col1`` and ``col2``.
 
-    >>> import __builtin__
     >>> a = [1] * 10
     >>> b = [1] * 10
-    >>> df = spark.createDataFrame(__builtin__.zip(a, b), ["a", "b"])
+    >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
     >>> df.agg(covar_pop("a", "b").alias('c')).collect()
     [Row(c=0.0)]
     """
@@ -378,10 +376,9 @@ def covar_pop(col1, col2):
 def covar_samp(col1, col2):
     """Returns a new :class:`Column` for the sample covariance of ``col1`` and ``col2``.
 
-    >>> import __builtin__
     >>> a = [1] * 10
     >>> b = [1] * 10
-    >>> df = spark.createDataFrame(__builtin__.zip(a, b), ["a", "b"])
+    >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
     >>> df.agg(covar_samp("a", "b").alias('c')).collect()
     [Row(c=0.0)]
     """
@@ -2398,7 +2395,7 @@ def array_repeat(col, count):
 
 
 @since(2.4)
-def zip(col1, col2):
+def zip_lists(col1, col2):
     """
     Merge two columns into one, such that the M-th element of the N-th argument will be
     the N-th field of the M-th output element.
@@ -2406,13 +2403,13 @@ def zip(col1, col2):
     :param col1: name of the first column
     :param col2: name of the second column
 
-    >>> from pyspark.sql.functions import zip
+    >>> from pyspark.sql.functions import zip_lists
     >>> df = spark.createDataFrame([(([1, 2, 3], [2, 3, 4]))], ['vals1', 'vals2'])
-    >>> df.select(zip(df.vals1, df.vals2).alias('zipped')).collect()
+    >>> df.select(zip_lists(df.vals1, df.vals2).alias('zipped')).collect()
     [Row(zipped=[1, 2]), Row(zipped=[2, 3]), Row(zipped=[3, 4])]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.zip(_to_java_column(col1), _to_java_column(col2)))
+    return Column(sc._jvm.functions.zip_lists(_to_java_column(col1), _to_java_column(col2)))
 
 
 # ---------------------------- User Defined Function ----------------------------------
