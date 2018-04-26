@@ -1210,7 +1210,7 @@ class DAGScheduler(
           case _ =>
             updateAccumulators(event)
         }
-      case _: ExceptionFailure => updateAccumulators(event)
+      case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
       case _ =>
     }
     postTaskEnd(event)
@@ -1414,13 +1414,11 @@ class DAGScheduler(
       case commitDenied: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case _: ExceptionFailure =>
-        // Tasks killed or failed with exceptions might still have accumulator updates.
-        updateAccumulators(event)
+      case exceptionFailure: ExceptionFailure =>
+        // Nothing left to do, already handled above for accumulator updates.
 
       case _: TaskKilled =>
-        // Tasks killed or failed with exceptions might still have accumulator updates.
-        updateAccumulators(event)
+        // Nothing left to do, already handled above for accumulator updates.
 
       case TaskResultLost =>
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.

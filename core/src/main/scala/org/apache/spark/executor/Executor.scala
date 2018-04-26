@@ -482,33 +482,6 @@ private[spark] class Executor(
       } catch {
         case t: TaskKilledException =>
           logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
-          setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
-
-        case _: InterruptedException | NonFatal(_) if
-            task != null && task.reasonIfKilled.isDefined =>
-          val killReason = task.reasonIfKilled.getOrElse("unknown reason")
-          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
-          setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(
-            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
-
-        case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
-          val reason = task.context.fetchFailed.get.toTaskFailedReason
-          if (!t.isInstanceOf[FetchFailedException]) {
-            // there was a fetch failure in the task, but some user code wrapped that exception
-            // and threw something else.  Regardless, we treat it as a fetch failure.
-            val fetchFailedCls = classOf[FetchFailedException].getName
-            logWarning(s"TID ${taskId} encountered a ${fetchFailedCls} and " +
-              s"failed, but the ${fetchFailedCls} was hidden by another " +
-              s"exception.  Spark is handling this like a fetch failure and ignoring the " +
-              s"other exception: $t")
-          }
-          setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
-
-        case t: TaskKilledException =>
-          logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
 
           // Collect latest accumulator values to report back to the driver
           val accums: Seq[AccumulatorV2[_, _]] =
@@ -526,7 +499,8 @@ private[spark] class Executor(
           val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates).withAccums(accums))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
-        case _: InterruptedException if task.reasonIfKilled.isDefined =>
+        case _: InterruptedException | NonFatal(_) if
+            task != null && task.reasonIfKilled.isDefined =>
           val killReason = task.reasonIfKilled.getOrElse("unknown reason")
           logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
 
@@ -545,6 +519,20 @@ private[spark] class Executor(
 
           val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates).withAccums(accums))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
+
+        case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
+          val reason = task.context.fetchFailed.get.toTaskFailedReason
+          if (!t.isInstanceOf[FetchFailedException]) {
+            // there was a fetch failure in the task, but some user code wrapped that exception
+            // and threw something else.  Regardless, we treat it as a fetch failure.
+            val fetchFailedCls = classOf[FetchFailedException].getName
+            logWarning(s"TID ${taskId} encountered a ${fetchFailedCls} and " +
+              s"failed, but the ${fetchFailedCls} was hidden by another " +
+              s"exception.  Spark is handling this like a fetch failure and ignoring the " +
+              s"other exception: $t")
+          }
+          setTaskFinishedAndClearInterruptStatus()
+          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskCommitDeniedReason

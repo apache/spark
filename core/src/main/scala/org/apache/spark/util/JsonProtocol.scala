@@ -919,7 +919,7 @@ private[spark] object JsonProtocol {
       case `taskKilled` =>
         val killReason = jsonOption(json \ "Kill Reason")
           .map(_.extract[String]).getOrElse("unknown reason")
-        val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
+        val accumUpdates = jsonOption(json \ "Accumulator Updates")
           .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
           .getOrElse(Seq[AccumulableInfo]())
         TaskKilled(killReason, accumUpdates)
