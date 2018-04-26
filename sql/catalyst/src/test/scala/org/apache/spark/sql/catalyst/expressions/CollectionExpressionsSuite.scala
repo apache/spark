@@ -106,6 +106,41 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
 
+  test("ArrayJoin") {
+    def testArrays(
+        arrays: Seq[Expression],
+        nullReplacement: Option[Expression],
+        expected: Seq[String]): Unit = {
+      assert(arrays.length == expected.length)
+      arrays.zip(expected).foreach { case (arr, exp) =>
+        checkEvaluation(ArrayJoin(arr, Literal(","), nullReplacement), exp)
+      }
+    }
+
+    val arrays = Seq(Literal.create(Seq[String]("a", "b"), ArrayType(StringType)),
+      Literal.create(Seq[String]("a", null, "b"), ArrayType(StringType)),
+      Literal.create(Seq[String](null), ArrayType(StringType)),
+      Literal.create(Seq[String]("a", "b", null), ArrayType(StringType)),
+      Literal.create(Seq[String](null, "a", "b"), ArrayType(StringType)),
+      Literal.create(Seq[String]("a"), ArrayType(StringType)))
+
+    val withoutNullReplacement = Seq("a,b", "a,b", "", "a,b", "a,b", "a")
+    val withNullReplacement = Seq("a,b", "a,NULL,b", "NULL", "a,b,NULL", "NULL,a,b", "a")
+    testArrays(arrays, None, withoutNullReplacement)
+    testArrays(arrays, Some(Literal("NULL")), withNullReplacement)
+
+    checkEvaluation(ArrayJoin(
+      Literal.create(null, ArrayType(StringType)), Literal(","), None), null)
+    checkEvaluation(ArrayJoin(
+      Literal.create(Seq[String](null), ArrayType(StringType)),
+      Literal.create(null, StringType),
+      None), null)
+    checkEvaluation(ArrayJoin(
+      Literal.create(Seq[String](null), ArrayType(StringType)),
+      Literal(","),
+      Some(Literal.create(null, StringType))), null)
+  }
+
   test("Array Min") {
     checkEvaluation(ArrayMin(Literal.create(Seq(-11, 10, 2), ArrayType(IntegerType))), -11)
     checkEvaluation(
