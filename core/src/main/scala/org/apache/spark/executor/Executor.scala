@@ -288,23 +288,18 @@ private[spark] class Executor(
     }
 
     /**
-     * Set executor runtime and JVM gc time if task instance is still valid
-     */
-    private def reportGCAndExecutorTimeIfPossible(taskStart: Long): Unit = {
-      if (task != null) {
-        task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
-        task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
-      }
-    }
-
-    /**
      *  Utility function to:
      *    1. Report executor runtime and JVM gc time if possible
      *    2. Collect accumulator updates
      *    3. Set the finished flag to true and clear current thread's interrupt status
      */
     private def collectAccumulatorsAndResetStatusOnFailure(taskStart: Long) = {
-      reportGCAndExecutorTimeIfPossible(taskStart)
+      // Report executor runtime and JVM gc time
+      Option(task).foreach(t => {
+        t.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+        t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+      })
+
       // Collect latest accumulator values to report back to the driver
       val accums: Seq[AccumulatorV2[_, _]] =
         Option(task).map(_.collectAccumulatorUpdates(taskFailed = true)).getOrElse(Seq.empty)
