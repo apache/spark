@@ -111,13 +111,14 @@ trait ProgressReporter extends Logging {
     logDebug("Starting Trigger Calculation")
     lastTriggerStartTimestamp = currentTriggerStartTimestamp
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
-    updateCurrentStatus()
+    updateStatusOnTriggerStart()
     currentDurationsMs.clear()
   }
 
   // This is extracted from startTrigger() to allow ContinuousExecution override it
   // and keep isTriggerActive false
-  protected def updateCurrentStatus(): Unit = {
+  /** This method is used to define how to update query status when startTrigger() is called. */
+  protected def updateStatusOnTriggerStart(): Unit = {
     currentStatus = currentStatus.copy(isTriggerActive = true)
   }
 

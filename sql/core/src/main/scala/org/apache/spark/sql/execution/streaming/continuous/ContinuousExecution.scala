@@ -80,7 +80,7 @@ class ContinuousExecution(
 
   // isTriggerActive flag is kept false for ContinuousExecution
   // since it is tied to MicroBatchExecution
-  override protected def updateCurrentStatus(): Unit = {
+  override protected def updateStatusOnTriggerStart(): Unit = {
   }
 
   override protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
