@@ -37,7 +37,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
 
   var amClientMock: AMRMClient[ContainerRequest] = _
   var yarnBlacklistTracker: YarnAllocatorBlacklistTracker = _
-  var failureWithinTimeIntervalTracker: FailureWithinTimeIntervalTracker = _
+  var failureTracker: FailureTracker = _
   var clock: ManualClock = _
 
   override def beforeEach(): Unit = {
@@ -45,23 +45,18 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     sparkConf.set(BLACKLIST_TIMEOUT_CONF, BLACKLIST_TIMEOUT)
     sparkConf.set(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED, true)
     sparkConf.set(MAX_FAILED_EXEC_PER_NODE, MAX_FAILED_EXEC_PER_NODE_VALUE)
+    clock = new ManualClock()
 
     amClientMock = mock(classOf[AMRMClient[ContainerRequest]])
-    failureWithinTimeIntervalTracker = new FailureWithinTimeIntervalTracker(sparkConf)
+    failureTracker = new FailureTracker(sparkConf, clock)
     yarnBlacklistTracker =
-      new YarnAllocatorBlacklistTracker(sparkConf, amClientMock, failureWithinTimeIntervalTracker)
+      new YarnAllocatorBlacklistTracker(sparkConf, amClientMock, failureTracker)
     yarnBlacklistTracker.setNumClusterNodes(4)
-
-    clock = new ManualClock()
-    yarnBlacklistTracker.setClock(clock)
-    failureWithinTimeIntervalTracker.setClock(clock)
     super.beforeEach()
   }
 
   test("expiring its own blacklisted nodes") {
-    clock.setTime(0L)
-
-    1 to MAX_FAILED_EXEC_PER_NODE_VALUE foreach {
+    (1 to MAX_FAILED_EXEC_PER_NODE_VALUE).foreach {
       _ => {
         yarnBlacklistTracker.handleResourceAllocationFailure(Some("host"))
         // host should not be blacklisted at these failures as MAX_FAILED_EXEC_PER_NODE is 2
@@ -81,8 +76,6 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
   }
 
   test("not handling the expiry of scheduler blacklisted nodes") {
-    clock.setTime(0L)
-
     yarnBlacklistTracker.setSchedulerBlacklistedNodes(Map("host1" -> 100, "host2" -> 150))
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("host1", "host2"), Collections.emptyList())
@@ -90,7 +83,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     // advance timer more then host1, host2 expiry time
     clock.advance(200L)
 
-    // expired backlisted nodes (simulating a resource request)
+    // expired blacklisted nodes (simulating a resource request)
     yarnBlacklistTracker.setSchedulerBlacklistedNodes(Map("host1" -> 100, "host2" -> 150))
     // no change is communicated to YARN regarding the blacklisting
     verify(amClientMock).updateBlacklist(Collections.emptyList(), Collections.emptyList())
@@ -98,9 +91,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
 
 
   test("synchronizing blacklisting to YARN (stateful)") {
-    clock.setTime(0L)
-
-    1 to MAX_FAILED_EXEC_PER_NODE_VALUE foreach {
+    (1 to MAX_FAILED_EXEC_PER_NODE_VALUE).foreach {
       _ => {
         yarnBlacklistTracker.handleResourceAllocationFailure(Some("host1"))
         // host3 should not be blacklisted at these failures as MAX_FAILED_EXEC_PER_NODE is 2
@@ -126,14 +117,12 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
   }
 
   test("sending the latter expires blacklisted nodes if blacklist size limit is exceeded") {
-    clock.setTime(0L)
-
     yarnBlacklistTracker.setSchedulerBlacklistedNodes(
       Map("host1" -> 50, "host2" -> 10, "host3" -> 200))
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("host1", "host2", "host3"), Collections.emptyList())
 
-    1 to MAX_FAILED_EXEC_PER_NODE_VALUE foreach {
+    (1 to MAX_FAILED_EXEC_PER_NODE_VALUE).foreach {
       _ => {
         yarnBlacklistTracker.handleResourceAllocationFailure(Some("host4"))
         // host4 should not be blacklisted at these failures as MAX_FAILED_EXEC_PER_NODE is 2

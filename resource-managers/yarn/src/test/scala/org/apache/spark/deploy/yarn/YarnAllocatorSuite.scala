@@ -358,7 +358,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     sparkConf.set("spark.yarn.executor.failuresValidityInterval", "100s")
     val handler = createAllocator(4)
     val clock = new ManualClock(0L)
-    handler.getFailureWithinTimeIntervalTracker.setClock(clock)
+    handler.failureTracker.setClock(clock)
 
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)

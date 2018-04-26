@@ -126,7 +126,7 @@ private[scheduler] class BlacklistTracker (
           nodeIdToBlacklistExpiryTime.remove(node)
           listenerBus.post(SparkListenerNodeUnblacklisted(now, node))
         }
-        _nodeBlacklist.set(collection.immutable.Map(nodeIdToBlacklistExpiryTime.toSeq: _*))
+        _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.toMap)
       }
       updateNextExpiryTime()
     }
@@ -196,7 +196,7 @@ private[scheduler] class BlacklistTracker (
 
           nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
           listenerBus.post(SparkListenerNodeBlacklisted(now, host, 1))
-          _nodeBlacklist.set(collection.immutable.Map(nodeIdToBlacklistExpiryTime.toSeq: _*))
+          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.toMap)
           killExecutorsOnBlacklistedNode(host)
           updateNextExpiryTime()
         }
@@ -258,7 +258,7 @@ private[scheduler] class BlacklistTracker (
             s"executors blacklisted: ${blacklistedExecsOnNode}")
           nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
           listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
-          _nodeBlacklist.set(collection.immutable.Map(nodeIdToBlacklistExpiryTime.toSeq: _*))
+          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.toMap)
           killExecutorsOnBlacklistedNode(node)
         }
       }

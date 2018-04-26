@@ -22,9 +22,13 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{Clock, SystemClock}
 
-private[spark] class FailureWithinTimeIntervalTracker(sparkConf: SparkConf) extends Logging {
-
-  private var clock: Clock = new SystemClock
+/**
+ * FailureTracker is responsible for tracking executor failures both for each host separately
+ * and for all host altogether.
+*/
+private[spark] class FailureTracker(
+    sparkConf: SparkConf,
+    var clock: Clock = new SystemClock) extends Logging {
 
   private val executorFailuresValidityInterval =
     sparkConf.get(config.EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).getOrElse(-1L)
@@ -34,11 +38,11 @@ private[spark] class FailureWithinTimeIntervalTracker(sparkConf: SparkConf) exte
 
   private val failedExecutorsTimeStamps = new mutable.Queue[Long]()
 
-  private def getRecentFailureCount(failedExecutorsTimeStampsForHost: mutable.Queue[Long]): Int = {
+  private def recentFailureCount(failedExecutorsTimeStampsForHost: mutable.Queue[Long]): Int = {
     val endTime = clock.getTimeMillis()
-    while (executorFailuresValidityInterval > 0
-      && failedExecutorsTimeStampsForHost.nonEmpty
-      && failedExecutorsTimeStampsForHost.head < endTime - executorFailuresValidityInterval) {
+    while (executorFailuresValidityInterval > 0 &&
+        failedExecutorsTimeStampsForHost.nonEmpty &&
+        failedExecutorsTimeStampsForHost.head < endTime - executorFailuresValidityInterval) {
       failedExecutorsTimeStampsForHost.dequeue()
     }
     failedExecutorsTimeStampsForHost.size
@@ -51,8 +55,8 @@ private[spark] class FailureWithinTimeIntervalTracker(sparkConf: SparkConf) exte
     clock = newClock
   }
 
-  def getNumExecutorsFailed: Int = synchronized {
-    getRecentFailureCount(failedExecutorsTimeStamps)
+  def numExecutorsFailed: Int = synchronized {
+    recentFailureCount(failedExecutorsTimeStamps)
   }
 
   def registerFailureOnHost(hostname: String): Unit = synchronized {
@@ -64,16 +68,18 @@ private[spark] class FailureWithinTimeIntervalTracker(sparkConf: SparkConf) exte
         failedExecutorsTimeStampsPerHost.put(hostname, failureOnHost)
         failureOnHost
       })
-    failedExecutorsOnHost.enqueue(timeMillis)  }
+    failedExecutorsOnHost.enqueue(timeMillis)
+  }
 
   def registerExecutorFailure(): Unit = synchronized {
     val timeMillis = clock.getTimeMillis()
     failedExecutorsTimeStamps.enqueue(timeMillis)
   }
 
-  def getNumExecutorFailuresOnHost(hostname: String): Int =
+  def numFailuresOnHost(hostname: String): Int = {
     failedExecutorsTimeStampsPerHost.get(hostname).map { failedExecutorsOnHost =>
-      getRecentFailureCount(failedExecutorsOnHost)
+      recentFailureCount(failedExecutorsOnHost)
     }.getOrElse(0)
+  }
 
 }

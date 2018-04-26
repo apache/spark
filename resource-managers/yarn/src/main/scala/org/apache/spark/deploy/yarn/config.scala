@@ -342,5 +342,4 @@ package object config {
     .checkValue(weight => weight >= 0 && weight <= 1, "The value of this ratio must be in [0, 1].")
     .createWithDefault(0.75)
 
-
 }

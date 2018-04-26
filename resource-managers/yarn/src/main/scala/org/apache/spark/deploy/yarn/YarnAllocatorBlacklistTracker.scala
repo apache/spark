@@ -28,44 +28,40 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
+/**
+ * YarnAllocatorBlacklistTracker is responsible for tracking the blacklisted nodes
+ * and synchronizing these node list to YARN.
+ *
+ */
 private[spark] class YarnAllocatorBlacklistTracker(
     sparkConf: SparkConf,
     amClient: AMRMClient[ContainerRequest],
-    failureWithinTimeIntervalTracker: FailureWithinTimeIntervalTracker)
+    failureTracker: FailureTracker)
   extends Logging {
 
-  private val DEFAULT_TIMEOUT = "1h"
+  private val defaultTimeout = "1h"
 
-  private val BLACKLIST_TIMEOUT_MILLIS =
-    sparkConf.get(BLACKLIST_TIMEOUT_CONF).getOrElse(Utils.timeStringAsMs(DEFAULT_TIMEOUT))
+  private val blacklistTimeoutMillis =
+    sparkConf.get(BLACKLIST_TIMEOUT_CONF).getOrElse(Utils.timeStringAsMs(defaultTimeout))
 
-  private val IS_YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
+  private val launchBlacklistEnabled =
     sparkConf.get(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED).getOrElse(false)
 
-  private val BLACKLIST_MAX_FAILED_EXEC_PER_NODE = sparkConf.get(MAX_FAILED_EXEC_PER_NODE)
+  private val maxFailuresPerHost = sparkConf.get(MAX_FAILED_EXEC_PER_NODE)
 
-  private val BLACKLIST_MAX_NODE_BLACKLIST_RATIO =
+  private val blacklistMaxNodeRatio =
     sparkConf.get(YARN_BLACKLIST_MAX_NODE_BLACKLIST_RATIO)
 
-  private var clock: Clock = new SystemClock
-
-  private val allocationBlacklistedNodesWithExpiry = new HashMap[String, Long]()
+  private val allocatorBlacklist = new HashMap[String, Long]()
 
   private var currentBlacklistedYarnNodes = Set.empty[String]
 
-  private var schedulerBlacklistedNodesWithExpiry = Map.empty[String, Long]
+  private var schedulerBlacklist = Map.empty[String, Long]
 
-  private var numClusterNodes = (Int.MaxValue / BLACKLIST_MAX_NODE_BLACKLIST_RATIO).toInt
+  private var numClusterNodes = (Int.MaxValue / blacklistMaxNodeRatio).toInt
 
   def setNumClusterNodes(numClusterNodes: Int): Unit = {
     this.numClusterNodes = numClusterNodes
-  }
-
-  /**
-   * Use a different clock. This is mainly used for testing.
-   */
-  def setClock(newClock: Clock): Unit = {
-    clock = newClock
   }
 
   def handleResourceAllocationFailure(hostOpt: Option[String]): Unit = {
@@ -75,78 +71,79 @@ private[spark] class YarnAllocatorBlacklistTracker(
         // otherwise such failures could shutdown the application
         // as resource requests are asynchronous
         // and a late failure response could exceed MAX_EXECUTOR_FAILURES
-        if (!schedulerBlacklistedNodesWithExpiry.contains(hostname) &&
-          !allocationBlacklistedNodesWithExpiry.contains(hostname)) {
-          failureWithinTimeIntervalTracker.registerFailureOnHost(hostname)
+        if (!schedulerBlacklist.contains(hostname) &&
+            !allocatorBlacklist.contains(hostname)) {
+          failureTracker.registerFailureOnHost(hostname)
           updateAllocationBlacklistedNodes(hostname)
         }
       case None =>
-        failureWithinTimeIntervalTracker.registerExecutorFailure()
+        failureTracker.registerExecutorFailure()
     }
   }
 
   private def updateAllocationBlacklistedNodes(hostname: String): Unit = {
-    if (IS_YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED) {
-      val failuresOnHost = failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost(hostname)
-      if (failuresOnHost > BLACKLIST_MAX_FAILED_EXEC_PER_NODE) {
+    if (launchBlacklistEnabled) {
+      val failuresOnHost = failureTracker.numFailuresOnHost(hostname)
+      if (failuresOnHost > maxFailuresPerHost) {
         logInfo(s"blacklisting $hostname as YARN allocation failed $failuresOnHost times")
-        allocationBlacklistedNodesWithExpiry.put(
+        allocatorBlacklist.put(
           hostname,
-          clock.getTimeMillis() + BLACKLIST_TIMEOUT_MILLIS)
+          failureTracker.clock.getTimeMillis() + blacklistTimeoutMillis)
         refreshBlacklistedNodes()
       }
     }
   }
 
   def setSchedulerBlacklistedNodes(schedulerBlacklistedNodesWithExpiry: Map[String, Long]): Unit = {
-    this.schedulerBlacklistedNodesWithExpiry = schedulerBlacklistedNodesWithExpiry
+    this.schedulerBlacklist = schedulerBlacklistedNodesWithExpiry
     refreshBlacklistedNodes()
   }
 
   private def refreshBlacklistedNodes(): Unit = {
     removeExpiredYarnBlacklistedNodes()
-    val limit = (numClusterNodes * BLACKLIST_MAX_NODE_BLACKLIST_RATIO).toInt
+    val limit = (numClusterNodes * blacklistMaxNodeRatio).toInt
     val nodesToBlacklist =
-      if (schedulerBlacklistedNodesWithExpiry.size +
-          allocationBlacklistedNodesWithExpiry.size > limit) {
+      if (schedulerBlacklist.size +
+          allocatorBlacklist.size > limit) {
         mostRelevantSubsetOfBlacklistedNodes(limit)
       } else {
-        schedulerBlacklistedNodesWithExpiry.keySet ++ allocationBlacklistedNodesWithExpiry.keySet
+        schedulerBlacklist.keySet ++ allocatorBlacklist.keySet
       }
 
     synchronizeBlacklistedNodeWithYarn(nodesToBlacklist)
   }
 
   private def mostRelevantSubsetOfBlacklistedNodes(limit: Int) = {
+    val allBlacklist = schedulerBlacklist ++ allocatorBlacklist
     val relevant =
-      (schedulerBlacklistedNodesWithExpiry ++ allocationBlacklistedNodesWithExpiry).toSeq
+      allBlacklist.toSeq
       .sortBy(_._2)(Ordering[Long].reverse)
       .take(limit)
       .map(_._1)
       .toSet
-    logInfo(s"blacklist size limit ($limit) is reached, the most relevant subset is: $relevant")
+    logInfo(s"blacklist size limit ($limit) is reached, total count: ${allBlacklist.size}")
     relevant
   }
 
   private def synchronizeBlacklistedNodeWithYarn(nodesToBlacklist: Set[String]): Unit = {
     // Update blacklist information to YARN ResourceManager for this application,
     // in order to avoid allocating new Containers on the problematic nodes.
-    val blacklistAdditions = (nodesToBlacklist -- currentBlacklistedYarnNodes).toList.sorted
-    val blacklistRemovals = (currentBlacklistedYarnNodes -- nodesToBlacklist).toList.sorted
-    if (blacklistAdditions.nonEmpty) {
-      logInfo(s"adding nodes to YARN application master's blacklist: $blacklistAdditions")
+    val additions = (nodesToBlacklist -- currentBlacklistedYarnNodes).toList.sorted
+    val removals = (currentBlacklistedYarnNodes -- nodesToBlacklist).toList.sorted
+    if (additions.nonEmpty) {
+      logInfo(s"adding nodes to YARN application master's blacklist: $additions")
     }
-    if (blacklistRemovals.nonEmpty) {
-      logInfo(s"removing nodes from YARN application master's blacklist: $blacklistRemovals")
+    if (removals.nonEmpty) {
+      logInfo(s"removing nodes from YARN application master's blacklist: $removals")
     }
-    amClient.updateBlacklist(blacklistAdditions.asJava, blacklistRemovals.asJava)
+    amClient.updateBlacklist(additions.asJava, removals.asJava)
     currentBlacklistedYarnNodes = nodesToBlacklist
   }
 
   private def removeExpiredYarnBlacklistedNodes() = {
-    val now = clock.getTimeMillis()
-    allocationBlacklistedNodesWithExpiry.retain {
-      (_: String, expiryTime: Long) => expiryTime > now
+    val now = failureTracker.clock.getTimeMillis()
+    allocatorBlacklist.retain {
+      (_, expiryTime) => expiryTime > now
     }
   }
 }
