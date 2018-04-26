@@ -78,7 +78,7 @@ class ContinuousExecution(
     case _ => throw new IllegalStateException(s"Unsupported type of trigger: $trigger")
   }
 
-  // isTriggerActive field is kept false for ContinuousExecution
+  // isTriggerActive flag is kept false for ContinuousExecution
   // since it is tied to MicroBatchExecution
   override protected def updateCurrentStatus(): Unit = {
   }
