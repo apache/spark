@@ -123,9 +123,7 @@ case class MapValues(child: Expression)
 trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
   protected def arrayExpression: Expression
 
-  // If -1, place null element at the end of the array
-  // If 1, place null element at the beginning of the array
-  protected def nullOrder: Int
+  protected def nullOrder: NullOrder
 
   @transient
   private lazy val lt: Comparator[Any] = {
@@ -140,9 +138,9 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
         if (o1 == null && o2 == null) {
           0
         } else if (o1 == null) {
-          -1 * nullOrder
+          nullOrder
         } else if (o2 == null) {
-          1 * nullOrder
+          -nullOrder
         } else {
           ordering.compare(o1, o2)
         }
@@ -163,9 +161,9 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
         if (o1 == null && o2 == null) {
           0
         } else if (o1 == null) {
-          1 * nullOrder
+          -nullOrder
         } else if (o2 == null) {
-          -1 * nullOrder
+          nullOrder
         } else {
           -ordering.compare(o1, o2)
         }
@@ -185,6 +183,8 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
 
 object ArraySortUtil {
   type NullOrder = Int
+  // Least: place null element at the end of the array
+  // Greatest: place null element at the beginning of the array
   object NullOrder {
     val Least: NullOrder = -1
     val Greatest: NullOrder = 1
@@ -220,7 +220,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
   override def arrayExpression: Expression = base
-  override def nullOrder: Int = NullOrder.Greatest
+  override def nullOrder: NullOrder = NullOrder.Least
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
@@ -356,7 +356,7 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortUt
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override def arrayExpression: Expression = child
-  override def nullOrder: Int = NullOrder.Least
+  override def nullOrder: NullOrder = NullOrder.Greatest
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
