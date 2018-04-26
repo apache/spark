@@ -196,8 +196,10 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-    checkEvaluationWithUnsafeProjection(expression, expected, inputRow, UnsafeProjection)
-    checkEvaluationWithUnsafeProjection(expression, expected, inputRow, InterpretedUnsafeProjection)
+    checkEvaluationWithUnsafeProjection(expression, expected, inputRow,
+      CodegenUnsafeProjectionCreator)
+    checkEvaluationWithUnsafeProjection(expression, expected, inputRow,
+      InterpretedUnsafeProjectionCreator)
   }
 
   protected def checkEvaluationWithUnsafeProjection(
@@ -228,7 +230,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
   protected def evaluateWithUnsafeProjection(
       expression: Expression,
       inputRow: InternalRow = EmptyRow,
-      factory: UnsafeProjectionCreator = UnsafeProjection): InternalRow = {
+      factory: UnsafeProjectionCreator = CodegenUnsafeProjectionCreator): InternalRow = {
     // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
     // some expression is reusing variable names across different instances.
     // This behavior is tested in ExpressionEvalHelperSuite.

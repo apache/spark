@@ -37,8 +37,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     name: String)(
     f: UnsafeProjectionCreator => Unit): Unit = {
     test(name) {
-      f(UnsafeProjection)
-      f(InterpretedUnsafeProjection)
+      f(CodegenUnsafeProjectionCreator)
+      f(InterpretedUnsafeProjectionCreator)
     }
   }
 

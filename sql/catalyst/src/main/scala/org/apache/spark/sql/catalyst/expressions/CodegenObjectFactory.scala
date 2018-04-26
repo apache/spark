@@ -31,49 +31,37 @@ object CodegenError {
   }
 }
 
-/**
- * A factory class which can be used to create objects that have both codegen and interpreted
- * implementations. This tries to create codegen object first, if any compile error happens,
- * it fallbacks to interpreted version.
- */
-abstract class CodegenObjectFactory[IN, OUT] {
-
-  def createObject(in: IN): OUT = try {
-    createCodeGeneratedObject(in)
-  } catch {
-    case CodegenError(_) => createInterpretedObject(in)
-  }
-
+trait CodegenObjectFactoryBase[IN, OUT] {
+  protected def createObject(in: IN): OUT
   protected def createCodeGeneratedObject(in: IN): OUT
   protected def createInterpretedObject(in: IN): OUT
 }
 
-object UnsafeProjectionFactory extends CodegenObjectFactory[Seq[Expression], UnsafeProjection]
-    with UnsafeProjectionCreator {
-
-  override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
-    UnsafeProjection.createProjection(in)
-  }
-
-  override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
-    InterpretedUnsafeProjection.createProjection(in)
-  }
-
-  override protected[sql] def createProjection(exprs: Seq[Expression]): UnsafeProjection =
-    createObject(exprs)
-
-  /**
-   * Same as other create()'s but allowing enabling/disabling subexpression elimination.
-   * The param `subexpressionEliminationEnabled` doesn't guarantee to work. For example,
-   * when fallbacking to interpreted execution, it is not supported.
-   */
-  def create(
-      exprs: Seq[Expression],
-      inputSchema: Seq[Attribute],
-      subexpressionEliminationEnabled: Boolean): UnsafeProjection = try {
-    UnsafeProjection.create(exprs, inputSchema, subexpressionEliminationEnabled)
+/**
+ * A factory which can be used to create objects that have both codegen and interpreted
+ * implementations. This tries to create codegen object first, if any compile error happens,
+ * it fallbacks to interpreted version.
+ */
+trait CodegenObjectFactory[IN, OUT] extends CodegenObjectFactoryBase[IN, OUT] {
+  override protected def createObject(in: IN): OUT = try {
+    createCodeGeneratedObject(in)
   } catch {
-    case CodegenError(_) => InterpretedUnsafeProjection.create(exprs, inputSchema)
+    case CodegenError(_) => createInterpretedObject(in)
   }
 }
 
+/**
+ * A factory which can be used to create codegen objects without fallback to interpreted version.
+ */
+trait CodegenObjectFactoryWithoutFallback[IN, OUT] extends CodegenObjectFactoryBase[IN, OUT] {
+  override protected def createObject(in: IN): OUT =
+    createCodeGeneratedObject(in)
+}
+
+/**
+ * A factory which can be used to create objects with interpreted implementation.
+ */
+trait InterpretedCodegenObjectFactory[IN, OUT] extends CodegenObjectFactoryBase[IN, OUT] {
+  override protected def createObject(in: IN): OUT =
+    createInterpretedObject(in)
+}
