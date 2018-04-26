@@ -53,16 +53,21 @@ abstract class QueryStage extends UnaryExecNode {
    * blocking on one child stage.
    */
   def executeChildStages(): Unit = {
+    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+
     // Handle broadcast stages
     val broadcastQueryStages: Seq[BroadcastQueryStage] = child.collect {
       case bqs: BroadcastQueryStageInput => bqs.childStage
     }
     val broadcastFutures = broadcastQueryStages.map { queryStage =>
-      Future { queryStage.prepareBroadcast() }(QueryStage.executionContext)
+      Future {
+        SQLExecution.withExecutionId(sqlContext.sparkContext, executionId) {
+          queryStage.prepareBroadcast()
+        }
+      }(QueryStage.executionContext)
     }
 
     // Submit shuffle stages
-    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val shuffleQueryStages: Seq[ShuffleQueryStage] = child.collect {
       case sqs: ShuffleQueryStageInput => sqs.childStage
     }
