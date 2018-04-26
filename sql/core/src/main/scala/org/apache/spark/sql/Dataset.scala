@@ -2933,7 +2933,7 @@ class Dataset[T] private[sql](
    */
   def storageLevel: StorageLevel = {
     sparkSession.sharedState.cacheManager.lookupCachedData(this).map { cachedData =>
-      cachedData.cachedRepresentation.storageLevel
+      cachedData.cachedRepresentation.cacheBuilder.storageLevel
     }.getOrElse(StorageLevel.NONE)
   }
 
@@ -3189,10 +3189,10 @@ class Dataset[T] private[sql](
 
   private[sql] def collectToPython(): Int = {
     EvaluatePython.registerPicklers()
-    withNewExecutionId {
+    withAction("collectToPython", queryExecution) { plan =>
       val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
-      val iter = new SerDeUtil.AutoBatchedPickler(
-        queryExecution.executedPlan.executeCollect().iterator.map(toJava))
+      val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
+        plan.executeCollect().iterator.map(toJava))
       PythonRDD.serveIterator(iter, "serve-DataFrame")
     }
   }
@@ -3201,8 +3201,9 @@ class Dataset[T] private[sql](
    * Collect a Dataset as ArrowPayload byte arrays and serve to PySpark.
    */
   private[sql] def collectAsArrowToPython(): Int = {
-    withNewExecutionId {
-      val iter = toArrowPayload.collect().iterator.map(_.asPythonSerializable)
+    withAction("collectAsArrowToPython", queryExecution) { plan =>
+      val iter: Iterator[Array[Byte]] =
+        toArrowPayload(plan).collect().iterator.map(_.asPythonSerializable)
       PythonRDD.serveIterator(iter, "serve-Arrow")
     }
   }
@@ -3311,14 +3312,19 @@ class Dataset[T] private[sql](
   }
 
   /** Convert to an RDD of ArrowPayload byte arrays */
-  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
+  private[sql] def toArrowPayload(plan: SparkPlan): RDD[ArrowPayload] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
-    queryExecution.toRdd.mapPartitionsInternal { iter =>
+    plan.execute().mapPartitionsInternal { iter =>
       val context = TaskContext.get()
       ArrowConverters.toPayloadIterator(
         iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, context)
     }
+  }
+
+  // This is only used in tests, for now.
+  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
+    toArrowPayload(queryExecution.executedPlan)
   }
 }

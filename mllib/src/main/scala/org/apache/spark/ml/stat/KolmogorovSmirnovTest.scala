@@ -85,7 +85,7 @@ object KolmogorovSmirnovTest {
       dataset: Dataset[_],
       sampleCol: String,
       cdf: Function[java.lang.Double, java.lang.Double]): DataFrame = {
-    test(dataset, sampleCol, (x: Double) => cdf.call(x))
+    test(dataset, sampleCol, (x: Double) => cdf.call(x).toDouble)
   }
 
   /**

@@ -14,25 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit.steps
+package org.apache.spark.deploy.k8s
 
-import org.apache.spark.deploy.k8s.MountSecretsBootstrap
-import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBuilder}
 
-/**
- * A driver configuration step for mounting user-specified secrets onto user-specified paths.
- *
- * @param bootstrap a utility actually handling mounting of the secrets.
- */
-private[spark] class DriverMountSecretsStep(
-    bootstrap: MountSecretsBootstrap) extends DriverConfigurationStep {
+private[spark] case class SparkPod(pod: Pod, container: Container)
 
-  override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
-    val pod = bootstrap.addSecretVolumes(driverSpec.driverPod)
-    val container = bootstrap.mountSecrets(driverSpec.driverContainer)
-    driverSpec.copy(
-      driverPod = pod,
-      driverContainer = container
-    )
+private[spark] object SparkPod {
+  def initialPod(): SparkPod = {
+    SparkPod(
+      new PodBuilder()
+        .withNewMetadata()
+        .endMetadata()
+        .withNewSpec()
+        .endSpec()
+        .build(),
+      new ContainerBuilder().build())
   }
 }

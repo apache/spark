@@ -37,87 +37,6 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 
 /**
- * An expression that concatenates multiple inputs into a single output.
- * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
- * If any input is null, concat returns null.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of str1, str2, ..., strN.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('Spark', 'SQL');
-       SparkSQL
-  """)
-case class Concat(children: Seq[Expression]) extends Expression {
-
-  private lazy val isBinaryMode: Boolean = dataType == BinaryType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.isEmpty) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      val childTypes = children.map(_.dataType)
-      if (childTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
-        return TypeCheckResult.TypeCheckFailure(
-          s"input to function $prettyName should have StringType or BinaryType, but it's " +
-            childTypes.map(_.simpleString).mkString("[", ", ", "]"))
-      }
-      TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
-    }
-  }
-
-  override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
-
-  override def nullable: Boolean = children.exists(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  override def eval(input: InternalRow): Any = {
-    if (isBinaryMode) {
-      val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
-      ByteArray.concat(inputs: _*)
-    } else {
-      val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-      UTF8String.concat(inputs : _*)
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evals = children.map(_.genCode(ctx))
-    val args = ctx.freshName("args")
-
-    val inputs = evals.zipWithIndex.map { case (eval, index) =>
-      s"""
-        ${eval.code}
-        if (!${eval.isNull}) {
-          $args[$index] = ${eval.value};
-        }
-      """
-    }
-
-    val (concatenator, initCode) = if (isBinaryMode) {
-      (classOf[ByteArray].getName, s"byte[][] $args = new byte[${evals.length}][];")
-    } else {
-      ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
-    }
-    val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = inputs,
-      funcName = "valueConcat",
-      extraArguments = (s"${CodeGenerator.javaType(dataType)}[]", args) :: Nil)
-    ev.copy(s"""
-      $initCode
-      $codes
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
-      boolean ${ev.isNull} = ${ev.value} == null;
-    """)
-  }
-
-  override def toString: String = s"concat(${children.mkString(", ")})"
-
-  override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
-}
-
-
-/**
  * An expression that concatenates multiple input strings or array of strings into a single string,
  * using a given separator (the first child).
  *
@@ -1501,26 +1420,6 @@ case class StringRepeat(str: Expression, times: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
-  }
-}
-
-/**
- * Returns the reversed given string.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(str) - Returns the reversed given string.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('Spark SQL');
-       LQS krapS
-  """)
-case class StringReverse(child: Expression) extends UnaryExpression with String2StringExpression {
-  override def convert(v: UTF8String): UTF8String = v.reverse()
-
-  override def prettyName: String = "reverse"
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"($c).reverse()")
   }
 }
 
