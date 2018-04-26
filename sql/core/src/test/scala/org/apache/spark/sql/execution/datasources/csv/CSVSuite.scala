@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
 import java.nio.charset.UnsupportedCharsetException
-import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.commons.lang3.time.FastDateFormat
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
@@ -36,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils  with TestCsvData {
+class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -1321,7 +1319,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils  with T
     }.getMessage
     assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
 
-    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 10).csv(ds)
+    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 1.0).csv(ds)
     assert(sampled.count() == ds.count())
   }
 }

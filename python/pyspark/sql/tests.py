@@ -3014,8 +3014,7 @@ class SQLTests(ReusedSQLTestCase):
             .map(lambda x: '0.1' if x == 1 else str(x))\
             .repartition(1)
         schema = self.spark.read.option('inferSchema', True)\
-            .option('samplingRatio', 0.5)\
-            .csv(rdd).schema
+            .csv(rdd, samplingRatio=0.5).schema
         self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
 
 
