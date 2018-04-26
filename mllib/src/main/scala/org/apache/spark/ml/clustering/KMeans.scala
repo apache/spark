@@ -161,7 +161,6 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     validateSchema(dataset.schema)
-
     val data: RDD[OldVector] = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol))
       .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)

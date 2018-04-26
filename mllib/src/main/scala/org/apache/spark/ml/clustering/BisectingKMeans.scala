@@ -32,8 +32,8 @@ import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
 
 
 /**
@@ -70,12 +70,23 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
   def getMinDivisibleClusterSize: Double = $(minDivisibleClusterSize)
 
   /**
+   * Validates the input schema.
+   * @param schema input schema
+   */
+  private[clustering] def validateSchema(schema: StructType): Unit = {
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, false))
+
+    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
+  }
+  /**
    * Validates and transforms the input schema.
    * @param schema input schema
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    validateSchema(schema)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
@@ -113,13 +124,16 @@ class BisectingKMeansModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    dataset.withColumn($(predictionCol),
+      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
   }
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+
 
   private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
@@ -132,9 +146,12 @@ class BisectingKMeansModel private[ml] (
    */
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
-    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
-    parentModel.computeCost(data.map(OldVectors.fromML))
+    validateSchema(dataset.schema)
+    val data: RDD[OldVector] = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol))
+      .rdd.map {
+      case Row(point: Vector) => OldVectors.fromML(point)
+    }
+    parentModel.computeCost(data)
   }
 
   @Since("2.0.0")
@@ -260,7 +277,9 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
     transformSchema(dataset.schema, logging = true)
-    val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+    val rdd: RDD[OldVector] = dataset.select(
+      DatasetUtils.columnToVector(dataset, getFeaturesCol))
+      .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 
