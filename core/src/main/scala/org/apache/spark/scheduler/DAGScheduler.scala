@@ -1414,10 +1414,7 @@ class DAGScheduler(
       case commitDenied: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case exceptionFailure: ExceptionFailure =>
-        // Nothing left to do, already handled above for accumulator updates.
-
-      case _: TaskKilled =>
+      case exceptionFailure: ExceptionFailure | taskKilled: TaskKilled =>
         // Nothing left to do, already handled above for accumulator updates.
 
       case TaskResultLost =>

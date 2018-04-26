@@ -218,7 +218,7 @@ case class TaskKilled(
     private[spark] val accums: Seq[AccumulatorV2[_, _]] = Nil)
   extends TaskFailedReason {
 
-  override def toErrorString: String = "TaskKilled ($reason)"
+  override def toErrorString: String = s"TaskKilled ($reason)"
   override def countTowardsTaskFailures: Boolean = false
 
 }
