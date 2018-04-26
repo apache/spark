@@ -782,6 +782,22 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
+      // Special rules for `to/from_utc_timestamp`. `to/from_utc_timestamp` assumes its input is
+      // in UTC timezone, and if input is string, it should not contain timezone.
+      // TODO: We should move the type coercion logic to expressions instead of a central
+      // place to put all the rules.
+      case e: FromUTCTimestamp if e.left.dataType == StringType =>
+        e.copy(left = StringToTimestampWithoutTimezone(e.left))
+
+      case e: FromUTCTimestamp if e.left.dataType == DateType =>
+        e.copy(left = Cast(e.left, TimestampType))
+
+      case e: ToUTCTimestamp if e.left.dataType == StringType =>
+        e.copy(left = StringToTimestampWithoutTimezone(e.left))
+
+      case e: ToUTCTimestamp if e.left.dataType == DateType =>
+        e.copy(left = Cast(e.left, TimestampType))
+
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
