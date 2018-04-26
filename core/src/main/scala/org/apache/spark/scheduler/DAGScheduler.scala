@@ -1178,19 +1178,27 @@ class DAGScheduler(
       event.taskInfo.attemptNumber, // this is a task attempt number
       event.reason)
 
-    if (!stageIdToStage.contains(task.stageId)) {
-      // The stage may have already finished when we get this event -- eg. maybe it was a
+    val stageOpt = stageIdToStage.get(task.stageId)
+
+    if (stageOpt.isEmpty || (failedStages.contains(stageOpt.get) && event.reason == Success)) {
+      // The stage may have already finished or failed when we get this event -- eg. maybe it was a
       // speculative task. It is important that we send the TaskEnd event in any case, so listeners
       // are properly notified and can chose to handle it. For instance, some listeners are
       // doing their own accounting and if they don't get the task end event they think
       // tasks are still running when they really aren't.
+      val msg = if (stageOpt.isEmpty) {
+        "have already finished"
+      } else {
+        s"${stageOpt.get} have been marked as failed"
+      }
+      logWarning(s"Ignoring task $task because of stage $msg")
       postTaskEnd(event)
 
-      // Skip all the actions if the stage has been cancelled.
+      // Skip all the actions if the stage has been cancelled or failed.
       return
     }
 
-    val stage = stageIdToStage(task.stageId)
+    val stage = stageOpt.get
 
     // Make sure the task's accumulators are updated before any other processing happens, so that
     // we can post a task end event before any jobs or stages are updated. The accumulators are
@@ -1266,9 +1274,6 @@ class DAGScheduler(
             }
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
-            } else if (failedStages.contains(shuffleStage)) {
-              logInfo(s"Ignoring task $smt because of stage $shuffleStage have " +
-                s"been marked as failed")
             } else {
               // The epoch of the task is acceptable (i.e., the task was launched after the most
               // recent failure we're aware of for the executor), so mark the task's output as

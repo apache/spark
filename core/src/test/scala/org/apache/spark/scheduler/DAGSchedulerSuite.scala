@@ -2472,6 +2472,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(scheduler.failedStages.nonEmpty)
     // The second result task self success soon.
     assert(taskSets(1).tasks(1).isInstanceOf[ResultTask[_, _]])
+    // This task success event will be ignored by DAGScheduler
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), Success, makeMapStatus("hostB", 2)))
+    // Resubmit failed stage and success finally
+    scheduler.resubmitFailedStages()
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(0), Success, makeMapStatus("hostB", 2)))
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(1), Success, makeMapStatus("hostB", 2)))
     assertDataStructuresEmpty()
