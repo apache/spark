@@ -78,6 +78,11 @@ class ContinuousExecution(
     case _ => throw new IllegalStateException(s"Unsupported type of trigger: $trigger")
   }
 
+  // isTriggerActive field is kept false for ContinuousExecution
+  // since it is tied to MicroBatchExecution
+  override protected def updateCurrentStatus(): Unit = {
+  }
+
   override protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
     val stateUpdate = new UnaryOperator[State] {
       override def apply(s: State) = s match {
