@@ -152,6 +152,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(sparkContext.conf).thenReturn(sparkConf)
     when(sparkContext.listenerBus).thenReturn(listenerBus)
     when(taskSchedulerImpl.sc).thenReturn(sparkContext)
+    when(taskSchedulerImpl.nodeBlacklistWithExpiryTimes).thenReturn(Map[String, Long]())
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, APP_ID)).thenReturn(podsWithLabelOperations)
     when(podsWithLabelOperations.watch(executorPodsWatcherArgument.capture()))
