@@ -379,6 +379,175 @@ case class ArrayContains(left: Expression, right: Expression)
 }
 
 /**
+ * Creates a String containing all the elements of the input array separated by the delimiter.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, delimiter[, nullReplacement]) - Concatenates the elements of the given array
+      using the delimiter and an optional string to replace nulls. If no value is set for
+      nullReplacement, any null value is filtered.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('hello', 'world'), ' ');
+       hello world
+      > SELECT _FUNC_(array('hello', null ,'world'), ' ');
+       hello world
+      > SELECT _FUNC_(array('hello', null ,'world'), ' ', ',');
+       hello , world
+  """, since = "2.4.0")
+case class ArrayJoin(
+    array: Expression,
+    delimiter: Expression,
+    nullReplacement: Option[Expression]) extends Expression with ExpectsInputTypes {
+
+  def this(array: Expression, delimiter: Expression) = this(array, delimiter, None)
+
+  def this(array: Expression, delimiter: Expression, nullReplacement: Expression) =
+    this(array, delimiter, Some(nullReplacement))
+
+  override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
+    Seq(ArrayType(StringType), StringType, StringType)
+  } else {
+    Seq(ArrayType(StringType), StringType)
+  }
+
+  override def children: Seq[Expression] = if (nullReplacement.isDefined) {
+    Seq(array, delimiter, nullReplacement.get)
+  } else {
+    Seq(array, delimiter)
+  }
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    val arrayEval = array.eval(input)
+    if (arrayEval == null) return null
+    val delimiterEval = delimiter.eval(input)
+    if (delimiterEval == null) return null
+    val nullReplacementEval = nullReplacement.map(_.eval(input))
+    if (nullReplacementEval.contains(null)) return null
+
+    val buffer = new UTF8StringBuilder()
+    var firstItem = true
+    val nullHandling = nullReplacementEval match {
+      case Some(rep) => (prependDelimiter: Boolean) => {
+        if (!prependDelimiter) {
+          buffer.append(delimiterEval.asInstanceOf[UTF8String])
+        }
+        buffer.append(rep.asInstanceOf[UTF8String])
+        true
+      }
+      case None => (_: Boolean) => false
+    }
+    arrayEval.asInstanceOf[ArrayData].foreach(StringType, (_, item) => {
+      if (item == null) {
+        if (nullHandling(firstItem)) {
+          firstItem = false
+        }
+      } else {
+        if (!firstItem) {
+          buffer.append(delimiterEval.asInstanceOf[UTF8String])
+        }
+        buffer.append(item.asInstanceOf[UTF8String])
+        firstItem = false
+      }
+    })
+    buffer.build()
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val code = nullReplacement match {
+      case Some(replacement) =>
+        val replacementGen = replacement.genCode(ctx)
+        val nullHandling = (buffer: String, delimiter: String, firstItem: String) => {
+          s"""
+             |if (!$firstItem) {
+             |  $buffer.append($delimiter);
+             |}
+             |$buffer.append(${replacementGen.value});
+             |$firstItem = false;
+           """.stripMargin
+        }
+        val execCode = if (replacement.nullable) {
+          ctx.nullSafeExec(replacement.nullable, replacementGen.isNull) {
+            genCodeForArrayAndDelimiter(ctx, ev, nullHandling)
+          }
+        } else {
+          genCodeForArrayAndDelimiter(ctx, ev, nullHandling)
+        }
+        s"""
+           |${replacementGen.code}
+           |$execCode
+         """.stripMargin
+      case None => genCodeForArrayAndDelimiter(ctx, ev,
+        (_: String, _: String, _: String) => "// nulls are ignored")
+    }
+    if (nullable) {
+      ev.copy(
+        s"""
+           |boolean ${ev.isNull} = true;
+           |UTF8String ${ev.value} = null;
+           |$code
+         """.stripMargin)
+    } else {
+      ev.copy(
+        s"""
+           |UTF8String ${ev.value} = null;
+           |$code
+         """.stripMargin, FalseLiteral)
+    }
+  }
+
+  private def genCodeForArrayAndDelimiter(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      nullEval: (String, String, String) => String): String = {
+    val arrayGen = array.genCode(ctx)
+    val delimiterGen = delimiter.genCode(ctx)
+    val buffer = ctx.freshName("buffer")
+    val bufferClass = classOf[UTF8StringBuilder].getName
+    val i = ctx.freshName("i")
+    val firstItem = ctx.freshName("firstItem")
+    val resultCode =
+      s"""
+         |$bufferClass $buffer = new $bufferClass();
+         |boolean $firstItem = true;
+         |for (int $i = 0; $i < ${arrayGen.value}.numElements(); $i ++) {
+         |  if (${arrayGen.value}.isNullAt($i)) {
+         |    ${nullEval(buffer, delimiterGen.value, firstItem)}
+         |  } else {
+         |    if (!$firstItem) {
+         |      $buffer.append(${delimiterGen.value});
+         |    }
+         |    $buffer.append(${CodeGenerator.getValue(arrayGen.value, StringType, i)});
+         |    $firstItem = false;
+         |  }
+         |}
+         |${ev.value} = $buffer.build();""".stripMargin
+
+    if (array.nullable || delimiter.nullable) {
+      arrayGen.code + ctx.nullSafeExec(array.nullable, arrayGen.isNull) {
+        delimiterGen.code + ctx.nullSafeExec(delimiter.nullable, delimiterGen.isNull) {
+          s"""
+             |${ev.isNull} = false;
+             |$resultCode""".stripMargin
+        }
+      }
+    } else {
+      s"""
+         |${arrayGen.code}
+         |${delimiterGen.code}
+         |$resultCode""".stripMargin
+    }
+  }
+
+  override def dataType: DataType = StringType
+
+}
+
+/**
  * Returns the minimum value in the array.
  */
 @ExpressionDescription(

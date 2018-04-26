@@ -413,6 +413,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("array_join function") {
+    val df = Seq(
+      (Seq[String]("a", "b"), ","),
+      (Seq[String]("a", null, "b"), ","),
+      (Seq.empty[String], ",")
+    ).toDF("x", "delimiter")
+
+    checkAnswer(
+      df.select(array_join(df("x"), ";")),
+      Seq(Row("a;b"), Row("a;b"), Row(""))
+    )
+    checkAnswer(
+      df.select(array_join(df("x"), ";", "NULL")),
+      Seq(Row("a;b"), Row("a;NULL;b"), Row(""))
+    )
+    checkAnswer(
+      df.selectExpr("array_join(x, delimiter)"),
+      Seq(Row("a,b"), Row("a,b"), Row("")))
+    checkAnswer(
+      df.selectExpr("array_join(x, delimiter, 'NULL')"),
+      Seq(Row("a,b"), Row("a,NULL,b"), Row("")))
+  }
+
   test("array_min function") {
     val df = Seq(
       Seq[Option[Int]](Some(1), Some(3), Some(2)),
