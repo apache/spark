@@ -429,6 +429,24 @@ class TypeCoercionSuite extends AnalysisTest {
         Some(StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType)))),
         isSymmetric = false)
     }
+
+    widenTest(
+      ArrayType(IntegerType, containsNull = true),
+      ArrayType(IntegerType, containsNull = false),
+      Some(ArrayType(IntegerType, containsNull = true)))
+
+    widenTest(
+      MapType(IntegerType, StringType, valueContainsNull = true),
+      MapType(IntegerType, StringType, valueContainsNull = false),
+      Some(MapType(IntegerType, StringType, valueContainsNull = true)))
+
+    widenTest(
+      new StructType()
+        .add("arr", ArrayType(IntegerType, containsNull = true), nullable = false),
+      new StructType()
+        .add("arr", ArrayType(IntegerType, containsNull = false), nullable = true),
+      Some(new StructType()
+        .add("arr", ArrayType(IntegerType, containsNull = true), nullable = true)))
   }
 
   test("wider common type for decimal and array") {
