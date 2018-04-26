@@ -50,7 +50,7 @@ class MulticlassMetrics @Since("2.4.0") (predAndLabelsWithOptWeight: RDD[_]) {
     predLabelsWeight.map {
       case (prediction: Double, label: Double, weight: Double) =>
         (label, weight)
-    }.mapValues(weight => weight).reduceByKey(_ + _).collect().toMap
+    }.reduceByKey(_ + _).collect().toMap
   private lazy val labelCount: Double = labelCountByClass.values.sum
   private lazy val tpByClass: Map[Double, Double] = predLabelsWeight
     .map {
