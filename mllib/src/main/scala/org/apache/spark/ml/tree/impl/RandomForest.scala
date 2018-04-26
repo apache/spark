@@ -22,12 +22,11 @@ import java.io.IOException
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.util.Instrumentation
+import org.apache.spark.ml.util.{Instrumentation, OptionalInstrumentation}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
@@ -77,7 +76,7 @@ import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
  * the heaviest part of the computation.  In general, this implementation is bound by either
  * the cost of statistics computation on workers or by communicating the sufficient statistics.
  */
-private[spark] object RandomForest extends Logging {
+private[spark] object RandomForest {
 
   /**
    * Train a random forest.
@@ -91,7 +90,7 @@ private[spark] object RandomForest extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String,
       seed: Long,
-      instr: Option[Instrumentation[_]],
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(RandomForest.getClass),
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
 
@@ -104,24 +103,24 @@ private[spark] object RandomForest extends Logging {
     val retaggedInput = input.retag(classOf[LabeledPoint])
     val metadata =
       DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
-    instr match {
+    instr.instrumentation match {
       case Some(instrumentation) =>
         instrumentation.logNumFeatures(metadata.numFeatures)
         instrumentation.logNumClasses(metadata.numClasses)
         instrumentation.logNumExamples(metadata.numExamples)
       case None =>
-        logInfo("numFeatures: " + metadata.numFeatures)
-        logInfo("numClasses: " + metadata.numClasses)
-        logInfo("numExamples: " + metadata.numExamples)
+        instr.logInfo("numFeatures: " + metadata.numFeatures)
+        instr.logInfo("numClasses: " + metadata.numClasses)
+        instr.logInfo("numExamples: " + metadata.numExamples)
     }
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
     timer.start("findSplits")
-    val splits = findSplits(retaggedInput, metadata, seed)
+    val splits = findSplits(retaggedInput, metadata, seed, instr = instr)
     timer.stop("findSplits")
-    logDebug("numBins: feature: number of bins")
-    logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
+    instr.logDebug("numBins: feature: number of bins")
+    instr.logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
       s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
     }.mkString("\n"))
 
@@ -143,7 +142,7 @@ private[spark] object RandomForest extends Logging {
     // Max memory usage for aggregates
     // TODO: Calculate memory usage more precisely.
     val maxMemoryUsage: Long = strategy.maxMemoryInMB * 1024L * 1024L
-    logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
+    instr.logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
 
     /*
      * The main idea here is to perform group-wise training of the decision tree nodes thus
@@ -187,7 +186,7 @@ private[spark] object RandomForest extends Logging {
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
       val (nodesForGroup, treeToNodeToIndexInfo) =
-        RandomForest.selectNodesToSplit(nodeStack, maxMemoryUsage, metadata, rng)
+        RandomForest.selectNodesToSplit(nodeStack, maxMemoryUsage, metadata, rng, instr = instr)
       // Sanity check (should never occur):
       assert(nodesForGroup.nonEmpty,
         s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
@@ -199,7 +198,7 @@ private[spark] object RandomForest extends Logging {
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
       RandomForest.findBestSplits(baggedInput, metadata, topNodesForGroup, nodesForGroup,
-        treeToNodeToIndexInfo, splits, nodeStack, timer, nodeIdCache)
+        treeToNodeToIndexInfo, splits, nodeStack, timer, nodeIdCache, instr = instr)
       timer.stop("findBestSplits")
     }
 
@@ -207,8 +206,8 @@ private[spark] object RandomForest extends Logging {
 
     timer.stop("total")
 
-    logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    instr.logInfo("Internal timing for DecisionTree:")
+    instr.logInfo(s"$timer")
 
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {
@@ -216,7 +215,7 @@ private[spark] object RandomForest extends Logging {
         nodeIdCache.get.deleteAllCheckpoints()
       } catch {
         case e: IOException =>
-          logWarning(s"delete all checkpoints failed. Error reason: ${e.getMessage}")
+          instr.logWarning(s"delete all checkpoints failed. Error reason: ${e.getMessage}")
       }
     }
 
@@ -373,7 +372,9 @@ private[spark] object RandomForest extends Logging {
       splits: Array[Array[Split]],
       nodeStack: mutable.ArrayStack[(Int, LearningNode)],
       timer: TimeTracker = new TimeTracker,
-      nodeIdCache: Option[NodeIdCache] = None): Unit = {
+      nodeIdCache: Option[NodeIdCache] = None,
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(RandomForest.getClass)
+      ): Unit = {
 
     /*
      * The high-level descriptions of the best split optimizations are noted here.
@@ -399,13 +400,13 @@ private[spark] object RandomForest extends Logging {
 
     // numNodes:  Number of nodes in this group
     val numNodes = nodesForGroup.values.map(_.length).sum
-    logDebug("numNodes = " + numNodes)
-    logDebug("numFeatures = " + metadata.numFeatures)
-    logDebug("numClasses = " + metadata.numClasses)
-    logDebug("isMulticlass = " + metadata.isMulticlass)
-    logDebug("isMulticlassWithCategoricalFeatures = " +
+    instr.logDebug("numNodes = " + numNodes)
+    instr.logDebug("numFeatures = " + metadata.numFeatures)
+    instr.logDebug("numClasses = " + metadata.numClasses)
+    instr.logDebug("isMulticlass = " + metadata.isMulticlass)
+    instr.logDebug("isMulticlassWithCategoricalFeatures = " +
       metadata.isMulticlassWithCategoricalFeatures)
-    logDebug("using nodeIdCache = " + nodeIdCache.nonEmpty.toString)
+    instr.logDebug("using nodeIdCache = " + nodeIdCache.nonEmpty.toString)
 
     /**
      * Performs a sequential aggregation over a partition for a particular tree and node.
@@ -562,7 +563,7 @@ private[spark] object RandomForest extends Logging {
 
         // find best split for each node
         val (split: Split, stats: ImpurityStats) =
-          binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
+          binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex), instr = instr)
         (nodeIndex, (split, stats))
     }.collectAsMap()
 
@@ -582,14 +583,14 @@ private[spark] object RandomForest extends Logging {
         val aggNodeIndex = nodeInfo.nodeIndexInGroup
         val (split: Split, stats: ImpurityStats) =
           nodeToBestSplits(aggNodeIndex)
-        logDebug("best split = " + split)
+        instr.logDebug("best split = " + split)
 
         // Extract info for this node.  Create children if not leaf.
         val isLeaf =
           (stats.gain <= 0) || (LearningNode.indexToLevel(nodeIndex) == metadata.maxDepth)
         node.isLeaf = isLeaf
         node.stats = stats
-        logDebug("Node = " + node)
+        instr.logDebug("Node = " + node)
 
         if (!isLeaf) {
           node.split = Some(split)
@@ -616,9 +617,9 @@ private[spark] object RandomForest extends Logging {
             nodeStack.push((treeIndex, node.rightChild.get))
           }
 
-          logDebug("leftChildIndex = " + node.leftChild.get.id +
+          instr.logDebug("leftChildIndex = " + node.leftChild.get.id +
             ", impurity = " + stats.leftImpurity)
-          logDebug("rightChildIndex = " + node.rightChild.get.id +
+          instr.logDebug("rightChildIndex = " + node.rightChild.get.id +
             ", impurity = " + stats.rightImpurity)
         }
       }
@@ -699,7 +700,9 @@ private[spark] object RandomForest extends Logging {
       binAggregates: DTStatsAggregator,
       splits: Array[Array[Split]],
       featuresForNode: Option[Array[Int]],
-      node: LearningNode): (Split, ImpurityStats) = {
+      node: LearningNode,
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(RandomForest.getClass)
+      ): (Split, ImpurityStats) = {
 
     // Calculate InformationGain and ImpurityStats if current node is top node
     val level = LearningNode.indexToLevel(node.id)
@@ -793,12 +796,13 @@ private[spark] object RandomForest extends Logging {
             (featureValue, centroid)
           }
 
-          logDebug("Centroids for categorical variable: " + centroidForCategories.mkString(","))
+          instr.logDebug("Centroids for categorical variable: " +
+            centroidForCategories.mkString(","))
 
           // bins sorted by centroids
           val categoriesSortedByCentroid = centroidForCategories.toList.sortBy(_._2)
 
-          logDebug("Sorted centroids for categorical variable = " +
+          instr.logDebug("Sorted centroids for categorical variable = " +
             categoriesSortedByCentroid.mkString(","))
 
           // Cumulative sum (scanLeft) of bin statistics.
@@ -885,9 +889,11 @@ private[spark] object RandomForest extends Logging {
   protected[tree] def findSplits(
       input: RDD[LabeledPoint],
       metadata: DecisionTreeMetadata,
-      seed: Long): Array[Array[Split]] = {
+      seed: Long,
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(RandomForest.getClass)
+      ): Array[Array[Split]] = {
 
-    logDebug("isMulticlass = " + metadata.isMulticlass)
+    instr.logDebug("isMulticlass = " + metadata.isMulticlass)
 
     val numFeatures = metadata.numFeatures
 
@@ -895,19 +901,21 @@ private[spark] object RandomForest extends Logging {
     val continuousFeatures = Range(0, numFeatures).filter(metadata.isContinuous)
     val sampledInput = if (continuousFeatures.nonEmpty) {
       val fraction = samplesFractionForFindSplits(metadata)
-      logDebug("fraction of data used for calculating quantiles = " + fraction)
+      instr.logDebug("fraction of data used for calculating quantiles = " + fraction)
       input.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt())
     } else {
       input.sparkContext.emptyRDD[LabeledPoint]
     }
 
-    findSplitsBySorting(sampledInput, metadata, continuousFeatures)
+    findSplitsBySorting(sampledInput, metadata, continuousFeatures, instr = instr)
   }
 
   private def findSplitsBySorting(
       input: RDD[LabeledPoint],
       metadata: DecisionTreeMetadata,
-      continuousFeatures: IndexedSeq[Int]): Array[Array[Split]] = {
+      continuousFeatures: IndexedSeq[Int],
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(RandomForest.getClass)
+      ): Array[Array[Split]] = {
 
     val continuousSplits: scala.collection.Map[Int, Array[Split]] = {
       // reduce the parallelism for split computations when there are less
@@ -920,9 +928,9 @@ private[spark] object RandomForest extends Logging {
           continuousFeatures.map(idx => (idx, point.features(idx))).filter(_._2 != 0.0)
         }.groupByKey(numPartitions)
         .map { case (idx, samples) =>
-          val thresholds = findSplitsForContinuousFeature(samples, metadata, idx)
+          val thresholds = findSplitsForContinuousFeature(samples, metadata, idx, instr = instr)
           val splits: Array[Split] = thresholds.map(thresh => new ContinuousSplit(idx, thresh))
-          logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
+          instr.logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
           (idx, splits)
         }.collectAsMap()
     }
@@ -992,7 +1000,9 @@ private[spark] object RandomForest extends Logging {
   private[tree] def findSplitsForContinuousFeature(
       featureSamples: Iterable[Double],
       metadata: DecisionTreeMetadata,
-      featureIndex: Int): Array[Double] = {
+      featureIndex: Int,
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(RandomForest.getClass)
+      ): Array[Double] = {
     require(metadata.isContinuous(featureIndex),
       "findSplitsForContinuousFeature can only be used to find splits for a continuous feature.")
 
@@ -1032,7 +1042,7 @@ private[spark] object RandomForest extends Logging {
       } else {
         // stride between splits
         val stride: Double = numSamples.toDouble / (numSplits + 1)
-        logDebug("stride = " + stride)
+        instr.logDebug("stride = " + stride)
 
         // iterate `valueCount` to find splits
         val splitsBuilder = mutable.ArrayBuilder.make[Double]
@@ -1090,7 +1100,9 @@ private[spark] object RandomForest extends Logging {
       nodeStack: mutable.ArrayStack[(Int, LearningNode)],
       maxMemoryUsage: Long,
       metadata: DecisionTreeMetadata,
-      rng: Random): (Map[Int, Array[LearningNode]], Map[Int, Map[Int, NodeIndexInfo]]) = {
+      rng: Random,
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(RandomForest.getClass)
+      ): (Map[Int, Array[LearningNode]], Map[Int, Map[Int, NodeIndexInfo]]) = {
     // Collect some nodes to split:
     //  nodesForGroup(treeIndex) = nodes to split
     val mutableNodesForGroup = new mutable.HashMap[Int, mutable.ArrayBuffer[LearningNode]]()
@@ -1127,8 +1139,8 @@ private[spark] object RandomForest extends Logging {
     }
     if (memUsage > maxMemoryUsage) {
       // If maxMemoryUsage is 0, we should still allow splitting 1 node.
-      logWarning(s"Tree learning is using approximately $memUsage bytes per iteration, which" +
-        s" exceeds requested limit maxMemoryUsage=$maxMemoryUsage. This allows splitting" +
+      instr.logWarning(s"Tree learning is using approximately $memUsage bytes per iteration, " +
+        s"which exceeds requested limit maxMemoryUsage=$maxMemoryUsage. This allows splitting" +
         s" $numNodesInGroup nodes in this iteration.")
     }
     // Convert mutable maps to immutable ones.

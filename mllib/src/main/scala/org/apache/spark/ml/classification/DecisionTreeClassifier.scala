@@ -114,7 +114,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
     instr.logParams(params: _*)
 
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+      seed = $(seed), instr = OptionalInstrumentation.create(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
     instr.logSuccess(m)
@@ -128,7 +128,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
     instr.logParams(params: _*)
 
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 0L, instr = Some(instr), parentUID = Some(uid))
+      seed = 0L, instr = OptionalInstrumentation.create(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
     instr.logSuccess(m)

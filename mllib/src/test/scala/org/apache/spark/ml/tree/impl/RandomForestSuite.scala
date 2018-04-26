@@ -203,7 +203,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     withClue("DecisionTree requires number of features > 0," +
       " but was given an empty features vector") {
       intercept[IllegalArgumentException] {
-        RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
+        RandomForest.run(rdd, strategy, 1, "all", 42L)
       }
     }
   }
@@ -219,7 +219,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
           numClasses = 2,
           maxBins = 5,
           categoricalFeaturesInfo = Map(0 -> 1, 1 -> 5))
-    val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
+    val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L)
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
     assert(tree.rootNode.prediction === lp.label)
@@ -230,7 +230,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       Variance,
       maxDepth = 2,
       maxBins = 5)
-    val Array(tree2) = RandomForest.run(rdd, strategy2, 1, "all", 42L, instr = None)
+    val Array(tree2) = RandomForest.run(rdd, strategy2, 1, "all", 42L)
     assert(tree2.rootNode.impurity === -1.0)
     assert(tree2.depth === 0)
     assert(tree2.rootNode.prediction === lp.label)
@@ -411,7 +411,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3), maxBins = 3)
 
     val model = RandomForest.run(input, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42, instr = None, prune = false).head
+      seed = 42, prune = false).head
 
     model.rootNode match {
       case n: InternalNode => n.split match {
@@ -435,9 +435,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       new OldStrategy(OldAlgo.Classification, Entropy, 3, 2, 100, maxMemoryInMB = 0)
 
     val tree1 = RandomForest.run(rdd, strategy1, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42, instr = None).head
+      seed = 42).head
     val tree2 = RandomForest.run(rdd, strategy2, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42, instr = None).head
+      seed = 42).head
 
     def getChildren(rootNode: Node): Array[InternalNode] = rootNode match {
       case n: InternalNode =>
@@ -661,10 +661,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = numClasses, maxBins = 32)
 
     val prunedTree = RandomForest.run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto",
-      seed = 42, instr = None).head
+      seed = 42).head
 
     val unprunedTree = RandomForest.run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto",
-      seed = 42, instr = None, prune = false).head
+      seed = 42, prune = false).head
 
     assert(prunedTree.numNodes === 5)
     assert(unprunedTree.numNodes === 7)
@@ -691,10 +691,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = 0, maxBins = 32)
 
     val prunedTree = RandomForest.run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto",
-      seed = 42, instr = None).head
+      seed = 42).head
 
     val unprunedTree = RandomForest.run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto",
-      seed = 42, instr = None, prune = false).head
+      seed = 42, prune = false).head
 
     assert(prunedTree.numNodes === 3)
     assert(unprunedTree.numNodes === 5)

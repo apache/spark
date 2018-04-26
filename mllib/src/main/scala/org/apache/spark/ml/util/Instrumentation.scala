@@ -42,8 +42,8 @@ import org.apache.spark.sql.Dataset
  * @tparam E the type of the estimator
  */
 private[spark] class Instrumentation[E <: Estimator[_]] private (
-    val estimator: E,
-    val dataset: RDD[_]) extends Logging {
+    @transient val estimator: E,
+    @transient val dataset: RDD[_]) extends Logging with Serializable {
 
   private val id = UUID.randomUUID()
   private val prefix = {
@@ -77,6 +77,13 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
    */
   override def logInfo(msg: => String): Unit = {
     super.logInfo(prefix + msg)
+  }
+
+  /**
+   * Logs an debug message with a prefix that uniquely identifies the training session.
+   */
+  override def logDebug(msg: => String): Unit = {
+    super.logDebug(prefix + msg)
   }
 
   /**
@@ -171,9 +178,16 @@ private[spark] object Instrumentation {
  */
 private[spark] class OptionalInstrumentation private(
     val instrumentation: Option[Instrumentation[_ <: Estimator[_]]],
-    val className: String) extends Logging {
+    val className: String) extends Logging with Serializable {
 
   protected override def logName: String = className
+
+  override def logDebug(msg: => String) {
+    instrumentation match {
+      case Some(instr) => instr.logDebug(msg)
+      case None => super.logDebug(msg)
+    }
+  }
 
   override def logInfo(msg: => String) {
     instrumentation match {

@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml.tree.impl
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
+import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
@@ -30,7 +30,7 @@ import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
 
 
-private[spark] object GradientBoostedTrees extends Logging {
+private[spark] object GradientBoostedTrees {
 
   /**
    * Method to train a gradient boosting model
@@ -250,7 +250,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       boostingStrategy: OldBoostingStrategy,
       validate: Boolean,
       seed: Long,
-      featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      featureSubsetStrategy: String,
+      instr: OptionalInstrumentation = OptionalInstrumentation
+        .create(GradientBoostedTrees.getClass)
+      ): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
@@ -287,9 +290,9 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     timer.stop("init")
 
-    logDebug("##########")
-    logDebug("Building tree 0")
-    logDebug("##########")
+    instr.logDebug("##########")
+    instr.logDebug("Building tree 0")
+    instr.logDebug("##########")
 
     // Initialize tree
     timer.start("building tree 0")
@@ -302,7 +305,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     var predError: RDD[(Double, Double)] =
       computeInitialPredictionAndError(input, firstTreeWeight, firstTreeModel, loss)
     predErrorCheckpointer.update(predError)
-    logDebug("error of gbt = " + predError.values.mean())
+    instr.logDebug("error of gbt = " + predError.values.mean())
 
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
@@ -322,9 +325,9 @@ private[spark] object GradientBoostedTrees extends Logging {
       }
 
       timer.start(s"building tree $m")
-      logDebug("###################################################")
-      logDebug("Gradient boosting tree iteration " + m)
-      logDebug("###################################################")
+      instr.logDebug("###################################################")
+      instr.logDebug("Gradient boosting tree iteration " + m)
+      instr.logDebug("###################################################")
 
       val dt = new DecisionTreeRegressor().setSeed(seed + m)
       val model = dt.train(data, treeStrategy, featureSubsetStrategy)
@@ -339,7 +342,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       predError = updatePredictionError(
         input, predError, baseLearnerWeights(m), baseLearners(m), loss)
       predErrorCheckpointer.update(predError)
-      logDebug("error of gbt = " + predError.values.mean())
+      instr.logDebug("error of gbt = " + predError.values.mean())
 
       if (validate) {
         // Stop training early if
@@ -364,8 +367,8 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     timer.stop("total")
 
-    logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    instr.logInfo("Internal timing for DecisionTree:")
+    instr.logInfo(s"$timer")
 
     predErrorCheckpointer.unpersistDataSet()
     predErrorCheckpointer.deleteAllCheckpoints()
