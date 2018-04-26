@@ -759,6 +759,14 @@ setGeneric("array_contains", function(x, value) { standardGeneric("array_contain
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("array_max", function(x) { standardGeneric("array_max") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_min", function(x) { standardGeneric("array_min") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("array_position", function(x, value) { standardGeneric("array_position") })
 
 #' @rdname column_string_functions

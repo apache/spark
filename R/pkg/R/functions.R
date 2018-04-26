@@ -206,6 +206,7 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
+#' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
@@ -2989,6 +2990,32 @@ setMethod("array_contains",
           signature(x = "Column", value = "ANY"),
           function(x, value) {
             jc <- callJStatic("org.apache.spark.sql.functions", "array_contains", x@jc, value)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_max}: Returns the maximum value of the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_max array_max,Column-method
+#' @note array_max since 2.4.0
+setMethod("array_max",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_max", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_min}: Returns the minimum value of the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_min array_min,Column-method
+#' @note array_min since 2.4.0
+setMethod("array_min",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_min", x@jc)
             column(jc)
           })
 
