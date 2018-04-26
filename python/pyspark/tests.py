@@ -889,6 +889,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_namedtuple_in_rdd(self):
         from collections import namedtuple
+        global Person
         Person = namedtuple("Person", "id firstName lastName")
         jon = Person(1, "Jon", "Doe")
         jane = Person(2, "Jane", "Doe")
