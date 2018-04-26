@@ -142,7 +142,7 @@ private[continuous] class EpochCoordinator(
   private val epochsWaitingToBeCommitted = mutable.HashSet.empty[Long]
 
   private def resolveCommitsAtEpoch(epoch: Long) = {
-    val thisEpochCommits = findCommitsForEpoch(epoch)
+    val thisEpochCommits = findPartitionCommitsForEpoch(epoch)
     val nextEpochOffsets =
       partitionOffsets.collect { case ((e, _), o) if e == epoch => o }
 
@@ -163,7 +163,7 @@ private[continuous] class EpochCoordinator(
         // Commit subsequent epochs that are waiting to be committed.
         var nextEpoch = lastCommittedEpoch + 1
         while (epochsWaitingToBeCommitted.contains(nextEpoch)) {
-          val nextEpochCommits = findCommitsForEpoch(nextEpoch)
+          val nextEpochCommits = findPartitionCommitsForEpoch(nextEpoch)
           commitEpoch(nextEpoch, nextEpochCommits)
 
           epochsWaitingToBeCommitted.remove(nextEpoch)
@@ -183,10 +183,16 @@ private[continuous] class EpochCoordinator(
     }
   }
 
-  private def findCommitsForEpoch(epoch: Long): Iterable[WriterCommitMessage] = {
+  /**
+   * Collect per-partition commits for an epoch.
+   */
+  private def findPartitionCommitsForEpoch(epoch: Long): Iterable[WriterCommitMessage] = {
     partitionCommits.collect { case ((e, _), msg) if e == epoch => msg }
   }
 
+  /**
+   * Commit epoch to the offset log.
+   */
   private def commitEpoch(epoch: Long, messages: Iterable[WriterCommitMessage]): Unit = {
     logDebug(s"Epoch $epoch has received commits from all partitions " +
       s"and is ready to be committed. Committing epoch $epoch.")
