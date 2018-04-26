@@ -138,7 +138,7 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 
     join.joinType match {
       case RightOuter if leftHasNonNullPredicate => Inner
-      case LeftOuter if rightHasNonNullPredicate => Inner
+      case LeftOuter if rightHasNonNullPredicate => LeftOuter
       case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate => Inner
       case FullOuter if leftHasNonNullPredicate => LeftOuter
       case FullOuter if rightHasNonNullPredicate => RightOuter

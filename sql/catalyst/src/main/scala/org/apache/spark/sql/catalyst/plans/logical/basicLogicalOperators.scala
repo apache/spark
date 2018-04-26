@@ -317,6 +317,8 @@ case class Join(
         left.constraints
       case LeftOuter =>
         left.constraints
+          .union(right.constraints)
+          .union(splitConjunctivePredicates(condition.get).toSet)
       case RightOuter =>
         right.constraints
       case FullOuter =>
