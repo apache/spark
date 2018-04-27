@@ -186,4 +186,6 @@ class CSVOptions(
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
     settings
   }
+
+  val textOptions = parameters.originalMap
 }
