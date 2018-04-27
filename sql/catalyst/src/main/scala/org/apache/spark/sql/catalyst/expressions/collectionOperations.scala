@@ -401,6 +401,8 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 
   override def children: Seq[Expression] = Seq(x, start, length)
 
+  lazy val elementType: DataType = x.dataType.asInstanceOf[ArrayType].elementType
+
   override def nullSafeEval(xVal: Any, startVal: Any, lengthVal: Any): Any = {
     val startInt = startVal.asInstanceOf[Int]
     val lengthInt = lengthVal.asInstanceOf[Int]
@@ -422,17 +424,12 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     if (startIndex < 0 || startIndex >= arr.numElements()) {
       return new GenericArrayData(Array.empty[AnyRef])
     }
-    val elementType = x.dataType.asInstanceOf[ArrayType].elementType
     val data = arr.toSeq[AnyRef](elementType)
     new GenericArrayData(data.slice(startIndex, startIndex + lengthInt))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val elementType = x.dataType.asInstanceOf[ArrayType].elementType
     nullSafeCodeGen(ctx, ev, (x, start, length) => {
-      val arrayClass = classOf[GenericArrayData].getName
-      val values = ctx.freshName("values")
-      val i = ctx.freshName("i")
       val startIdx = ctx.freshName("startIdx")
       val resLength = ctx.freshName("resLength")
       val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
@@ -456,18 +453,60 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |} else {
          |  $resLength = $length;
          |}
+         |${genCodeForResult(ctx, ev, x, startIdx, resLength)}
+       """.stripMargin
+    })
+  }
+
+  def genCodeForResult(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      inputArray: String,
+      startIdx: String,
+      resLength: String): String = {
+    val values = ctx.freshName("values")
+    val i = ctx.freshName("i")
+    val getValue = CodeGenerator.getValue(inputArray, elementType, s"$i + $startIdx")
+    if (!CodeGenerator.isPrimitiveType(elementType)) {
+      val arrayClass = classOf[GenericArrayData].getName
+      s"""
          |Object[] $values;
-         |if ($startIdx < 0 || $startIdx >= $x.numElements()) {
+         |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
          |  $values = new Object[0];
          |} else {
          |  $values = new Object[$resLength];
          |  for (int $i = 0; $i < $resLength; $i ++) {
-         |    $values[$i] = ${CodeGenerator.getValue(x, elementType, s"$i + $startIdx")};
+         |    $values[$i] = $getValue;
          |  }
          |}
          |${ev.value} = new $arrayClass($values);
        """.stripMargin
-    })
+    } else {
+      val sizeInBytes = ctx.freshName("sizeInBytes")
+      val bytesArray = ctx.freshName("bytesArray")
+      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+      s"""
+         |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
+         |  $resLength = 0;
+         |}
+         |${CodeGenerator.JAVA_INT} $sizeInBytes =
+         |  UnsafeArrayData.calculateHeaderPortionInBytes($resLength) +
+         |  ${classOf[ByteArrayMethods].getName}.roundNumberOfBytesToNearestWord(
+         |    ${elementType.defaultSize} * $resLength);
+         |byte[] $bytesArray = new byte[$sizeInBytes];
+         |UnsafeArrayData $values = new UnsafeArrayData();
+         |Platform.putLong($bytesArray, ${Platform.BYTE_ARRAY_OFFSET}, $resLength);
+         |$values.pointTo($bytesArray, ${Platform.BYTE_ARRAY_OFFSET}, $sizeInBytes);
+         |for (int $i = 0; $i < $resLength; $i ++) {
+         |  if ($inputArray.isNullAt($i + $startIdx)) {
+         |    $values.setNullAt($i);
+         |  } else {
+         |    $values.set$primitiveValueTypeName($i, $getValue);
+         |  }
+         |}
+         |${ev.value} = $values;
+       """.stripMargin
+    }
   }
 }
 
