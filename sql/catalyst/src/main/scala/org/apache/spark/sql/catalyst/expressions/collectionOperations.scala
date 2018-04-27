@@ -19,13 +19,39 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+
+/**
+ * Base trait for [[BinaryExpression]]s with two arrays of the same element type and implicit
+ * casting.
+ */
+trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
+  with ImplicitCastInputTypes {
+
+  protected lazy val elementType: DataType = inputTypes.head.asInstanceOf[ArrayType].elementType
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    TypeCoercion.findWiderTypeForTwo(left.dataType, right.dataType) match {
+      case Some(arrayType) => Seq(arrayType, arrayType)
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    TypeCoercion.findWiderTypeForTwo(left.dataType, right.dataType) match {
+      case Some(ArrayType(_, _)) => TypeCheckResult.TypeCheckSuccess
+      case None => TypeCheckResult.TypeCheckFailure(s"input to function $prettyName should have " +
+        s"been two ${ArrayType.simpleString}s with same element type, but it's " +
+        s"[${left.dataType.simpleString}, ${right.dataType.simpleString}]")
+    }
+  }
+}
+
 
 /**
  * Given an array or map, returns its size. Returns -1 if null.
@@ -391,26 +417,9 @@ case class ArrayContains(left: Expression, right: Expression)
   """, since = "2.4.0")
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-
-  private lazy val elementType = inputTypes.head.asInstanceOf[ArrayType].elementType
+  extends BinaryArrayExpressionWithImplicitCast {
 
   override def dataType: DataType = BooleanType
-
-  override def inputTypes: Seq[AbstractDataType] = left.dataType match {
-    case la: ArrayType if la.sameType(right.dataType) =>
-      Seq(la, right.dataType)
-    case _ => Seq.empty
-  }
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (!left.dataType.isInstanceOf[ArrayType] || !right.dataType.isInstanceOf[ArrayType] ||
-        !left.dataType.sameType(right.dataType)) {
-      TypeCheckResult.TypeCheckFailure("Arguments must be arrays with the same element type.")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
-  }
 
   override def nullable: Boolean = {
     left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull ||
