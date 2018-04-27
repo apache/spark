@@ -20,8 +20,8 @@ package org.apache.spark.io
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
-
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkEnv, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -57,7 +57,9 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
   }
 
   test("SPARK-24107: writeFully() write buffer which is larger than bufferWriteChunkSize") {
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(80 * 1024 * 1024)))
+    val bufferWriteChunkSize = Option(SparkEnv.get).map(_.conf.get(config.BUFFER_WRITE_CHUNK_SIZE))
+            .getOrElse(config.BUFFER_WRITE_CHUNK_SIZE.defaultValue.get).toInt
+    val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(bufferWriteChunkSize + 8)))
     val byteArrayWritableChannel = new ByteArrayWritableChannel(chunkedByteBuffer.size.toInt)
     chunkedByteBuffer.writeFully(byteArrayWritableChannel)
     assert(byteArrayWritableChannel.length() === chunkedByteBuffer.size)
