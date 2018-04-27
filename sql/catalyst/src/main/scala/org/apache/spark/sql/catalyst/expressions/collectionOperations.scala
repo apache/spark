@@ -863,8 +863,9 @@ case class Concat(children: Seq[Expression]) extends Expression {
       val childTypes = children.map(_.dataType)
       if (childTypes.exists(tpe => !allowedTypes.exists(_.acceptsType(tpe)))) {
         return TypeCheckResult.TypeCheckFailure(
-          s"input to function $prettyName should have been StringType, BinaryType or ArrayType," +
-            s" but it's " + childTypes.map(_.simpleString).mkString("[", ", ", "]"))
+          s"input to function $prettyName should have been ${StringType.simpleString}," +
+            s" ${BinaryType.simpleString} or ${ArrayType.simpleString}, but it's " +
+            childTypes.map(_.simpleString).mkString("[", ", ", "]"))
       }
       TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
     }
