@@ -236,7 +236,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         "write files of Hive data source directly.")
     }
 
-    assertNotBucketed("save")
+    assertNotBucketedOrSorted("save")
 
     val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
@@ -309,7 +309,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    assertNotBucketed("insertInto")
+    assertNotBucketedOrSorted("insertInto")
 
     if (partitioningColumns.isDefined) {
       throw new AnalysisException(
@@ -339,9 +339,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def assertNotBucketed(operation: String): Unit = {
-    if (numBuckets.isDefined || sortColumnNames.isDefined) {
-      throw new AnalysisException(s"'$operation' does not support bucketing right now")
+  private def assertNotBucketedOrSorted(operation: String): Unit = {
+    (numBuckets.isDefined, sortColumnNames.isDefined) match {
+      case (true, true) =>
+        throw new AnalysisException(
+          s"'$operation' does not support bucketing and sorting right now")
+      case (true, false) =>
+        throw new AnalysisException(s"'$operation' does not support bucketing right now")
+      case (false, true) =>
+        throw new AnalysisException(s"'$operation' does not support sorting right now")
     }
   }
 
@@ -491,7 +497,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
-    assertNotBucketed("jdbc")
+    assertNotBucketedOrSorted("jdbc")
     // connectionProperties should override settings in extraOptions.
     this.extraOptions ++= connectionProperties.asScala
     // explicit url and dbtable should override all
