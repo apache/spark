@@ -56,7 +56,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
   }
 
-  test("writeFully() can write buffer which is larger than bufferWriteChunkSize correctly") {
+  test("SPARK-24107: writeFully() write buffer which is larger than bufferWriteChunkSize") {
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(80 * 1024 * 1024)))
     chunkedByteBuffer.writeFully(new ByteArrayWritableChannel(chunkedByteBuffer.size.toInt))
     assert(chunkedByteBuffer.size === (80L * 1024L * 1024L))
