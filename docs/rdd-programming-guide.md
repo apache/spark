@@ -1548,6 +1548,9 @@ data.map(g)
 
 </div>
 
+In new version of Spark(> 2.3), the semantic of Accumulator has been changed a bit: it now includes updates from 
+killed task if available for internal metrics.
+
 # Deploying to a Cluster
 
 The [application submission guide](submitting-applications.html) describes how to submit applications to a cluster.
