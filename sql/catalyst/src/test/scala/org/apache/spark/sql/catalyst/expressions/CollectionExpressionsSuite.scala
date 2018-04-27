@@ -61,35 +61,41 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
     val a2 = Literal.create(Seq("b", "a"), ArrayType(StringType))
     val a3 = Literal.create(Seq("b", null, "a"), ArrayType(StringType))
-    val a4 = Literal.create(Seq(null, null), ArrayType(NullType))
+    val d1 = new Decimal().set(10)
+    val d2 = new Decimal().set(100)
+    val a4 = Literal.create(Seq(d2, d1), ArrayType(DecimalType(10, 0)))
+    val a5 = Literal.create(Seq(null, null), ArrayType(NullType))
 
     checkEvaluation(new SortArray(a0), Seq(1, 2, 3))
     checkEvaluation(new SortArray(a1), Seq[Integer]())
     checkEvaluation(new SortArray(a2), Seq("a", "b"))
     checkEvaluation(new SortArray(a3), Seq(null, "a", "b"))
+    checkEvaluation(new SortArray(a4), Seq(d1, d2))
     checkEvaluation(SortArray(a0, Literal(true)), Seq(1, 2, 3))
     checkEvaluation(SortArray(a1, Literal(true)), Seq[Integer]())
     checkEvaluation(SortArray(a2, Literal(true)), Seq("a", "b"))
     checkEvaluation(new SortArray(a3, Literal(true)), Seq(null, "a", "b"))
+    checkEvaluation(SortArray(a4, Literal(true)), Seq(d1, d2))
     checkEvaluation(SortArray(a0, Literal(false)), Seq(3, 2, 1))
     checkEvaluation(SortArray(a1, Literal(false)), Seq[Integer]())
     checkEvaluation(SortArray(a2, Literal(false)), Seq("b", "a"))
     checkEvaluation(new SortArray(a3, Literal(false)), Seq("b", "a", null))
+    checkEvaluation(SortArray(a4, Literal(false)), Seq(d2, d1))
 
     checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
-    checkEvaluation(new SortArray(a4), Seq(null, null))
+    checkEvaluation(new SortArray(a5), Seq(null, null))
 
     val typeAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
     val arrayStruct = Literal.create(Seq(create_row(2), create_row(1)), typeAS)
 
     checkEvaluation(new SortArray(arrayStruct), Seq(create_row(1), create_row(2)))
 
-
     checkEvaluation(ArraySort(a0), Seq(1, 2, 3))
     checkEvaluation(ArraySort(a1), Seq[Integer]())
     checkEvaluation(ArraySort(a2), Seq("a", "b"))
     checkEvaluation(ArraySort(a3), Seq("a", "b", null))
-    checkEvaluation(ArraySort(a4), Seq(null, null))
+    checkEvaluation(ArraySort(a4), Seq(d1, d2))
+    checkEvaluation(ArraySort(a5), Seq(null, null))
     checkEvaluation(ArraySort(arrayStruct), Seq(create_row(1), create_row(2)))
   }
 

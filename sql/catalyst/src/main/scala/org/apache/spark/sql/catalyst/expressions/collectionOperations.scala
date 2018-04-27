@@ -120,7 +120,7 @@ case class MapValues(child: Expression)
 /**
  * Common base class for [[SortArray]] and [[ArraySort]].
  */
-trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
+trait ArraySortUtil extends ExpectsInputTypes {
   protected def arrayExpression: Expression
 
   protected def nullOrder: NullOrder
@@ -171,20 +171,82 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
     }
   }
 
+  val elementType = arrayExpression.dataType.asInstanceOf[ArrayType].elementType
+
   def sortEval(array: Any, ascending: Boolean): Any = {
-    val elementType = arrayExpression.dataType.asInstanceOf[ArrayType].elementType
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
     if (elementType != NullType) {
       java.util.Arrays.sort(data, if (ascending) lt else gt)
     }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
+
+  def sortCodegen(ctx: CodegenContext, ev: ExprCode, base: String, order: String): String = {
+    val arrayData = classOf[ArrayData].getName
+    val genericArrayData = classOf[GenericArrayData].getName
+    val array = ctx.freshName("array")
+    val c = ctx.freshName("c")
+    val sort = if (elementType == NullType) "" else {
+      val sortOrder = ctx.freshName("sortOrder")
+      val o1 = ctx.freshName("o1")
+      val o2 = ctx.freshName("o2")
+      val jt = CodeGenerator.javaType(elementType)
+      val comp = if (CodeGenerator.isPrimitiveType(elementType)) {
+        val bt = CodeGenerator.boxedType(elementType)
+        val v1 = ctx.freshName("v1")
+        val v2 = ctx.freshName("v2")
+        s"""
+           |$jt $v1 = (($bt) $o1).${jt}Value();
+           |$jt $v2 = (($bt) $o2).${jt}Value();
+           |int $c = ${ctx.genComp(elementType, v1, v2)};
+         """.stripMargin
+      } else {
+        s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
+      }
+      s"""
+         |final int $sortOrder = $order ? 1 : -1;
+         |java.util.Arrays.sort($array, new java.util.Comparator() {
+         |  @Override public int compare(Object $o1, Object $o2) {
+         |    if ($o1 == null && $o2 == null) {
+         |      return 0;
+         |    } else if ($o1 == null) {
+         |      return $sortOrder * $nullOrder;
+         |    } else if ($o2 == null) {
+         |      return -$sortOrder * $nullOrder;
+         |    }
+         |    $comp
+         |    return $sortOrder * $c;
+         |  }
+         |});
+       """.stripMargin
+    }
+    val dataTypes = elementType match {
+      case DecimalType.Fixed(p, s) =>
+        s"org.apache.spark.sql.types.DataTypes.createDecimalType($p, $s)"
+      case ArrayType(et, cn) =>
+        s"org.apache.spark.sql.types.DataTypes.createArrayType($et, $cn)"
+      case MapType(kt, vt, cn) =>
+        s"org.apache.spark.sql.types.DataTypes.createMapType($kt, $vt, $cn)"
+      case StructType(f) =>
+        "org.apache.spark.sql.types.StructType$.MODULE$." +
+          s"apply(new java.util.ArrayList(${f.length}))"
+      case _ =>
+        s"org.apache.spark.sql.types.DataTypes.$elementType"
+    }
+    s"""
+       |Object[] $array = (Object[]) (($arrayData) $base).toArray(
+       |  $dataTypes, scala.reflect.ClassTag$$.MODULE$$.AnyRef());
+       |$sort
+       |${ev.value} = new $genericArrayData($array);
+     """.stripMargin
+  }
+
 }
 
 object ArraySortUtil {
   type NullOrder = Int
-  // Least: place null element at the end of the array
-  // Greatest: place null element at the beginning of the array
+  // Least: place null element at the first of the array for ascending order
+  // Greatest: place null element at the end of the array for ascending order
   object NullOrder {
     val Least: NullOrder = -1
     val Greatest: NullOrder = 1
@@ -243,7 +305,59 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
     sortEval(array, ascending.asInstanceOf[Boolean])
   }
 
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (b, order) => sortCodegen(ctx, ev, b, order))
+  }
+
   override def prettyName: String = "sort_array"
+}
+
+
+/**
+ * Sorts the input array in ascending order according to the natural ordering of
+ * the array elements and returns it.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array) - Sorts the input array in ascending order. The elements of the input array must
+      be orderable. Null elements will be placed at the end of the returned array.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
+       ["a","b","c","d",null]
+  """,
+  since = "2.4.0")
+// scalastyle:on line.size.limit
+case class ArraySort(child: Expression) extends UnaryExpression with ArraySortUtil {
+
+  override def dataType: DataType = child.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  override def arrayExpression: Expression = child
+  override def nullOrder: NullOrder = NullOrder.Greatest
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+      TypeCheckResult.TypeCheckSuccess
+    case ArrayType(dt, _) =>
+      val dtSimple = dt.simpleString
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
+  }
+
+  override def nullSafeEval(array: Any): Any = {
+    sortEval(array, true)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => sortCodegen(ctx, ev, c, "true"))
+  }
+
+  override def prettyName: String = "array_sort"
 }
 
 /**
@@ -331,49 +445,6 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
   }
 
   override def prettyName: String = "reverse"
-}
-
-/**
- * Sorts the input array in ascending order according to the natural ordering of
- * the array elements and returns it.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(array) - Sorts the input array in ascending order. The elements of the input array must
-      be orderable. Null elements will be placed at the end of the returned array.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
-       ["a","b","c","d",null]
-  """,
-  since = "2.4.0")
-// scalastyle:on line.size.limit
-case class ArraySort(child: Expression) extends UnaryExpression with ArraySortUtil {
-
-  override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
-
-  override def arrayExpression: Expression = child
-  override def nullOrder: NullOrder = NullOrder.Greatest
-
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
-      TypeCheckResult.TypeCheckSuccess
-    case ArrayType(dt, _) =>
-      val dtSimple = dt.simpleString
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
-  }
-
-  override def nullSafeEval(array: Any): Any = {
-    sortEval(array, true)
-  }
-
-  override def prettyName: String = "array_sort"
 }
 
 /**
