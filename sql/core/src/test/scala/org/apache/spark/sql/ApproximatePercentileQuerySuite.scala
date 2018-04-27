@@ -284,8 +284,9 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext wi
   }
 
   test("SPARK-24013: unneeded compress can cause performance issues with sorted input") {
-    failAfter(20 seconds) {
-      assert(sql("select approx_percentile(id, array(0.1)) from range(10000000)").count() == 1)
+    failAfter(30 seconds) {
+      checkAnswer(sql("select approx_percentile(id, array(0.1)) from range(10000000)"),
+        Row(Array(999160)))
     }
   }
 }
