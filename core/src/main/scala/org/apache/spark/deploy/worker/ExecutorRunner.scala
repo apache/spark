@@ -143,7 +143,7 @@ private[deploy] class ExecutorRunner(
     try {
       // Launch the process
       val subsOpts = appDesc.command.javaOpts.map {
-        opt => Utils.substituteAppNExecIds(opt, appId, execId.toString)
+        Utils.substituteAppNExecIds(_, appId, execId.toString)
       }
       val subsCommand = appDesc.command.copy(javaOpts = subsOpts)
       val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
