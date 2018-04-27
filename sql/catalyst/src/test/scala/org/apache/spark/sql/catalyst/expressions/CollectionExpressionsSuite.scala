@@ -146,15 +146,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapConcat(Seq()),
       Map())
 
-      // argument checking
+    // argument checking
     assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
     assert(MapConcat(Seq(m5, m6)).checkInputDataTypes().isSuccess)
     assert(MapConcat(Seq(m0, m5)).checkInputDataTypes().isFailure)
+    assert(MapConcat(Seq(m0, Literal(12))).checkInputDataTypes().isFailure)
     assert(MapConcat(Seq(m0, m1)).dataType.keyType == StringType)
     assert(MapConcat(Seq(m0, m1)).dataType.valueType == StringType)
     assert(MapConcat(Seq(m0, m1)).dataType.valueContainsNull == false)
     assert(MapConcat(Seq(m5, m6)).dataType.keyType == StringType)
     assert(MapConcat(Seq(m5, m6)).dataType.valueType == IntegerType)
+    assert(MapConcat(Seq()).dataType.keyType == StringType)
+    assert(MapConcat(Seq()).dataType.valueType == StringType)
     assert(MapConcat(Seq(m5, m6)).dataType.valueContainsNull == true)
     assert(MapConcat(Seq(m6, m5)).dataType.valueContainsNull == true)
   }
