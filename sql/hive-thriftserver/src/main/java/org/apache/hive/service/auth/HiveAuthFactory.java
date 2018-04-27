@@ -18,6 +18,8 @@
 package org.apache.hive.service.auth;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -92,7 +94,7 @@ public class HiveAuthFactory {
   public static final String HS2_PROXY_USER = "hive.server2.proxy.user";
   public static final String HS2_CLIENT_TOKEN = "hiveserver2ClientToken";
 
-  public HiveAuthFactory(HiveConf conf) throws TTransportException {
+  public HiveAuthFactory(HiveConf conf) throws TTransportException, IOException {
     this.conf = conf;
     transportMode = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TRANSPORT_MODE);
     authTypeStr = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_AUTHENTICATION);
@@ -107,9 +109,16 @@ public class HiveAuthFactory {
         authTypeStr = AuthTypes.NONE.getAuthName();
       }
       if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName())) {
-        saslServer = ShimLoader.getHadoopThriftAuthBridge()
-          .createServer(conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB),
-                        conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL));
+        String principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL);
+        String keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB);
+        if (needUgiLogin(UserGroupInformation.getCurrentUser(),
+          SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
+          saslServer = ShimLoader.getHadoopThriftAuthBridge().createServer(principal, keytab);
+        } else {
+          // Using the default constructor to avoid unnecessary UGI login.
+          saslServer = new HadoopThriftAuthBridge.Server();
+        }
+
         // start delegation token manager
         try {
           // rawStore is only necessary for DBTokenStore
@@ -359,6 +368,36 @@ public class HiveAuthFactory {
     } catch (IOException e) {
       throw new HiveSQLException(
         "Failed to validate proxy privilege of " + realUser + " for " + proxyUser, "08S01", e);
+    }
+  }
+
+  public static boolean needUgiLogin(UserGroupInformation ugi, String principal, String keytab) {
+    return null == ugi || !ugi.hasKerberosCredentials() || !ugi.getUserName().equals(principal) ||
+      !keytab.equals(getKeytabFromUgi());
+  }
+
+  private static String getKeytabFromUgi() {
+    Class<?> clz = UserGroupInformation.class;
+    try {
+      synchronized (clz) {
+        Field field = clz.getDeclaredField("keytabFile");
+        field.setAccessible(true);
+        return (String) field.get(null);
+      }
+    } catch (NoSuchFieldException e) {
+      try {
+        synchronized (clz) {
+          // In Hadoop 3 we don't have "keytabFile" field, instead we should use private method
+          // getKeytab().
+          Method method = clz.getDeclaredMethod("getKeytab");
+          method.setAccessible(true);
+          return (String) method.invoke(UserGroupInformation.getCurrentUser());
+        }
+      } catch (Throwable t) {
+        return null;
+      }
+    } catch (Throwable t) {
+      return null;
     }
   }
 
