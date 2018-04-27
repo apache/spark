@@ -99,7 +99,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
    * been processed.
    */
   object AddData {
-    def apply[A](source: MemoryStream[A], data: A*): AddDataMemory[A] =
+    def apply[A](source: MemoryStreamBase[A], data: A*): AddDataMemory[A] =
       AddDataMemory(source, data)
   }
 
@@ -131,7 +131,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     def runAction(): Unit
   }
 
-  case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends AddData {
+  case class AddDataMemory[A](source: MemoryStreamBase[A], data: Seq[A]) extends AddData {
     override def toString: String = s"AddData to $source: ${data.mkString(",")}"
 
     override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {

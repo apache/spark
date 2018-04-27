@@ -176,7 +176,8 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None, allowUnquotedControlChars=None, encoding=None, lineSep=None):
+             multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
+             encoding=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -242,6 +243,8 @@ class DataFrameReader(OptionUtils):
                          when the multiLine option is set to ``true``.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param samplingRatio: defines fraction of input JSON objects used for schema inferring.
+                              If None is set, it uses the default value, ``1.0``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -259,7 +262,8 @@ class DataFrameReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars, encoding=encoding, lineSep=lineSep)
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
+            samplingRatio=samplingRatio, encoding=encoding)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -752,7 +756,7 @@ class DataFrameWriter(OptionUtils):
 
     @since(1.4)
     def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None,
-             encoding=None, lineSep=None):
+             lineSep=None, encoding=None):
         """Saves the content of the :class:`DataFrame` in JSON format
         (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
         specified path.
@@ -786,7 +790,7 @@ class DataFrameWriter(OptionUtils):
         self.mode(mode)
         self._set_opts(
             compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
-            encoding=encoding, lineSep=lineSep)
+            lineSep=lineSep, encoding=encoding)
         self._jwrite.json(path)
 
     @since(1.4)

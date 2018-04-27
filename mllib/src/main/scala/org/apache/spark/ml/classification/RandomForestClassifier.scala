@@ -319,14 +319,14 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
         case (treeMetadata, root) =>
           val tree = new DecisionTreeClassificationModel(treeMetadata.uid,
             root.asInstanceOf[ClassificationNode], numFeatures, numClasses)
-          DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+          treeMetadata.getAndSetParams(tree)
           tree
       }
       require(numTrees == trees.length, s"RandomForestClassificationModel.load expected $numTrees" +
         s" trees based on metadata but found ${trees.length} trees.")
 
       val model = new RandomForestClassificationModel(metadata.uid, trees, numFeatures, numClasses)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

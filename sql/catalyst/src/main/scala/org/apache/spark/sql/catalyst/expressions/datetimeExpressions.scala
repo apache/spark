@@ -1156,38 +1156,49 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between `timestamp1` and `timestamp2`.",
+  usage = """
+    _FUNC_(timestamp1, timestamp2[, roundOff]) - Returns number of months between `timestamp1` and `timestamp2`.
+      The result is rounded to 8 decimal places by default. Set roundOff=false otherwise."""",
   examples = """
     Examples:
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
        3.94959677
+      > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30', false);
+       3.9495967741935485
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+case class MonthsBetween(
+    date1: Expression,
+    date2: Expression,
+    roundOff: Expression,
+    timeZoneId: Option[String] = None)
+  extends TernaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
-  def this(date1: Expression, date2: Expression) = this(date1, date2, None)
+  def this(date1: Expression, date2: Expression) = this(date1, date2, Literal.TrueLiteral, None)
 
-  override def left: Expression = date1
-  override def right: Expression = date2
+  def this(date1: Expression, date2: Expression, roundOff: Expression) =
+    this(date1, date2, roundOff, None)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
+  override def children: Seq[Expression] = Seq(date1, date2, roundOff)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType, BooleanType)
 
   override def dataType: DataType = DoubleType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(t1: Any, t2: Any): Any = {
-    DateTimeUtils.monthsBetween(t1.asInstanceOf[Long], t2.asInstanceOf[Long], timeZone)
+  override def nullSafeEval(t1: Any, t2: Any, roundOff: Any): Any = {
+    DateTimeUtils.monthsBetween(
+      t1.asInstanceOf[Long], t2.asInstanceOf[Long], roundOff.asInstanceOf[Boolean], timeZone)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (l, r) => {
-      s"""$dtu.monthsBetween($l, $r, $tz)"""
+    defineCodeGen(ctx, ev, (d1, d2, roundOff) => {
+      s"""$dtu.monthsBetween($d1, $d2, $roundOff, $tz)"""
     })
   }
 
