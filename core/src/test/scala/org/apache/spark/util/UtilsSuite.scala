@@ -1168,6 +1168,23 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
   }
+
+  test("Test that Utils.getSimpleName works as expected") {
+    val fullname1 = "org.apache.spark.TestClass$MyClass"
+    assert(Utils.getSimpleName(fullname1) === "TestClass$MyClass")
+
+    val fullname2 = "org.apache.spark.TestClass$MyClass$"
+    assert(Utils.getSimpleName(fullname2) === "TestClass$MyClass")
+
+    val fullname3 = "org.apache.spark.TestClass$MyClass$1$"
+    assert(Utils.getSimpleName(fullname3) === "TestClass$MyClass$1")
+
+    val fullname4 = "TestClass$MyClass$1$"
+    assert(Utils.getSimpleName(fullname4) === "TestClass$MyClass$1")
+
+    val fullname5 = "$iwC$iwC$$iwC$$iwC$TestClass$MyClass$"
+    assert(Utils.getSimpleName(fullname5) === "MyClass")
+  }
 }
 
 private class SimpleExtension

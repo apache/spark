@@ -2715,6 +2715,66 @@ private[spark] object Utils extends Logging {
     HashCodes.fromBytes(secretBytes).toString()
   }
 
+  /**
+   * A safer version than scala obj's getClass.getSimpleName and Utils.getFormattedClassName
+   * which may throw Malformed class name error.
+   * This method mimicks scalatest's getSimpleNameOfAnObjectsClass.
+   */
+  def getSimpleName(fullyQualifiedName: String): String = {
+    stripDollars(parseSimpleName(fullyQualifiedName))
+  }
+
+  /**
+   * Remove the packages from full qualified class name
+   */
+  private def parseSimpleName(fullyQualifiedName: String): String = {
+    // Find last dot position
+    val dotPos = fullyQualifiedName.lastIndexOf('.')
+    // Need to check the dotPos != fullyQualifiedName.length
+    if (dotPos != -1 && dotPos != fullyQualifiedName.length) {
+      fullyQualifiedName.substring(dotPos + 1)
+    } else {
+      fullyQualifiedName
+    }
+  }
+
+  /**
+   * Remove trailing dollar signs from qualified class name,
+   * and return the trailing part after the last dollar sign in the middle
+   */
+  private def stripDollars(s: String): String = {
+    val lastDollarIndex = s.lastIndexOf('$')
+    if (lastDollarIndex < s.length - 1) {
+      // The last char is not a dollar sign
+      if (lastDollarIndex == -1 || !s.contains("$iw")) {
+        // The name does not have dollar sign or is not an intepreter
+        // generated class, so we should return the full string
+        s
+      } else {
+        // The class name is intepreter generated,
+        // return the part after the last dollar sign
+        // This is the same behavior as getClass.getSimpleName
+        s.substring(lastDollarIndex + 1)
+      }
+    }
+    else {
+      // The last char is a dollar sign
+      // Find last non-dollar char
+      val lastNonDollarChar = s.reverse.find(_ != '$')
+      lastNonDollarChar match {
+        case None => s
+        case Some(c) =>
+          val lastNonDollarIndex = s.lastIndexOf(c)
+          if (lastNonDollarIndex == -1) {
+            s
+          } else {
+            // Strip the trailing dollar signs
+            // Invoke stripDollars again to get the simple name
+            stripDollars(s.substring(0, lastNonDollarIndex + 1))
+          }
+      }
+    }
+  }
 }
 
 private[util] object CallerContext extends Logging {
