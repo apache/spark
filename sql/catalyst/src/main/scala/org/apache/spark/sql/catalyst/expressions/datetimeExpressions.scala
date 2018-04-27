@@ -1029,11 +1029,12 @@ case class StringToTimestampWithoutTimezone(child: Expression, timeZoneId: Optio
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
   override def dataType: DataType = TimestampType
   override def nullable: Boolean = true
-  override def prettyName: String = "string_to_timestamp"
+  override def toString: String = child.toString
+  override def sql: String = child.sql
 
   override def nullSafeEval(input: Any): Any = {
     DateTimeUtils.stringToTimestamp(
-      input.asInstanceOf[UTF8String], timeZone, forceTimezone = true).orNull
+      input.asInstanceOf[UTF8String], timeZone, rejectTzInString = true).orNull
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1073,7 +1074,7 @@ case class StringToTimestampWithoutTimezone(child: Expression, timeZoneId: Optio
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
@@ -1262,7 +1263,7 @@ case class MonthsBetween(
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType

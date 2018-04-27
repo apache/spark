@@ -296,11 +296,11 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
   def stringToTimestamp(s: UTF8String): Option[SQLTimestamp] = {
-    stringToTimestamp(s, defaultTimeZone(), forceTimezone = false)
+    stringToTimestamp(s, defaultTimeZone(), rejectTzInString = false)
   }
 
   def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
-    stringToTimestamp(s, timeZone, forceTimezone = false)
+    stringToTimestamp(s, timeZone, rejectTzInString = false)
   }
 
   /**
@@ -310,13 +310,14 @@ object DateTimeUtils {
    * @param s the input timestamp string.
    * @param timeZone the timezone of the timestamp string, will be ignored if the timestamp string
    *                 already contains timezone information and `forceTimezone` is false.
-   * @param forceTimezone if true, force to apply the given timezone to the timestamp string. If the
-   *                      timestamp string already contains timezone, return None.
+   * @param rejectTzInString if true, rejects timezone in the input string, i.e., if the
+   *                         timestamp string contains timezone, like `2000-10-10 00:00:00+00:00`,
+   *                         return None.
    */
   def stringToTimestamp(
       s: UTF8String,
       timeZone: TimeZone,
-      forceTimezone: Boolean): Option[SQLTimestamp] = {
+      rejectTzInString: Boolean): Option[SQLTimestamp] = {
     if (s == null) {
       return None
     }
@@ -434,7 +435,7 @@ object DateTimeUtils {
       return None
     }
 
-    if (tz.isDefined && forceTimezone) return None
+    if (tz.isDefined && rejectTzInString) return None
 
     val c = if (tz.isEmpty) {
       Calendar.getInstance(timeZone)

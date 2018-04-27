@@ -59,7 +59,7 @@ object TypeCoercion {
       IfCoercion ::
       StackCoercion ::
       Division ::
-      ImplicitTypeCasts ::
+      new ImplicitTypeCasts(conf) ::
       DateTimeOperations ::
       WindowFrameCoercion ::
       Nil
@@ -776,27 +776,32 @@ object TypeCoercion {
   /**
    * Casts types according to the expected input types for [[Expression]]s.
    */
-  object ImplicitTypeCasts extends TypeCoercionRule {
+  class ImplicitTypeCasts(conf: SQLConf) extends TypeCoercionRule {
+
+    private def rejectTzInString = conf.getConf(SQLConf.REJECT_TIMEZONE_IN_STRING)
+
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      // Special rules for `to/from_utc_timestamp`. `to/from_utc_timestamp` assumes its input is
-      // in UTC timezone, and if input is string, it should not contain timezone.
+      // Special rules for `from/to_utc_timestamp`. These 2 functions assume the input timestamp
+      // string is in a specific timezone, so the string itself should not contain timezone.
       // TODO: We should move the type coercion logic to expressions instead of a central
       // place to put all the rules.
       case e: FromUTCTimestamp if e.left.dataType == StringType =>
-        e.copy(left = StringToTimestampWithoutTimezone(e.left))
-
-      case e: FromUTCTimestamp if e.left.dataType == DateType =>
-        e.copy(left = Cast(e.left, TimestampType))
+        if (rejectTzInString) {
+          e.copy(left = StringToTimestampWithoutTimezone(e.left))
+        } else {
+          e.copy(left = Cast(e.left, TimestampType))
+        }
 
       case e: ToUTCTimestamp if e.left.dataType == StringType =>
-        e.copy(left = StringToTimestampWithoutTimezone(e.left))
-
-      case e: ToUTCTimestamp if e.left.dataType == DateType =>
-        e.copy(left = Cast(e.left, TimestampType))
+        if (rejectTzInString) {
+          e.copy(left = StringToTimestampWithoutTimezone(e.left))
+        } else {
+          e.copy(left = Cast(e.left, TimestampType))
+        }
 
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
@@ -814,7 +819,7 @@ object TypeCoercion {
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
-          implicitCast(in, expected).getOrElse(in)
+          ImplicitTypeCasts.implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
@@ -830,6 +835,9 @@ object TypeCoercion {
         }
         e.withNewChildren(children)
     }
+  }
+
+  object ImplicitTypeCasts {
 
     /**
      * Given an expected data type, try to cast the expression and return the cast expression.
