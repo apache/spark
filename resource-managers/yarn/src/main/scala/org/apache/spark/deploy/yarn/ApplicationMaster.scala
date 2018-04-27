@@ -675,8 +675,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     val userThread = new Thread {
       override def run() {
         try {
-          if(!Modifier.isStatic(mainMethod.getModifiers)) {
-            logError(s"Could not find main method in object ${args.userClass}")
+          if (!Modifier.isStatic(mainMethod.getModifiers)) {
+            logError(s"Could not find static main method in object ${args.userClass}")
             finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_EXCEPTION_USER_CLASS)
           } else {
             mainMethod.invoke(null, userArgs.toArray)
