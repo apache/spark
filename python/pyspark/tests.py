@@ -203,12 +203,33 @@ class SorterTests(unittest.TestCase):
         sc.stop()
 
 
+# Used by ``SerializationTestCase.test_importable_namedtuple``
+from collections import namedtuple
+assert namedtuple.__hijack
+P = namedtuple("P", "x y")
+
+
 class SerializationTestCase(unittest.TestCase):
 
-    def test_namedtuple(self):
+    def test_non_importable_namedtuple(self):
         from collections import namedtuple
         from pickle import dumps, loads
-        P = namedtuple("P", "x y")
+        LocalP = namedtuple("LocalP", "x y")
+        assert "__reduce__" in vars(LocalP)
+        assert LocalP.__module__ == __name__
+        p1 = LocalP(1, 3)
+        p2 = loads(dumps(p1, 2))
+        self.assertEqual(p1, p2)
+
+        from pyspark.cloudpickle import dumps
+        LocalP2 = loads(dumps(LocalP))
+        p3 = LocalP2(1, 3)
+        self.assertEqual(p1, p3)
+
+    def test_importable_namedtuple(self):
+        from pickle import dumps, loads
+        assert "__reduce__" not in vars(P)
+        assert P.__module__ == __name__
         p1 = P(1, 3)
         p2 = loads(dumps(p1, 2))
         self.assertEqual(p1, p2)
