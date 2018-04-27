@@ -512,7 +512,7 @@ examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
        [[1 -> "a"], [2 -> "c"], [3 -> "d"]
-  """)
+  """, since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
