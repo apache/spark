@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
-import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.{InvocationTargetException, Modifier}
 import java.net.{Socket, URI, URL}
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
