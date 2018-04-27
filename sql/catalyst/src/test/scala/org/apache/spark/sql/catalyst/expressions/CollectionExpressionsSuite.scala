@@ -136,7 +136,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq(null), ArrayType(IntegerType)),
       Literal.create(Seq(null), ArrayType(IntegerType))), null)
   }
-  
+
   test("ArrayJoin") {
     def testArrays(
         arrays: Seq[Expression],
