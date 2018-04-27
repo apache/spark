@@ -137,6 +137,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       null)
     checkEvaluation(MapConcat(Seq(mNull, mNull)),
       null)
+    checkEvaluation(MapConcat(Seq(mNull)),
+      null)
 
     // single map
     checkEvaluation(MapConcat(Seq(m0)),
