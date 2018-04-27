@@ -1088,16 +1088,20 @@ def add_months(start, months):
 
 
 @since(1.5)
-def months_between(date1, date2):
+def months_between(date1, date2, roundOff=True):
     """
     Returns the number of months between date1 and date2.
+    Unless `roundOff` is set to `False`, the result is rounded off to 8 digits.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['date1', 'date2'])
     >>> df.select(months_between(df.date1, df.date2).alias('months')).collect()
-    [Row(months=3.9495967...)]
+    [Row(months=3.94959677)]
+    >>> df.select(months_between(df.date1, df.date2, False).alias('months')).collect()
+    [Row(months=3.9495967741935485)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.months_between(_to_java_column(date1), _to_java_column(date2)))
+    return Column(sc._jvm.functions.months_between(
+        _to_java_column(date1), _to_java_column(date2), roundOff))
 
 
 @since(2.2)
@@ -1843,6 +1847,27 @@ def slice(x, start, length):
     return Column(sc._jvm.functions.slice(_to_java_column(x), start, length))
 
 
+@ignore_unicode_prefix
+@since(2.4)
+def array_join(col, delimiter, null_replacement=None):
+    """
+    Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
+    `null_replacement` if set, otherwise they are ignored.
+
+    >>> df = spark.createDataFrame([(["a", "b", "c"],), (["a", None],)], ['data'])
+    >>> df.select(array_join(df.data, ",").alias("joined")).collect()
+    [Row(joined=u'a,b,c'), Row(joined=u'a')]
+    >>> df.select(array_join(df.data, ",", "NULL").alias("joined")).collect()
+    [Row(joined=u'a,b,c'), Row(joined=u'a,NULL')]
+    """
+    sc = SparkContext._active_spark_context
+    if null_replacement is None:
+        return Column(sc._jvm.functions.array_join(_to_java_column(col), delimiter))
+    else:
+        return Column(sc._jvm.functions.array_join(
+            _to_java_column(col), delimiter, null_replacement))
+
+
 @since(1.5)
 @ignore_unicode_prefix
 def concat(*cols):
@@ -2202,6 +2227,23 @@ def reverse(col):
      """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.reverse(_to_java_column(col)))
+
+
+@since(2.4)
+def flatten(col):
+    """
+    Collection function: creates a single array from an array of arrays.
+    If a structure of nested arrays is deeper than two levels,
+    only one level of nesting is removed.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([[1, 2, 3], [4, 5], [6]],), ([None, [4, 5]],)], ['data'])
+    >>> df.select(flatten(df.data).alias('r')).collect()
+    [Row(r=[1, 2, 3, 4, 5, 6]), Row(r=None)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.flatten(_to_java_column(col)))
 
 
 @since(2.3)

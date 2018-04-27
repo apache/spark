@@ -238,7 +238,7 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
       val model = new BucketedRandomProjectionLSHModel(metadata.uid,
         randUnitVectors.rowIter.toArray)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

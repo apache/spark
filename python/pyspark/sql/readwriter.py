@@ -176,7 +176,7 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None, allowUnquotedControlChars=None, lineSep=None):
+             multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -239,6 +239,8 @@ class DataFrameReader(OptionUtils):
                                           including tab and line feed characters) or not.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param samplingRatio: defines fraction of input JSON objects used for schema inferring.
+                              If None is set, it uses the default value, ``1.0``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -256,7 +258,8 @@ class DataFrameReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep)
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
+            samplingRatio=samplingRatio)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:

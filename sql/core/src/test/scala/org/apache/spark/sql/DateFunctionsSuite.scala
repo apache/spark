@@ -327,6 +327,13 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq((t1, d1, s1), (t2, d2, s2)).toDF("t", "d", "s")
     checkAnswer(df.select(months_between(col("t"), col("d"))), Seq(Row(-10.0), Row(7.0)))
     checkAnswer(df.selectExpr("months_between(t, s)"), Seq(Row(0.5), Row(-0.5)))
+    checkAnswer(df.selectExpr("months_between(t, s, true)"), Seq(Row(0.5), Row(-0.5)))
+    Seq(true, false).foreach { roundOff =>
+      checkAnswer(df.select(months_between(col("t"), col("d"), roundOff)),
+        Seq(Row(-10.0), Row(7.0)))
+      checkAnswer(df.withColumn("r", lit(false)).selectExpr("months_between(t, s, r)"),
+        Seq(Row(0.5), Row(-0.5)))
+    }
   }
 
   test("function last_day") {

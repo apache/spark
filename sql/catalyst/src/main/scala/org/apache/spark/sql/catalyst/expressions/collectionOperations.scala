@@ -459,11 +459,11 @@ case class Slice(x: Expression, start: Expression, length: Expression)
   }
 
   def genCodeForResult(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      inputArray: String,
-      startIdx: String,
-      resLength: String): String = {
+                        ctx: CodegenContext,
+                        ev: ExprCode,
+                        inputArray: String,
+                        startIdx: String,
+                        resLength: String): String = {
     val values = ctx.freshName("values")
     val i = ctx.freshName("i")
     val getValue = CodeGenerator.getValue(inputArray, elementType, s"$i + $startIdx")
@@ -508,6 +508,175 @@ case class Slice(x: Expression, start: Expression, length: Expression)
        """.stripMargin
     }
   }
+}
+
+/**
+ * Creates a String containing all the elements of the input array separated by the delimiter.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, delimiter[, nullReplacement]) - Concatenates the elements of the given array
+      using the delimiter and an optional string to replace nulls. If no value is set for
+      nullReplacement, any null value is filtered.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('hello', 'world'), ' ');
+       hello world
+      > SELECT _FUNC_(array('hello', null ,'world'), ' ');
+       hello world
+      > SELECT _FUNC_(array('hello', null ,'world'), ' ', ',');
+       hello , world
+  """, since = "2.4.0")
+case class ArrayJoin(
+    array: Expression,
+    delimiter: Expression,
+    nullReplacement: Option[Expression]) extends Expression with ExpectsInputTypes {
+
+  def this(array: Expression, delimiter: Expression) = this(array, delimiter, None)
+
+  def this(array: Expression, delimiter: Expression, nullReplacement: Expression) =
+    this(array, delimiter, Some(nullReplacement))
+
+  override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
+    Seq(ArrayType(StringType), StringType, StringType)
+  } else {
+    Seq(ArrayType(StringType), StringType)
+  }
+
+  override def children: Seq[Expression] = if (nullReplacement.isDefined) {
+    Seq(array, delimiter, nullReplacement.get)
+  } else {
+    Seq(array, delimiter)
+  }
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    val arrayEval = array.eval(input)
+    if (arrayEval == null) return null
+    val delimiterEval = delimiter.eval(input)
+    if (delimiterEval == null) return null
+    val nullReplacementEval = nullReplacement.map(_.eval(input))
+    if (nullReplacementEval.contains(null)) return null
+
+    val buffer = new UTF8StringBuilder()
+    var firstItem = true
+    val nullHandling = nullReplacementEval match {
+      case Some(rep) => (prependDelimiter: Boolean) => {
+        if (!prependDelimiter) {
+          buffer.append(delimiterEval.asInstanceOf[UTF8String])
+        }
+        buffer.append(rep.asInstanceOf[UTF8String])
+        true
+      }
+      case None => (_: Boolean) => false
+    }
+    arrayEval.asInstanceOf[ArrayData].foreach(StringType, (_, item) => {
+      if (item == null) {
+        if (nullHandling(firstItem)) {
+          firstItem = false
+        }
+      } else {
+        if (!firstItem) {
+          buffer.append(delimiterEval.asInstanceOf[UTF8String])
+        }
+        buffer.append(item.asInstanceOf[UTF8String])
+        firstItem = false
+      }
+    })
+    buffer.build()
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val code = nullReplacement match {
+      case Some(replacement) =>
+        val replacementGen = replacement.genCode(ctx)
+        val nullHandling = (buffer: String, delimiter: String, firstItem: String) => {
+          s"""
+             |if (!$firstItem) {
+             |  $buffer.append($delimiter);
+             |}
+             |$buffer.append(${replacementGen.value});
+             |$firstItem = false;
+           """.stripMargin
+        }
+        val execCode = if (replacement.nullable) {
+          ctx.nullSafeExec(replacement.nullable, replacementGen.isNull) {
+            genCodeForArrayAndDelimiter(ctx, ev, nullHandling)
+          }
+        } else {
+          genCodeForArrayAndDelimiter(ctx, ev, nullHandling)
+        }
+        s"""
+           |${replacementGen.code}
+           |$execCode
+         """.stripMargin
+      case None => genCodeForArrayAndDelimiter(ctx, ev,
+        (_: String, _: String, _: String) => "// nulls are ignored")
+    }
+    if (nullable) {
+      ev.copy(
+        s"""
+           |boolean ${ev.isNull} = true;
+           |UTF8String ${ev.value} = null;
+           |$code
+         """.stripMargin)
+    } else {
+      ev.copy(
+        s"""
+           |UTF8String ${ev.value} = null;
+           |$code
+         """.stripMargin, FalseLiteral)
+    }
+  }
+
+  private def genCodeForArrayAndDelimiter(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      nullEval: (String, String, String) => String): String = {
+    val arrayGen = array.genCode(ctx)
+    val delimiterGen = delimiter.genCode(ctx)
+    val buffer = ctx.freshName("buffer")
+    val bufferClass = classOf[UTF8StringBuilder].getName
+    val i = ctx.freshName("i")
+    val firstItem = ctx.freshName("firstItem")
+    val resultCode =
+      s"""
+         |$bufferClass $buffer = new $bufferClass();
+         |boolean $firstItem = true;
+         |for (int $i = 0; $i < ${arrayGen.value}.numElements(); $i ++) {
+         |  if (${arrayGen.value}.isNullAt($i)) {
+         |    ${nullEval(buffer, delimiterGen.value, firstItem)}
+         |  } else {
+         |    if (!$firstItem) {
+         |      $buffer.append(${delimiterGen.value});
+         |    }
+         |    $buffer.append(${CodeGenerator.getValue(arrayGen.value, StringType, i)});
+         |    $firstItem = false;
+         |  }
+         |}
+         |${ev.value} = $buffer.build();""".stripMargin
+
+    if (array.nullable || delimiter.nullable) {
+      arrayGen.code + ctx.nullSafeExec(array.nullable, arrayGen.isNull) {
+        delimiterGen.code + ctx.nullSafeExec(delimiter.nullable, delimiterGen.isNull) {
+          s"""
+             |${ev.isNull} = false;
+             |$resultCode""".stripMargin
+        }
+      }
+    } else {
+      s"""
+         |${arrayGen.code}
+         |${delimiterGen.code}
+         |$resultCode""".stripMargin
+    }
+  }
+
+  override def dataType: DataType = StringType
+
 }
 
 /**
@@ -1014,4 +1183,180 @@ case class Concat(children: Seq[Expression]) extends Expression {
   override def toString: String = s"concat(${children.mkString(", ")})"
 
   override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
+}
+
+/**
+ * Transforms an array of arrays into a single array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(arrayOfArrays) - Transforms an array of arrays into a single array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(array(1, 2), array(3, 4));
+       [1,2,3,4]
+  """,
+  since = "2.4.0")
+case class Flatten(child: Expression) extends UnaryExpression {
+
+  private val MAX_ARRAY_LENGTH = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+
+  private lazy val childDataType: ArrayType = child.dataType.asInstanceOf[ArrayType]
+
+  override def nullable: Boolean = child.nullable || childDataType.containsNull
+
+  override def dataType: DataType = childDataType.elementType
+
+  lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(_: ArrayType, _) =>
+      TypeCheckResult.TypeCheckSuccess
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(
+        s"The argument should be an array of arrays, " +
+        s"but '${child.sql}' is of ${child.dataType.simpleString} type."
+      )
+  }
+
+  override def nullSafeEval(child: Any): Any = {
+    val elements = child.asInstanceOf[ArrayData].toObjectArray(dataType)
+
+    if (elements.contains(null)) {
+      null
+    } else {
+      val arrayData = elements.map(_.asInstanceOf[ArrayData])
+      val numberOfElements = arrayData.foldLeft(0L)((sum, e) => sum + e.numElements())
+      if (numberOfElements > MAX_ARRAY_LENGTH) {
+        throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
+          s"$numberOfElements elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.")
+      }
+      val flattenedData = new Array(numberOfElements.toInt)
+      var position = 0
+      for (ad <- arrayData) {
+        val arr = ad.toObjectArray(elementType)
+        Array.copy(arr, 0, flattenedData, position, arr.length)
+        position += arr.length
+      }
+      new GenericArrayData(flattenedData)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val code = if (CodeGenerator.isPrimitiveType(elementType)) {
+        genCodeForFlattenOfPrimitiveElements(ctx, c, ev.value)
+      } else {
+        genCodeForFlattenOfNonPrimitiveElements(ctx, c, ev.value)
+      }
+      if (childDataType.containsNull) nullElementsProtection(ev, c, code) else code
+    })
+  }
+
+  private def nullElementsProtection(
+      ev: ExprCode,
+      childVariableName: String,
+      coreLogic: String): String = {
+    s"""
+    |for (int z = 0; !${ev.isNull} && z < $childVariableName.numElements(); z++) {
+    |  ${ev.isNull} |= $childVariableName.isNullAt(z);
+    |}
+    |if (!${ev.isNull}) {
+    |  $coreLogic
+    |}
+    """.stripMargin
+  }
+
+  private def genCodeForNumberOfElements(
+      ctx: CodegenContext,
+      childVariableName: String) : (String, String) = {
+    val variableName = ctx.freshName("numElements")
+    val code = s"""
+      |long $variableName = 0;
+      |for (int z = 0; z < $childVariableName.numElements(); z++) {
+      |  $variableName += $childVariableName.getArray(z).numElements();
+      |}
+      |if ($variableName > $MAX_ARRAY_LENGTH) {
+      |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
+      |    $variableName + " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+      |}
+      """.stripMargin
+    (code, variableName)
+  }
+
+  private def genCodeForFlattenOfPrimitiveElements(
+      ctx: CodegenContext,
+      childVariableName: String,
+      arrayDataName: String): String = {
+    val arrayName = ctx.freshName("array")
+    val arraySizeName = ctx.freshName("size")
+    val counter = ctx.freshName("counter")
+    val tempArrayDataName = ctx.freshName("tempArrayData")
+
+    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
+
+    val unsafeArraySizeInBytes = s"""
+      |long $arraySizeName = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
+      |  $numElemName,
+      |  ${elementType.defaultSize});
+      |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
+      |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
+      |    $arraySizeName + " bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH" +
+      |    " bytes for UnsafeArrayData.");
+      |}
+      """.stripMargin
+    val baseOffset = Platform.BYTE_ARRAY_OFFSET
+
+    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+
+    s"""
+    |$numElemCode
+    |$unsafeArraySizeInBytes
+    |byte[] $arrayName = new byte[(int)$arraySizeName];
+    |UnsafeArrayData $tempArrayDataName = new UnsafeArrayData();
+    |Platform.putLong($arrayName, $baseOffset, $numElemName);
+    |$tempArrayDataName.pointTo($arrayName, $baseOffset, (int)$arraySizeName);
+    |int $counter = 0;
+    |for (int k = 0; k < $childVariableName.numElements(); k++) {
+    |  ArrayData arr = $childVariableName.getArray(k);
+    |  for (int l = 0; l < arr.numElements(); l++) {
+    |   if (arr.isNullAt(l)) {
+    |     $tempArrayDataName.setNullAt($counter);
+    |   } else {
+    |     $tempArrayDataName.set$primitiveValueTypeName(
+    |       $counter,
+    |       ${CodeGenerator.getValue("arr", elementType, "l")}
+    |     );
+    |   }
+    |   $counter++;
+    | }
+    |}
+    |$arrayDataName = $tempArrayDataName;
+    """.stripMargin
+  }
+
+  private def genCodeForFlattenOfNonPrimitiveElements(
+      ctx: CodegenContext,
+      childVariableName: String,
+      arrayDataName: String): String = {
+    val genericArrayClass = classOf[GenericArrayData].getName
+    val arrayName = ctx.freshName("arrayObject")
+    val counter = ctx.freshName("counter")
+    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
+
+    s"""
+    |$numElemCode
+    |Object[] $arrayName = new Object[(int)$numElemName];
+    |int $counter = 0;
+    |for (int k = 0; k < $childVariableName.numElements(); k++) {
+    |  ArrayData arr = $childVariableName.getArray(k);
+    |  for (int l = 0; l < arr.numElements(); l++) {
+    |    $arrayName[$counter] = ${CodeGenerator.getValue("arr", elementType, "l")};
+    |    $counter++;
+    |  }
+    |}
+    |$arrayDataName = new $genericArrayClass($arrayName);
+    """.stripMargin
+  }
+
+  override def prettyName: String = "flatten"
 }
