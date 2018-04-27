@@ -22,11 +22,13 @@ import logging
 from optparse import OptionParser
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 from threading import Thread, Lock
 import time
+import uuid
 if sys.version < '3':
     import Queue
 else:
@@ -77,6 +79,25 @@ def run_individual_python_test(test_name, pyspark_python):
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
     })
+
+    # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
+    # recognized by the tempfile module to override the default system temp directory.
+    target_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'target'))
+    if not os.path.isdir(target_dir):
+        os.mkdir(target_dir)
+    tmp_dir = os.path.join(target_dir, str(uuid.uuid4()))
+    if not os.path.isdir(tmp_dir):
+        os.mkdir(tmp_dir)
+    env["TMPDIR"] = tmp_dir
+
+    # Also override the JVM's temp directory by setting driver and executor options.
+    spark_args = [
+        "--conf", "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        "pyspark-shell"
+    ]
+    env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
+
     LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
@@ -84,6 +105,7 @@ def run_individual_python_test(test_name, pyspark_python):
         retcode = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
+        shutil.rmtree(tmp_dir, ignore_errors=True)
     except:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
