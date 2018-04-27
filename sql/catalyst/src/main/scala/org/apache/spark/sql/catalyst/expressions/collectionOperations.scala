@@ -46,7 +46,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
   override def checkInputDataTypes(): TypeCheckResult = {
     TypeCoercion.findWiderTypeForTwo(left.dataType, right.dataType) match {
       case Some(ArrayType(_, _)) => TypeCheckResult.TypeCheckSuccess
-      case None => TypeCheckResult.TypeCheckFailure(s"input to function $prettyName should have " +
+      case _ => TypeCheckResult.TypeCheckFailure(s"input to function $prettyName should have " +
         s"been two ${ArrayType.simpleString}s with same element type, but it's " +
         s"[${left.dataType.simpleString}, ${right.dataType.simpleString}]")
     }
