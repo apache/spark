@@ -308,7 +308,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         logError("Uncaught exception: ", e)
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-          "Uncaught exception: " + e)
+          "Uncaught exception: " + StringUtils.stringifyException(e))
     }
   }
 
