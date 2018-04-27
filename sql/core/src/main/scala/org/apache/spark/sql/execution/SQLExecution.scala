@@ -88,7 +88,7 @@ object SQLExecution {
   /**
    * Wrap an action with a known executionId. When running a different action in a different
    * thread from the original one, this method can be used to connect the Spark jobs in this action
-   * with the known executionId, e.g., `BroadcastHashJoin.broadcastFuture`.
+   * with the known executionId, e.g., `BroadcastExchangeExec.relationFuture`.
    */
   def withExecutionId[T](sc: SparkContext, executionId: String)(body: => T): T = {
     val oldExecutionId = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)

@@ -141,28 +141,29 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
 
   def toArray[T: ClassTag](elementType: DataType): Array[T] = {
     val size = numElements()
+    val accessor = InternalRow.getAccessor(elementType)
     val values = new Array[T](size)
     var i = 0
     while (i < size) {
       if (isNullAt(i)) {
         values(i) = null.asInstanceOf[T]
       } else {
-        values(i) = get(i, elementType).asInstanceOf[T]
+        values(i) = accessor(this, i).asInstanceOf[T]
       }
       i += 1
     }
     values
   }
 
-  // todo: specialize this.
   def foreach(elementType: DataType, f: (Int, Any) => Unit): Unit = {
     val size = numElements()
+    val accessor = InternalRow.getAccessor(elementType)
     var i = 0
     while (i < size) {
       if (isNullAt(i)) {
         f(i, null)
       } else {
-        f(i, get(i, elementType))
+        f(i, accessor(this, i))
       }
       i += 1
     }

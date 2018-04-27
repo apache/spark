@@ -3018,6 +3018,14 @@ class SQLTests(ReusedSQLTestCase):
             df.select(df.name).orderBy(functions.desc_nulls_last('name')).collect(),
             [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)])
 
+    def test_json_sampling_ratio(self):
+        rdd = self.spark.sparkContext.range(0, 100, 1, 1) \
+            .map(lambda x: '{"a":0.1}' if x == 1 else '{"a":%s}' % str(x))
+        schema = self.spark.read.option('inferSchema', True) \
+            .option('samplingRatio', 0.5) \
+            .json(rdd).schema
+        self.assertEquals(schema, StructType([StructField("a", LongType(), True)]))
+
     def test_checking_csv_header(self):
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
@@ -3104,23 +3112,28 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
         filename_pattern = (
             "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
             "TestQueryExecutionListener.class")
-        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
-            raise unittest.SkipTest(
+        cls.has_listener = bool(glob.glob(os.path.join(SPARK_HOME, filename_pattern)))
+
+        if cls.has_listener:
+            # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
+            cls.spark = SparkSession.builder \
+                .master("local[4]") \
+                .appName(cls.__name__) \
+                .config(
+                    "spark.sql.queryExecutionListeners",
+                    "org.apache.spark.sql.TestQueryExecutionListener") \
+                .getOrCreate()
+
+    def setUp(self):
+        if not self.has_listener:
+            raise self.skipTest(
                 "'org.apache.spark.sql.TestQueryExecutionListener' is not "
                 "available. Will skip the related tests.")
 
-        # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
-        cls.spark = SparkSession.builder \
-            .master("local[4]") \
-            .appName(cls.__name__) \
-            .config(
-                "spark.sql.queryExecutionListeners",
-                "org.apache.spark.sql.TestQueryExecutionListener") \
-            .getOrCreate()
-
     @classmethod
     def tearDownClass(cls):
-        cls.spark.stop()
+        if hasattr(cls, "spark"):
+            cls.spark.stop()
 
     def tearDown(self):
         self.spark._jvm.OnSuccessCall.clear()
@@ -3204,18 +3217,22 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
     def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        cls.hive_available = True
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
-            cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         except TypeError:
-            cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         os.unlink(cls.tempdir.name)
-        cls.spark = HiveContext._createForTesting(cls.sc)
-        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        cls.df = cls.sc.parallelize(cls.testData).toDF()
+        if cls.hive_available:
+            cls.spark = HiveContext._createForTesting(cls.sc)
+            cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+            cls.df = cls.sc.parallelize(cls.testData).toDF()
+
+    def setUp(self):
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     @classmethod
     def tearDownClass(cls):
@@ -5324,6 +5341,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 if __name__ == "__main__":
     from pyspark.sql.tests import *
     if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
     else:
-        unittest.main()
+        unittest.main(verbosity=2)

@@ -205,7 +205,7 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
         .map(tuple => (tuple(0), tuple(1))).toArray
       val model = new MinHashLSHModel(metadata.uid, randCoefficients)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
