@@ -279,7 +279,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       val root = loadTreeNodes(path, metadata, sparkSession, isClassification = true)
       val model = new DecisionTreeClassificationModel(metadata.uid,
         root.asInstanceOf[ClassificationNode], numFeatures, numClasses)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

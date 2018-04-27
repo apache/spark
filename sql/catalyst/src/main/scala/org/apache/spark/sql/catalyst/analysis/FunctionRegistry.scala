@@ -402,6 +402,7 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
     expression[ArraysOverlap]("arrays_overlap"),
+    expression[ArrayJoin]("array_join"),
     expression[ArrayPosition]("array_position"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
@@ -414,6 +415,7 @@ object FunctionRegistry {
     expression[ArrayMax]("array_max"),
     expression[Reverse]("reverse"),
     expression[Concat]("concat"),
+    expression[Flatten]("flatten"),
     CreateStruct.registryEntry,
 
     // misc functions

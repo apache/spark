@@ -311,7 +311,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
         case (treeMetadata, root) =>
           val tree = new DecisionTreeRegressionModel(treeMetadata.uid,
             root.asInstanceOf[RegressionNode], numFeatures)
-          DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+          treeMetadata.getAndSetParams(tree)
           tree
       }
 
@@ -319,7 +319,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
         s" trees based on metadata but found ${trees.length} trees.")
 
       val model = new GBTRegressionModel(metadata.uid, trees, treeWeights, numFeatures)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
