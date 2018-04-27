@@ -99,13 +99,15 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapEntries(ms2), null)
 
   test("Map Concat") {
-    val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
-    val m1 = Literal.create(Map("c" -> "3", "a" -> "4"), MapType(StringType, StringType))
+    val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType,
+      valueContainsNull = false))
+    val m1 = Literal.create(Map("c" -> "3", "a" -> "4"), MapType(StringType, StringType,
+      valueContainsNull = false))
     val m2 = Literal.create(Map("d" -> "4", "e" -> "5"), MapType(StringType, StringType))
-    val m3 = Literal.create(Map("a" -> "1", "b" -> null), MapType(StringType, StringType))
-    val m4 = Literal.create(Map("a" -> null, "b" -> "2"), MapType(StringType, StringType))
-    val m5 = Literal.create(Map("a" -> 1, "b" -> null), MapType(StringType, IntegerType))
-    val m6 = Literal.create(Map("a" -> null, "b" -> 2), MapType(StringType, IntegerType))
+    val m3 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
+    val m4 = Literal.create(Map("a" -> null, "c" -> "3"), MapType(StringType, StringType))
+    val m5 = Literal.create(Map("a" -> 1, "b" -> 2), MapType(StringType, IntegerType))
+    val m6 = Literal.create(Map("a" -> null, "c" -> 3), MapType(StringType, IntegerType))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
     // overlapping maps
@@ -122,17 +124,39 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     // null reference values
     checkEvaluation(MapConcat(Seq(m3, m4)),
-      mutable.LinkedHashMap("a" -> null, "b" -> "2"))
+      mutable.LinkedHashMap("a" -> null, "b" -> "2", "c" -> "3"))
 
     // null primitive values
     checkEvaluation(MapConcat(Seq(m5, m6)),
-      mutable.LinkedHashMap("a" -> null, "b" -> 2))
+      mutable.LinkedHashMap("a" -> null, "b" -> 2, "c" -> 3))
 
     // null map
     checkEvaluation(MapConcat(Seq(m0, mNull)),
       null)
     checkEvaluation(MapConcat(Seq(mNull, m0)),
       null)
+    checkEvaluation(MapConcat(Seq(mNull, mNull)),
+      null)
+
+    // single map
+    checkEvaluation(MapConcat(Seq(m0)),
+      mutable.LinkedHashMap("a" -> "1", "b" -> "2"))
+
+    // no map
+    checkEvaluation(MapConcat(Seq()),
+      Map())
+
+      // argument checking
+    assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
+    assert(MapConcat(Seq(m5, m6)).checkInputDataTypes().isSuccess)
+    assert(MapConcat(Seq(m0, m5)).checkInputDataTypes().isFailure)
+    assert(MapConcat(Seq(m0, m1)).dataType.keyType == StringType)
+    assert(MapConcat(Seq(m0, m1)).dataType.valueType == StringType)
+    assert(MapConcat(Seq(m0, m1)).dataType.valueContainsNull == false)
+    assert(MapConcat(Seq(m5, m6)).dataType.keyType == StringType)
+    assert(MapConcat(Seq(m5, m6)).dataType.valueType == IntegerType)
+    assert(MapConcat(Seq(m5, m6)).dataType.valueContainsNull == true)
+    assert(MapConcat(Seq(m6, m5)).dataType.valueContainsNull == true)
   }
 
   test("MapFromEntries") {

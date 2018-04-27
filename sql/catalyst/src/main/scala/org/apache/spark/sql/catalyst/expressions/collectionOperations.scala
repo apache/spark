@@ -516,17 +516,16 @@ examples = """
 case class MapConcat(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    // this check currently does not allow valueContainsNull to vary,
-    // and unfortunately none of the MapType toString methods include
-    // valueContainsNull for the error message
-    if (children.size < 2) {
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName expects at least two input maps.")
-    } else if (children.exists(!_.dataType.isInstanceOf[MapType])) {
+    // check key types and value types separately to allow valueContainsNull to vary
+    if (children.exists(!_.dataType.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckFailure(
         s"The given input of function $prettyName should all be of type map, " +
           "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else if (children.map(_.dataType).distinct.length > 1) {
+    } else if (children.map(_.dataType.asInstanceOf[MapType].keyType).distinct.length > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"The given input maps of function $prettyName should all be the same type, " +
+          "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+    } else if (children.map(_.dataType.asInstanceOf[MapType].valueType).distinct.length > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The given input maps of function $prettyName should all be the same type, " +
           "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
@@ -536,8 +535,15 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
   }
 
   override def dataType: MapType = {
-    children.headOption.map(_.dataType.asInstanceOf[MapType])
-      .getOrElse(MapType(keyType = StringType, valueType = StringType))
+    MapType(
+      keyType = children.headOption
+        .map(_.dataType.asInstanceOf[MapType].keyType).getOrElse(StringType),
+      valueType = children.headOption
+        .map(_.dataType.asInstanceOf[MapType].valueType).getOrElse(StringType),
+      valueContainsNull = children.map { c =>
+        c.dataType.asInstanceOf[MapType]
+      }.exists(_.valueContainsNull)
+    )
   }
 
   override def nullable: Boolean = children.exists(_.nullable)
@@ -562,8 +568,8 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapCodes = children.map(c => c.genCode(ctx))
-    val keyType = children.head.dataType.asInstanceOf[MapType].keyType
-    val valueType = children.head.dataType.asInstanceOf[MapType].valueType
+    val keyType = dataType.keyType
+    val valueType = dataType.valueType
     val mapRefArrayName = ctx.freshName("mapRefArray")
     val unionMapName = ctx.freshName("union")
 
