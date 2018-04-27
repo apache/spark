@@ -2154,4 +2154,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-24085 scalar subquery in partitioning expression") {
+    Seq("orc", "parquet").foreach { format =>
+      Seq(true, false).foreach { isConverted =>
+        withSQLConf(
+          HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted",
+          "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTable(format) {
+            withTempPath { tempDir =>
+              sql(
+                s"""
+                  |CREATE TABLE ${format} (id_value string)
+                  |PARTITIONED BY (id_type string)
+                  |LOCATION '${tempDir.toURI}'
+                  |STORED AS ${format}
+                """.stripMargin)
+              sql(s"insert into $format values ('1','a')")
+              sql(s"insert into $format values ('2','a')")
+              sql(s"insert into $format values ('3','b')")
+              sql(s"insert into $format values ('4','b')")
+              checkAnswer(
+                sql(s"SELECT * FROM $format WHERE id_type = (SELECT 'b')"),
+                Row("3", "b") :: Row("4", "b") :: Nil)
+            }
+          }
+        }
+      }
+    }
+  }
+
 }
