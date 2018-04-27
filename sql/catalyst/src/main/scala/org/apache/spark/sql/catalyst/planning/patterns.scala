@@ -145,7 +145,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         // and which can be used for secondary sort optimizations.
         val rangePreds: mutable.Set[Expression] = mutable.Set.empty
         var rangeConditions: Seq[BinaryComparison] =
-          if (SQLConf.get.useSmjInnerRangeOptimization) {
+          if (SQLConf.get.useSmjInnerRangeOptimization && SQLConf.get.wholeStageEnabled) {
             otherPredicates.flatMap {
               case p@LessThan(l, r) => isValidRangeCondition(l, r, left, right, joinKeys) match {
                 case "asis" => rangePreds.add(p); Some(LessThan(l, r))
