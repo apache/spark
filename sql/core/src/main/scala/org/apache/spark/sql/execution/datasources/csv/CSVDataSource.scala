@@ -184,7 +184,8 @@ object TextInputCSVDataSource extends CSVDataSource {
         DataSource.apply(
           sparkSession,
           paths = paths,
-          className = classOf[TextFileFormat].getName
+          className = classOf[TextFileFormat].getName,
+          options = options.textOptions
         ).resolveRelation(checkFilesExist = false))
         .select("value").as[String](Encoders.STRING)
     } else {
@@ -248,7 +249,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
       options: CSVOptions): RDD[PortableDataStream] = {
     val paths = inputPaths.map(_.getPath)
     val name = paths.mkString(",")
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
+    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
+      options.textOptions))
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration
 

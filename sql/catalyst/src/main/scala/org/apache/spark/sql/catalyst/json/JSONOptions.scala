@@ -107,4 +107,6 @@ private[sql] class JSONOptions(
       allowBackslashEscapingAnyCharacter)
     factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
   }
+
+  val textOptions = parameters.originalMap
 }
