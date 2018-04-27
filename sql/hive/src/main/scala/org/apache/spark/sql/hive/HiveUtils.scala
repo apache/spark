@@ -104,6 +104,13 @@ private[spark] object HiveUtils extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val CONVERT_METASTORE_TABLE_PROPERTY =
+    buildConf("spark.sql.hive.convertMetastoreTableProperty")
+      .doc("When true, ORC/Parquet table properties are converted together while converting " +
+        "metastore tables")
+      .booleanConf
+      .createWithDefault(true)
+
   val CONVERT_METASTORE_ORC = buildConf("spark.sql.hive.convertMetastoreOrc")
     .internal()
     .doc("When set to true, the built-in ORC reader and writer are used to process " +

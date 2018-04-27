@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAl
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
-import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
+import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET, CONVERT_METASTORE_TABLE_PROPERTY}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -2157,7 +2157,10 @@ class HiveDDLSuite
 
   test("SPARK-23355 convertMetastoreOrc should not ignore table properties - STORED AS") {
     Seq("native", "hive").foreach { orcImpl =>
-      withSQLConf(ORC_IMPLEMENTATION.key -> orcImpl, CONVERT_METASTORE_ORC.key -> "true") {
+      withSQLConf(
+        ORC_IMPLEMENTATION.key -> orcImpl,
+        CONVERT_METASTORE_ORC.key -> "true",
+        CONVERT_METASTORE_TABLE_PROPERTY.key -> "true") {
         withTable("t") {
           withTempPath { path =>
             sql(
@@ -2197,7 +2200,9 @@ class HiveDDLSuite
   }
 
   test("SPARK-23355 convertMetastoreParquet should not ignore table properties - STORED AS") {
-    withSQLConf(CONVERT_METASTORE_PARQUET.key -> "true") {
+    withSQLConf(
+      CONVERT_METASTORE_PARQUET.key -> "true",
+      CONVERT_METASTORE_TABLE_PROPERTY.key -> "true") {
       withTable("t") {
         withTempPath { path =>
           sql(
@@ -2220,6 +2225,49 @@ class HiveDDLSuite
           val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
 
           assertCompression(maybeFile, "parquet", "GZIP")
+        }
+      }
+    }
+  }
+
+  test("Ignore ORC table properties for backward compatibility") {
+    Seq("native", "hive").foreach { orcImpl =>
+      withSQLConf(
+        ORC_IMPLEMENTATION.key -> orcImpl,
+        CONVERT_METASTORE_ORC.key -> "true",
+        CONVERT_METASTORE_TABLE_PROPERTY.key -> "false") {
+        withTable("t") {
+          withTempPath { path =>
+            sql(
+              s"""
+                |CREATE TABLE t(id int) STORED AS ORC
+                |TBLPROPERTIES (orc.compress 'NONE')
+                |LOCATION '${path.toURI}'
+              """.stripMargin)
+            sql("INSERT INTO t SELECT 1")
+            val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
+            assertCompression(maybeFile, "orc", "SNAPPY")
+          }
+        }
+      }
+    }
+  }
+
+  test("Ignore Parquet table properties for backward compatibility") {
+    withSQLConf(
+      CONVERT_METASTORE_PARQUET.key -> "true",
+      CONVERT_METASTORE_TABLE_PROPERTY.key -> "false") {
+      withTable("t") {
+        withTempPath { path =>
+          sql(
+            s"""
+              |CREATE TABLE t(id int) STORED AS PARQUET
+              |TBLPROPERTIES (parquet.compression 'NONE')
+              |LOCATION '${path.toURI}'
+            """.stripMargin)
+          sql("INSERT INTO t SELECT 1")
+          val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
+          assertCompression(maybeFile, "parquet", "SNAPPY")
         }
       }
     }
