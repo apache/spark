@@ -553,9 +553,8 @@ class DefaultParamsReader(MLReader):
                 "`defaultParamMap` section not found"
 
             for paramName in metadata['defaultParamMap']:
-                param = instance.getParam(paramName)
                 paramValue = metadata['defaultParamMap'][paramName]
-                instance._setDefault(**{param.name: paramValue})
+                instance._setDefault(**{paramName: paramValue})
 
     @staticmethod
     def loadParamsInstance(path, sc):
