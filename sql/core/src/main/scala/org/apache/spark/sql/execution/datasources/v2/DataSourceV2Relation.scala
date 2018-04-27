@@ -54,9 +54,12 @@ case class DataSourceV2Relation(
 
   private lazy val v2Options: DataSourceOptions = makeV2Options(options)
 
+  // postScanFilters: filters that need to be evaluated after the scan.
+  // pushedFilters: filters that will be pushed down and evaluated in the underlying data sources.
+  // Note: postScanFilters and pushedFilters can overlap, e.g. the parquet row group filter.
   lazy val (
       reader: DataSourceReader,
-      afterScanFilters: Seq[Expression],
+      postScanFilters: Seq[Expression],
       pushedFilters: Seq[Expression]) = {
     val newReader = userSpecifiedSchema match {
       case Some(s) =>
@@ -67,14 +70,16 @@ case class DataSourceV2Relation(
 
     DataSourceV2Relation.pushRequiredColumns(newReader, projection.toStructType)
 
-    val (afterScanFilters, pushedFilters) = filters match {
+    val (postScanFilters, pushedFilters) = filters match {
       case Some(filterSeq) =>
         DataSourceV2Relation.pushFilters(newReader, filterSeq)
       case _ =>
         (Nil, Nil)
     }
+    logInfo(s"Post-Scan Filters: ${postScanFilters.mkString(",")}")
+    logInfo(s"Pushed Filters: ${pushedFilters.mkString(", ")}")
 
-    (newReader, afterScanFilters, pushedFilters)
+    (newReader, postScanFilters, pushedFilters)
   }
 
   override def doCanonicalize(): LogicalPlan = {
@@ -219,36 +224,35 @@ object DataSourceV2Relation {
       reader: DataSourceReader,
       filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
     reader match {
-      case catalystFilterSupport: SupportsPushDownCatalystFilters =>
-        (
-            catalystFilterSupport.pushCatalystFilters(filters.toArray),
-            catalystFilterSupport.pushedCatalystFilters()
-        )
+      case r: SupportsPushDownCatalystFilters =>
+        val postScanFilters = r.pushCatalystFilters(filters.toArray)
+        val pushedFilters = r.pushedCatalystFilters()
+        (postScanFilters, pushedFilters)
 
-      case filterSupport: SupportsPushDownFilters =>
-        val translateResults: Seq[(Option[Filter], Expression)] = filters.map { p =>
-          (DataSourceStrategy.translateFilter(p), p)
+      case r: SupportsPushDownFilters =>
+        // A map from translated data source filters to original catalyst filter expressions.
+        val translatedFilterToExpr = scala.collection.mutable.HashMap.empty[Filter, Expression]
+        // Catalyst filter expression that can't be translated to data source filters.
+        val untranslatableExprs = scala.collection.mutable.ArrayBuffer.empty[Expression]
+
+        for (filterExpr <- filters) {
+          val translated = DataSourceStrategy.translateFilter(filterExpr)
+          if (translated.isDefined) {
+            translatedFilterToExpr(translated.get) = filterExpr
+          } else {
+            untranslatableExprs += filterExpr
+          }
         }
-
-        // Catalyst predicate expressions that cannot be converted to data source filters.
-        val nonConvertiblePredicates = translateResults.collect {
-          case (None, p) => p
-        }
-
-        // A map from translated data source filters to original catalyst predicate expressions.
-        val translatedMap: Map[Filter, Expression] = translateResults.collect {
-          case (Some(f), p) => (f, p)
-        }.toMap
 
         // Data source filters that need to be evaluated again after scanning. which means
         // the data source cannot guarantee the rows returned can pass these filters.
         // As a result we must return it so Spark can plan an extra filter operator.
-        val afterScanPredicates =
-          filterSupport.pushFilters(translatedMap.keys.toArray).map(translatedMap)
+        val postScanFilters =
+          r.pushFilters(translatedFilterToExpr.keys.toArray).map(translatedFilterToExpr)
         // The filters which are marked as pushed to this data source
-        val pushedPredicates = filterSupport.pushedFilters().map(translatedMap)
+        val pushedFilters = r.pushedFilters().map(translatedFilterToExpr)
 
-        (nonConvertiblePredicates ++ afterScanPredicates, pushedPredicates)
+        (untranslatableExprs ++ postScanFilters, pushedFilters)
 
       case _ => (filters, Nil)
     }
