@@ -39,6 +39,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
   override def inputTypes: Seq[AbstractDataType] = {
     TypeCoercion.findWiderTypeForTwo(left.dataType, right.dataType) match {
       case Some(arrayType) => Seq(arrayType, arrayType)
+      case None => Seq.empty
     }
   }
 
