@@ -513,8 +513,7 @@ examples = """
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
        [[1 -> "a"], [2 -> "c"], [3 -> "d"]
   """)
-case class MapConcat(children: Seq[Expression]) extends Expression
-  with CodegenFallback {
+case class MapConcat(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     // this check currently does not allow valueContainsNull to vary,
@@ -541,7 +540,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression
       .getOrElse(MapType(keyType = StringType, valueType = StringType))
   }
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = children.exists(_.nullable)
 
   override def eval(input: InternalRow): Any = {
     val union = new util.LinkedHashMap[Any, Any]()
@@ -611,7 +610,10 @@ case class MapConcat(children: Seq[Expression]) extends Expression
         |  $arrayDataClass $vaName = $mapDataName.valueArray();
         |  for (int $index2Name = 0; $index2Name < $kaName.numElements(); $index2Name++) {
         |    Object $keyName = ${CodeGenerator.getValue(kaName, keyType, index2Name)};
-        |    Object $valueName = ${CodeGenerator.getValue(vaName, valueType, index2Name)};
+        |    Object $valueName = null;
+        |    if (!${vaName}.isNullAt($index2Name)) {
+        |      $valueName = ${CodeGenerator.getValue(vaName, valueType, index2Name)};
+        |    }
         |    $unionMapName.put($keyName, $valueName);
         |  }
         |}

@@ -102,17 +102,32 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
     val m1 = Literal.create(Map("c" -> "3", "a" -> "4"), MapType(StringType, StringType))
     val m2 = Literal.create(Map("d" -> "4", "e" -> "5"), MapType(StringType, StringType))
+    val m3 = Literal.create(Map("a" -> "1", "b" -> null), MapType(StringType, StringType))
+    val m4 = Literal.create(Map("a" -> null, "b" -> "2"), MapType(StringType, StringType))
+    val m5 = Literal.create(Map("a" -> 1, "b" -> null), MapType(StringType, IntegerType))
+    val m6 = Literal.create(Map("a" -> null, "b" -> 2), MapType(StringType, IntegerType))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
     // overlapping maps
     checkEvaluation(MapConcat(Seq(m0, m1)),
       mutable.LinkedHashMap("a" -> "4", "b" -> "2", "c" -> "3"))
+
     // maps with no overlap
     checkEvaluation(MapConcat(Seq(m0, m2)),
       mutable.LinkedHashMap("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5"))
+
     // 3 maps
     checkEvaluation(MapConcat(Seq(m0, m1, m2)),
       mutable.LinkedHashMap("a" -> "4", "b" -> "2", "c" -> "3", "d" -> "4", "e" -> "5"))
+
+    // null reference values
+    checkEvaluation(MapConcat(Seq(m3, m4)),
+      mutable.LinkedHashMap("a" -> null, "b" -> "2"))
+
+    // null primitive values
+    checkEvaluation(MapConcat(Seq(m5, m6)),
+      mutable.LinkedHashMap("a" -> null, "b" -> 2))
+
     // null map
     checkEvaluation(MapConcat(Seq(m0, mNull)),
       null)
