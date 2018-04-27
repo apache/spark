@@ -22,12 +22,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 import javax.net.ssl.SSLServerSocket;
 import javax.security.auth.login.LoginException;
@@ -373,30 +368,30 @@ public class HiveAuthFactory {
 
   public static boolean needUgiLogin(UserGroupInformation ugi, String principal, String keytab) {
     return null == ugi || !ugi.hasKerberosCredentials() || !ugi.getUserName().equals(principal) ||
-      !keytab.equals(getKeytabFromUgi());
+      !Objects.equals(keytab, getKeytabFromUgi());
   }
 
   private static String getKeytabFromUgi() {
     Class<?> clz = UserGroupInformation.class;
     try {
+      Field field = clz.getDeclaredField("keytabFile");
+      field.setAccessible(true);
       synchronized (clz) {
-        Field field = clz.getDeclaredField("keytabFile");
-        field.setAccessible(true);
         return (String) field.get(null);
       }
-    } catch (NoSuchFieldException e) {
+    } catch (NoSuchFieldException nfe) {
       try {
+        Method method = clz.getDeclaredMethod("getKeytab");
+        method.setAccessible(true);
         synchronized (clz) {
           // In Hadoop 3 we don't have "keytabFile" field, instead we should use private method
           // getKeytab().
-          Method method = clz.getDeclaredMethod("getKeytab");
-          method.setAccessible(true);
           return (String) method.invoke(UserGroupInformation.getCurrentUser());
         }
-      } catch (Throwable t) {
+      } catch (Exception e) {
         return null;
       }
-    } catch (Throwable t) {
+    } catch (Exception e) {
       return null;
     }
   }
