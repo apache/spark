@@ -1170,22 +1170,25 @@ class PowerIterationClustering(HasMaxIter, HasPredictionCol, JavaTransformer, Ja
     is a symmetric matrix whose entries are non-negative similarities between items.
     PIC takes this matrix (or graph) as an adjacency matrix.  Specifically, each input row
     includes:
-      - :py:class:`idCol`: vertex ID
-      - :py:class:`neighborsCol`: neighbors of vertex in :py:class:`idCol`
-      - :py:class:`similaritiesCol`: non-negative weights (similarities) of edges between the
-         vertex in :py:class:`idCol` and each neighbor in :py:class:`neighborsCol`
-     PIC returns a cluster assignment for each input vertex.  It appends a new column
-     :py:class:`predictionCol` containing the cluster assignment in :py:class:`[0,k)` for
-     each row (vertex).
 
-     Notes:
-      - [[PowerIterationClustering]] is a transformer with an expensive [[transform]] operation.
+     - :py:class:`idCol`: vertex ID
+     - :py:class:`neighborsCol`: neighbors of vertex in :py:class:`idCol`
+     - :py:class:`similaritiesCol`: non-negative weights (similarities) of edges between the
+        vertex in :py:class:`idCol` and each neighbor in :py:class:`neighborsCol`
+
+    PIC returns a cluster assignment for each input vertex.  It appends a new column
+    :py:class:`predictionCol` containing the cluster assignment in :py:class:`[0,k)` for
+    each row (vertex).
+
+    Notes:
+
+     - [[PowerIterationClustering]] is a transformer with an expensive [[transform]] operation.
         Transform runs the iterative PIC algorithm to cluster the whole input dataset.
-      - Input validation: This validates that similarities are non-negative but does NOT validate
+     - Input validation: This validates that similarities are non-negative but does NOT validate
         that the input matrix is symmetric.
 
-     @see <a href=http://en.wikipedia.org/wiki/Spectral_clustering>
-     Spectral clustering (Wikipedia)</a>
+    @see <a href=http://en.wikipedia.org/wiki/Spectral_clustering>
+    Spectral clustering (Wikipedia)</a>
 
     >>> from pyspark.sql.types import ArrayType, DoubleType, LongType, StructField, StructType
     >>> similarities = [((long)(1), [0], [0.5]), ((long)(2), [0, 1], [0.7,0.5]), \
