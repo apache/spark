@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.util.{Benchmark, Utils}
 
 /**
- * Benchmark to measure JSON read/write performance.
+ * The benchmarks aims to measure performance of JSON parsing when encoding is set and isn't.
  * To run this:
  *  spark-submit --class <this class> --jars <spark sql test jar>
  */
@@ -49,9 +49,9 @@ object JSONBenchmarks {
     val benchmark = new Benchmark("JSON schema inferring", rowsNum)
 
     withTempPath { path =>
-      // scalastyle:off
+      // scalastyle:off println
       benchmark.out.println("Preparing data for benchmarking ...")
-      // scalastyle:on
+      // scalastyle:on println
 
       spark.sparkContext.range(0, rowsNum, 1)
         .map(_ => "a")
@@ -86,9 +86,9 @@ object JSONBenchmarks {
     val benchmark = new Benchmark("JSON per-line parsing", rowsNum)
 
     withTempPath { path =>
-      // scalastyle:off
+      // scalastyle:off println
       benchmark.out.println("Preparing data for benchmarking ...")
-      // scalastyle:on
+      // scalastyle:on println
 
       spark.sparkContext.range(0, rowsNum, 1)
         .map(_ => "a")
@@ -127,9 +127,9 @@ object JSONBenchmarks {
     val benchmark = new Benchmark("JSON parsing of wide lines", rowsNum)
 
     withTempPath { path =>
-      // scalastyle:off
+      // scalastyle:off println
       benchmark.out.println("Preparing data for benchmarking ...")
-      // scalastyle:on
+      // scalastyle:on println
 
       spark.sparkContext.range(0, rowsNum, 1)
         .map { i =>

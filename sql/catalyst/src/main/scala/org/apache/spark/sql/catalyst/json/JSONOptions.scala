@@ -113,9 +113,9 @@ private[sql] class JSONOptions(
         s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
            | ${blacklist.mkString(", ")}""".stripMargin)
 
-      val forcingLineSep = !(multiLine == false &&
+      val isLineSepRequired = !(multiLine == false &&
         Charset.forName(enc) != StandardCharsets.UTF_8 && lineSeparator.isEmpty)
-      require(forcingLineSep, s"The lineSep option must be specified for the $enc encoding")
+      require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
 
       enc
   }

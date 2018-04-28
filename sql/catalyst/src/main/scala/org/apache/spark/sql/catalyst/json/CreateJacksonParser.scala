@@ -47,7 +47,17 @@ private[sql] object CreateJacksonParser extends Serializable {
     jsonFactory.createParser(record.getBytes, 0, record.getLength)
   }
 
-  def getStreamDecoder(enc: String, in: Array[Byte], length: Int): StreamDecoder = {
+  // Jackson parsers can be ranked according to their performance:
+  // 1. Array based with actual encoding UTF-8 in the array. This is the fastest parser
+  //    but it doesn't allow to set encoding explicitly. Actual encoding is detected automatically
+  //    by checking leading bytes of the array.
+  // 2. InputStream based with actual encoding UTF-8 in the stream. Encoding is detected
+  //    automatically by analyzing first bytes of the input stream.
+  // 3. Reader based parser. This is the slowest parser used here but it allows to create
+  //    a reader with specific encoding.
+  // The method creates a reader for an array with given encoding and sets size of internal
+  // decoding buffer according to size of input array.
+  private def getStreamDecoder(enc: String, in: Array[Byte], length: Int): StreamDecoder = {
     val bais = new ByteArrayInputStream(in, 0, length)
     val byteChannel = Channels.newChannel(bais)
     val decodingBufferSize = Math.min(length, 8192)

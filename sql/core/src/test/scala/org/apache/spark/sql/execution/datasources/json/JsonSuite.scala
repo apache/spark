@@ -48,6 +48,10 @@ class TestFileFilter extends PathFilter {
 class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   import testImplicits._
 
+  def testFile(fileName: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
+  }
+
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any) {
       assert(expected.getClass == actual.getClass,
@@ -2168,12 +2172,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(sampled.count() == ds.count())
   }
 
-  def testFile(fileName: String): String = {
-    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
-  }
-
   test("SPARK-23723: json in UTF-16 with BOM") {
-    val fileName = "json-tests/utf16WithBOM.json"
+    val fileName = "test-data/utf16WithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
@@ -2184,7 +2184,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-23723: multi-line json in UTF-32BE with BOM") {
-    val fileName = "json-tests/utf32BEWithBOM.json"
+    val fileName = "test-data/utf32BEWithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
@@ -2194,7 +2194,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-23723: Use user's encoding in reading of multi-line json in UTF-16LE") {
-    val fileName = "json-tests/utf16LE.json"
+    val fileName = "test-data/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
@@ -2209,7 +2209,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val exception = intercept[UnsupportedCharsetException] {
       spark.read
         .options(Map("encoding" -> invalidCharset, "lineSep" -> "\n"))
-        .json(testFile("json-tests/utf16LE.json"))
+        .json(testFile("test-data/utf16LE.json"))
         .count()
     }
 
@@ -2217,7 +2217,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-23723: checking that the encoding option is case agnostic") {
-    val fileName = "json-tests/utf16LE.json"
+    val fileName = "test-data/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
@@ -2229,7 +2229,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
 
   test("SPARK-23723: specified encoding is not matched to actual encoding") {
-    val fileName = "json-tests/utf16LE.json"
+    val fileName = "test-data/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val exception = intercept[SparkException] {
       spark.read.schema(schema)
@@ -2244,9 +2244,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(errMsg.contains("Malformed records are detected in record parsing"))
   }
 
-  def checkEncoding(
-      expectedEncoding: String,
-      pathToJsonFiles: String,
+  def checkEncoding(expectedEncoding: String, pathToJsonFiles: String,
       expectedContent: String): Unit = {
     val jsonFiles = new File(pathToJsonFiles)
       .listFiles()
@@ -2254,7 +2252,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       .filter(_.getName.endsWith("json"))
     val actualContent = jsonFiles.map { file =>
       new String(Files.readAllBytes(file.toPath), expectedEncoding)
-    }.mkString.trim.replaceAll(" ", "")
+    }.mkString.trim
 
     assert(actualContent == expectedContent)
   }
@@ -2265,8 +2263,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val df = spark.createDataset(Seq(("Dog", 42)))
       df.write
         .options(Map("encoding" -> encoding, "lineSep" -> "\n"))
-        .format("json").mode("overwrite")
-        .save(path.getCanonicalPath)
+        .json(path.getCanonicalPath)
 
       checkEncoding(
         expectedEncoding = encoding,
@@ -2278,9 +2275,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("SPARK-23723: save json in default encoding - UTF-8") {
     withTempPath { path =>
       val df = spark.createDataset(Seq(("Dog", 42)))
-      df.write
-        .format("json").mode("overwrite")
-        .save(path.getCanonicalPath)
+      df.write.json(path.getCanonicalPath)
 
       checkEncoding(
         expectedEncoding = "UTF-8",
@@ -2296,24 +2291,19 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         val df = spark.createDataset(Seq((0)))
         df.write
           .options(Map("encoding" -> encoding, "lineSep" -> "\n"))
-          .format("json").mode("overwrite")
-          .save(path.getCanonicalPath)
+          .json(path.getCanonicalPath)
       }
     }
 
     assert(exception.getMessage == encoding)
   }
 
-  test("SPARK-23723: read written json in UTF-16LE") {
+  test("SPARK-23723: read back json in UTF-16LE") {
     val options = Map("encoding" -> "UTF-16LE", "lineSep" -> "\n")
     withTempPath { path =>
-      val ds = spark.createDataset(Seq(
-        ("a", 1), ("b", 2), ("c", 3))
-      ).repartition(2)
-      ds.write
-        .options(options)
-        .format("json").mode("overwrite")
-        .save(path.getCanonicalPath)
+      val ds = spark.createDataset(Seq(("a", 1), ("b", 2), ("c", 3))).repartition(2)
+      ds.write.options(options).json(path.getCanonicalPath)
+
       val readBack = spark
         .read
         .options(options)
@@ -2325,20 +2315,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   def checkReadJson(lineSep: String, encoding: String, inferSchema: Boolean, id: Int): Unit = {
     test(s"SPARK-23724: checks reading json in ${encoding} #${id}") {
-      val lineSepInBytes = {
-        if (lineSep.startsWith("x")) {
-          lineSep.replaceAll("[^0-9A-Fa-f]", "")
-            .sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
-        } else {
-          lineSep.getBytes(encoding)
-        }
-      }
       val schema = new StructType().add("f1", StringType).add("f2", IntegerType)
       withTempPath { path =>
         val records = List(("a", 1), ("b", 2))
         val data = records
           .map(rec => s"""{"f1":"${rec._1}", "f2":${rec._2}}""".getBytes(encoding))
-          .reduce((a1, a2) => a1 ++ lineSepInBytes ++ a2)
+          .reduce((a1, a2) => a1 ++ lineSep.getBytes(encoding) ++ a2)
         val os = new FileOutputStream(path)
         os.write(data)
         os.close()
@@ -2372,7 +2354,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     (11, "\u000a\u000d", "UTF-8", true),
     (12, "===", "US-ASCII", false),
     (13, "$^+", "utf-32le", true)
-  ).foreach{case (i, d, c, s) => checkReadJson(d, c, s, i)}
+  ).foreach {
+    case (testNum, sep, encoding, inferSchema) => checkReadJson(sep, encoding, inferSchema, testNum)
+  }
   // scalastyle:on nonascii
 
   test("SPARK-23724: lineSep should be set if encoding if different from UTF-8") {
@@ -2380,7 +2364,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val exception = intercept[IllegalArgumentException] {
       spark.read
         .options(Map("encoding" -> encoding))
-        .json(testFile("json-tests/utf16LE.json"))
+        .json(testFile("test-data/utf16LE.json"))
         .count()
     }
 
@@ -2390,13 +2374,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   private val badJson = "\u0000\u0000\u0000A\u0001AAA"
 
-  test("SPARK-23094: invalid json with leading nulls - from file (multiLine=true)") {
-    withTempDir { tempDir =>
+  test("SPARK-23094: permissively read JSON file with leading nulls when multiLine is enabled") {
+    withTempPath { tempDir =>
       val path = tempDir.getAbsolutePath
-      Seq(badJson + """{"a":1}""").toDS().write.mode("overwrite").text(path)
+      Seq(badJson + """{"a":1}""").toDS().write.text(path)
       val expected = s"""${badJson}{"a":1}\n"""
       val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
       val df = spark.read.format("json")
+        .option("mode", "PERMISSIVE")
         .option("multiLine", true)
         .option("encoding", "UTF-8")
         .schema(schema).load(path)
@@ -2404,12 +2389,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("SPARK-23094: invalid json with leading nulls - from file (multiLine=false)") {
-    withTempDir { tempDir =>
+  test("SPARK-23094: permissively read JSON file with leading nulls when multiLine is disabled") {
+    withTempPath { tempDir =>
       val path = tempDir.getAbsolutePath
-      Seq(badJson, """{"a":1}""").toDS().write.mode("overwrite").text(path)
+      Seq(badJson, """{"a":1}""").toDS().write.text(path)
       val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
       val df = spark.read.format("json")
+        .option("mode", "PERMISSIVE")
         .option("multiLine", false)
         .option("encoding", "UTF-8")
         .schema(schema).load(path)
@@ -2417,9 +2403,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("SPARK-23094: invalid json with leading nulls - from dataset") {
+  test("SPARK-23094: permissively parse a dataset contains JSON with leading nulls") {
     checkAnswer(
-      spark.read.option("encoding", "UTF-8").json(Seq(badJson).toDS()),
+      spark.read.option("mode", "PERMISSIVE").option("encoding", "UTF-8").json(Seq(badJson).toDS()),
       Row(badJson))
   }
 }
