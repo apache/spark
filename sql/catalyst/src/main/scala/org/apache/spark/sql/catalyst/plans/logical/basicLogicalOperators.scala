@@ -691,7 +691,9 @@ case class Pivot(
     pivotColumn: Expression,
     pivotValues: Seq[Literal],
     aggregates: Seq[Expression],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    groupByExprsImplicit: Boolean = false) extends UnaryNode {
+  override lazy val resolved = false // Pivot will be replaced after being resolved.
   override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
     case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
     case _ => pivotValues.flatMap{ value =>
