@@ -712,6 +712,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       df.selectExpr("concat(i1, array(i1, i2))")
     }
+
+    val e = intercept[AnalysisException] {
+      df.selectExpr("concat(map(1, 2), map(3, 4))")
+    }
+    assert(e.getMessage.contains("string, binary or array"))
   }
 
   test("flatten function") {
