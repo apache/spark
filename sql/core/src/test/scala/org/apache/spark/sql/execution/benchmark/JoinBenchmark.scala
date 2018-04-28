@@ -222,16 +222,8 @@ class JoinBenchmark extends BenchmarkBase {
      */
   }
 
-  val expensiveFunc = (first: Int, second: Int) => {
-    for (i <- 1 to 2000) {
-      Math.sqrt(i * i * i)
-    }
-    Math.abs(first - second)
-  }
-
   def innerRangeTest(N: Int, M: Int): Unit = {
     import sparkSession.implicits._
-    val expUdf = sparkSession.udf.register("expensiveFunc", expensiveFunc)
     val df1 = sparkSession.sparkContext.parallelize(1 to M).
       cartesian(sparkSession.sparkContext.parallelize(1 to N)).
       toDF("col1a", "col1b")
@@ -240,12 +232,12 @@ class JoinBenchmark extends BenchmarkBase {
       toDF("col2a", "col2b")
     val df = df1.join(df2, 'col1a === 'col2a and ('col1b < 'col2b + 3) and ('col1b > 'col2b - 3))
     assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[SortMergeJoinExec]).isDefined)
-    df.where(expUdf('col1b, 'col2b) < 3).count()
+    df.count()
   }
 
   ignore("sort merge inner range join") {
     sparkSession.conf.set("spark.sql.join.smj.useInnerRangeOptimization", "false")
-    val N = 2 << 5
+    val N = 2 << 11
     val M = 100
     runBenchmark("sort merge inner range join", N * M) {
       innerRangeTest(N, M)
@@ -255,14 +247,14 @@ class JoinBenchmark extends BenchmarkBase {
      *AMD EPYC 7401 24-Core Processor
      *sort merge join:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
      *---------------------------------------------------------------------------------------------
-     *sort merge join wholestage off            13822 / 14068          0.0     2159662.3       1.0X
-     *sort merge join wholestage on               3863 / 4226          0.0      603547.0       3.6X
+     *sort merge join wholestage off            30956 / 31374          0.0       75575.5       1.0X
+     *sort merge join wholestage on             10864 / 11043          0.0       26523.6       2.8X
      */
   }
 
   ignore("sort merge inner range join optimized") {
     sparkSession.conf.set("spark.sql.join.smj.useInnerRangeOptimization", "true")
-    val N = 2 << 5
+    val N = 2 << 11
     val M = 100
     runBenchmark("sort merge inner range join optimized", N * M) {
       innerRangeTest(N, M)
@@ -272,8 +264,8 @@ class JoinBenchmark extends BenchmarkBase {
      *AMD EPYC 7401 24-Core Processor
      *sort merge join:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
      *---------------------------------------------------------------------------------------------
-     *sort merge join wholestage off            12723 / 12800          0.0     1988008.4       1.0X
-     *sort merge join wholestage on                469 /  526          0.0       73340.4      27.1X
+     *sort merge join wholestage off            30734 / 31135          0.0       75035.2       1.0X
+     *sort merge join wholestage on                959 / 1040          0.4        2341.3      32.0X
      */
   }
 
