@@ -107,14 +107,25 @@ object RateStreamProvider {
     // seconds   = 0 1 2  3  4  5  6
     // speed     = 0 2 4  6  8 10 10 (speedDeltaPerSecond * seconds)
     // end value = 0 2 6 12 20 30 40 (0 + speedDeltaPerSecond * seconds) * (seconds + 1) / 2
-    val speedDeltaPerSecond = rowsPerSecond / (rampUpTimeSeconds + 1)
+    val speedDeltaPerSecond = math.max(1, rowsPerSecond / (rampUpTimeSeconds + 1))
+
+    // If rowsPerSecond is smaller than rampUpTimeSeconds, speed will exceed the rowsPerSecond in
+    // the rampUpTimes, so we should delay the ramp up.
+    // E.g., rampUpTimeSeconds = 10, rowsPerSecond = 6
+    // Then speedDeltaPerSecond = 1
+    //
+    // seconds   = 0 1 2 3 4 5 6 7  8  9  10  11
+    // speed     = 0 0 0 0 0 1 2 3  4  5   6   6
+    // end value = 0 0 0 0 0 1 3 6 10 15  21  27
+    val validSeconds = math.max(0, math.min(seconds, seconds - (rampUpTimeSeconds - rowsPerSecond)))
+
     if (seconds <= rampUpTimeSeconds) {
       // Calculate "(0 + speedDeltaPerSecond * seconds) * (seconds + 1) / 2" in a special way to
       // avoid overflow
-      if (seconds % 2 == 1) {
-        (seconds + 1) / 2 * speedDeltaPerSecond * seconds
+      if (validSeconds % 2 == 1) {
+        (validSeconds + 1) / 2 * speedDeltaPerSecond * validSeconds
       } else {
-        seconds / 2 * speedDeltaPerSecond * (seconds + 1)
+        validSeconds / 2 * speedDeltaPerSecond * (validSeconds + 1)
       }
     } else {
       // rampUpPart is just a special case of the above formula: rampUpTimeSeconds == seconds

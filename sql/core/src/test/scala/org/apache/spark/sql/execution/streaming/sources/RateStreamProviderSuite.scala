@@ -190,6 +190,24 @@ class RateSourceSuite extends StreamTest {
     assert(valueAtSecond(seconds = 3, rowsPerSecond = 10, rampUpTimeSeconds = 4) === 12)
     assert(valueAtSecond(seconds = 4, rowsPerSecond = 10, rampUpTimeSeconds = 4) === 20)
     assert(valueAtSecond(seconds = 5, rowsPerSecond = 10, rampUpTimeSeconds = 4) === 30)
+
+    assert(valueAtSecond(seconds = 0, rowsPerSecond = 5, rampUpTimeSeconds = 5) === 0)
+    assert(valueAtSecond(seconds = 1, rowsPerSecond = 5, rampUpTimeSeconds = 5) === 1)
+    assert(valueAtSecond(seconds = 2, rowsPerSecond = 5, rampUpTimeSeconds = 5) === 3)
+    assert(valueAtSecond(seconds = 3, rowsPerSecond = 5, rampUpTimeSeconds = 5) === 6)
+    assert(valueAtSecond(seconds = 4, rowsPerSecond = 5, rampUpTimeSeconds = 5) === 10)
+    assert(valueAtSecond(seconds = 5, rowsPerSecond = 5, rampUpTimeSeconds = 5) === 15)
+    assert(valueAtSecond(seconds = 6, rowsPerSecond = 5, rampUpTimeSeconds = 5) === 20)
+
+    assert(valueAtSecond(seconds = 0, rowsPerSecond = 5, rampUpTimeSeconds = 7) === 0)
+    assert(valueAtSecond(seconds = 1, rowsPerSecond = 5, rampUpTimeSeconds = 7) === 0)
+    assert(valueAtSecond(seconds = 2, rowsPerSecond = 5, rampUpTimeSeconds = 7) === 0)
+    assert(valueAtSecond(seconds = 3, rowsPerSecond = 5, rampUpTimeSeconds = 7) === 1)
+    assert(valueAtSecond(seconds = 4, rowsPerSecond = 5, rampUpTimeSeconds = 7) === 3)
+    assert(valueAtSecond(seconds = 5, rowsPerSecond = 5, rampUpTimeSeconds = 7) === 6)
+    assert(valueAtSecond(seconds = 6, rowsPerSecond = 5, rampUpTimeSeconds = 7) === 10)
+    assert(valueAtSecond(seconds = 7, rowsPerSecond = 5, rampUpTimeSeconds = 7) === 15)
+    assert(valueAtSecond(seconds = 8, rowsPerSecond = 5, rampUpTimeSeconds = 7) === 20)
   }
 
   test("rampUpTime") {
