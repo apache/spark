@@ -94,7 +94,7 @@ object TPCDSQueryBenchmark extends Logging {
       origQueries: Seq[String],
       args: TPCDSQueryBenchmarkArguments): Seq[String] = {
     if (args.queryFilter.nonEmpty) {
-      origQueries.filter { case queryName => args.queryFilter.contains(queryName) }
+      origQueries.filter(args.queryFilter.contains)
     } else {
       origQueries
     }
