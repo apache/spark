@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.nio.charset.StandardCharsets
 import java.util.{Locale, TimeZone}
 
+import scala.collection.immutable.ListMap
+
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 import org.apache.commons.lang3.time.FastDateFormat
 
@@ -187,5 +189,5 @@ class CSVOptions(
     settings
   }
 
-  val textOptions = parameters.originalMap
+  val textOptions = ListMap(parameters.toList: _*)
 }
