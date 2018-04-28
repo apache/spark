@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.json
 
 import java.util.{Locale, TimeZone}
 
+import scala.collection.immutable.ListMap
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.commons.lang3.time.FastDateFormat
 
@@ -97,5 +99,5 @@ private[sql] class JSONOptions(
     factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
   }
 
-  val textOptions = parameters.originalMap
+  val textOptions = ListMap(parameters.toList: _*)
 }
