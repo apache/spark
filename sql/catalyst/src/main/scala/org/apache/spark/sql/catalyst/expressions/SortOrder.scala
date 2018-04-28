@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
 
 abstract sealed class SortDirection {
@@ -147,7 +148,40 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       (!child.isAscending && child.nullOrdering == NullsLast)
   }
 
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any = {
+    val value = child.child.eval(input)
+    if (value == null) {
+      return null
+    }
+    val prefix = child.child.dataType match {
+      case BooleanType =>
+        if (value.asInstanceOf[Boolean]) 1L else 0L
+      case _: IntegralType =>
+        value.asInstanceOf[java.lang.Number].longValue()
+      case DateType | TimestampType =>
+        value.asInstanceOf[java.lang.Number].longValue()
+      case FloatType | DoubleType =>
+        val dVal = value.asInstanceOf[java.lang.Number].doubleValue()
+        DoublePrefixComparator.computePrefix(dVal)
+      case StringType =>
+        StringPrefixComparator.computePrefix(value.asInstanceOf[UTF8String])
+      case BinaryType =>
+        BinaryPrefixComparator.computePrefix(value.asInstanceOf[Array[Byte]])
+      case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
+        val dtValue = value.asInstanceOf[Decimal]
+        if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
+          dtValue
+        } else {
+          val p = Decimal.MAX_LONG_DIGITS
+          val s = p - (dt.precision - dt.scale)
+          if (dtValue.changePrecision(p, s)) dtValue.toUnscaledLong else Long.MinValue
+        }
+      case dt: DecimalType =>
+        val dtValue = value.asInstanceOf[Decimal].toDouble
+        DoublePrefixComparator.computePrefix(dtValue)
+    }
+    prefix
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.child.genCode(ctx)
