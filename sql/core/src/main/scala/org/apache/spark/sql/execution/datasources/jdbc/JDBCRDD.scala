@@ -56,6 +56,7 @@ object JDBCRDD extends Logging {
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
+      statement.setQueryTimeout(options.queryTimeout)
       try {
         val rs = statement.executeQuery()
         try {
