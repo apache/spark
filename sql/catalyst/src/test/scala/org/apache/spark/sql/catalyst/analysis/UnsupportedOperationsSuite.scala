@@ -622,7 +622,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     expectedMsgs = Seq("monotonically_increasing_id"))
 
   assertSupportedForContinuousProcessing(
-    "typedFilter", TypedFilter(
+    "TypedFilter", TypedFilter(
       null,
       null,
       null,
@@ -778,7 +778,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     }
   }
 
-  /** Assert that the logical plan is supportd for continuous procsssing mode */
+  /** Assert that the logical plan is supported for continuous procsssing mode */
   def assertSupportedForContinuousProcessing(
     name: String,
     plan: LogicalPlan,
