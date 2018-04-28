@@ -22,7 +22,13 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 
 import javax.net.ssl.SSLServerSocket;
 import javax.security.auth.login.LoginException;
@@ -381,11 +387,11 @@ public class HiveAuthFactory {
       }
     } catch (NoSuchFieldException nfe) {
       try {
+        // In Hadoop 3 we don't have "keytabFile" field, instead we should use private method
+        // getKeytab().
         Method method = clz.getDeclaredMethod("getKeytab");
         method.setAccessible(true);
         synchronized (clz) {
-          // In Hadoop 3 we don't have "keytabFile" field, instead we should use private method
-          // getKeytab().
           return (String) method.invoke(UserGroupInformation.getCurrentUser());
         }
       } catch (Exception e) {
