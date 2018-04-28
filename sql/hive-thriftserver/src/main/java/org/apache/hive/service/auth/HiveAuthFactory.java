@@ -95,6 +95,25 @@ public class HiveAuthFactory {
   public static final String HS2_PROXY_USER = "hive.server2.proxy.user";
   public static final String HS2_CLIENT_TOKEN = "hiveserver2ClientToken";
 
+  private static Field keytabFile = null;
+  private static Method getKeytab = null;
+  static {
+    Class<?> clz = UserGroupInformation.class;
+    try {
+      keytabFile = clz.getDeclaredField("keytabFile");
+      keytabFile.setAccessible(true);
+    } catch (NoSuchFieldException nfe) {
+      keytabFile = null;
+    }
+
+    try {
+      getKeytab = clz.getDeclaredMethod("getKeytab");
+      getKeytab.setAccessible(true);
+    } catch(NoSuchMethodException nme) {
+      getKeytab = null;
+    }
+  }
+
   public HiveAuthFactory(HiveConf conf) throws TTransportException, IOException {
     this.conf = conf;
     transportMode = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TRANSPORT_MODE);
@@ -378,28 +397,18 @@ public class HiveAuthFactory {
   }
 
   private static String getKeytabFromUgi() {
-    Class<?> clz = UserGroupInformation.class;
-    try {
-      Field field = clz.getDeclaredField("keytabFile");
-      field.setAccessible(true);
-      synchronized (clz) {
-        return (String) field.get(null);
-      }
-    } catch (NoSuchFieldException nfe) {
+    synchronized (UserGroupInformation.class) {
       try {
-        // In Hadoop 3 we don't have "keytabFile" field, instead we should use private method
-        // getKeytab().
-        Method method = clz.getDeclaredMethod("getKeytab");
-        method.setAccessible(true);
-        synchronized (clz) {
-          return (String) method.invoke(UserGroupInformation.getCurrentUser());
+        if (keytabFile != null) {
+          return (String) keytabFile.get(null);
+        } else if (getKeytab != null) {
+          return (String) getKeytab.invoke(UserGroupInformation.getCurrentUser());
+        } else {
+          return null;
         }
       } catch (Exception e) {
         return null;
       }
-    } catch (Exception e) {
-      return null;
     }
   }
-
 }
