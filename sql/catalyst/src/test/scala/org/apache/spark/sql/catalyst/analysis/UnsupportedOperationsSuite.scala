@@ -627,7 +627,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       null,
       null,
       null,
-      new StreamingRelationV2(attribute)), OutputMode.Append())
+      new TestStreamingRelationV2(attribute)), OutputMode.Append())
 
   /*
     =======================================================================================
@@ -858,8 +858,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     override def isStreaming: Boolean = true
   }
 
-  case class StreamingRelationV2(output: Seq[Attribute]) extends LeafNode {
+  case class TestStreamingRelationV2(output: Seq[Attribute]) extends LeafNode {
     def this(attribute: Attribute) = this(Seq(attribute))
     override def isStreaming: Boolean = true
+    override def nodeName: String = "StreamingRelationV2"
   }
 }
