@@ -51,7 +51,7 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(SortPrefix(SortOrder(i2, Ascending)), -20132983L)
     checkEvaluation(SortPrefix(SortOrder(l1, Ascending)), 20132983L)
     checkEvaluation(SortPrefix(SortOrder(l2, Ascending)), -20132983L)
-    // TODO: Find out why 17649L is the correct number for both eval and codegen paths
+    // For some reason, the Literal.create code gives us the number of days since the epoch
     checkEvaluation(SortPrefix(SortOrder(d1, Ascending)), 17649L)
     checkEvaluation(SortPrefix(SortOrder(t1, Ascending)), millis*1000)
     checkEvaluation(SortPrefix(SortOrder(f1, Ascending)),
