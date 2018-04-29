@@ -176,7 +176,8 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None):
+             multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
+             encoding=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -237,6 +238,10 @@ class DataFrameReader(OptionUtils):
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
+        :param encoding: allows to forcibly set one of standard basic or extended encoding for
+                         the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
+                         the encoding of input JSON will be detected automatically
+                         when the multiLine option is set to ``true``.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
         :param samplingRatio: defines fraction of input JSON objects used for schema inferring.
@@ -259,7 +264,7 @@ class DataFrameReader(OptionUtils):
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
-            samplingRatio=samplingRatio)
+            samplingRatio=samplingRatio, encoding=encoding)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -752,7 +757,7 @@ class DataFrameWriter(OptionUtils):
 
     @since(1.4)
     def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None,
-             lineSep=None):
+             lineSep=None, encoding=None):
         """Saves the content of the :class:`DataFrame` in JSON format
         (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
         specified path.
@@ -776,6 +781,8 @@ class DataFrameWriter(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+        :param encoding: specifies encoding (charset) of saved json files. If None is set,
+                        the default UTF-8 charset will be used.
         :param lineSep: defines the line separator that should be used for writing. If None is
                         set, it uses the default value, ``\\n``.
 
@@ -784,7 +791,7 @@ class DataFrameWriter(OptionUtils):
         self.mode(mode)
         self._set_opts(
             compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
-            lineSep=lineSep)
+            lineSep=lineSep, encoding=encoding)
         self._jwrite.json(path)
 
     @since(1.4)
