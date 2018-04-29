@@ -171,7 +171,7 @@ trait ArraySortUtil extends ExpectsInputTypes {
     }
   }
 
-  val elementType = arrayExpression.dataType.asInstanceOf[ArrayType].elementType
+  def elementType: DataType = arrayExpression.dataType.asInstanceOf[ArrayType].elementType
 
   def sortEval(array: Any, ascending: Boolean): Any = {
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
