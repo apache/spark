@@ -211,7 +211,8 @@ object ApproximatePercentile {
    */
   class PercentileDigest(
       private var summaries: QuantileSummaries,
-      private var isCompressed: Boolean) {
+      // visible for testing
+      private[sql] var isCompressed: Boolean) {
 
     // Trigger compression if the QuantileSummaries's buffer length exceeds
     // compressThresHoldBufferLength. The buffer length can be get by
