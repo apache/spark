@@ -1188,8 +1188,8 @@ class PowerIterationClustering(HasMaxIter, HasPredictionCol, JavaTransformer, Ja
      - Input validation: This validates that similarities are non-negative but does NOT validate
         that the input matrix is symmetric.
 
-    .. seealso:: <a href=http://en.wikipedia.org/wiki/Spectral_clustering>
-    Spectral clustering (Wikipedia)</a>
+    .. seealso:: `Wikipedia on Spectral clustering \
+    <http://en.wikipedia.org/wiki/Spectral_clustering>`_
 
     >>> from pyspark.sql.types import ArrayType, DoubleType, LongType, StructField, StructType
     >>> similarities = [((long)(1), [0], [0.5]), ((long)(2), [0, 1], [0.7,0.5]), \
