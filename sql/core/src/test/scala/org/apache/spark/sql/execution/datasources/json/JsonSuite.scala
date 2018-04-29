@@ -2419,7 +2419,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       Row(badJson))
   }
 
-  test("Read json in UTF-16 with BOM") {
+  test("SPARK-24118: Read json in UTF-16 with BOM") {
     val fileName = "test-data/utf16WithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
@@ -2430,7 +2430,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird"), Row("Doug", "Rood")))
   }
 
-  test("Read json in UTF-32 with BOM") {
+  test("SPARK-24118: Read json in UTF-32 with BOM") {
     val fileName = "test-data/utf32WithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
