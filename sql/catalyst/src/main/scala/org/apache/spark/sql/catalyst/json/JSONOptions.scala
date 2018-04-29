@@ -101,18 +101,6 @@ private[sql] class JSONOptions(
    */
   val encoding: Option[String] = parameters.get("encoding")
     .orElse(parameters.get("charset")).map { enc =>
-      // The following encodings are not supported in per-line mode (multiline is false)
-      // because they cause some problems in reading files with BOM which is supposed to
-      // present in the files with such encodings. After splitting input files by lines,
-      // only the first lines will have the BOM which leads to impossibility for reading
-      // the rest lines. Besides of that, the lineSep option must have the BOM in such
-      // encodings which can never present between lines.
-      val blacklist = Seq(Charset.forName("UTF-16"), Charset.forName("UTF-32"))
-      val isBlacklisted = blacklist.contains(Charset.forName(enc))
-      require(multiLine || !isBlacklisted,
-        s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
-           | ${blacklist.mkString(", ")}""".stripMargin)
-
       val isLineSepRequired = !(multiLine == false &&
         Charset.forName(enc) != StandardCharsets.UTF_8 && lineSeparator.isEmpty)
       require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
@@ -120,8 +108,26 @@ private[sql] class JSONOptions(
       enc
   }
 
-  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes(encoding.getOrElse("UTF-8"))
+  /**
+   * A sequence of bytes between two consecutive json records in read.
+   * Format of the `lineSep` option is:
+   *   selector (1 char) + separator spec (any length) | sequence of chars
+   *
+   * Currently the following selectors are supported:
+   * - 'x' + sequence of bytes in hexadecimal format. For example: "x0a 0d".
+   *   Hex pairs can be separated by any chars different from 0-9,A-F,a-f
+   * - '\' - reserved for a sequence of control chars like "\r\n"
+   *         and unicode escape like "\u000D\u000A"
+   * - 'r' and '/' - reserved for future use
+   */
+  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.collect {
+    case hexs if hexs.startsWith("x") =>
+      hexs.replaceAll("[^0-9A-Fa-f]", "").sliding(2, 2).toArray
+        .map(Integer.parseInt(_, 16).toByte)
+    case reserved if reserved.startsWith("r") || reserved.startsWith("/") =>
+      throw new NotImplementedError(s"The $reserved selector has not supported yet")
+    case lineSep =>
+      lineSep.getBytes(encoding.map(Charset.forName(_)).getOrElse(StandardCharsets.UTF_8))
   }
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 

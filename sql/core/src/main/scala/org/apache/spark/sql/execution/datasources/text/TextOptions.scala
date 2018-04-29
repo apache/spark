@@ -43,15 +43,36 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
 
   val encoding: Option[String] = parameters.get(ENCODING)
 
+  /**
+   * A string between two consecutive text lines.
+   * Note: the option 'lineSep' uses a different default value in read and write.
+   */
   val lineSeparator: Option[String] = parameters.get(LINE_SEPARATOR).map { lineSep =>
     require(lineSep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
 
     lineSep
   }
 
-  // Note that the option 'lineSep' uses a different default value in read and write.
-  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes(encoding.map(Charset.forName(_)).getOrElse(StandardCharsets.UTF_8))
+  /**
+   * A sequence of bytes between two consecutive text lines in read.
+   * Format of the `lineSep` option is:
+   *   selector (1 char) + separator spec (any length) | sequence of chars
+   *
+   * Currently the following selectors are supported:
+   * - 'x' + sequence of bytes in hexadecimal format. For example: "x0a 0d".
+   *   Hex pairs can be separated by any chars different from 0-9,A-F,a-f
+   * - '\' - reserved for a sequence of control chars like "\r\n"
+   *         and unicode escape like "\u000D\u000A"
+   * - 'r' and '/' - reserved for future use
+   */
+  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.collect {
+    case hexs if hexs.startsWith("x") =>
+      hexs.replaceAll("[^0-9A-Fa-f]", "").sliding(2, 2).toArray
+        .map(Integer.parseInt(_, 16).toByte)
+    case reserved if reserved.startsWith("r") || reserved.startsWith("/") =>
+      throw new NotImplementedError(s"The $reserved selector has not supported yet")
+    case lineSep =>
+      lineSep.getBytes(encoding.map(Charset.forName(_)).getOrElse(StandardCharsets.UTF_8))
   }
   val lineSeparatorInWrite: Array[Byte] =
     lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
