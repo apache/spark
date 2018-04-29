@@ -98,24 +98,25 @@ object CSVBenchmarks {
       val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
 
       benchmark.addCase(s"Select all columns", 3) { _ =>
-        ds.select("*").count()
+        ds.select("*").filter((row: Row) => true).count()
       }
       benchmark.addCase(s"Select 10 columns", 3) { _ =>
         ds.select($"col0", $"col10", $"col20", $"col30", $"col40",
-          $"col50", $"col60", $"col70", $"col80", $"col90").count()
+          $"col50", $"col60", $"col70", $"col80", $"col90")
+          .filter((row: Row) => true).count()
       }
       benchmark.addCase(s"Select one column", 3) { _ =>
-        ds.select($"col0").count()
+        ds.select($"col0").filter((row: Row) => true).count()
       }
 
       /*
       Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
 
-      Wide rows with 1000 columns:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      ---------------------------------------------------------------------------------------------
-      Select all columns                       53338 / 53477          0.0       53337.6       1.0X
-      Select 10 columns                        52724 / 53132          0.0       52723.6       1.0X
-      Select one column                        52277 / 52494          0.0       52276.7       1.0X
+      Wide rows with 1000 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      --------------------------------------------------------------------------------------------
+      Select all columns                    135378 / 206881          0.0      135378.2       1.0X
+      Select 10 columns                       57290 / 57581          0.0       57289.7       2.4X
+      Select one column                       55718 / 56358          0.0       55718.3       2.4X
       */
       benchmark.run()
     }
