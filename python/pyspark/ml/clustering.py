@@ -1161,6 +1161,7 @@ class PowerIterationClustering(HasMaxIter, HasPredictionCol, JavaTransformer, Ja
                                JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
+
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
     <a href=http://www.icml2010.org/papers/387.pdf>Lin and Cohen</a>. From the abstract:
     PIC finds a very low-dimensional embedding of a dataset using truncated power
@@ -1171,23 +1172,23 @@ class PowerIterationClustering(HasMaxIter, HasPredictionCol, JavaTransformer, Ja
     PIC takes this matrix (or graph) as an adjacency matrix.  Specifically, each input row
     includes:
 
-     - :py:class:`idCol`: vertex ID
-     - :py:class:`neighborsCol`: neighbors of vertex in :py:class:`idCol`
-     - :py:class:`similaritiesCol`: non-negative weights (similarities) of edges between the
-        vertex in :py:class:`idCol` and each neighbor in :py:class:`neighborsCol`
+     - :py:attr:`idCol`: vertex ID
+     - :py:attr:`neighborsCol`: neighbors of vertex in :py:attr:`idCol`
+     - :py:attr:`similaritiesCol`: non-negative weights (similarities) of edges between the
+        vertex in :py:attr:`idCol` and each neighbor in :py:attr:`neighborsCol`
 
     PIC returns a cluster assignment for each input vertex.  It appends a new column
-    :py:class:`predictionCol` containing the cluster assignment in :py:class:`[0,k)` for
+    :py:attr:`predictionCol` containing the cluster assignment in :py:attr:`[0,k)` for
     each row (vertex).
 
-    Notes:
+    .. note::
 
      - [[PowerIterationClustering]] is a transformer with an expensive [[transform]] operation.
         Transform runs the iterative PIC algorithm to cluster the whole input dataset.
      - Input validation: This validates that similarities are non-negative but does NOT validate
         that the input matrix is symmetric.
 
-    @see <a href=http://en.wikipedia.org/wiki/Spectral_clustering>
+    .. seealso:: <a href=http://en.wikipedia.org/wiki/Spectral_clustering>
     Spectral clustering (Wikipedia)</a>
 
     >>> from pyspark.sql.types import ArrayType, DoubleType, LongType, StructField, StructType
@@ -1328,7 +1329,7 @@ class PowerIterationClustering(HasMaxIter, HasPredictionCol, JavaTransformer, Ja
     @since("2.4.0")
     def setNeighborsCol(self, value):
         """
-        Sets the value of :py:attr:`neighborsCol.
+        Sets the value of :py:attr:`neighborsCol`.
         """
         return self._set(neighborsCol=value)
 
@@ -1351,7 +1352,7 @@ class PowerIterationClustering(HasMaxIter, HasPredictionCol, JavaTransformer, Ja
         """
         Gets the value of :py:attr:`similaritiesCol`.
         """
-        return self.getOrDefault(self.binary)
+        return self.getOrDefault(self.similaritiesCol)
 
 
 if __name__ == "__main__":
