@@ -101,6 +101,18 @@ private[sql] class JSONOptions(
    */
   val encoding: Option[String] = parameters.get("encoding")
     .orElse(parameters.get("charset")).map { enc =>
+      // The following encodings are not supported in per-line mode (multiline is false)
+      // because they cause some problems in reading files with BOM which is supposed to
+      // present in the files with such encodings. After splitting input files by lines,
+      // only the first lines will have the BOM which leads to impossibility for reading
+      // the rest lines. Besides of that, the lineSep option must have the BOM in such
+      // encodings which can never present between lines.
+      val blacklist = Seq(Charset.forName("UTF-16"), Charset.forName("UTF-32"))
+      val isBlacklisted = blacklist.contains(Charset.forName(enc))
+      require(multiLine || !isBlacklisted,
+        s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
+           | ${blacklist.mkString(", ")}""".stripMargin)
+
       val isLineSepRequired = !(multiLine == false &&
         Charset.forName(enc) != StandardCharsets.UTF_8 && lineSeparator.isEmpty)
       require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
