@@ -110,8 +110,8 @@ object CSVBenchmarks {
 
       Wide rows with 1000 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       --------------------------------------------------------------------------------------------
-      Select 100 columns                      46345 / 58202          0.0       46345.3       1.0X
-      Select one column                       44344 / 44650          0.0       44344.0       1.0X
+      Select 100 columns                      33388 / 33661          0.0       33388.3       1.0X
+      Select one column                       22825 / 23111          0.0       22825.5       1.5X
       */
       benchmark.run()
     }
