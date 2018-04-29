@@ -170,7 +170,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
         val dtValue = value.asInstanceOf[Decimal]
         if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-          dtValue
+          dtValue.toUnscaledLong
         } else {
           val p = Decimal.MAX_LONG_DIGITS
           val s = p - (dt.precision - dt.scale)

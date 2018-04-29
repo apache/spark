@@ -43,6 +43,9 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val b1 = Literal.create(Array[Byte](12), BinaryType)
     val b2 = Literal.create(Array[Byte](12, 17, 99, 0, 0, 0, 2, 3, 0xf4.asInstanceOf[Byte]),
       BinaryType)
+    val dec1 = Literal(Decimal(20132983L, 10, 2))
+    val dec2 = Literal(Decimal(20132983L, 19, 2))
+    val dec3 = Literal(Decimal(20132983L, 21, 2))
 
     checkEvaluation(SortPrefix(SortOrder(i1, Ascending)), 20132983L)
     checkEvaluation(SortPrefix(SortOrder(i2, Ascending)), -20132983L)
@@ -67,5 +70,9 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       BinaryPrefixComparator.computePrefix(b1.value.asInstanceOf[Array[Byte]]))
     checkEvaluation(SortPrefix(SortOrder(b2, Ascending)),
       BinaryPrefixComparator.computePrefix(b2.value.asInstanceOf[Array[Byte]]))
+    checkEvaluation(SortPrefix(SortOrder(dec1, Ascending)), 20132983L)
+    checkEvaluation(SortPrefix(SortOrder(dec2, Ascending)), 2013298L)
+    checkEvaluation(SortPrefix(SortOrder(dec3, Ascending)),
+      DoublePrefixComparator.computePrefix(201329.83d))
   }
 }
