@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.io.File
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
+import org.apache.spark.sql.{Column, Row, SparkSession}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.{Benchmark, Utils}
 
 /**
@@ -85,28 +85,24 @@ object CSVBenchmarks {
       benchmark.out.println("Preparing data for benchmarking ...")
       // scalastyle:on println
 
-      val fields = for (i <- 0 until colsNum) yield StructField(s"col$i", DoubleType)
+      val fields = for (i <- 0 until colsNum) yield StructField(s"col$i", IntegerType)
       val schema = StructType(fields)
-      val values = (0 until colsNum).map(i => s"$i.$i").mkString(",")
+      val values = (0 until colsNum).map(i => i.toString).mkString(",")
       val columnNames = schema.fieldNames
 
       val rdd = spark.sparkContext.range(0, rowsNum, 1)
-        .map(_ => Row.fromSeq((0 until colsNum).map(_ + 0.1)))
+        .map(_ => Row.fromSeq((0 until colsNum)))
       val df = spark.createDataFrame(rdd, schema)
       df.write.option("header", true).csv(path.getAbsolutePath)
 
       val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
 
-      benchmark.addCase(s"Select all columns", 3) { _ =>
-        ds.select("*").filter((row: Row) => true).count()
-      }
-      benchmark.addCase(s"Select 10 columns", 3) { _ =>
-        ds.select($"col0", $"col10", $"col20", $"col30", $"col40",
-          $"col50", $"col60", $"col70", $"col80", $"col90")
-          .filter((row: Row) => true).count()
+      val cols100 = columnNames.take(100).map(Column(_))
+      benchmark.addCase(s"Select 100 columns", 3) { _ =>
+        ds.select(cols100: _*).filter((row: Row) => true).count()
       }
       benchmark.addCase(s"Select one column", 3) { _ =>
-        ds.select($"col0").filter((row: Row) => true).count()
+        ds.select($"col1").filter((row: Row) => true).count()
       }
 
       /*
@@ -114,9 +110,8 @@ object CSVBenchmarks {
 
       Wide rows with 1000 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       --------------------------------------------------------------------------------------------
-      Select all columns                    135378 / 206881          0.0      135378.2       1.0X
-      Select 10 columns                       57290 / 57581          0.0       57289.7       2.4X
-      Select one column                       55718 / 56358          0.0       55718.3       2.4X
+      Select 100 columns                      46345 / 58202          0.0       46345.3       1.0X
+      Select one column                       44344 / 44650          0.0       44344.0       1.0X
       */
       benchmark.run()
     }
