@@ -134,33 +134,7 @@ class ContinuousDataSourceRDD(
   }
 }
 
-class EpochPollRunnable(
-    queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
-    context: TaskContext,
-    failedFlag: AtomicBoolean)
-  extends Thread with Logging {
-  private[continuous] var failureReason: Throwable = _
 
-  private val epochEndpoint = EpochCoordinatorRef.get(
-    context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
-  private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
-
-  override def run(): Unit = {
-    try {
-      val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch)
-      for (i <- currentEpoch to newEpoch - 1) {
-        queue.put((null, null))
-        logDebug(s"Sent marker to start epoch ${i + 1}")
-      }
-      currentEpoch = newEpoch
-    } catch {
-      case t: Throwable =>
-        failureReason = t
-        failedFlag.set(true)
-        throw t
-    }
-  }
-}
 
 class DataReaderThread(
     reader: DataReader[UnsafeRow],
