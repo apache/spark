@@ -43,7 +43,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, StructType}
 import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
@@ -312,6 +312,18 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getKeepLastCheckpoint: Boolean = $(keepLastCheckpoint)
 
   /**
+   * Validates the input schema.
+   * @param schema input schema
+   */
+  private[clustering] def validateSchema(schema: StructType): Unit = {
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, false))
+
+    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
+  }
+
+  /**
    * Validates and transforms the input schema.
    *
    * @param schema input schema
@@ -345,7 +357,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
             s" must be >= 1.  Found value: $getTopicConcentration")
       }
     }
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    validateSchema(schema)
     SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }
 
@@ -461,7 +473,8 @@ abstract class LDAModel private[ml] (
       val transformer = oldLocalModel.getTopicDistributionMethod
 
       val t = udf { (v: Vector) => transformer(OldVectors.fromML(v)).asML }
-      dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF()
+      dataset.withColumn($(topicDistributionCol),
+        t(DatasetUtils.columnToVector(dataset, getFeaturesCol))).toDF()
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +
         " such as topicDistributionCol to produce results.")
@@ -938,7 +951,7 @@ object LDA extends MLReadable[LDA] {
        featuresCol: String): RDD[(Long, OldVector)] = {
     dataset
       .withColumn("docId", monotonically_increasing_id())
-      .select("docId", featuresCol)
+      .select(col("docId"), DatasetUtils.columnToVector(dataset, featuresCol))
       .rdd
       .map { case Row(docId: Long, features: Vector) =>
         (docId, OldVectors.fromML(features))

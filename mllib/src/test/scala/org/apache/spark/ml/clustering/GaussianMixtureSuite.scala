@@ -25,6 +25,8 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType}
 
 
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
@@ -255,6 +257,42 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val symmetricMatrix = new DenseMatrix(4, 4, symmetricValues)
     val expectedMatrix = GaussianMixture.unpackUpperTriangularMatrix(4, triangularValues)
     assert(symmetricMatrix === expectedMatrix)
+  }
+
+  test("GaussianMixture with Array input") {
+    val featuresColNameD = "array_double_features"
+    val featuresColNameF = "array_float_features"
+    val doubleUDF = udf { (features: Vector) =>
+      val featureArray = Array.fill[Double](features.size)(0.0)
+      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
+      featureArray
+    }
+    val floatUDF = udf { (features: Vector) =>
+      val featureArray = Array.fill[Float](features.size)(0.0f)
+      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
+      featureArray
+    }
+    val newdatasetD = dataset.withColumn(featuresColNameD, doubleUDF(col("features")))
+      .drop("features")
+    val newdatasetF = dataset.withColumn(featuresColNameF, floatUDF(col("features")))
+      .drop("features")
+    assert(newdatasetD.schema(featuresColNameD).dataType.equals(new ArrayType(DoubleType, false)))
+    assert(newdatasetF.schema(featuresColNameF).dataType.equals(new ArrayType(FloatType, false)))
+
+    val gmD = new GaussianMixture().setK(k).setMaxIter(1)
+      .setFeaturesCol(featuresColNameD).setSeed(1)
+    val gmF = new GaussianMixture().setK(k).setMaxIter(1)
+      .setFeaturesCol(featuresColNameF).setSeed(1)
+    val modelD = gmD.fit(newdatasetD)
+    val modelF = gmF.fit(newdatasetF)
+    val transformedD = modelD.transform(newdatasetD)
+    val transformedF = modelF.transform(newdatasetF)
+    val predictDifference = transformedD.select("prediction")
+      .except(transformedF.select("prediction"))
+    assert(predictDifference.count() == 0)
+    val probabilityDifference = transformedD.select("probability")
+      .except(transformedF.select("probability"))
+    assert(probabilityDifference.count() == 0)
   }
 }
 

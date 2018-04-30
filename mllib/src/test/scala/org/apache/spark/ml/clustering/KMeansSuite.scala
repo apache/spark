@@ -30,8 +30,8 @@ import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
+import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType}
 
 private[clustering] case class TestRow(features: Vector)
 

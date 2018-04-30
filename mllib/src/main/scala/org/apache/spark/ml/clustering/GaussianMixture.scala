@@ -33,8 +33,8 @@ import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatr
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
 
 
 /**
@@ -57,13 +57,25 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   def getK: Int = $(k)
 
   /**
+   * Validates the input schema.
+   * @param schema input schema
+   */
+  private[clustering] def validateSchema(schema: StructType): Unit = {
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, false))
+
+    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
+  }
+
+  /**
    * Validates and transforms the input schema.
    *
    * @param schema input schema
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    validateSchema(schema)
     val schemaWithPredictionCol = SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
     SchemaUtils.appendColumn(schemaWithPredictionCol, $(probabilityCol), new VectorUDT)
   }
@@ -109,8 +121,9 @@ class GaussianMixtureModel private[ml] (
     transformSchema(dataset.schema, logging = true)
     val predUDF = udf((vector: Vector) => predict(vector))
     val probUDF = udf((vector: Vector) => predictProbability(vector))
-    dataset.withColumn($(predictionCol), predUDF(col($(featuresCol))))
-      .withColumn($(probabilityCol), probUDF(col($(featuresCol))))
+    dataset
+      .withColumn($(predictionCol), predUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+      .withColumn($(probabilityCol), probUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
   }
 
   @Since("2.0.0")
@@ -340,7 +353,8 @@ class GaussianMixture @Since("2.0.0") (
     val sc = dataset.sparkSession.sparkContext
     val numClusters = $(k)
 
-    val instances: RDD[Vector] = dataset.select(col($(featuresCol))).rdd.map {
+    val instances: RDD[Vector] = dataset
+      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol)).rdd.map {
       case Row(features: Vector) => features
     }.cache()
 

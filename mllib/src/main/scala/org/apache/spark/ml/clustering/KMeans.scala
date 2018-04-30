@@ -350,9 +350,8 @@ class KMeans @Since("1.5.0") (
     transformSchema(dataset.schema, logging = true)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val instances: RDD[OldVector] = dataset.select(
-      DatasetUtils.columnToVector(dataset, getFeaturesCol))
-      .rdd.map {
+    val instances: RDD[OldVector] = dataset
+      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol)).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 

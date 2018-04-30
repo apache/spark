@@ -133,8 +133,6 @@ class BisectingKMeansModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-
-
   private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("2.0.0")
@@ -277,9 +275,8 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
     transformSchema(dataset.schema, logging = true)
-    val rdd: RDD[OldVector] = dataset.select(
-      DatasetUtils.columnToVector(dataset, getFeaturesCol))
-      .rdd.map {
+    val rdd: RDD[OldVector] = dataset
+      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol)).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 
