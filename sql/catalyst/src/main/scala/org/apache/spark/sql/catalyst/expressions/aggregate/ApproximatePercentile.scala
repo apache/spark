@@ -206,27 +206,14 @@ object ApproximatePercentile {
    * with limited memory. PercentileDigest is backed by [[QuantileSummaries]].
    *
    * @param summaries underlying probabilistic data structure [[QuantileSummaries]].
-   * @param isCompressed An internal flag from class [[QuantileSummaries]] to indicate whether the
-   *                   underlying quantileSummaries is compressed.
    */
-  class PercentileDigest(
-      private var summaries: QuantileSummaries,
-      // visible for testing
-      private[sql] var isCompressed: Boolean) {
-
-    // Trigger compression if the QuantileSummaries's buffer length exceeds
-    // compressThresHoldBufferLength. The buffer length can be get by
-    // quantileSummaries.sampled.length
-    private[this] final val compressThresHoldBufferLength: Int = {
-      // Max buffer length after compression.
-      val maxBufferLengthAfterCompression: Int = (1 / summaries.relativeError).toInt * 2
-      // A safe upper bound for buffer length before compression
-      maxBufferLengthAfterCompression * 2
-    }
+  class PercentileDigest(private var summaries: QuantileSummaries) {
 
     def this(relativeError: Double) = {
-      this(new QuantileSummaries(defaultCompressThreshold, relativeError), isCompressed = true)
+      this(new QuantileSummaries(defaultCompressThreshold, relativeError, compressed = true))
     }
+
+    private[sql] def isCompressed: Boolean = summaries.compressed
 
     /** Returns compressed object of [[QuantileSummaries]] */
     def quantileSummaries: QuantileSummaries = {
@@ -237,8 +224,6 @@ object ApproximatePercentile {
     /** Insert an observation value into the PercentileDigest data structure. */
     def add(value: Double): Unit = {
       summaries = summaries.insert(value)
-      // The result of QuantileSummaries.insert is un-compressed
-      isCompressed = false
     }
 
     /** In-place merges in another PercentileDigest. */
@@ -275,7 +260,6 @@ object ApproximatePercentile {
 
     private final def compress(): Unit = {
       summaries = summaries.compress()
-      isCompressed = true
     }
   }
 
@@ -330,8 +314,8 @@ object ApproximatePercentile {
         sampled(i) = Stats(value, g, delta)
         i += 1
       }
-      val summary = new QuantileSummaries(compressThreshold, relativeError, sampled, count)
-      new PercentileDigest(summary, isCompressed = true)
+      val summary = new QuantileSummaries(compressThreshold, relativeError, sampled, count, true)
+      new PercentileDigest(summary)
     }
   }
 

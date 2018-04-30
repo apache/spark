@@ -283,10 +283,12 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-24013: unneeded compress can cause performance issues with sorted input") {
     val buffer = new PercentileDigest(1.0D / ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY)
+    var compressCounts = 0
     (1 to 10000000).foreach { i =>
       buffer.add(i)
-      assert(!buffer.isCompressed)
+      if (buffer.isCompressed) compressCounts += 1
     }
+    assert(compressCounts > 0)
     buffer.quantileSummaries
     assert(buffer.isCompressed)
   }
