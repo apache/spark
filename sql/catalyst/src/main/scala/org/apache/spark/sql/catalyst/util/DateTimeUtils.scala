@@ -45,7 +45,6 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
   final val SECONDS_PER_DAY = 60 * 60 * 24L
-  final val SECONDS_PER_MONTH = 60 * 60 * 24 * 31D
   final val MICROS_PER_MILLIS = 1000L
   final val MICROS_PER_SECOND = MICROS_PER_MILLIS * MILLIS_PER_SECOND
   final val MILLIS_PER_SECOND = 1000L
@@ -899,7 +898,9 @@ object DateTimeUtils {
     val secondsInDay1 = (millis1 - daysToMillis(date1, timeZone)) / 1000L
     val secondsInDay2 = (millis2 - daysToMillis(date2, timeZone)) / 1000L
     val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
-    val diff = monthDiff + secondsDiff / SECONDS_PER_MONTH
+    // 2678400D is the number of seconds in 31 days
+    // every month is considered to be 31 days long in this function
+    val diff = monthDiff + secondsDiff / 2678400D
     if (roundOff) {
       // rounding to 8 digits
       math.round(diff * 1e8) / 1e8
