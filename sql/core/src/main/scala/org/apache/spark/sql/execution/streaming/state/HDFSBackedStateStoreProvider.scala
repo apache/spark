@@ -341,9 +341,13 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   private def updateFromDeltaFile(version: Long, map: MapType): Unit = {
     val fileToRead = deltaFile(version)
     var input: DataInputStream = null
-    // We don't guarantee that all epoch IDs actually run, so some versions might not exist.
-    if (!fm.exists(fileToRead)) return
-    val sourceStream = fm.open(fileToRead)
+    val sourceStream = try {
+      fm.open(fileToRead)
+    } catch {
+      case f: FileNotFoundException =>
+        throw new IllegalStateException(
+          s"Error reading delta file $fileToRead of $this: $fileToRead does not exist", f)
+    }
     try {
       input = decompressStream(sourceStream)
       var eof = false
