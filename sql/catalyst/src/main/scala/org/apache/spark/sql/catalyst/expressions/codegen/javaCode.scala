@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.lang.{Boolean => JBool}
 
+import scala.collection.mutable
 import scala.language.{existentials, implicitConversions}
 
 import org.apache.spark.sql.types.{BooleanType, DataType}
@@ -120,12 +121,78 @@ object JavaCode {
 trait ExprValue extends JavaCode {
   def javaType: Class[_]
   def isPrimitive: Boolean = javaType.isPrimitive
+
+  // This will be called during string interpolation.
+  override def toString: String = ExprValue.exprValueToString(this)
 }
 
 object ExprValue {
-  implicit def exprValueToString(exprValue: ExprValue): String = exprValue.toString
+
+  private var currentHandlerForExprValue =
+    new ThreadLocal[(ExprValue) => String]() {
+      override def initialValue(): (ExprValue) => String =
+        defaultExprValueToString
+    }
+
+  def defaultExprValueToString(exprValue: ExprValue): String = exprValue.code
+
+  implicit def exprValueToString(exprValue: ExprValue): String = {
+    currentListeners.get.foreach(_.genExprValue(exprValue))
+    currentHandlerForExprValue.get()(exprValue)
+  }
+
+  protected[sql] val currentListeners =
+    new ThreadLocal[mutable.ArrayBuffer[ExprValueCodegenListener]]() {
+      override def initialValue(): mutable.ArrayBuffer[ExprValueCodegenListener] =
+        mutable.ArrayBuffer.empty[ExprValueCodegenListener]
+    }
+
+  /**
+   * By adding a listener, we can catch all expr values which are generated during codegen.
+   */
+  def withExprValueCodegenListener[T](listener: ExprValueCodegenListener)
+      (f: () => T): T = {
+    val index = currentListeners.get.length
+    currentListeners.get += listener
+    val result = f()
+    assert(currentListeners.get.length == index + 1,
+      "There are codegen listeners which are not removed after used!")
+    currentListeners.get.remove(index)
+    result
+  }
+
+  /**
+   * Sets up a handler function used to convert `ExprValue` to string during codegen. The given
+   * handler can overwrite the default behavior which outputs `ExprValue` to its actual code.
+   */
+  def withExprValueHandler[T](handlerFunc: (ExprValue) => String)(f: () => T): T = {
+    val previousHandler = currentHandlerForExprValue.get
+    currentHandlerForExprValue.set(handlerFunc)
+    val result = f()
+    currentHandlerForExprValue.set(previousHandler)
+    result
+  }
 }
 
+/**
+ * A listener which gets notified when `ExprValue`s are generated to Java code.
+ */
+trait ExprValueCodegenListener {
+  def genExprValue(exprValue: ExprValue): Unit
+}
+
+/**
+ * A codegen listener specified for `SimpleExprValue` expression values.
+ */
+case class SimpleExprValueCodegenListener() extends ExprValueCodegenListener {
+  protected[sql] val exprValues: mutable.HashSet[SimpleExprValue] =
+    mutable.HashSet.empty[SimpleExprValue]
+
+  override def genExprValue(exprValue: ExprValue): Unit = exprValue match {
+    case s: SimpleExprValue => exprValues += s
+    case _ =>
+  }
+}
 
 /**
  * A java expression fragment.

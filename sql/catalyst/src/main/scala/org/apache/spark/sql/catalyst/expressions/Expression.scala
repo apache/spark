@@ -445,7 +445,6 @@ abstract class UnaryExpression extends Expression {
       """)
     } else {
       ev.copy(code = s"""
-        boolean ${ev.isNull} = false;
         ${childGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
@@ -544,7 +543,6 @@ abstract class BinaryExpression extends Expression {
       """)
     } else {
       ev.copy(code = s"""
-        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${rightGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -687,7 +685,6 @@ abstract class TernaryExpression extends Expression {
         $nullSafeEval""")
     } else {
       ev.copy(code = s"""
-        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}
