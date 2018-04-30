@@ -358,9 +358,7 @@ case class DataSource(
       case (format: FileFormat, _) =>
         val globbedPaths =
           checkAndGlobPathIfNecessary(checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
-        val useCatalogFileIndex = sparkSession.sqlContext.conf.manageFilesourcePartitions &&
-          catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
-          catalogTable.get.partitionColumnNames.nonEmpty
+        val useCatalogFileIndex = sparkSession.sqlContext.conf.manageFilesourcePartitions && catalogTable.isDefined
         val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
           val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
           val index = fileIndexFactory.create(
