@@ -45,12 +45,16 @@ import org.apache.spark.util.ThreadUtils
  *  * {epochPoll|dataReader}Failed - flags to check if the epoch poll and data reader threads are
  *    still running. These threads won't be restarted if they fail, so the RDD should intercept
  *    this state when convenient to fail the query.
+ *  * close() - to close this reader when the query is going to shut down.
  */
 class ContinuousQueuedDataReader(
     split: Partition,
     context: TaskContext,
     dataQueueSize: Int,
     epochPollIntervalMs: Long) extends Closeable {
+  private val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]]
+    .readerFactory.createDataReader()
+
   // Important sequencing - we must get our starting point before the provider threads start running
   var currentOffset: PartitionOffset = ContinuousDataSourceRDD.getBaseReader(reader).getOffset
   var currentEpoch: Long = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
@@ -62,9 +66,6 @@ class ContinuousQueuedDataReader(
 
   val epochPollFailed = new AtomicBoolean(false)
   val dataReaderFailed = new AtomicBoolean(false)
-
-  private val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]]
-    .readerFactory.createDataReader()
 
   private val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
 

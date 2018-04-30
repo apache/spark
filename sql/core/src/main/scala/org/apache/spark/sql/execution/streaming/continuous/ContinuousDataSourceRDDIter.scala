@@ -25,7 +25,6 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
@@ -134,8 +133,6 @@ class ContinuousDataSourceRDD(
     }
   }
 }
-
-case class EpochPackedPartitionOffset(epoch: Long) extends PartitionOffset
 
 class EpochPollRunnable(
     queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
