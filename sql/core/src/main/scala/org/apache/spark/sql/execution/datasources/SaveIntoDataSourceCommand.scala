@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.CreatableRelationProvider
-import org.apache.spark.util.Utils
 
 /**
  * Saves the results of `query` in to a data source.
@@ -50,12 +49,7 @@ case class SaveIntoDataSourceCommand(
   }
 
   override def simpleString: String = {
-    // Redact the options according to the current session's config. If for some reason there
-    // is no current session, be paranoid and don't show any options.
-    val redacted = SparkSession.getActiveSession.map(_.sessionState.conf).map { conf =>
-      conf.redactOptions(options)
-    }.getOrElse(Map())
-
+    val redacted = SQLConf.get.redactOptions(options)
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
   }
 }
