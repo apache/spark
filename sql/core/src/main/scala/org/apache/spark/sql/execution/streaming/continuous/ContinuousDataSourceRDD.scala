@@ -32,6 +32,13 @@ import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, PartitionOffset}
 import org.apache.spark.util.ThreadUtils
 
+/**
+ * The bottom-most RDD of a continuous processing read task. Wraps a [[ContinuousQueuedDataReader]]
+ * to read from the remote source, and polls that queue for incoming rows.
+ *
+ * Note that continuous processing calls compute() multiple times, and the same
+ * [[ContinuousQueuedDataReader]] instance will/must be shared between each call for the same split.
+ */
 class ContinuousDataSourceRDD(
     sc: SparkContext,
     sqlContext: SQLContext,
