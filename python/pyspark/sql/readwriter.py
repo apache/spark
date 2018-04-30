@@ -983,6 +983,21 @@ def _test():
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 
+    hive_enabled = True
+    try:
+        sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+    except py4j.protocol.Py4JError:
+        hive_enabled = False
+    except TypeError:
+        hive_enabled = False
+
+    if not hive_enabled:
+        # if hive is not enabled, then skip doctests that need hive
+        # TODO: Need to communicate with outside world that this test
+        # has been skipped.
+        m = pyspark.sql.readwriter
+        m.__dict__["DataFrameReader"].__dict__["table"].__doc__ = ""
+
     globs['tempfile'] = tempfile
     globs['os'] = os
     globs['sc'] = sc
