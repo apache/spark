@@ -1699,7 +1699,7 @@ Using the above optimizations with Arrow will produce the same results as when A
 enabled. Note that even with Arrow, `toPandas()` results in the collection of all records in the
 DataFrame to the driver program and should be done on a small subset of the data. Not all Spark
 data types are currently supported and an error can be raised if a column has an unsupported type,
-see [Supported SQL Types](#supported-sql-arrow-types). If an error occurs during `createDataFrame()`,
+see [Supported SQL Types](#supported-sql-types). If an error occurs during `createDataFrame()`,
 Spark will fall back to create the DataFrame without Arrow.
 
 ## Pandas UDFs (a.k.a. Vectorized UDFs)
