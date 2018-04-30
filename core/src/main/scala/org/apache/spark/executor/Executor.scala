@@ -233,7 +233,7 @@ private[spark] class Executor(
    * Only in local mode, we have to prevent the driver from setting the active SparkSession
    * in the executor threads.  See SPARK-23894.
    */
-  lazy val clearActiveSparkSessionMethod = if (Utils.isLocalMaster(conf)) {
+  private lazy val clearActiveSparkSessionMethod = if (Utils.isLocalMaster(conf)) {
     try {
       val cls = Utils.classForName("org.apache.spark.sql.SparkSession")
       Some(cls.getMethod("clearActiveSession"))
