@@ -21,7 +21,6 @@ import java.util.concurrent.BlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{SparkEnv, TaskContext}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset

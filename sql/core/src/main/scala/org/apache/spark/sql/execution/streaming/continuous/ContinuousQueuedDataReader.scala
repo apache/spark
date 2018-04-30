@@ -22,7 +22,6 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{Partition, TaskContext}
-
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.DataSourceRDDPartition
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
@@ -71,11 +70,11 @@ class ContinuousQueuedDataReader(
 
   private val epochPollExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     s"epoch-poll--$coordinatorId--${context.partitionId()}")
-  private val epochPollRunnable = new EpochPollRunnable(queue, context, epochPollFailed)
+  val epochPollRunnable = new EpochPollRunnable(queue, context, epochPollFailed)
   epochPollExecutor.scheduleWithFixedDelay(
     epochPollRunnable, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
 
-  private val dataReaderThread = new DataReaderThread(reader, queue, context, dataReaderFailed)
+  val dataReaderThread = new DataReaderThread(reader, queue, context, dataReaderFailed)
   dataReaderThread.setDaemon(true)
   dataReaderThread.start()
 

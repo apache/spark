@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.collection.JavaConverters._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -46,7 +44,8 @@ class ContinuousDataSourceRDD(
   // When computing the same partition multiple times, we need to use the same data reader to
   // do so for continuity in offsets.
   @GuardedBy("dataReaders")
-  private val dataReaders: mutable.Map[Partition, ContinuousQueuedDataReader] = _
+  private val dataReaders: mutable.Map[Partition, ContinuousQueuedDataReader] =
+    mutable.Map[Partition, ContinuousQueuedDataReader]()
 
   override protected def getPartitions: Array[Partition] = {
     readerFactories.zipWithIndex.map {
