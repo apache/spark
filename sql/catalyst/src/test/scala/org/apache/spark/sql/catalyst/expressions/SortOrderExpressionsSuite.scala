@@ -27,6 +27,8 @@ import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.{BinaryPre
 class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SortPrefix") {
+    val b1 = Literal.create(false, BooleanType)
+    val b2 = Literal.create(true, BooleanType)
     val i1 = Literal.create(20132983, IntegerType)
     val i2 = Literal.create(-20132983, IntegerType)
     val l1 = Literal.create(20132983, LongType)
@@ -40,13 +42,15 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val db2 = Literal.create(-0.7788229d, DoubleType)
     val s1 = Literal.create("T", StringType)
     val s2 = Literal.create("This is longer than 8 characters", StringType)
-    val b1 = Literal.create(Array[Byte](12), BinaryType)
-    val b2 = Literal.create(Array[Byte](12, 17, 99, 0, 0, 0, 2, 3, 0xf4.asInstanceOf[Byte]),
+    val bin1 = Literal.create(Array[Byte](12), BinaryType)
+    val bin2 = Literal.create(Array[Byte](12, 17, 99, 0, 0, 0, 2, 3, 0xf4.asInstanceOf[Byte]),
       BinaryType)
     val dec1 = Literal(Decimal(20132983L, 10, 2))
     val dec2 = Literal(Decimal(20132983L, 19, 2))
     val dec3 = Literal(Decimal(20132983L, 21, 2))
 
+    checkEvaluation(SortPrefix(SortOrder(b1, Ascending)), 0L)
+    checkEvaluation(SortPrefix(SortOrder(b2, Ascending)), 1L)
     checkEvaluation(SortPrefix(SortOrder(i1, Ascending)), 20132983L)
     checkEvaluation(SortPrefix(SortOrder(i2, Ascending)), -20132983L)
     checkEvaluation(SortPrefix(SortOrder(l1, Ascending)), 20132983L)
@@ -66,10 +70,10 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       StringPrefixComparator.computePrefix(s1.value.asInstanceOf[UTF8String]))
     checkEvaluation(SortPrefix(SortOrder(s2, Ascending)),
       StringPrefixComparator.computePrefix(s2.value.asInstanceOf[UTF8String]))
-    checkEvaluation(SortPrefix(SortOrder(b1, Ascending)),
-      BinaryPrefixComparator.computePrefix(b1.value.asInstanceOf[Array[Byte]]))
-    checkEvaluation(SortPrefix(SortOrder(b2, Ascending)),
-      BinaryPrefixComparator.computePrefix(b2.value.asInstanceOf[Array[Byte]]))
+    checkEvaluation(SortPrefix(SortOrder(bin1, Ascending)),
+      BinaryPrefixComparator.computePrefix(bin1.value.asInstanceOf[Array[Byte]]))
+    checkEvaluation(SortPrefix(SortOrder(bin2, Ascending)),
+      BinaryPrefixComparator.computePrefix(bin2.value.asInstanceOf[Array[Byte]]))
     checkEvaluation(SortPrefix(SortOrder(dec1, Ascending)), 20132983L)
     checkEvaluation(SortPrefix(SortOrder(dec2, Ascending)), 2013298L)
     checkEvaluation(SortPrefix(SortOrder(dec3, Ascending)),
