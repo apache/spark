@@ -19,10 +19,13 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
@@ -38,9 +41,13 @@ class ContinuousDataSourceRDD(
     @transient private val readerFactories: Seq[DataReaderFactory[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
-  private var readerForTask: ContinuousReaderForTask = _
   private val dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize
   private val epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs
+
+  // When computing the same partition multiple times, we need to use the same data reader to
+  // do so for continuity in offsets.
+  @GuardedBy("dataReaders")
+  private val dataReaders: mutable.Map[Partition, ContinuousQueuedDataReader] = _
 
   override protected def getPartitions: Array[Partition] = {
     readerFactories.zipWithIndex.map {
@@ -54,9 +61,14 @@ class ContinuousDataSourceRDD(
       throw new ContinuousTaskRetryException()
     }
 
-    if (readerForTask == null) {
-      readerForTask =
-        new ContinuousReaderForTask(split, context, dataQueueSize, epochPollIntervalMs)
+    val readerForPartition = dataReaders.synchronized {
+      if (!dataReaders.contains(split)) {
+        dataReaders.put(
+          split,
+          new ContinuousQueuedDataReader(split, context, dataQueueSize, epochPollIntervalMs))
+      }
+
+      dataReaders(split)
     }
 
     val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
@@ -71,15 +83,15 @@ class ContinuousDataSourceRDD(
           if (context.isInterrupted() || context.isCompleted()) {
             currentEntry = (null, null)
           }
-          if (readerForTask.dataReaderFailed.get()) {
+          if (readerForPartition.dataReaderFailed.get()) {
             throw new SparkException(
-              "data read failed", readerForTask.dataReaderThread.failureReason)
+              "data read failed", readerForPartition.dataReaderThread.failureReason)
           }
-          if (readerForTask.epochPollFailed.get()) {
+          if (readerForPartition.epochPollFailed.get()) {
             throw new SparkException(
-              "epoch poll failed", readerForTask.epochPollRunnable.failureReason)
+              "epoch poll failed", readerForPartition.epochPollRunnable.failureReason)
           }
-          currentEntry = readerForTask.queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+          currentEntry = readerForPartition.queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         }
 
         currentEntry match {
@@ -87,14 +99,14 @@ class ContinuousDataSourceRDD(
           case (null, null) =>
             epochEndpoint.send(ReportPartitionOffset(
               context.partitionId(),
-              readerForTask.currentEpoch,
-              readerForTask.currentOffset))
-            readerForTask.currentEpoch += 1
+              readerForPartition.currentEpoch,
+              readerForPartition.currentOffset))
+            readerForPartition.currentEpoch += 1
             currentEntry = null
             false
           // real row
           case (_, offset) =>
-            readerForTask.currentOffset = offset
+            readerForPartition.currentOffset = offset
             true
         }
       }
@@ -110,6 +122,16 @@ class ContinuousDataSourceRDD(
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readerFactory.preferredLocations()
+  }
+
+  override def clearDependencies(): Unit = {
+    super.clearDependencies()
+    dataReaders.synchronized {
+      dataReaders.foreach {
+        case (_, reader) => reader.close()
+      }
+      dataReaders.clear()
+    }
   }
 }
 

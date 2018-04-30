@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
+import java.io.Closeable
 import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{Partition, TaskContext}
+
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.DataSourceRDDPartition
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
@@ -30,11 +32,11 @@ import org.apache.spark.util.ThreadUtils
  * An object containing a queue of continuous processing records read in.
  * Instantiated once per task.
  */
-class ContinuousReaderForTask(
+class ContinuousQueuedDataReader(
     split: Partition,
     context: TaskContext,
     dataQueueSize: Int,
-    epochPollIntervalMs: Long) {
+    epochPollIntervalMs: Long) extends Closeable {
   // This queue contains two types of messages:
   // * (null, null) representing an epoch boundary.
   // * (row, off) containing a data row and its corresponding PartitionOffset.
@@ -48,16 +50,15 @@ class ContinuousReaderForTask(
 
   private val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
 
+  // Important sequencing - we must get our starting point before the provider threads start running
+  var currentOffset: PartitionOffset = ContinuousDataSourceRDD.getBaseReader(reader).getOffset
+  var currentEpoch: Long = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
+
   private val epochPollExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     s"epoch-poll--$coordinatorId--${context.partitionId()}")
   val epochPollRunnable = new EpochPollRunnable(queue, context, epochPollFailed)
   epochPollExecutor.scheduleWithFixedDelay(
     epochPollRunnable, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
-
-  // Important sequencing - we must get start offset before the data reader thread begins
-  var currentOffset = ContinuousDataSourceRDD.getBaseReader(reader).getOffset
-  var currentEpoch =
-    context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
   val dataReaderThread = new DataReaderThread(reader, queue, context, dataReaderFailed)
   dataReaderThread.setDaemon(true)
@@ -67,4 +68,9 @@ class ContinuousReaderForTask(
     dataReaderThread.interrupt()
     epochPollExecutor.shutdown()
   })
+
+  override def close(): Unit = {
+    dataReaderThread.interrupt()
+    epochPollExecutor.shutdown()
+  }
 }
