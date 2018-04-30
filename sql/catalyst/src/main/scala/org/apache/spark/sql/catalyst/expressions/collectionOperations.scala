@@ -459,11 +459,11 @@ case class Slice(x: Expression, start: Expression, length: Expression)
   }
 
   def genCodeForResult(
-                        ctx: CodegenContext,
-                        ev: ExprCode,
-                        inputArray: String,
-                        startIdx: String,
-                        resLength: String): String = {
+      ctx: CodegenContext,
+      ev: ExprCode,
+      inputArray: String,
+      startIdx: String,
+      resLength: String): String = {
     val values = ctx.freshName("values")
     val i = ctx.freshName("i")
     val getValue = CodeGenerator.getValue(inputArray, elementType, s"$i + $startIdx")
