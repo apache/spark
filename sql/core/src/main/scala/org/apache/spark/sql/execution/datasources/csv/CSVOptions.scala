@@ -150,6 +150,9 @@ class CSVOptions(
 
   val isCommentSet = this.comment != '\u0000'
 
+  val samplingRatio =
+    parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+
   /**
    * Forcibly apply the specified or inferred schema to datasource files.
    * If the option is enabled, headers of CSV files will be ignored.
