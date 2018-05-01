@@ -58,7 +58,7 @@ object PrefixSpan {
    * @return A `DataFrame` that contains columns of sequence and corresponding frequency.
    *         The schema of it will be:
    *          - `sequence: Seq[Seq[T]]` (T is the item type)
-   *          - `frequency: Long`
+   *          - `freq: Long`
    */
   @Since("2.4.0")
   def findFrequentSequentialPatterns(
@@ -87,7 +87,7 @@ object PrefixSpan {
     val rows = mllibPrefixSpan.run(sequences).freqSequences.map(f => Row(f.sequence, f.freq))
     val schema = StructType(Seq(
       StructField("sequence", dataset.schema(sequenceCol).dataType, nullable = false),
-      StructField("frequency", LongType, nullable = false)))
+      StructField("freq", LongType, nullable = false)))
     val freqSequences = dataset.sparkSession.createDataFrame(rows, schema)
 
     freqSequences
