@@ -172,6 +172,16 @@ trait Partitioning {
     case AllTuples => numPartitions == 1
     case _ => false
   }
+
+  /**
+   * Transforms this [[Partitioning]] by substituting all projected [[Expression Expressions]]
+   * with their corresponding aliases from a projection. If this [[Partitioning]] is not
+   * concerned with any projected [[Expression]], return the original [[Partitioning]].
+   *
+   * @param projectList a [[Seq]] of projected [[Expression Expressions]]
+   * @return the transformed [[Partitioning]] after the projection
+   */
+  def project(projectList: Seq[NamedExpression]): Partitioning = this
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning
@@ -220,6 +230,15 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     }
   }
 
+  override def project(projectList: Seq[NamedExpression]): Partitioning = {
+    val newExpressions = expressions.map(_.substituteProjectedExpressions(projectList))
+    if (newExpressions == expressions) {
+      this
+    } else {
+      HashPartitioning(newExpressions, numPartitions)
+    }
+  }
+
   /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
    * than numPartitions) based on hashing expressions.
@@ -257,6 +276,15 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
             (requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions)
         case _ => false
       }
+    }
+  }
+
+  override def project(projectList: Seq[NamedExpression]): Partitioning = {
+    val newOrdering = SortOrder.projectOrdering(ordering, projectList)
+    if (newOrdering == ordering) {
+      this
+    } else {
+      RangePartitioning(newOrdering, numPartitions)
     }
   }
 }
@@ -297,6 +325,15 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
    */
   override def satisfies(required: Distribution): Boolean =
     partitionings.exists(_.satisfies(required))
+
+  override def project(projectList: Seq[NamedExpression]): Partitioning = {
+    val newPartitionings = partitionings.map(_.project(projectList))
+    if (newPartitionings == partitionings) {
+      this
+    } else {
+      PartitioningCollection(newPartitionings)
+    }
+  }
 
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")

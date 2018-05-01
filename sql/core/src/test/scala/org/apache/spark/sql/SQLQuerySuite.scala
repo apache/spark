@@ -25,8 +25,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.{aggregate, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2791,5 +2792,72 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           .as[String].collect().mkString(",").contains("i,p,j"))
       }
     }
+  }
+
+  test("SPARK-23368: Avoid unnecessary Exchange or Sort after projection (test Project)") {
+    val df = sql(
+      """
+        |SELECT * FROM (
+        |  SELECT t1.a a1, t2.a a2, t1.b + 1 b1, t2.b b2
+        |  FROM testData2 t1 JOIN testData2 t2
+        |  ON t1.a + 1 = t2.a AND t1.b + 1 = t2.b
+        |)
+        |JOIN testData2 t3
+        |ON a1 + 1 = t3.a AND b1 = t3.b
+      """.stripMargin)
+    val plan = df.queryExecution.executedPlan
+    val sortOrExchangeOverJoin = plan.find {
+      case s: SortExec =>
+        s.find {
+          case j: SortMergeJoinExec => true
+          case _ => false
+        }.nonEmpty
+      case e: Exchange =>
+        e.find {
+          case j: SortMergeJoinExec => true
+          case _ => false
+        }.nonEmpty
+      case _ => false
+    }
+    assert(sortOrExchangeOverJoin.isEmpty)
+    checkAnswer(df, Row(1, 2, 2, 2, 2, 2) :: Row(2, 3, 2, 2, 3, 2) :: Nil)
+  }
+
+  test("SPARK-23368: Avoid unnecessary Exchange or Sort after projection (test Aggregate)") {
+    val df = sql(
+      """
+        |SELECT a1, t2.b, c FROM (
+        |  SELECT a a1, b + 1 b1, count(*) c
+        |  FROM testData2
+        |  GROUP BY a, b + 1
+        |) t1
+        |JOIN testData2 t2
+        |ON a1 = t2.a AND b1 = t2.b
+      """.stripMargin)
+    val plan = df.queryExecution.executedPlan
+    val exchangeOverFinalAggregate = plan.find {
+      case e: Exchange =>
+        e.find {
+          case h: HashAggregateExec =>
+            h.child.find {
+              case h2: HashAggregateExec => true
+              case _ => false
+            }.nonEmpty
+          case s: SortAggregateExec =>
+            s.child.find {
+              case s2: SortAggregateExec => true
+              case _ => false
+            }.nonEmpty
+          case o: ObjectHashAggregateExec =>
+            o.child.find {
+              case o2: ObjectHashAggregateExec => true
+              case _ => false
+            }.nonEmpty
+          case _ => false
+        }.nonEmpty
+      case _ => false
+    }
+    assert(exchangeOverFinalAggregate.isEmpty)
+    checkAnswer(df, Row(1, 2, 1) :: Row(2, 2, 1) :: Row(3, 2, 1) :: Nil)
   }
 }

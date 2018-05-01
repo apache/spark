@@ -66,10 +66,13 @@ case class SortAggregateExec(
     groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
   }
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputPartitioning: Partitioning =
+    child.outputPartitioning.project(resultExpressions)
 
   override def outputOrdering: Seq[SortOrder] = {
-    groupingExpressions.map(SortOrder(_, Ascending))
+    SortOrder.projectOrdering(
+      groupingExpressions.map(SortOrder(_, Ascending)),
+      resultExpressions)
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {

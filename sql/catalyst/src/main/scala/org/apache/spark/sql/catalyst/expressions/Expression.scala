@@ -117,6 +117,25 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
+  /**
+   * Transform this [[Expression]] with substitutions from projected [[Expression Expressions]]
+   * to their corresponding aliases.
+   *
+   * @param projectList a [[Seq]] of projected [[Expression Expressions]]
+   * @return the transformed [[Expression]], or the original [[Expression]] if no substitution
+   *         is applied.
+   */
+  def substituteProjectedExpressions(projectList: Seq[NamedExpression]): Expression = {
+    this.transform {
+      case e =>
+        val found = projectList.find {
+          case Alias(child, _) => child.semanticEquals(e)
+          case _ => false
+        }
+        if (found.nonEmpty) found.get.toAttribute else e
+    }
+  }
+
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
     if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {

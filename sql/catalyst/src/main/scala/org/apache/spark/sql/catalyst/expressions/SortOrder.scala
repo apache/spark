@@ -119,6 +119,31 @@ object SortOrder {
       }
     }
   }
+
+  /**
+   * Transforms an ordering by substituting all projected [[Expression Expressions]]
+   * with their corresponding aliases from a projection. If this ordering is not
+   * concerned with any projected [[Expression]], return the original ordering.
+   *
+   * @param ordering the original ordering before projection
+   * @param projectList a [[Seq]] of projected [[Expression Expressions]]
+   * @return the transformed ordering after the projection
+   */
+  def projectOrdering(ordering: Seq[SortOrder], projectList: Seq[NamedExpression])
+  : Seq[SortOrder] = {
+    ordering.map {
+      o => {
+        val newChild = o.child.substituteProjectedExpressions(projectList)
+        val newSameOrderExpressions = o.sameOrderExpressions.map(
+          _.substituteProjectedExpressions(projectList))
+        if (newChild == o.child && newSameOrderExpressions == o.sameOrderExpressions) {
+          o
+        } else {
+          SortOrder(newChild, o.direction, o.nullOrdering, newSameOrderExpressions)
+        }
+      }
+    }
+  }
 }
 
 /**
