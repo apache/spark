@@ -685,6 +685,13 @@ class SQLTests(ReusedSQLTestCase):
                                             multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
 
+    def test_encoding_json(self):
+        people_array = self.spark.read\
+            .json("python/test_support/sql/people_array_utf16le.json",
+                  multiLine=True, encoding="UTF-16LE")
+        expected = [Row(age=30, name=u'Andy'), Row(age=19, name=u'Justin')]
+        self.assertEqual(people_array.collect(), expected)
+
     def test_linesep_json(self):
         df = self.spark.read.json("python/test_support/sql/people.json", lineSep=",")
         expected = [Row(_corrupt_record=None, name=u'Michael'),
@@ -3026,8 +3033,35 @@ class SQLTests(ReusedSQLTestCase):
             .json(rdd).schema
         self.assertEquals(schema, StructType([StructField("a", LongType(), True)]))
 
+    def test_csv_sampling_ratio(self):
+        rdd = self.spark.sparkContext.range(0, 100, 1, 1) \
+            .map(lambda x: '0.1' if x == 1 else str(x))
+        schema = self.spark.read.option('inferSchema', True)\
+            .csv(rdd, samplingRatio=0.5).schema
+        self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
+
+    @classmethod
+    def setUpClass(cls):
+        # get a SparkContext to check for availability of Hive
+        sc = SparkContext('local[4]', cls.__name__)
+        cls.hive_available = True
+        try:
+            sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        except py4j.protocol.Py4JError:
+            cls.hive_available = False
+        except TypeError:
+            cls.hive_available = False
+        finally:
+            # we don't need this SparkContext for the test
+            sc.stop()
+
+    def setUp(self):
+        super(HiveSparkSubmitTests, self).setUp()
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     def test_hivecontext(self):
         # This test checks that HiveContext is using Hive metastore (SPARK-16224).

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{File, StringWriter}
-import java.nio.charset.StandardCharsets
+import java.io.{File, FileOutputStream, StringWriter}
+import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.util.Locale
@@ -47,6 +47,10 @@ class TestFileFilter extends PathFilter {
 
 class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   import testImplicits._
+
+  def testFile(fileName: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
+  }
 
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any) {
@@ -2166,5 +2170,242 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val sampled = spark.read.option("samplingRatio", 1.0).json(ds)
     assert(sampled.count() == ds.count())
+  }
+
+  test("SPARK-23723: json in UTF-16 with BOM") {
+    val fileName = "test-data/utf16WithBOM.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiline", "true")
+      .option("encoding", "UTF-16")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird"), Row("Doug", "Rood")))
+  }
+
+  test("SPARK-23723: multi-line json in UTF-32BE with BOM") {
+    val fileName = "test-data/utf32BEWithBOM.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiline", "true")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
+  }
+
+  test("SPARK-23723: Use user's encoding in reading of multi-line json in UTF-16LE") {
+    val fileName = "test-data/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiline", "true")
+      .options(Map("encoding" -> "UTF-16LE"))
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
+  }
+
+  test("SPARK-23723: Unsupported encoding name") {
+    val invalidCharset = "UTF-128"
+    val exception = intercept[UnsupportedCharsetException] {
+      spark.read
+        .options(Map("encoding" -> invalidCharset, "lineSep" -> "\n"))
+        .json(testFile("test-data/utf16LE.json"))
+        .count()
+    }
+
+    assert(exception.getMessage.contains(invalidCharset))
+  }
+
+  test("SPARK-23723: checking that the encoding option is case agnostic") {
+    val fileName = "test-data/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiline", "true")
+      .options(Map("encoding" -> "uTf-16lE"))
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
+  }
+
+
+  test("SPARK-23723: specified encoding is not matched to actual encoding") {
+    val fileName = "test-data/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val exception = intercept[SparkException] {
+      spark.read.schema(schema)
+        .option("mode", "FAILFAST")
+        .option("multiline", "true")
+        .options(Map("encoding" -> "UTF-16BE"))
+        .json(testFile(fileName))
+        .count()
+    }
+    val errMsg = exception.getMessage
+
+    assert(errMsg.contains("Malformed records are detected in record parsing"))
+  }
+
+  def checkEncoding(expectedEncoding: String, pathToJsonFiles: String,
+      expectedContent: String): Unit = {
+    val jsonFiles = new File(pathToJsonFiles)
+      .listFiles()
+      .filter(_.isFile)
+      .filter(_.getName.endsWith("json"))
+    val actualContent = jsonFiles.map { file =>
+      new String(Files.readAllBytes(file.toPath), expectedEncoding)
+    }.mkString.trim
+
+    assert(actualContent == expectedContent)
+  }
+
+  test("SPARK-23723: save json in UTF-32BE") {
+    val encoding = "UTF-32BE"
+    withTempPath { path =>
+      val df = spark.createDataset(Seq(("Dog", 42)))
+      df.write
+        .options(Map("encoding" -> encoding, "lineSep" -> "\n"))
+        .json(path.getCanonicalPath)
+
+      checkEncoding(
+        expectedEncoding = encoding,
+        pathToJsonFiles = path.getCanonicalPath,
+        expectedContent = """{"_1":"Dog","_2":42}""")
+    }
+  }
+
+  test("SPARK-23723: save json in default encoding - UTF-8") {
+    withTempPath { path =>
+      val df = spark.createDataset(Seq(("Dog", 42)))
+      df.write.json(path.getCanonicalPath)
+
+      checkEncoding(
+        expectedEncoding = "UTF-8",
+        pathToJsonFiles = path.getCanonicalPath,
+        expectedContent = """{"_1":"Dog","_2":42}""")
+    }
+  }
+
+  test("SPARK-23723: wrong output encoding") {
+    val encoding = "UTF-128"
+    val exception = intercept[UnsupportedCharsetException] {
+      withTempPath { path =>
+        val df = spark.createDataset(Seq((0)))
+        df.write
+          .options(Map("encoding" -> encoding, "lineSep" -> "\n"))
+          .json(path.getCanonicalPath)
+      }
+    }
+
+    assert(exception.getMessage == encoding)
+  }
+
+  test("SPARK-23723: read back json in UTF-16LE") {
+    val options = Map("encoding" -> "UTF-16LE", "lineSep" -> "\n")
+    withTempPath { path =>
+      val ds = spark.createDataset(Seq(("a", 1), ("b", 2), ("c", 3))).repartition(2)
+      ds.write.options(options).json(path.getCanonicalPath)
+
+      val readBack = spark
+        .read
+        .options(options)
+        .json(path.getCanonicalPath)
+
+      checkAnswer(readBack.toDF(), ds.toDF())
+    }
+  }
+
+  def checkReadJson(lineSep: String, encoding: String, inferSchema: Boolean, id: Int): Unit = {
+    test(s"SPARK-23724: checks reading json in ${encoding} #${id}") {
+      val schema = new StructType().add("f1", StringType).add("f2", IntegerType)
+      withTempPath { path =>
+        val records = List(("a", 1), ("b", 2))
+        val data = records
+          .map(rec => s"""{"f1":"${rec._1}", "f2":${rec._2}}""".getBytes(encoding))
+          .reduce((a1, a2) => a1 ++ lineSep.getBytes(encoding) ++ a2)
+        val os = new FileOutputStream(path)
+        os.write(data)
+        os.close()
+        val reader = if (inferSchema) {
+          spark.read
+        } else {
+          spark.read.schema(schema)
+        }
+        val readBack = reader
+          .option("encoding", encoding)
+          .option("lineSep", lineSep)
+          .json(path.getCanonicalPath)
+        checkAnswer(readBack, records.map(rec => Row(rec._1, rec._2)))
+      }
+    }
+  }
+
+  // scalastyle:off nonascii
+  List(
+    (0, "|", "UTF-8", false),
+    (1, "^", "UTF-16BE", true),
+    (2, "::", "ISO-8859-1", true),
+    (3, "!!!@3", "UTF-32LE", false),
+    (4, 0x1E.toChar.toString, "UTF-8", true),
+    (5, "아", "UTF-32BE", false),
+    (6, "куку", "CP1251", true),
+    (7, "sep", "utf-8", false),
+    (8, "\r\n", "UTF-16LE", false),
+    (9, "\r\n", "utf-16be", true),
+    (10, "\u000d\u000a", "UTF-32BE", false),
+    (11, "\u000a\u000d", "UTF-8", true),
+    (12, "===", "US-ASCII", false),
+    (13, "$^+", "utf-32le", true)
+  ).foreach {
+    case (testNum, sep, encoding, inferSchema) => checkReadJson(sep, encoding, inferSchema, testNum)
+  }
+  // scalastyle:on nonascii
+
+  test("SPARK-23724: lineSep should be set if encoding if different from UTF-8") {
+    val encoding = "UTF-16LE"
+    val exception = intercept[IllegalArgumentException] {
+      spark.read
+        .options(Map("encoding" -> encoding))
+        .json(testFile("test-data/utf16LE.json"))
+        .count()
+    }
+
+    assert(exception.getMessage.contains(
+      s"""The lineSep option must be specified for the $encoding encoding"""))
+  }
+
+  private val badJson = "\u0000\u0000\u0000A\u0001AAA"
+
+  test("SPARK-23094: permissively read JSON file with leading nulls when multiLine is enabled") {
+    withTempPath { tempDir =>
+      val path = tempDir.getAbsolutePath
+      Seq(badJson + """{"a":1}""").toDS().write.text(path)
+      val expected = s"""${badJson}{"a":1}\n"""
+      val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
+      val df = spark.read.format("json")
+        .option("mode", "PERMISSIVE")
+        .option("multiLine", true)
+        .option("encoding", "UTF-8")
+        .schema(schema).load(path)
+      checkAnswer(df, Row(null, expected))
+    }
+  }
+
+  test("SPARK-23094: permissively read JSON file with leading nulls when multiLine is disabled") {
+    withTempPath { tempDir =>
+      val path = tempDir.getAbsolutePath
+      Seq(badJson, """{"a":1}""").toDS().write.text(path)
+      val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
+      val df = spark.read.format("json")
+        .option("mode", "PERMISSIVE")
+        .option("multiLine", false)
+        .option("encoding", "UTF-8")
+        .schema(schema).load(path)
+      checkAnswer(df, Seq(Row(1, null), Row(null, badJson)))
+    }
+  }
+
+  test("SPARK-23094: permissively parse a dataset contains JSON with leading nulls") {
+    checkAnswer(
+      spark.read.option("mode", "PERMISSIVE").option("encoding", "UTF-8").json(Seq(badJson).toDS()),
+      Row(badJson))
   }
 }
