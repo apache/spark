@@ -86,6 +86,12 @@ class ContinuousDataSourceRDD(
       override def hasNext(): Boolean = {
         while (currentEntry == null) {
           if (context.isInterrupted() || context.isCompleted()) {
+            // Force the epoch to end here. The writer will notice the context is interrupted
+            // or completed and not start a new one. This makes it possible to achieve clean
+            // shutdown of the streaming query.
+            // TODO: The obvious generalization of this logic to multiple stages won't work. It's
+            // invalid to send an epoch marker from the bottom of a task if all its child tasks
+            // haven't sent one.
             currentEntry = (null, null)
           }
           if (readerForPartition.dataReaderFailed.get()) {
