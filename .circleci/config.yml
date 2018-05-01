@@ -355,16 +355,20 @@ jobs:
 
             # Otherwise, combine the two, preferring newer results from circle test results
             echo "Found both cached and circle test results, merging"
-            jq -s 'def meld:
+            if jq -s 'def meld:
                reduce .[] as $o
                  ({}; reduce ($o|keys)[] as $key (.; .[$key] += [$o[$key]] ));
               def grp: map([{key: "\(.source)~\(.classname)", value: .}] | from_entries) | meld;
               ((.[0].tests | grp) * (.[1].tests | grp)) | map(values) | flatten | {tests: .}' \
                 "$TEST_RESULTS_FILE" \
-                "$CIRCLE_INTERNAL_TASK_DATA/circle-test-results/results.json" \
+                "$CIRCLE_TEST_RESULTS_FILE" \
                 > /tmp/new-test-results.json
-            # Overwrite the previously cached results with the merged file
-            mv -f /tmp/new-test-results.json "$TEST_RESULTS_FILE"
+            then
+              # Overwrite the previously cached results with the merged file
+              mv -f /tmp/new-test-results.json "$TEST_RESULTS_FILE"
+            else
+              echo "Failed to merge test results, probably $CIRCLE_TEST_RESULTS_FILE didn't have the expected structure - ignoring it"
+            fi
       - save_cache:
           key: v1-test-results-{{ .Branch }}-{{ .BuildNum }}
           paths:
