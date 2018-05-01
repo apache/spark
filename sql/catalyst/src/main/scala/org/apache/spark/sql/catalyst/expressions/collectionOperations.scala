@@ -2383,7 +2383,6 @@ case class ArrayDistinct(child: Expression)
     val elementType = dataType.asInstanceOf[ArrayType].elementType
     nullSafeCodeGen(ctx, ev, (array) => {
       val arrayClass = classOf[GenericArrayData].getName
-      val tempArray = ctx.freshName("tempArray")
       val distinctArray = ctx.freshName("distinctArray")
       val i = ctx.freshName("i")
       val j = ctx.freshName("j")
@@ -2392,7 +2391,6 @@ case class ArrayDistinct(child: Expression)
       val getValue2 = CodeGenerator.getValue(array, elementType, j)
       s"""
          |int $pos = 0;
-         |Object[] $tempArray = new Object[$array.numElements()];
          |for (int $i = 0; $i < $array.numElements(); $i ++) {
          |  if ($array.isNullAt($i)) {
          |     int $j;
@@ -2401,26 +2399,46 @@ case class ArrayDistinct(child: Expression)
          |         break;
          |     }
          |     if ($i == $j) {
-         |       $tempArray[$pos]  = null;
          |       $pos = $pos + 1;
          |     }
          |  }
          |  else {
          |    int $j;
          |    for ($j = 0; $j < $i; $j ++) {
-         |     if (${ctx.genEqual(elementType, getValue1, getValue2)})
-         |       break;
+         |      if (!$array.isNullAt($j) && ${ctx.genEqual(elementType, getValue1, getValue2)})
+         |        break;
          |    }
          |    if ($i == $j) {
-         |     $tempArray[$pos] = ${CodeGenerator.getValue(array, elementType, s"$i")};
          |     $pos = $pos + 1;
          |    }
          |  }
          |}
          |
          |Object[] $distinctArray = new Object[$pos];
-         |for (int $i = 0; $i < $pos; $i ++) {
-         |  $distinctArray[$i] = $tempArray[$i];
+         |$pos = 0;
+         |for (int $i = 0; $i < $array.numElements(); $i ++) {
+         |  if ($array.isNullAt($i)) {
+         |     int $j;
+         |     for ($j = 0; $j < $i; $j ++) {
+         |       if ($array.isNullAt($j))
+         |         break;
+         |     }
+         |     if ($i == $j) {
+         |       $distinctArray[$pos] = null;
+         |       $pos = $pos + 1;
+         |     }
+         |  }
+         |  else {
+         |    int $j;
+         |    for ($j = 0; $j < $i; $j ++) {
+         |      if (!$array.isNullAt($j) && ${ctx.genEqual(elementType, getValue1, getValue2)})
+         |        break;
+         |    }
+         |    if ($i == $j) {
+         |     $distinctArray[$pos] = ${CodeGenerator.getValue(array, elementType, s"$i")};
+         |     $pos = $pos + 1;
+         |    }
+         |  }
          |}
          |
          |${ev.value} = new $arrayClass($distinctArray);
