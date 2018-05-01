@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -275,7 +276,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
     if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -286,7 +287,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
           ${ev.value} = $divide;
         }""")
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -362,7 +363,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
     if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -373,7 +374,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
           ${ev.value} = $remainder;
         }""")
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -479,7 +480,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
     }
 
     if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -490,7 +491,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
           $result
         }""")
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -612,7 +613,7 @@ case class Least(children: Seq[Expression]) extends Expression {
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
     ev.copy(code =
-      s"""
+      code"""
          |${ev.isNull} = true;
          |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |$codes
@@ -687,7 +688,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
     ev.copy(code =
-      s"""
+      code"""
          |${ev.isNull} = true;
          |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |$codes

@@ -27,6 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -122,10 +123,10 @@ trait CodegenSupport extends SparkPlan {
         ctx.INPUT_ROW = row
         ctx.currentVars = colVars
         val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
-        val code = s"""
+        val code = code"""
           |$evaluateInputs
           |${ev.code.trim}
-         """.stripMargin.trim
+         """.stripMargin
         ExprCode(code, FalseLiteral, ev.value)
       } else {
         // There are no columns
@@ -260,7 +261,7 @@ trait CodegenSupport extends SparkPlan {
    */
   protected def evaluateVariables(variables: Seq[ExprCode]): String = {
     val evaluate = variables.filter(_.code != "").map(_.code.trim).mkString("\n")
-    variables.foreach(_.code = "")
+    variables.foreach(_.code = EmptyBlock)
     evaluate
   }
 
@@ -276,7 +277,7 @@ trait CodegenSupport extends SparkPlan {
     variables.zipWithIndex.foreach { case (ev, i) =>
       if (ev.code != "" && required.contains(attributes(i))) {
         evaluateVars.append(ev.code.trim + "\n")
-        ev.code = ""
+        ev.code = EmptyBlock
       }
     }
     evaluateVars.toString()

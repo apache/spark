@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.lang.{Boolean => JBool}
 
-import scala.collection.mutable
 import scala.language.{existentials, implicitConversions}
 
 import org.apache.spark.sql.types.{BooleanType, DataType}
@@ -113,6 +112,102 @@ object JavaCode {
   def isNullExpression(code: String): SimpleExprValue = {
     expression(code, BooleanType)
   }
+
+  def block(code: String): Block = {
+    CodeBlock(codeParts = Seq(code), exprValues = Seq.empty)
+  }
+}
+
+/**
+ * A block of java code which involves some expressions represented by `ExprValue`.
+ */
+trait Block extends JavaCode {
+  def exprValues: Seq[Any]
+
+  // This will be called during string interpolation.
+  override def toString: String = _marginChar match {
+    case Some(c) => code.stripMargin(c)
+    case _ => code
+  }
+
+  var _marginChar: Option[Char] = None
+
+  def stripMargin(c: Char): this.type = {
+    _marginChar = Some(c)
+    this
+  }
+
+  def stripMargin: this.type = {
+    _marginChar = Some('|')
+    this
+  }
+
+  def + (other: Block): Block
+}
+
+object Block {
+  implicit def blockToString(block: Block): String = block.toString
+
+  implicit def blocksToBlock(blocks: Seq[Block]): Block = Blocks(blocks)
+
+  implicit class BlockHelper(val sc: StringContext) extends AnyVal {
+    def code(args: Any*): Block = {
+      if (sc.parts.length == 0) {
+        EmptyBlock
+      } else {
+        args.foreach {
+          case _: ExprValue => true
+          case _: Int | _: Long | _: Float | _: Double | _: String => true
+          case _: Block => true
+          case other => throw new IllegalArgumentException(
+            s"Can not interpolate ${other.getClass} into code block.")
+        }
+        CodeBlock(sc.parts, args)
+      }
+    }
+  }
+}
+
+/**
+ * A block of java code.
+ */
+case class CodeBlock(codeParts: Seq[String], exprValues: Seq[Any]) extends Block {
+  override def code: String = {
+    val strings = codeParts.iterator
+    val expressions = exprValues.iterator
+    var buf = new StringBuffer(strings.next)
+    while (strings.hasNext) {
+      if (expressions.hasNext) {
+        buf append expressions.next
+        buf append strings.next
+      }
+    }
+    buf.toString
+  }
+
+  override def + (other: Block): Block = other match {
+    case c: CodeBlock => Blocks(Seq(this, c))
+    case b: Blocks => Blocks(Seq(this) ++ b.blocks)
+    case EmptyBlock => this
+  }
+}
+
+case class Blocks(blocks: Seq[Block]) extends Block {
+  override def exprValues: Seq[Any] = blocks.flatMap(_.exprValues)
+  override def code: String = blocks.map(_.toString).mkString
+
+  override def + (other: Block): Block = other match {
+    case c: CodeBlock => Blocks(blocks :+ c)
+    case b: Blocks => Blocks(blocks ++ b.blocks)
+    case EmptyBlock => this
+  }
+}
+
+object EmptyBlock extends Block with Serializable {
+  override def code: String = ""
+  override def exprValues: Seq[Any] = Seq.empty
+
+  override def + (other: Block): Block = other
 }
 
 /**
@@ -127,71 +222,7 @@ trait ExprValue extends JavaCode {
 }
 
 object ExprValue {
-
-  private var currentHandlerForExprValue =
-    new ThreadLocal[(ExprValue) => String]() {
-      override def initialValue(): (ExprValue) => String =
-        defaultExprValueToString
-    }
-
-  def defaultExprValueToString(exprValue: ExprValue): String = exprValue.code
-
-  implicit def exprValueToString(exprValue: ExprValue): String = {
-    currentListeners.get.foreach(_.genExprValue(exprValue))
-    currentHandlerForExprValue.get()(exprValue)
-  }
-
-  protected[sql] val currentListeners =
-    new ThreadLocal[mutable.ArrayBuffer[ExprValueCodegenListener]]() {
-      override def initialValue(): mutable.ArrayBuffer[ExprValueCodegenListener] =
-        mutable.ArrayBuffer.empty[ExprValueCodegenListener]
-    }
-
-  /**
-   * By adding a listener, we can catch all expr values which are generated during codegen.
-   */
-  def withExprValueCodegenListener[T](listener: ExprValueCodegenListener)
-      (f: () => T): T = {
-    val index = currentListeners.get.length
-    currentListeners.get += listener
-    val result = f()
-    assert(currentListeners.get.length == index + 1,
-      "There are codegen listeners which are not removed after used!")
-    currentListeners.get.remove(index)
-    result
-  }
-
-  /**
-   * Sets up a handler function used to convert `ExprValue` to string during codegen. The given
-   * handler can overwrite the default behavior which outputs `ExprValue` to its actual code.
-   */
-  def withExprValueHandler[T](handlerFunc: (ExprValue) => String)(f: () => T): T = {
-    val previousHandler = currentHandlerForExprValue.get
-    currentHandlerForExprValue.set(handlerFunc)
-    val result = f()
-    currentHandlerForExprValue.set(previousHandler)
-    result
-  }
-}
-
-/**
- * A listener which gets notified when `ExprValue`s are generated to Java code.
- */
-trait ExprValueCodegenListener {
-  def genExprValue(exprValue: ExprValue): Unit
-}
-
-/**
- * A codegen listener specified for `SimpleExprValue` expression values.
- */
-case class SimpleExprValueCodegenListener() extends ExprValueCodegenListener {
-  protected[sql] val exprValues: mutable.HashSet[SimpleExprValue] =
-    mutable.HashSet.empty[SimpleExprValue]
-
-  override def genExprValue(exprValue: ExprValue): Unit = exprValue match {
-    case s: SimpleExprValue => exprValues += s
-    case _ =>
-  }
+  implicit def exprValueToString(exprValue: ExprValue): String = exprValue.code
 }
 
 /**

@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -100,7 +101,8 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
-      ExprCode(ctx.registerComment(this.toString), subExprState.isNull, subExprState.value)
+      ExprCode(JavaCode.block(ctx.registerComment(this.toString)), subExprState.isNull,
+        subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
@@ -108,9 +110,9 @@ abstract class Expression extends TreeNode[Expression] {
         JavaCode.isNullVariable(isNull),
         JavaCode.variable(value, dataType)))
       reduceCodeSize(ctx, eval)
-      if (eval.code.nonEmpty) {
+      if (eval.code.toString.nonEmpty) {
         // Add `this` in the comment.
-        eval.copy(code = s"${ctx.registerComment(this.toString)}\n" + eval.code.trim)
+        eval.copy(code = JavaCode.block(s"${ctx.registerComment(this.toString)}\n") + eval.code)
       } else {
         eval
       }
@@ -143,7 +145,7 @@ abstract class Expression extends TreeNode[Expression] {
            """.stripMargin)
 
       eval.value = JavaCode.variable(newValue, dataType)
-      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
+      eval.code = code"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }
 
@@ -437,14 +439,14 @@ abstract class UnaryExpression extends Expression {
 
     if (nullable) {
       val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${childGen.code}
         boolean ${ev.isNull} = ${childGen.isNull};
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${childGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
@@ -536,13 +538,13 @@ abstract class BinaryExpression extends Expression {
           }
       }
 
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${leftGen.code}
         ${rightGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -679,12 +681,12 @@ abstract class TernaryExpression extends Expression {
           }
       }
 
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}

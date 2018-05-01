@@ -38,6 +38,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -56,19 +57,19 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
  */
-case class ExprCode(var code: String, var isNull: ExprValue, var value: ExprValue)
+case class ExprCode(var code: Block, var isNull: ExprValue, var value: ExprValue)
 
 object ExprCode {
   def apply(isNull: ExprValue, value: ExprValue): ExprCode = {
-    ExprCode(code = "", isNull, value)
+    ExprCode(code = code"", isNull, value)
   }
 
   def forNullValue(dataType: DataType): ExprCode = {
-    ExprCode(code = "", isNull = TrueLiteral, JavaCode.defaultLiteral(dataType))
+    ExprCode(code = code"", isNull = TrueLiteral, JavaCode.defaultLiteral(dataType))
   }
 
   def forNonNullValue(value: ExprValue): ExprCode = {
-    ExprCode(code = "", isNull = FalseLiteral, value = value)
+    ExprCode(code = code"", isNull = FalseLiteral, value = value)
   }
 }
 
@@ -329,9 +330,9 @@ class CodegenContext {
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = addMutableState(javaType(dataType), variableName)
     val code = dataType match {
-      case StringType => s"$value = $initCode.clone();"
-      case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
-      case _ => s"$value = $initCode;"
+      case StringType => code"$value = $initCode.clone();"
+      case _: StructType | _: ArrayType | _: MapType => code"$value = $initCode.copy();"
+      case _ => code"$value = $initCode;"
     }
     ExprCode(code, FalseLiteral, JavaCode.global(value, dataType))
   }

@@ -21,6 +21,7 @@ import java.util.Comparator
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -54,7 +55,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    ev.copy(code = s"""
+    ev.copy(code = code"""
       boolean ${ev.isNull} = false;
       ${childGen.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
@@ -486,14 +487,14 @@ case class ArrayJoin(
     }
     if (nullable) {
       ev.copy(
-        s"""
+        code"""
            |boolean ${ev.isNull} = true;
            |UTF8String ${ev.value} = null;
            |$code
          """.stripMargin)
     } else {
       ev.copy(
-        s"""
+        code"""
            |UTF8String ${ev.value} = null;
            |$code
          """.stripMargin, FalseLiteral)
@@ -578,11 +579,11 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
     val childGen = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
     val i = ctx.freshName("i")
-    val item = ExprCode("",
+    val item = ExprCode(EmptyBlock,
       isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
       value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
     ev.copy(code =
-      s"""
+      code"""
          |${childGen.code}
          |boolean ${ev.isNull} = true;
          |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -643,11 +644,11 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
     val childGen = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
     val i = ctx.freshName("i")
-    val item = ExprCode("",
+    val item = ExprCode(EmptyBlock,
       isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
       value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
     ev.copy(code =
-      s"""
+      code"""
          |${childGen.code}
          |boolean ${ev.isNull} = true;
          |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -938,7 +939,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
       expressions = inputs,
       funcName = "valueConcat",
       extraArguments = (s"$javaType[]", args) :: Nil)
-    ev.copy(s"""
+    ev.copy(code"""
       $initCode
       $codes
       $javaType ${ev.value} = $concatenator.concat($args);
