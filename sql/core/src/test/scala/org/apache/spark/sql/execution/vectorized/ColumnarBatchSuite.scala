@@ -1335,14 +1335,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.close()
   }
 
-  testVector("WritableColumnVector.reserve(): requested capacity is too large", 1024, ByteType) {
-    column =>
-      val capacity = column.MAX_CAPACITY + 1
-      val ex = intercept[RuntimeException] { column.reserve(capacity) }
-      assert(ex.getMessage.contains(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key))
-      assert(ex.getMessage.contains(capacity.toString))
-  }
-
   testVector("WritableColumnVector.reserve(): requested capacity is negative", 1024, ByteType) {
     column =>
       val ex = intercept[RuntimeException] { column.reserve(-1) }
