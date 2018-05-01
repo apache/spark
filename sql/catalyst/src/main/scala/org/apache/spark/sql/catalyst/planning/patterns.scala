@@ -290,14 +290,14 @@ object PhysicalWindow {
       }
 
       val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)
-        .reduceLeft ( (t1: WindowFunctionType, t2: WindowFunctionType) =>
+        .reduceLeft { (t1: WindowFunctionType, t2: WindowFunctionType) =>
           if (t1 != t2) {
             throw new AnalysisException(
               s"Found different window function type in $windowExpressions")
           } else {
             t1
           }
-        )
+        }
 
       Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child))
 

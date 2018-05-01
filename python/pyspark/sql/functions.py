@@ -2583,9 +2583,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        :class:`MapType` and :class:`StructType` are currently not supported as output types.
 
        Group aggregate UDFs are used with :meth:`pyspark.sql.GroupedData.agg` and
-       :meth:`pyspark.sql.Window`
+       :class:`pyspark.sql.Window`
 
-       This example show using grouped aggregated UDFS with groupby:
+       This example shows using grouped aggregated UDFs with groupby:
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> df = spark.createDataFrame(

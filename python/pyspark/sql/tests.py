@@ -5630,8 +5630,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
             time_two(mean_udf(time_two(df['v'])).over(w)))
         expected2 = df.withColumn(
             'v2',
-            time_two(mean(time_two(df['v'])).over(w))
-        )
+            time_two(mean(time_two(df['v'])).over(w)))
 
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
         self.assertPandasEqual(expected2.toPandas(), result2.toPandas())

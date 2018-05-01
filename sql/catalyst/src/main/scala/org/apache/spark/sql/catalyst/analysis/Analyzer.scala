@@ -1739,9 +1739,10 @@ class Analyzer(
    * 1. For a list of [[Expression]]s (a projectList or an aggregateExpressions), partitions
    *    it two lists of [[Expression]]s, one for all [[WindowExpression]]s and another for
    *    all regular expressions.
-   * 2. For all [[WindowExpression]]s, groups them based on their [[WindowSpecDefinition]]s.
-   * 3. For every distinct [[WindowSpecDefinition]], creates a [[Window]] operator and inserts
-   *    it into the plan tree.
+   * 2. For all [[WindowExpression]]s, groups them based on their [[WindowSpecDefinition]]s
+   *    and [[WindowFunctionType]]s.
+   * 3. For every distinct [[WindowSpecDefinition]] and [[WindowFunctionType]], creates a
+   *    [[Window]] operator and inserts it into the plan tree.
    */
   object ExtractWindowExpressions extends Rule[LogicalPlan] {
     private def hasWindowFunction(exprs: Seq[Expression]): Boolean =

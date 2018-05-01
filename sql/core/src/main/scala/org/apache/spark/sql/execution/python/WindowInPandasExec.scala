@@ -47,7 +47,9 @@ case class WindowInPandasExec(
       logWarning("No Partition Defined for Window operation! Moving all data to a single "
         + "partition, this can cause serious performance degradation.")
       AllTuples :: Nil
-    } else ClusteredDistribution(partitionSpec) :: Nil
+    } else {
+      ClusteredDistribution(partitionSpec) :: Nil
+    }
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
@@ -98,11 +100,8 @@ case class WindowInPandasExec(
     val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
 
     // Extract window expressions and window functions
-    val expressions = windowExpression.flatMap { e =>
-      e.collect {
-        case e: WindowExpression => e
-      }
-    }
+    val expressions = windowExpression.flatMap(_.collect { case e: WindowExpression => e })
+
     val udfExpressions = expressions.map(_.windowFunction.asInstanceOf[PythonUDF])
 
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
@@ -147,11 +146,11 @@ case class WindowInPandasExec(
       }
 
       val inputProj = UnsafeProjection.create(allInputs, child.output)
-      val pythonInput = grouped.map { case (k, rows) =>
-          rows.map { row =>
-            queue.add(row.asInstanceOf[UnsafeRow])
-            inputProj(row)
-          }
+      val pythonInput = grouped.map { case (_, rows) =>
+        rows.map { row =>
+          queue.add(row.asInstanceOf[UnsafeRow])
+          inputProj(row)
+        }
       }
 
       val windowFunctionResult = new ArrowPythonRunner(
