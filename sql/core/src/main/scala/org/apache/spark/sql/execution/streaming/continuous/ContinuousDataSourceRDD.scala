@@ -93,16 +93,17 @@ class ContinuousDataSourceRDD(
             // invalid to send an epoch marker from the bottom of a task if all its child tasks
             // haven't sent one.
             currentEntry = (null, null)
+          } else {
+            if (readerForPartition.dataReaderFailed.get()) {
+              throw new SparkException(
+                "data read failed", readerForPartition.dataReaderThread.failureReason)
+            }
+            if (readerForPartition.epochPollFailed.get()) {
+              throw new SparkException(
+                "epoch poll failed", readerForPartition.epochPollRunnable.failureReason)
+            }
+            currentEntry = readerForPartition.queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
           }
-          if (readerForPartition.dataReaderFailed.get()) {
-            throw new SparkException(
-              "data read failed", readerForPartition.dataReaderThread.failureReason)
-          }
-          if (readerForPartition.epochPollFailed.get()) {
-            throw new SparkException(
-              "epoch poll failed", readerForPartition.epochPollRunnable.failureReason)
-          }
-          currentEntry = readerForPartition.queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         }
 
         currentEntry match {
