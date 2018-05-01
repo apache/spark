@@ -49,6 +49,7 @@ function build {
     # Set image build arguments accordingly if this is a source repo and not a distribution archive.
     IMG_PATH=resource-managers/kubernetes/docker/src/main/dockerfiles
     BUILD_ARGS=(
+      ${BUILD_PARAMS}
       --build-arg
       img_path=$IMG_PATH
       --build-arg
@@ -57,7 +58,7 @@ function build {
   else
     # Not passed as an argument to docker, but used to validate the Spark directory.
     IMG_PATH="kubernetes/dockerfiles"
-    BUILD_ARGS=()
+    BUILD_ARGS=(${BUILD_PARAMS})
   fi
 
   if [ ! -d "$IMG_PATH" ]; then
@@ -89,6 +90,8 @@ Options:
   -f file     Dockerfile to build. By default builds the Dockerfile shipped with Spark.
   -r repo     Repository address.
   -t tag      Tag to apply to the built image, or to identify the image to be pushed.
+  -b arg      Build arg to build or push the image. For multiple build args, this option needs to
+              be used separately for each build arg.
   -m          Use minikube's Docker daemon.
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
@@ -117,13 +120,15 @@ fi
 REPO=
 TAG=
 DOCKERFILE=
-while getopts f:mr:t: option
+BUILD_PARAMS=
+while getopts f:mr:t:b: option
 do
  case "${option}"
  in
  f) DOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
+ b) BUILD_PARAMS=${BUILD_PARAMS}" --build-arg "${OPTARG};;
  m)
    if ! which minikube 1>/dev/null; then
      error "Cannot find minikube."
