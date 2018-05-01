@@ -629,7 +629,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .map(typedVisit[Expression])
     val pivotColumn = UnresolvedAttribute.quoted(ctx.pivotColumn.getText)
     val pivotValues = ctx.pivotValues.asScala.map(typedVisit[Expression]).map(Literal.apply)
-    Pivot(Seq.empty, pivotColumn, pivotValues, aggregates, query, true)
+    Pivot(None, pivotColumn, pivotValues, aggregates, query)
   }
 
   /**

@@ -102,3 +102,12 @@ PIVOT (
   abs(earnings)
   FOR year IN (2012, 2013)
 );
+
+-- pivot with unresolvable columns
+SELECT * FROM (
+  SELECT course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR year IN (2012, 2013)
+);

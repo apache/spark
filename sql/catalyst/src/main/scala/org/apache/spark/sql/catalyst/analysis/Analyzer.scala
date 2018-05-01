@@ -275,9 +275,9 @@ class Analyzer(
       case g: GroupingSets if g.child.resolved && hasUnresolvedAlias(g.aggregations) =>
         g.copy(aggregations = assignAliases(g.aggregations))
 
-      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child, false)
-        if child.resolved && hasUnresolvedAlias(groupByExprs) =>
-        Pivot(assignAliases(groupByExprs), pivotColumn, pivotValues, aggregates, child)
+      case Pivot(groupByOpt, pivotColumn, pivotValues, aggregates, child)
+        if child.resolved && groupByOpt.isDefined && hasUnresolvedAlias(groupByOpt.get) =>
+        Pivot(Some(assignAliases(groupByOpt.get)), pivotColumn, pivotValues, aggregates, child)
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
@@ -504,9 +504,10 @@ class Analyzer(
 
   object ResolvePivot extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p: Pivot if !p.childrenResolved | !p.aggregates.forall(_.resolved)
-        | !p.groupByExprs.forall(_.resolved) | !p.pivotColumn.resolved => p
-      case Pivot(groupBy, pivotColumn, pivotValues, aggregates, child, groupByExprsImplicit) =>
+      case p: Pivot if !p.childrenResolved || !p.aggregates.forall(_.resolved)
+        || (p.groupByExprsOpt.isDefined && !p.groupByExprsOpt.get.forall(_.resolved))
+        || !p.pivotColumn.resolved => p
+      case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         // Check all aggregate expressions.
         aggregates.foreach { e =>
           if (!isAggregateExpression(e)) {
@@ -515,13 +516,8 @@ class Analyzer(
           }
         }
         // Group-by expressions coming from SQL are implicit and need to be deduced.
-        val groupByExprs = if (groupByExprsImplicit) {
-          (child.outputSet
-            -- aggregates.flatMap(_.references)
-            -- pivotColumn.references).toSeq
-          } else {
-            groupBy
-          }
+        val groupByExprs = groupByExprsOpt.getOrElse(
+          (child.outputSet -- aggregates.flatMap(_.references) -- pivotColumn.references).toSeq)
         val singleAgg = aggregates.size == 1
         def outputName(value: Literal, aggregate: Expression): String = {
           val utf8Value = Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
