@@ -32,9 +32,8 @@ import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowUtils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -1338,7 +1337,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   testVector("WritableColumnVector.reserve(): requested capacity is negative", 1024, ByteType) {
     column =>
       val ex = intercept[RuntimeException] { column.reserve(-1) }
-      assert(ex.getMessage.contains(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key))
-      assert(ex.getMessage.contains("integer overflow"))
+      assert(ex.getMessage.contains(
+          "Cannot reserve additional contiguous bytes in the vectorized reader (integer overflow)"))
   }
 }
