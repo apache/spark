@@ -525,19 +525,26 @@ def _hijack_namedtuple():
         cls = _old_namedtuple(*args, **kwargs)
 
         import sys
-        f = sys._getframe(1)
-        # The extra wrapper around ``namedtuple`` causes the created
-        # classes to have "collections" as ``__module__``, unless
-        # the user explicitly specified a module (>= 3.6).
-        if not kwargs.get("module"):
-            cls.__module__ = f.f_globals.get("__name__", "__main__")
-
-        # Do not ``_hack_namedtuple`` if it is being created at the
-        # top level of some module.
-        if f.f_code.co_name == "<module>":
-            return cls
+        # The ``try-catch`` guards against environments which do not
+        # provide a CPython-compatible ``sys._getframe`` function.
+        # See ``collections.namedtuple`` source code for details.
+        try:
+            f = sys._getframe(1)
+        except (AttributeError, ValueError):
+            pass
         else:
-            return _hack_namedtuple(cls)
+            # The extra wrapper around ``namedtuple`` causes the created
+            # classes to have "collections" as ``__module__``, unless
+            # the user explicitly specified a module (>= 3.6).
+            if not kwargs.get("module"):
+                cls.__module__ = f.f_globals.get("__name__", "__main__")
+
+            # Do not ``_hack_namedtuple`` if it is being created at the
+            # top level of some module.
+            if f.f_code.co_name == "<module>":
+                return cls
+
+        return _hack_namedtuple(cls)
 
     # replace namedtuple with new one
     collections.namedtuple.__globals__["_old_namedtuple_kwdefaults"] = _old_namedtuple_kwdefaults
