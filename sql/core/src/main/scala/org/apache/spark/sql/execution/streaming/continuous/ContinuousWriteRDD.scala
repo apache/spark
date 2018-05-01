@@ -25,7 +25,7 @@ import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, Wr
 import org.apache.spark.util.Utils
 
 class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactory[InternalRow])
-    extends RDD[Long](prev) {
+    extends RDD[Unit](prev) {
 
   override val partitioner = prev.partitioner
 
