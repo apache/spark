@@ -340,6 +340,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       """.stripMargin
     val out = in.select(from_json($"value", schema, Map[String, String]()))
 
+    assert(out.columns.head == "entries")
     checkAnswer(out, Row(Map("a" -> 1, "b" -> 2, "c" -> 3)))
   }
 
