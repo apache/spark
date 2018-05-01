@@ -395,6 +395,36 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(podOperations).create(recreatedResolvedPod)
   }
 
+  test("Executors that are initially created but the watch notices them fail on init are rebuilt" +
+    " in the next batch.") {
+    sparkConf
+      .set(KUBERNETES_ALLOCATION_BATCH_SIZE, 1)
+      .set(org.apache.spark.internal.config.EXECUTOR_INSTANCES, 1)
+    val scheduler = newSchedulerBackend()
+    scheduler.start()
+    val firstResolvedPod = expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
+    when(podOperations.create(FIRST_EXECUTOR_POD)).thenAnswer(AdditionalAnswers.returnsFirstArg())
+    requestExecutorRunnable.getValue.run()
+    allocatorRunnable.getValue.run()
+    verify(podOperations, times(1)).create(firstResolvedPod)
+    val failedInitPod = new PodBuilder(firstResolvedPod)
+      .editOrNewStatus()
+        .withPhase("Init:Error")
+        .addNewInitContainerStatus()
+          .withNewState()
+            .withNewTerminated()
+              .withExitCode(1)
+              .endTerminated()
+            .endState()
+          .endInitContainerStatus()
+        .endStatus()
+      .build()
+    executorPodsWatcherArgument.getValue.eventReceived(Action.MODIFIED, failedInitPod)
+    val recreatedResolvedPod = expectPodCreationWithId(2, FIRST_EXECUTOR_POD)
+    allocatorRunnable.getValue.run()
+    verify(podOperations).create(recreatedResolvedPod)
+  }
+
   private def newSchedulerBackend(): KubernetesClusterSchedulerBackend = {
     new KubernetesClusterSchedulerBackend(
       taskSchedulerImpl,
