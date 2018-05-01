@@ -99,7 +99,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   private void throwUnsupportedException(int requiredCapacity, Throwable cause) {
     String message = "Cannot reserve additional contiguous bytes in the vectorized reader (" +
-        (requiredCapacity >= 0 ?"requested " + requiredCapacity + " bytes" : "integer overflow") +
+        (requiredCapacity >= 0 ? "requested " + requiredCapacity + " bytes" : "integer overflow") +
         "). As a workaround, you can reduce the vectorized reader batch size, or disable the " +
         "vectorized reader. For parquet file format, refer to " +
         SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE().key() +
