@@ -383,7 +383,7 @@ final class OneVsRest @Since("1.4.0") (
       getClassifier match {
         case _: HasWeightCol => true
         case c =>
-          logWarning(s"weightCol is ignored, as it is not supported by $c now.")
+          instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
           false
       }
     }

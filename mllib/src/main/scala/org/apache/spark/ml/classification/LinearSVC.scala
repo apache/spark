@@ -170,7 +170,7 @@ class LinearSVC @Since("2.2.0") (
           Instance(label, weight, features)
       }
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(regParam, maxIter, fitIntercept, tol, standardization, threshold,
       aggregationDepth)
 
@@ -209,7 +209,7 @@ class LinearSVC @Since("2.2.0") (
       if (numInvalid != 0) {
         val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
           s"Found $numInvalid invalid labels."
-        logError(msg)
+        instr.logError(msg)
         throw new SparkException(msg)
       }
 
@@ -246,7 +246,7 @@ class LinearSVC @Since("2.2.0") (
       bcFeaturesStd.destroy(blocking = false)
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
-        logError(msg)
+        instr.logError(msg)
         throw new SparkException(msg)
       }
 

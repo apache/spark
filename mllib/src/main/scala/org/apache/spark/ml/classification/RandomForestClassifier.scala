@@ -116,9 +116,10 @@ class RandomForestClassifier @Since("1.4.0") (
     set(featureSubsetStrategy, value)
 
   override protected def train(dataset: Dataset[_]): RandomForestClassificationModel = {
+    val instr = Instrumentation.create(this, dataset)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses: Int = getNumClasses(dataset)
+    val numClasses: Int = getNumClasses(dataset, instr = OptionalInstrumentation.create(instr))
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -130,7 +131,6 @@ class RandomForestClassifier @Since("1.4.0") (
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
 
-    val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
       impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)

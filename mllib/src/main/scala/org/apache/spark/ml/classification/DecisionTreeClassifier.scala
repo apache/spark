@@ -97,9 +97,10 @@ class DecisionTreeClassifier @Since("1.4.0") (
   override def setSeed(value: Long): this.type = set(seed, value)
 
   override protected def train(dataset: Dataset[_]): DecisionTreeClassificationModel = {
+    val instr = Instrumentation.create(this, dataset)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses: Int = getNumClasses(dataset)
+    val numClasses: Int = getNumClasses(dataset, instr = OptionalInstrumentation.create(instr))
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -110,7 +111,6 @@ class DecisionTreeClassifier @Since("1.4.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
 
-    val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
 
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",

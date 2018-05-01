@@ -23,7 +23,7 @@ import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
-import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
+import org.apache.spark.ml.util.{MetadataUtils, OptionalInstrumentation, SchemaUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -103,7 +103,10 @@ abstract class Classifier[
    * @throws IllegalArgumentException  if metadata does not specify numClasses, and the
    *                                   actual numClasses exceeds maxNumClasses
    */
-  protected def getNumClasses(dataset: Dataset[_], maxNumClasses: Int = 100): Int = {
+  protected def getNumClasses(dataset: Dataset[_],
+    maxNumClasses: Int = 100,
+    instr: OptionalInstrumentation = OptionalInstrumentation
+      .create(classOf[Classifier[FeaturesType, E, M]])): Int = {
     MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
       case Some(n: Int) => n
       case None =>
@@ -121,7 +124,7 @@ abstract class Classifier[
           s" to be inferred from values.  To avoid this error for labels with > $maxNumClasses" +
           s" classes, specify numClasses explicitly in the metadata; this can be done by applying" +
           s" StringIndexer to the label column.")
-        logInfo(this.getClass.getCanonicalName + s" inferred $numClasses classes for" +
+        instr.logInfo(this.getClass.getCanonicalName + s" inferred $numClasses classes for" +
           s" labelCol=$labelCol since numClasses was not specified in the column metadata.")
         numClasses
     }
