@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 
 /**
  * Given an array or map, returns its size. Returns -1 if null.
@@ -286,4 +287,99 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_contains"
+}
+
+/**
+ * Returns the array containing the given input value (left) count (right) times.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(element, count) - Returns the array containing element count times.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('123', 2);
+       ['123', '123']
+  """)
+case class ArrayRepeat(left: Expression, right: Expression)
+  extends BinaryExpression {
+
+  override def dataType: ArrayType = ArrayType(left.dataType, left.nullable)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val expected = IntegerType
+    if (!expected.acceptsType(right.dataType)) {
+      val mismatch = s"argument 2 requires ${expected.simpleString} type, " +
+        s"however, '${right.sql}' is of ${right.dataType.simpleString} type."
+      TypeCheckResult.TypeCheckFailure(mismatch)
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = {
+    new GenericArrayData(List.fill(right.eval(input).asInstanceOf[Integer])(left.eval(input)))
+  }
+
+  override def prettyName: String = "array_repeat"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+
+    val leftGen = left.genCode(ctx)
+    val rightGen = right.genCode(ctx)
+    val element = leftGen.value
+    val count = rightGen.value
+    val et = dataType.elementType
+    val isPrimitive = CodeGenerator.isPrimitiveType(et)
+
+    val arrayDataName = ctx.freshName("arrayData")
+    val arrayName = ctx.freshName("arrayObject")
+    val initialization = (numElements: String) => if (isPrimitive) {
+      val arrayName = ctx.freshName("array")
+      val baseOffset = Platform.BYTE_ARRAY_OFFSET
+      s"""
+         | int numBytes = ${et.defaultSize} * $numElements;
+         | int unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes($numElements)
+         |   + org.apache.spark.unsafe.array.ByteArrayMethods
+         |     .roundNumberOfBytesToNearestWord(numBytes);
+         | byte[] $arrayName = new byte[unsafeArraySizeInBytes];
+         | UnsafeArrayData $arrayDataName = new UnsafeArrayData();
+         | Platform.putLong($arrayName, $baseOffset, $numElements);
+         | $arrayDataName.pointTo($arrayName, $baseOffset, unsafeArraySizeInBytes);
+         | ${ev.value} = $arrayDataName;
+       """.stripMargin
+    } else {
+      s"${ev.value} = new ${classOf[GenericArrayData].getName()}(new Object[$numElements]);"
+    }
+
+    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(et)
+    val assignments = {
+      val updateArray = if (isPrimitive) {
+        s"${ev.value}.set$primitiveValueTypeName(k, $element);"
+      } else {
+        s"${ev.value}.update(k, $element);"
+      }
+      s"""
+         | for (int k = 0; k < $count; k++) {
+         |   ${updateArray};
+         | }
+       """.stripMargin
+    }
+
+    val resultCode = s"""
+                        | if ($count < 0) {
+                        |   ${initialization("0")}
+                        | } else {
+                        |   ${initialization(count)}
+                        | }
+                        | ${assignments}
+                      """.stripMargin
+
+    ev.copy(code = s"""
+      boolean ${ev.isNull} = false;
+      ${leftGen.code}
+      ${rightGen.code}
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      $resultCode""", isNull = "false")
+  }
 }

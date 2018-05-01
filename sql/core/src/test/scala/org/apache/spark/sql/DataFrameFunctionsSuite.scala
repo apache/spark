@@ -413,6 +413,111 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("array_repeat function") {
+    val strDF = Seq(
+      ("hi", 1),
+      (null, 2)
+    ).toDF("a", "b")
+
+    checkAnswer(
+      strDF.select(array_repeat(strDF("a"), 0)),
+      Seq(
+        Row(Seq[String]()),
+        Row(Seq[String]())
+      ))
+
+    checkAnswer(
+      strDF.select(array_repeat(strDF("a"), 1)),
+      Seq(
+        Row(Seq("hi")),
+        Row(Seq(null))
+      ))
+
+    checkAnswer(
+      strDF.select(array_repeat(strDF("a"), 2)),
+      Seq(
+        Row(Seq("hi", "hi")),
+        Row(Seq(null, null))
+      ))
+
+    checkAnswer(
+      strDF.select(array_repeat(strDF("a"), strDF("b"))),
+      Seq(
+        Row(Seq("hi")),
+        Row(Seq(null, null))
+      ))
+
+    checkAnswer(
+      strDF.selectExpr("array_repeat(a, 2)"),
+      Seq(
+        Row(Seq("hi", "hi")),
+        Row(Seq(null, null))
+      ))
+
+    checkAnswer(
+      strDF.selectExpr("array_repeat(a, b)"),
+      Seq(
+        Row(Seq("hi")),
+        Row(Seq(null, null))
+      ))
+
+    val intDF = Seq(
+      (1, 1),
+      (3, 2)
+    ).toDF("a", "b")
+
+    checkAnswer(
+      intDF.select(array_repeat(intDF("a"), 0)),
+      Seq(
+        Row(Seq[Int]()),
+        Row(Seq[Int]())
+      ))
+
+    checkAnswer(
+      intDF.select(array_repeat(intDF("a"), 1)),
+      Seq(
+        Row(Seq(1)),
+        Row(Seq(3))
+      ))
+
+    checkAnswer(
+      intDF.select(array_repeat(intDF("a"), 2)),
+      Seq(
+        Row(Seq(1, 1)),
+        Row(Seq(3, 3))
+      ))
+
+    checkAnswer(
+      intDF.select(array_repeat(intDF("a"), intDF("b"))),
+      Seq(
+        Row(Seq(1)),
+        Row(Seq(3, 3))
+      ))
+
+    checkAnswer(
+      intDF.selectExpr("array_repeat(a, 2)"),
+      Seq(
+        Row(Seq(1, 1)),
+        Row(Seq(3, 3))
+      ))
+
+    checkAnswer(
+      intDF.selectExpr("array_repeat(a, b)"),
+      Seq(
+        Row(Seq(1)),
+        Row(Seq(3, 3))
+      ))
+
+    val nullDF = Seq(
+      ("hi", null)
+    ).toDF("a", "b")
+
+    intercept[AnalysisException] {
+      nullDF.select(array_repeat(nullDF("a"), nullDF("b")))
+    }
+
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

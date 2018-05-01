@@ -105,4 +105,20 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
+
+  test("ArrayRepeat") {
+    val intArray = Literal.create(Seq(1, 2), ArrayType(IntegerType))
+    val strArray = Literal.create(Seq("hi", "hola"), ArrayType(StringType))
+
+    checkEvaluation(ArrayRepeat(Literal("hi"), Literal(0)), Seq())
+    checkEvaluation(ArrayRepeat(Literal("hi"), Literal(-1)), Seq())
+    checkEvaluation(ArrayRepeat(Literal("hi"), Literal(1)), Seq("hi"))
+    checkEvaluation(ArrayRepeat(Literal("hi"), Literal(2)), Seq("hi", "hi"))
+    checkEvaluation(ArrayRepeat(Literal(true), Literal(2)), Seq(true, true))
+    checkEvaluation(ArrayRepeat(Literal(1), Literal(2)), Seq(1, 1))
+    checkEvaluation(ArrayRepeat(Literal(3.2), Literal(2)), Seq(3.2, 3.2))
+    checkEvaluation(ArrayRepeat(Literal(null), Literal(2)), Seq[String](null, null))
+    checkEvaluation(ArrayRepeat(intArray, Literal(2)), Seq(Seq(1, 2), Seq(1, 2)))
+    checkEvaluation(ArrayRepeat(strArray, Literal(2)), Seq(Seq("hi", "hola"), Seq("hi", "hola")))
+  }
 }
