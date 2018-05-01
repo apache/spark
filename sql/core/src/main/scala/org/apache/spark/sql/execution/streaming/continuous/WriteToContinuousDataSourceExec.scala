@@ -47,10 +47,9 @@ case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPla
     }
 
     val rdd = new ContinuousWriteRDD(query.execute(), writerFactory)
-    val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 
     logInfo(s"Start processing data source writer: $writer. " +
-      s"The input RDD has ${messages.length} partitions.")
+      s"The input RDD has ${rdd.partitions.length} partitions.")
     EpochCoordinatorRef.get(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       sparkContext.env)
@@ -62,18 +61,8 @@ case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPla
       rdd.collect()
     } catch {
       case _: InterruptedException =>
-      // Interruption is how continuous queries are ended, so accept and ignore the exception.
+        // Interruption is how continuous queries are ended, so accept and ignore the exception.
       case cause: Throwable =>
-        logError(s"Data source writer $writer is aborting.")
-        try {
-          writer.abort(0, messages)
-        } catch {
-          case t: Throwable =>
-            logError(s"Data source writer $writer failed to abort.")
-            cause.addSuppressed(t)
-            throw new SparkException("Writing job failed.", cause)
-        }
-        logError(s"Data source writer $writer aborted.")
         cause match {
           // Do not wrap interruption exceptions that will be handled by streaming specially.
           case _ if StreamExecution.isInterruptionException(cause) => throw cause
