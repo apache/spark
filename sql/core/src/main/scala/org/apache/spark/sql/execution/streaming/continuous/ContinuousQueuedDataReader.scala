@@ -79,8 +79,7 @@ class ContinuousQueuedDataReader(
   dataReaderThread.start()
 
   context.addTaskCompletionListener(_ => {
-    dataReaderThread.interrupt()
-    epochPollExecutor.shutdown()
+    this.close()
   })
 
   override def close(): Unit = {
