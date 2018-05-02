@@ -265,7 +265,8 @@ class BisectingKMeans @Since("2.0.0") (
     }
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(featuresCol, predictionCol, k, maxIter, seed, minDivisibleClusterSize)
+    instr.logParams(featuresCol, predictionCol, k, maxIter, seed,
+      minDivisibleClusterSize, distanceMeasure)
 
     val bkm = new MLlibBisectingKMeans()
       .setK($(k))
@@ -278,6 +279,7 @@ class BisectingKMeans @Since("2.0.0") (
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
+    instr.logNamedValue("clusterSizes", summary.clusterSizes.toString)
     instr.logSuccess(model)
     model
   }

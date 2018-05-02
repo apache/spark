@@ -423,6 +423,8 @@ class GaussianMixture @Since("2.0.0") (
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
     model.setSummary(Some(summary))
+    instr.logNamedValue("logLikelihood", logLikelihood)
+    instr.logNamedValue("clusterSizes", summary.clusterSizes.toString)
     instr.logSuccess(model)
     model
   }
