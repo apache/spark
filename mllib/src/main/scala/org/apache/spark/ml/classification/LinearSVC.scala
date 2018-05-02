@@ -187,6 +187,9 @@ class LinearSVC @Since("2.2.0") (
         (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
+    instr.logNamedValue(Instrumentation.loggerTags.numExamples, summarizer.count)
+    instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
+    instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid

@@ -120,7 +120,6 @@ class RandomForestClassifier @Since("1.4.0") (
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses: Int = getNumClasses(dataset)
-    instr.logNumClasses(numClasses)
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -142,6 +141,8 @@ class RandomForestClassifier @Since("1.4.0") (
 
     val numFeatures = oldDataset.first().features.size
     val m = new RandomForestClassificationModel(uid, trees, numFeatures, numClasses)
+    instr.logNumClasses(numClasses)
+    instr.logNumFeatures(numFeatures)
     instr.logSuccess(m)
     m
   }
