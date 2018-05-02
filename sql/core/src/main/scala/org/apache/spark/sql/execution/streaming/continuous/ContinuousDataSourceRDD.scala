@@ -135,16 +135,6 @@ class ContinuousDataSourceRDD(
   override def getPreferredLocations(split: Partition): Seq[String] = {
     split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readerFactory.preferredLocations()
   }
-
-  override def clearDependencies(): Unit = {
-    super.clearDependencies()
-    dataReaders.synchronized {
-      dataReaders.foreach {
-        case (_, reader) => reader.close()
-      }
-      dataReaders.clear()
-    }
-  }
 }
 
 object ContinuousDataSourceRDD {
