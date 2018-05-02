@@ -186,7 +186,14 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
   def render(request: HttpServletRequest): Seq[Node] = {
     // stripXSS is called first to remove suspicious characters used in XSS attacks
     val parameterId = UIUtils.stripXSS(request.getParameter("id"))
-    require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
+    if (parameterId == null || parameterId.isEmpty) {
+      val content =
+        <div id="no-info">
+          <p>Missing id parameter. Will redirect to Jobs page</p>
+        </div>
+      return UIUtils.headerSparkPage(
+        "Missing Job Id", content, parent, redirectPath = Some(s"/${parent.name}"))
+    }
 
     val jobId = parameterId.toInt
     val jobData = store.asOption(store.job(jobId)).getOrElse {

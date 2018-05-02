@@ -208,7 +208,8 @@ private[spark] object UIUtils extends Logging {
       refreshInterval: Option[Int] = None,
       helpText: Option[String] = None,
       showVisualization: Boolean = false,
-      useDataTables: Boolean = false): Seq[Node] = {
+      useDataTables: Boolean = false,
+      redirectPath: Option[String] = None) : Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -218,12 +219,16 @@ private[spark] object UIUtils extends Logging {
       </li>
     }
     val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
+    val redirectMetaContent: Option[Node] = redirectPath.map{ path =>
+      <meta http-equiv="refresh" content={s"0; url=${prependBaseUri(path)}"} />
+    }
 
     <html>
       <head>
         {commonHeaderNodes}
         {if (showVisualization) vizHeaderNodes else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
+        {if (redirectMetaContent.isDefined) redirectMetaContent.get}
         <link rel="shortcut icon" href={prependBaseUri("/static/spark-logo-77x50px-hd.png")}></link>
         <title>{appName} - {title}</title>
       </head>
