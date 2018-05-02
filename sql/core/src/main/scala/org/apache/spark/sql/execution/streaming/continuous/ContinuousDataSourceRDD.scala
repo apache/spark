@@ -41,12 +41,10 @@ import org.apache.spark.util.ThreadUtils
  */
 class ContinuousDataSourceRDD(
     sc: SparkContext,
-    sqlContext: SQLContext,
+    dataQueueSize: Int,
+    epochPollIntervalMs: Long,
     @transient private val readerFactories: Seq[DataReaderFactory[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
-
-  private val dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize
-  private val epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs
 
   // When computing the same partition multiple times, we need to use the same data reader to
   // do so for continuity in offsets.
