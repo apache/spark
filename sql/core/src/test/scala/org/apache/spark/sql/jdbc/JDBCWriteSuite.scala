@@ -515,4 +515,15 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     }.getMessage
     assert(e.contains("NULL not allowed for column \"NAME\""))
   }
+
+  test("SPARK-23856 Spark jdbc setQueryTimeout option") {
+    val errMsg = intercept[SparkException] {
+      spark.range(10000000L).selectExpr("id AS k", "id AS v").coalesce(1).write
+        .mode(SaveMode.Overwrite)
+        .option("queryTimeout", 1)
+        .option("batchsize", Int.MaxValue)
+        .jdbc(url1, "TEST.TIMEOUTTEST", properties)
+    }.getMessage
+    assert(errMsg.contains("Statement was canceled or the session timed out"))
+  }
 }
