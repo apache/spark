@@ -40,6 +40,8 @@ import org.apache.spark.unsafe.types.UTF8String
 case class CreateArray(children: Seq[Expression], defaultElementType: DataType = StringType)
   extends Expression {
 
+  def this(children: Seq[Expression]) = this(children, StringType)
+
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
