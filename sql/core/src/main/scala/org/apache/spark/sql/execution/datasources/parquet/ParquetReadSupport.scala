@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.{Map => JMap}
+import java.util.{Map => JMap, TimeZone}
 
 import scala.collection.JavaConverters._
 
@@ -48,8 +48,16 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-private[parquet] class ParquetReadSupport extends ReadSupport[UnsafeRow] with Logging {
+private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
+    extends ReadSupport[UnsafeRow] with Logging {
   private var catalystRequestedSchema: StructType = _
+
+  def this() {
+    // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
+    // used in the vectorized reader, where we get the convertTz value directly, and the value here
+    // is ignored.
+    this(None)
+  }
 
   /**
    * Called on executor side before [[prepareForRead()]] and instantiating actual Parquet record
@@ -95,7 +103,8 @@ private[parquet] class ParquetReadSupport extends ReadSupport[UnsafeRow] with Lo
     new ParquetRecordMaterializer(
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
-      new ParquetSchemaConverter(conf))
+      new ParquetToSparkSchemaConverter(conf),
+      convertTz)
   }
 }
 
@@ -270,7 +279,7 @@ private[parquet] object ParquetReadSupport {
   private def clipParquetGroupFields(
       parquetRecord: GroupType, structType: StructType): Seq[Type] = {
     val parquetFieldMap = parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
-    val toParquet = new ParquetSchemaConverter(writeLegacyParquetFormat = false)
+    val toParquet = new SparkToParquetSchemaConverter(writeLegacyParquetFormat = false)
     structType.map { f =>
       parquetFieldMap
         .get(f.name)

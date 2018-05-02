@@ -117,9 +117,13 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
       findTransitively: Boolean): Map[Class[_], Set[String]] = {
     val fields = new mutable.HashMap[Class[_], mutable.Set[String]]
     outerClasses.foreach { c => fields(c) = new mutable.HashSet[String] }
-    ClosureCleaner.getClassReader(closure.getClass)
-      .accept(new FieldAccessFinder(fields, findTransitively), 0)
-    fields.mapValues(_.toSet).toMap
+    val cr = ClosureCleaner.getClassReader(closure.getClass)
+    if (cr == null) {
+      Map.empty
+    } else {
+      cr.accept(new FieldAccessFinder(fields, findTransitively), 0)
+      fields.mapValues(_.toSet).toMap
+    }
   }
 
   // Accessors for private methods

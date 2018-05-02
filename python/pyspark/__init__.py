@@ -35,7 +35,7 @@ Public classes:
   - :class:`StorageLevel`:
       Finer-grained cache persistence levels.
   - :class:`TaskContext`:
-      Information about the current running task, avaialble on the workers and experimental.
+      Information about the current running task, available on the workers and experimental.
 
 """
 
@@ -54,6 +54,7 @@ from pyspark.status import *
 from pyspark.taskcontext import TaskContext
 from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
+from pyspark._globals import _NoValue
 
 
 def since(version):

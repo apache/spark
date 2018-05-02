@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.net.URI
 import java.nio.charset.{Charset, StandardCharsets}
 
 import com.univocity.parsers.csv.CsvParser
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.Job
@@ -111,8 +112,8 @@ abstract class CSVDataSource extends Serializable {
 
 object CSVDataSource {
   def apply(options: CSVOptions): CSVDataSource = {
-    if (options.wholeFile) {
-      WholeFileCSVDataSource
+    if (options.multiLine) {
+      MultiLineCSVDataSource
     } else {
       TextInputCSVDataSource
     }
@@ -160,7 +161,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       val firstRow = new CsvParser(parsedOptions.asParserSettings).parseLine(firstLine)
       val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
       val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
-      val tokenRDD = csv.rdd.mapPartitions { iter =>
+      val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
+      val tokenRDD = sampled.rdd.mapPartitions { iter =>
         val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
         val linesWithoutHeader =
           CSVUtils.filterHeaderLine(filteredLines, firstLine, parsedOptions)
@@ -196,7 +198,7 @@ object TextInputCSVDataSource extends CSVDataSource {
   }
 }
 
-object WholeFileCSVDataSource extends CSVDataSource {
+object MultiLineCSVDataSource extends CSVDataSource {
   override val isSplitable: Boolean = false
 
   override def readFile(
@@ -205,7 +207,7 @@ object WholeFileCSVDataSource extends CSVDataSource {
       parser: UnivocityParser,
       schema: StructType): Iterator[InternalRow] = {
     UnivocityParser.parseStream(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath),
+      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
       parser.options.headerFlag,
       parser,
       schema)
@@ -217,8 +219,9 @@ object WholeFileCSVDataSource extends CSVDataSource {
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
     csv.flatMap { lines =>
+      val path = new Path(lines.getPath())
       UnivocityParser.tokenizeStream(
-        CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, lines.getPath()),
+        CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
         shouldDropHeader = false,
         new CsvParser(parsedOptions.asParserSettings))
     }.take(1).headOption match {
@@ -229,11 +232,12 @@ object WholeFileCSVDataSource extends CSVDataSource {
           UnivocityParser.tokenizeStream(
             CodecStreams.createInputStreamWithCloseResource(
               lines.getConfiguration,
-              lines.getPath()),
+              new Path(lines.getPath())),
             parsedOptions.headerFlag,
             new CsvParser(parsedOptions.asParserSettings))
         }
-        CSVInferSchema.infer(tokenRDD, header, parsedOptions)
+        val sampled = CSVUtils.sample(tokenRDD, parsedOptions)
+        CSVInferSchema.infer(sampled, header, parsedOptions)
       case None =>
         // If the first row could not be read, just return the empty schema.
         StructType(Nil)

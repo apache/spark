@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, TimeZoneAwareExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -29,7 +28,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[LocalRelation]].
  */
-case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] {
+case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case table: UnresolvedInlineTable if table.expressionsResolved =>
       validateInputDimension(table)
@@ -99,12 +98,9 @@ case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] {
           val castedExpr = if (e.dataType.sameType(targetType)) {
             e
           } else {
-            Cast(e, targetType)
+            cast(e, targetType)
           }
-          castedExpr.transform {
-            case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
-              e.withTimeZone(conf.sessionLocalTimeZone)
-          }.eval()
+          castedExpr.eval()
         } catch {
           case NonFatal(ex) =>
             table.failAnalysis(s"failed to evaluate expression ${e.sql}: ${ex.getMessage}")

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.ByteArrayOutputStream
-import java.util.Locale
+import java.io.{ByteArrayOutputStream, CharConversionException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -126,16 +125,11 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase(Locale.ROOT)
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toFloat
-          } else {
-            throw new RuntimeException(s"Cannot parse $value as FloatType.")
+          parser.getText match {
+            case "NaN" => Float.NaN
+            case "Infinity" => Float.PositiveInfinity
+            case "-Infinity" => Float.NegativeInfinity
+            case other => throw new RuntimeException(s"Cannot parse $other as FloatType.")
           }
       }
 
@@ -146,16 +140,11 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase(Locale.ROOT)
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toDouble
-          } else {
-            throw new RuntimeException(s"Cannot parse $value as DoubleType.")
+          parser.getText match {
+            case "NaN" => Double.NaN
+            case "Infinity" => Double.PositiveInfinity
+            case "-Infinity" => Double.NegativeInfinity
+            case other => throw new RuntimeException(s"Cannot parse $other as DoubleType.")
           }
       }
 
@@ -289,7 +278,7 @@ class JacksonParser(
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
       throw new RuntimeException(
-        s"Failed to parse a value for data type $dataType (current token: $token).")
+        s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
   }
 
   /**
@@ -368,7 +357,18 @@ class JacksonParser(
       }
     } catch {
       case e @ (_: RuntimeException | _: JsonProcessingException) =>
+        // JSON parser currently doesn't support partial results for corrupted records.
+        // For such records, all fields other than the field configured by
+        // `columnNameOfCorruptRecord` are set to `null`.
         throw BadRecordException(() => recordLiteral(record), () => None, e)
+      case e: CharConversionException if options.encoding.isEmpty =>
+        val msg =
+          """JSON parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        throw BadRecordException(() => recordLiteral(record), () => None, wrappedCharException)
     }
   }
 }

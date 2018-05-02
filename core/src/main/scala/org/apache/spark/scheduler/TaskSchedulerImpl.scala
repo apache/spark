@@ -32,7 +32,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
-import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 
@@ -51,29 +50,21 @@ import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
-private[spark] class TaskSchedulerImpl private[scheduler](
+private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    private[scheduler] val blacklistTrackerOpt: Option[BlacklistTracker],
     isLocal: Boolean = false)
   extends TaskScheduler with Logging {
 
   import TaskSchedulerImpl._
 
   def this(sc: SparkContext) = {
-    this(
-      sc,
-      sc.conf.get(config.MAX_TASK_FAILURES),
-      TaskSchedulerImpl.maybeCreateBlacklistTracker(sc))
+    this(sc, sc.conf.get(config.MAX_TASK_FAILURES))
   }
 
-  def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
-    this(
-      sc,
-      maxTaskFailures,
-      TaskSchedulerImpl.maybeCreateBlacklistTracker(sc),
-      isLocal = isLocal)
-  }
+  // Lazily initializing blackListTrackOpt to avoid getting empty ExecutorAllocationClient,
+  // because ExecutorAllocationClient is created after this TaskSchedulerImpl.
+  private[scheduler] lazy val blacklistTrackerOpt = maybeCreateBlacklistTracker(sc)
 
   val conf = sc.conf
 
@@ -129,7 +120,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   var backend: SchedulerBackend = null
 
-  val mapOutputTracker = SparkEnv.get.mapOutputTracker
+  val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
   private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
@@ -240,8 +231,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         // 2. The task set manager has been created but no tasks has been scheduled. In this case,
         //    simply abort the stage.
         tsm.runningTasksSet.foreach { tid =>
-          val execId = taskIdToExecutorId(tid)
-          backend.killTask(tid, execId, interruptThread, reason = "stage cancelled")
+            taskIdToExecutorId.get(tid).foreach(execId =>
+              backend.killTask(tid, execId, interruptThread, reason = "Stage cancelled"))
         }
         tsm.abort("Stage %s cancelled".format(stageId))
         logInfo("Stage %d was cancelled".format(stageId))
@@ -353,7 +344,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
-    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
+    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
@@ -567,6 +558,11 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       dagScheduler.executorLost(failedExecutor.get, reason)
       backend.reviveOffers()
     }
+  }
+
+  override def workerRemoved(workerId: String, host: String, message: String): Unit = {
+    logInfo(s"Handle removed worker $workerId: $message")
+    dagScheduler.workerRemoved(workerId, host, message)
   }
 
   private def logExecutorLoss(

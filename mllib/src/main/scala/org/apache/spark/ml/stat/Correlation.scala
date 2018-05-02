@@ -27,7 +27,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
- * API for correlation functions in MLlib, compatible with Dataframes and Datasets.
+ * API for correlation functions in MLlib, compatible with DataFrames and Datasets.
  *
  * The functions in this package generalize the functions in [[org.apache.spark.sql.Dataset#stat]]
  * to spark.ml's Vector types.

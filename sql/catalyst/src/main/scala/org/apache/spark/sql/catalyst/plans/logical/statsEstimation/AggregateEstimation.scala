@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Statistics}
-import org.apache.spark.sql.internal.SQLConf
 
 
 object AggregateEstimation {
@@ -29,17 +28,19 @@ object AggregateEstimation {
    * Estimate the number of output rows based on column stats of group-by columns, and propagate
    * column stats for aggregate expressions.
    */
-  def estimate(conf: SQLConf, agg: Aggregate): Option[Statistics] = {
-    val childStats = agg.child.stats(conf)
+  def estimate(agg: Aggregate): Option[Statistics] = {
+    val childStats = agg.child.stats
     // Check if we have column stats for all group-by columns.
     val colStatsExist = agg.groupingExpressions.forall { e =>
-      e.isInstanceOf[Attribute] && childStats.attributeStats.contains(e.asInstanceOf[Attribute])
+      e.isInstanceOf[Attribute] &&
+        childStats.attributeStats.get(e.asInstanceOf[Attribute]).exists(_.hasCountStats)
     }
-    if (rowCountsExist(conf, agg.child) && colStatsExist) {
+    if (rowCountsExist(agg.child) && colStatsExist) {
       // Multiply distinct counts of group-by columns. This is an upper bound, which assumes
       // the data contains all combinations of distinct values of group-by columns.
       var outputRows: BigInt = agg.groupingExpressions.foldLeft(BigInt(1))(
-        (res, expr) => res * childStats.attributeStats(expr.asInstanceOf[Attribute]).distinctCount)
+        (res, expr) => res *
+          childStats.attributeStats(expr.asInstanceOf[Attribute]).distinctCount.get)
 
       outputRows = if (agg.groupingExpressions.isEmpty) {
         // If there's no group-by columns, the output is a single row containing values of aggregate
@@ -56,7 +57,7 @@ object AggregateEstimation {
         sizeInBytes = getOutputSize(agg.output, outputRows, outputAttrStats),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
-        isBroadcastable = childStats.isBroadcastable))
+        hints = childStats.hints))
     } else {
       None
     }

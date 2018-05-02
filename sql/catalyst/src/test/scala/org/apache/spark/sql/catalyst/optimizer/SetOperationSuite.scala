@@ -34,7 +34,7 @@ class SetOperationSuite extends PlanTest {
         CombineUnions,
         PushProjectionThroughUnion,
         PushDownPredicate,
-        PruneFilters(conf)) :: Nil
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -79,11 +79,11 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("Remove unnecessary distincts in multiple unions") {
-    val query1 = OneRowRelation
+    val query1 = OneRowRelation()
       .select(Literal(1).as('a))
-    val query2 = OneRowRelation
+    val query2 = OneRowRelation()
       .select(Literal(2).as('b))
-    val query3 = OneRowRelation
+    val query3 = OneRowRelation()
       .select(Literal(3).as('c))
 
     // D - U - D - U - query1
@@ -111,13 +111,13 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("Keep necessary distincts in multiple unions") {
-    val query1 = OneRowRelation
+    val query1 = OneRowRelation()
       .select(Literal(1).as('a))
-    val query2 = OneRowRelation
+    val query2 = OneRowRelation()
       .select(Literal(2).as('b))
-    val query3 = OneRowRelation
+    val query3 = OneRowRelation()
       .select(Literal(3).as('c))
-    val query4 = OneRowRelation
+    val query4 = OneRowRelation()
       .select(Literal(4).as('d))
 
     // U - D - U - query1

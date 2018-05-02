@@ -35,7 +35,6 @@ connExists <- function(env) {
 #' Also terminates the backend this R session is connected to.
 #' @rdname sparkR.session.stop
 #' @name sparkR.session.stop
-#' @export
 #' @note sparkR.session.stop since 2.0.0
 sparkR.session.stop <- function() {
   env <- .sparkREnv
@@ -84,7 +83,6 @@ sparkR.session.stop <- function() {
 
 #' @rdname sparkR.session.stop
 #' @name sparkR.stop
-#' @export
 #' @note sparkR.stop since 1.4.0
 sparkR.stop <- function() {
   sparkR.session.stop()
@@ -103,7 +101,6 @@ sparkR.stop <- function() {
 #' @param sparkPackages Character vector of package coordinates
 #' @seealso \link{sparkR.session}
 #' @rdname sparkR.init-deprecated
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init("local[2]", "SparkR", "/home/spark")
@@ -113,7 +110,7 @@ sparkR.stop <- function() {
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("one.jar", "two.jar", "three.jar"),
-#'                  c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                  c("com.databricks:spark-avro_2.11:2.0.1"))
 #'}
 #' @note sparkR.init since 1.4.0
 sparkR.init <- function(
@@ -270,7 +267,6 @@ sparkR.sparkContext <- function(
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
 #' @seealso \link{sparkR.session}
 #' @rdname sparkRSQL.init-deprecated
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -298,7 +294,6 @@ sparkRSQL.init <- function(jsc = NULL) {
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
 #' @seealso \link{sparkR.session}
 #' @rdname sparkRHive.init-deprecated
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -347,7 +342,6 @@ sparkRHive.init <- function(jsc = NULL) {
 #' @param enableHiveSupport enable support for Hive, fallback if not built with Hive support; once
 #'        set, this cannot be turned off on an existing session
 #' @param ... named Spark properties passed to the method.
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -357,7 +351,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' sparkR.session("yarn-client", "SparkR", "/home/spark",
 #'                list(spark.executor.memory="4g"),
 #'                c("one.jar", "two.jar", "three.jar"),
-#'                c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                c("com.databricks:spark-avro_2.11:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
 #' @note sparkR.session since 2.0.0
@@ -420,6 +414,18 @@ sparkR.session <- function(
                                 enableHiveSupport)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
+
+  # Check if version number of SparkSession matches version number of SparkR package
+  jvmVersion <- callJMethod(sparkSession, "version")
+  # Remove -SNAPSHOT from jvm versions
+  jvmVersionStrip <- gsub("-SNAPSHOT", "", jvmVersion)
+  rPackageVersion <- paste0(packageVersion("SparkR"))
+
+  if (jvmVersionStrip != rPackageVersion) {
+    warning(paste("Version mismatch between Spark JVM and SparkR package. JVM version was",
+                  jvmVersion, ", while R package version was", rPackageVersion))
+  }
+
   sparkSession
 }
 
@@ -430,7 +436,6 @@ sparkR.session <- function(
 #' @return the SparkUI URL, or NA if it is disabled, or not started.
 #' @rdname sparkR.uiWebUrl
 #' @name sparkR.uiWebUrl
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -533,6 +538,68 @@ cancelJobGroup <- function(sc, groupId) {
     groupIdToUse <- sc
     cancelJobGroup.default(groupIdToUse)
   }
+}
+
+#' Set a human readable description of the current job.
+#'
+#' Set a description that is shown as a job description in UI.
+#'
+#' @param value The job description of the current job.
+#' @rdname setJobDescription
+#' @name setJobDescription
+#' @examples
+#'\dontrun{
+#' setJobDescription("This is an example job.")
+#'}
+#' @note setJobDescription since 2.3.0
+setJobDescription <- function(value) {
+  if (!is.null(value)) {
+    value <- as.character(value)
+  }
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setJobDescription", value))
+}
+
+#' Set a local property that affects jobs submitted from this thread, such as the
+#' Spark fair scheduler pool.
+#'
+#' @param key The key for a local property.
+#' @param value The value for a local property.
+#' @rdname setLocalProperty
+#' @name setLocalProperty
+#' @examples
+#'\dontrun{
+#' setLocalProperty("spark.scheduler.pool", "poolA")
+#'}
+#' @note setLocalProperty since 2.3.0
+setLocalProperty <- function(key, value) {
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
+  }
+  if (!is.null(value)) {
+    value <- as.character(value)
+  }
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setLocalProperty", as.character(key), value))
+}
+
+#' Get a local property set in this thread, or \code{NULL} if it is missing. See
+#' \code{setLocalProperty}.
+#'
+#' @param key The key for a local property.
+#' @rdname getLocalProperty
+#' @name getLocalProperty
+#' @examples
+#'\dontrun{
+#' getLocalProperty("spark.scheduler.pool")
+#'}
+#' @note getLocalProperty since 2.3.0
+getLocalProperty <- function(key) {
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
+  }
+  sc <- getSparkContext()
+  callJMethod(sc, "getLocalProperty", as.character(key))
 }
 
 sparkConfToSubmitOps <- new.env()

@@ -27,3 +27,24 @@ import org.apache.spark.ml.linalg.Vector
  * @param features The vector of features for this data point.
  */
 private[ml] case class Instance(label: Double, weight: Double, features: Vector)
+
+/**
+ * Case class that represents an instance of data point with
+ * label, weight, offset and features.
+ * This is mainly used in GeneralizedLinearRegression currently.
+ *
+ * @param label Label for this data point.
+ * @param weight The weight of this instance.
+ * @param offset The offset used for this data point.
+ * @param features The vector of features for this data point.
+ */
+private[ml] case class OffsetInstance(
+    label: Double,
+    weight: Double,
+    offset: Double,
+    features: Vector) {
+
+  /** Converts to an [[Instance]] object by leaving out the offset. */
+  def toInstance: Instance = Instance(label, weight, features)
+
+}

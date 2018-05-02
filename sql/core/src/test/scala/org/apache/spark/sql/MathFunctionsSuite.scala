@@ -231,6 +231,19 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
         BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
     )
+
+    val bdPi: BigDecimal = BigDecimal(31415925L, 7)
+    checkAnswer(
+      sql(s"SELECT round($bdPi, 7), round($bdPi, 8), round($bdPi, 9), round($bdPi, 10), " +
+        s"round($bdPi, 100), round($bdPi, 6), round(null, 8)"),
+      Seq(Row(bdPi, bdPi, bdPi, bdPi, bdPi, BigDecimal("3.141593"), null))
+    )
+
+    checkAnswer(
+      sql(s"SELECT bround($bdPi, 7), bround($bdPi, 8), bround($bdPi, 9), bround($bdPi, 10), " +
+        s"bround($bdPi, 100), bround($bdPi, 6), bround(null, 8)"),
+      Seq(Row(bdPi, bdPi, bdPi, bdPi, bdPi, BigDecimal("3.141592"), null))
+    )
   }
 
   test("round/bround with data frame from a local Seq of Product") {
@@ -243,6 +256,18 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
       df.withColumn("value_brounded", bround('value)),
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
+  }
+
+  test("round/bround with table columns") {
+    withTable("t") {
+      Seq(BigDecimal("5.9")).toDF("i").write.saveAsTable("t")
+      checkAnswer(
+        sql("select i, round(i) from t"),
+        Seq(Row(BigDecimal("5.9"), BigDecimal("6"))))
+      checkAnswer(
+        sql("select i, bround(i) from t"),
+        Seq(Row(BigDecimal("5.9"), BigDecimal("6"))))
+    }
   }
 
   test("exp") {

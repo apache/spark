@@ -181,23 +181,23 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   }
 
   override def addTaskSetManager(manager: Schedulable, properties: Properties) {
-    var poolName = DEFAULT_POOL_NAME
-    var parentPool = rootPool.getSchedulableByName(poolName)
-    if (properties != null) {
-      poolName = properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
-      parentPool = rootPool.getSchedulableByName(poolName)
-      if (parentPool == null) {
-        // we will create a new pool that user has configured in app
-        // instead of being defined in xml file
-        parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
-          DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
-        rootPool.addSchedulable(parentPool)
-        logWarning(s"A job was submitted with scheduler pool $poolName, which has not been " +
-          "configured. This can happen when the file that pools are read from isn't set, or " +
-          s"when that file doesn't contain $poolName. Created $poolName with default " +
-          s"configuration (schedulingMode: $DEFAULT_SCHEDULING_MODE, " +
-          s"minShare: $DEFAULT_MINIMUM_SHARE, weight: $DEFAULT_WEIGHT)")
+    val poolName = if (properties != null) {
+        properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
+      } else {
+        DEFAULT_POOL_NAME
       }
+    var parentPool = rootPool.getSchedulableByName(poolName)
+    if (parentPool == null) {
+      // we will create a new pool that user has configured in app
+      // instead of being defined in xml file
+      parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
+        DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
+      rootPool.addSchedulable(parentPool)
+      logWarning(s"A job was submitted with scheduler pool $poolName, which has not been " +
+        "configured. This can happen when the file that pools are read from isn't set, or " +
+        s"when that file doesn't contain $poolName. Created $poolName with default " +
+        s"configuration (schedulingMode: $DEFAULT_SCHEDULING_MODE, " +
+        s"minShare: $DEFAULT_MINIMUM_SHARE, weight: $DEFAULT_WEIGHT)")
     }
     parentPool.addSchedulable(manager)
     logInfo("Added task set " + manager.name + " tasks to pool " + poolName)

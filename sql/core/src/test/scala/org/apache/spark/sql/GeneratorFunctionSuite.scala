@@ -43,6 +43,10 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.selectExpr("stack(3, 1, 1.1, 'a', 2, 2.2, 'b', 3, 3.3, 'c')"),
       Row(1, 1.1, "a") :: Row(2, 2.2, "b") :: Row(3, 3.3, "c") :: Nil)
 
+    // Null values
+    checkAnswer(df.selectExpr("stack(3, 1, 1.1, null, 2, null, 'b', null, 3.3, 'c')"),
+      Row(1, 1.1, null) :: Row(2, null, "b") :: Row(null, 3.3, "c") :: Nil)
+
     // Repeat generation at every input row
     checkAnswer(spark.range(2).selectExpr("stack(2, 1, 2, 3)"),
       Row(1, 2) :: Row(3, null) :: Row(1, 2) :: Row(3, null) :: Nil)
@@ -61,7 +65,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val m3 = intercept[AnalysisException] {
       df.selectExpr("stack(2, 1, '2.2')")
     }.getMessage
-    assert(m3.contains("data type mismatch: Argument 1 (IntegerType) != Argument 2 (StringType)"))
+    assert(m3.contains("data type mismatch: Argument 1 (int) != Argument 2 (string)"))
 
     // stack on column data
     val df2 = Seq((2, 1, 2, 3)).toDF("n", "a", "b", "c")
@@ -76,7 +80,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val m5 = intercept[AnalysisException] {
       df3.selectExpr("stack(2, a, b)")
     }.getMessage
-    assert(m5.contains("data type mismatch: Argument 1 (IntegerType) != Argument 2 (DoubleType)"))
+    assert(m5.contains("data type mismatch: Argument 1 (int) != Argument 2 (double)"))
 
   }
 
@@ -91,7 +95,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
     checkAnswer(
       df.select(explode_outer('intList)),
-      Row(1) :: Row(2) :: Row(3) :: Nil)
+      Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
   }
 
   test("single posexplode") {
@@ -105,7 +109,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
     checkAnswer(
       df.select(posexplode_outer('intList)),
-      Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Nil)
+      Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Row(null, null) :: Nil)
   }
 
   test("explode and other columns") {
@@ -161,7 +165,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(explode_outer('intList).as('int)).select('int),
-      Row(1) :: Row(2) :: Row(3) :: Nil)
+      Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
 
     checkAnswer(
       df.select(explode('intList).as('int)).select(sum('int)),
@@ -182,7 +186,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(explode_outer('map)),
-      Row("a", "b") :: Row("c", "d") :: Nil)
+      Row("a", "b") :: Row(null, null) :: Row("c", "d") :: Nil)
   }
 
   test("explode on map with aliases") {
@@ -198,7 +202,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(explode_outer('map).as("key1" :: "value1" :: Nil)).select("key1", "value1"),
-      Row("a", "b") :: Nil)
+      Row("a", "b") :: Row(null, null) :: Nil)
   }
 
   test("self join explode") {
@@ -279,7 +283,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     )
     checkAnswer(
       df2.selectExpr("inline_outer(col1)"),
-      Row(3, "4") :: Row(5, "6") :: Nil
+      Row(null, null) :: Row(3, "4") :: Row(5, "6") :: Nil
     )
   }
 
@@ -297,7 +301,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("outer generator()") {
-    spark.sessionState.functionRegistry.registerFunction("empty_gen", _ => EmptyGenerator())
+    spark.sessionState.functionRegistry
+      .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator())
     checkAnswer(
       sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
       Row(1, null) :: Row(2, null) :: Nil)

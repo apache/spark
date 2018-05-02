@@ -221,7 +221,7 @@ class ObjectHashAggregateExecBenchmark extends BenchmarkBase with TestHiveSingle
     val sessionCatalog = sparkSession.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
     val functionIdentifier = FunctionIdentifier(functionName, database = None)
     val func = CatalogFunction(functionIdentifier, clazz.getName, resources = Nil)
-    sessionCatalog.registerFunction(func, ignoreIfExists = false)
+    sessionCatalog.registerFunction(func, overrideIfExists = false)
   }
 
   private def percentile_approx(

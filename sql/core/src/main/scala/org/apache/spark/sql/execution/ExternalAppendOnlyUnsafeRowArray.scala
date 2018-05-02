@@ -31,16 +31,16 @@ import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, UnsafeSorterIterator}
 
 /**
- * An append-only array for [[UnsafeRow]]s that spills content to disk when there a predefined
- * threshold of rows is reached.
+ * An append-only array for [[UnsafeRow]]s that strictly keeps content in an in-memory array
+ * until [[numRowsInMemoryBufferThreshold]] is reached post which it will switch to a mode which
+ * would flush to disk after [[numRowsSpillThreshold]] is met (or before if there is
+ * excessive memory consumption). Setting these threshold involves following trade-offs:
  *
- * Setting spill threshold faces following trade-off:
- *
- * - If the spill threshold is too high, the in-memory array may occupy more memory than is
- *   available, resulting in OOM.
- * - If the spill threshold is too low, we spill frequently and incur unnecessary disk writes.
- *   This may lead to a performance regression compared to the normal case of using an
- *   [[ArrayBuffer]] or [[Array]].
+ * - If [[numRowsInMemoryBufferThreshold]] is too high, the in-memory array may occupy more memory
+ *   than is available, resulting in OOM.
+ * - If [[numRowsSpillThreshold]] is too low, data will be spilled frequently and lead to
+ *   excessive disk writes. This may lead to a performance regression compared to the normal case
+ *   of using an [[ArrayBuffer]] or [[Array]].
  */
 private[sql] class ExternalAppendOnlyUnsafeRowArray(
     taskMemoryManager: TaskMemoryManager,
@@ -49,9 +49,10 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     taskContext: TaskContext,
     initialSize: Int,
     pageSizeBytes: Long,
+    numRowsInMemoryBufferThreshold: Int,
     numRowsSpillThreshold: Int) extends Logging {
 
-  def this(numRowsSpillThreshold: Int) {
+  def this(numRowsInMemoryBufferThreshold: Int, numRowsSpillThreshold: Int) {
     this(
       TaskContext.get().taskMemoryManager(),
       SparkEnv.get.blockManager,
@@ -59,11 +60,12 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       TaskContext.get(),
       1024,
       SparkEnv.get.memoryManager.pageSizeBytes,
+      numRowsInMemoryBufferThreshold,
       numRowsSpillThreshold)
   }
 
   private val initialSizeOfInMemoryBuffer =
-    Math.min(DefaultInitialSizeOfInMemoryBuffer, numRowsSpillThreshold)
+    Math.min(DefaultInitialSizeOfInMemoryBuffer, numRowsInMemoryBufferThreshold)
 
   private val inMemoryBuffer = if (initialSizeOfInMemoryBuffer > 0) {
     new ArrayBuffer[UnsafeRow](initialSizeOfInMemoryBuffer)
@@ -102,11 +104,11 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   }
 
   def add(unsafeRow: UnsafeRow): Unit = {
-    if (numRows < numRowsSpillThreshold) {
+    if (numRows < numRowsInMemoryBufferThreshold) {
       inMemoryBuffer += unsafeRow.copy()
     } else {
       if (spillableArray == null) {
-        logInfo(s"Reached spill threshold of $numRowsSpillThreshold rows, switching to " +
+        logInfo(s"Reached spill threshold of $numRowsInMemoryBufferThreshold rows, switching to " +
           s"${classOf[UnsafeExternalSorter].getName}")
 
         // We will not sort the rows, so prefixComparator and recordComparator are null
@@ -166,7 +168,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     if (spillableArray == null) {
       new InMemoryBufferIterator(startIndex)
     } else {
-      new SpillableArrayIterator(spillableArray.getIterator, numFieldsPerRow, startIndex)
+      new SpillableArrayIterator(spillableArray.getIterator(startIndex), numFieldsPerRow)
     }
   }
 
@@ -204,28 +206,10 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
   private[this] class SpillableArrayIterator(
       iterator: UnsafeSorterIterator,
-      numFieldPerRow: Int,
-      startIndex: Int)
+      numFieldPerRow: Int)
     extends ExternalAppendOnlyUnsafeRowArrayIterator {
 
     private val currentRow = new UnsafeRow(numFieldPerRow)
-
-    def init(): Unit = {
-      var i = 0
-      while (i < startIndex) {
-        if (iterator.hasNext) {
-          iterator.loadNext()
-        } else {
-          throw new ArrayIndexOutOfBoundsException(
-            "Invalid `startIndex` provided for generating iterator over the array. " +
-              s"Total elements: $numRows, requested `startIndex`: $startIndex")
-        }
-        i += 1
-      }
-    }
-
-    // Traverse upto the given [[startIndex]]
-    init()
 
     override def hasNext(): Boolean = !isModified() && iterator.hasNext
 

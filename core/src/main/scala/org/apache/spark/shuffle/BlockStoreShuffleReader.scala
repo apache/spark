@@ -18,7 +18,7 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
@@ -51,6 +51,8 @@ private[spark] class BlockStoreShuffleReader[K, C](
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
       SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue),
+      SparkEnv.get.conf.get(config.REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS),
+      SparkEnv.get.conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM),
       SparkEnv.get.conf.getBoolean("spark.shuffle.detectCorrupt", true))
 
     val serializerInstance = dep.serializer.newInstance()
@@ -88,12 +90,11 @@ private[spark] class BlockStoreShuffleReader[K, C](
         dep.aggregator.get.combineValuesByKey(keyValuesIterator, context)
       }
     } else {
-      require(!dep.mapSideCombine, "Map-side combine without Aggregator specified!")
       interruptibleIter.asInstanceOf[Iterator[Product2[K, C]]]
     }
 
     // Sort the output if there is a sort ordering defined.
-    dep.keyOrdering match {
+    val resultIter = dep.keyOrdering match {
       case Some(keyOrd: Ordering[K]) =>
         // Create an ExternalSorter to sort the data.
         val sorter =
@@ -102,9 +103,21 @@ private[spark] class BlockStoreShuffleReader[K, C](
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
+        // Use completion callback to stop sorter if task was finished/cancelled.
+        context.addTaskCompletionListener(_ => {
+          sorter.stop()
+        })
         CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](sorter.iterator, sorter.stop())
       case None =>
         aggregatedIter
+    }
+
+    resultIter match {
+      case _: InterruptibleIterator[Product2[K, C]] => resultIter
+      case _ =>
+        // Use another interruptible iterator here to support task cancellation as aggregator
+        // or(and) sorter may have consumed previous interruptible iterator.
+        new InterruptibleIterator[Product2[K, C]](context, resultIter)
     }
   }
 }

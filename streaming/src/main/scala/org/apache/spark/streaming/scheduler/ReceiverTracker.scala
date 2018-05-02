@@ -165,11 +165,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean): Unit = synchronized {
-    if (isTrackerStarted) {
-      // First, stop the receivers
-      trackerState = Stopping
+    val isStarted: Boolean = isTrackerStarted
+    trackerState = Stopping
+    if (isStarted) {
       if (!skipReceiverLaunch) {
-        // Send the stop signal to all the receivers
+        // First, stop the receivers. Send the stop signal to all the receivers
         endpoint.askSync[Boolean](StopAllReceivers)
 
         // Wait for the Spark job that runs the receivers to be over
@@ -194,17 +194,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Finally, stop the endpoint
       ssc.env.rpcEnv.stop(endpoint)
       endpoint = null
-      receivedBlockTracker.stop()
-      logInfo("ReceiverTracker stopped")
-      trackerState = Stopped
-    } else if (isTrackerInitialized) {
-      trackerState = Stopping
-      // `ReceivedBlockTracker` is open when this instance is created. We should
-      // close this even if this `ReceiverTracker` is not started.
-      receivedBlockTracker.stop()
-      logInfo("ReceiverTracker stopped")
-      trackerState = Stopped
     }
+
+    // `ReceivedBlockTracker` is open when this instance is created. We should
+    // close this even if this `ReceiverTracker` is not started.
+    receivedBlockTracker.stop()
+    logInfo("ReceiverTracker stopped")
+    trackerState = Stopped
   }
 
   /** Allocate all unallocated blocks to the given batch. */
@@ -453,9 +449,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     endpoint.send(StartAllReceivers(receivers))
   }
 
-  /** Check if tracker has been marked for initiated */
-  private def isTrackerInitialized: Boolean = trackerState == Initialized
-
   /** Check if tracker has been marked for starting */
   private def isTrackerStarted: Boolean = trackerState == Started
 
@@ -528,7 +521,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
               if (active) {
                 context.reply(addBlock(receivedBlockInfo))
               } else {
-                throw new IllegalStateException("ReceiverTracker RpcEndpoint shut down.")
+                context.sendFailure(
+                  new IllegalStateException("ReceiverTracker RpcEndpoint already shut down."))
               }
             }
           })

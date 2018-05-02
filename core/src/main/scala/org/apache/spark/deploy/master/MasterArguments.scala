@@ -60,12 +60,12 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) exte
   @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
-      Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
+      Utils.checkHost(value)
       host = value
       parse(tail)
 
     case ("--host" | "-h") :: value :: tail =>
-      Utils.checkHost(value, "Please use hostname " + value)
+      Utils.checkHost(value)
       host = value
       parse(tail)
 

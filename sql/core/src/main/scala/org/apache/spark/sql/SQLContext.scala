@@ -420,8 +420,11 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * converted to Catalyst rows.
    */
   private[sql]
-  def internalCreateDataFrame(catalystRows: RDD[InternalRow], schema: StructType) = {
-    sparkSession.internalCreateDataFrame(catalystRows, schema)
+  def internalCreateDataFrame(
+      catalystRows: RDD[InternalRow],
+      schema: StructType,
+      isStreaming: Boolean = false) = {
+    sparkSession.internalCreateDataFrame(catalystRows, schema, isStreaming)
   }
 
   /**
@@ -505,7 +508,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
 
   /**
-   * :: Experimental ::
    * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
    * {{{
    *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
@@ -514,7 +516,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    *
    * @since 2.0.0
    */
-  @Experimental
   @InterfaceStability.Evolving
   def readStream: DataStreamReader = sparkSession.readStream
 

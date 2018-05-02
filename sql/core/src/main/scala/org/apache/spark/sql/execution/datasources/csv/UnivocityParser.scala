@@ -111,9 +111,7 @@ class UnivocityParser(
         case options.nanValue => Float.NaN
         case options.negativeInf => Float.NegativeInfinity
         case options.positiveInf => Float.PositiveInfinity
-        case datum =>
-          Try(datum.toFloat)
-            .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).floatValue())
+        case datum => datum.toFloat
       }
 
     case _: DoubleType => (d: String) =>
@@ -121,9 +119,7 @@ class UnivocityParser(
         case options.nanValue => Double.NaN
         case options.negativeInf => Double.NegativeInfinity
         case options.positiveInf => Double.PositiveInfinity
-        case datum =>
-          Try(datum.toDouble)
-            .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).doubleValue())
+        case datum => datum.toDouble
       }
 
     case _: BooleanType => (d: String) =>
@@ -207,9 +203,11 @@ class UnivocityParser(
           case _: BadRecordException => None
         }
       }
+      // For records with less or more tokens than the schema, tries to return partial results
+      // if possible.
       throw BadRecordException(
         () => getCurrentInput,
-        getPartialResult,
+        () => getPartialResult(),
         new RuntimeException("Malformed CSV record"))
     } else {
       try {
@@ -222,6 +220,9 @@ class UnivocityParser(
         row
       } catch {
         case NonFatal(e) =>
+          // For corrupted records with the number of tokens same as the schema,
+          // CSV reader doesn't support partial results. All fields other than the field
+          // configured by `columnNameOfCorruptRecord` are set to `null`.
           throw BadRecordException(() => getCurrentInput, () => None, e)
       }
     }

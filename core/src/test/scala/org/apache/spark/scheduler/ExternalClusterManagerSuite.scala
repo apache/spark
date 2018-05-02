@@ -84,6 +84,7 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
+  override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
   override def applicationAttemptId(): Option[String] = None
   def executorHeartbeatReceived(
       execId: String,

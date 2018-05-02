@@ -28,68 +28,70 @@ class ResolveHintsSuite extends AnalysisTest {
 
   test("invalid hints should be ignored") {
     checkAnalysis(
-      Hint("some_random_hint_that_does_not_exist", Seq("TaBlE"), table("TaBlE")),
+      UnresolvedHint("some_random_hint_that_does_not_exist", Seq("TaBlE"), table("TaBlE")),
       testRelation,
       caseSensitive = false)
   }
 
   test("case-sensitive or insensitive parameters") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), table("TaBlE")),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = true)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), table("TaBlE")),
+      UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
       testRelation,
       caseSensitive = true)
   }
 
   test("multiple broadcast hint aliases") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
-      Join(BroadcastHint(testRelation), BroadcastHint(testRelation2), Inner, None),
+      UnresolvedHint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
+      Join(ResolvedHint(testRelation, HintInfo(broadcast = true)),
+        ResolvedHint(testRelation2, HintInfo(broadcast = true)), Inner, None),
       caseSensitive = false)
   }
 
   test("do not traverse past existing broadcast hints") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), BroadcastHint(table("table").where('a > 1))),
-      BroadcastHint(testRelation.where('a > 1)).analyze,
+      UnresolvedHint("MAPJOIN", Seq("table"),
+        ResolvedHint(table("table").where('a > 1), HintInfo(broadcast = true))),
+      ResolvedHint(testRelation.where('a > 1), HintInfo(broadcast = true)).analyze,
       caseSensitive = false)
   }
 
   test("should work for subqueries") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("tableAlias"), table("table").as("tableAlias")),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").as("tableAlias")),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     // Negative case: if the alias doesn't match, don't match the original table name.
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), table("table").as("tableAlias")),
+      UnresolvedHint("MAPJOIN", Seq("table"), table("table").as("tableAlias")),
       testRelation,
       caseSensitive = false)
   }
 
   test("do not traverse past subquery alias") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
+      UnresolvedHint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
       testRelation.where('a > 1).analyze,
       caseSensitive = false)
   }
@@ -102,7 +104,8 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
         """.stripMargin
       ),
-      BroadcastHint(testRelation.where('a > 1).select('a)).select('a).analyze,
+      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(broadcast = true))
+        .select('a).analyze,
       caseSensitive = false)
   }
 

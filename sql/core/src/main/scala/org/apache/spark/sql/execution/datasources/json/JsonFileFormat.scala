@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import java.nio.charset.{Charset, StandardCharsets}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -113,6 +115,20 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       }
     }
 
+    if (requiredSchema.length == 1 &&
+      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      throw new AnalysisException(
+        "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
+        "referenced columns only include the internal corrupt record column\n" +
+        s"(named _corrupt_record by default). For example:\n" +
+        "spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()\n" +
+        "and spark.read.schema(schema).json(file).select(\"_corrupt_record\").show().\n" +
+        "Instead, you can cache or save the parsed results and then send the same query.\n" +
+        "For example, val df = spark.read.schema(schema).json(file).cache() and then\n" +
+        "df.filter($\"_corrupt_record\".isNotNull).count()."
+      )
+    }
+
     (file: PartitionedFile) => {
       val parser = new JacksonParser(actualSchema, parsedOptions)
       JsonDataSource(parsedOptions).readFile(
@@ -137,7 +153,13 @@ private[json] class JsonOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
 
-  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
+  private val encoding = options.encoding match {
+    case Some(charsetName) => Charset.forName(charsetName)
+    case None => StandardCharsets.UTF_8
+  }
+
+  private val writer = CodecStreams.createOutputStreamWriter(
+    context, new Path(path), encoding)
 
   // create the Generator without separator inserted between 2 records
   private[this] val gen = new JacksonGenerator(dataSchema, writer, options)

@@ -210,7 +210,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(ref.get.isEmpty)
 
     // Getting a garbage collected accum should throw error
-    intercept[IllegalAccessError] {
+    intercept[IllegalStateException] {
       AccumulatorContext.get(accId)
     }
 

@@ -17,18 +17,16 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.BeforeAndAfterEach
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
-class SessionStateSuite extends SparkFunSuite
-    with BeforeAndAfterEach with BeforeAndAfterAll {
+class SessionStateSuite extends SparkFunSuite {
 
   /**
    * A shared SparkSession for all tests in this suite. Make sure you reset any changes to this
@@ -38,6 +36,7 @@ class SessionStateSuite extends SparkFunSuite
   protected var activeSession: SparkSession = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     activeSession = SparkSession.builder().master("local").getOrCreate()
   }
 
@@ -45,6 +44,8 @@ class SessionStateSuite extends SparkFunSuite
     if (activeSession != null) {
       activeSession.stop()
       activeSession = null
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
     }
     super.afterAll()
   }
@@ -71,10 +72,10 @@ class SessionStateSuite extends SparkFunSuite
   }
 
   test("fork new session and inherit function registry and udf") {
-    val testFuncName1 = "strlenScala"
-    val testFuncName2 = "addone"
+    val testFuncName1 = FunctionIdentifier("strlenScala")
+    val testFuncName2 = FunctionIdentifier("addone")
     try {
-      activeSession.udf.register(testFuncName1, (_: String).length + (_: Int))
+      activeSession.udf.register(testFuncName1.funcName, (_: String).length + (_: Int))
       val forkedSession = activeSession.cloneSession()
 
       // inheritance
@@ -86,7 +87,7 @@ class SessionStateSuite extends SparkFunSuite
       // independence
       forkedSession.sessionState.functionRegistry.dropFunction(testFuncName1)
       assert(activeSession.sessionState.functionRegistry.lookupFunction(testFuncName1).nonEmpty)
-      activeSession.udf.register(testFuncName2, (_: Int) + 1)
+      activeSession.udf.register(testFuncName2.funcName, (_: Int) + 1)
       assert(forkedSession.sessionState.functionRegistry.lookupFunction(testFuncName2).isEmpty)
     } finally {
       activeSession.sessionState.functionRegistry.dropFunction(testFuncName1)

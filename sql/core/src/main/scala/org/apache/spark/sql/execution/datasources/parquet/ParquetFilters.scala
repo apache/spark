@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.sql.Date
+
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
@@ -28,6 +33,10 @@ import org.apache.spark.sql.types._
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
 private[parquet] object ParquetFilters {
+
+  private def dateToDays(date: Date): SQLDate = {
+    DateTimeUtils.fromJavaDate(date)
+  }
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
     case BooleanType =>
@@ -50,6 +59,10 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+      (n: String, v: Any) => FilterApi.eq(
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -72,6 +85,10 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+      (n: String, v: Any) => FilterApi.notEq(
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeLt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -91,6 +108,10 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+      (n: String, v: Any) => FilterApi.lt(
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeLtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -110,6 +131,10 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+      (n: String, v: Any) => FilterApi.ltEq(
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeGt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -129,6 +154,10 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+      (n: String, v: Any) => FilterApi.gt(
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeGtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -148,6 +177,10 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+      (n: String, v: Any) => FilterApi.gtEq(
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   /**
@@ -166,7 +199,14 @@ private[parquet] object ParquetFilters {
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
-    val dataTypeOf = getFieldMap(schema)
+    val nameToType = getFieldMap(schema)
+
+    // Parquet does not allow dots in the column name because dots are used as a column path
+    // delimiter. Since Parquet 1.8.2 (PARQUET-389), Parquet accepts the filter predicates
+    // with missing columns. The incorrect results could be got from Parquet when we push down
+    // filters for the column having dots in the names. Thus, we do not push down such filters.
+    // See SPARK-20364.
+    def canMakeFilterOn(name: String): Boolean = nameToType.contains(name) && !name.contains(".")
 
     // NOTE:
     //
@@ -184,30 +224,30 @@ private[parquet] object ParquetFilters {
     // Probably I missed something and obviously this should be changed.
 
     predicate match {
-      case sources.IsNull(name) if dataTypeOf.contains(name) =>
-        makeEq.lift(dataTypeOf(name)).map(_(name, null))
-      case sources.IsNotNull(name) if dataTypeOf.contains(name) =>
-        makeNotEq.lift(dataTypeOf(name)).map(_(name, null))
+      case sources.IsNull(name) if canMakeFilterOn(name) =>
+        makeEq.lift(nameToType(name)).map(_(name, null))
+      case sources.IsNotNull(name) if canMakeFilterOn(name) =>
+        makeNotEq.lift(nameToType(name)).map(_(name, null))
 
-      case sources.EqualTo(name, value) if dataTypeOf.contains(name) =>
-        makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualTo(name, value)) if dataTypeOf.contains(name) =>
-        makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.EqualTo(name, value) if canMakeFilterOn(name) =>
+        makeEq.lift(nameToType(name)).map(_(name, value))
+      case sources.Not(sources.EqualTo(name, value)) if canMakeFilterOn(name) =>
+        makeNotEq.lift(nameToType(name)).map(_(name, value))
 
-      case sources.EqualNullSafe(name, value) if dataTypeOf.contains(name) =>
-        makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualNullSafe(name, value)) if dataTypeOf.contains(name) =>
-        makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.EqualNullSafe(name, value) if canMakeFilterOn(name) =>
+        makeEq.lift(nameToType(name)).map(_(name, value))
+      case sources.Not(sources.EqualNullSafe(name, value)) if canMakeFilterOn(name) =>
+        makeNotEq.lift(nameToType(name)).map(_(name, value))
 
-      case sources.LessThan(name, value) if dataTypeOf.contains(name) =>
-        makeLt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.LessThanOrEqual(name, value) if dataTypeOf.contains(name) =>
-        makeLtEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.LessThan(name, value) if canMakeFilterOn(name) =>
+        makeLt.lift(nameToType(name)).map(_(name, value))
+      case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name) =>
+        makeLtEq.lift(nameToType(name)).map(_(name, value))
 
-      case sources.GreaterThan(name, value) if dataTypeOf.contains(name) =>
-        makeGt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.GreaterThanOrEqual(name, value) if dataTypeOf.contains(name) =>
-        makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.GreaterThan(name, value) if canMakeFilterOn(name) =>
+        makeGt.lift(nameToType(name)).map(_(name, value))
+      case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name) =>
+        makeGtEq.lift(nameToType(name)).map(_(name, value))
 
       case sources.And(lhs, rhs) =>
         // At here, it is not safe to just convert one side if we do not understand the

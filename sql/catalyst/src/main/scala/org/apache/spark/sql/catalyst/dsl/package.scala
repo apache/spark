@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
+import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -159,7 +160,9 @@ package object dsl {
     def first(e: Expression): Expression = new First(e).toAggregateExpression()
     def last(e: Expression): Expression = new Last(e).toAggregateExpression()
     def min(e: Expression): Expression = Min(e).toAggregateExpression()
+    def minDistinct(e: Expression): Expression = Min(e).toAggregateExpression(isDistinct = true)
     def max(e: Expression): Expression = Max(e).toAggregateExpression()
+    def maxDistinct(e: Expression): Expression = Max(e).toAggregateExpression(isDistinct = true)
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
@@ -168,6 +171,7 @@ package object dsl {
       case Seq() => UnresolvedStar(None)
       case target => UnresolvedStar(Option(target))
     }
+    def namedStruct(e: Expression*): Expression = CreateNamedStruct(e)
 
     def callFunction[T, U](
         func: T => U,
@@ -298,6 +302,8 @@ package object dsl {
 
       def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
 
+      def filter[T : Encoder](func: FilterFunction[T]): LogicalPlan = TypedFilter(func, logicalPlan)
+
       def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
 
       def deserialize[T : Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)
@@ -356,17 +362,17 @@ package object dsl {
 
       def generate(
         generator: Generator,
-        join: Boolean = false,
+        unrequiredChildIndex: Seq[Int] = Nil,
         outer: Boolean = false,
         alias: Option[String] = None,
         outputNames: Seq[String] = Nil): LogicalPlan =
-        Generate(generator, join = join, outer = outer, alias,
-          outputNames.map(UnresolvedAttribute(_)), logicalPlan)
+        Generate(generator, unrequiredChildIndex, outer,
+          alias, outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
         InsertIntoTable(
           analysis.UnresolvedRelation(TableIdentifier(tableName)),
-          Map.empty, logicalPlan, overwrite, false)
+          Map.empty, logicalPlan, overwrite, ifPartitionNotExists = false)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
@@ -381,6 +387,9 @@ package object dsl {
 
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))
+
+      def hint(name: String, parameters: Any*): LogicalPlan =
+        UnresolvedHint(name, parameters, logicalPlan)
     }
   }
 }

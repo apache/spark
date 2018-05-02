@@ -21,7 +21,7 @@ import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.streaming.Trigger
 
 /**
- * A [[Trigger]] that process only one batch of data in a streaming query then terminates
+ * A [[Trigger]] that processes only one batch of data in a streaming query then terminates
  * the query.
  */
 @Experimental

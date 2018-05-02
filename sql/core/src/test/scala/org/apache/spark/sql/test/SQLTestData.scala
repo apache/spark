@@ -21,15 +21,12 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext, SQLImplicits}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A collection of sample data used in SQL tests.
  */
 private[sql] trait SQLTestData { self =>
   protected def spark: SparkSession
-
-  protected def sqlConf: SQLConf = spark.sessionState.conf
 
   // Helper object to import SQL implicits without a concrete SQLContext
   private object internalImplicits extends SQLImplicits {

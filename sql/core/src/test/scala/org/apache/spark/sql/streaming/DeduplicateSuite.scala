@@ -19,8 +19,9 @@ package org.apache.spark.sql.streaming
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 
@@ -266,6 +267,19 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       CheckLastBatch(5, 6),
       AddData(input, 1 -> 0, 4 -> 7), // Drop (1 -> 0) due to watermark
       CheckLastBatch(7)
+    )
+  }
+
+  test("SPARK-21546: dropDuplicates should ignore watermark when it's not a key") {
+    val input = MemoryStream[(Int, Int)]
+    val df = input.toDS.toDF("id", "time")
+      .withColumn("time", $"time".cast("timestamp"))
+      .withWatermark("time", "1 second")
+      .dropDuplicates("id")
+      .select($"id", $"time".cast("long"))
+    testStream(df)(
+      AddData(input, 1 -> 1, 1 -> 2, 2 -> 2),
+      CheckLastBatch(1 -> 1, 2 -> 2)
     )
   }
 }

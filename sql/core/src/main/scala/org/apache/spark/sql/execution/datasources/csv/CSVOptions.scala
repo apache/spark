@@ -89,6 +89,14 @@ class CSVOptions(
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
+  val charToEscapeQuoteEscaping = parameters.get("charToEscapeQuoteEscaping") match {
+    case None => None
+    case Some(null) => None
+    case Some(value) if value.length == 0 => None
+    case Some(value) if value.length == 1 => Some(value.charAt(0))
+    case _ =>
+      throw new RuntimeException("charToEscapeQuoteEscaping cannot be more than one character")
+  }
   val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
@@ -117,7 +125,7 @@ class CSVOptions(
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  val timeZone: TimeZone = TimeZone.getTimeZone(
+  val timeZone: TimeZone = DateTimeUtils.getTimeZone(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
@@ -128,7 +136,7 @@ class CSVOptions(
     FastDateFormat.getInstance(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, Locale.US)
 
-  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
+  val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
   val maxColumns = getInt("maxColumns", 20480)
 
@@ -142,12 +150,16 @@ class CSVOptions(
 
   val isCommentSet = this.comment != '\u0000'
 
+  val samplingRatio =
+    parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
+    charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
@@ -165,6 +177,7 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
+    charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.TestUtils.assertSpilled
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.TestUtils.assertSpilled
 
 case class WindowData(month: Int, area: String, product: Int)
 
@@ -356,6 +356,46 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
     spark.catalog.dropTempView("nums")
   }
 
+  test("window function: mutiple window expressions specified by range in a single expression") {
+    val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
+    nums.createOrReplaceTempView("nums")
+    withTempView("nums") {
+      val expected =
+        Row(1, 1, 1, 4, null, 8, 25) ::
+          Row(1, 3, 4, 9, 1, 12, 24) ::
+          Row(1, 5, 9, 15, 4, 16, 21) ::
+          Row(1, 7, 16, 21, 8, 9, 16) ::
+          Row(1, 9, 25, 16, 12, null, 9) ::
+          Row(0, 2, 2, 6, null, 10, 30) ::
+          Row(0, 4, 6, 12, 2, 14, 28) ::
+          Row(0, 6, 12, 18, 6, 18, 24) ::
+          Row(0, 8, 20, 24, 10, 10, 18) ::
+          Row(0, 10, 30, 18, 14, null, 10) ::
+          Nil
+
+      val actual = sql(
+        """
+          |SELECT
+          |  y,
+          |  x,
+          |  sum(x) over w1 as history_sum,
+          |  sum(x) over w2 as period_sum1,
+          |  sum(x) over w3 as period_sum2,
+          |  sum(x) over w4 as period_sum3,
+          |  sum(x) over w5 as future_sum
+          |FROM nums
+          |WINDOW
+          |  w1 AS (PARTITION BY y ORDER BY x RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+          |  w2 AS (PARTITION BY y ORDER BY x RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING),
+          |  w3 AS (PARTITION BY y ORDER BY x RANGE BETWEEN 4 PRECEDING AND 2 PRECEDING ),
+          |  w4 AS (PARTITION BY y ORDER BY x RANGE BETWEEN 2 FOLLOWING AND 4 FOLLOWING),
+          |  w5 AS (PARTITION BY y ORDER BY x RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+        """.stripMargin
+      )
+      checkAnswer(actual, expected)
+    }
+  }
+
   test("SPARK-7595: Window will cause resolve failed with self join") {
     checkAnswer(sql(
       """
@@ -437,7 +477,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
         |WINDOW w1 AS (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDiNG AND CURRENT RoW)
       """.stripMargin)
 
-    withSQLConf("spark.sql.windowExec.buffer.spill.threshold" -> "1") {
+    withSQLConf("spark.sql.windowExec.buffer.in.memory.threshold" -> "1",
+      "spark.sql.windowExec.buffer.spill.threshold" -> "2") {
       assertSpilled(sparkContext, "test with low buffer spill threshold") {
         checkAnswer(actual, expected)
       }

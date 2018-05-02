@@ -9,7 +9,7 @@ displayTitle: Regression - RDD-based API
 belongs to the family of regression algorithms. Formally isotonic regression is a problem where
 given a finite set of real numbers `$Y = {y_1, y_2, ..., y_n}$` representing observed responses
 and `$X = {x_1, x_2, ..., x_n}$` the unknown response values to be fitted
-finding a function that minimises
+finding a function that minimizes
 
 `\begin{equation}
   f(x) = \sum_{i=1}^n w_i (y_i - x_i)^2
@@ -28,7 +28,7 @@ best fitting the original data points.
 which uses an approach to
 [parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
 The training input is an RDD of tuples of three double values that represent
-label, feature and weight in this order. Additionally IsotonicRegression algorithm has one
+label, feature and weight in this order. Additionally, IsotonicRegression algorithm has one
 optional parameter called $isotonic$ defaulting to true.
 This argument specifies if the isotonic regression is
 isotonic (monotonically increasing) or antitonic (monotonically decreasing).

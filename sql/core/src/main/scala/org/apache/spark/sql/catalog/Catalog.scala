@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
-
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Catalog interface for Spark. To access this, use `SparkSession.catalog`.
@@ -475,6 +475,18 @@ abstract class Catalog {
    * @since 2.0.0
    */
   def cacheTable(tableName: String): Unit
+
+  /**
+   * Caches the specified table with the given storage level.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a temporary view or
+   *                  a table/view in the current database.
+   * @param storageLevel storage level to cache table.
+   * @since 2.3.0
+   */
+  def cacheTable(tableName: String, storageLevel: StorageLevel): Unit
+
 
   /**
    * Removes the specified table from the in-memory cache.

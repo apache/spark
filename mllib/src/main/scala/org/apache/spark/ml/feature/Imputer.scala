@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.HasInputCols
+import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 /**
  * Params for [[Imputer]] and [[ImputerModel]].
  */
-private[feature] trait ImputerParams extends Params with HasInputCols {
+private[feature] trait ImputerParams extends Params with HasInputCols with HasOutputCols {
 
   /**
    * The imputation strategy. Currently only "mean" and "median" are supported.
@@ -63,16 +63,6 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
   /** @group getParam */
   def getMissingValue: Double = $(missingValue)
 
-  /**
-   * Param for output column names.
-   * @group param
-   */
-  final val outputCols: StringArrayParam = new StringArrayParam(this, "outputCols",
-    "output column names")
-
-  /** @group getParam */
-  final def getOutputCols: Array[String] = $(outputCols)
-
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     require($(inputCols).length == $(inputCols).distinct.length, s"inputCols contains" +
@@ -102,7 +92,8 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
  * computing median, DataFrameStatFunctions.approxQuantile is used with a relative error of 0.001.
  */
 @Experimental
-class Imputer @Since("2.2.0")(override val uid: String)
+@Since("2.2.0")
+class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   extends Estimator[ImputerModel] with ImputerParams with DefaultParamsWritable {
 
   @Since("2.2.0")
@@ -132,23 +123,49 @@ class Imputer @Since("2.2.0")(override val uid: String)
   override def fit(dataset: Dataset[_]): ImputerModel = {
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
-    import spark.implicits._
-    val surrogates = $(inputCols).map { inputCol =>
-      val ic = col(inputCol)
-      val filtered = dataset.select(ic.cast(DoubleType))
-        .filter(ic.isNotNull && ic =!= $(missingValue) && !ic.isNaN)
-      if(filtered.take(1).length == 0) {
-        throw new SparkException(s"surrogate cannot be computed. " +
-          s"All the values in $inputCol are Null, Nan or missingValue(${$(missingValue)})")
-      }
-      val surrogate = $(strategy) match {
-        case Imputer.mean => filtered.select(avg(inputCol)).as[Double].first()
-        case Imputer.median => filtered.stat.approxQuantile(inputCol, Array(0.5), 0.001).head
-      }
-      surrogate
+
+    val cols = $(inputCols).map { inputCol =>
+      when(col(inputCol).equalTo($(missingValue)), null)
+        .when(col(inputCol).isNaN, null)
+        .otherwise(col(inputCol))
+        .cast("double")
+        .as(inputCol)
     }
 
-    val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(surrogates)))
+    val results = $(strategy) match {
+      case Imputer.mean =>
+        // Function avg will ignore null automatically.
+        // For a column only containing null, avg will return null.
+        val row = dataset.select(cols.map(avg): _*).head()
+        Array.range(0, $(inputCols).length).map { i =>
+          if (row.isNullAt(i)) {
+            Double.NaN
+          } else {
+            row.getDouble(i)
+          }
+        }
+
+      case Imputer.median =>
+        // Function approxQuantile will ignore null automatically.
+        // For a column only containing null, approxQuantile will return an empty array.
+        dataset.select(cols: _*).stat.approxQuantile($(inputCols), Array(0.5), 0.001)
+          .map { array =>
+            if (array.isEmpty) {
+              Double.NaN
+            } else {
+              array.head
+            }
+          }
+    }
+
+    val emptyCols = $(inputCols).zip(results).filter(_._2.isNaN).map(_._1)
+    if (emptyCols.nonEmpty) {
+      throw new SparkException(s"surrogate cannot be computed. " +
+        s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
+        s"missingValue(${$(missingValue)})")
+    }
+
+    val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(results)))
     val schema = StructType($(inputCols).map(col => StructField(col, DoubleType, nullable = false)))
     val surrogateDF = spark.createDataFrame(rows, schema)
     copyValues(new ImputerModel(uid, surrogateDF).setParent(this))
@@ -165,8 +182,8 @@ class Imputer @Since("2.2.0")(override val uid: String)
 object Imputer extends DefaultParamsReadable[Imputer] {
 
   /** strategy names that Imputer currently supports. */
-  private[ml] val mean = "mean"
-  private[ml] val median = "median"
+  private[feature] val mean = "mean"
+  private[feature] val median = "median"
 
   @Since("2.2.0")
   override def load(path: String): Imputer = super.load(path)
@@ -180,9 +197,10 @@ object Imputer extends DefaultParamsReadable[Imputer] {
  *                    which are used to replace the missing values in the input DataFrame.
  */
 @Experimental
-class ImputerModel private[ml](
-    override val uid: String,
-    val surrogateDF: DataFrame)
+@Since("2.2.0")
+class ImputerModel private[ml] (
+    @Since("2.2.0") override val uid: String,
+    @Since("2.2.0") val surrogateDF: DataFrame)
   extends Model[ImputerModel] with ImputerParams with MLWritable {
 
   import ImputerModel._
@@ -195,20 +213,18 @@ class ImputerModel private[ml](
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    var outputDF = dataset
     val surrogates = surrogateDF.select($(inputCols).map(col): _*).head().toSeq
 
-    $(inputCols).zip($(outputCols)).zip(surrogates).foreach {
+    val newCols = $(inputCols).zip($(outputCols)).zip(surrogates).map {
       case ((inputCol, outputCol), surrogate) =>
         val inputType = dataset.schema(inputCol).dataType
         val ic = col(inputCol)
-        outputDF = outputDF.withColumn(outputCol,
-          when(ic.isNull, surrogate)
+        when(ic.isNull, surrogate)
           .when(ic === $(missingValue), surrogate)
           .otherwise(ic)
-          .cast(inputType))
+          .cast(inputType)
     }
-    outputDF.toDF()
+    dataset.withColumns($(outputCols), newCols).toDF()
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -246,7 +262,7 @@ object ImputerModel extends MLReadable[ImputerModel] {
       val dataPath = new Path(path, "data").toString
       val surrogateDF = sqlContext.read.parquet(dataPath)
       val model = new ImputerModel(metadata.uid, surrogateDF)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
@@ -58,7 +59,7 @@ class FileIndexSuite extends SharedSQLContext {
       require(!unqualifiedDirPath.toString.contains("file:"))
       require(!unqualifiedFilePath.toString.contains("file:"))
 
-      val fs = unqualifiedDirPath.getFileSystem(sparkContext.hadoopConfiguration)
+      val fs = unqualifiedDirPath.getFileSystem(spark.sessionState.newHadoopConf())
       val qualifiedFilePath = fs.makeQualified(new Path(file.getCanonicalPath))
       require(qualifiedFilePath.toString.startsWith("file:"))
 
@@ -235,6 +236,17 @@ class FileIndexSuite extends SharedSQLContext {
     }
     val fileStatusCache = FileStatusCache.getOrCreate(spark)
     fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)
+  }
+
+  test("SPARK-20367 - properly unescape column names in inferPartitioning") {
+    withTempPath { path =>
+      val colToUnescape = "Column/#%'?"
+      spark
+        .range(1)
+        .select(col("id").as(colToUnescape), col("id"))
+        .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
+      assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
+    }
   }
 }
 

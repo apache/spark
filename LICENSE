@@ -249,11 +249,11 @@ The text of each license is also included at licenses/LICENSE-[project].txt.
         (Interpreter classes (all .scala files in repl/src/main/scala
         except for Main.Scala, SparkHelper.scala and ExecutorClassLoader.scala),
         and for SerializableMapWrapper in JavaUtils.scala)
-     (BSD-like) Scala Actors library (org.scala-lang:scala-actors:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scala Compiler (org.scala-lang:scala-compiler:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scala Compiler (org.scala-lang:scala-reflect:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scala Library (org.scala-lang:scala-library:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scalap (org.scala-lang:scalap:2.11.7 - http://www.scala-lang.org/)
+     (BSD-like) Scala Actors library (org.scala-lang:scala-actors:2.11.8 - http://www.scala-lang.org/)
+     (BSD-like) Scala Compiler (org.scala-lang:scala-compiler:2.11.8 - http://www.scala-lang.org/)
+     (BSD-like) Scala Compiler (org.scala-lang:scala-reflect:2.11.8 - http://www.scala-lang.org/)
+     (BSD-like) Scala Library (org.scala-lang:scala-library:2.11.8 - http://www.scala-lang.org/)
+     (BSD-like) Scalap (org.scala-lang:scalap:2.11.8 - http://www.scala-lang.org/)
      (BSD-style) scalacheck (org.scalacheck:scalacheck_2.11:1.10.0 - http://www.scalacheck.org)
      (BSD-style) spire (org.spire-math:spire_2.11:0.7.1 - http://spire-math.org)
      (BSD-style) spire-macros (org.spire-math:spire-macros_2.11:0.7.1 - http://spire-math.org)
@@ -263,12 +263,14 @@ The text of each license is also included at licenses/LICENSE-[project].txt.
      (New BSD license) Protocol Buffer Java API (org.spark-project.protobuf:protobuf-java:2.4.1-shaded - http://code.google.com/p/protobuf)
      (The BSD License) Fortran to Java ARPACK (net.sourceforge.f2j:arpack_combined_all:0.1 - http://f2j.sourceforge.net)
      (The BSD License) xmlenc Library (xmlenc:xmlenc:0.52 - http://xmlenc.sourceforge.net)
-     (The New BSD License) Py4J (net.sf.py4j:py4j:0.10.4 - http://py4j.sourceforge.net/)
+     (The New BSD License) Py4J (net.sf.py4j:py4j:0.10.6 - http://py4j.sourceforge.net/)
      (Two-clause BSD-style license) JUnit-Interface (com.novocode:junit-interface:0.10 - http://github.com/szeiger/junit-interface/)
      (BSD licence) sbt and sbt-launch-lib.bash
      (BSD 3 Clause) d3.min.js (https://github.com/mbostock/d3/blob/master/LICENSE)
      (BSD 3 Clause) DPark (https://github.com/douban/dpark/blob/master/LICENSE)
      (BSD 3 Clause) CloudPickle (https://github.com/cloudpipe/cloudpickle/blob/master/LICENSE)
+     (BSD 2 Clause) Zstd-jni (https://github.com/luben/zstd-jni/blob/master/LICENSE)
+     (BSD license) Zstd (https://github.com/facebook/zstd/blob/v1.3.1/LICENSE)
 
 ========================================================================
 MIT licenses
@@ -297,3 +299,4 @@ The text of each license is also included at licenses/LICENSE-[project].txt.
      (MIT License) RowsGroup (http://datatables.net/license/mit)
      (MIT License) jsonFormatter (http://www.jqueryscript.net/other/jQuery-Plugin-For-Pretty-JSON-Formatting-jsonFormatter.html)
      (MIT License) modernizr (https://github.com/Modernizr/Modernizr/blob/master/LICENSE)
+     (MIT License) machinist (https://github.com/typelevel/machinist)

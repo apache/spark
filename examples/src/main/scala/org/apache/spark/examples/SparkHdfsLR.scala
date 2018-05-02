@@ -40,8 +40,8 @@ object SparkHdfsLR {
 
   def parsePoint(line: String): DataPoint = {
     val tok = new java.util.StringTokenizer(line, " ")
-    var y = tok.nextToken.toDouble
-    var x = new Array[Double](D)
+    val y = tok.nextToken.toDouble
+    val x = new Array[Double](D)
     var i = 0
     while (i < D) {
       x(i) = tok.nextToken.toDouble; i += 1
@@ -78,18 +78,18 @@ object SparkHdfsLR {
     val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
-    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
-    println("Initial w: " + w)
+    val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
+    println(s"Initial w: $w")
 
     for (i <- 1 to ITERATIONS) {
-      println("On iteration " + i)
+      println(s"On iteration $i")
       val gradient = points.map { p =>
         p.x * (1 / (1 + exp(-p.y * (w.dot(p.x)))) - 1) * p.y
       }.reduce(_ + _)
       w -= gradient
     }
 
-    println("Final w: " + w)
+    println(s"Final w: $w")
     spark.stop()
   }
 }

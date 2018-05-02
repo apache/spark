@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import scala.collection.mutable
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, Matchers}

@@ -85,11 +85,13 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
   def fit(
       formula: String,
       data: DataFrame,
-      aggregationDepth: Int): AFTSurvivalRegressionWrapper = {
+      aggregationDepth: Int,
+      stringIndexerOrderType: String): AFTSurvivalRegressionWrapper = {
 
     val (rewritedFormula, censorCol) = formulaRewrite(formula)
 
     val rFormula = new RFormula().setFormula(rewritedFormula)
+      .setStringIndexerOrderType(stringIndexerOrderType)
     RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 

@@ -202,9 +202,9 @@ public class SaslIntegrationSuite {
         }
       };
 
-      String[] blockIds = { "shuffle_2_3_4", "shuffle_6_7_8" };
+      String[] blockIds = { "shuffle_0_1_2", "shuffle_0_3_4" };
       OneForOneBlockFetcher fetcher =
-          new OneForOneBlockFetcher(client1, "app-2", "0", blockIds, listener);
+          new OneForOneBlockFetcher(client1, "app-2", "0", blockIds, listener, conf);
       fetcher.start();
       blockFetchLatch.await();
       checkSecurityException(exception.get());

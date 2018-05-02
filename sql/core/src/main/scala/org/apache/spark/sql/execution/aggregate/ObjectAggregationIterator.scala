@@ -18,18 +18,20 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.{BaseOrdering, GenerateOrdering}
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 class ObjectAggregationIterator(
+    partIndex: Int,
     outputAttributes: Seq[Attribute],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
@@ -39,8 +41,10 @@ class ObjectAggregationIterator(
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     originalInputAttributes: Seq[Attribute],
     inputRows: Iterator[InternalRow],
-    fallbackCountThreshold: Int)
+    fallbackCountThreshold: Int,
+    numOutputRows: SQLMetric)
   extends AggregationIterator(
+    partIndex,
     groupingExpressions,
     originalInputAttributes,
     aggregateExpressions,
@@ -68,10 +72,6 @@ class ObjectAggregationIterator(
     generateProcessRow(newExpressions, newFunctions, newInputAttributes)
   }
 
-  // A safe projection used to do deep clone of input rows to prevent false sharing.
-  private[this] val safeProjection: Projection =
-    FromUnsafeProjection(outputAttributes.map(_.dataType))
-
   /**
    * Start processing input rows.
    */
@@ -83,7 +83,9 @@ class ObjectAggregationIterator(
 
   override final def next(): UnsafeRow = {
     val entry = aggBufferIterator.next()
-    generateOutput(entry.groupingKey, entry.aggregationBuffer)
+    val res = generateOutput(entry.groupingKey, entry.aggregationBuffer)
+    numOutputRows += 1
+    res
   }
 
   /**
@@ -147,12 +149,11 @@ class ObjectAggregationIterator(
       val groupingKey = groupingProjection.apply(null)
       val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
       while (inputRows.hasNext) {
-        val newInput = safeProjection(inputRows.next())
-        processRow(buffer, newInput)
+        processRow(buffer, inputRows.next())
       }
     } else {
       while (inputRows.hasNext && !sortBased) {
-        val newInput = safeProjection(inputRows.next())
+        val newInput = inputRows.next()
         val groupingKey = groupingProjection.apply(newInput)
         val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
         processRow(buffer, newInput)
@@ -262,9 +263,7 @@ class SortBasedAggregator(
           // Firstly, update the aggregation buffer with input rows.
           while (hasNextInput &&
             groupingKeyOrdering.compare(inputIterator.getKey, groupingKey) == 0) {
-            // Since `inputIterator.getValue` is an `UnsafeRow` whose underlying buffer will be
-            // overwritten when `inputIterator` steps forward, we need to do a deep copy here.
-            processRow(result.aggregationBuffer, inputIterator.getValue.copy())
+            processRow(result.aggregationBuffer, inputIterator.getValue)
             hasNextInput = inputIterator.next()
           }
 
@@ -273,12 +272,7 @@ class SortBasedAggregator(
           // be called after calling processRow.
           while (hasNextAggBuffer &&
             groupingKeyOrdering.compare(initialAggBufferIterator.getKey, groupingKey) == 0) {
-            mergeAggregationBuffers(
-              result.aggregationBuffer,
-              // Since `inputIterator.getValue` is an `UnsafeRow` whose underlying buffer will be
-              // overwritten when `inputIterator` steps forward, we need to do a deep copy here.
-              initialAggBufferIterator.getValue.copy()
-            )
+            mergeAggregationBuffers(result.aggregationBuffer, initialAggBufferIterator.getValue)
             hasNextAggBuffer = initialAggBufferIterator.next()
           }
 
@@ -321,9 +315,7 @@ class SortBasedAggregator(
       SparkEnv.get.blockManager,
       SparkEnv.get.serializerManager,
       TaskContext.get().taskMemoryManager().pageSizeBytes,
-      SparkEnv.get.conf.getLong(
-        "spark.shuffle.spill.numElementsForceSpillThreshold",
-        UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
+      SparkEnv.get.conf.get(config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD),
       null
     )
   }

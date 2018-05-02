@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, Date, Timestamp}
+
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
 import org.apache.spark.sql.types._
@@ -115,12 +117,47 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
+   * The SQL query that should be used to truncate a table. Dialects can override this method to
+   * return a query that is suitable for a particular database. For PostgreSQL, for instance,
+   * a different query is used to prevent "TRUNCATE" affecting other tables.
+   * @param table The name of the table.
+   * @return The SQL query to use for truncating a table
+   */
+  @Since("2.3.0")
+  def getTruncateQuery(table: String): String = {
+    s"TRUNCATE TABLE $table"
+  }
+
+  /**
    * Override connection specific properties to run before a select is made.  This is in place to
    * allow dialects that need special treatment to optimize behavior.
    * @param connection The connection object
    * @param properties The connection properties.  This is passed through from the relation.
    */
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+  }
+
+  /**
+   * Escape special characters in SQL string literals.
+   * @param value The string to be escaped.
+   * @return Escaped string.
+   */
+  @Since("2.3.0")
+  protected[jdbc] def escapeSql(value: String): String =
+    if (value == null) null else StringUtils.replace(value, "'", "''")
+
+  /**
+   * Converts value to SQL expression.
+   * @param value The value to be converted.
+   * @return Converted value.
+   */
+  @Since("2.3.0")
+  def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case dateValue: Date => "'" + dateValue + "'"
+    case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case _ => value
   }
 
   /**
@@ -174,6 +211,7 @@ object JdbcDialects {
   registerDialect(MsSqlServerDialect)
   registerDialect(DerbyDialect)
   registerDialect(OracleDialect)
+  registerDialect(TeradataDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.

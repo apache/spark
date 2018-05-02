@@ -123,7 +123,6 @@ infer_type <- function(x) {
 #' @return a list of config values with keys as their names
 #' @rdname sparkR.conf
 #' @name sparkR.conf
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -163,7 +162,6 @@ sparkR.conf <- function(key, defaultValue) {
 #' @return a character string of the Spark version
 #' @rdname sparkR.version
 #' @name sparkR.version
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -191,7 +189,6 @@ getDefaultSqlSource <- function() {
 #'        limited by length of the list or number of rows of the data.frame
 #' @return A SparkDataFrame.
 #' @rdname createDataFrame
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -294,7 +291,6 @@ createDataFrame <- function(x, ...) {
 
 #' @rdname createDataFrame
 #' @aliases createDataFrame
-#' @export
 #' @method as.DataFrame default
 #' @note as.DataFrame since 1.6.0
 as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0, numPartitions = NULL) {
@@ -304,7 +300,6 @@ as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0, numPa
 #' @param ... additional argument(s).
 #' @rdname createDataFrame
 #' @aliases as.DataFrame
-#' @export
 as.DataFrame <- function(data, ...) {
   dispatchFunc("as.DataFrame(data, schema = NULL)", data, ...)
 }
@@ -334,7 +329,7 @@ setMethod("toDF", signature(x = "RDD"),
 #'
 #' Loads a JSON file, returning the result as a SparkDataFrame
 #' By default, (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
-#' ) is supported. For JSON (one record per file), set a named property \code{wholeFile} to
+#' ) is supported. For JSON (one record per file), set a named property \code{multiLine} to
 #' \code{TRUE}.
 #' It goes through the entire dataset once to determine the schema.
 #'
@@ -342,13 +337,12 @@ setMethod("toDF", signature(x = "RDD"),
 #' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.json
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' df <- read.json(path, wholeFile = TRUE)
+#' df <- read.json(path, multiLine = TRUE)
 #' df <- jsonFile(path)
 #' }
 #' @name read.json
@@ -371,7 +365,6 @@ read.json <- function(x, ...) {
 
 #' @rdname read.json
 #' @name jsonFile
-#' @export
 #' @method jsonFile default
 #' @note jsonFile since 1.4.0
 jsonFile.default <- function(path) {
@@ -423,7 +416,6 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 #' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.orc
-#' @export
 #' @name read.orc
 #' @note read.orc since 2.0.0
 read.orc <- function(path, ...) {
@@ -444,7 +436,6 @@ read.orc <- function(path, ...) {
 #' @param path path of file to read. A vector of multiple paths is allowed.
 #' @return SparkDataFrame
 #' @rdname read.parquet
-#' @export
 #' @name read.parquet
 #' @method read.parquet default
 #' @note read.parquet since 1.6.0
@@ -466,7 +457,6 @@ read.parquet <- function(x, ...) {
 #' @param ... argument(s) passed to the method.
 #' @rdname read.parquet
 #' @name parquetFile
-#' @export
 #' @method parquetFile default
 #' @note parquetFile since 1.4.0
 parquetFile.default <- function(...) {
@@ -490,7 +480,6 @@ parquetFile <- function(x, ...) {
 #' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.text
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -522,7 +511,6 @@ read.text <- function(x, ...) {
 #' @param sqlQuery A character vector containing the SQL query
 #' @return SparkDataFrame
 #' @rdname sql
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -556,7 +544,6 @@ sql <- function(x, ...) {
 #' @return SparkDataFrame
 #' @rdname tableToDF
 #' @name tableToDF
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -584,22 +571,23 @@ tableToDF <- function(tableName) {
 #'
 #' @param path The path of files to load
 #' @param source The name of external data source
-#' @param schema The data schema defined in structType
+#' @param schema The data schema defined in structType or a DDL-formatted string.
 #' @param na.strings Default string value for NA when source is "csv"
 #' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
 #' @seealso \link{read.json}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
 #' df1 <- read.df("path/to/file.json", source = "json")
 #' schema <- structType(structField("name", "string"),
 #'                      structField("info", "map<string,double>"))
-#' df2 <- read.df(mapTypeJsonPath, "json", schema, wholeFile = TRUE)
+#' df2 <- read.df(mapTypeJsonPath, "json", schema, multiLine = TRUE)
 #' df3 <- loadDF("data/test_table", "parquet", mergeSchema = "true")
+#' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
+#' df4 <- read.df(mapTypeJsonPath, "json", stringSchema, multiLine = TRUE)
 #' }
 #' @name read.df
 #' @method read.df default
@@ -623,14 +611,19 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.string
   if (source == "csv" && is.null(options[["nullValue"]])) {
     options[["nullValue"]] <- na.strings
   }
+  read <- callJMethod(sparkSession, "read")
+  read <- callJMethod(read, "format", source)
   if (!is.null(schema)) {
-    stopifnot(class(schema) == "structType")
-    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
-                              source, schema$jobj, options)
-  } else {
-    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
-                              source, options)
+    if (class(schema) == "structType") {
+      read <- callJMethod(read, "schema", schema$jobj)
+    } else if (is.character(schema)) {
+      read <- callJMethod(read, "schema", schema)
+    } else {
+      stop("schema should be structType or character.")
+    }
   }
+  read <- callJMethod(read, "options", options)
+  sdf <- handledCallJMethod(read, "load")
   dataFrame(sdf)
 }
 
@@ -674,7 +667,6 @@ loadDF <- function(x = NULL, ...) {
 #' @return SparkDataFrame
 #' @rdname read.jdbc
 #' @name read.jdbc
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -717,15 +709,16 @@ read.jdbc <- function(url, tableName,
 #' "spark.sql.sources.default" will be used.
 #'
 #' @param source The name of external data source
-#' @param schema The data schema defined in structType, this is required for file-based streaming
-#'               data source
+#' @param schema The data schema defined in structType or a DDL-formatted string, this is
+#'               required for file-based streaming data source
 #' @param ... additional external data source specific named options, for instance \code{path} for
-#'        file-based streaming data source
+#'        file-based streaming data source. \code{timeZone} to indicate a timezone to be used to
+#'        parse timestamps in the JSON/CSV data sources or partition values; If it isn't set, it
+#'        uses the default value, session local timezone.
 #' @return SparkDataFrame
 #' @rdname read.stream
 #' @name read.stream
 #' @seealso \link{write.stream}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -733,6 +726,8 @@ read.jdbc <- function(url, tableName,
 #' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp")
 #'
 #' df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
+#' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
+#' df1 <- read.stream("json", path = jsonDir, schema = stringSchema, maxFilesPerTrigger = 1)
 #' }
 #' @name read.stream
 #' @note read.stream since 2.2.0
@@ -750,10 +745,15 @@ read.stream <- function(source = NULL, schema = NULL, ...) {
   read <- callJMethod(sparkSession, "readStream")
   read <- callJMethod(read, "format", source)
   if (!is.null(schema)) {
-    stopifnot(class(schema) == "structType")
-    read <- callJMethod(read, "schema", schema$jobj)
+    if (class(schema) == "structType") {
+      read <- callJMethod(read, "schema", schema$jobj)
+    } else if (is.character(schema)) {
+      read <- callJMethod(read, "schema", schema)
+    } else {
+      stop("schema should be structType or character.")
+    }
   }
   read <- callJMethod(read, "options", options)
   sdf <- handledCallJMethod(read, "load")
-  dataFrame(callJMethod(sdf, "toDF"))
+  dataFrame(sdf)
 }
