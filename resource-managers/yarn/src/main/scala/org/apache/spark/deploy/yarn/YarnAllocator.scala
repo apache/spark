@@ -157,7 +157,7 @@ private[yarn] class YarnAllocator(
 
   def getNumExecutorsRunning: Int = runningExecutors.size()
 
-  def getNumExecutorsFailed: Int = failureTracker.numExecutorsFailed
+  def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
   /**
    * A sequence of pending container requests that have not yet been fulfilled.
@@ -182,9 +182,9 @@ private[yarn] class YarnAllocator(
    * @param localityAwareTasks number of locality aware tasks to be used as container placement hint
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
    *                             container placement hint.
-   * @param schedulerBlacklist blacklisted nodes with expiry times, which is passed
-   *                       in to avoid allocating new containers on them. It will be used to update
-   *                       the application master's blacklist.
+   * @param schedulerBlacklist blacklisted nodes with expiry times, which is passed in to avoid
+   *                           allocating new containers on them. It will be used to update
+   *                           the application master's blacklist.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(

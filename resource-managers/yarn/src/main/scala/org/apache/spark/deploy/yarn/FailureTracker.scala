@@ -24,7 +24,7 @@ import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * FailureTracker is responsible for tracking executor failures both for each host separately
- * and for all host altogether.
+ * and for all hosts altogether.
 */
 private[spark] class FailureTracker(
     sparkConf: SparkConf,
@@ -38,14 +38,14 @@ private[spark] class FailureTracker(
 
   private val failedExecutorsTimeStamps = new mutable.Queue[Long]()
 
-  private def recentFailureCount(failedExecutorsTimeStampsForHost: mutable.Queue[Long]): Int = {
+  private def updateAndCountFailures(failedExecutorsWithTimeStamps: mutable.Queue[Long]): Int = {
     val endTime = clock.getTimeMillis()
     while (executorFailuresValidityInterval > 0 &&
-        failedExecutorsTimeStampsForHost.nonEmpty &&
-        failedExecutorsTimeStampsForHost.head < endTime - executorFailuresValidityInterval) {
-      failedExecutorsTimeStampsForHost.dequeue()
+        failedExecutorsWithTimeStamps.nonEmpty &&
+        failedExecutorsWithTimeStamps.head < endTime - executorFailuresValidityInterval) {
+      failedExecutorsWithTimeStamps.dequeue()
     }
-    failedExecutorsTimeStampsForHost.size
+    failedExecutorsWithTimeStamps.size
   }
 
   /**
@@ -55,8 +55,8 @@ private[spark] class FailureTracker(
     clock = newClock
   }
 
-  def numExecutorsFailed: Int = synchronized {
-    recentFailureCount(failedExecutorsTimeStamps)
+  def numFailedExecutors: Int = synchronized {
+    updateAndCountFailures(failedExecutorsTimeStamps)
   }
 
   def registerFailureOnHost(hostname: String): Unit = synchronized {
@@ -78,7 +78,7 @@ private[spark] class FailureTracker(
 
   def numFailuresOnHost(hostname: String): Int = {
     failedExecutorsTimeStampsPerHost.get(hostname).map { failedExecutorsOnHost =>
-      recentFailureCount(failedExecutorsOnHost)
+      updateAndCountFailures(failedExecutorsOnHost)
     }.getOrElse(0)
   }
 
