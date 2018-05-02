@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.streaming.continuous
 
 import java.io.Closeable
-import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
+import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.{Partition, SparkException, TaskContext}
+import org.apache.spark.{Partition, SparkEnv, SparkException, TaskContext}
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.DataSourceRDDPartition
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
@@ -63,11 +65,11 @@ class ContinuousQueuedDataReader(
 
   private val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
 
-  private val epochPollExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+  private val epochMarkerExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     s"epoch-poll--$coordinatorId--${context.partitionId()}")
-  private val epochPollRunnable = new EpochPollRunnable(queue, context, epochPollFailed)
-  epochPollExecutor.scheduleWithFixedDelay(
-    epochPollRunnable, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
+  private val epochMarkerGenerator = new EpochMarkerGenerator(queue, context, epochPollFailed)
+  epochMarkerExecutor.scheduleWithFixedDelay(
+    epochMarkerGenerator, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
 
   private val dataReaderThread = new DataReaderThread(reader, queue, context, dataReaderFailed)
   dataReaderThread.setDaemon(true)
@@ -95,7 +97,7 @@ class ContinuousQueuedDataReader(
           throw new SparkException("data read failed", dataReaderThread.failureReason)
         }
         if (epochPollFailed.get()) {
-          throw new SparkException("epoch poll failed", epochPollRunnable.failureReason)
+          throw new SparkException("epoch poll failed", epochMarkerGenerator.failureReason)
         }
         currentEntry = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }
@@ -106,6 +108,44 @@ class ContinuousQueuedDataReader(
 
   override def close(): Unit = {
     dataReaderThread.interrupt()
-    epochPollExecutor.shutdown()
+    epochMarkerExecutor.shutdown()
+  }
+
+  /**
+   * The epoch marker component of [[ContinuousQueuedDataReader]]. Populates the queue with
+   * (null, null) when a new epoch marker arrives.
+   */
+  class EpochMarkerGenerator(
+      queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
+      context: TaskContext,
+      failedFlag: AtomicBoolean)
+    extends Thread with Logging {
+    private[continuous] var failureReason: Throwable = _
+
+    private val epochEndpoint = EpochCoordinatorRef.get(
+      context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
+    // Note that this is *not* the same as the currentEpoch in [[ContinuousDataQueuedReader]]! That
+    // field represents the epoch wrt the data being processed. The currentEpoch here is just a
+    // counter to ensure we send the appropriate number of markers if we fall behind the driver.
+    private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
+
+    override def run(): Unit = {
+      try {
+        val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch)
+        // It's possible to fall more than 1 epoch behind if a GetCurrentEpoch RPC ends up taking
+        // a while. We catch up by injecting enough epoch markers immediately to catch up. This will
+        // result in some epochs being empty for this partition, but that's fine.
+        for (i <- currentEpoch to newEpoch - 1) {
+          queue.put((null, null))
+          logDebug(s"Sent marker to start epoch ${i + 1}")
+        }
+        currentEpoch = newEpoch
+      } catch {
+        case t: Throwable =>
+          failureReason = t
+          failedFlag.set(true)
+          throw t
+      }
+    }
   }
 }
