@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 /**
  * Base class for all counting aggregators.
  */
-abstract class CountAggregate extends DeclarativeAggregate {
+abstract class CountLike extends DeclarativeAggregate {
   override def nullable: Boolean = false
 
   // Return data type.
@@ -57,7 +57,7 @@ abstract class CountAggregate extends DeclarativeAggregate {
     _FUNC_(DISTINCT expr[, expr...]) - Returns the number of rows for which the supplied expression(s) are unique and non-null.
   """)
 // scalastyle:on line.size.limit
-case class Count(children: Seq[Expression]) extends CountAggregate {
+case class Count(children: Seq[Expression]) extends CountLike {
 
   override lazy val updateExpressions = {
     val nullableChildren = children.filter(_.nullable)

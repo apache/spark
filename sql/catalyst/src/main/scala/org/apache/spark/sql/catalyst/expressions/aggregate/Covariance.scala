@@ -60,7 +60,7 @@ abstract class Covariance(x: Expression, y: Expression)
     Seq(newN, newXAvg, newYAvg, newCk)
   }
 
-  def updateExpressionsDef: Seq[Expression] = {
+  protected def updateExpressionsDef: Seq[Expression] = {
     val newN = n + Literal(1.0)
     val dx = x - xAvg
     val dy = y - yAvg

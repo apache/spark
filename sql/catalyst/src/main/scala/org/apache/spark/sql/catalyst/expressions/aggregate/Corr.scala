@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 /**
- * Basee class for computing Pearson correlation between two expressions.
+ * Base class for computing Pearson correlation between two expressions.
  * When applied on empty data (i.e., count is zero), it returns NULL.
  *
  * Definition of Pearson correlation can be found at
@@ -50,7 +50,6 @@ abstract class PearsonCorrelation(x: Expression, y: Expression)
   override lazy val updateExpressions: Seq[Expression] = updateExpressionsDef
 
   override val mergeExpressions: Seq[Expression] = {
-
     val n1 = n.left
     val n2 = n.right
     val newN = n1 + n2
@@ -67,7 +66,7 @@ abstract class PearsonCorrelation(x: Expression, y: Expression)
     Seq(newN, newXAvg, newYAvg, newCk, newXMk, newYMk)
   }
 
-  def updateExpressionsDef: Seq[Expression] = {
+  protected def updateExpressionsDef: Seq[Expression] = {
     val newN = n + Literal(1.0)
     val dx = x - xAvg
     val dxN = dx / newN

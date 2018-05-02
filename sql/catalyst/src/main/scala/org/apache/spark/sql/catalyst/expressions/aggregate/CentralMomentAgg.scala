@@ -101,7 +101,7 @@ abstract class CentralMomentAgg(child: Expression)
     trimHigherOrder(Seq(newN, newAvg, newM2, newM3, newM4))
   }
 
-  def updateExpressionsDef: Seq[Expression] = {
+  protected def updateExpressionsDef: Seq[Expression] = {
     val newN = n + Literal(1.0)
     val delta = child - avg
     val deltaN = delta / newN

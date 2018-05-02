@@ -23,13 +23,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-abstract class AverageAggregate extends DeclarativeAggregate {
+abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
 
   override def nullable: Boolean = true
   // Return data type.
   override def dataType: DataType = resultType
-
-  def child: Expression
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
@@ -68,18 +66,21 @@ abstract class AverageAggregate extends DeclarativeAggregate {
       Cast(sum, resultType) / Cast(count, resultType)
   }
 
-  def updateExpressionsDef: Seq[Expression] = Seq(
+  protected def updateExpressionsDef: Seq[Expression] = Seq(
     /* sum = */
     Add(
       sum,
       Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)),
     /* count = */ If(IsNull(child), count, count + 1L)
   )
+
+  override lazy val updateExpressions = updateExpressionsDef
 }
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.")
-case class Average(child: Expression) extends AverageAggregate with ImplicitCastInputTypes {
+case class Average(child: Expression)
+    extends AverageLike(child) with ImplicitCastInputTypes {
 
   override def prettyName: String = "avg"
 
@@ -89,6 +90,4 @@ case class Average(child: Expression) extends AverageAggregate with ImplicitCast
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, "function average")
-
-  override lazy val updateExpressions = updateExpressionsDef
 }
