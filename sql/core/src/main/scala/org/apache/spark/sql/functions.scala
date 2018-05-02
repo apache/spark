@@ -1023,6 +1023,14 @@ object functions {
   }
 
   /**
+   * Creates a new column with empty arrays of the given type.
+   *
+   * @group normal_funcs
+   * @since 2.4.0
+   */
+  def array(elementType: DataType): Column = withExpr { CreateArray(Seq.empty, elementType) }
+
+  /**
    * Creates a new map column. The input columns must be grouped as key-value pairs, e.g.
    * (key1, value1, key2, value2, ...). The key columns must all have the same data type, and can't
    * be null. The value columns must all have the same data type.

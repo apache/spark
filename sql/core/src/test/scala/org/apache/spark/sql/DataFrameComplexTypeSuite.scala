@@ -20,12 +20,42 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 /**
  * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
  */
 class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  test("Empty Typed Array") {
+    val df = Seq((1, "a")).toDF("i", "s")
+
+    def checkSchema(df: DataFrame, expected: StructType): Unit = {
+      assert(
+        expected == df.schema,
+        "The schema of the data frame does not match the expected schema.")
+    }
+
+    checkAnswer(
+      df.select(array(IntegerType)),
+      Seq(Row(Seq.empty)))
+
+    checkSchema(
+      df.select(array(IntegerType) as "i"),
+      StructType(StructField("i", ArrayType(IntegerType, false), false) :: Nil)
+    )
+
+    val sType = StructType(StructField("a", IntegerType, true) :: Nil)
+    checkAnswer(
+      df.select(array(sType)),
+      Seq(Row(Seq.empty)))
+
+    checkSchema(
+      df.select(array(sType) as "s"),
+      StructType(StructField("s", ArrayType(sType, false), false) :: Nil)
+    )
+  }
 
   test("UDF on struct") {
     val f = udf((a: String) => a)

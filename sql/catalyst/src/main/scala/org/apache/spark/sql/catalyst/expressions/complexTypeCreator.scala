@@ -37,7 +37,8 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
   """)
-case class CreateArray(children: Seq[Expression]) extends Expression {
+case class CreateArray(children: Seq[Expression], defaultElementType: DataType = StringType)
+  extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -47,7 +48,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def dataType: ArrayType = {
     ArrayType(
-      children.headOption.map(_.dataType).getOrElse(StringType),
+      children.headOption.map(_.dataType).getOrElse(defaultElementType),
       containsNull = children.exists(_.nullable))
   }
 
