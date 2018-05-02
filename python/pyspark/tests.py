@@ -2303,6 +2303,15 @@ class UtilTests(PySparkTestCase):
 
         self.assertTrue('NullPointerException' in _exception_message(context.exception))
 
+    def test_parsing_version_string(self):
+        from pyspark.util import VersionUtils
+
+        (major, minor) = VersionUtils.majorMinorVersion("2.4.0")
+        self.assertEqual(major, 2)
+        self.assertEqual(minor, 4)
+
+        self.assertRaises(ValueError, lambda: VersionUtils.majorMinorVersion("abced"))
+
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
