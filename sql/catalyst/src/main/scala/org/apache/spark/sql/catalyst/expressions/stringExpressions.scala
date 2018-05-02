@@ -2016,6 +2016,7 @@ case class Encode(value: Expression, charset: Expression)
   usage = """
     _FUNC_(expr1, expr2) - Formats the number `expr1` like '#,###,###.##', rounded to `expr2`
       decimal places. If `expr2` is 0, the result has no decimal point or fractional part.
+      `expr2` also accept a user specified format.
       This is supposed to function like MySQL's FORMAT.
   """,
   examples = """
@@ -2095,7 +2096,7 @@ case class FormatNumber(x: Expression, d: Expression)
           case _ =>
             pattern.delete(0, pattern.length)
             lastDStringValue = Some(dValue)
-            if (dValue.toString.isEmpty) {
+            if (dValue.isEmpty) {
               numberFormat.applyLocalizedPattern(defaultFormat)
             } else {
               numberFormat.applyLocalizedPattern(dValue)
@@ -2132,13 +2133,12 @@ case class FormatNumber(x: Expression, d: Expression)
       // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
       // as a decimal separator.
       val usLocale = "US"
-      val dFormat = ctx.freshName("dFormat")
-      val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
       val numberFormat = ctx.addMutableState(df, "numberFormat",
         v => s"""$v = new $df("", new $dfs($l.$usLocale));""")
 
       right.dataType match {
         case IntegerType =>
+          val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
           val i = ctx.freshName("i")
           val lastDIntValue =
             ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
@@ -2166,13 +2166,15 @@ case class FormatNumber(x: Expression, d: Expression)
         case StringType =>
           val lastDStringValue =
             ctx.addMutableState("String", "lastDValue", v => s"""$v = "$defaultFormat";""")
+          val dValue = ctx.addMutableState("String", "dValue")
           s"""
-            if (!$d.toString().equals($lastDStringValue)) {
-              $lastDStringValue = $d.toString();
-              if ($d.toString().isEmpty()) {
+            $dValue = $d.toString();
+            if (!$dValue.equals($lastDStringValue)) {
+              $lastDStringValue = $dValue;
+              if ($dValue.isEmpty()) {
                 $numberFormat.applyLocalizedPattern("$defaultFormat");
               } else {
-                $numberFormat.applyLocalizedPattern($d.toString());
+                $numberFormat.applyLocalizedPattern($dValue);
               }
             }
             ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
