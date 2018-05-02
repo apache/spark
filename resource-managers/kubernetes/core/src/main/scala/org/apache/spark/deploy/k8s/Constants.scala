@@ -75,6 +75,7 @@ private[spark] object Constants {
   val ENV_PYSPARK_PRIMARY = "PYSPARK_PRIMARY"
   val ENV_PYSPARK_FILES = "PYSPARK_FILES"
   val ENV_PYSPARK_ARGS = "PYSPARK_APP_ARGS"
+  val ENV_PYSPARK_PYTHON_VERSION = "PYSPARK_PYTHON_VERSION"
 
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"

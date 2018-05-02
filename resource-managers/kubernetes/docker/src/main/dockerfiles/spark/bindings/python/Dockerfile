@@ -18,16 +18,17 @@
 ARG base_img
 FROM $base_img
 WORKDIR /
-COPY python /opt/spark/python
+RUN mkdir ${SPARK_HOME}/python
+COPY python/lib ${SPARK_HOME}/python/lib
 RUN apk add --no-cache python && \
+    apk add --no-cache python3 && \
     python -m ensurepip && \
+    python3 -m ensurepip && \
     rm -r /usr/lib/python*/ensurepip && \
     pip install --upgrade pip setuptools && \
     rm -r /root/.cache
-ENV PYTHON_VERSION 2.7.13
-ENV PYSPARK_PYTHON python
-ENV PYSPARK_DRIVER_PYTHON python
-ENV PYTHONPATH ${SPARK_HOME}/python/:${SPARK_HOME}/python/lib/py4j-0.10.6-src.zip:${PYTHONPATH}
+
+ENV PYTHONPATH ${SPARK_HOME}/python/lib/pyspark.zip:${SPARK_HOME}/python/lib/py4j-*.zip
 
 WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]

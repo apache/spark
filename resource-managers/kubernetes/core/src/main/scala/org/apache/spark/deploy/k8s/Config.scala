@@ -181,7 +181,18 @@ private[spark] object Config extends Logging {
       .doc("This sets the Memory Overhead Factor that will allocate memory to non-JVM jobs " +
         "which in the case of JVM tasks will default to 0.10 and 0.40 for non-JVM jobs")
       .doubleConf
-      .createWithDefault(0.10)
+      .checkValue(mem_overhead => mem_overhead >= 0 && mem_overhead < 1,
+        "Ensure that memory overhead is a double between 0 --> 1.0")
+      .createOptional
+
+  val PYSPARK_PYTHON_VERSION =
+    ConfigBuilder("spark.kubernetes.pyspark.pythonversion")
+      .doc("This sets the python version. Either 2 or 3. (Python2 or Python3)")
+      .stringConf
+      .checkValue(pv => List("2", "3").contains(pv),
+        "Ensure that Python Version is either Python2 or Python3")
+      .createWithDefault("2")
+
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"

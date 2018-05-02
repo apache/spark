@@ -76,6 +76,9 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
   def pySparkAppArgs(): Option[String] = sparkConf
     .get(KUBERNETES_PYSPARK_APP_ARGS)
 
+  def pySparkPythonVersion(): String = sparkConf
+      .get(PYSPARK_PYTHON_VERSION)
+
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
   def imagePullSecrets(): Seq[LocalObjectReference] = {
@@ -131,7 +134,7 @@ private[spark] object KubernetesConf {
               sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
               sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_APP_ARGS, appArgs.mkString(" "))
           }
-          sparkConfWithMainAppJar.set(MEMORY_OVERHEAD_FACTOR, 0.4)
+          sparkConfWithMainAppJar.setIfMissing(MEMORY_OVERHEAD_FACTOR, 0.4)
     }
 
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
