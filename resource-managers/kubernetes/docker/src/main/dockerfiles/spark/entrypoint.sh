@@ -53,12 +53,21 @@ if [ -n "$SPARK_MOUNTED_FILES_DIR" ]; then
   cp -R "$SPARK_MOUNTED_FILES_DIR/." .
 fi
 
-PYSPARK_SECONDARY="$PYSPARK_APP_ARGS"
-if [ ! -z "$PYSPARK_FILES" ]; then
-    PYSPARK_SECONDARY="$PYSPARK_FILES $PYSPARK_APP_ARGS"
+if [ -n "$PYSPARK_FILES" ]; then
+    PYTHONPATH="$PYTHONPATH:$PYSPARK_FILES"
 fi
 
-
+if [ "$PYSPARK_PYTHON_VERSION" == "2" ]; then
+    pyv="$(python -V 2>&1)"
+    export PYTHON_VERSION="${pyv:7}"
+    export PYSPARK_PYTHON="python"
+    export PYSPARK_DRIVER_PYTHON="python"
+elif [ "$PYSPARK_PYTHON_VERSION" == "3" ]; then
+    pyv3="$(python3 -V 2>&1)"
+    export PYTHON_VERSION="${pyv3:7}"
+    export PYSPARK_PYTHON="python3"
+    export PYSPARK_DRIVER_PYTHON="python3"
+fi
 
 case "$SPARK_K8S_CMD" in
   driver)
@@ -74,7 +83,7 @@ case "$SPARK_K8S_CMD" in
       "$SPARK_HOME/bin/spark-submit"
       --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
       --deploy-mode client
-      "$@" $PYSPARK_PRIMARY $PYSPARK_SECONDARY
+      "$@" $PYSPARK_PRIMARY $PYSPARK_APP_ARGS
     )
     ;;
 

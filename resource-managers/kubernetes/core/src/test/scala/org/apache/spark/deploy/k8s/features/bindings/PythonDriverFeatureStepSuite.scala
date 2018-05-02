@@ -32,7 +32,7 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
     val mainResource = "local:///main.py"
     val pyFiles = Seq("local:///example2.py", "local:///example3.py")
     val expectedPySparkFiles =
-      "/example2.py,/example3.py"
+      "/example2.py:/example3.py"
     val baseDriverPod = SparkPod.initialPod()
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, mainResource)
@@ -57,7 +57,7 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
     val step = new PythonDriverFeatureStep(kubernetesConf)
     val driverPod = step.configurePod(baseDriverPod).pod
     val driverContainerwithPySpark = step.configurePod(baseDriverPod).container
-    assert(driverContainerwithPySpark.getEnv.size === 3)
+    assert(driverContainerwithPySpark.getEnv.size === 4)
     val envs = driverContainerwithPySpark
       .getEnv
       .asScala
@@ -66,12 +66,14 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
     assert(envs(ENV_PYSPARK_PRIMARY) === expectedMainResource)
     assert(envs(ENV_PYSPARK_FILES) === expectedPySparkFiles)
     assert(envs(ENV_PYSPARK_ARGS) === "5 7")
+    assert(envs(ENV_PYSPARK_PYTHON_VERSION) === "2")
   }
   test("Python Step testing empty pyfiles") {
     val mainResource = "local:///main.py"
     val baseDriverPod = SparkPod.initialPod()
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, mainResource)
+      .set(PYSPARK_PYTHON_VERSION, "3")
     val kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
@@ -89,7 +91,7 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
     val step = new PythonDriverFeatureStep(kubernetesConf)
     val driverPod = step.configurePod(baseDriverPod).pod
     val driverContainerwithPySpark = step.configurePod(baseDriverPod).container
-    assert(driverContainerwithPySpark.getEnv.size === 3)
+    assert(driverContainerwithPySpark.getEnv.size === 4)
     val envs = driverContainerwithPySpark
       .getEnv
       .asScala
@@ -97,5 +99,6 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
       .toMap
     assert(envs(ENV_PYSPARK_FILES) === "")
     assert(envs(ENV_PYSPARK_ARGS) === "")
+    assert(envs(ENV_PYSPARK_PYTHON_VERSION) === "3")
   }
 }
