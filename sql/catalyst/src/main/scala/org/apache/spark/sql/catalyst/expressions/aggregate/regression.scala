@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, If, ImplicitCastInputTypes, IsNull, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{AbstractDataType, DoubleType}
 
 /**

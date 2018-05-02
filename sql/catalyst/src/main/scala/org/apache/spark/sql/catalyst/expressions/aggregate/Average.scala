@@ -80,7 +80,7 @@ abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.")
 case class Average(child: Expression)
-    extends AverageLike(child) with ImplicitCastInputTypes {
+  extends AverageLike(child) with ImplicitCastInputTypes {
 
   override def prettyName: String = "avg"
 

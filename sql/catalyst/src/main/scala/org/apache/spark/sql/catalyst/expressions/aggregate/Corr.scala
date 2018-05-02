@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
 abstract class PearsonCorrelation(x: Expression, y: Expression)
-    extends DeclarativeAggregate with ImplicitCastInputTypes {
+  extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(x, y)
   override def nullable: Boolean = true
