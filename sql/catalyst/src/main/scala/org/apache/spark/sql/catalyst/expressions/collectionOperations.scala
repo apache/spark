@@ -181,23 +181,27 @@ trait ArraySortUtil extends ExpectsInputTypes {
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 
+  def javaDataTypes(dt : DataType): String = {
+    dt match {
+      case DecimalType.Fixed(p, s) =>
+        s"org.apache.spark.sql.types.DataTypes.createDecimalType($p, $s)"
+      case ArrayType(et, cn) =>
+        val jetString = javaDataTypes(et)
+        s"org.apache.spark.sql.types.DataTypes.createArrayType($jetString, $cn)"
+      case StructType(f) =>
+        "org.apache.spark.sql.types.StructType$.MODULE$." +
+          s"apply(new java.util.ArrayList(${f.length}))"
+      case _ =>
+        s"org.apache.spark.sql.types.$dt$$.MODULE$$"
+    }
+  }
+
   def sortCodegen(ctx: CodegenContext, ev: ExprCode, base: String, order: String): String = {
     val arrayData = classOf[ArrayData].getName
     val genericArrayData = classOf[GenericArrayData].getName
     val array = ctx.freshName("array")
     val c = ctx.freshName("c")
-    val dataTypes = elementType match {
-      case DecimalType.Fixed(p, s) =>
-        s"org.apache.spark.sql.types.DataTypes.createDecimalType($p, $s)"
-      case ArrayType(et, cn) =>
-        val dt = s"org.apache.spark.sql.types.$et$$.MODULE$$"
-        s"org.apache.spark.sql.types.DataTypes.createArrayType($dt, $cn)"
-      case StructType(f) =>
-        "org.apache.spark.sql.types.StructType$.MODULE$." +
-          s"apply(new java.util.ArrayList(${f.length}))"
-      case _ =>
-        s"org.apache.spark.sql.types.$elementType$$.MODULE$$"
-    }
+    val dataTypes = javaDataTypes(elementType)
     if (elementType == NullType) {
       s"${ev.value} = (($arrayData) $base).copy();"
     } else {

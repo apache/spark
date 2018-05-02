@@ -90,6 +90,20 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(new SortArray(arrayStruct), Seq(create_row(1), create_row(2)))
 
+    val typeAA = ArrayType(ArrayType(IntegerType))
+    val aa1 = Array[java.lang.Integer](1, 2)
+    val aa2 = Array[java.lang.Integer](3, null, 4)
+    val arrayArray = Literal.create(Seq(aa2, aa1), typeAA)
+
+    checkEvaluation(new SortArray(arrayArray), Seq(aa1, aa2))
+
+    val typeAAS = ArrayType(ArrayType(StructType(StructField("a", IntegerType) :: Nil)))
+    val aas1 = Array(create_row(1))
+    val aas2 = Array(create_row(2))
+    val arrayArrayStruct = Literal.create(Seq(aas2, aas1), typeAAS)
+
+    checkEvaluation(new SortArray(arrayArrayStruct), Seq(aas1, aas2))
+
     checkEvaluation(ArraySort(a0), Seq(1, 2, 3))
     checkEvaluation(ArraySort(a1), Seq[Integer]())
     checkEvaluation(ArraySort(a2), Seq("a", "b"))
@@ -97,6 +111,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArraySort(a4), Seq(d1, d2))
     checkEvaluation(ArraySort(a5), Seq(null, null))
     checkEvaluation(ArraySort(arrayStruct), Seq(create_row(1), create_row(2)))
+    checkEvaluation(ArraySort(arrayArray), Seq(aa1, aa2))
+    checkEvaluation(ArraySort(arrayArrayStruct), Seq(aas1, aas2))
   }
 
   test("Array contains") {
