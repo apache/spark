@@ -498,7 +498,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("Create partitioned data source table with user specified schema") {
     import testImplicits._
-    val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+    val df = sparkContext.parallelize(1 to 10).map(i => (i.toString, i)).toDF("str", "num")
 
     // Case 1: with partitioning columns but no schema: Option("num")
     // Case 2: without schema and partitioning columns: None
@@ -508,7 +508,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           .save(pathToPartitionedTable.getCanonicalPath)
         checkSchemaInCreatedDataSourceTable(
           pathToPartitionedTable,
-          userSpecifiedSchema = Option("num int, str string"),
+          userSpecifiedSchema = Option("str string, num int"),
           userSpecifiedPartitionCols = partitionCols,
           expectedSchema = new StructType().add("str", StringType).add("num", IntegerType),
           expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
