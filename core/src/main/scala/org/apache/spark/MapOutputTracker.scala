@@ -841,6 +841,7 @@ private[spark] object MapOutputTracker extends Logging {
    * Given an array of map statuses and a range of map output partitions, returns a sequence that,
    * for each block manager ID, lists the shuffle block IDs and corresponding shuffle block sizes
    * stored at that block manager.
+   * Note that empty blocks are filtered in the result.
    *
    * If any of the statuses is null (indicating a missing location due to a failed mapper),
    * throws a FetchFailedException.
@@ -867,8 +868,11 @@ private[spark] object MapOutputTracker extends Logging {
         throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
       } else {
         for (part <- startPartition until endPartition) {
-          splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
-            ((ShuffleBlockId(shuffleId, mapId, part), status.getSizeForBlock(part)))
+          val size = status.getSizeForBlock(part)
+          if (size != 0) {
+            splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
+                ((ShuffleBlockId(shuffleId, mapId, part), size))
+          }
         }
       }
     }
