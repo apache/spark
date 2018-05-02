@@ -81,7 +81,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public void reserve(int requiredCapacity) {
-    if (requiredCapacity > capacity) {
+    if (requiredCapacity < 0) {
+      throwUnsupportedException(requiredCapacity, null);
+    } else if (requiredCapacity > capacity) {
       int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
       if (requiredCapacity <= newCapacity) {
         try {
@@ -92,8 +94,6 @@ public abstract class WritableColumnVector extends ColumnVector {
       } else {
         throwUnsupportedException(requiredCapacity, null);
       }
-    } else if (requiredCapacity < 0) {
-      throwUnsupportedException(requiredCapacity, null);
     }
   }
 
