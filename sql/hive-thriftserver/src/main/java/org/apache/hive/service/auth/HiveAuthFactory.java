@@ -103,6 +103,8 @@ public class HiveAuthFactory {
       keytabFile = clz.getDeclaredField("keytabFile");
       keytabFile.setAccessible(true);
     } catch (NoSuchFieldException nfe) {
+      LOG.debug("Cannot find private field \"keytabFile\" in class: " +
+        UserGroupInformation.class.getCanonicalName(), nfe);
       keytabFile = null;
     }
 
@@ -110,6 +112,8 @@ public class HiveAuthFactory {
       getKeytab = clz.getDeclaredMethod("getKeytab");
       getKeytab.setAccessible(true);
     } catch(NoSuchMethodException nme) {
+      LOG.debug("Cannot find private method \"getKeytab\" in class:" +
+        UserGroupInformation.class.getCanonicalName(), nme);
       getKeytab = null;
     }
   }
@@ -407,6 +411,7 @@ public class HiveAuthFactory {
           return null;
         }
       } catch (Exception e) {
+        LOG.debug("Fail to get keytabFile path via reflection", e);
         return null;
       }
     }
