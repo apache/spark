@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.buffer.NioManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
-import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
+import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamData, StreamManager}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, OpenBlocks, StreamHandle, UploadBlock}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
@@ -50,6 +50,7 @@ class NettyBlockRpcServer(
   override def receive(
       client: TransportClient,
       rpcMessage: ByteBuffer,
+      streamData: StreamData,
       responseContext: RpcResponseCallback): Unit = {
     val message = BlockTransferMessage.Decoder.fromByteBuffer(rpcMessage)
     logTrace(s"Received request: $message")

@@ -32,15 +32,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.protocol.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.NioManagedBuffer;
-import org.apache.spark.network.protocol.ChunkFetchRequest;
-import org.apache.spark.network.protocol.OneWayMessage;
-import org.apache.spark.network.protocol.RpcRequest;
-import org.apache.spark.network.protocol.StreamChunkId;
-import org.apache.spark.network.protocol.StreamRequest;
+
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
@@ -230,6 +228,54 @@ public class TransportClient implements Closeable {
           } else {
             String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
               getRemoteAddress(channel), future.cause());
+            logger.error(errorMsg, future.cause());
+            handler.removeRpcRequest(requestId);
+            channel.close();
+            try {
+              callback.onFailure(new IOException(errorMsg, future.cause()));
+            } catch (Exception e) {
+              logger.error("Uncaught exception in RPC response callback handler!", e);
+            }
+          }
+        });
+
+    return requestId;
+  }
+
+  /**
+   * Send data to the remote end as a stream.   This differs from stream() in that this is a request
+   * to *send* data to the remote end, not to receive it from the remote.
+   *
+   * @param meta meta data associated with the stream, which will be read completely on the
+   *             receiving end before the stream itself.
+   * @param data this will be streamed to the remote end to allow for transferring large amounts
+   *             of data without reading into memory.
+   * @param callback handles the reply -- onSuccess will only be called when both message and data
+   *                 are received successfully.
+   */
+  public long uploadStream(
+      ManagedBuffer meta,
+      ManagedBuffer data,
+      RpcResponseCallback callback) {
+    long startTime = System.currentTimeMillis();
+    if (logger.isTraceEnabled()) {
+      logger.trace("Sending RPC to {}", getRemoteAddress(channel));
+    }
+
+    long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
+    handler.addRpcRequest(requestId, callback);
+
+    channel.writeAndFlush(new UploadStream(requestId, meta, data))
+        .addListener(future -> {
+          if (future.isSuccess()) {
+            long timeTaken = System.currentTimeMillis() - startTime;
+            if (logger.isTraceEnabled()) {
+              logger.trace("Sending request {} to {} took {} ms", requestId,
+                  getRemoteAddress(channel), timeTaken);
+            }
+          } else {
+            String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
+                getRemoteAddress(channel), future.cause());
             logger.error(errorMsg, future.cause());
             handler.removeRpcRequest(requestId);
             channel.close();

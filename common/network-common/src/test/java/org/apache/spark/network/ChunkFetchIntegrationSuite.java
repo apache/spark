@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
+import org.apache.spark.network.server.StreamData;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -108,6 +109,7 @@ public class ChunkFetchIntegrationSuite {
       public void receive(
           TransportClient client,
           ByteBuffer message,
+          StreamData data,
           RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }

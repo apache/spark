@@ -17,19 +17,23 @@
 
 package org.apache.spark.network;
 
+import java.io.*;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
+import com.google.common.io.Files;
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NettyManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
+import org.apache.spark.network.client.StreamCallback;
+import org.apache.spark.network.server.*;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -37,37 +41,44 @@ import static org.junit.Assert.*;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
-import org.apache.spark.network.server.OneForOneStreamManager;
-import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class RpcIntegrationSuite {
+  static TransportConf conf;
   static TransportServer server;
   static TransportClientFactory clientFactory;
   static RpcHandler rpcHandler;
   static List<String> oneWayMsgs;
+  static StreamTestHelper testData;
+
+  static ConcurrentHashMap<String, VerifyingStreamCallback> streamCallbacks =
+      new ConcurrentHashMap<>();
 
   @BeforeClass
   public static void setUp() throws Exception {
-    TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
+    conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
+    testData = new StreamTestHelper();
     rpcHandler = new RpcHandler() {
       @Override
       public void receive(
           TransportClient client,
           ByteBuffer message,
+          StreamData streamData,
           RpcResponseCallback callback) {
         String msg = JavaUtils.bytesToString(message);
-        String[] parts = msg.split("/");
-        if (parts[0].equals("hello")) {
-          callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
-        } else if (parts[0].equals("return error")) {
-          callback.onFailure(new RuntimeException("Returned: " + parts[1]));
-        } else if (parts[0].equals("throw error")) {
-          throw new RuntimeException("Thrown: " + parts[1]);
+        if (streamData != null) {
+          receiveStream(msg, streamData);
+        } else {
+          String[] parts = msg.split("/");
+          if (parts[0].equals("hello")) {
+            callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
+          } else if (parts[0].equals("return error")) {
+            callback.onFailure(new RuntimeException("Returned: " + parts[1]));
+          } else if (parts[0].equals("throw error")) {
+            throw new RuntimeException("Thrown: " + parts[1]);
+          }
         }
       }
 
@@ -85,10 +96,52 @@ public class RpcIntegrationSuite {
     oneWayMsgs = new ArrayList<>();
   }
 
+  private static void receiveStream(String msg, StreamData streamData) {
+    try {
+      if (msg.startsWith("fail/")) {
+        String[] parts = msg.split("/");
+        switch(parts[1]) {
+          case "no callback":
+            // don't register anything here, check the rpc error response is appropriate
+            break;
+          case "exception":
+            StreamCallback callback = new StreamCallback() {
+              @Override
+              public void onData(String streamId, ByteBuffer buf) throws IOException {
+                throw new IOException("failed to read stream data!");
+              }
+
+              @Override
+              public void onComplete(String streamId) throws IOException {
+              }
+
+              @Override
+              public void onFailure(String streamId, Throwable cause) throws IOException {
+              }
+            };
+            streamData.registerStreamCallback(msg, callback);
+            break;
+          case "multiple":
+            VerifyingStreamCallback streamCallback = new VerifyingStreamCallback(msg);
+            streamData.registerStreamCallback(msg, streamCallback);
+            streamData.registerStreamCallback(msg, streamCallback);
+            break;
+        }
+      } else {
+        VerifyingStreamCallback streamCallback = new VerifyingStreamCallback(msg);
+        streamData.registerStreamCallback(msg, streamCallback);
+        streamCallbacks.put(msg, streamCallback);
+      }
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   @AfterClass
   public static void tearDown() {
     server.close();
     clientFactory.close();
+    testData.cleanup();
   }
 
   static class RpcResult {
@@ -124,6 +177,50 @@ public class RpcIntegrationSuite {
     }
 
     if (!sem.tryAcquire(commands.length, 5, TimeUnit.SECONDS)) {
+      fail("Timeout getting response from the server");
+    }
+    client.close();
+    return res;
+  }
+
+  private RpcResult sendRpcWithStream(String... streams) throws Exception {
+    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    final Semaphore sem = new Semaphore(0);
+    RpcResult res = new RpcResult();
+    res.successMessages = Collections.synchronizedSet(new HashSet<String>());
+    res.errorMessages = Collections.synchronizedSet(new HashSet<String>());
+    RpcResponseCallback callback = new RpcResponseCallback() {
+      @Override
+      public void onSuccess(ByteBuffer message) {
+        String response = JavaUtils.bytesToString(message);
+        res.successMessages.add(response);
+        sem.release();
+      }
+
+      @Override
+      public void onFailure(Throwable e) {
+        res.errorMessages.add(e.getMessage());
+        sem.release();
+      }
+    };
+
+    for (String stream: streams) {
+      int idx = stream.lastIndexOf('/');
+      ManagedBuffer meta = new NioManagedBuffer(JavaUtils.stringToBytes(stream));
+      String streamName = (idx == -1) ? stream : stream.substring(idx + 1);
+      ManagedBuffer data = testData.openStream(conf, streamName);
+      client.uploadStream(meta, data, callback);
+    }
+    streamCallbacks.values().forEach(streamCallback -> {
+      try {
+        streamCallback.waitForCompletionAndVerify(TimeUnit.SECONDS.toMillis(5));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+
+
+    if (!sem.tryAcquire(streams.length, 5, TimeUnit.SECONDS)) {
       fail("Timeout getting response from the server");
     }
     client.close();
@@ -193,8 +290,52 @@ public class RpcIntegrationSuite {
     }
   }
 
+  @Test
+  public void sendRpcWithStreamOneAtATime() throws Exception {
+    for (String stream: StreamTestHelper.STREAMS) {
+      RpcResult res = sendRpcWithStream(stream);
+      assertTrue("there were error messages!" + res.errorMessages, res.errorMessages.isEmpty());
+      assertEquals(Sets.newHashSet(stream), res.successMessages);
+    }
+  }
+
+  @Test
+  public void sendRpcWithStreamConcurrently() throws Exception {
+    String[] streams = new String[10];
+    for (int i = 0; i < 10; i++) {
+      streams[i] = StreamTestHelper.STREAMS[i % StreamTestHelper.STREAMS.length];
+    }
+    RpcResult res = sendRpcWithStream(streams);
+    assertEquals(res.successMessages, Sets.newHashSet(StreamTestHelper.STREAMS));
+    assertTrue(res.errorMessages.isEmpty());
+  }
+
+  @Test
+  public void sendRpcWithStreamFailures() throws Exception {
+    // when there is a failure reading stream data, we don't try to keep the channel usable,
+    // just send back a decent error msg.
+    RpcResult noCallbackResult = sendRpcWithStream("fail/no callback/smallBuffer", "smallBuffer");
+    assertTrue("unexpected success: " + noCallbackResult.successMessages,
+        noCallbackResult.successMessages.isEmpty());
+    assertErrorsContain(noCallbackResult.errorMessages,
+        Sets.newHashSet("Destination did not register stream handler", "closed"));
+
+    RpcResult multiCallbackResult = sendRpcWithStream("fail/multiple/smallBuffer", "smallBuffer");
+    assertTrue("unexpected success: " + multiCallbackResult.successMessages,
+        multiCallbackResult.successMessages.isEmpty());
+    assertErrorsContain(multiCallbackResult.errorMessages,
+        Sets.newHashSet("Cannot register more than one stream callback", "closed"));
+
+    RpcResult exceptionInCallbackResult = sendRpcWithStream("fail/exception/file", "smallBuffer");
+    assertTrue("unexpected success: " + exceptionInCallbackResult.successMessages,
+        exceptionInCallbackResult.successMessages.isEmpty());
+    assertErrorsContain(exceptionInCallbackResult.errorMessages,
+        Sets.newHashSet("Destination failed while reading stream", "Connection reset"));
+  }
+
   private void assertErrorsContain(Set<String> errors, Set<String> contains) {
-    assertEquals(contains.size(), errors.size());
+    assertEquals("Expected " + contains.size() + " errors, got " + errors.size() + "errors: " +
+        errors, contains.size(), errors.size());
 
     Set<String> remainingErrors = Sets.newHashSet(errors);
     for (String contain : contains) {
@@ -211,5 +352,57 @@ public class RpcIntegrationSuite {
     }
 
     assertTrue(remainingErrors.isEmpty());
+  }
+
+  private static class VerifyingStreamCallback implements StreamCallback {
+    final String streamId;
+    final StreamSuite.TestCallback helper;
+    final OutputStream out;
+    final File outFile;
+    VerifyingStreamCallback(String streamId) throws IOException {
+      if (streamId.equals("file")) {
+        outFile = File.createTempFile("data", ".tmp", testData.tempDir);
+        out = new FileOutputStream(outFile);
+      } else {
+        out = new ByteArrayOutputStream();
+        outFile = null;
+      }
+      this.streamId = streamId;
+      helper = new StreamSuite.TestCallback(out);
+    }
+
+    void waitForCompletionAndVerify(long timeoutMs) throws IOException {
+      helper.waitForCompletion(timeoutMs);
+      if (streamId.equals("file")) {
+        assertTrue("File stream did not match.", Files.equal(testData.testFile, outFile));
+      } else {
+        byte[] result = ((ByteArrayOutputStream)out).toByteArray();
+        ByteBuffer srcBuffer = testData.srcBuffer(streamId);
+        ByteBuffer base;
+        synchronized (srcBuffer) {
+          base = srcBuffer.duplicate();
+        }
+        byte[] expected = new byte[base.remaining()];
+        base.get(expected);
+        assertEquals(expected.length, result.length);
+        assertTrue("buffers don't match", Arrays.equals(expected, result));
+
+      }
+    }
+
+    @Override
+    public void onData(String streamId, ByteBuffer buf) throws IOException {
+      helper.onData(streamId, buf);
+    }
+
+    @Override
+    public void onComplete(String streamId) throws IOException {
+      helper.onComplete(streamId);
+    }
+
+    @Override
+    public void onFailure(String streamId, Throwable cause) throws IOException {
+      helper.onFailure(streamId, cause);
+    }
   }
 }

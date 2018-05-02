@@ -25,6 +25,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.server.StreamData;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.util.MapConfigProvider;
@@ -91,6 +92,7 @@ public class RequestTimeoutIntegrationSuite {
       public void receive(
           TransportClient client,
           ByteBuffer message,
+          StreamData streamData,
           RpcResponseCallback callback) {
         try {
           semaphore.acquire();
@@ -138,6 +140,7 @@ public class RequestTimeoutIntegrationSuite {
       public void receive(
           TransportClient client,
           ByteBuffer message,
+          StreamData streamData,
           RpcResponseCallback callback) {
         try {
           semaphore.acquire();
@@ -194,6 +197,7 @@ public class RequestTimeoutIntegrationSuite {
       public void receive(
           TransportClient client,
           ByteBuffer message,
+          StreamData streamData,
           RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }

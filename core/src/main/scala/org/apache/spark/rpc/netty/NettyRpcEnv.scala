@@ -520,12 +520,12 @@ private[netty] class NettyRpcEndpointRef(
   override def name: String = endpointAddress.name
 
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
-    nettyEnv.ask(new RequestMessage(nettyEnv.address, this, message), timeout)
+    nettyEnv.ask(new RequestMessage(nettyEnv.address, this, message, null), timeout)
   }
 
   override def send(message: Any): Unit = {
     require(message != null, "Message is null")
-    nettyEnv.send(new RequestMessage(nettyEnv.address, this, message))
+    nettyEnv.send(new RequestMessage(nettyEnv.address, this, message, null))
   }
 
   override def toString: String = s"NettyRpcEndpointRef(${endpointAddress})"
@@ -546,11 +546,14 @@ private[netty] class NettyRpcEndpointRef(
  *                      `NettyRpcEnv`.
  * @param receiver the receiver of this message.
  * @param content the message content.
+ * @param streamData optional stream of data.  May be null.  If present,
+  *                   streamData.registerStreamCallback *must* be called.
  */
 private[netty] class RequestMessage(
     val senderAddress: RpcAddress,
     val receiver: NettyRpcEndpointRef,
-    val content: Any) {
+    val content: Any,
+    val streamData: StreamData) {
 
   /** Manually serialize [[RequestMessage]] to minimize the size. */
   def serialize(nettyEnv: NettyRpcEnv): ByteBuffer = {
@@ -596,7 +599,11 @@ private[netty] object RequestMessage {
     }
   }
 
-  def apply(nettyEnv: NettyRpcEnv, client: TransportClient, bytes: ByteBuffer): RequestMessage = {
+  def apply(
+      nettyEnv: NettyRpcEnv,
+      client: TransportClient,
+      bytes: ByteBuffer,
+      streamData: StreamData): RequestMessage = {
     val bis = new ByteBufferInputStream(bytes)
     val in = new DataInputStream(bis)
     try {
@@ -608,7 +615,8 @@ private[netty] object RequestMessage {
         senderAddress,
         ref,
         // The remaining bytes in `bytes` are the message content.
-        nettyEnv.deserialize(client, bytes))
+        nettyEnv.deserialize(client, bytes),
+        streamData)
     } finally {
       in.close()
     }
@@ -643,26 +651,30 @@ private[netty] class NettyRpcHandler(
   override def receive(
       client: TransportClient,
       message: ByteBuffer,
+      streamData: StreamData,
       callback: RpcResponseCallback): Unit = {
-    val messageToDispatch = internalReceive(client, message)
+    val messageToDispatch = internalReceive(client, message, streamData)
     dispatcher.postRemoteMessage(messageToDispatch, callback)
   }
 
   override def receive(
       client: TransportClient,
       message: ByteBuffer): Unit = {
-    val messageToDispatch = internalReceive(client, message)
+    val messageToDispatch = internalReceive(client, message, null)
     dispatcher.postOneWayMessage(messageToDispatch)
   }
 
-  private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
+  private def internalReceive(
+      client: TransportClient,
+      message: ByteBuffer,
+      streamData: StreamData): RequestMessage = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
-    val requestMessage = RequestMessage(nettyEnv, client, message)
+    val requestMessage = RequestMessage(nettyEnv, client, message, streamData)
     if (requestMessage.senderAddress == null) {
       // Create a new message with the socket address of the client as the sender.
-      new RequestMessage(clientAddr, requestMessage.receiver, requestMessage.content)
+      new RequestMessage(clientAddr, requestMessage.receiver, requestMessage.content, streamData)
     } else {
       // The remote RpcEnv listens to some port, we should also fire a RemoteProcessConnected for
       // the listening address

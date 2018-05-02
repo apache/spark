@@ -24,6 +24,7 @@ import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.Channel;
+import org.apache.spark.network.server.*;
 import org.junit.After;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -37,10 +38,6 @@ import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.sasl.SaslRpcHandler;
 import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
-import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.server.TransportServer;
-import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -144,6 +141,7 @@ public class AuthIntegrationSuite {
         public void receive(
             TransportClient client,
             ByteBuffer message,
+            StreamData streamData,
             RpcResponseCallback callback) {
           assertEquals("Ping", JavaUtils.bytesToString(message));
           callback.onSuccess(JavaUtils.stringToBytes("Pong"));
