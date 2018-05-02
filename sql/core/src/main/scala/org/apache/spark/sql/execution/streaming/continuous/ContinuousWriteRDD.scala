@@ -24,6 +24,14 @@ import org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTask.{logEr
 import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.util.Utils
 
+/**
+ * The RDD writing to a sink in continuous processing.
+ *
+ * Within each task, we repeatedly call prev.compute(). Each resulting iterator contains the data
+ * to be written for one epoch, which we commit and forward to the driver.
+ *
+ * We keep repeating prev.compute() and writing new epochs until the query is shut down.
+ */
 class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactory[InternalRow])
     extends RDD[Unit](prev) {
 
