@@ -5713,7 +5713,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     AnalysisException,
-                    '.*Only unbounded window frame is supported with Python UDFs.*'):
+                    '.*Only unbounded window frame is supported.*'):
                 df.withColumn('mean_v', mean_udf(df['v']).over(ow))
 
 
