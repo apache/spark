@@ -704,12 +704,16 @@ case class Pivot(
     aggregates: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
   override lazy val resolved = false // Pivot will be replaced after being resolved.
-  override def output: Seq[Attribute] =
-    groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ aggregates match {
-    case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
-    case _ => pivotValues.flatMap{ value =>
-      aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+  override def output: Seq[Attribute] = {
+    val pivotAgg = aggregates match {
+      case agg :: Nil =>
+        pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
+      case _ =>
+        pivotValues.flatMap { value =>
+          aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+        }
     }
+    groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
 }
 
