@@ -56,8 +56,8 @@ object JDBCRDD extends Logging {
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
-      statement.setQueryTimeout(options.queryTimeout)
       try {
+        statement.setQueryTimeout(options.queryTimeout)
         val rs = statement.executeQuery()
         try {
           JdbcUtils.getSchema(rs, dialect, alwaysNullable = true)
@@ -280,9 +280,9 @@ private[jdbc] class JDBCRDD(
     options.sessionInitStatement match {
       case Some(sql) =>
         val statement = conn.prepareStatement(sql)
-        statement.setQueryTimeout(options.queryTimeout)
         logInfo(s"Executing sessionInitStatement: $sql")
         try {
+          statement.setQueryTimeout(options.queryTimeout)
           statement.execute()
         } finally {
           statement.close()

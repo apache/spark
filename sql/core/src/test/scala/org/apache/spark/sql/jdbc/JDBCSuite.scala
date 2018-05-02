@@ -1199,7 +1199,7 @@ class JDBCSuite extends SparkFunSuite
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)
       .option("dbtable", s"($longRunningQuery)")
-      .option("queryTimeout", "1")
+      .option("queryTimeout", 1)
       .load()
     val errMsg = intercept[SparkException] {
       df.collect()
