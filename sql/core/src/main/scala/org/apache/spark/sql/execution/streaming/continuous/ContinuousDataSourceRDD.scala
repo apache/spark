@@ -61,12 +61,6 @@ class ContinuousDataSourceRDD(
     @transient private val readerFactories: Seq[DataReaderFactory[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
-  // When computing the same partition multiple times, we need to use the same data reader to
-  // do so for continuity in offsets.
-  @GuardedBy("dataReaders")
-  private val dataReaders: mutable.Map[Partition, ContinuousQueuedDataReader] =
-    mutable.Map[Partition, ContinuousQueuedDataReader]()
-
   override protected def getPartitions: Array[Partition] = {
     readerFactories.zipWithIndex.map {
       case (readerFactory, index) => new ContinuousDataSourceRDDPartition(index, readerFactory)
