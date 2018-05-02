@@ -72,7 +72,7 @@ private[kafka010] sealed trait KafkaDataConsumer[K, V] {
   def release(): Unit
 
   /** Reference to the internal implementation that this wrapper delegates to */
-  private[kafka010] def internalConsumer: InternalKafkaConsumer[K, V]
+  def internalConsumer: InternalKafkaConsumer[K, V]
 }
 
 
@@ -226,7 +226,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
   /**
    * Must be called before acquire, once per JVM, to configure the cache.
    * Further calls are ignored.
-   * */
+   */
   def init(
       initialCapacity: Int,
       maxCapacity: Int,
@@ -249,7 +249,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
 
           if (entry.getValue.inUse == false && this.size > maxCapacity) {
             logWarning(
-              s"KafkaConsumer cache hitting max capacity of $maxCapacity, " +
+                s"KafkaConsumer cache hitting max capacity of $maxCapacity, " +
                 s"removing consumer for ${entry.getKey}")
                try {
               entry.getValue.close()
