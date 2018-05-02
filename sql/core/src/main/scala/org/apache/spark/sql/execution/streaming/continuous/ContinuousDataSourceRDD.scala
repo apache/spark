@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -31,6 +32,20 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, Ro
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, PartitionOffset}
 import org.apache.spark.util.ThreadUtils
+
+class ContinuousDataSourceRDDPartition(
+    val index: Int,
+    val readerFactory: DataReaderFactory[UnsafeRow])
+  extends Partition with Serializable {
+
+  // This is semantically a lazy val - it's initialized once the first time a call to
+  // ContinuousDataSourceRDD.compute() needs to access it, so it can be shared across
+  // all compute() calls for a partition. This ensures that one compute() picks up where the
+  // previous one ended.
+  // We don't make it actually a lazy val because it needs input which isn't available here.
+  // This will only be initialized on the executors.
+  private[continuous] var queueReader: ContinuousQueuedDataReader = _
+}
 
 /**
  * The bottom-most RDD of a continuous processing read task. Wraps a [[ContinuousQueuedDataReader]]
@@ -54,7 +69,7 @@ class ContinuousDataSourceRDD(
 
   override protected def getPartitions: Array[Partition] = {
     readerFactories.zipWithIndex.map {
-      case (readerFactory, index) => new DataSourceRDDPartition(index, readerFactory)
+      case (readerFactory, index) => new ContinuousDataSourceRDDPartition(index, readerFactory)
     }.toArray
   }
 
@@ -64,14 +79,15 @@ class ContinuousDataSourceRDD(
       throw new ContinuousTaskRetryException()
     }
 
-    val readerForPartition = dataReaders.synchronized {
-      if (!dataReaders.contains(split)) {
-        dataReaders.put(
-          split,
-          new ContinuousQueuedDataReader(split, context, dataQueueSize, epochPollIntervalMs))
+    val readerForPartition = {
+      val partition = split.asInstanceOf[ContinuousDataSourceRDDPartition]
+      if (partition.queueReader == null) {
+        partition.queueReader =
+          new ContinuousQueuedDataReader(
+            partition.readerFactory, context, dataQueueSize, epochPollIntervalMs)
       }
 
-      dataReaders(split)
+      partition.queueReader
     }
 
     val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
@@ -109,7 +125,7 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readerFactory.preferredLocations()
+    split.asInstanceOf[ContinuousDataSourceRDDPartition].readerFactory.preferredLocations()
   }
 }
 

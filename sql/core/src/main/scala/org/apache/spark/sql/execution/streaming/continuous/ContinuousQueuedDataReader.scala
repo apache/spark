@@ -22,11 +22,9 @@ import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{Partition, SparkEnv, SparkException, TaskContext}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.datasources.v2.DataSourceRDDPartition
-import org.apache.spark.sql.sources.v2.reader.DataReader
+import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
 import org.apache.spark.util.ThreadUtils
 
@@ -45,12 +43,11 @@ import org.apache.spark.util.ThreadUtils
  *    this before ending the compute() iterator.
  */
 class ContinuousQueuedDataReader(
-    split: Partition,
+    factory: DataReaderFactory[UnsafeRow],
     context: TaskContext,
     dataQueueSize: Int,
     epochPollIntervalMs: Long) extends Closeable {
-  private val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]]
-    .readerFactory.createDataReader()
+  private val reader = factory.createDataReader()
 
   // Important sequencing - we must get our starting point before the provider threads start running
   var currentOffset: PartitionOffset = ContinuousDataSourceRDD.getBaseReader(reader).getOffset
