@@ -100,7 +100,8 @@ class DecisionTreeClassifier @Since("1.4.0") (
     val instr = Instrumentation.create(this, dataset)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses: Int = getNumClasses(dataset, instr = OptionalInstrumentation.create(instr))
+    val numClasses: Int = getNumClasses(dataset)
+    instr.logNumClasses(numClasses)
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
