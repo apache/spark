@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, PodBuilder}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
+import org.apache.spark.deploy.k8s.submit._
 
 class KubernetesConfSuite extends SparkFunSuite {
 
@@ -55,7 +55,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_ID,
       None,
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      None)
     assert(conf.appId === APP_ID)
     assert(conf.sparkConf.getAll.toMap === sparkConf.getAll.toMap)
     assert(conf.appResourceNamePrefix === RESOURCE_NAME_PREFIX)
@@ -76,7 +77,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_ID,
       mainAppJar,
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      None)
     assert(kubernetesConfWithMainJar.sparkConf.get("spark.jars")
       .split(",")
       === Array("local:///opt/spark/jar1.jar", "local:///opt/spark/main.jar"))
@@ -87,13 +89,40 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_ID,
       None,
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      None)
     assert(kubernetesConfWithoutMainJar.sparkConf.get("spark.jars").split(",")
       === Array("local:///opt/spark/jar1.jar"))
+    assert(kubernetesConfWithoutMainJar.sparkConf.get(MEMORY_OVERHEAD_FACTOR).isEmpty)
   }
 
-  test("Resolve driver labels, annotations, secret mount paths, and envs.") {
+  test("Creating driver conf with a python primary file") {
+    val mainResourceFile = "local:///opt/spark/main.py"
+    val inputPyFiles = Array("local:///opt/spark/example2.py", "local:///example3.py")
     val sparkConf = new SparkConf(false)
+      .setJars(Seq("local:///opt/spark/jar1.jar"))
+      .set("spark.files", "local:///opt/spark/example4.py")
+    val mainAppResource = Some(PythonMainAppResource(mainResourceFile))
+    val kubernetesConfWithMainResource = KubernetesConf.createDriverConf(
+      sparkConf,
+      APP_NAME,
+      RESOURCE_NAME_PREFIX,
+      APP_ID,
+      mainAppResource,
+      MAIN_CLASS,
+      APP_ARGS,
+      Some(inputPyFiles.mkString(",")))
+    assert(kubernetesConfWithMainResource.sparkConf.get("spark.jars").split(",")
+      === Array("local:///opt/spark/jar1.jar"))
+    assert(kubernetesConfWithMainResource.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === Some(0.4))
+    assert(kubernetesConfWithMainResource.sparkFiles
+      === Array("local:///opt/spark/example4.py", mainResourceFile) ++ inputPyFiles)
+  }
+
+
+  test("Resolve driver labels, annotations, secret mount paths, envs, and memory overhead") {
+    val sparkConf = new SparkConf(false)
+      .set(MEMORY_OVERHEAD_FACTOR, 0.3)
     CUSTOM_LABELS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$key", value)
     }
@@ -114,7 +143,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_ID,
       None,
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      None)
     assert(conf.roleLabels === Map(
       SPARK_APP_ID_LABEL -> APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++
@@ -122,6 +152,7 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.roleAnnotations === CUSTOM_ANNOTATIONS)
     assert(conf.roleSecretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
     assert(conf.roleEnvs === CUSTOM_ENVS)
+    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === Some(0.3))
   }
 
   test("Basic executor translated fields.") {

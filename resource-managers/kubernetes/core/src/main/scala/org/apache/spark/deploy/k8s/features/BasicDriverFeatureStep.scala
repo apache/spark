@@ -25,6 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 
@@ -44,11 +45,16 @@ private[spark] class BasicDriverFeatureStep(
   private val driverCpuCores = conf.get("spark.driver.cores", "1")
   private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
+  private val driverDockerContainer = conf.roleSpecificConf.mainAppResource.map {
+    case JavaMainAppResource(_) => "driver"
+    case PythonMainAppResource(_) => "driver-py"
+  }.getOrElse(throw new SparkException("Must specify a JVM or Python Resource"))
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
   private val memoryOverheadMiB = conf
     .get(DRIVER_MEMORY_OVERHEAD)
-    .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt, MEMORY_OVERHEAD_MIN_MIB))
+    .getOrElse(math.max((conf.get(MEMORY_OVERHEAD_FACTOR).getOrElse(0.1) * driverMemoryMiB).toInt,
+      MEMORY_OVERHEAD_MIN_MIB))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
@@ -71,7 +77,7 @@ private[spark] class BasicDriverFeatureStep(
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
     }
 
-    val driverContainer = new ContainerBuilder(pod.container)
+    val withoutArgsDriverContainer: ContainerBuilder = new ContainerBuilder(pod.container)
       .withName(DRIVER_CONTAINER_NAME)
       .withImage(driverContainerImage)
       .withImagePullPolicy(conf.imagePullPolicy())
@@ -88,15 +94,22 @@ private[spark] class BasicDriverFeatureStep(
         .addToRequests("memory", driverMemoryQuantity)
         .addToLimits("memory", driverMemoryQuantity)
         .endResources()
-      .addToArgs("driver")
+      .addToArgs(driverDockerContainer)
       .addToArgs("--properties-file", SPARK_CONF_PATH)
       .addToArgs("--class", conf.roleSpecificConf.mainClass)
-      // The user application jar is merged into the spark.jars list and managed through that
-      // property, so there is no need to reference it explicitly here.
-      .addToArgs(SparkLauncher.NO_RESOURCE)
-      .addToArgs(conf.roleSpecificConf.appArgs: _*)
-      .build()
 
+    val driverContainer =
+      if (driverDockerContainer == "driver-py") {
+        withoutArgsDriverContainer
+          .build()
+      } else {
+        // The user application jar is merged into the spark.jars list and managed through that
+        // property, so there is no need to reference it explicitly here.
+        withoutArgsDriverContainer
+          .addToArgs(SparkLauncher.NO_RESOURCE)
+          .addToArgs(conf.roleSpecificConf.appArgs: _*)
+          .build()
+      }
     val driverPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(driverPodName)
@@ -122,7 +135,7 @@ private[spark] class BasicDriverFeatureStep(
     val resolvedSparkJars = KubernetesUtils.resolveFileUrisAndPath(
       conf.sparkJars())
     val resolvedSparkFiles = KubernetesUtils.resolveFileUrisAndPath(
-      conf.sparkFiles())
+      conf.sparkFiles)
     if (resolvedSparkJars.nonEmpty) {
       additionalProps.put("spark.jars", resolvedSparkJars.mkString(","))
     }

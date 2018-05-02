@@ -284,8 +284,6 @@ private[spark] class SparkSubmit extends Logging {
       case (STANDALONE, CLUSTER) if args.isR =>
         error("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
-      case (KUBERNETES, _) if args.isPython =>
-        error("Python applications are currently not supported for Kubernetes.")
       case (KUBERNETES, _) if args.isR =>
         error("R applications are currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
@@ -695,9 +693,17 @@ private[spark] class SparkSubmit extends Logging {
     if (isKubernetesCluster) {
       childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
       if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
-        childArgs ++= Array("--primary-java-resource", args.primaryResource)
+        if (args.isPython) {
+          childArgs ++= Array("--primary-py-file", args.primaryResource)
+          childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
+          if (args.pyFiles != null) {
+            childArgs ++= Array("--other-py-files", args.pyFiles)
+          }
+        } else {
+          childArgs ++= Array("--primary-java-resource", args.primaryResource)
+          childArgs ++= Array("--main-class", args.mainClass)
+        }
       }
-      childArgs ++= Array("--main-class", args.mainClass)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg =>
           childArgs += ("--arg", arg)
