@@ -17,21 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.concurrent.TimeUnit
-import javax.annotation.concurrent.GuardedBy
-
-import scala.collection.mutable
-import scala.reflect.ClassTag
-
 import org.apache.spark._
-import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, RowToUnsafeDataReader}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, PartitionOffset}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{NextIterator, ThreadUtils}
 
 class ContinuousDataSourceRDDPartition(
     val index: Int,
@@ -67,6 +60,10 @@ class ContinuousDataSourceRDD(
     }.toArray
   }
 
+  // Initializes the per-task reader if not already done, and then produces the UnsafeRow
+  // iterator for the current epoch.
+  // Note that the iterator is also responsible for advancing some fields in the per-task
+  // reader that need to be shared across epochs.
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
     // If attempt number isn't 0, this is a task retry, which we don't support.
     if (context.attemptNumber() != 0) {
@@ -86,35 +83,26 @@ class ContinuousDataSourceRDD(
 
     val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
     val epochEndpoint = EpochCoordinatorRef.get(coordinatorId, SparkEnv.get)
-    new Iterator[UnsafeRow] {
-      private var currentEntry: (UnsafeRow, PartitionOffset) = _
-
-      override def hasNext(): Boolean = {
-        currentEntry = readerForPartition.next()
-
-        currentEntry match {
+    new NextIterator[UnsafeRow] {
+      override def getNext(): UnsafeRow = {
+        readerForPartition.next() match {
           // epoch boundary marker
-          case (null, null) =>
+          case EpochMarker =>
             epochEndpoint.send(ReportPartitionOffset(
               context.partitionId(),
               readerForPartition.currentEpoch,
               readerForPartition.currentOffset))
             readerForPartition.currentEpoch += 1
-            currentEntry = null
-            false
+            finished = true
+            null
           // real row
-          case (_, offset) =>
+          case ContinuousRow(row, offset) =>
             readerForPartition.currentOffset = offset
-            true
+            row
         }
       }
 
-      override def next(): UnsafeRow = {
-        if (currentEntry == null) throw new NoSuchElementException("No current row was set")
-        val r = currentEntry._1
-        currentEntry = null
-        r
-      }
+      override def close(): Unit = {}
     }
   }
 

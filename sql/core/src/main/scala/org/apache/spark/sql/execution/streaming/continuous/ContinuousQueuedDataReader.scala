@@ -29,6 +29,13 @@ import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
 import org.apache.spark.util.ThreadUtils
 
 /**
+ * The record types in a continuous processing buffer.
+ */
+sealed trait ContinuousRecord
+case object EpochMarker extends ContinuousRecord
+case class ContinuousRow(row: UnsafeRow, offset: PartitionOffset) extends ContinuousRecord
+
+/**
  * A wrapper for a continuous processing data reader, including a reading queue and epoch markers.
  *
  * This will be instantiated once per partition - successive calls to compute() in the
@@ -53,10 +60,7 @@ class ContinuousQueuedDataReader(
   var currentOffset: PartitionOffset = ContinuousDataSourceRDD.getBaseReader(reader).getOffset
   var currentEpoch: Long = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
-  // This queue contains two types of messages:
-  // * (null, null) representing an epoch boundary.
-  // * (row, off) containing a data row and its corresponding PartitionOffset.
-  private val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](dataQueueSize)
+  private val queue = new ArrayBlockingQueue[ContinuousRecord](dataQueueSize)
 
   private val epochPollFailed = new AtomicBoolean(false)
   private val dataReaderFailed = new AtomicBoolean(false)
@@ -77,9 +81,9 @@ class ContinuousQueuedDataReader(
     this.close()
   })
 
-  def next(): (UnsafeRow, PartitionOffset) = {
+  def next(): ContinuousRecord = {
     val POLL_TIMEOUT_MS = 1000
-    var currentEntry: (UnsafeRow, PartitionOffset) = null
+    var currentEntry: ContinuousRecord = null
 
     while (currentEntry == null) {
       if (context.isInterrupted() || context.isCompleted()) {
@@ -89,7 +93,7 @@ class ContinuousQueuedDataReader(
         // TODO: The obvious generalization of this logic to multiple stages won't work. It's
         // invalid to send an epoch marker from the bottom of a task if all its child tasks
         // haven't sent one.
-        currentEntry = (null, null)
+        currentEntry = EpochMarker
       } else {
         if (dataReaderFailed.get()) {
           throw new SparkException("data read failed", dataReaderThread.failureReason)
@@ -115,7 +119,7 @@ class ContinuousQueuedDataReader(
    */
   class DataReaderThread(
       reader: DataReader[UnsafeRow],
-      queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
+      queue: BlockingQueue[ContinuousRecord],
       context: TaskContext,
       failedFlag: AtomicBoolean)
     extends Thread(
@@ -138,7 +142,7 @@ class ContinuousQueuedDataReader(
             }
           }
 
-          queue.put((reader.get().copy(), baseReader.getOffset))
+          queue.put(ContinuousRow(reader.get().copy(), baseReader.getOffset))
         }
       } catch {
         case _: InterruptedException if context.isInterrupted() =>
@@ -160,7 +164,7 @@ class ContinuousQueuedDataReader(
    * (null, null) when a new epoch marker arrives.
    */
   class EpochMarkerGenerator(
-      queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
+      queue: BlockingQueue[ContinuousRecord],
       context: TaskContext,
       failedFlag: AtomicBoolean)
     extends Thread with Logging {
@@ -180,7 +184,7 @@ class ContinuousQueuedDataReader(
         // a while. We catch up by injecting enough epoch markers immediately to catch up. This will
         // result in some epochs being empty for this partition, but that's fine.
         for (i <- currentEpoch to newEpoch - 1) {
-          queue.put((null, null))
+          queue.put(EpochMarker)
           logDebug(s"Sent marker to start epoch ${i + 1}")
         }
         currentEpoch = newEpoch
