@@ -67,23 +67,26 @@ class VersionUtils(object):
     Provides utility method to determine Spark versions with given input string.
     """
     @staticmethod
-    def majorMinorVersion(version):
+    def majorMinorVersion(sparkVersion):
         """
-        Get major and minor version numbers for given Spark version string.
+        Given a Spark version string, return the (major version number, minor version number).
+        E.g., for 2.0.1-SNAPSHOT, return (2, 0).
 
-        >>> version = "2.4.0"
-        >>> majorMinorVersion(version)
+        >>> sparkVersion = "2.4.0"
+        >>> VersionUtils.majorMinorVersion(sparkVersion)
         (2, 4)
-        >>> version = "2.3.0-SNAPSHOT"
-        >>> majorMinorVersion(version)
+        >>> sparkVersion = "2.3.0-SNAPSHOT"
+        >>> VersionUtils.majorMinorVersion(sparkVersion)
         (2, 3)
 
         """
-        m = re.search('^(\d+)\.(\d+)(\..*)?$', version)
-        if m is None:
-            raise ValueError("invalid version string: " + version)
-        else:
+        m = re.search('^(\d+)\.(\d+)(\..*)?$', sparkVersion)
+        if m is not None:
             return (int(m.group(1)), int(m.group(2)))
+        else:
+            raise ValueError("Spark tried to parse '%s' as a Spark" % sparkVersion +
+                             " version string, but it could not find the major and minor" +
+                             " version numbers.")
 
 
 if __name__ == "__main__":

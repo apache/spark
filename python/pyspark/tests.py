@@ -2305,11 +2305,6 @@ class UtilTests(PySparkTestCase):
 
     def test_parsing_version_string(self):
         from pyspark.util import VersionUtils
-
-        (major, minor) = VersionUtils.majorMinorVersion("2.4.0")
-        self.assertEqual(major, 2)
-        self.assertEqual(minor, 4)
-
         self.assertRaises(ValueError, lambda: VersionUtils.majorMinorVersion("abced"))
 
 
