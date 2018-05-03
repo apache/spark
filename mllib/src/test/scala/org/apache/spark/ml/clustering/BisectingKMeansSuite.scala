@@ -17,9 +17,11 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.mllib.clustering.DistanceMeasure
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
 
@@ -139,6 +141,46 @@ class BisectingKMeansSuite
     val bisectingKMeans = new BisectingKMeans()
     testEstimatorAndModelReadWrite(bisectingKMeans, dataset, BisectingKMeansSuite.allParamSettings,
       BisectingKMeansSuite.allParamSettings, checkModelData)
+  }
+
+  test("BisectingKMeans with cosine distance is not supported for 0-length vectors") {
+    val model = new BisectingKMeans().setK(2).setDistanceMeasure(DistanceMeasure.COSINE).setSeed(1)
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(10.0, 10.0),
+      Vectors.dense(1.0, 0.5)
+    )).map(v => TestRow(v)))
+    val e = intercept[SparkException](model.fit(df))
+    assert(e.getCause.isInstanceOf[AssertionError])
+    assert(e.getCause.getMessage.contains("Cosine distance is not defined"))
+  }
+
+  test("BisectingKMeans with cosine distance") {
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      Vectors.dense(1.0, 1.0),
+      Vectors.dense(10.0, 10.0),
+      Vectors.dense(1.0, 0.5),
+      Vectors.dense(10.0, 4.4),
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(-100.0, 90.0)
+    )).map(v => TestRow(v)))
+    val model = new BisectingKMeans()
+      .setK(3)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
+      .setSeed(1)
+      .fit(df)
+    val predictionDf = model.transform(df)
+    assert(predictionDf.select("prediction").distinct().count() == 3)
+    val predictionsMap = predictionDf.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap(Vectors.dense(10.0, 10.0)))
+    assert(predictionsMap(Vectors.dense(1.0, 0.5)) ==
+      predictionsMap(Vectors.dense(10.0, 4.4)))
+    assert(predictionsMap(Vectors.dense(-1.0, 1.0)) ==
+      predictionsMap(Vectors.dense(-100.0, 90.0)))
+
+    model.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
   }
 }
 

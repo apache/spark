@@ -95,6 +95,12 @@
       <groupId>org.apache.curator</groupId>
       <artifactId>curator-recipes</artifactId>
     </dependency>
+    <!-- With curator 2.12  SBT/Ivy doesn't get ZK on the build classpath.
+         Explicitly declaring it as a dependency fixes this. -->
+    <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
+    </dependency>
 
     <!-- Jetty dependencies promoted to compile here so they are shaded
          and inlined into spark-core jar -->

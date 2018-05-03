@@ -169,7 +169,7 @@ private[kafka010] class KafkaMicroBatchReader(
     kafkaOffsetReader.close()
   }
 
-  override def toString(): String = s"Kafka[$kafkaOffsetReader]"
+  override def toString(): String = s"KafkaV2[$kafkaOffsetReader]"
 
   /**
    * Read initial partition offsets from the checkpoint, or decide the offsets and write them to
@@ -321,17 +321,8 @@ private[kafka010] case class KafkaMicroBatchDataReader(
     failOnDataLoss: Boolean,
     reuseKafkaConsumer: Boolean) extends DataReader[UnsafeRow] with Logging {
 
-  private val consumer = {
-    if (!reuseKafkaConsumer) {
-      // If we can't reuse CachedKafkaConsumers, creating a new CachedKafkaConsumer. We
-      // uses `assign` here, hence we don't need to worry about the "group.id" conflicts.
-      CachedKafkaConsumer.createUncached(
-        offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
-    } else {
-      CachedKafkaConsumer.getOrCreate(
-        offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
-    }
-  }
+  private val consumer = KafkaDataConsumer.acquire(
+    offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
 
   private val rangeToRead = resolveRange(offsetRange)
   private val converter = new KafkaRecordToUnsafeRowConverter
@@ -360,14 +351,7 @@ private[kafka010] case class KafkaMicroBatchDataReader(
   }
 
   override def close(): Unit = {
-    if (!reuseKafkaConsumer) {
-      // Don't forget to close non-reuse KafkaConsumers. You may take down your cluster!
-      consumer.close()
-    } else {
-      // Indicate that we're no longer using this consumer
-      CachedKafkaConsumer.releaseKafkaConsumer(
-        offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
-    }
+    consumer.release()
   }
 
   private def resolveRange(range: KafkaOffsetRange): KafkaOffsetRange = {

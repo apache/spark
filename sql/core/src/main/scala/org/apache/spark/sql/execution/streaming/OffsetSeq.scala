@@ -39,7 +39,9 @@ case class OffsetSeq(offsets: Seq[Option[Offset]], metadata: Option[OffsetSeqMet
    * cannot be serialized).
    */
   def toStreamProgress(sources: Seq[BaseStreamingSource]): StreamProgress = {
-    assert(sources.size == offsets.size)
+    assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
+      s"checkpoint offsets and now there are [${sources.size}] sources requested by the query. " +
+      s"Cannot continue.")
     new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
   }
 

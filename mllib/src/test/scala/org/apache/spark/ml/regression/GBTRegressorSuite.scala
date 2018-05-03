@@ -99,6 +99,14 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("prediction on single instance") {
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setMaxIter(2)
+    val model = gbt.fit(trainData.toDF())
+    testPredictionModelSinglePrediction(model, validationData.toDF)
+  }
+
   test("Checkpointing") {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString

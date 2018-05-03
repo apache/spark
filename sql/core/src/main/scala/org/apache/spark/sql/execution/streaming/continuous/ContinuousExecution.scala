@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
+import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
@@ -198,7 +199,7 @@ class ContinuousExecution(
       triggerLogicalPlan.schema,
       outputMode,
       new DataSourceOptions(extraOptions.asJava))
-    val withSink = WriteToDataSourceV2(writer, triggerLogicalPlan)
+    val withSink = WriteToContinuousDataSource(writer, triggerLogicalPlan)
 
     val reader = withSink.collect {
       case StreamingDataSourceV2Relation(_, _, _, r: ContinuousReader) => r
@@ -317,8 +318,10 @@ class ContinuousExecution(
     synchronized {
       if (queryExecutionThread.isAlive) {
         commitLog.add(epoch)
-        val offset = offsetLog.get(epoch).get.offsets(0).get
+        val offset =
+          continuousSources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
         committedOffsets ++= Seq(continuousSources(0) -> offset)
+        continuousSources(0).commit(offset.asInstanceOf[v2.reader.streaming.Offset])
       } else {
         return
       }
