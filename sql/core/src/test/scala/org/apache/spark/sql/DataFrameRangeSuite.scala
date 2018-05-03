@@ -174,7 +174,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
             fail("Expected the cause to be SparkException, got " + cause.toString() + " instead.")
         }
       }
-      // Wait until all ListenerBus events consumed to make sure cancelStage called for all stage
+      // Wait until all ListenerBus events consumed to make sure cancelStage called for all stages
       sparkContext.listenerBus.waitUntilEmpty(20.seconds.toMillis)
       eventually(timeout(20.seconds)) {
         assert(sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
