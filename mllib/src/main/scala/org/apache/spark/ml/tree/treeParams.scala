@@ -320,6 +320,12 @@ private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   }
 }
 
+private[spark] object TreeEnsembleParams {
+  // These options should be lowercase.
+  final val supportedFeatureSubsetStrategies: Array[String] =
+    Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase(Locale.ROOT))
+}
+
 /**
  * Parameters for Decision Tree-based ensemble algorithms.
  *
@@ -359,7 +365,57 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
       oldImpurity: OldImpurity): OldStrategy = {
     super.getOldStrategy(categoricalFeatures, numClasses, oldAlgo, oldImpurity, getSubsamplingRate)
   }
+
+  /**
+   * The number of features to consider for splits at each tree node.
+   * Supported options:
+   *  - "auto": Choose automatically for task:
+   *            If numTrees == 1, set to "all."
+   *            If numTrees > 1 (forest), set to "sqrt" for classification and
+   *              to "onethird" for regression.
+   *  - "all": use all features
+   *  - "onethird": use 1/3 of the features
+   *  - "sqrt": use sqrt(number of features)
+   *  - "log2": use log2(number of features)
+   *  - "n": when n is in the range (0, 1.0], use n * number of features. When n
+   *         is in the range (1, number of features), use n features.
+   * (default = "auto")
+   *
+   * These various settings are based on the following references:
+   *  - log2: tested in Breiman (2001)
+   *  - sqrt: recommended by Breiman manual for random forests
+   *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
+   *    package.
+   * @see <a href="http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf">Breiman (2001)</a>
+   * @see <a href="http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf">
+   * Breiman manual for random forests</a>
+   *
+   * @group param
+   */
+  final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
+    "The number of features to consider for splits at each tree node." +
+      s" Supported options: ${TreeEnsembleParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
+      s", (0.0-1.0], [1-n].",
+    (value: String) =>
+      TreeEnsembleParams.supportedFeatureSubsetStrategies.contains(
+        value.toLowerCase(Locale.ROOT))
+      || Try(value.toInt).filter(_ > 0).isSuccess
+      || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
+
+  setDefault(featureSubsetStrategy -> "auto")
+
+  /**
+   * @deprecated This method is deprecated and will be removed in 3.0.0
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
+  def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
+
+  /** @group getParam */
+  final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
 }
+
+
 
 /**
  * Parameters for Random Forest algorithms.
@@ -391,60 +447,6 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /** @group getParam */
   final def getNumTrees: Int = $(numTrees)
-
-  /**
-   * The number of features to consider for splits at each tree node.
-   * Supported options:
-   *  - "auto": Choose automatically for task:
-   *            If numTrees == 1, set to "all."
-   *            If numTrees > 1 (forest), set to "sqrt" for classification and
-   *              to "onethird" for regression.
-   *  - "all": use all features
-   *  - "onethird": use 1/3 of the features
-   *  - "sqrt": use sqrt(number of features)
-   *  - "log2": use log2(number of features)
-   *  - "n": when n is in the range (0, 1.0], use n * number of features. When n
-   *         is in the range (1, number of features), use n features.
-   * (default = "auto")
-   *
-   * These various settings are based on the following references:
-   *  - log2: tested in Breiman (2001)
-   *  - sqrt: recommended by Breiman manual for random forests
-   *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
-   *    package.
-   * @see <a href="http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf">Breiman (2001)</a>
-   * @see <a href="http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf">
-   * Breiman manual for random forests</a>
-   *
-   * @group param
-   */
-  final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
-    "The number of features to consider for splits at each tree node." +
-      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
-      s", (0.0-1.0], [1-n].",
-    (value: String) =>
-      RandomForestParams.supportedFeatureSubsetStrategies.contains(
-        value.toLowerCase(Locale.ROOT))
-      || Try(value.toInt).filter(_ > 0).isSuccess
-      || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
-
-  setDefault(featureSubsetStrategy -> "auto")
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
-
-  /** @group getParam */
-  final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
-}
-
-private[spark] object RandomForestParams {
-  // These options should be lowercase.
-  final val supportedFeatureSubsetStrategies: Array[String] =
-    Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait RandomForestClassifierParams
@@ -458,7 +460,7 @@ private[ml] trait RandomForestRegressorParams
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.
@@ -484,12 +486,9 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
    * (default = 0.1)
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
+  final override val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
     "(a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator.",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
-
-  /** @group getParam */
-  final def getStepSize: Double = $(stepSize)
 
   /**
    * @deprecated This method is deprecated and will be removed in 3.0.0.
@@ -499,6 +498,8 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
   setDefault(maxIter -> 20, stepSize -> 0.1)
+
+  setDefault(featureSubsetStrategy -> "all")
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(

@@ -115,7 +115,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
               locality: TaskLocality.Value): Option[(Int, TaskLocality.Value)] = {
             if (!hasDequeuedSpeculatedTask) {
               hasDequeuedSpeculatedTask = true
-              Some(0, TaskLocality.PROCESS_LOCAL)
+              Some((0, TaskLocality.PROCESS_LOCAL))
             } else {
               None
             }
@@ -265,8 +265,7 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     val committer = FileCommitProtocol.instantiate(
       className = classOf[HadoopMapRedCommitProtocol].getName,
       jobId = jobId.value.getId.toString,
-      outputPath = jobConf.get("mapred.output.dir"),
-      isAppend = false)
+      outputPath = jobConf.get("mapred.output.dir"))
 
     // Create TaskAttemptContext.
     // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it

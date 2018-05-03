@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.command
 
@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.internal.SessionState
 
 
@@ -36,7 +36,14 @@ object CommandUtils extends Logging {
   def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
     if (table.stats.nonEmpty) {
       val catalog = sparkSession.sessionState.catalog
-      catalog.alterTableStats(table.identifier, None)
+      if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+        val newTable = catalog.getTableMetadata(table.identifier)
+        val newSize = CommandUtils.calculateTotalSize(sparkSession.sessionState, newTable)
+        val newStats = CatalogStatistics(sizeInBytes = newSize)
+        catalog.alterTableStats(table.identifier, Some(newStats))
+      } else {
+        catalog.alterTableStats(table.identifier, None)
+      }
     }
   }
 
@@ -84,7 +91,9 @@ object CommandUtils extends Logging {
       size
     }
 
-    locationUri.map { p =>
+    val startTime = System.nanoTime()
+    logInfo(s"Starting to calculate the total file size under path $locationUri.")
+    val size = locationUri.map { p =>
       val path = new Path(p)
       try {
         val fs = path.getFileSystem(sessionState.newHadoopConf())
@@ -97,6 +106,35 @@ object CommandUtils extends Logging {
           0L
       }
     }.getOrElse(0L)
+    val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
+    logInfo(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
+
+    size
   }
 
+  def compareAndGetNewStats(
+      oldStats: Option[CatalogStatistics],
+      newTotalSize: BigInt,
+      newRowCount: Option[BigInt]): Option[CatalogStatistics] = {
+    val oldTotalSize = oldStats.map(_.sizeInBytes).getOrElse(BigInt(-1))
+    val oldRowCount = oldStats.flatMap(_.rowCount).getOrElse(BigInt(-1))
+    var newStats: Option[CatalogStatistics] = None
+    if (newTotalSize >= 0 && newTotalSize != oldTotalSize) {
+      newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
+    }
+    // We only set rowCount when noscan is false, because otherwise:
+    // 1. when total size is not changed, we don't need to alter the table;
+    // 2. when total size is changed, `oldRowCount` becomes invalid.
+    // This is to make sure that we only record the right statistics.
+    if (newRowCount.isDefined) {
+      if (newRowCount.get >= 0 && newRowCount.get != oldRowCount) {
+        newStats = if (newStats.isDefined) {
+          newStats.map(_.copy(rowCount = newRowCount))
+        } else {
+          Some(CatalogStatistics(sizeInBytes = oldTotalSize, rowCount = newRowCount))
+        }
+      }
+    }
+    newStats
+  }
 }

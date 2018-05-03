@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.json4s.JsonDSL._
 
@@ -102,6 +103,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
+
+  /**
+   * Returns all field names in an array. This is an alias of `fieldNames`.
+   *
+   * @since 2.4.0
+   */
+  def names: Array[String] = fieldNames
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
@@ -263,7 +271,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
-      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+      throw new IllegalArgumentException(
+        s"""Field "$name" does not exist.
+           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
   }
 
   /**
@@ -276,7 +286,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
-        s"Field ${nonExistFields.mkString(",")} does not exist.")
+        s"""Nonexistent field(s): ${nonExistFields.mkString(", ")}.
+           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin)
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -289,7 +300,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
-      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+      throw new IllegalArgumentException(
+        s"""Field "$name" does not exist.
+           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {
@@ -467,10 +480,16 @@ object StructType extends AbstractDataType {
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
-              .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-                leftField.copy(
-                  dataType = merge(leftType, rightType),
-                  nullable = leftNullable || rightNullable)
+              .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
+                try {
+                  leftField.copy(
+                    dataType = merge(leftType, rightType),
+                    nullable = leftNullable || rightNullable)
+                } catch {
+                  case NonFatal(e) =>
+                    throw new SparkException(s"Failed to merge fields '$leftName' and " +
+                      s"'$rightName'. " + e.getMessage)
+                }
               }
               .orElse {
                 Some(leftField)

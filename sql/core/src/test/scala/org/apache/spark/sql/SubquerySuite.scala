@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
@@ -27,23 +28,23 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   val row = identity[(java.lang.Integer, java.lang.Double)](_)
 
   lazy val l = Seq(
-    row(1, 2.0),
-    row(1, 2.0),
-    row(2, 1.0),
-    row(2, 1.0),
-    row(3, 3.0),
-    row(null, null),
-    row(null, 5.0),
-    row(6, null)).toDF("a", "b")
+    row((1, 2.0)),
+    row((1, 2.0)),
+    row((2, 1.0)),
+    row((2, 1.0)),
+    row((3, 3.0)),
+    row((null, null)),
+    row((null, 5.0)),
+    row((6, null))).toDF("a", "b")
 
   lazy val r = Seq(
-    row(2, 3.0),
-    row(2, 3.0),
-    row(3, 2.0),
-    row(4, 1.0),
-    row(null, null),
-    row(null, 5.0),
-    row(6, null)).toDF("c", "d")
+    row((2, 3.0)),
+    row((2, 3.0)),
+    row((3, 2.0)),
+    row((4, 1.0)),
+    row((null, null)),
+    row((null, 5.0)),
+    row((6, null))).toDF("c", "d")
 
   lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
 
@@ -112,7 +113,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |   with t4 as (select 1 as d, 3 as e)
           |   select * from t4 cross join t2 where t2.b = t4.d
           | )
-          | select a from (select 1 as a union all select 2 as a) t
+          | select a from (select 1 as a union all select 2 as a)
           | where a = (select max(d) from t3)
         """.stripMargin),
       Array(Row(1))
@@ -606,8 +607,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |    select cntPlusOne + 1 as cntPlusTwo from (
             |        select cnt + 1 as cntPlusOne from (
             |            select sum(r.c) s, count(*) cnt from r where l.a = r.c having cnt = 0
-            |        ) t1
-            |    ) t2
+            |        )
+            |    )
             |) = 2""".stripMargin),
       Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
   }
@@ -655,7 +656,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           """
             | select c1 from onerow t1
             | where exists (select 1
-            |               from   (select 1 as c1 from onerow t2 LIMIT 1) t2
+            |               from   (select c1 from onerow t2 LIMIT 1) t2
             |               where  t1.c1=t2.c1)""".stripMargin),
         Row(1) :: Nil)
     }
@@ -870,9 +871,103 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-20688: correctly check analysis for scalar sub-queries") {
     withTempView("t") {
-      Seq(1 -> "a").toDF("i", "j").createTempView("t")
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
       val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.message.contains("cannot resolve '`a`' given input columns: [i, j]"))
+      assert(e.message.contains("cannot resolve '`a`' given input columns: [t.i, t.j]"))
+    }
+  }
+
+  test("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 1") {
+    withTable("t1") {
+      withTempPath { path =>
+        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
+        sql(s"CREATE TABLE t1 USING parquet LOCATION '${path.toURI}'")
+
+        val sqlText =
+          """
+            |SELECT * FROM t1
+            |WHERE
+            |NOT EXISTS (SELECT * FROM t1)
+          """.stripMargin
+        val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
+        val join = optimizedPlan.collectFirst { case j: Join => j }.get
+        assert(join.duplicateResolved)
+        assert(optimizedPlan.resolved)
+      }
+    }
+  }
+
+  test("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 2") {
+    withTable("t1", "t2", "t3") {
+      withTempPath { path =>
+        val data = Seq((1, 1, 1), (2, 0, 2))
+
+        data.toDF("t1a", "t1b", "t1c").write.parquet(path.getCanonicalPath + "/t1")
+        data.toDF("t2a", "t2b", "t2c").write.parquet(path.getCanonicalPath + "/t2")
+        data.toDF("t3a", "t3b", "t3c").write.parquet(path.getCanonicalPath + "/t3")
+
+        sql(s"CREATE TABLE t1 USING parquet LOCATION '${path.toURI}/t1'")
+        sql(s"CREATE TABLE t2 USING parquet LOCATION '${path.toURI}/t2'")
+        sql(s"CREATE TABLE t3 USING parquet LOCATION '${path.toURI}/t3'")
+
+        val sqlText =
+          s"""
+             |SELECT *
+             |FROM   (SELECT *
+             |        FROM   t2
+             |        WHERE  t2c IN (SELECT t1c
+             |                       FROM   t1
+             |                       WHERE  t1a = t2a)
+             |        UNION
+             |        SELECT *
+             |        FROM   t3
+             |        WHERE  t3a IN (SELECT t2a
+             |                       FROM   t2
+             |                       UNION ALL
+             |                       SELECT t1a
+             |                       FROM   t1
+             |                       WHERE  t1b > 0)) t4
+             |WHERE  t4.t2b IN (SELECT Min(t3b)
+             |                          FROM   t3
+             |                          WHERE  t4.t2a = t3a)
+           """.stripMargin
+        val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
+        val joinNodes = optimizedPlan.collect { case j: Join => j }
+        joinNodes.foreach(j => assert(j.duplicateResolved))
+        assert(optimizedPlan.resolved)
+      }
+    }
+  }
+
+  test("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 3") {
+    val sqlText =
+      """
+        |SELECT * FROM l, r WHERE l.a = r.c + 1 AND
+        |(EXISTS (SELECT * FROM r) OR l.a = r.c)
+      """.stripMargin
+    val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
+    val join = optimizedPlan.collectFirst { case j: Join => j }.get
+    assert(join.duplicateResolved)
+    assert(optimizedPlan.resolved)
+  }
+
+  test("SPARK-23316: AnalysisException after max iteration reached for IN query") {
+    // before the fix this would throw AnalysisException
+    spark.range(10).where("(id,id) in (select id, null from range(3))").count
+  }
+
+  test("SPARK-24085 scalar subquery in partitioning expression") {
+    withTable("parquet_part") {
+      Seq("1" -> "a", "2" -> "a", "3" -> "b", "4" -> "b")
+        .toDF("id_value", "id_type")
+        .write
+        .mode(SaveMode.Overwrite)
+        .partitionBy("id_type")
+        .format("parquet")
+        .saveAsTable("parquet_part")
+      checkAnswer(
+        sql("SELECT * FROM parquet_part WHERE id_type = (SELECT 'b')"),
+        Row("3", "b") :: Row("4", "b") :: Nil)
     }
   }
 }

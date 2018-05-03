@@ -41,6 +41,7 @@ import org.apache.spark.streaming.api.java._
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 
+@deprecated("Update to Kafka 0.10 integration", "2.3.0")
 object KafkaUtils {
   /**
    * Create an input stream that pulls messages from Kafka Brokers.

@@ -45,6 +45,7 @@ private[spark] class StandaloneSchedulerBackend(
   private var client: StandaloneAppClient = null
   private val stopping = new AtomicBoolean(false)
   private val launcherBackend = new LauncherBackend() {
+    override protected def conf: SparkConf = sc.conf
     override protected def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
   }
 
@@ -153,7 +154,7 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
     memory: Int) {
-    logInfo("Granted executor ID %s on hostPort %s with %d cores, %s RAM".format(
+    logInfo("Granted executor ID %s on hostPort %s with %d core(s), %s RAM".format(
       fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }
 

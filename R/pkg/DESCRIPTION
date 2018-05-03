@@ -1,8 +1,8 @@
 Package: SparkR
 Type: Package
-Version: 2.3.0
+Version: 2.4.0
 Title: R Frontend for Apache Spark
-Description: The SparkR package provides an R Frontend for Apache Spark.
+Description: Provides an R Frontend for Apache Spark.
 Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
                     email = "shivaram@cs.berkeley.edu"),
              person("Xiangrui", "Meng", role = "aut",
@@ -59,3 +59,4 @@ Collate:
     'window.R'
 RoxygenNote: 5.0.1
 VignetteBuilder: knitr
+NeedsCompilation: no

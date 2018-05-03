@@ -308,7 +308,6 @@ object FunctionRegistry {
     expression[BitLength]("bit_length"),
     expression[Length]("char_length"),
     expression[Length]("character_length"),
-    expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
     expression[Elt]("elt"),
@@ -336,7 +335,6 @@ object FunctionRegistry {
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
-    expression[StringReverse]("reverse"),
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
@@ -346,6 +344,8 @@ object FunctionRegistry {
     expression[StringSplit]("split"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[Left]("left"),
+    expression[Right]("right"),
     expression[SubstringIndex]("substring_index"),
     expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
@@ -390,8 +390,10 @@ object FunctionRegistry {
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
+    expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[DayOfWeek]("dayofweek"),
+    expression[WeekDay]("weekday"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
@@ -399,12 +401,21 @@ object FunctionRegistry {
     // collection functions
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
+    expression[ArrayJoin]("array_join"),
+    expression[ArrayPosition]("array_position"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
+    expression[ElementAt]("element_at"),
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
     expression[Size]("size"),
+    expression[Size]("cardinality"),
     expression[SortArray]("sort_array"),
+    expression[ArrayMin]("array_min"),
+    expression[ArrayMax]("array_max"),
+    expression[Reverse]("reverse"),
+    expression[Concat]("concat"),
+    expression[Flatten]("flatten"),
     CreateStruct.registryEntry,
 
     // misc functions
@@ -524,7 +535,15 @@ object FunctionRegistry {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-          throw new AnalysisException(s"Invalid number of arguments for function $name")
+          val validParametersCount = constructors.map(_.getParameterCount).distinct.sorted
+          val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+            validParametersCount.head.toString
+          } else {
+            validParametersCount.init.mkString("one of ", ", ", " and ") +
+              validParametersCount.last
+          }
+          throw new AnalysisException(s"Invalid number of arguments for function $name. " +
+            s"Expected: $expectedNumberOfParameters; Found: ${params.length}")
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
@@ -556,7 +575,9 @@ object FunctionRegistry {
     }
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
-    (name, (new ExpressionInfo(clazz.getCanonicalName, null, name, usage, null), builder))
+    val expressionInfo =
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "")
+    (name, (expressionInfo, builder))
   }
 
   /**
@@ -566,7 +587,21 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      if (df.extended().isEmpty) {
+        new ExpressionInfo(
+          clazz.getCanonicalName,
+          null,
+          name,
+          df.usage(),
+          df.arguments(),
+          df.examples(),
+          df.note(),
+          df.since())
+      } else {
+        // This exists for the backward compatibility with old `ExpressionDescription`s defining
+        // the extended description in `extended()`.
+        new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      }
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }

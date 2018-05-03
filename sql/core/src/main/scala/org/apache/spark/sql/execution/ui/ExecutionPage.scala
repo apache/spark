@@ -21,24 +21,42 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
-  private val listener = parent.listener
+  private val sqlStore = parent.sqlStore
 
-  override def render(request: HttpServletRequest): Seq[Node] = listener.synchronized {
+  override def render(request: HttpServletRequest): Seq[Node] = {
     // stripXSS is called first to remove suspicious characters used in XSS attacks
     val parameterExecutionId = UIUtils.stripXSS(request.getParameter("id"))
     require(parameterExecutionId != null && parameterExecutionId.nonEmpty,
       "Missing execution id parameter")
 
     val executionId = parameterExecutionId.toLong
-    val content = listener.getExecution(executionId).map { executionUIData =>
+    val content = sqlStore.execution(executionId).map { executionUIData =>
       val currentTime = System.currentTimeMillis()
-      val duration =
-        executionUIData.completionTime.getOrElse(currentTime) - executionUIData.submissionTime
+      val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
+        executionUIData.submissionTime
+
+      def jobLinks(status: JobExecutionStatus, label: String): Seq[Node] = {
+        val jobs = executionUIData.jobs.flatMap { case (jobId, jobStatus) =>
+          if (jobStatus == status) Some(jobId) else None
+        }
+        if (jobs.nonEmpty) {
+          <li>
+            <strong>{label} </strong>
+            {jobs.toSeq.sorted.map { jobId =>
+              <a href={jobURL(jobId.intValue())}>{jobId.toString}</a><span>&nbsp;</span>
+            }}
+          </li>
+        } else {
+          Nil
+        }
+      }
+
 
       val summary =
         <div>
@@ -49,40 +67,20 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <li>
               <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
             </li>
-            {if (executionUIData.runningJobs.nonEmpty) {
-              <li>
-                <strong>Running Jobs: </strong>
-                {executionUIData.runningJobs.sorted.map { jobId =>
-                <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
-              }}
-              </li>
-            }}
-            {if (executionUIData.succeededJobs.nonEmpty) {
-              <li>
-                <strong>Succeeded Jobs: </strong>
-                {executionUIData.succeededJobs.sorted.map { jobId =>
-                  <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
-                }}
-              </li>
-            }}
-            {if (executionUIData.failedJobs.nonEmpty) {
-              <li>
-                <strong>Failed Jobs: </strong>
-                {executionUIData.failedJobs.sorted.map { jobId =>
-                  <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
-                }}
-              </li>
-            }}
+            {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
+            {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
+            {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
           </ul>
         </div>
 
-      val metrics = listener.getExecutionMetrics(executionId)
+      val metrics = sqlStore.executionMetrics(executionId)
+      val graph = sqlStore.planGraph(executionId)
 
       summary ++
-        planVisualization(metrics, executionUIData.physicalPlanGraph) ++
+        planVisualization(metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription)
     }.getOrElse {
-      <div>No information to display for Plan {executionId}</div>
+      <div>No information to display for query {executionId}</div>
     }
 
     UIUtils.headerSparkPage(s"Details for Query $executionId", content, parent, Some(5000))

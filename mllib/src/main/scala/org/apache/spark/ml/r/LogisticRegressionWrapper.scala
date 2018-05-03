@@ -103,12 +103,14 @@ private[r] object LogisticRegressionWrapper
       lowerBoundsOnCoefficients: Array[Double],
       upperBoundsOnCoefficients: Array[Double],
       lowerBoundsOnIntercepts: Array[Double],
-      upperBoundsOnIntercepts: Array[Double]
+      upperBoundsOnIntercepts: Array[Double],
+      handleInvalid: String
       ): LogisticRegressionWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
+      .setHandleInvalid(handleInvalid)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 

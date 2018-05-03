@@ -21,16 +21,31 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class FileStreamSinkSuite extends StreamTest {
   import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
+    } finally {
+      super.afterAll()
+    }
+  }
 
   test("unpartitioned writing and batch reading") {
     val inputData = MemoryStream[Int]
@@ -80,7 +95,7 @@ class FileStreamSinkSuite extends StreamTest {
       .start(outputDir)
 
     try {
-      // The output is partitoned by "value", so the value will appear in the file path.
+      // The output is partitioned by "value", so the value will appear in the file path.
       // This is to test if we handle spaces in the path correctly.
       inputData.addData("hello world")
       failAfter(streamingTimeout) {
@@ -126,8 +141,7 @@ class FileStreamSinkSuite extends StreamTest {
       // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
       // been inferred
       val hadoopdFsRelations = outputDf.queryExecution.analyzed.collect {
-        case LogicalRelation(baseRelation, _, _) if baseRelation.isInstanceOf[HadoopFsRelation] =>
-          baseRelation.asInstanceOf[HadoopFsRelation]
+        case LogicalRelation(baseRelation: HadoopFsRelation, _, _, _) => baseRelation
       }
       assert(hadoopdFsRelations.size === 1)
       assert(hadoopdFsRelations.head.location.isInstanceOf[MetadataLogFileIndex])
@@ -305,6 +319,10 @@ class FileStreamSinkSuite extends StreamTest {
     testFormat(Some("parquet"))
   }
 
+  test("orc") {
+    testFormat(Some("orc"))
+  }
+
   test("text") {
     testFormat(Some("text"))
   }
@@ -336,7 +354,7 @@ class FileStreamSinkSuite extends StreamTest {
   }
 
   test("FileStreamSink.ancestorIsMetadataDirectory()") {
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val hadoopConf = spark.sessionState.newHadoopConf()
     def assertAncestorIsMetadataDirectory(path: String): Unit =
       assert(FileStreamSink.ancestorIsMetadataDirectory(new Path(path), hadoopConf))
     def assertAncestorIsNotMetadataDirectory(path: String): Unit =
@@ -351,5 +369,92 @@ class FileStreamSinkSuite extends StreamTest {
 
     assertAncestorIsNotMetadataDirectory(s"/a/b/c")
     assertAncestorIsNotMetadataDirectory(s"/a/b/c/${FileStreamSink.metadataDir}extra")
+  }
+
+  test("SPARK-20460 Check name duplication in schema") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val inputData = MemoryStream[(Int, Int)]
+        val df = inputData.toDF()
+
+        val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+        val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+
+        var query: StreamingQuery = null
+        try {
+          query =
+            df.writeStream
+              .option("checkpointLocation", checkpointDir)
+              .format("json")
+              .start(outputDir)
+
+          inputData.addData((1, 1))
+
+          failAfter(streamingTimeout) {
+            query.processAllAvailable()
+          }
+        } finally {
+          if (query != null) {
+            query.stop()
+          }
+        }
+
+        val errorMsg = intercept[AnalysisException] {
+          spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
+        }.getMessage
+        assert(errorMsg.contains("Found duplicate column(s) in the data schema: "))
+      }
+    }
+  }
+
+  test("SPARK-23288 writing and checking output metrics") {
+    Seq("parquet", "orc", "text", "json").foreach { format =>
+      val inputData = MemoryStream[String]
+      val df = inputData.toDF()
+
+      withTempDir { outputDir =>
+        withTempDir { checkpointDir =>
+
+          var query: StreamingQuery = null
+
+          var numTasks = 0
+          var recordsWritten: Long = 0L
+          var bytesWritten: Long = 0L
+          try {
+            spark.sparkContext.addSparkListener(new SparkListener() {
+              override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+                val outputMetrics = taskEnd.taskMetrics.outputMetrics
+                recordsWritten += outputMetrics.recordsWritten
+                bytesWritten += outputMetrics.bytesWritten
+                numTasks += 1
+              }
+            })
+
+            query =
+              df.writeStream
+                .option("checkpointLocation", checkpointDir.getCanonicalPath)
+                .format(format)
+                .start(outputDir.getCanonicalPath)
+
+            inputData.addData("1", "2", "3")
+            inputData.addData("4", "5")
+
+            failAfter(streamingTimeout) {
+              query.processAllAvailable()
+            }
+            spark.sparkContext.listenerBus.waitUntilEmpty(streamingTimeout.toMillis)
+
+            assert(numTasks > 0)
+            assert(recordsWritten === 5)
+            // This is heavily file type/version specific but should be filled
+            assert(bytesWritten > 0)
+          } finally {
+            if (query != null) {
+              query.stop()
+            }
+          }
+        }
+      }
+    }
   }
 }

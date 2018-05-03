@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
+  RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -42,11 +43,12 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
  * This node is inserted at the top of a subquery when it is optimized. This makes sure we can
  * recognize a subquery as such, and it allows us to write subquery aware transformations.
  */
-case class Subquery(child: LogicalPlan) extends UnaryNode {
+case class Subquery(child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
+case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
+    extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
@@ -63,14 +65,6 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
 
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(projectList))
-
-  override def computeStats: Statistics = {
-    if (conf.cboEnabled) {
-      ProjectEstimation.estimate(this).getOrElse(super.computeStats)
-    } else {
-      super.computeStats
-    }
-  }
 }
 
 /**
@@ -80,8 +74,13 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * their output.
  *
  * @param generator the generator expression
- * @param join  when true, each output row is implicitly joined with the input tuple that produced
- *              it.
+ * @param unrequiredChildIndex this paramter starts as Nil and gets filled by the Optimizer.
+ *                             It's used as an optimization for omitting data generation that will
+ *                             be discarded next by a projection.
+ *                             A common use case is when we explode(array(..)) and are interested
+ *                             only in the exploded data and not in the original array. before this
+ *                             optimization the array got duplicated for each of its elements,
+ *                             causing O(n^^2) memory consumption. (see [SPARK-21657])
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
  * @param qualifier Qualifier for the attributes of generator(UDTF)
@@ -90,15 +89,17 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  */
 case class Generate(
     generator: Generator,
-    join: Boolean,
+    unrequiredChildIndex: Seq[Int],
     outer: Boolean,
     qualifier: Option[String],
     generatorOutput: Seq[Attribute],
     child: LogicalPlan)
   extends UnaryNode {
 
-  /** The set of all attributes produced by this node. */
-  def generatedSet: AttributeSet = AttributeSet(generatorOutput)
+  lazy val requiredChildOutput: Seq[Attribute] = {
+    val unrequiredSet = unrequiredChildIndex.toSet
+    child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
+  }
 
   override lazy val resolved: Boolean = {
     generator.resolved &&
@@ -121,13 +122,11 @@ case class Generate(
     nullableOutput
   }
 
-  def output: Seq[Attribute] = {
-    if (join) child.output ++ qualifiedGeneratorOutput else qualifiedGeneratorOutput
-  }
+  def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
-  extends UnaryNode with PredicateHelper {
+  extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
@@ -136,14 +135,6 @@ case class Filter(condition: Expression, child: LogicalPlan)
     val predicates = splitConjunctivePredicates(condition)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
-  }
-
-  override def computeStats: Statistics = {
-    if (conf.cboEnabled) {
-      FilterEstimation(this).estimate.getOrElse(super.computeStats)
-    } else {
-      super.computeStats
-    }
   }
 }
 
@@ -190,15 +181,6 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       Some(children.flatMap(_.maxRows).min)
     }
   }
-
-  override def computeStats: Statistics = {
-    val leftSize = left.stats.sizeInBytes
-    val rightSize = right.stats.sizeInBytes
-    val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    Statistics(
-      sizeInBytes = sizeInBytes,
-      hints = left.stats.hints.resetForJoin())
-  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
@@ -207,10 +189,6 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override def output: Seq[Attribute] = left.output
 
   override protected def validConstraints: Set[Expression] = leftConstraints
-
-  override def computeStats: Statistics = {
-    left.stats.copy()
-  }
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -220,12 +198,26 @@ object Union {
   }
 }
 
+/**
+ * Logical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ */
 case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
   override def maxRows: Option[Long] = {
     if (children.exists(_.maxRows.isEmpty)) {
       None
     } else {
       Some(children.flatMap(_.maxRows).sum)
+    }
+  }
+
+  /**
+   * Note the definition has assumption about how union is implemented physically.
+   */
+  override def maxRowsPerPartition: Option[Long] = {
+    if (children.exists(_.maxRowsPerPartition.isEmpty)) {
+      None
+    } else {
+      Some(children.flatMap(_.maxRowsPerPartition).sum)
     }
   }
 
@@ -245,11 +237,6 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
           case (l, r) => l.dataType.sameType(r.dataType)
         })
     children.length > 1 && childrenResolved && allChildrenCompatible
-  }
-
-  override def computeStats: Statistics = {
-    val sizeInBytes = children.map(_.stats.sizeInBytes).sum
-    Statistics(sizeInBytes = sizeInBytes)
   }
 
   /**
@@ -355,25 +342,6 @@ case class Join(
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
-
-  override def computeStats: Statistics = {
-    def simpleEstimation: Statistics = joinType match {
-      case LeftAnti | LeftSemi =>
-        // LeftSemi and LeftAnti won't ever be bigger than left
-        left.stats
-      case _ =>
-        // Make sure we don't propagate isBroadcastable in other joins, because
-        // they could explode the size.
-        val stats = super.computeStats
-        stats.copy(hints = stats.hints.resetForJoin())
-    }
-
-    if (conf.cboEnabled) {
-      JoinEstimation.estimate(this).getOrElse(simpleEstimation)
-    } else {
-      simpleEstimation
-    }
-  }
 }
 
 /**
@@ -408,6 +376,30 @@ case class InsertIntoTable(
 
   // We don't want `table` in children as sometimes we don't want to transform it.
   override def children: Seq[LogicalPlan] = query :: Nil
+  override def output: Seq[Attribute] = Seq.empty
+  override lazy val resolved: Boolean = false
+}
+
+/**
+ * Insert query result into a directory.
+ *
+ * @param isLocal Indicates whether the specified directory is local directory
+ * @param storage Info about output file, row and what serialization format
+ * @param provider Specifies what data source to use; only used for data source file.
+ * @param child The query to be executed
+ * @param overwrite If true, the existing directory will be overwritten
+ *
+ * Note that this plan is unresolved and has to be replaced by the concrete implementations
+ * during analysis.
+ */
+case class InsertIntoDir(
+    isLocal: Boolean,
+    storage: CatalogStorageFormat,
+    provider: Option[String],
+    child: LogicalPlan,
+    overwrite: Boolean = true)
+  extends UnaryNode {
+
   override def output: Seq[Attribute] = Seq.empty
   override lazy val resolved: Boolean = false
 }
@@ -478,13 +470,15 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
+  override def outputOrdering: Seq[SortOrder] = order
 }
 
 /** Factory for constructing new `Range` nodes. */
 object Range {
-  def apply(start: Long, end: Long, step: Long, numSlices: Option[Int]): Range = {
+  def apply(start: Long, end: Long, step: Long,
+            numSlices: Option[Int], isStreaming: Boolean = false): Range = {
     val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
-    new Range(start, end, step, numSlices, output)
+    new Range(start, end, step, numSlices, output, isStreaming)
   }
   def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
     Range(start, end, step, Some(numSlices))
@@ -496,7 +490,8 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Option[Int],
-    output: Seq[Attribute])
+    output: Seq[Attribute],
+    override val isStreaming: Boolean)
   extends LeafNode with MultiInstanceRelation {
 
   require(step != 0, s"step ($step) cannot be 0")
@@ -522,13 +517,21 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override def computeStats: Statistics = {
-    val sizeInBytes = LongType.defaultSize * numElements
-    Statistics( sizeInBytes = sizeInBytes )
-  }
-
   override def simpleString: String = {
     s"Range ($start, $end, step=$step, splits=$numSlices)"
+  }
+
+  override def computeStats(): Statistics = {
+    Statistics(sizeInBytes = LongType.defaultSize * numElements)
+  }
+
+  override def outputOrdering: Seq[SortOrder] = {
+    val order = if (step > 0) {
+      Ascending
+    } else {
+      Descending
+    }
+    output.map(a => SortOrder(a, order))
   }
 }
 
@@ -553,25 +556,6 @@ case class Aggregate(
   override def validConstraints: Set[Expression] = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     child.constraints.union(getAliasedConstraints(nonAgg))
-  }
-
-  override def computeStats: Statistics = {
-    def simpleEstimation: Statistics = {
-      if (groupingExpressions.isEmpty) {
-        Statistics(
-          sizeInBytes = EstimationUtils.getOutputSize(output, outputRowCount = 1),
-          rowCount = Some(1),
-          hints = child.stats.hints)
-      } else {
-        super.computeStats
-      }
-    }
-
-    if (conf.cboEnabled) {
-      AggregateEstimation.estimate(this).getOrElse(simpleEstimation)
-    } else {
-      simpleEstimation
-    }
   }
 }
 
@@ -671,11 +655,6 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override def computeStats: Statistics = {
-    val sizeInBytes = super.computeStats.sizeInBytes * projections.length
-    Statistics(sizeInBytes = sizeInBytes)
-  }
-
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override protected def validConstraints: Set[Expression] = Set.empty[Expression]
@@ -721,6 +700,27 @@ case class Pivot(
   }
 }
 
+/**
+ * A constructor for creating a logical limit, which is split into two separate logical nodes:
+ * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
+ *
+ * This muds the water for clean logical/physical separation, and is done for better limit pushdown.
+ * In distributed query processing, a non-terminal global limit is actually an expensive operation
+ * because it requires coordination (in Spark this is done using a shuffle).
+ *
+ * In most cases when we want to push down limit, it is often better to only push some partition
+ * local limit. Consider the following:
+ *
+ *   GlobalLimit(Union(A, B))
+ *
+ * It is better to do
+ *   GlobalLimit(Union(LocalLimit(A), LocalLimit(B)))
+ *
+ * than
+ *   Union(GlobalLimit(A), GlobalLimit(B)).
+ *
+ * So we introduced LocalLimit and GlobalLimit in the logical plan node for limit pushdown.
+ */
 object Limit {
   def apply(limitExpr: Expression, child: LogicalPlan): UnaryNode = {
     GlobalLimit(limitExpr, LocalLimit(limitExpr, child))
@@ -734,50 +734,34 @@ object Limit {
   }
 }
 
-case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+/**
+ * A global (coordinated) limit. This operator can emit at most `limitExpr` number in total.
+ *
+ * See [[Limit]] for more information.
+ */
+case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
       case _ => None
     }
-  }
-  override def computeStats: Statistics = {
-    val limit = limitExpr.eval().asInstanceOf[Int]
-    val childStats = child.stats
-    val rowCount: BigInt = childStats.rowCount.map(_.min(limit)).getOrElse(limit)
-    // Don't propagate column stats, because we don't know the distribution after a limit operation
-    Statistics(
-      sizeInBytes = EstimationUtils.getOutputSize(output, rowCount, childStats.attributeStats),
-      rowCount = Some(rowCount),
-      hints = childStats.hints)
   }
 }
 
-case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+/**
+ * A partition-local (non-coordinated) limit. This operator can emit at most `limitExpr` number
+ * of tuples on each physical partition.
+ *
+ * See [[Limit]] for more information.
+ */
+case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = {
+
+  override def maxRowsPerPartition: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
       case _ => None
-    }
-  }
-  override def computeStats: Statistics = {
-    val limit = limitExpr.eval().asInstanceOf[Int]
-    val childStats = child.stats
-    if (limit == 0) {
-      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
-      // (product of children).
-      Statistics(
-        sizeInBytes = 1,
-        rowCount = Some(0),
-        hints = childStats.hints)
-    } else {
-      // The output row count of LocalLimit should be the sum of row counts from each partition.
-      // However, since the number of partitions is not available here, we just use statistics of
-      // the child. Because the distribution after a limit operation is unknown, we do not propagate
-      // the column stats.
-      childStats.copy(attributeStats = AttributeMap(Nil))
     }
   }
 }
@@ -791,9 +775,9 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan)
-  extends UnaryNode {
+  extends OrderPreservingUnaryNode {
 
-  override lazy val canonicalized: LogicalPlan = child.canonicalized
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
@@ -828,18 +812,6 @@ case class Sample(
   }
 
   override def output: Seq[Attribute] = child.output
-
-  override def computeStats: Statistics = {
-    val ratio = upperBound - lowerBound
-    val childStats = child.stats
-    var sizeInBytes = EstimationUtils.ceil(BigDecimal(childStats.sizeInBytes) * ratio)
-    if (sizeInBytes == 0) {
-      sizeInBytes = 1
-    }
-    val sampledRowCount = childStats.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
-    // Don't propagate column stats, because we don't know the distribution after a sample operation
-    Statistics(sizeInBytes, sampledRowCount, hints = childStats.hints)
-  }
 }
 
 /**
@@ -883,6 +855,27 @@ case class RepartitionByExpression(
 
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
+  val partitioning: Partitioning = {
+    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+
+    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+      s"""
+         |SortOrder: $sortOrder
+         |NonSortOrder: $nonSortOrder
+       """.stripMargin)
+
+    if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+    } else if (nonSortOrder.nonEmpty) {
+      HashPartitioning(nonSortOrder, numPartitions)
+    } else {
+      RoundRobinPartitioning(numPartitions)
+    }
+  }
+
   override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true
 }
@@ -890,17 +883,39 @@ case class RepartitionByExpression(
 /**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
-case object OneRowRelation extends LeafNode {
+case class OneRowRelation() extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
-  override def computeStats: Statistics = Statistics(sizeInBytes = 1)
+  override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
+
+  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
+  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = OneRowRelation()
 }
 
 /** A logical plan for `dropDuplicates`. */
 case class Deduplicate(
     keys: Seq[Attribute],
-    child: LogicalPlan,
-    streaming: Boolean) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * A logical plan for setting a barrier of analysis.
+ *
+ * The SQL Analyzer goes through a whole query plan even most part of it is analyzed. This
+ * increases the time spent on query analysis for long pipelines in ML, especially.
+ *
+ * This logical plan wraps an analyzed logical plan to prevent it from analysis again. The barrier
+ * is applied to the analyzed logical plan in Dataset. It won't change the output of wrapped
+ * logical plan and just acts as a wrapper to hide it from analyzer. New operations on the dataset
+ * will be put on the barrier, so only the new nodes created will be analyzed.
+ *
+ * This analysis barrier will be removed at the end of analysis stage.
+ */
+case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
+  override protected def innerChildren: Seq[LogicalPlan] = Seq(child)
+  override def output: Seq[Attribute] = child.output
+  override def isStreaming: Boolean = child.isStreaming
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
 }

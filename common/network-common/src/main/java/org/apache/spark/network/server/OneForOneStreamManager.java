@@ -23,10 +23,10 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import scala.Tuple2;
-
 import com.google.common.base.Preconditions;
 import io.netty.channel.Channel;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,6 +54,9 @@ public class OneForOneStreamManager extends StreamManager {
     // Used to keep track of the index of the buffer that the user has retrieved, just to ensure
     // that the caller only requests each chunk one at a time, in order.
     int curChunk = 0;
+
+    // Used to keep track of the number of chunks being transferred and not finished yet.
+    volatile long chunksBeingTransferred = 0L;
 
     StreamState(String appId, Iterator<ManagedBuffer> buffers) {
       this.appId = appId;
@@ -98,21 +101,23 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public ManagedBuffer openStream(String streamChunkId) {
-    Tuple2<Long, Integer> streamIdAndChunkId = parseStreamChunkId(streamChunkId);
-    return getChunk(streamIdAndChunkId._1, streamIdAndChunkId._2);
+    Pair<Long, Integer> streamChunkIdPair = parseStreamChunkId(streamChunkId);
+    return getChunk(streamChunkIdPair.getLeft(), streamChunkIdPair.getRight());
   }
 
   public static String genStreamChunkId(long streamId, int chunkId) {
     return String.format("%d_%d", streamId, chunkId);
   }
 
-  public static Tuple2<Long, Integer> parseStreamChunkId(String streamChunkId) {
+  // Parse streamChunkId to be stream id and chunk id. This is used when fetch remote chunk as a
+  // stream.
+  public static Pair<Long, Integer> parseStreamChunkId(String streamChunkId) {
     String[] array = streamChunkId.split("_");
     assert array.length == 2:
-      "Stream id and chunk index should be specified when open stream for fetching block.";
+      "Stream id and chunk index should be specified.";
     long streamId = Long.valueOf(array[0]);
     int chunkIndex = Integer.valueOf(array[1]);
-    return new Tuple2<>(streamId, chunkIndex);
+    return ImmutablePair.of(streamId, chunkIndex);
   }
 
   @Override
@@ -144,6 +149,42 @@ public class OneForOneStreamManager extends StreamManager {
           state.appId));
       }
     }
+  }
+
+  @Override
+  public void chunkBeingSent(long streamId) {
+    StreamState streamState = streams.get(streamId);
+    if (streamState != null) {
+      streamState.chunksBeingTransferred++;
+    }
+
+  }
+
+  @Override
+  public void streamBeingSent(String streamId) {
+    chunkBeingSent(parseStreamChunkId(streamId).getLeft());
+  }
+
+  @Override
+  public void chunkSent(long streamId) {
+    StreamState streamState = streams.get(streamId);
+    if (streamState != null) {
+      streamState.chunksBeingTransferred--;
+    }
+  }
+
+  @Override
+  public void streamSent(String streamId) {
+    chunkSent(OneForOneStreamManager.parseStreamChunkId(streamId).getLeft());
+  }
+
+  @Override
+  public long chunksBeingTransferred() {
+    long sum = 0L;
+    for (StreamState streamState: streams.values()) {
+      sum += streamState.chunksBeingTransferred;
+    }
+    return sum;
   }
 
   /**

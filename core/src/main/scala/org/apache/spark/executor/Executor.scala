@@ -35,7 +35,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.internal.config._
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task, TaskDescription}
 import org.apache.spark.shuffle.FetchFailedException
@@ -56,7 +57,7 @@ private[spark] class Executor(
     env: SparkEnv,
     userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false,
-    uncaughtExceptionHandler: UncaughtExceptionHandler = SparkUncaughtExceptionHandler)
+    uncaughtExceptionHandler: UncaughtExceptionHandler = new SparkUncaughtExceptionHandler)
   extends Logging {
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
@@ -113,8 +114,9 @@ private[spark] class Executor(
   private val taskReaperForTask: HashMap[Long, TaskReaper] = HashMap[Long, TaskReaper]()
 
   if (!isLocal) {
-    env.metricsSystem.registerSource(executorSource)
     env.blockManager.initialize(conf.getAppId)
+    env.metricsSystem.registerSource(executorSource)
+    env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   }
 
   // Whether to load classes in user jars before those in Spark jars
@@ -130,6 +132,9 @@ private[spark] class Executor(
 
   // Set the classloader for serializer
   env.serializer.setDefaultClassLoader(replClassLoader)
+  // SPARK-21928.  SerializerManager's internal instance of Kryo might get used in netty threads
+  // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
+  env.serializerManager.setDefaultClassLoader(replClassLoader)
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
@@ -137,8 +142,7 @@ private[spark] class Executor(
     conf.getSizeAsBytes("spark.task.maxDirectResultSize", 1L << 20),
     RpcUtils.maxMessageSizeBytes(conf))
 
-  // Limit of bytes for total size of results (default is 1GB)
-  private val maxResultSize = Utils.getMaxResultSize(conf)
+  private val maxResultSize = conf.get(MAX_RESULT_SIZE)
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
@@ -402,12 +406,53 @@ private[spark] class Executor(
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
         task.metrics.setResultSerializationTime(afterSerialization - beforeSerialization)
 
+        // Expose task metrics using the Dropwizard metrics system.
+        // Update task metrics counters
+        executorSource.METRIC_CPU_TIME.inc(task.metrics.executorCpuTime)
+        executorSource.METRIC_RUN_TIME.inc(task.metrics.executorRunTime)
+        executorSource.METRIC_JVM_GC_TIME.inc(task.metrics.jvmGCTime)
+        executorSource.METRIC_DESERIALIZE_TIME.inc(task.metrics.executorDeserializeTime)
+        executorSource.METRIC_DESERIALIZE_CPU_TIME.inc(task.metrics.executorDeserializeCpuTime)
+        executorSource.METRIC_RESULT_SERIALIZE_TIME.inc(task.metrics.resultSerializationTime)
+        executorSource.METRIC_SHUFFLE_FETCH_WAIT_TIME
+          .inc(task.metrics.shuffleReadMetrics.fetchWaitTime)
+        executorSource.METRIC_SHUFFLE_WRITE_TIME.inc(task.metrics.shuffleWriteMetrics.writeTime)
+        executorSource.METRIC_SHUFFLE_TOTAL_BYTES_READ
+          .inc(task.metrics.shuffleReadMetrics.totalBytesRead)
+        executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ
+          .inc(task.metrics.shuffleReadMetrics.remoteBytesRead)
+        executorSource.METRIC_SHUFFLE_REMOTE_BYTES_READ_TO_DISK
+          .inc(task.metrics.shuffleReadMetrics.remoteBytesReadToDisk)
+        executorSource.METRIC_SHUFFLE_LOCAL_BYTES_READ
+          .inc(task.metrics.shuffleReadMetrics.localBytesRead)
+        executorSource.METRIC_SHUFFLE_RECORDS_READ
+          .inc(task.metrics.shuffleReadMetrics.recordsRead)
+        executorSource.METRIC_SHUFFLE_REMOTE_BLOCKS_FETCHED
+          .inc(task.metrics.shuffleReadMetrics.remoteBlocksFetched)
+        executorSource.METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED
+          .inc(task.metrics.shuffleReadMetrics.localBlocksFetched)
+        executorSource.METRIC_SHUFFLE_BYTES_WRITTEN
+          .inc(task.metrics.shuffleWriteMetrics.bytesWritten)
+        executorSource.METRIC_SHUFFLE_RECORDS_WRITTEN
+          .inc(task.metrics.shuffleWriteMetrics.recordsWritten)
+        executorSource.METRIC_INPUT_BYTES_READ
+          .inc(task.metrics.inputMetrics.bytesRead)
+        executorSource.METRIC_INPUT_RECORDS_READ
+          .inc(task.metrics.inputMetrics.recordsRead)
+        executorSource.METRIC_OUTPUT_BYTES_WRITTEN
+          .inc(task.metrics.outputMetrics.bytesWritten)
+        executorSource.METRIC_OUTPUT_RECORDS_WRITTEN
+          .inc(task.metrics.inputMetrics.recordsRead)
+        executorSource.METRIC_RESULT_SIZE.inc(task.metrics.resultSize)
+        executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
+        executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
+
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
         // TODO: do not serialize value twice
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)
-        val resultSize = serializedDirectResult.limit
+        val resultSize = serializedDirectResult.limit()
 
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
@@ -435,6 +480,19 @@ private[spark] class Executor(
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
       } catch {
+        case t: TaskKilledException =>
+          logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
+          setTaskFinishedAndClearInterruptStatus()
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
+
+        case _: InterruptedException | NonFatal(_) if
+            task != null && task.reasonIfKilled.isDefined =>
+          val killReason = task.reasonIfKilled.getOrElse("unknown reason")
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
+          setTaskFinishedAndClearInterruptStatus()
+          execBackend.statusUpdate(
+            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
+
         case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
           val reason = task.context.fetchFailed.get.toTaskFailedReason
           if (!t.isInstanceOf[FetchFailedException]) {
@@ -449,23 +507,10 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-        case t: TaskKilledException =>
-          logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
-          setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
-
-        case _: InterruptedException | NonFatal(_) if
-            task != null && task.reasonIfKilled.isDefined =>
-          val killReason = task.reasonIfKilled.getOrElse("unknown reason")
-          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
-          setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(
-            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
-
         case CausedBy(cDE: CommitDeniedException) =>
-          val reason = cDE.toTaskFailedReason
+          val reason = cDE.toTaskCommitDeniedReason
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
         case t: Throwable =>
           // Attempt to exit cleanly by informing the driver of our failure.
@@ -473,36 +518,44 @@ private[spark] class Executor(
           // the default uncaught exception handler, which will terminate the Executor.
           logError(s"Exception in $taskName (TID $taskId)", t)
 
-          // Collect latest accumulator values to report back to the driver
-          val accums: Seq[AccumulatorV2[_, _]] =
-            if (task != null) {
-              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
-              task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
-              task.collectAccumulatorUpdates(taskFailed = true)
-            } else {
-              Seq.empty
-            }
+          // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
+          // libraries may set up shutdown hooks that race with running tasks during shutdown,
+          // spurious failures may occur and can result in improper accounting in the driver (e.g.
+          // the task failure would not be ignored if the shutdown happened because of premption,
+          // instead of an app issue).
+          if (!ShutdownHookManager.inShutdown()) {
+            // Collect latest accumulator values to report back to the driver
+            val accums: Seq[AccumulatorV2[_, _]] =
+              if (task != null) {
+                task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+                task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+                task.collectAccumulatorUpdates(taskFailed = true)
+              } else {
+                Seq.empty
+              }
 
-          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+            val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
 
-          val serializedTaskEndReason = {
-            try {
-              ser.serialize(new ExceptionFailure(t, accUpdates).withAccums(accums))
-            } catch {
-              case _: NotSerializableException =>
-                // t is not serializable so just send the stacktrace
-                ser.serialize(new ExceptionFailure(t, accUpdates, false).withAccums(accums))
+            val serializedTaskEndReason = {
+              try {
+                ser.serialize(new ExceptionFailure(t, accUpdates).withAccums(accums))
+              } catch {
+                case _: NotSerializableException =>
+                  // t is not serializable so just send the stacktrace
+                  ser.serialize(new ExceptionFailure(t, accUpdates, false).withAccums(accums))
+              }
             }
+            setTaskFinishedAndClearInterruptStatus()
+            execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
+          } else {
+            logInfo("Not reporting error to driver during JVM shutdown.")
           }
-          setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
-          if (Utils.isFatalError(t)) {
+          if (!t.isInstanceOf[SparkOutOfMemoryError] && Utils.isFatalError(t)) {
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
-
       } finally {
         runningTasks.remove(taskId)
       }

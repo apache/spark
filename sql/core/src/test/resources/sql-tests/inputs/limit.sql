@@ -21,7 +21,7 @@ SELECT * FROM testdata LIMIT true;
 SELECT * FROM testdata LIMIT 'a';
 
 -- limit within a subquery
-SELECT * FROM (SELECT * FROM range(10) LIMIT 5) t WHERE id > 3;
+SELECT * FROM (SELECT * FROM range(10) LIMIT 5) WHERE id > 3;
 
 -- limit ALL
 SELECT * FROM testdata WHERE key < 3 LIMIT ALL;

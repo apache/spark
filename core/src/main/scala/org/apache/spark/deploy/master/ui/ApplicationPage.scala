@@ -100,12 +100,29 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
       <div class="row-fluid"> <!-- Executors -->
         <div class="span12">
-          <h4> Executor Summary ({allExecutors.length}) </h4>
-          {executorsTable}
+          <span class="collapse-aggregated-executors collapse-table"
+              onClick="collapseTable('collapse-aggregated-executors','aggregated-executors')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Executor Summary ({allExecutors.length})</a>
+            </h4>
+          </span>
+          <div class="aggregated-executors collapsible-table">
+            {executorsTable}
+          </div>
           {
             if (removedExecutors.nonEmpty) {
-              <h4> Removed Executors ({removedExecutors.length}) </h4> ++
-              removedExecutorsTable
+              <span class="collapse-aggregated-removedExecutors collapse-table"
+                  onClick="collapseTable('collapse-aggregated-removedExecutors',
+                  'aggregated-removedExecutors')">
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Removed Executors ({removedExecutors.length})</a>
+                </h4>
+              </span> ++
+              <div class="aggregated-removedExecutors collapsible-table">
+                {removedExecutorsTable}
+              </div>
             }
           }
         </div>
@@ -125,10 +142,10 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       <td>{executor.memory}</td>
       <td>{executor.state}</td>
       <td>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stdout</a>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stderr</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stderr"}>stderr</a>
       </td>
     </tr>
   }

@@ -24,18 +24,17 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.commons.lang3.time.FastDateFormat
-import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.hadoop.io.SequenceFile.CompressionType
+import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.functions.{col, regexp_replace}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -482,19 +481,53 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("save csv with quote escaping, using charToEscapeQuoteEscaping option") {
+    withTempPath { path =>
+
+      // original text
+      val df1 = Seq(
+        """You are "beautiful"""",
+        """Yes, \"in the inside"\"""
+      ).toDF()
+
+      // text written in CSV with following options:
+      // quote character: "
+      // escape character: \
+      // character to escape quote escaping: #
+      val df2 = Seq(
+        """"You are \"beautiful\""""",
+        """"Yes, #\\"in the inside\"#\""""
+      ).toDF()
+
+      df2.coalesce(1).write.text(path.getAbsolutePath)
+
+      val df3 = spark.read
+        .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\\")
+        .option("charToEscapeQuoteEscaping", "#")
+        .load(path.getAbsolutePath)
+
+      checkAnswer(df1, df3)
+    }
+  }
+
   test("commented lines in CSV data") {
-    val results = spark.read
-      .format("csv")
-      .options(Map("comment" -> "~", "header" -> "false"))
-      .load(testFile(commentsFile))
-      .collect()
+    Seq("false", "true").foreach { multiLine =>
 
-    val expected =
-      Seq(Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
-        Seq("6", "7", "8", "9", "0", "2015-08-21 16:58:01"),
-        Seq("1", "2", "3", "4", "5", "2015-08-23 18:00:42"))
+      val results = spark.read
+        .format("csv")
+        .options(Map("comment" -> "~", "header" -> "false", "multiLine" -> multiLine))
+        .load(testFile(commentsFile))
+        .collect()
 
-    assert(results.toSeq.map(_.toSeq) === expected)
+      val expected =
+        Seq(Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
+          Seq("6", "7", "8", "9", "0", "2015-08-21 16:58:01"),
+          Seq("1", "2", "3", "4", "5", "2015-08-23 18:00:42"))
+
+      assert(results.toSeq.map(_.toSeq) === expected)
+    }
   }
 
   test("inferring schema with commented lines in CSV data") {
@@ -1173,5 +1206,120 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           checkAnswer(readBack, Row(expected))
         }
       }
+  }
+
+  test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
+    val exception = intercept[SparkException] {
+      spark.read.schema("a DOUBLE")
+        .option("mode", "FAILFAST")
+        .csv(Seq("10u12").toDS())
+        .collect()
+    }
+    assert(exception.getMessage.contains("""input string: "10u12""""))
+
+    val count = spark.read.schema("a FLOAT")
+      .option("mode", "DROPMALFORMED")
+      .csv(Seq("10u12").toDS())
+      .count()
+    assert(count == 0)
+
+    val results = spark.read.schema("a FLOAT")
+      .option("mode", "PERMISSIVE")
+      .csv(Seq("10u12").toDS())
+    checkAnswer(results, Row(null))
+  }
+
+  test("SPARK-20978: Fill the malformed column when the number of tokens is less than schema") {
+    val df = spark.read
+      .schema("a string, b string, unparsed string")
+      .option("columnNameOfCorruptRecord", "unparsed")
+      .csv(Seq("a").toDS())
+    checkAnswer(df, Row("a", null, "a"))
+  }
+
+  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
+    "from a file") {
+    val columnNameOfCorruptRecord = "_corrupt_record"
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", TimestampType)
+      .add(columnNameOfCorruptRecord, StringType)
+    // negative cases
+    val msg = intercept[AnalysisException] {
+      spark
+        .read
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .csv(testFile(valueMalformedFile))
+        .select(columnNameOfCorruptRecord)
+        .collect()
+    }.getMessage
+    assert(msg.contains("only include the internal corrupt record column"))
+    intercept[org.apache.spark.sql.catalyst.errors.TreeNodeException[_]] {
+      spark
+        .read
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .csv(testFile(valueMalformedFile))
+        .filter($"_corrupt_record".isNotNull)
+        .count()
+    }
+    // workaround
+    val df = spark
+      .read
+      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+      .schema(schema)
+      .csv(testFile(valueMalformedFile))
+      .cache()
+    assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
+    assert(df.filter($"_corrupt_record".isNull).count() == 1)
+    checkAnswer(
+      df.select(columnNameOfCorruptRecord),
+      Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
+    )
+  }
+
+  test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
+    // Set default values for the DataSource parameters to make sure
+    // that whole test file is mapped to only one partition. This will guarantee
+    // reliable sampling of the input file.
+    withSQLConf(
+      "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
+      "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
+    )(withTempPath { path =>
+      val ds = sampledTestData.coalesce(1)
+      ds.write.text(path.getAbsolutePath)
+
+      val readback = spark.read
+        .option("inferSchema", true).option("samplingRatio", 0.1)
+        .csv(path.getCanonicalPath)
+      assert(readback.schema == new StructType().add("_c0", IntegerType))
+    })
+  }
+
+  test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
+    val ds = sampledTestData.coalesce(1)
+    val readback = spark.read
+      .option("inferSchema", true).option("samplingRatio", 0.1)
+      .csv(ds)
+
+    assert(readback.schema == new StructType().add("_c0", IntegerType))
+  }
+
+  test("SPARK-23846: samplingRatio is out of the range (0, 1.0]") {
+    val ds = spark.range(0, 100, 1, 1).map(_.toString)
+
+    val errorMsg0 = intercept[IllegalArgumentException] {
+      spark.read.option("inferSchema", true).option("samplingRatio", -1).csv(ds)
+    }.getMessage
+    assert(errorMsg0.contains("samplingRatio (-1.0) should be greater than 0"))
+
+    val errorMsg1 = intercept[IllegalArgumentException] {
+      spark.read.option("inferSchema", true).option("samplingRatio", 0).csv(ds)
+    }.getMessage
+    assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
+
+    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 1.0).csv(ds)
+    assert(sampled.count() == ds.count())
   }
 }

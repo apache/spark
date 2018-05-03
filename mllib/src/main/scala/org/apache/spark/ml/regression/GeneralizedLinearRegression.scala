@@ -20,12 +20,14 @@ package org.apache.spark.ml.regression
 import java.util.Locale
 
 import breeze.stats.{distributions => dist}
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim._
@@ -36,7 +38,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
-
 
 /**
  * Params for Generalized Linear Regression.
@@ -141,6 +142,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   /**
    * Param for offset column name. If this is not set or empty, we treat all instance offsets
    * as 0.0. The feature specified as offset has a constant coefficient of 1.0.
+   *
    * @group param
    */
   @Since("2.3.0")
@@ -164,7 +166,18 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
     isDefined(linkPredictionCol) && $(linkPredictionCol).nonEmpty
   }
 
-  import GeneralizedLinearRegression._
+  /**
+   * The solver algorithm for optimization.
+   * Supported options: "irls" (iteratively reweighted least squares).
+   * Default: "irls"
+   *
+   * @group param
+   */
+  @Since("2.0.0")
+  final override val solver: Param[String] = new Param[String](this, "solver",
+    "The solver algorithm for optimization. Supported options: " +
+      s"${supportedSolvers.mkString(", ")}. (Default irls)",
+    ParamValidators.inArray[String](supportedSolvers))
 
   @Since("2.0.0")
   override def validateAndTransformSchema(
@@ -350,7 +363,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> "irls")
+  setDefault(solver -> IRLS)
 
   /**
    * Sets the link prediction (linear predictor) column name.
@@ -391,7 +404,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
-      val wlsModel = optimizer.fit(instances)
+      val wlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
@@ -405,10 +418,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
             OffsetInstance(label, weight, offset, features)
         }
       // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
-      val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
+      val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam),
+        instr = OptionalInstrumentation.create(instr))
       val optimizer = new IterativelyReweightedLeastSquares(initialModel,
         familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
-      val irlsModel = optimizer.fit(instances)
+      val irlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
           .setParent(this))
@@ -442,6 +456,12 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     Gamma -> Inverse, Gamma -> Identity, Gamma -> Log
   )
 
+  /** String name for "irls" (iteratively reweighted least squares) solver. */
+  private[regression] val IRLS = "irls"
+
+  /** Set of solvers that GeneralizedLinearRegression supports. */
+  private[regression] val supportedSolvers = Array(IRLS)
+
   /** Set of family names that GeneralizedLinearRegression supports. */
   private[regression] lazy val supportedFamilyNames =
     supportedFamilyAndLinkPairs.map(_._1.name).toArray :+ "tweedie"
@@ -451,6 +471,10 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     supportedFamilyAndLinkPairs.map(_._2.name).toArray
 
   private[regression] val epsilon: Double = 1E-16
+
+  private[regression] def ylogy(y: Double, mu: Double): Double = {
+    if (y == 0) 0.0 else y * math.log(y / mu)
+  }
 
   /**
    * Wrapper of family and link combination used in the model.
@@ -469,7 +493,10 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     def initialize(
         instances: RDD[OffsetInstance],
         fitIntercept: Boolean,
-        regParam: Double): WeightedLeastSquaresModel = {
+        regParam: Double,
+        instr: OptionalInstrumentation = OptionalInstrumentation.create(
+          classOf[GeneralizedLinearRegression])
+      ): WeightedLeastSquaresModel = {
       val newInstances = instances.map { instance =>
         val mu = family.initialize(instance.label, instance.weight)
         val eta = predict(mu) - instance.offset
@@ -478,7 +505,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val initialModel = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
-        .fit(newInstances)
+        .fit(newInstances, instr)
       initialModel
     }
 
@@ -706,10 +733,6 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def variance(mu: Double): Double = mu * (1.0 - mu)
 
-    private def ylogy(y: Double, mu: Double): Double = {
-      if (y == 0) 0.0 else y * math.log(y / mu)
-    }
-
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
       2.0 * weight * (ylogy(y, mu) + ylogy(1.0 - y, 1.0 - mu))
     }
@@ -764,7 +787,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def variance(mu: Double): Double = mu
 
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      2.0 * weight * (y * math.log(y / mu) - (y - mu))
+      2.0 * weight * (ylogy(y, mu) - (y - mu))
     }
 
     override def aic(
@@ -991,7 +1014,7 @@ class GeneralizedLinearRegressionModel private[ml] (
 
   private lazy val familyAndLink = FamilyAndLink(this)
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     predict(features, 0.0)
   }
 
@@ -1127,7 +1150,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
 
       val model = new GeneralizedLinearRegressionModel(metadata.uid, coefficients, intercept)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -1186,6 +1209,21 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /** Number of instances in DataFrame predictions. */
   @Since("2.2.0")
   lazy val numInstances: Long = predictions.count()
+
+
+  /**
+   * Name of features. If the name cannot be retrieved from attributes,
+   * set default names to feature column name with numbered suffix "_0", "_1", and so on.
+   */
+  private[ml] lazy val featureNames: Array[String] = {
+    val featureAttrs = AttributeGroup.fromStructField(
+      dataset.schema(model.getFeaturesCol)).attributes
+    if (featureAttrs.isDefined) {
+      featureAttrs.get.map(_.name.get)
+    } else {
+      Array.tabulate[String](origModel.numFeatures)((x: Int) => model.getFeaturesCol + "_" + x)
+    }
+  }
 
   /** The numeric rank of the fitted linear model. */
   @Since("2.0.0")
@@ -1439,6 +1477,98 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
     } else {
       throw new UnsupportedOperationException(
         "No p-value available for this GeneralizedLinearRegressionModel")
+    }
+  }
+
+  /**
+   * Coefficients with statistics: feature name, coefficients, standard error, tValue and pValue.
+   */
+  private[ml] lazy val coefficientsWithStatistics: Array[
+    (String, Double, Double, Double, Double)] = {
+    var featureNamesLocal = featureNames
+    var coefficientsArray = model.coefficients.toArray
+    var index = Array.range(0, coefficientsArray.length)
+    if (model.getFitIntercept) {
+      featureNamesLocal = featureNamesLocal :+ "(Intercept)"
+      coefficientsArray = coefficientsArray :+ model.intercept
+      // Reorder so that intercept comes first
+      index = (coefficientsArray.length - 1) +: index
+    }
+    index.map { i =>
+      (featureNamesLocal(i), coefficientsArray(i), coefficientStandardErrors(i),
+        tValues(i), pValues(i))
+    }
+  }
+
+  override def toString: String = {
+    if (isNormalSolver) {
+
+      def round(x: Double): String = {
+        BigDecimal(x).setScale(4, BigDecimal.RoundingMode.HALF_UP).toString
+      }
+
+      val colNames = Array("Feature", "Estimate", "Std Error", "T Value", "P Value")
+
+      val data = coefficientsWithStatistics.map { row =>
+        val strRow = row.productIterator.map { cell =>
+          val str = cell match {
+            case s: String => s
+            case n: Double => round(n)
+          }
+          // Truncate if length > 20
+          if (str.length > 20) {
+            str.substring(0, 17) + "..."
+          } else {
+            str
+          }
+        }
+        strRow.toArray
+      }
+
+      // Compute the width of each column
+      val colWidths = colNames.map(_.length)
+      data.foreach { strRow =>
+        strRow.zipWithIndex.foreach { case (cell: String, i: Int) =>
+          colWidths(i) = math.max(colWidths(i), cell.length)
+        }
+      }
+
+      val sb = new StringBuilder
+
+      // Output coefficients with statistics
+      sb.append("Coefficients:\n")
+      colNames.zipWithIndex.map { case (colName: String, i: Int) =>
+        StringUtils.leftPad(colName, colWidths(i))
+      }.addString(sb, "", " ", "\n")
+
+      data.foreach { case strRow: Array[String] =>
+        strRow.zipWithIndex.map { case (cell: String, i: Int) =>
+          StringUtils.leftPad(cell.toString, colWidths(i))
+        }.addString(sb, "", " ", "\n")
+      }
+
+      sb.append("\n")
+      sb.append(s"(Dispersion parameter for ${family.name} family taken to be " +
+        s"${round(dispersion)})")
+
+      sb.append("\n")
+      val nd = s"Null deviance: ${round(nullDeviance)} on $degreesOfFreedom degrees of freedom"
+      val rd = s"Residual deviance: ${round(deviance)} on $residualDegreeOfFreedom degrees of " +
+        "freedom"
+      val l = math.max(nd.length, rd.length)
+      sb.append(StringUtils.leftPad(nd, l))
+      sb.append("\n")
+      sb.append(StringUtils.leftPad(rd, l))
+
+      if (family.name != "tweedie") {
+        sb.append("\n")
+        sb.append(s"AIC: " + round(aic))
+      }
+
+      sb.toString()
+    } else {
+      throw new UnsupportedOperationException(
+        "No summary available for this GeneralizedLinearRegressionModel")
     }
   }
 }

@@ -26,6 +26,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -80,7 +81,11 @@ abstract class DataType extends AbstractDataType {
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def sameType(other: DataType): Boolean =
-    DataType.equalsIgnoreNullability(this, other)
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      DataType.equalsIgnoreNullability(this, other)
+    } else {
+      DataType.equalsIgnoreCaseAndNullability(this, other)
+    }
 
   /**
    * Returns the same data type but set all nullability fields are true
@@ -290,25 +295,31 @@ object DataType {
   }
 
   /**
-   * Returns true if the two data types share the same "shape", i.e. the types (including
-   * nullability) are the same, but the field names don't need to be the same.
+   * Returns true if the two data types share the same "shape", i.e. the types
+   * are the same, but the field names don't need to be the same.
+   *
+   * @param ignoreNullability whether to ignore nullability when comparing the types
    */
-  def equalsStructurally(from: DataType, to: DataType): Boolean = {
+  def equalsStructurally(
+      from: DataType,
+      to: DataType,
+      ignoreNullability: Boolean = false): Boolean = {
     (from, to) match {
       case (left: ArrayType, right: ArrayType) =>
         equalsStructurally(left.elementType, right.elementType) &&
-          left.containsNull == right.containsNull
+          (ignoreNullability || left.containsNull == right.containsNull)
 
       case (left: MapType, right: MapType) =>
         equalsStructurally(left.keyType, right.keyType) &&
           equalsStructurally(left.valueType, right.valueType) &&
-          left.valueContainsNull == right.valueContainsNull
+          (ignoreNullability || left.valueContainsNull == right.valueContainsNull)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields)
             .forall { case (l, r) =>
-              equalsStructurally(l.dataType, r.dataType) && l.nullable == r.nullable
+              equalsStructurally(l.dataType, r.dataType) &&
+                (ignoreNullability || l.nullable == r.nullable)
             }
 
       case (fromDataType, toDataType) => fromDataType == toDataType

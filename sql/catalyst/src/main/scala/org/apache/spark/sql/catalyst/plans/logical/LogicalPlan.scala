@@ -22,97 +22,19 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types.StructType
 
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstraints with Logging {
+abstract class LogicalPlan
+  extends QueryPlan[LogicalPlan]
+  with LogicalPlanStats
+  with QueryPlanConstraints
+  with Logging {
 
-  private var _analyzed: Boolean = false
-
-  /**
-   * Marks this plan as already analyzed. This should only be called by [[CheckAnalysis]].
-   */
-  private[catalyst] def setAnalyzed(): Unit = { _analyzed = true }
-
-  /**
-   * Returns true if this node and its children have already been gone through analysis and
-   * verification.  Note that this is only an optimization used to avoid analyzing trees that
-   * have already been analyzed, and can be reset by transformations.
-   */
-  def analyzed: Boolean = _analyzed
-
-  /** Returns true if this subtree contains any streaming data sources. */
+  /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true)
-
-  /**
-   * Returns a copy of this node where `rule` has been recursively applied first to all of its
-   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
-   * unchanged.  This function is similar to `transformUp`, but skips sub-trees that have already
-   * been marked as analyzed.
-   *
-   * @param rule the function use to transform this nodes children
-   */
-  def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
-    if (!analyzed) {
-      val afterRuleOnChildren = mapChildren(_.resolveOperators(rule))
-      if (this fastEquals afterRuleOnChildren) {
-        CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(this, identity[LogicalPlan])
-        }
-      } else {
-        CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
-        }
-      }
-    } else {
-      this
-    }
-  }
-
-  /**
-   * Recursively transforms the expressions of a tree, skipping nodes that have already
-   * been analyzed.
-   */
-  def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
-    this resolveOperators  {
-      case p => p.transformExpressions(r)
-    }
-  }
-
-  /** A cache for the estimated statistics, such that it will only be computed once. */
-  private var statsCache: Option[Statistics] = None
-
-  /**
-   * Returns the estimated statistics for the current logical plan node. Under the hood, this
-   * method caches the return value, which is computed based on the configuration passed in the
-   * first time. If the configuration changes, the cache can be invalidated by calling
-   * [[invalidateStatsCache()]].
-   */
-  final def stats: Statistics = statsCache.getOrElse {
-    statsCache = Some(computeStats)
-    statsCache.get
-  }
-
-  /** Invalidates the stats cache. See [[stats]] for more information. */
-  final def invalidateStatsCache(): Unit = {
-    statsCache = None
-    children.foreach(_.invalidateStatsCache())
-  }
-
-  /**
-   * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of all child plan's cardinality, i.e. applies in the case
-   * of cartesian joins.
-   *
-   * [[LeafNode]]s must override this.
-   */
-  protected def computeStats: Statistics = {
-    if (children.isEmpty) {
-      throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
-    }
-    Statistics(sizeInBytes = children.map(_.stats.sizeInBytes).product)
-  }
 
   override def verboseStringWithSuffix: String = {
     super.verboseString + statsCache.map(", " + _.toString).getOrElse("")
@@ -125,6 +47,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstrai
    * Any operator that can push through a Limit should override this function (e.g., Project).
    */
   def maxRows: Option[Long] = None
+
+  /**
+   * Returns the maximum number of rows this plan may compute on each partition.
+   */
+  def maxRowsPerPartition: Option[Long] = maxRows
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
@@ -282,7 +209,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstrai
 
       // More than one match.
       case ambiguousReferences =>
-        val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
+        val referenceNames = ambiguousReferences.map(_._1.qualifiedName).mkString(", ")
         throw new AnalysisException(
           s"Reference '$name' is ambiguous, could be: $referenceNames.")
     }
@@ -292,6 +219,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstrai
    * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
    */
   def refresh(): Unit = children.foreach(_.refresh())
+
+  /**
+   * Returns the output ordering that this plan generates.
+   */
+  def outputOrdering: Seq[SortOrder] = Nil
 }
 
 /**
@@ -300,6 +232,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstrai
 abstract class LeafNode extends LogicalPlan {
   override final def children: Seq[LogicalPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
+
+  /** Leaf nodes that can survive analysis must define their own statistics. */
+  def computeStats(): Statistics = throw new UnsupportedOperationException
 }
 
 /**
@@ -317,6 +252,8 @@ abstract class UnaryNode extends LogicalPlan {
   protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
     var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
     projectList.foreach {
+      case a @ Alias(l: Literal, _) =>
+        allConstraints += EqualTo(a.toAttribute, l)
       case a @ Alias(e, _) =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
         allConstraints ++= allConstraints.map(_ transform {
@@ -331,23 +268,6 @@ abstract class UnaryNode extends LogicalPlan {
   }
 
   override protected def validConstraints: Set[Expression] = child.constraints
-
-  override def computeStats: Statistics = {
-    // There should be some overhead in Row object, the size should not be zero when there is
-    // no columns, this help to prevent divide-by-zero error.
-    val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
-    val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
-    // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (child.stats.sizeInBytes * outputRowSize) / childRowSize
-    if (sizeInBytes == 0) {
-      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
-      // (product of children).
-      sizeInBytes = 1
-    }
-
-    // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes, hints = child.stats.hints)
-  }
 }
 
 /**
@@ -358,4 +278,8 @@ abstract class BinaryNode extends LogicalPlan {
   def right: LogicalPlan
 
   override final def children: Seq[LogicalPlan] = Seq(left, right)
+}
+
+abstract class OrderPreservingUnaryNode extends UnaryNode {
+  override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }

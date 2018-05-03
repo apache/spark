@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
@@ -208,6 +209,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(DayOfWeek(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))),
       Calendar.FRIDAY)
     checkConsistencyBetweenInterpretedAndCodegen(DayOfWeek, DateType)
+  }
+
+  test("WeekDay") {
+    checkEvaluation(WeekDay(Literal.create(null, DateType)), null)
+    checkEvaluation(WeekDay(Literal(d)), 2)
+    checkEvaluation(WeekDay(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 2)
+    checkEvaluation(WeekDay(Cast(Literal(ts), DateType, gmtId)), 4)
+    checkEvaluation(WeekDay(Cast(Literal("2011-05-06"), DateType, gmtId)), 4)
+    checkEvaluation(WeekDay(Literal(new Date(sdf.parse("2017-05-27 13:10:15").getTime))), 5)
+    checkEvaluation(WeekDay(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 4)
+    checkConsistencyBetweenInterpretedAndCodegen(WeekDay, DateType)
   }
 
   test("WeekOfYear") {
@@ -452,34 +464,47 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         MonthsBetween(
           Literal(new Timestamp(sdf.parse("1997-02-28 10:30:00").getTime)),
           Literal(new Timestamp(sdf.parse("1996-10-30 00:00:00").getTime)),
-          timeZoneId),
-        3.94959677)
+          Literal.TrueLiteral,
+          timeZoneId = timeZoneId), 3.94959677)
       checkEvaluation(
         MonthsBetween(
-          Literal(new Timestamp(sdf.parse("2015-01-30 11:52:00").getTime)),
-          Literal(new Timestamp(sdf.parse("2015-01-30 11:50:00").getTime)),
-          timeZoneId),
-        0.0)
-      checkEvaluation(
-        MonthsBetween(
-          Literal(new Timestamp(sdf.parse("2015-01-31 00:00:00").getTime)),
-          Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
-          timeZoneId),
-        -2.0)
-      checkEvaluation(
-        MonthsBetween(
-          Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
-          Literal(new Timestamp(sdf.parse("2015-02-28 00:00:00").getTime)),
-          timeZoneId),
-        1.0)
+          Literal(new Timestamp(sdf.parse("1997-02-28 10:30:00").getTime)),
+          Literal(new Timestamp(sdf.parse("1996-10-30 00:00:00").getTime)),
+          Literal.FalseLiteral,
+          timeZoneId = timeZoneId), 3.9495967741935485)
+
+      Seq(Literal.FalseLiteral, Literal.TrueLiteral). foreach { roundOff =>
+        checkEvaluation(
+          MonthsBetween(
+            Literal(new Timestamp(sdf.parse("2015-01-30 11:52:00").getTime)),
+            Literal(new Timestamp(sdf.parse("2015-01-30 11:50:00").getTime)),
+            roundOff,
+            timeZoneId = timeZoneId), 0.0)
+        checkEvaluation(
+          MonthsBetween(
+            Literal(new Timestamp(sdf.parse("2015-01-31 00:00:00").getTime)),
+            Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
+            roundOff,
+            timeZoneId = timeZoneId), -2.0)
+        checkEvaluation(
+          MonthsBetween(
+            Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
+            Literal(new Timestamp(sdf.parse("2015-02-28 00:00:00").getTime)),
+            roundOff,
+            timeZoneId = timeZoneId), 1.0)
+      }
       val t = Literal(Timestamp.valueOf("2015-03-31 22:00:00"))
       val tnull = Literal.create(null, TimestampType)
-      checkEvaluation(MonthsBetween(t, tnull, timeZoneId), null)
-      checkEvaluation(MonthsBetween(tnull, t, timeZoneId), null)
-      checkEvaluation(MonthsBetween(tnull, tnull, timeZoneId), null)
+      checkEvaluation(MonthsBetween(t, tnull, Literal.TrueLiteral, timeZoneId = timeZoneId), null)
+      checkEvaluation(MonthsBetween(tnull, t, Literal.TrueLiteral, timeZoneId = timeZoneId), null)
+      checkEvaluation(
+        MonthsBetween(tnull, tnull, Literal.TrueLiteral, timeZoneId = timeZoneId), null)
+      checkEvaluation(
+        MonthsBetween(t, t, Literal.create(null, BooleanType), timeZoneId = timeZoneId), null)
       checkConsistencyBetweenInterpretedAndCodegen(
-        (time1: Expression, time2: Expression) => MonthsBetween(time1, time2, timeZoneId),
-        TimestampType, TimestampType)
+        (time1: Expression, time2: Expression, roundOff: Expression) =>
+          MonthsBetween(time1, time2, roundOff, timeZoneId = timeZoneId),
+        TimestampType, TimestampType, BooleanType)
     }
   }
 
@@ -527,7 +552,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
 
-  test("function trunc") {
+  test("TruncDate") {
     def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
       checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
         expected)
@@ -543,9 +568,80 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       testTrunc(date, fmt, Date.valueOf("2015-07-01"))
     }
     testTrunc(date, "DD", null)
+    testTrunc(date, "SECOND", null)
+    testTrunc(date, "HOUR", null)
     testTrunc(date, null, null)
     testTrunc(null, "MON", null)
     testTrunc(null, null, null)
+  }
+
+  test("TruncTimestamp") {
+    def testTrunc(input: Timestamp, fmt: String, expected: Timestamp): Unit = {
+      checkEvaluation(
+        TruncTimestamp(Literal.create(fmt, StringType), Literal.create(input, TimestampType)),
+        expected)
+      checkEvaluation(
+        TruncTimestamp(
+          NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
+        expected)
+    }
+
+    withDefaultTimeZone(TimeZoneGMT) {
+      val inputDate = Timestamp.valueOf("2015-07-22 05:30:06")
+
+      Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-01-01 00:00:00"))
+      }
+
+      Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-01 00:00:00"))
+      }
+
+      Seq("DAY", "day", "DD", "dd").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 00:00:00"))
+      }
+
+      Seq("HOUR", "hour").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 05:00:00"))
+      }
+
+      Seq("MINUTE", "minute").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 05:30:00"))
+      }
+
+      Seq("SECOND", "second").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 05:30:06"))
+      }
+
+      Seq("WEEK", "week").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-20 00:00:00"))
+      }
+
+      Seq("QUARTER", "quarter").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-01 00:00:00"))
+      }
+
+      testTrunc(inputDate, "INVALID", null)
+      testTrunc(inputDate, null, null)
+      testTrunc(null, "MON", null)
+      testTrunc(null, null, null)
+    }
   }
 
   test("from_unixtime") {
@@ -720,6 +816,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
+    // Test escaping of timezone
+    GenerateUnsafeProjection.generate(
+      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("\"quote")) :: Nil)
   }
 
   test("from_utc_timestamp") {
@@ -740,5 +839,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
+    // Test escaping of timezone
+    GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal("\"quote")) :: Nil)
   }
 }

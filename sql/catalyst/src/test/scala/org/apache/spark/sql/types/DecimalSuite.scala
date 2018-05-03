@@ -109,8 +109,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("small decimals represented as unscaled long") {
     checkCompact(new Decimal(), true)
-    checkCompact(Decimal(BigDecimal(10.03)), false)
-    checkCompact(Decimal(BigDecimal(1e20)), false)
+    checkCompact(Decimal(BigDecimal("10.03")), false)
+    checkCompact(Decimal(BigDecimal("100000000000000000000")), false)
     checkCompact(Decimal(17L), true)
     checkCompact(Decimal(17), true)
     checkCompact(Decimal(17L, 2, 1), true)
@@ -213,7 +213,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
           assert(d.changePrecision(10, 0, mode))
           assert(d.toString === bd.setScale(0, mode).toString(), s"num: $sign$n, mode: $mode")
 
-          val copy = d.toPrecision(10, 0, mode).orNull
+          val copy = d.toPrecision(10, 0, mode)
           assert(copy !== null)
           assert(d.ne(copy))
           assert(d === copy)

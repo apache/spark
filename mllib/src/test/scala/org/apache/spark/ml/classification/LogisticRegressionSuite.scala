@@ -22,21 +22,20 @@ import scala.language.existentials
 import scala.util.Random
 import scala.util.control.Breaks._
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix, Vector, Vectors}
+import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit, rand}
 import org.apache.spark.sql.types.LongType
 
-class LogisticRegressionSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -45,6 +44,7 @@ class LogisticRegressionSuite
   @transient var smallMultinomialDataset: Dataset[_] = _
   @transient var binaryDataset: Dataset[_] = _
   @transient var multinomialDataset: Dataset[_] = _
+  @transient var multinomialDatasetWithZeroVar: Dataset[_] = _
   private val eps: Double = 1e-5
 
   override def beforeAll(): Unit = {
@@ -98,6 +98,23 @@ class LogisticRegressionSuite
       df.cache()
       df
     }
+
+    multinomialDatasetWithZeroVar = {
+      val nPoints = 100
+      val coefficients = Array(
+        -0.57997, 0.912083, -0.371077,
+        -0.16624, -0.84355, -0.048509)
+
+      val xMean = Array(5.843, 3.0)
+      val xVariance = Array(0.6856, 0.0)
+
+      val testData = generateMultinomialLogisticInput(
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
+
+      val df = sc.parallelize(testData, 4).toDF().withColumn("weight", lit(1.0))
+      df.cache()
+      df
+    }
   }
 
   /**
@@ -111,6 +128,11 @@ class LogisticRegressionSuite
     multinomialDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
       label + "," + weight + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
+    multinomialDatasetWithZeroVar.rdd.map {
+      case Row(label: Double, features: Vector, weight: Double) =>
+        label + "," + weight + "," + features.toArray.mkString(",")
+    }.repartition(1)
+     .saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDatasetWithZeroVar")
   }
 
   test("params") {
@@ -198,15 +220,64 @@ class LogisticRegressionSuite
     }
   }
 
-  test("empty probabilityCol") {
-    val lr = new LogisticRegression().setProbabilityCol("")
-    val model = lr.fit(smallBinaryDataset)
-    assert(model.hasSummary)
-    // Validate that we re-insert a probability column for evaluation
-    val fieldNames = model.summary.predictions.schema.fieldNames
-    assert(smallBinaryDataset.schema.fieldNames.toSet.subsetOf(
-      fieldNames.toSet))
-    assert(fieldNames.exists(s => s.startsWith("probability_")))
+  test("empty probabilityCol or predictionCol") {
+    val lr = new LogisticRegression().setMaxIter(1)
+    val datasetFieldNames = smallBinaryDataset.schema.fieldNames.toSet
+    def checkSummarySchema(model: LogisticRegressionModel, columns: Seq[String]): Unit = {
+      val fieldNames = model.summary.predictions.schema.fieldNames
+      assert(model.hasSummary)
+      assert(datasetFieldNames.subsetOf(fieldNames.toSet))
+      columns.foreach { c => assert(fieldNames.exists(_.startsWith(c))) }
+    }
+    // check that the summary model adds the appropriate columns
+    Seq(("binomial", smallBinaryDataset), ("multinomial", smallMultinomialDataset)).foreach {
+      case (family, dataset) =>
+        lr.setFamily(family)
+        lr.setProbabilityCol("").setPredictionCol("prediction")
+        val modelNoProb = lr.fit(dataset)
+        checkSummarySchema(modelNoProb, Seq("probability_"))
+
+        lr.setProbabilityCol("probability").setPredictionCol("")
+        val modelNoPred = lr.fit(dataset)
+        checkSummarySchema(modelNoPred, Seq("prediction_"))
+
+        lr.setProbabilityCol("").setPredictionCol("")
+        val modelNoPredNoProb = lr.fit(dataset)
+        checkSummarySchema(modelNoPredNoProb, Seq("prediction_", "probability_"))
+    }
+  }
+
+  test("check summary types for binary and multiclass") {
+    val lr = new LogisticRegression()
+      .setFamily("binomial")
+      .setMaxIter(1)
+
+    val blorModel = lr.fit(smallBinaryDataset)
+    assert(blorModel.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+    assert(blorModel.summary.asBinary.isInstanceOf[BinaryLogisticRegressionSummary])
+    assert(blorModel.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+
+    val mlorModel = lr.setFamily("multinomial").fit(smallMultinomialDataset)
+    assert(mlorModel.summary.isInstanceOf[LogisticRegressionTrainingSummary])
+    withClue("cannot get binary summary for multiclass model") {
+      intercept[RuntimeException] {
+        mlorModel.binarySummary
+      }
+    }
+    withClue("cannot cast summary to binary summary multiclass model") {
+      intercept[RuntimeException] {
+        mlorModel.summary.asBinary
+      }
+    }
+
+    val mlorBinaryModel = lr.setFamily("multinomial").fit(smallBinaryDataset)
+    assert(mlorBinaryModel.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+    assert(mlorBinaryModel.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+
+    val blorSummary = blorModel.evaluate(smallBinaryDataset)
+    val mlorSummary = mlorModel.evaluate(smallMultinomialDataset)
+    assert(blorSummary.isInstanceOf[BinaryLogisticRegressionSummary])
+    assert(mlorSummary.isInstanceOf[LogisticRegressionSummary])
   }
 
   test("setThreshold, getThreshold") {
@@ -259,15 +330,14 @@ class LogisticRegressionSuite
     val binaryModel = blr.fit(smallBinaryDataset)
 
     binaryModel.setThreshold(1.0)
-    val binaryZeroPredictions =
-      binaryModel.transform(smallBinaryDataset).select("prediction").collect()
-    assert(binaryZeroPredictions.forall(_.getDouble(0) === 0.0))
+    testTransformer[(Double, Vector)](smallBinaryDataset.toDF(), binaryModel, "prediction") {
+      row => assert(row.getDouble(0) === 0.0)
+    }
 
     binaryModel.setThreshold(0.0)
-    val binaryOnePredictions =
-      binaryModel.transform(smallBinaryDataset).select("prediction").collect()
-    assert(binaryOnePredictions.forall(_.getDouble(0) === 1.0))
-
+    testTransformer[(Double, Vector)](smallBinaryDataset.toDF(), binaryModel, "prediction") {
+      row => assert(row.getDouble(0) === 1.0)
+    }
 
     val mlr = new LogisticRegression().setFamily("multinomial")
     val model = mlr.fit(smallMultinomialDataset)
@@ -275,31 +345,36 @@ class LogisticRegressionSuite
 
     // should predict all zeros
     model.setThresholds(Array(1, 1000, 1000))
-    val zeroPredictions = model.transform(smallMultinomialDataset).select("prediction").collect()
-    assert(zeroPredictions.forall(_.getDouble(0) === 0.0))
+    testTransformer[(Double, Vector)](smallMultinomialDataset.toDF(), model, "prediction") {
+      row => assert(row.getDouble(0) === 0.0)
+    }
 
     // should predict all ones
     model.setThresholds(Array(1000, 1, 1000))
-    val onePredictions = model.transform(smallMultinomialDataset).select("prediction").collect()
-    assert(onePredictions.forall(_.getDouble(0) === 1.0))
+    testTransformer[(Double, Vector)](smallMultinomialDataset.toDF(), model, "prediction") {
+      row => assert(row.getDouble(0) === 1.0)
+    }
 
     // should predict all twos
     model.setThresholds(Array(1000, 1000, 1))
-    val twoPredictions = model.transform(smallMultinomialDataset).select("prediction").collect()
-    assert(twoPredictions.forall(_.getDouble(0) === 2.0))
+    testTransformer[(Double, Vector)](smallMultinomialDataset.toDF(), model, "prediction") {
+      row => assert(row.getDouble(0) === 2.0)
+    }
 
     // constant threshold scaling is the same as no thresholds
     model.setThresholds(Array(1000, 1000, 1000))
-    val scaledPredictions = model.transform(smallMultinomialDataset).select("prediction").collect()
-    assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
-      scaled.getDouble(0) === base.getDouble(0)
-    })
+    testTransformerByGlobalCheckFunc[(Double, Vector)](smallMultinomialDataset.toDF(), model,
+      "prediction") { scaledPredictions: Seq[Row] =>
+      assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
+        scaled.getDouble(0) === base.getDouble(0)
+      })
+    }
 
     // force it to use the predict method
     model.setRawPredictionCol("").setProbabilityCol("").setThresholds(Array(0, 1, 1))
-    val predictionsWithPredict =
-      model.transform(smallMultinomialDataset).select("prediction").collect()
-    assert(predictionsWithPredict.forall(_.getDouble(0) === 0.0))
+    testTransformer[(Double, Vector)](smallMultinomialDataset.toDF(), model, "prediction") {
+      row => assert(row.getDouble(0) === 0.0)
+    }
   }
 
   test("logistic regression doesn't fit intercept when fitIntercept is off") {
@@ -330,21 +405,19 @@ class LogisticRegressionSuite
 
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0)
-    val predAllZero = model.transform(smallBinaryDataset)
-      .select("prediction", "myProbability")
-      .collect()
-      .map { case Row(pred: Double, prob: Vector) => pred }
-    assert(predAllZero.forall(_ === 0),
-      s"With threshold=1.0, expected predictions to be all 0, but only" +
-      s" ${predAllZero.count(_ === 0)} of ${smallBinaryDataset.count()} were 0.")
+    testTransformerByGlobalCheckFunc[(Double, Vector)](smallBinaryDataset.toDF(),
+      model, "prediction", "myProbability") { rows =>
+      val predAllZero = rows.map(_.getDouble(0))
+      assert(predAllZero.forall(_ === 0),
+        s"With threshold=1.0, expected predictions to be all 0, but only" +
+        s" ${predAllZero.count(_ === 0)} of ${smallBinaryDataset.count()} were 0.")
+    }
     // Call transform with params, and check that the params worked.
-    val predNotAllZero =
-      model.transform(smallBinaryDataset, model.threshold -> 0.0,
-        model.probabilityCol -> "myProb")
-        .select("prediction", "myProb")
-        .collect()
-        .map { case Row(pred: Double, prob: Vector) => pred }
-    assert(predNotAllZero.exists(_ !== 0.0))
+    testTransformerByGlobalCheckFunc[(Double, Vector)](smallBinaryDataset.toDF(),
+      model.copy(ParamMap(model.threshold -> 0.0,
+        model.probabilityCol -> "myProb")), "prediction", "myProb") {
+      rows => assert(rows.map(_.getDouble(0)).exists(_ !== 0.0))
+    }
 
     // Call fit() with new params, and check as many params as we can.
     lr.setThresholds(Array(0.6, 0.4))
@@ -368,10 +441,10 @@ class LogisticRegressionSuite
     val numFeatures = smallMultinomialDataset.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
 
-    val results = model.transform(smallMultinomialDataset)
-    // check that raw prediction is coefficients dot features + intercept
-    results.select("rawPrediction", "features").collect().foreach {
-      case Row(raw: Vector, features: Vector) =>
+    testTransformer[(Double, Vector)](smallMultinomialDataset.toDF(),
+      model, "rawPrediction", "features", "probability") {
+      case Row(raw: Vector, features: Vector, prob: Vector) =>
+        // check that raw prediction is coefficients dot features + intercept
         assert(raw.size === 3)
         val margins = Array.tabulate(3) { k =>
           var margin = 0.0
@@ -382,12 +455,7 @@ class LogisticRegressionSuite
           margin
         }
         assert(raw ~== Vectors.dense(margins) relTol eps)
-    }
-
-    // Compare rawPrediction with probability
-    results.select("rawPrediction", "probability").collect().foreach {
-      case Row(raw: Vector, prob: Vector) =>
-        assert(raw.size === 3)
+        // Compare rawPrediction with probability
         assert(prob.size === 3)
         val max = raw.toArray.max
         val subtract = if (max > 0) max else 0.0
@@ -399,36 +467,8 @@ class LogisticRegressionSuite
         assert(prob(2) ~== 1.0 - probFromRaw1 - probFromRaw0 relTol eps)
     }
 
-    // Compare prediction with probability
-    results.select("prediction", "probability").collect().foreach {
-      case Row(pred: Double, prob: Vector) =>
-        val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
-        assert(pred == predFromProb)
-    }
-
-    // force it to use raw2prediction
-    model.setRawPredictionCol("rawPrediction").setProbabilityCol("")
-    val resultsUsingRaw2Predict =
-      model.transform(smallMultinomialDataset).select("prediction").as[Double].collect()
-    resultsUsingRaw2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
-      case (pred1, pred2) => assert(pred1 === pred2)
-    }
-
-    // force it to use probability2prediction
-    model.setRawPredictionCol("").setProbabilityCol("probability")
-    val resultsUsingProb2Predict =
-      model.transform(smallMultinomialDataset).select("prediction").as[Double].collect()
-    resultsUsingProb2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
-      case (pred1, pred2) => assert(pred1 === pred2)
-    }
-
-    // force it to use predict
-    model.setRawPredictionCol("").setProbabilityCol("")
-    val resultsUsingPredict =
-      model.transform(smallMultinomialDataset).select("prediction").as[Double].collect()
-    resultsUsingPredict.zip(results.select("prediction").as[Double].collect()).foreach {
-      case (pred1, pred2) => assert(pred1 === pred2)
-    }
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, LogisticRegressionModel](this, model, smallMultinomialDataset)
   }
 
   test("binary logistic regression: Predictor, Classifier methods") {
@@ -441,48 +481,31 @@ class LogisticRegressionSuite
     val numFeatures = smallBinaryDataset.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
 
-    val results = model.transform(smallBinaryDataset)
-
-    // Compare rawPrediction with probability
-    results.select("rawPrediction", "probability").collect().foreach {
-      case Row(raw: Vector, prob: Vector) =>
+    testTransformer[(Double, Vector)](smallBinaryDataset.toDF(),
+      model, "rawPrediction", "probability", "prediction") {
+      case Row(raw: Vector, prob: Vector, pred: Double) =>
+        // Compare rawPrediction with probability
         assert(raw.size === 2)
         assert(prob.size === 2)
         val probFromRaw1 = 1.0 / (1.0 + math.exp(-raw(1)))
         assert(prob(1) ~== probFromRaw1 relTol eps)
         assert(prob(0) ~== 1.0 - probFromRaw1 relTol eps)
-    }
-
-    // Compare prediction with probability
-    results.select("prediction", "probability").collect().foreach {
-      case Row(pred: Double, prob: Vector) =>
+        // Compare prediction with probability
         val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
         assert(pred == predFromProb)
     }
 
-    // force it to use raw2prediction
-    model.setRawPredictionCol("rawPrediction").setProbabilityCol("")
-    val resultsUsingRaw2Predict =
-      model.transform(smallBinaryDataset).select("prediction").as[Double].collect()
-    resultsUsingRaw2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
-      case (pred1, pred2) => assert(pred1 === pred2)
-    }
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, LogisticRegressionModel](this, model, smallBinaryDataset)
+  }
 
-    // force it to use probability2prediction
-    model.setRawPredictionCol("").setProbabilityCol("probability")
-    val resultsUsingProb2Predict =
-      model.transform(smallBinaryDataset).select("prediction").as[Double].collect()
-    resultsUsingProb2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
-      case (pred1, pred2) => assert(pred1 === pred2)
-    }
-
-    // force it to use predict
-    model.setRawPredictionCol("").setProbabilityCol("")
-    val resultsUsingPredict =
-      model.transform(smallBinaryDataset).select("prediction").as[Double].collect()
-    resultsUsingPredict.zip(results.select("prediction").as[Double].collect()).foreach {
-      case (pred1, pred2) => assert(pred1 === pred2)
-    }
+  test("prediction on single instance") {
+    val blor = new LogisticRegression().setFamily("binomial")
+    val blorModel = blor.fit(smallBinaryDataset)
+    testPredictionModelSinglePrediction(blorModel, smallBinaryDataset)
+    val mlor = new LogisticRegression().setFamily("multinomial")
+    val mlorModel = mlor.fit(smallMultinomialDataset)
+    testPredictionModelSinglePrediction(mlorModel, smallMultinomialDataset)
   }
 
   test("coefficients and intercept methods") {
@@ -506,8 +529,8 @@ class LogisticRegressionSuite
   test("sparse coefficients in LogisticAggregator") {
     val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val binaryAgg = new LogisticAggregator(bcCoefficientsBinary, bcFeaturesStd, 2,
-      fitIntercept = true, multinomial = false)
+    val binaryAgg = new LogisticAggregator(bcFeaturesStd, 2,
+      fitIntercept = true, multinomial = false)(bcCoefficientsBinary)
     val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         binaryAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
@@ -516,8 +539,8 @@ class LogisticRegressionSuite
     assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
 
     val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
-    val multinomialAgg = new LogisticAggregator(bcCoefficientsMulti, bcFeaturesStd, 3,
-      fitIntercept = true, multinomial = true)
+    val multinomialAgg = new LogisticAggregator(bcFeaturesStd, 3,
+      fitIntercept = true, multinomial = true)(bcCoefficientsMulti)
     val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         multinomialAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
@@ -537,19 +560,21 @@ class LogisticRegressionSuite
       LabeledPoint(1.0, Vectors.dense(0.0, 1000.0)),
       LabeledPoint(1.0, Vectors.dense(0.0, -1.0))
     ).toDF()
-    val results = model.transform(overFlowData).select("rawPrediction", "probability").collect()
 
-    // probabilities are correct when margins have to be adjusted
-    val raw1 = results(0).getAs[Vector](0)
-    val prob1 = results(0).getAs[Vector](1)
-    assert(raw1 === Vectors.dense(1000.0, 2000.0, 3000.0))
-    assert(prob1 ~== Vectors.dense(0.0, 0.0, 1.0) absTol eps)
+    testTransformerByGlobalCheckFunc[(Double, Vector)](overFlowData.toDF(),
+      model, "rawPrediction", "probability") { results: Seq[Row] =>
+        // probabilities are correct when margins have to be adjusted
+        val raw1 = results(0).getAs[Vector](0)
+        val prob1 = results(0).getAs[Vector](1)
+        assert(raw1 === Vectors.dense(1000.0, 2000.0, 3000.0))
+        assert(prob1 ~== Vectors.dense(0.0, 0.0, 1.0) absTol eps)
 
-    // probabilities are correct when margins don't have to be adjusted
-    val raw2 = results(1).getAs[Vector](0)
-    val prob2 = results(1).getAs[Vector](1)
-    assert(raw2 === Vectors.dense(-1.0, -2.0, -3.0))
-    assert(prob2 ~== Vectors.dense(0.66524096, 0.24472847, 0.09003057) relTol eps)
+        // probabilities are correct when margins don't have to be adjusted
+        val raw2 = results(1).getAs[Vector](0)
+        val prob2 = results(1).getAs[Vector](1)
+        assert(raw2 === Vectors.dense(-1.0, -2.0, -3.0))
+        assert(prob2 ~== Vectors.dense(0.66524096, 0.24472847, 0.09003057) relTol eps)
+    }
   }
 
   test("MultiClassSummarizer") {
@@ -1389,6 +1414,61 @@ class LogisticRegressionSuite
     assert(model2.coefficientMatrix.toArray.sum ~== 0.0 absTol eps)
     assert(model2.interceptVector ~== interceptsR relTol 0.05)
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
+  }
+
+  test("multinomial logistic regression with zero variance (SPARK-21681)") {
+    val sqlContext = multinomialDatasetWithZeroVar.sqlContext
+    import sqlContext.implicits._
+    val mlr = new LogisticRegression().setFamily("multinomial").setFitIntercept(true)
+      .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(true).setWeightCol("weight")
+
+    val model = mlr.fit(multinomialDatasetWithZeroVar)
+
+    /*
+     Use the following R code to load the data and train the model using glmnet package.
+
+     library("glmnet")
+     data <- read.csv("path", header=FALSE)
+     label = as.factor(data$V1)
+     w = data$V2
+     features = as.matrix(data.frame(data$V3, data$V4))
+     coefficients = coef(glmnet(features, label, weights=w, family="multinomial",
+     alpha = 0, lambda = 0))
+     coefficients
+     $`0`
+     3 x 1 sparse Matrix of class "dgCMatrix"
+                    s0
+             0.2658824
+     data.V3 0.1881871
+     data.V4 .
+
+     $`1`
+     3 x 1 sparse Matrix of class "dgCMatrix"
+                      s0
+              0.53604701
+     data.V3 -0.02412645
+     data.V4  .
+
+     $`2`
+     3 x 1 sparse Matrix of class "dgCMatrix"
+                     s0
+             -0.8019294
+     data.V3 -0.1640607
+     data.V4  .
+    */
+
+    val coefficientsR = new DenseMatrix(3, 2, Array(
+      0.1881871, 0.0,
+      -0.02412645, 0.0,
+      -0.1640607, 0.0), isTransposed = true)
+    val interceptsR = Vectors.dense(0.2658824, 0.53604701, -0.8019294)
+
+    model.coefficientMatrix.colIter.foreach(v => assert(v.toArray.sum ~== 0.0 absTol eps))
+
+    assert(model.coefficientMatrix ~== coefficientsR relTol 0.05)
+    assert(model.coefficientMatrix.toArray.sum ~== 0.0 absTol eps)
+    assert(model.interceptVector ~== interceptsR relTol 0.05)
+    assert(model.interceptVector.toArray.sum ~== 0.0 absTol eps)
   }
 
   test("multinomial logistic regression with intercept without regularization with bound") {
@@ -2262,51 +2342,110 @@ class LogisticRegressionSuite
   }
 
   test("evaluate on test set") {
-    // TODO: add for multiclass when model summary becomes available
     // Evaluate on test set should be same as that of the transformed training data.
     val lr = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(1.0)
       .setThreshold(0.6)
-    val model = lr.fit(smallBinaryDataset)
-    val summary = model.summary.asInstanceOf[BinaryLogisticRegressionSummary]
+      .setFamily("binomial")
+    val blorModel = lr.fit(smallBinaryDataset)
+    val blorSummary = blorModel.binarySummary
 
-    val sameSummary =
-      model.evaluate(smallBinaryDataset).asInstanceOf[BinaryLogisticRegressionSummary]
-    assert(summary.areaUnderROC === sameSummary.areaUnderROC)
-    assert(summary.roc.collect() === sameSummary.roc.collect())
-    assert(summary.pr.collect === sameSummary.pr.collect())
+    val sameBlorSummary =
+      blorModel.evaluate(smallBinaryDataset).asInstanceOf[BinaryLogisticRegressionSummary]
+    assert(blorSummary.areaUnderROC === sameBlorSummary.areaUnderROC)
+    assert(blorSummary.roc.collect() === sameBlorSummary.roc.collect())
+    assert(blorSummary.pr.collect === sameBlorSummary.pr.collect())
     assert(
-      summary.fMeasureByThreshold.collect() === sameSummary.fMeasureByThreshold.collect())
-    assert(summary.recallByThreshold.collect() === sameSummary.recallByThreshold.collect())
+      blorSummary.fMeasureByThreshold.collect() === sameBlorSummary.fMeasureByThreshold.collect())
     assert(
-      summary.precisionByThreshold.collect() === sameSummary.precisionByThreshold.collect())
+      blorSummary.recallByThreshold.collect() === sameBlorSummary.recallByThreshold.collect())
+    assert(
+      blorSummary.precisionByThreshold.collect() === sameBlorSummary.precisionByThreshold.collect())
+    assert(blorSummary.labels === sameBlorSummary.labels)
+    assert(blorSummary.truePositiveRateByLabel === sameBlorSummary.truePositiveRateByLabel)
+    assert(blorSummary.falsePositiveRateByLabel === sameBlorSummary.falsePositiveRateByLabel)
+    assert(blorSummary.precisionByLabel === sameBlorSummary.precisionByLabel)
+    assert(blorSummary.recallByLabel === sameBlorSummary.recallByLabel)
+    assert(blorSummary.fMeasureByLabel === sameBlorSummary.fMeasureByLabel)
+    assert(blorSummary.accuracy === sameBlorSummary.accuracy)
+    assert(blorSummary.weightedTruePositiveRate === sameBlorSummary.weightedTruePositiveRate)
+    assert(blorSummary.weightedFalsePositiveRate === sameBlorSummary.weightedFalsePositiveRate)
+    assert(blorSummary.weightedRecall === sameBlorSummary.weightedRecall)
+    assert(blorSummary.weightedPrecision === sameBlorSummary.weightedPrecision)
+    assert(blorSummary.weightedFMeasure === sameBlorSummary.weightedFMeasure)
+
+    lr.setFamily("multinomial")
+    val mlorModel = lr.fit(smallMultinomialDataset)
+    val mlorSummary = mlorModel.summary
+
+    val mlorSameSummary = mlorModel.evaluate(smallMultinomialDataset)
+
+    assert(mlorSummary.truePositiveRateByLabel === mlorSameSummary.truePositiveRateByLabel)
+    assert(mlorSummary.falsePositiveRateByLabel === mlorSameSummary.falsePositiveRateByLabel)
+    assert(mlorSummary.precisionByLabel === mlorSameSummary.precisionByLabel)
+    assert(mlorSummary.recallByLabel === mlorSameSummary.recallByLabel)
+    assert(mlorSummary.fMeasureByLabel === mlorSameSummary.fMeasureByLabel)
+    assert(mlorSummary.accuracy === mlorSameSummary.accuracy)
+    assert(mlorSummary.weightedTruePositiveRate === mlorSameSummary.weightedTruePositiveRate)
+    assert(mlorSummary.weightedFalsePositiveRate === mlorSameSummary.weightedFalsePositiveRate)
+    assert(mlorSummary.weightedPrecision === mlorSameSummary.weightedPrecision)
+    assert(mlorSummary.weightedRecall === mlorSameSummary.weightedRecall)
+    assert(mlorSummary.weightedFMeasure === mlorSameSummary.weightedFMeasure)
   }
 
   test("evaluate with labels that are not doubles") {
     // Evaluate a test set with Label that is a numeric type other than Double
-    val lr = new LogisticRegression()
+    val blor = new LogisticRegression()
       .setMaxIter(1)
       .setRegParam(1.0)
-    val model = lr.fit(smallBinaryDataset)
-    val summary = model.evaluate(smallBinaryDataset).asInstanceOf[BinaryLogisticRegressionSummary]
+      .setFamily("binomial")
+    val blorModel = blor.fit(smallBinaryDataset)
+    val blorSummary = blorModel.evaluate(smallBinaryDataset)
+      .asInstanceOf[BinaryLogisticRegressionSummary]
 
-    val longLabelData = smallBinaryDataset.select(col(model.getLabelCol).cast(LongType),
-      col(model.getFeaturesCol))
-    val longSummary = model.evaluate(longLabelData).asInstanceOf[BinaryLogisticRegressionSummary]
+    val blorLongLabelData = smallBinaryDataset.select(col(blorModel.getLabelCol).cast(LongType),
+      col(blorModel.getFeaturesCol))
+    val blorLongSummary = blorModel.evaluate(blorLongLabelData)
+      .asInstanceOf[BinaryLogisticRegressionSummary]
 
-    assert(summary.areaUnderROC === longSummary.areaUnderROC)
+    assert(blorSummary.areaUnderROC === blorLongSummary.areaUnderROC)
+
+    val mlor = new LogisticRegression()
+      .setMaxIter(1)
+      .setRegParam(1.0)
+      .setFamily("multinomial")
+    val mlorModel = mlor.fit(smallMultinomialDataset)
+    val mlorSummary = mlorModel.evaluate(smallMultinomialDataset)
+
+    val mlorLongLabelData = smallMultinomialDataset.select(
+      col(mlorModel.getLabelCol).cast(LongType),
+      col(mlorModel.getFeaturesCol))
+    val mlorLongSummary = mlorModel.evaluate(mlorLongLabelData)
+
+    assert(mlorSummary.accuracy === mlorLongSummary.accuracy)
   }
 
   test("statistics on training data") {
     // Test that loss is monotonically decreasing.
-    val lr = new LogisticRegression()
+    val blor = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(1.0)
-      .setThreshold(0.6)
-    val model = lr.fit(smallBinaryDataset)
+      .setFamily("binomial")
+    val blorModel = blor.fit(smallBinaryDataset)
     assert(
-      model.summary
+      blorModel.summary
+        .objectiveHistory
+        .sliding(2)
+        .forall(x => x(0) >= x(1)))
+
+    val mlor = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0)
+      .setFamily("multinomial")
+    val mlorModel = mlor.fit(smallMultinomialDataset)
+    assert(
+      mlorModel.summary
         .objectiveHistory
         .sliding(2)
         .forall(x => x(0) >= x(1)))
@@ -2374,10 +2513,13 @@ class LogisticRegressionSuite
     val model1 = lr.fit(smallBinaryDataset)
     val lr2 = new LogisticRegression().setInitialModel(model1).setMaxIter(5).setFamily("binomial")
     val model2 = lr2.fit(smallBinaryDataset)
-    val predictions1 = model1.transform(smallBinaryDataset).select("prediction").collect()
-    val predictions2 = model2.transform(smallBinaryDataset).select("prediction").collect()
-    predictions1.zip(predictions2).foreach { case (Row(p1: Double), Row(p2: Double)) =>
-      assert(p1 === p2)
+    val binaryExpected = model1.transform(smallBinaryDataset).select("prediction").collect()
+      .map(_.getDouble(0))
+    for (model <- Seq(model1, model2)) {
+      testTransformerByGlobalCheckFunc[(Double, Vector)](smallBinaryDataset.toDF(), model,
+        "prediction") { rows: Seq[Row] =>
+        rows.map(_.getDouble(0)).toArray === binaryExpected
+      }
     }
     assert(model2.summary.totalIterations === 1)
 
@@ -2386,12 +2528,15 @@ class LogisticRegressionSuite
     val lr4 = new LogisticRegression()
       .setInitialModel(model3).setMaxIter(5).setFamily("multinomial")
     val model4 = lr4.fit(smallMultinomialDataset)
-    val predictions3 = model3.transform(smallMultinomialDataset).select("prediction").collect()
-    val predictions4 = model4.transform(smallMultinomialDataset).select("prediction").collect()
-    predictions3.zip(predictions4).foreach { case (Row(p1: Double), Row(p2: Double)) =>
-      assert(p1 === p2)
+    val multinomialExpected = model3.transform(smallMultinomialDataset).select("prediction")
+      .collect().map(_.getDouble(0))
+    for (model <- Seq(model3, model4)) {
+      testTransformerByGlobalCheckFunc[(Double, Vector)](smallMultinomialDataset.toDF(), model,
+        "prediction") { rows: Seq[Row] =>
+        rows.map(_.getDouble(0)).toArray === multinomialExpected
+      }
     }
-    // TODO: check that it converges in a single iteration when model summary is available
+    assert(model4.summary.totalIterations === 1)
   }
 
   test("binary logistic regression with all labels the same") {
@@ -2445,13 +2590,14 @@ class LogisticRegressionSuite
       LabeledPoint(4.0, Vectors.dense(2.0))).toDF()
     val mlr = new LogisticRegression().setFamily("multinomial")
     val model = mlr.fit(constantData)
-    val results = model.transform(constantData)
-    results.select("rawPrediction", "probability", "prediction").collect().foreach {
+    testTransformer[(Double, Vector)](constantData, model,
+      "rawPrediction", "probability", "prediction") {
       case Row(raw: Vector, prob: Vector, pred: Double) =>
         assert(raw === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, Double.PositiveInfinity)))
         assert(prob === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, 1.0)))
         assert(pred === 4.0)
     }
+    assert(model.summary.totalIterations === 0)
 
     // force the model to be trained with only one class
     val constantZeroData = Seq(
@@ -2459,26 +2605,27 @@ class LogisticRegressionSuite
       LabeledPoint(0.0, Vectors.dense(1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0))).toDF()
     val modelZeroLabel = mlr.setFitIntercept(false).fit(constantZeroData)
-    val resultsZero = modelZeroLabel.transform(constantZeroData)
-    resultsZero.select("rawPrediction", "probability", "prediction").collect().foreach {
+    testTransformer[(Double, Vector)](constantZeroData, modelZeroLabel,
+      "rawPrediction", "probability", "prediction") {
       case Row(raw: Vector, prob: Vector, pred: Double) =>
         assert(prob === Vectors.dense(Array(1.0)))
         assert(pred === 0.0)
     }
+    assert(modelZeroLabel.summary.totalIterations > 0)
 
     // ensure that the correct value is predicted when numClasses passed through metadata
     val labelMeta = NominalAttribute.defaultAttr.withName("label").withNumValues(6).toMetadata()
     val constantDataWithMetadata = constantData
       .select(constantData("label").as("label", labelMeta), constantData("features"))
     val modelWithMetadata = mlr.setFitIntercept(true).fit(constantDataWithMetadata)
-    val resultsWithMetadata = modelWithMetadata.transform(constantDataWithMetadata)
-    resultsWithMetadata.select("rawPrediction", "probability", "prediction").collect().foreach {
+    testTransformer[(Double, Vector)](constantDataWithMetadata, modelWithMetadata,
+      "rawPrediction", "probability", "prediction") {
       case Row(raw: Vector, prob: Vector, pred: Double) =>
         assert(raw === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, Double.PositiveInfinity, 0.0)))
         assert(prob === Vectors.dense(Array(0.0, 0.0, 0.0, 0.0, 1.0, 0.0)))
         assert(pred === 4.0)
     }
-    // TODO: check num iters is zero when it become available in the model
+    require(modelWithMetadata.summary.totalIterations === 0)
   }
 
   test("compressed storage for constant label") {
@@ -2572,6 +2719,17 @@ class LogisticRegressionSuite
     val lr = new LogisticRegression()
     testEstimatorAndModelReadWrite(lr, smallBinaryDataset, LogisticRegressionSuite.allParamSettings,
       LogisticRegressionSuite.allParamSettings, checkModelData)
+
+    // test lr with bounds on coefficients, need to set elasticNetParam to 0.
+    val numFeatures = smallBinaryDataset.select("features").head().getAs[Vector](0).size
+    val lowerBounds = new DenseMatrix(1, numFeatures, (1 to numFeatures).map(_ / 1000.0).toArray)
+    val upperBounds = new DenseMatrix(1, numFeatures, (1 to numFeatures).map(_ * 1000.0).toArray)
+    val paramSettings = Map("lowerBoundsOnCoefficients" -> lowerBounds,
+      "upperBoundsOnCoefficients" -> upperBounds,
+      "elasticNetParam" -> 0.0
+    )
+    testEstimatorAndModelReadWrite(lr, smallBinaryDataset, paramSettings,
+      paramSettings, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {

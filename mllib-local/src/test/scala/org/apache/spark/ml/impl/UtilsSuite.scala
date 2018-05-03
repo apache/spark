@@ -17,8 +17,8 @@
 
 package org.apache.spark.ml.impl
 
-import org.apache.spark.ml.impl.Utils.EPSILON
 import org.apache.spark.ml.SparkMLFunSuite
+import org.apache.spark.ml.impl.Utils.EPSILON
 
 
 class UtilsSuite extends SparkMLFunSuite {

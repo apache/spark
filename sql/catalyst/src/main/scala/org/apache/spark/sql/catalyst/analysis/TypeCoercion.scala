@@ -22,10 +22,12 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -44,21 +46,22 @@ import org.apache.spark.sql.types._
  */
 object TypeCoercion {
 
-  val typeCoercionRules =
-    PropagateTypes ::
-      InConversion ::
+  def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
+    InConversion(conf) ::
       WidenSetOperationTypes ::
-      PromoteStrings ::
+      PromoteStrings(conf) ::
       DecimalPrecision ::
       BooleanEquality ::
       FunctionArgumentConversion ::
+      ConcatCoercion(conf) ::
+      EltCoercion(conf) ::
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
       Division ::
-      PropagateTypes ::
-      ImplicitTypeCasts ::
+      new ImplicitTypeCasts(conf) ::
       DateTimeOperations ::
+      WindowFrameCoercion ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -99,6 +102,24 @@ object TypeCoercion {
     case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
       Some(TimestampType)
 
+    case (t1 @ StructType(fields1), t2 @ StructType(fields2)) if t1.sameType(t2) =>
+      Some(StructType(fields1.zip(fields2).map { case (f1, f2) =>
+        // Since `t1.sameType(t2)` is true, two StructTypes have the same DataType
+        // except `name` (in case of `spark.sql.caseSensitive=false`) and `nullable`.
+        // - Different names: use f1.name
+        // - Different nullabilities: `nullable` is true iff one of them is nullable.
+        val dataType = findTightestCommonType(f1.dataType, f2.dataType).get
+        StructField(f1.name, dataType, nullable = f1.nullable || f2.nullable)
+      }))
+
+    case (a1 @ ArrayType(et1, hasNull1), a2 @ ArrayType(et2, hasNull2)) if a1.sameType(a2) =>
+      findTightestCommonType(et1, et2).map(ArrayType(_, hasNull1 || hasNull2))
+
+    case (m1 @ MapType(kt1, vt1, hasNull1), m2 @ MapType(kt2, vt2, hasNull2)) if m1.sameType(m2) =>
+      val keyType = findTightestCommonType(kt1, kt2)
+      val valueType = findTightestCommonType(vt1, vt2)
+      Some(MapType(keyType.get, valueType.get, hasNull1 || hasNull2))
+
     case _ => None
   }
 
@@ -114,7 +135,8 @@ object TypeCoercion {
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
-  val findCommonTypeForBinaryComparison: (DataType, DataType) => Option[DataType] = {
+  private def findCommonTypeForBinaryComparison(
+      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
     // We should cast all relative timestamp/date/string comparison into string comparisons
     // This behaves as a user would expect because timestamp strings sort lexicographically.
     // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
@@ -122,12 +144,25 @@ object TypeCoercion {
     case (DateType, StringType) => Some(StringType)
     case (StringType, TimestampType) => Some(StringType)
     case (TimestampType, StringType) => Some(StringType)
-    case (TimestampType, DateType) => Some(StringType)
-    case (DateType, TimestampType) => Some(StringType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
+
+    // Cast to TimestampType when we compare DateType with TimestampType
+    // if conf.compareDateTimestampInTimestamp is true
+    // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
+    case (TimestampType, DateType)
+      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
+    case (DateType, TimestampType)
+      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
+
+    // There is no proper decimal type we can pick,
+    // using double type is the best we can do.
+    // See SPARK-22469 for details.
+    case (n: DecimalType, s: StringType) => Some(DoubleType)
+    case (s: StringType, n: DecimalType) => Some(DoubleType)
+
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
+    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
     case (l, r) => None
   }
 
@@ -137,7 +172,7 @@ object TypeCoercion {
    * i.e. the main difference with [[findTightestCommonType]] is that here we allow some
    * loss of precision when widening decimal and double, and promotion to string.
    */
-  private[analysis] def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
+  def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
       .orElse(stringPromotion(t1, t2))
@@ -148,11 +183,27 @@ object TypeCoercion {
       })
   }
 
+  /**
+   * Whether the data type contains StringType.
+   */
+  def hasStringType(dt: DataType): Boolean = dt match {
+    case StringType => true
+    case ArrayType(et, _) => hasStringType(et)
+    // Add StructType if we support string promotion for struct fields in the future.
+    case _ => false
+  }
+
   private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case Some(d) => findWiderTypeForTwo(d, c)
-      case None => None
-    })
+    // findWiderTypeForTwo doesn't satisfy the associative law, i.e. (a op b) op c may not equal
+    // to a op (b op c). This is only a problem for StringType or nested StringType in ArrayType.
+    // Excluding these types, findWiderTypeForTwo satisfies the associative law. For instance,
+    // (TimestampType, IntegerType, StringType) should have StringType as the wider common type.
+    val (stringTypes, nonStringTypes) = types.partition(hasStringType(_))
+    (stringTypes.distinct ++ nonStringTypes).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
+      r match {
+        case Some(d) => findWiderTypeForTwo(d, c)
+        case _ => None
+      })
   }
 
   /**
@@ -203,38 +254,6 @@ object TypeCoercion {
     exprs.map(_.dataType).distinct.length == 1
 
   /**
-   * Applies any changes to [[AttributeReference]] data types that are made by other rules to
-   * instances higher in the query tree.
-   */
-  object PropagateTypes extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-
-      // No propagation required for leaf nodes.
-      case q: LogicalPlan if q.children.isEmpty => q
-
-      // Don't propagate types from unresolved children.
-      case q: LogicalPlan if !q.childrenResolved => q
-
-      case q: LogicalPlan =>
-        val inputMap = q.inputSet.toSeq.map(a => (a.exprId, a)).toMap
-        q transformExpressions {
-          case a: AttributeReference =>
-            inputMap.get(a.exprId) match {
-              // This can happen when an Attribute reference is born in a non-leaf node, for
-              // example due to a call to an external script like in the Transform operator.
-              // TODO: Perhaps those should actually be aliases?
-              case None => a
-              // Leave the same if the dataTypes match.
-              case Some(newType) if a.dataType == newType.dataType => a
-              case Some(newType) =>
-                logDebug(s"Promoting $a to $newType in ${q.simpleString}")
-                newType
-            }
-        }
-    }
-  }
-
-  /**
    * Widens numeric types and converts strings to numbers when appropriate.
    *
    * Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
@@ -262,9 +281,7 @@ object TypeCoercion {
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case p if p.analyzed => p
-
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case s @ SetOperation(left, right) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
@@ -327,7 +344,7 @@ object TypeCoercion {
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
-  object PromoteStrings extends Rule[LogicalPlan] {
+  case class PromoteStrings(conf: SQLConf) extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
       (expr.dataType, targetType) match {
         case (NullType, dt) => Literal.create(null, targetType)
@@ -336,13 +353,16 @@ object TypeCoercion {
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ BinaryArithmetic(left @ StringType(), right) =>
+      case a @ BinaryArithmetic(left @ StringType(), right)
+        if right.dataType != CalendarIntervalType =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
-      case a @ BinaryArithmetic(left, right @ StringType()) =>
+      case a @ BinaryArithmetic(left, right @ StringType())
+        if left.dataType != CalendarIntervalType =>
         a.makeCopy(Array(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
@@ -353,8 +373,8 @@ object TypeCoercion {
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
-        if findCommonTypeForBinaryComparison(left.dataType, right.dataType).isDefined =>
-        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType).get
+          if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
@@ -385,7 +405,7 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  object InConversion extends Rule[LogicalPlan] {
+  case class InConversion(conf: SQLConf) extends TypeCoercionRule {
     private def flattenExpr(expr: Expression): Seq[Expression] = {
       expr match {
         // Multi columns in IN clause is represented as a CreateNamedStruct.
@@ -395,13 +415,14 @@ object TypeCoercion {
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ In(a, Seq(ListQuery(sub, children, exprId)))
+      case i @ In(a, Seq(ListQuery(sub, children, exprId, _)))
         if !i.resolved && flattenExpr(a).length == sub.output.length =>
         // LHS is the value expression of IN subquery.
         val lhs = flattenExpr(a)
@@ -410,7 +431,7 @@ object TypeCoercion {
         val rhs = sub.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeForBinaryComparison(l.dataType, r.dataType)
+          findCommonTypeForBinaryComparison(l.dataType, r.dataType, conf)
             .orElse(findTightestCommonType(l.dataType, r.dataType))
         }
 
@@ -433,7 +454,8 @@ object TypeCoercion {
             case _ => CreateStruct(castedLhs)
           }
 
-          In(newLhs, Seq(ListQuery(Project(castedRhs, sub), children, exprId)))
+          val newSub = Project(castedRhs, sub)
+          In(newLhs, Seq(ListQuery(newSub, children, exprId, newSub.output)))
         } else {
           i
         }
@@ -453,7 +475,7 @@ object TypeCoercion {
     private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
     private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -493,8 +515,9 @@ object TypeCoercion {
   /**
    * This ensure that the types for various functions are as expected.
    */
-  object FunctionArgumentConversion extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+  object FunctionArgumentConversion extends TypeCoercionRule {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -503,6 +526,14 @@ object TypeCoercion {
         findWiderCommonType(types) match {
           case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
           case None => a
+        }
+
+      case c @ Concat(children) if children.forall(c => ArrayType.acceptsType(c.dataType)) &&
+        !haveSameType(children) =>
+        val types = children.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(finalDataType) => Concat(children.map(Cast(_, finalDataType)))
+          case None => c
         }
 
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
@@ -583,8 +614,9 @@ object TypeCoercion {
    * Hive only performs integral division with the DIV operator. The arguments to / are always
    * converted to fractional types.
    */
-  object Division extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+  object Division extends TypeCoercionRule {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
       case e if !e.childrenResolved => e
@@ -605,8 +637,9 @@ object TypeCoercion {
   /**
    * Coerces the type of different branches of a CASE WHEN statement to a common type.
    */
-  object CaseWhenCoercion extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+  object CaseWhenCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case c: CaseWhen if c.childrenResolved && !c.valueTypesEqual =>
         val maybeCommonType = findWiderCommonType(c.valueTypes)
         maybeCommonType.map { commonType =>
@@ -635,8 +668,9 @@ object TypeCoercion {
   /**
    * Coerces the type of different branches of If statement to a common type.
    */
-  object IfCoercion extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+  object IfCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if left.dataType != right.dataType =>
@@ -655,8 +689,8 @@ object TypeCoercion {
   /**
    * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
    */
-  object StackCoercion extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+  object StackCoercion extends TypeCoercionRule {
+    override def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s @ Stack(children) if s.childrenResolved && s.hasFoldableNumRows =>
         Stack(children.zipWithIndex.map {
           // The first child is the number of rows for stack.
@@ -669,6 +703,56 @@ object TypeCoercion {
   }
 
   /**
+   * Coerces the types of [[Concat]] children to expected ones.
+   *
+   * If `spark.sql.function.concatBinaryAsString` is false and all children types are binary,
+   * the expected types are binary. Otherwise, the expected ones are strings.
+   */
+  case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
+
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transform { case p =>
+      p transformExpressionsUp {
+        // Skip nodes if unresolved or empty children
+        case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
+        case c @ Concat(children) if conf.concatBinaryAsString ||
+            !children.map(_.dataType).forall(_ == BinaryType) =>
+          val newChildren = c.children.map { e =>
+            ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+          }
+          c.copy(children = newChildren)
+      }
+    }
+  }
+
+  /**
+   * Coerces the types of [[Elt]] children to expected ones.
+   *
+   * If `spark.sql.function.eltOutputAsString` is false and all children types are binary,
+   * the expected types are binary. Otherwise, the expected ones are strings.
+   */
+  case class EltCoercion(conf: SQLConf) extends TypeCoercionRule {
+
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transform { case p =>
+      p transformExpressionsUp {
+        // Skip nodes if unresolved or not enough children
+        case c @ Elt(children) if !c.childrenResolved || children.size < 2 => c
+        case c @ Elt(children) =>
+          val index = children.head
+          val newIndex = ImplicitTypeCasts.implicitCast(index, IntegerType).getOrElse(index)
+          val newInputs = if (conf.eltOutputAsString ||
+              !children.tail.map(_.dataType).forall(_ == BinaryType)) {
+            children.tail.map { e =>
+              ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+            }
+          } else {
+            children.tail
+          }
+          c.copy(children = newIndex +: newInputs)
+      }
+    }
+  }
+
+  /**
    * Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
    * to TimeAdd/TimeSub
    */
@@ -676,7 +760,7 @@ object TypeCoercion {
 
     private val acceptedTypes = Seq(DateType, TimestampType, StringType)
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -692,10 +776,32 @@ object TypeCoercion {
   /**
    * Casts types according to the expected input types for [[Expression]]s.
    */
-  object ImplicitTypeCasts extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+  class ImplicitTypeCasts(conf: SQLConf) extends TypeCoercionRule {
+
+    private def rejectTzInString = conf.getConf(SQLConf.REJECT_TIMEZONE_IN_STRING)
+
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
+
+      // Special rules for `from/to_utc_timestamp`. These 2 functions assume the input timestamp
+      // string is in a specific timezone, so the string itself should not contain timezone.
+      // TODO: We should move the type coercion logic to expressions instead of a central
+      // place to put all the rules.
+      case e: FromUTCTimestamp if e.left.dataType == StringType =>
+        if (rejectTzInString) {
+          e.copy(left = StringToTimestampWithoutTimezone(e.left))
+        } else {
+          e.copy(left = Cast(e.left, TimestampType))
+        }
+
+      case e: ToUTCTimestamp if e.left.dataType == StringType =>
+        if (rejectTzInString) {
+          e.copy(left = StringToTimestampWithoutTimezone(e.left))
+        } else {
+          e.copy(left = Cast(e.left, TimestampType))
+        }
 
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
@@ -713,7 +819,7 @@ object TypeCoercion {
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
-          implicitCast(in, expected).getOrElse(in)
+          ImplicitTypeCasts.implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
@@ -729,6 +835,9 @@ object TypeCoercion {
         }
         e.withNewChildren(children)
     }
+  }
+
+  object ImplicitTypeCasts {
 
     /**
      * Given an expected data type, try to cast the expression and return the cast expression.
@@ -804,5 +913,74 @@ object TypeCoercion {
       }
       Option(ret)
     }
+  }
+
+  /**
+   * Cast WindowFrame boundaries to the type they operate upon.
+   */
+  object WindowFrameCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case s @ WindowSpecDefinition(_, Seq(order), SpecifiedWindowFrame(RangeFrame, lower, upper))
+          if order.resolved =>
+        s.copy(frameSpecification = SpecifiedWindowFrame(
+          RangeFrame,
+          createBoundaryCast(lower, order.dataType),
+          createBoundaryCast(upper, order.dataType)))
+    }
+
+    private def createBoundaryCast(boundary: Expression, dt: DataType): Expression = {
+      (boundary, dt) match {
+        case (e: SpecialFrameBoundary, _) => e
+        case (e, _: DateType) => e
+        case (e, _: TimestampType) => e
+        case (e: Expression, t) if e.dataType != t && Cast.canCast(e.dataType, t) =>
+          Cast(e, t)
+        case _ => boundary
+      }
+    }
+  }
+}
+
+trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
+  /**
+   * Applies any changes to [[AttributeReference]] data types that are made by the transform method
+   * to instances higher in the query tree.
+   */
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val newPlan = coerceTypes(plan)
+    if (plan.fastEquals(newPlan)) {
+      plan
+    } else {
+      propagateTypes(newPlan)
+    }
+  }
+
+  protected def coerceTypes(plan: LogicalPlan): LogicalPlan
+
+  private def propagateTypes(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // No propagation required for leaf nodes.
+    case q: LogicalPlan if q.children.isEmpty => q
+
+    // Don't propagate types from unresolved children.
+    case q: LogicalPlan if !q.childrenResolved => q
+
+    case q: LogicalPlan =>
+      val inputMap = q.inputSet.toSeq.map(a => (a.exprId, a)).toMap
+      q transformExpressions {
+        case a: AttributeReference =>
+          inputMap.get(a.exprId) match {
+            // This can happen when an Attribute reference is born in a non-leaf node, for
+            // example due to a call to an external script like in the Transform operator.
+            // TODO: Perhaps those should actually be aliases?
+            case None => a
+            // Leave the same if the dataTypes match.
+            case Some(newType) if a.dataType == newType.dataType => a
+            case Some(newType) =>
+              logDebug(
+                s"Promoting $a from ${a.dataType} to ${newType.dataType} in ${q.simpleString}")
+              newType
+          }
+      }
   }
 }

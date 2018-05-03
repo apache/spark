@@ -24,6 +24,7 @@ import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
 
 import com.google.common.base.Objects;
 import com.google.common.io.ByteStreams;
@@ -132,7 +133,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     if (conf.lazyFileDescriptor()) {
       return new DefaultFileRegion(file, offset, length);
     } else {
-      FileChannel fileChannel = new FileInputStream(file).getChannel();
+      FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
       return new DefaultFileRegion(fileChannel, offset, length);
     }
   }

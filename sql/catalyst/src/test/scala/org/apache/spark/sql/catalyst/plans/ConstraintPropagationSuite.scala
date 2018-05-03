@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType}
 
-class ConstraintPropagationSuite extends SparkFunSuite {
+class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
 
   private def resolveColumn(tr: LocalRelation, columnName: String): Expression =
     resolveColumn(tr.analyze, columnName)
@@ -400,26 +400,26 @@ class ConstraintPropagationSuite extends SparkFunSuite {
   }
 
   test("enable/disable constraint propagation") {
-    try {
-      val tr = LocalRelation('a.int, 'b.string, 'c.int)
-      val filterRelation = tr.where('a.attr > 10)
+    val tr = LocalRelation('a.int, 'b.string, 'c.int)
+    val filterRelation = tr.where('a.attr > 10)
 
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, true)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
       assert(filterRelation.analyze.constraints.nonEmpty)
+    }
 
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, false)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       assert(filterRelation.analyze.constraints.isEmpty)
+    }
 
-      val aliasedRelation = tr.where('c.attr > 10 && 'a.attr < 5)
-        .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a, 'a3)
+    val aliasedRelation = tr.where('c.attr > 10 && 'a.attr < 5)
+      .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a, 'a3)
 
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, true)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
       assert(aliasedRelation.analyze.constraints.nonEmpty)
+    }
 
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, false)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       assert(aliasedRelation.analyze.constraints.isEmpty)
-    } finally {
-      SQLConf.get.unsetConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED)
     }
   }
 }

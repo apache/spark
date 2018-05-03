@@ -175,7 +175,7 @@ an input DStream using data received by the instance of custom receiver, as show
 {% highlight scala %}
 // Assuming ssc is the StreamingContext
 val customReceiverStream = ssc.receiverStream(new CustomReceiver(host, port))
-val words = lines.flatMap(_.split(" "))
+val words = customReceiverStream.flatMap(_.split(" "))
 ...
 {% endhighlight %}
 
@@ -187,7 +187,7 @@ The full source code is in the example [CustomReceiver.scala]({{site.SPARK_GITHU
 {% highlight java %}
 // Assuming ssc is the JavaStreamingContext
 JavaDStream<String> customReceiverStream = ssc.receiverStream(new JavaCustomReceiver(host, port));
-JavaDStream<String> words = lines.flatMap(s -> ...);
+JavaDStream<String> words = customReceiverStream.flatMap(s -> ...);
 ...
 {% endhighlight %}
 

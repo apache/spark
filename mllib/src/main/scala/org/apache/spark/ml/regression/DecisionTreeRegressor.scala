@@ -117,12 +117,14 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
-  private[ml] def train(data: RDD[LabeledPoint],
-      oldStrategy: OldStrategy): DecisionTreeRegressionModel = {
+  private[ml] def train(
+      data: RDD[LabeledPoint],
+      oldStrategy: OldStrategy,
+      featureSubsetStrategy: String): DecisionTreeRegressionModel = {
     val instr = Instrumentation.create(this, data)
     instr.logParams(params: _*)
 
-    val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
+    val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy,
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
@@ -158,7 +160,7 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
 @Since("1.4.0")
 class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
-    override val rootNode: Node,
+    override val rootNode: RegressionNode,
     override val numFeatures: Int)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with DecisionTreeRegressorParams with MLWritable with Serializable {
@@ -173,10 +175,10 @@ class DecisionTreeRegressionModel private[ml] (
    * Construct a decision tree regression model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  private[ml] def this(rootNode: Node, numFeatures: Int) =
+  private[ml] def this(rootNode: RegressionNode, numFeatures: Int) =
     this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
   }
 
@@ -277,9 +279,10 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-      val root = loadTreeNodes(path, metadata, sparkSession)
-      val model = new DecisionTreeRegressionModel(metadata.uid, root, numFeatures)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      val root = loadTreeNodes(path, metadata, sparkSession, isClassification = false)
+      val model = new DecisionTreeRegressionModel(metadata.uid,
+        root.asInstanceOf[RegressionNode], numFeatures)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -293,8 +296,8 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
+    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures, isClassification = false)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
-    new DecisionTreeRegressionModel(uid, rootNode, numFeatures)
+    new DecisionTreeRegressionModel(uid, rootNode.asInstanceOf[RegressionNode], numFeatures)
   }
 }

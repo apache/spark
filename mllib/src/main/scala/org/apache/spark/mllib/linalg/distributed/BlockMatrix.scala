@@ -275,7 +275,7 @@ class BlockMatrix @Since("1.3.0") (
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
       mat.rowIter.zipWithIndex.map {
         case (vector, rowIdx) =>
-          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.asBreeze)
+          blockRowIdx * rowsPerBlock + rowIdx -> ((blockColIdx, vector.asBreeze))
       }
     }.groupByKey().map { case (rowIdx, vectors) =>
       val numberNonZeroPerRow = vectors.map(_._2.activeSize).sum.toDouble / cols.toDouble
@@ -286,7 +286,7 @@ class BlockMatrix @Since("1.3.0") (
         BDV.zeros[Double](cols)
       }
 
-      vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
+      vectors.foreach { case (blockColIdx: Int, vec: BV[_]) =>
         val offset = colsPerBlock * blockColIdx
         wholeVector(offset until Math.min(cols, offset + colsPerBlock)) := vec
       }

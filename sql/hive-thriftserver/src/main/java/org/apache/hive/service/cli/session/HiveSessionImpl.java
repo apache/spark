@@ -44,7 +44,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.history.HiveHistory;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.processors.SetProcessor;
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.common.util.HiveVersionInfo;
@@ -70,6 +70,12 @@ import org.apache.hive.service.cli.operation.Operation;
 import org.apache.hive.service.cli.operation.OperationManager;
 import org.apache.hive.service.cli.thrift.TProtocolVersion;
 import org.apache.hive.service.server.ThreadWithGarbageCleanup;
+
+import static org.apache.hadoop.hive.conf.SystemVariables.ENV_PREFIX;
+import static org.apache.hadoop.hive.conf.SystemVariables.HIVECONF_PREFIX;
+import static org.apache.hadoop.hive.conf.SystemVariables.HIVEVAR_PREFIX;
+import static org.apache.hadoop.hive.conf.SystemVariables.METACONF_PREFIX;
+import static org.apache.hadoop.hive.conf.SystemVariables.SYSTEM_PREFIX;
 
 /**
  * HiveSession
@@ -209,7 +215,7 @@ public class HiveSessionImpl implements HiveSession {
       String key = entry.getKey();
       if (key.startsWith("set:")) {
         try {
-          SetProcessor.setVariable(key.substring(4), entry.getValue());
+          setVariable(key.substring(4), entry.getValue());
         } catch (Exception e) {
           throw new HiveSQLException(e);
         }
@@ -221,8 +227,84 @@ public class HiveSessionImpl implements HiveSession {
     }
   }
 
+  // Copy from org.apache.hadoop.hive.ql.processors.SetProcessor, only change:
+  // setConf(varname, propName, varvalue, true) when varname.startsWith(HIVECONF_PREFIX)
+  public static int setVariable(String varname, String varvalue) throws Exception {
+    SessionState ss = SessionState.get();
+    if (varvalue.contains("\n")){
+      ss.err.println("Warning: Value had a \\n character in it.");
+    }
+    varname = varname.trim();
+    if (varname.startsWith(ENV_PREFIX)){
+      ss.err.println("env:* variables can not be set.");
+      return 1;
+    } else if (varname.startsWith(SYSTEM_PREFIX)){
+      String propName = varname.substring(SYSTEM_PREFIX.length());
+      System.getProperties().setProperty(propName,
+              new VariableSubstitution().substitute(ss.getConf(),varvalue));
+    } else if (varname.startsWith(HIVECONF_PREFIX)){
+      String propName = varname.substring(HIVECONF_PREFIX.length());
+      setConf(varname, propName, varvalue, true);
+    } else if (varname.startsWith(HIVEVAR_PREFIX)) {
+      String propName = varname.substring(HIVEVAR_PREFIX.length());
+      ss.getHiveVariables().put(propName,
+              new VariableSubstitution().substitute(ss.getConf(),varvalue));
+    } else if (varname.startsWith(METACONF_PREFIX)) {
+      String propName = varname.substring(METACONF_PREFIX.length());
+      Hive hive = Hive.get(ss.getConf());
+      hive.setMetaConf(propName, new VariableSubstitution().substitute(ss.getConf(), varvalue));
+    } else {
+      setConf(varname, varname, varvalue, true);
+    }
+    return 0;
+  }
+
+  // returns non-null string for validation fail
+  private static void setConf(String varname, String key, String varvalue, boolean register)
+          throws IllegalArgumentException {
+    HiveConf conf = SessionState.get().getConf();
+    String value = new VariableSubstitution().substitute(conf, varvalue);
+    if (conf.getBoolVar(HiveConf.ConfVars.HIVECONFVALIDATION)) {
+      HiveConf.ConfVars confVars = HiveConf.getConfVars(key);
+      if (confVars != null) {
+        if (!confVars.isType(value)) {
+          StringBuilder message = new StringBuilder();
+          message.append("'SET ").append(varname).append('=').append(varvalue);
+          message.append("' FAILED because ").append(key).append(" expects ");
+          message.append(confVars.typeString()).append(" type value.");
+          throw new IllegalArgumentException(message.toString());
+        }
+        String fail = confVars.validate(value);
+        if (fail != null) {
+          StringBuilder message = new StringBuilder();
+          message.append("'SET ").append(varname).append('=').append(varvalue);
+          message.append("' FAILED in validation : ").append(fail).append('.');
+          throw new IllegalArgumentException(message.toString());
+        }
+      } else if (key.startsWith("hive.")) {
+        throw new IllegalArgumentException("hive configuration " + key + " does not exists.");
+      }
+    }
+    conf.verifyAndSet(key, value);
+    if (register) {
+      SessionState.get().getOverriddenConfigurations().put(key, value);
+    }
+  }
+
   @Override
   public void setOperationLogSessionDir(File operationLogRootDir) {
+    if (!operationLogRootDir.exists()) {
+      LOG.warn("The operation log root directory is removed, recreating: " +
+          operationLogRootDir.getAbsolutePath());
+      if (!operationLogRootDir.mkdirs()) {
+        LOG.warn("Unable to create operation log root directory: " +
+            operationLogRootDir.getAbsolutePath());
+      }
+    }
+    if (!operationLogRootDir.canWrite()) {
+      LOG.warn("The operation log root directory is not writable: " +
+          operationLogRootDir.getAbsolutePath());
+    }
     sessionLogDir = new File(operationLogRootDir, sessionHandle.getHandleIdentifier().toString());
     isOperationLogEnabled = true;
     if (!sessionLogDir.exists()) {
@@ -559,6 +641,8 @@ public class HiveSessionImpl implements HiveSession {
       opHandleSet.clear();
       // Cleanup session log directory.
       cleanupSessionLogDir();
+      // Cleanup pipeout file.
+      cleanupPipeoutFile();
       HiveHistory hiveHist = sessionState.getHiveHistory();
       if (null != hiveHist) {
         hiveHist.closeStream();
@@ -580,6 +664,22 @@ public class HiveSessionImpl implements HiveSession {
         sessionState = null;
       }
       release(true);
+    }
+  }
+
+  private void cleanupPipeoutFile() {
+    String lScratchDir = hiveConf.getVar(ConfVars.LOCALSCRATCHDIR);
+    String sessionID = hiveConf.getVar(ConfVars.HIVESESSIONID);
+
+    File[] fileAry = new File(lScratchDir).listFiles(
+            (dir, name) -> name.startsWith(sessionID) && name.endsWith(".pipeout"));
+
+    for (File file : fileAry) {
+      try {
+        FileUtils.forceDelete(file);
+      } catch (Exception e) {
+        LOG.error("Failed to cleanup pipeout file: " + file, e);
+      }
     }
   }
 

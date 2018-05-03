@@ -19,11 +19,10 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -65,7 +64,8 @@ private[sql] object JDBCRelation extends Logging {
       s"bound. Lower bound: $lowerBound; Upper bound: $upperBound")
 
     val numPartitions =
-      if ((upperBound - lowerBound) >= partitioning.numPartitions) {
+      if ((upperBound - lowerBound) >= partitioning.numPartitions || /* check for overflow */
+          (upperBound - lowerBound) < 0) {
         partitioning.numPartitions
       } else {
         logWarning("The number of partitions is reduced because the specified number of " +
@@ -81,7 +81,7 @@ private[sql] object JDBCRelation extends Logging {
     val column = partitioning.column
     var i: Int = 0
     var currentValue: Long = lowerBound
-    var ans = new ArrayBuffer[Partition]()
+    val ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
       val lBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride
@@ -111,7 +111,14 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = JDBCRDD.resolveTable(jdbcOptions)
+  override val schema: StructType = {
+    val tableSchema = JDBCRDD.resolveTable(jdbcOptions)
+    jdbcOptions.customSchema match {
+      case Some(customSchema) => JdbcUtils.getCustomSchema(
+        tableSchema, customSchema, sparkSession.sessionState.conf.resolver)
+      case None => tableSchema
+    }
+  }
 
   // Check if JDBCRDD.compileFilter can accept input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {

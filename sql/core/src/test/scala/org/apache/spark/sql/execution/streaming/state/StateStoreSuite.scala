@@ -27,17 +27,17 @@ import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -137,7 +137,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(getData(provider, 19) === Set("a" -> 19))
   }
 
-  test("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
+  testQuietly("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
     val conf = new Configuration()
     conf.set("fs.fake.impl", classOf[RenameLikeHDFSFileSystem].getName)
     conf.set("fs.defaultFS", "fake:///")
@@ -182,6 +182,15 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     intercept[Exception] {
       getData(provider, snapshotVersion - 1)
     }
+  }
+
+  test("reports memory usage") {
+    val provider = newStoreProvider()
+    val store = provider.getStore(0)
+    val noDataMemoryUsed = store.metrics.memoryUsedBytes
+    put(store, "a", 1)
+    store.commit()
+    assert(store.metrics.memoryUsedBytes > noDataMemoryUsed)
   }
 
   test("StateStore.get") {
@@ -334,7 +343,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("SPARK-18342: commit fails when rename fails") {
+  testQuietly("SPARK-18342: commit fails when rename fails") {
     import RenameReturnsFalseFileSystem._
     val dir = scheme + "://" + newDir()
     val conf = new Configuration()
@@ -356,7 +365,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     def numTempFiles: Int = {
       if (deltaFileDir.exists) {
-        deltaFileDir.listFiles.map(_.getName).count(n => n.contains("temp") && !n.startsWith("."))
+        deltaFileDir.listFiles.map(_.getName).count(n => n.endsWith(".tmp"))
       } else 0
     }
 
@@ -461,6 +470,43 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  test("error writing [version].delta cancels the output stream") {
+
+    val hadoopConf = new Configuration()
+    hadoopConf.set(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+      classOf[CreateAtomicTestManager].getName)
+    val remoteDir = Utils.createTempDir().getAbsolutePath
+
+    val provider = newStoreProvider(
+      opId = Random.nextInt, partition = 0, dir = remoteDir, hadoopConf = hadoopConf)
+
+    // Disable failure of output stream and generate versions
+    CreateAtomicTestManager.shouldFailInCreateAtomic = false
+    for (version <- 1 to 10) {
+      val store = provider.getStore(version - 1)
+      put(store, version.toString, version) // update "1" -> 1, "2" -> 2, ...
+      store.commit()
+    }
+    val version10Data = (1L to 10).map(_.toString).map(x => x -> x).toSet
+
+    CreateAtomicTestManager.cancelCalledInCreateAtomic = false
+    val store = provider.getStore(10)
+    // Fail commit for next version and verify that reloading resets the files
+    CreateAtomicTestManager.shouldFailInCreateAtomic = true
+    put(store, "11", 11)
+    val e = intercept[IllegalStateException] { quietly { store.commit() } }
+    assert(e.getCause.isInstanceOf[IOException])
+    CreateAtomicTestManager.shouldFailInCreateAtomic = false
+
+    // Abort commit for next version and verify that reloading resets the files
+    CreateAtomicTestManager.cancelCalledInCreateAtomic = false
+    val store2 = provider.getStore(10)
+    put(store2, "11", 11)
+    store2.abort()
+    assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
+  }
+
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
     newStoreProvider(opId = Random.nextInt(), partition = 0)
   }
@@ -554,12 +600,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(!store.hasCommitted)
     assert(get(store, "a") === None)
     assert(store.iterator().isEmpty)
-    assert(store.numKeys() === 0)
+    assert(store.metrics.numKeys === 0)
 
     // Verify state after updating
     put(store, "a", 1)
     assert(get(store, "a") === Some(1))
-    assert(store.numKeys() === 1)
+    assert(store.metrics.numKeys === 1)
 
     assert(store.iterator().nonEmpty)
     assert(getLatestData(provider).isEmpty)
@@ -567,9 +613,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // Make updates, commit and then verify state
     put(store, "b", 2)
     put(store, "aa", 3)
-    assert(store.numKeys() === 3)
+    assert(store.metrics.numKeys === 3)
     remove(store, _.startsWith("a"))
-    assert(store.numKeys() === 1)
+    assert(store.metrics.numKeys === 1)
     assert(store.commit() === 1)
 
     assert(store.hasCommitted)
@@ -587,9 +633,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // New updates to the reloaded store with new version, and does not change old version
     val reloadedProvider = newStoreProvider(store.id)
     val reloadedStore = reloadedProvider.getStore(1)
-    assert(reloadedStore.numKeys() === 1)
+    assert(reloadedStore.metrics.numKeys === 1)
     put(reloadedStore, "c", 4)
-    assert(reloadedStore.numKeys() === 2)
+    assert(reloadedStore.metrics.numKeys === 2)
     assert(reloadedStore.commit() === 2)
     assert(rowsToSet(reloadedStore.iterator()) === Set("b" -> 2, "c" -> 4))
     assert(getLatestData(provider) === Set("b" -> 2, "c" -> 4))
@@ -665,6 +711,37 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     checkInvalidVersion(3)
   }
 
+  test("two concurrent StateStores - one for read-only and one for read-write") {
+    // During Streaming Aggregation, we have two StateStores per task, one used as read-only in
+    // `StateStoreRestoreExec`, and one read-write used in `StateStoreSaveExec`. `StateStore.abort`
+    // will be called for these StateStores if they haven't committed their results. We need to
+    // make sure that `abort` in read-only store after a `commit` in the read-write store doesn't
+    // accidentally lead to the deletion of state.
+    val dir = newDir()
+    val storeId = StateStoreId(dir, 0L, 1)
+    val provider0 = newStoreProvider(storeId)
+    // prime state
+    val store = provider0.getStore(0)
+    val key = "a"
+    put(store, key, 1)
+    store.commit()
+    assert(rowsToSet(store.iterator()) === Set(key -> 1))
+
+    // two state stores
+    val provider1 = newStoreProvider(storeId)
+    val restoreStore = provider1.getStore(1)
+    val saveStore = provider1.getStore(1)
+
+    put(saveStore, key, get(restoreStore, key).get + 1)
+    saveStore.commit()
+    restoreStore.abort()
+
+    // check that state is correct for next batch
+    val provider2 = newStoreProvider(storeId)
+    val finalStore = provider2.getStore(2)
+    assert(rowsToSet(finalStore.iterator()) === Set(key -> 2))
+  }
+
   /** Return a new provider with a random id */
   def newStoreProvider(): ProviderClass
 
@@ -679,6 +756,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
    * this provider
    */
   def getData(storeProvider: ProviderClass, version: Int): Set[(String, Int)]
+
+  protected def testQuietly(name: String)(f: => Unit): Unit = {
+    test(name) {
+      quietly {
+        f
+      }
+    }
+  }
 }
 
 object StateStoreTestsHelper {
