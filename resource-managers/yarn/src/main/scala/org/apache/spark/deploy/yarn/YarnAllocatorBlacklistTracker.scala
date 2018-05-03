@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.yarn
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import org.apache.hadoop.yarn.client.api.AMRMClient
@@ -31,6 +32,16 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
 /**
  * YarnAllocatorBlacklistTracker is responsible for tracking the blacklisted nodes
  * and synchronizing the node list to YARN.
+ *
+ * Blacklisted nodes are coming from two different sources:
+ *
+ * <ul>
+ *   <li> from the scheduler as task level blacklisted nodes
+ *   <li> from this class (tracked here) as YARN resource allocation problems
+ * </ul>
+ *
+ * The reason to realize this logic here (and not in the driver) is to avoid possible delays
+ * between synchronizing the blacklisted nodes with YARN and resource allocations.
  */
 private[spark] class YarnAllocatorBlacklistTracker(
     sparkConf: SparkConf,
@@ -57,7 +68,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   private var schedulerBlacklist = Map.empty[String, Long]
 
-  private var numClusterNodes = (Int.MaxValue / blacklistMaxNodeRatio).toInt
+  private var numClusterNodes = Int.MaxValue
 
   def setNumClusterNodes(numClusterNodes: Int): Unit = {
     this.numClusterNodes = numClusterNodes
@@ -66,8 +77,8 @@ private[spark] class YarnAllocatorBlacklistTracker(
   def handleResourceAllocationFailure(hostOpt: Option[String]): Unit = {
     hostOpt match {
       case Some(hostname) if launchBlacklistEnabled =>
-        // failures on a already blacklisted nodes are not even tracked
-        // otherwise such failures could shutdown the application
+        // failures on an already blacklisted nodes are not even tracked.
+        // otherwise, such failures could shutdown the application
         // as resource requests are asynchronous
         // and a late failure response could exceed MAX_EXECUTOR_FAILURES
         if (!schedulerBlacklist.contains(hostname) &&
@@ -141,5 +152,60 @@ private[spark] class YarnAllocatorBlacklistTracker(
     val now = failureTracker.clock.getTimeMillis()
     allocatorBlacklist.retain { (_, expiryTime) => expiryTime > now }
   }
+}
+
+/**
+ * FailureTracker is responsible for tracking executor failures both for each host separately
+ * and for all hosts altogether.
+ */
+private[spark] class FailureTracker(
+    sparkConf: SparkConf,
+    val clock: Clock = new SystemClock) extends Logging {
+
+  private val executorFailuresValidityInterval =
+    sparkConf.get(config.EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).getOrElse(-1L)
+
+  // Queue to store the timestamp of failed executors for each host
+  private val failedExecutorsTimeStampsPerHost = mutable.Map[String, mutable.Queue[Long]]()
+
+  private val failedExecutorsTimeStamps = new mutable.Queue[Long]()
+
+  private def updateAndCountFailures(failedExecutorsWithTimeStamps: mutable.Queue[Long]): Int = {
+    val endTime = clock.getTimeMillis()
+    while (executorFailuresValidityInterval > 0 &&
+      failedExecutorsWithTimeStamps.nonEmpty &&
+      failedExecutorsWithTimeStamps.head < endTime - executorFailuresValidityInterval) {
+      failedExecutorsWithTimeStamps.dequeue()
+    }
+    failedExecutorsWithTimeStamps.size
+  }
+
+  def numFailedExecutors: Int = synchronized {
+    updateAndCountFailures(failedExecutorsTimeStamps)
+  }
+
+  def registerFailureOnHost(hostname: String): Unit = synchronized {
+    val timeMillis = clock.getTimeMillis()
+    failedExecutorsTimeStamps.enqueue(timeMillis)
+    val failedExecutorsOnHost =
+      failedExecutorsTimeStampsPerHost.getOrElse(hostname, {
+        val failureOnHost = mutable.Queue[Long]()
+        failedExecutorsTimeStampsPerHost.put(hostname, failureOnHost)
+        failureOnHost
+      })
+    failedExecutorsOnHost.enqueue(timeMillis)
+  }
+
+  def registerExecutorFailure(): Unit = synchronized {
+    val timeMillis = clock.getTimeMillis()
+    failedExecutorsTimeStamps.enqueue(timeMillis)
+  }
+
+  def numFailuresOnHost(hostname: String): Int = {
+    failedExecutorsTimeStampsPerHost.get(hostname).map { failedExecutorsOnHost =>
+      updateAndCountFailures(failedExecutorsOnHost)
+    }.getOrElse(0)
+  }
+
 }
 

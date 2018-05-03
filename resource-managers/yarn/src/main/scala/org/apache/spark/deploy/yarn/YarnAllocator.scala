@@ -24,7 +24,7 @@ import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records._
@@ -42,7 +42,7 @@ import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -66,7 +66,8 @@ private[yarn] class YarnAllocator(
     appAttemptId: ApplicationAttemptId,
     securityMgr: SecurityManager,
     localResources: Map[String, LocalResource],
-    resolver: SparkRackResolver)
+    resolver: SparkRackResolver,
+    clock: Clock = new SystemClock)
   extends Logging {
 
   import YarnAllocator._
@@ -102,7 +103,7 @@ private[yarn] class YarnAllocator(
   private var executorIdCounter: Int =
     driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
 
-  private[spark] val failureTracker = new FailureTracker(sparkConf)
+  private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
 
   private val allocatorBlacklistTracker =
     new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
@@ -569,6 +570,8 @@ private[yarn] class YarnAllocator(
               completedContainer.getDiagnostics,
               PMEM_EXCEEDED_PATTERN))
           case _ =>
+            // all the failures which not covered above, like:
+            // disk failure, kill by app master or resource manager, ...
             allocatorBlacklistTracker.handleResourceAllocationFailure(hostOpt)
             (true, "Container marked as failed: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +

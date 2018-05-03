@@ -59,6 +59,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   var rmClient: AMRMClient[ContainerRequest] = _
 
+  var clock: ManualClock = _
+
   var containerNum = 0
 
   override def beforeEach() {
@@ -66,6 +68,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     rmClient = AMRMClient.createAMRMClient()
     rmClient.init(conf)
     rmClient.start()
+    clock = new ManualClock()
   }
 
   override def afterEach() {
@@ -101,7 +104,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       appAttemptId,
       new SecurityManager(sparkConf),
       Map(),
-      new MockResolver())
+      new MockResolver(),
+      clock)
   }
 
   def createContainer(host: String): Container = {
@@ -357,8 +361,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   test("window based failure executor counting") {
     sparkConf.set("spark.yarn.executor.failuresValidityInterval", "100s")
     val handler = createAllocator(4)
-    val clock = new ManualClock(0L)
-    handler.failureTracker.setClock(clock)
 
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)

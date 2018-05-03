@@ -270,8 +270,9 @@ private[scheduler] class BlacklistTracker (
   }
 
   /**
-   * Get the full set of nodes that are blacklisted.  Unlike other methods in this class, this *IS*
-   * thread-safe -- no lock required on a taskScheduler.
+   * Get the full set of blacklisted nodes with expiry dates of the blacklisting.
+   * Unlike other methods in this class, this *IS* thread-safe -- no lock required
+   * on a taskScheduler.
    */
   def nodeBlacklist(): Map[String, Long] = {
     _nodeBlacklist.get()
