@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
+import java.util.concurrent.atomic.AtomicLong
+
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTask.{logError, logInfo}
@@ -43,7 +46,8 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
     val epochCoordinator = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       SparkEnv.get)
-    var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
+    ContinuousWriteRDD.currentEpoch.set(
+      new AtomicLong(context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong))
 
     do {
       var dataWriter: DataWriter[InternalRow] = null
@@ -84,5 +88,11 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
   override def clearDependencies() {
     super.clearDependencies()
     prev = null
+  }
+}
+
+object ContinuousWriteRDD {
+  val currentEpoch: InheritableThreadLocal[AtomicLong] = new InheritableThreadLocal[AtomicLong] {
+
   }
 }
