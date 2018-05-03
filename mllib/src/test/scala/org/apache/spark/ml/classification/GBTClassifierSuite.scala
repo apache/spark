@@ -18,8 +18,8 @@
 package org.apache.spark.ml.classification
 
 import com.github.fommil.netlib.BLAS
-import org.apache.spark.{SparkException, SparkFunSuite}
 
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
