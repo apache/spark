@@ -108,6 +108,14 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val m4 = Literal.create(Map("a" -> null, "c" -> "3"), MapType(StringType, StringType))
     val m5 = Literal.create(Map("a" -> 1, "b" -> 2), MapType(StringType, IntegerType))
     val m6 = Literal.create(Map("a" -> null, "c" -> 3), MapType(StringType, IntegerType))
+    val m7 = Literal.create(Map(List(1, 2) -> 1, List(3, 4) -> 2),
+      MapType(ArrayType(IntegerType), IntegerType))
+    val m8 = Literal.create(Map(List(5, 6) -> 3, List(1, 2) -> 4),
+      MapType(ArrayType(IntegerType), IntegerType))
+    val m9 = Literal.create(Map(Map(1 -> 2, 3 -> 4) -> 1, Map(5 -> 6, 7 -> 8) -> 2),
+      MapType(MapType(IntegerType, IntegerType), IntegerType))
+    val m10 = Literal.create(Map(Map(9 -> 10, 11 -> 12) -> 3, Map(1 -> 2, 3 -> 4) -> 4),
+      MapType(MapType(IntegerType, IntegerType), IntegerType))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
     // overlapping maps
@@ -130,6 +138,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapConcat(Seq(m5, m6)),
       mutable.LinkedHashMap("a" -> null, "b" -> 2, "c" -> 3))
 
+    // keys that are arrays, with overlap
+    checkEvaluation(MapConcat(Seq(m7, m8)),
+      mutable.LinkedHashMap(List(1, 2) -> 4, List(3, 4) -> 2, List(5, 6) -> 3))
+
     // null map
     checkEvaluation(MapConcat(Seq(m0, mNull)),
       null)
@@ -151,6 +163,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // argument checking
     assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
     assert(MapConcat(Seq(m5, m6)).checkInputDataTypes().isSuccess)
+    assert(MapConcat(Seq(m9, m10)).checkInputDataTypes().isFailure)
     assert(MapConcat(Seq(m0, m5)).checkInputDataTypes().isFailure)
     assert(MapConcat(Seq(m0, Literal(12))).checkInputDataTypes().isFailure)
     assert(MapConcat(Seq(m0, m1)).dataType.keyType == StringType)

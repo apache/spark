@@ -521,6 +521,14 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
       TypeCheckResult.TypeCheckFailure(
         s"The given input of function $prettyName should all be of type map, " +
           "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+    } else if (children.map(_.dataType.asInstanceOf[MapType].keyType)
+      .exists(_.isInstanceOf[MapType])) {
+      // map_concat needs to pick a winner when multiple maps contain the same key. map_concat
+      // can do that only if it can detect when two keys are the same. SPARK-9415 states "map type
+      // should not support equality, hash". As a result, map_concat does not support a map type
+      // as a key
+      TypeCheckResult.TypeCheckFailure(
+        s"The given input maps of function $prettyName cannot have a map type as a key")
     } else if (children.map(_.dataType.asInstanceOf[MapType].keyType).distinct.length > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The given input maps of function $prettyName should all be the same type, " +
