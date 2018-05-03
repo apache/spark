@@ -2207,10 +2207,10 @@ object functions {
   }
 
   /**
-    * Returns the data type of the given column.
-    *
-    * @group misc_funcs
-    */
+   * Returns the data type of the given column.
+   *
+   * @group misc_funcs
+   */
   def data_type(e: Column): Column = withExpr { GetDataType(e.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
