@@ -78,10 +78,12 @@ case class InMemoryTableScanExec(
 
   private lazy val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
 
-  private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
+  private def createAndDecompressColumn(
+      cachedColumnarBatch: CachedBatch,
+      offHeapColumnVectorEnabled: Boolean): ColumnarBatch = {
     val rowCount = cachedColumnarBatch.numRows
     val taskContext = Option(TaskContext.get())
-    val columnVectors = if (!conf.offHeapColumnVectorEnabled || taskContext.isEmpty) {
+    val columnVectors = if (!offHeapColumnVectorEnabled || taskContext.isEmpty) {
       OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
     } else {
       OffHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
@@ -101,10 +103,13 @@ case class InMemoryTableScanExec(
 
   private lazy val inputRDD: RDD[InternalRow] = {
     val buffers = filteredCachedBatches()
+    val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     if (supportsBatch) {
       // HACK ALERT: This is actually an RDD[ColumnarBatch].
       // We're taking advantage of Scala's type erasure here to pass these batches along.
-      buffers.map(createAndDecompressColumn).asInstanceOf[RDD[InternalRow]]
+      buffers
+        .map(createAndDecompressColumn(_, offHeapColumnVectorEnabled))
+        .asInstanceOf[RDD[InternalRow]]
     } else {
       val numOutputRows = longMetric("numOutputRows")
 
