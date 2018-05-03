@@ -19,7 +19,9 @@ package org.apache.spark.scheduler
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
+import scala.collection.immutable.Map
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
 import org.apache.hadoop.fs.Path
@@ -29,10 +31,13 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
+
 
 /**
  * Test whether EventLoggingListener logs events properly.
@@ -43,6 +48,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  */
 class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
   with Logging {
+
   import EventLoggingListenerSuite._
 
   private val fileSystem = Utils.getHadoopFileSystem("/",
@@ -135,6 +141,10 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1.lz4" ===
       EventLoggingListener.getLogPath(baseDirUri,
         "a fine:mind$dollar{bills}.1", None, Some("lz4")))
+  }
+
+  test("Executor metrics update") {
+    testExecutorMetricsUpdateEventLogging()
   }
 
   /* ----------------- *
@@ -248,6 +258,233 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
     } {
       logData.close()
+    }
+  }
+
+  /**
+   * Test executor metrics update logging functionality. This checks that a
+   * SparkListenerExecutorMetricsUpdate event is added to the Spark history
+   * log if one of the executor metrics is larger than any previously
+   * recorded value for the metric, per executor per stage. The task metrics
+   * should not be added.
+   */
+  private def testExecutorMetricsUpdateEventLogging() {
+    val conf = getLoggingConf(testDirPath, None)
+    val logName = "executorMetricsUpdated-test"
+    val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
+    val listenerBus = new LiveListenerBus(conf)
+
+    // expected ExecutorMetricsUpdate, for the given stage id and executor id
+    val expectedMetricsEvents: Map[(Int, String), SparkListenerExecutorMetricsUpdate] =
+      Map(
+        ((0, "1"),
+          createExecutorMetricsUpdateEvent(1,
+            new ExecutorMetrics(-1L, 5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L, 70L, 20L))),
+        ((0, "2"),
+          createExecutorMetricsUpdateEvent(2,
+            new ExecutorMetrics(-1L, 7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L, 80L, 40L))),
+        ((1, "1"),
+          createExecutorMetricsUpdateEvent(1,
+            new ExecutorMetrics(-1L, 7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L, 50L, 0L))),
+        ((1, "2"),
+          createExecutorMetricsUpdateEvent(2,
+            new ExecutorMetrics(-1L, 7000L, 70L, 50L, 40L, 10L, 30L, 50L, 60L, 40L, 40L))))
+
+    // Events to post.
+    val events = Array(
+      SparkListenerApplicationStart("executionMetrics", None,
+        1L, "update", None),
+      createExecutorAddedEvent(1),
+      createExecutorAddedEvent(2),
+      createStageSubmittedEvent(0),
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(10L, 4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L)),
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(10L, 1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L)),
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(15L, 4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L)),
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(15L, 2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L)),
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(20L, 2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L)),
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(20L, 3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L)),
+      createStageSubmittedEvent(1),
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(25L, 5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L, 0L)),
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(25L, 7000L, 70L, 50L, 20L, 0L, 10L, 50L, 30L, 10L, 40L)),
+      createStageCompletedEvent(0),
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(30L, 6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L)),
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(30L, 5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L, 20L)),
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(35L, 7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L)),
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(35L, 5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 20L)),
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(40L, 5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L, 0L)),
+      createExecutorRemovedEvent(1),
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(40L, 4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L)),
+      createStageCompletedEvent(1),
+      SparkListenerApplicationEnd(1000L))
+
+    // play the events for the event logger
+    eventLogger.start()
+    listenerBus.start(Mockito.mock(classOf[SparkContext]), Mockito.mock(classOf[MetricsSystem]))
+    listenerBus.addToEventLogQueue(eventLogger)
+    events.foreach(event => listenerBus.post(event))
+    listenerBus.stop()
+    eventLogger.stop()
+
+    // Verify the log file contains the expected events.
+    // Posted events should be logged, except for ExecutorMetricsUpdate events -- these
+    // are consolidated, and the peak values for each stage are logged at stage end.
+    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
+    try {
+      val lines = readLines(logData)
+      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      assert(lines.size === 14)
+      assert(lines(0).contains("SparkListenerLogStart"))
+      assert(lines(1).contains("SparkListenerApplicationStart"))
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      var i = 1
+      events.foreach {event =>
+        event match {
+          case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
+          case stageCompleted: SparkListenerStageCompleted =>
+            for (j <- 1 to 2) {
+              checkExecutorMetricsUpdate(lines(i), stageCompleted.stageInfo.stageId,
+                expectedMetricsEvents)
+                i += 1
+             }
+            checkEvent(lines(i), event)
+            i += 1
+        case _ =>
+          checkEvent(lines(i), event)
+          i += 1
+        }
+      }
+    } finally {
+      logData.close()
+    }
+  }
+
+  /** Create a stage submitted event for the specified stage Id. */
+  private def createStageSubmittedEvent(stageId: Int) = {
+    SparkListenerStageSubmitted(new StageInfo(stageId, 0, stageId.toString, 0,
+      Seq.empty, Seq.empty, "details"))
+  }
+
+  /** Create a stage completed event for the specified stage Id. */
+  private def createStageCompletedEvent(stageId: Int) = {
+    SparkListenerStageCompleted(new StageInfo(stageId, 0, stageId.toString, 0,
+      Seq.empty, Seq.empty, "details"))
+  }
+
+  /** Create an executor added event for the specified executor Id. */
+  private def createExecutorAddedEvent(executorId: Int) = {
+    SparkListenerExecutorAdded(0L, executorId.toString, new ExecutorInfo("host1", 1, Map.empty))
+  }
+
+  /** Create an executor added event for the specified executor Id. */
+  private def createExecutorRemovedEvent(executorId: Int) = {
+    SparkListenerExecutorRemoved(0L, executorId.toString, "test")
+  }
+
+  /** Create an executor metrics update event, with the specified executor metrics values. */
+  private def createExecutorMetricsUpdateEvent(
+      executorId: Int,
+      executorMetrics: ExecutorMetrics): SparkListenerExecutorMetricsUpdate = {
+    val taskMetrics = TaskMetrics.empty
+    taskMetrics.incDiskBytesSpilled(111)
+    taskMetrics.incMemoryBytesSpilled(222)
+    val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
+    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, Some(executorMetrics))
+  }
+
+  /** Check that the two ExecutorMetrics match */
+  private def checkExecutorMetrics(
+      executorMetrics1: Option[ExecutorMetrics],
+      executorMetrics2: Option[ExecutorMetrics]) = {
+    (executorMetrics1, executorMetrics2) match {
+      case (Some(e1), Some(e2)) =>
+        assert(e1.timestamp === e2.timestamp)
+        assert(e1.jvmUsedHeapMemory === e2.jvmUsedHeapMemory)
+        assert(e1.jvmUsedNonHeapMemory === e2.jvmUsedNonHeapMemory)
+        assert(e1.onHeapExecutionMemory === e2.onHeapExecutionMemory)
+        assert(e1.offHeapExecutionMemory === e2.offHeapExecutionMemory)
+        assert(e1.onHeapStorageMemory === e2.onHeapStorageMemory)
+        assert(e1.offHeapStorageMemory === e2.offHeapStorageMemory)
+        assert(e1.onHeapUnifiedMemory === e2.onHeapUnifiedMemory)
+        assert(e1.offHeapUnifiedMemory === e2.offHeapUnifiedMemory)
+        assert(e1.directMemory === e2.directMemory)
+        assert(e1.mappedMemory === e2.mappedMemory)
+      case (None, None) =>
+      case _ =>
+        assert(false)
+    }
+  }
+
+  /** Check that the Spark history log line matches the expected event. */
+  private def checkEvent(line: String, event: SparkListenerEvent): Unit = {
+    assert(line.contains(event.getClass.toString.split("\\.").last))
+    event match {
+      case executorMetrics: SparkListenerExecutorMetricsUpdate =>
+        JsonProtocol.sparkEventFromJson(parse(line)) match {
+          case executorMetrics2: SparkListenerExecutorMetricsUpdate =>
+            assert(executorMetrics.execId === executorMetrics2.execId)
+            assert(executorMetrics2.accumUpdates.isEmpty)
+            checkExecutorMetrics(executorMetrics.executorUpdates, executorMetrics2.executorUpdates)
+          case _ =>
+            assertTypeError("expecting SparkListenerExecutorMetricsUpdate")
+        }
+      case stageSubmitted: SparkListenerStageSubmitted =>
+        // accumulables can be different, so only check the stage Id
+        JsonProtocol.sparkEventFromJson(parse(line)) match {
+          case logStageSubmitted : SparkListenerStageSubmitted =>
+            assert(logStageSubmitted.stageInfo.stageId == stageSubmitted.stageInfo.stageId)
+          case _ =>
+            assertTypeError("expecting SparkListenerStageSubmitted")
+        }
+      case stageCompleted: SparkListenerStageCompleted =>
+        // accumulables can be different, so only check the stage Id
+        JsonProtocol.sparkEventFromJson(parse(line)) match {
+          case logStageSubmitted : SparkListenerStageSubmitted =>
+            assert(logStageSubmitted.stageInfo.stageId == stageCompleted.stageInfo.stageId)
+          case _ =>
+            assertTypeError("expecting SparkListenerStageCompleted")
+        }
+      case _ =>
+        assert(JsonProtocol.sparkEventFromJson(parse(line)) === event)
+    }
+  }
+
+  /**
+   * Check that the Spark history log line is an ExecutorMetricsUpdate, and matches the expected
+   * value for the stage and executor.
+   *
+   * @param line the Spark history log line
+   * @param stageId the stage ID the ExecutorMetricsUpdate is associated with
+   * @param expectedEvents map of expected ExecutorMetricsUpdate events, for (stageId, executorId)
+   */
+  private def checkExecutorMetricsUpdate(
+      line: String,
+      stageId: Int,
+      expectedEvents: Map[(Int, String), SparkListenerExecutorMetricsUpdate]): Unit = {
+    JsonProtocol.sparkEventFromJson(parse(line)) match {
+      case executorMetrics: SparkListenerExecutorMetricsUpdate =>
+          expectedEvents.get((stageId, executorMetrics.execId)) match {
+            case Some(expectedMetrics) =>
+              assert(executorMetrics.accumUpdates.isEmpty)
+              checkExecutorMetrics(executorMetrics.executorUpdates, expectedMetrics.executorUpdates)
+            case None =>
+              assert(false)
+        }
+      case _ =>
+        assertTypeError("expecting SparkListenerExecutorMetricsUpdate")
     }
   }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
+import java.lang.management.ManagementFactory
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -34,7 +35,7 @@ import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{Executor, ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.JavaUtils
@@ -209,6 +210,16 @@ class DAGScheduler(
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
+  /** driver heartbeat for collecting metrics */
+  private val heartbeater: Heartbeater = new Heartbeater(reportHeartBeat,
+    sc.conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
+
+  /** BufferPoolMXBean for direct memory */
+  private val directBufferPool = Executor.getBufferPool(Executor.DIRECT_BUFFER_POOL_NAME)
+
+  /** BufferPoolMXBean for mapped memory */
+  private val mappedBufferPool = Executor.getBufferPool(Executor.MAPPED_BUFFER_POOL_NAME)
+
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -246,8 +257,10 @@ class DAGScheduler(
       execId: String,
       // (taskId, stageId, stageAttemptId, accumUpdates)
       accumUpdates: Array[(Long, Int, Int, Seq[AccumulableInfo])],
-      blockManagerId: BlockManagerId): Boolean = {
-    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates))
+      blockManagerId: BlockManagerId,
+      executorUpdates: ExecutorMetrics): Boolean = {
+    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
+      Some(executorUpdates)))
     blockManagerMaster.driverEndpoint.askSync[Boolean](
       BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))
   }
@@ -1753,9 +1766,21 @@ class DAGScheduler(
     messageScheduler.shutdownNow()
     eventProcessLoop.stop()
     taskScheduler.stop()
+    heartbeater.stop()
+  }
+
+  /** Reports heartbeat metrics for the driver. */
+  private def reportHeartBeat(): Unit = {
+    // get driver memory metrics
+    val driverUpdates = Executor.getCurrentExecutorMetrics(
+      sc.env.memoryManager, directBufferPool, mappedBufferPool)
+    val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
+    listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
+      Some(driverUpdates)))
   }
 
   eventProcessLoop.start()
+  heartbeater.start()
 }
 
 private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler)

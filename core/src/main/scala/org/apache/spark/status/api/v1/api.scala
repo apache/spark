@@ -25,6 +25,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.executor.ExecutorMetrics
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -98,13 +99,26 @@ class ExecutorSummary private[spark](
     val removeReason: Option[String],
     val executorLogs: Map[String, String],
     val memoryMetrics: Option[MemoryMetrics],
-    val blacklistedInStages: Set[Int])
+    val blacklistedInStages: Set[Int],
+    val peakMemoryMetrics: Option[PeakMemoryMetrics])
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,
     val usedOffHeapStorageMemory: Long,
     val totalOnHeapStorageMemory: Long,
     val totalOffHeapStorageMemory: Long)
+
+class PeakMemoryMetrics private[spark](
+    val jvmUsedHeapMemory: Long,
+    val jvmUsedNonHeapMemory: Long,
+    val onHeapExecutionMemory: Long,
+    val offHeapExecutionMemory: Long,
+    val onHeapStorageMemory: Long,
+    val offHeapStorageMemory: Long,
+    val onHeapUnifiedMemory: Long,
+    val offHeapUnifiedMemory: Long,
+    val directMemory: Long,
+    val mappedMemory: Long)
 
 class JobData private[spark](
     val jobId: Int,

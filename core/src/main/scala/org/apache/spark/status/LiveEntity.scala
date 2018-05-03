@@ -27,7 +27,7 @@ import com.google.common.collect.Interners
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
+import org.apache.spark.scheduler.{AccumulableInfo, PeakExecutorMetrics, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.SparkUI
@@ -268,6 +268,9 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
 
   def hasMemoryInfo: Boolean = totalOnHeap >= 0L
 
+  // peak values for executor level metrics
+  val peakExecutorMetrics = new PeakExecutorMetrics
+
   def hostname: String = if (host != null) host else hostPort.split(":")(0)
 
   override protected def doUpdate(): Any = {
@@ -302,10 +305,10 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       Option(removeReason),
       executorLogs,
       memoryMetrics,
-      blacklistedInStages)
+      blacklistedInStages,
+      peakExecutorMetrics.getPeakMemoryMetrics)
     new ExecutorSummaryWrapper(info)
   }
-
 }
 
 private class LiveExecutorStageSummary(

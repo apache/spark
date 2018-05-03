@@ -94,7 +94,9 @@ class JsonProtocolSuite extends SparkFunSuite {
         makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
-      SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)))
+      val executorUpdates = Some(new ExecutorMetrics(1234567L, 543L, 123456L, 12345L, 1234L, 123L,
+        12L, 432L, 321L, 654L, 765L))
+      SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)), executorUpdates)
     }
     val blockUpdated =
       SparkListenerBlockUpdated(BlockUpdatedInfo(BlockManagerId("Stars",
@@ -124,6 +126,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
+    testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
   }
 
   test("Dependent Classes") {
@@ -419,6 +422,30 @@ class JsonProtocolSuite extends SparkFunSuite {
       exceptionFailure.accumUpdates, oldExceptionFailure.accumUpdates, (x, y) => x == y)
   }
 
+  test("ExecutorMetricsUpdate backward compatibility: executor metrics update") {
+    // executorMetricsUpdate was added in 2.1.0. For older event logs, this should
+    // be set to None.
+    val executorMetricsUpdate = makeExecutorMetricsUpdate("1", true, true)
+    val oldExecutorMetricsUpdateJson =
+      JsonProtocol.executorMetricsUpdateToJson(executorMetricsUpdate)
+        .removeField( _._1 == "Executor Metrics Updated")
+    val exepectedExecutorMetricsUpdate = makeExecutorMetricsUpdate("1", true, false)
+    assertEquals(exepectedExecutorMetricsUpdate,
+      JsonProtocol.executorMetricsUpdateFromJson(oldExecutorMetricsUpdateJson))
+  }
+
+  test("ExecutorMetricsUpdate: empty metrics update") {
+    // For SparkListenerExecutorMetricUpdate events, metrics update will be set to
+    // empty in the event log, to avoid excess logging.
+    val executorMetricsUpdate = makeExecutorMetricsUpdate("1", true, true)
+    val oldExecutorMetricsUpdateJson =
+      JsonProtocol.executorMetricsUpdateToJson(executorMetricsUpdate)
+        .replace(List("Metrics Updated"), List.empty[JValue])
+    val exepectedExecutorMetricsUpdate = makeExecutorMetricsUpdate("1", false, true)
+    assertEquals(exepectedExecutorMetricsUpdate,
+      JsonProtocol.executorMetricsUpdateFromJson(oldExecutorMetricsUpdateJson))
+  }
+
   test("AccumulableInfo value de/serialization") {
     import InternalAccumulator._
     val blocks = Seq[(BlockId, BlockStatus)](
@@ -565,6 +592,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
             assert(stageAttemptId1 === stageAttemptId2)
             assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
           })
+        assertEquals(e1.executorUpdates, e2.executorUpdates)
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -652,6 +680,22 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def assertEquals(metrics1: InputMetrics, metrics2: InputMetrics) {
     assert(metrics1.bytesRead === metrics2.bytesRead)
+  }
+
+  private def assertEquals(metrics1: Option[ExecutorMetrics], metrics2: Option[ExecutorMetrics]) {
+    (metrics1, metrics2) match {
+      case (Some(m1), Some(m2)) =>
+        assert(m1.timestamp === m2.timestamp)
+        assert(m1.jvmUsedHeapMemory === m2.jvmUsedHeapMemory)
+        assert(m1.jvmUsedNonHeapMemory === m2.jvmUsedNonHeapMemory)
+        assert(m1.onHeapExecutionMemory === m2.onHeapExecutionMemory)
+        assert(m1.offHeapExecutionMemory === m2.offHeapExecutionMemory)
+        assert(m1.onHeapStorageMemory === m2.onHeapStorageMemory)
+        assert(m1.offHeapStorageMemory === m2.offHeapStorageMemory)
+      case (None, None) =>
+      case _ =>
+        assert(false)
+    }
   }
 
   private def assertEquals(result1: JobResult, result2: JobResult) {
@@ -819,6 +863,27 @@ private[spark] object JsonProtocolSuite extends Assertions {
       metadata: Option[String] = None): AccumulableInfo =
     new AccumulableInfo(id, Some(s"Accumulable$id"), Some(s"delta$id"), Some(s"val$id"),
       internal, countFailedValues, metadata)
+
+  /** Creates an SparkListenerExecutorMetricsUpdate event */
+  private def makeExecutorMetricsUpdate(
+      execId: String,
+      includeTaskMetrics: Boolean,
+      includeExecutorMetrics: Boolean): SparkListenerExecutorMetricsUpdate = {
+    val taskMetrics =
+      if (includeTaskMetrics) {
+        Seq((1L, 1, 1, Seq(makeAccumulableInfo(1, false, false, None),
+          makeAccumulableInfo(2, false, false, None))))
+      } else {
+        Seq()
+      }
+    val executorMetricsUpdate =
+      if (includeExecutorMetrics) {
+        Some(new ExecutorMetrics(1234567L, 123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L))
+      } else {
+        None
+      }
+    SparkListenerExecutorMetricsUpdate(execId, taskMetrics, executorMetricsUpdate)
+  }
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -2007,7 +2072,21 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        }
       |      ]
       |    }
-      |  ]
+      |  ],
+      |  "Executor Metrics Updated" : {
+      |    "Timestamp" : 1234567,
+      |    "JVM Used Heap Memory" : 543,
+      |    "JVM Used Nonheap Memory" : 123456,
+      |    "Onheap Execution Memory" : 12345,
+      |    "Offheap Execution Memory" : 1234,
+      |    "Onheap Storage Memory" : 123,
+      |    "Offheap Storage Memory" : 12,
+      |    "Onheap Unified Memory" : 432,
+      |    "Offheap Unified Memory" : 321,
+      |    "Direct Memory" : 654,
+      |    "Mapped Memory" : 765
+      |  }
+      |
       |}
     """.stripMargin
 

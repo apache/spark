@@ -19,12 +19,13 @@ package org.apache.spark.executor
 
 import java.io.{File, NotSerializableException}
 import java.lang.Thread.UncaughtExceptionHandler
-import java.lang.management.ManagementFactory
+import java.lang.management.{BufferPoolMXBean, ManagementFactory}
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent._
 import javax.annotation.concurrent.GuardedBy
+import javax.management.ObjectName
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -36,7 +37,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
+import org.apache.spark.memory.{MemoryManager, SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task, TaskDescription}
 import org.apache.spark.shuffle.FetchFailedException
@@ -70,6 +71,12 @@ private[spark] class Executor(
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
   private val conf = env.conf
+
+  // BufferPoolMXBean for direct memory
+  private val directBufferPool = Executor.getBufferPool(Executor.DIRECT_BUFFER_POOL_NAME)
+
+  // BufferPoolMXBean for mapped memory
+  private val mappedBufferPool = Executor.getBufferPool(Executor.MAPPED_BUFFER_POOL_NAME)
 
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
@@ -148,7 +155,8 @@ private[spark] class Executor(
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
   // Executor for the heartbeat task.
-  private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
+  private val heartbeater = new Heartbeater(reportHeartBeat,
+    conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
 
   // must be initialized before running startDriverHeartbeat()
   private val heartbeatReceiverRef =
@@ -167,7 +175,7 @@ private[spark] class Executor(
    */
   private var heartbeatFailures = 0
 
-  startDriverHeartbeater()
+  heartbeater.start()
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
@@ -216,8 +224,7 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     env.metricsSystem.report()
-    heartbeater.shutdown()
-    heartbeater.awaitTermination(10, TimeUnit.SECONDS)
+    heartbeater.stop()
     threadPool.shutdown()
     if (!isLocal) {
       env.stop()
@@ -772,6 +779,10 @@ private[spark] class Executor(
     val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulatorV2[_, _]])]()
     val curGCTime = computeTotalGcTime()
 
+    // get executor level memory metrics
+    val executorUpdates = Executor.getCurrentExecutorMetrics(env.memoryManager,
+      directBufferPool, mappedBufferPool)
+
     for (taskRunner <- runningTasks.values().asScala) {
       if (taskRunner.task != null) {
         taskRunner.task.metrics.mergeShuffleReadMetrics()
@@ -780,7 +791,8 @@ private[spark] class Executor(
       }
     }
 
-    val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
+    val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId,
+      executorUpdates)
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
           message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
@@ -800,21 +812,6 @@ private[spark] class Executor(
         }
     }
   }
-
-  /**
-   * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
-   */
-  private def startDriverHeartbeater(): Unit = {
-    val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
-
-    // Wait a random interval so the heartbeats don't end up in sync
-    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
-
-    val heartbeatTask = new Runnable() {
-      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
-    }
-    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
-  }
 }
 
 private[spark] object Executor {
@@ -822,4 +819,43 @@ private[spark] object Executor {
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
   val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
+
+  val DIRECT_BUFFER_POOL_NAME = "direct"
+  val MAPPED_BUFFER_POOL_NAME = "mapped"
+
+  /** Get the BufferPoolMXBean for the specified buffer pool. */
+  def getBufferPool(pool: String): BufferPoolMXBean = {
+    val name = new ObjectName("java.nio:type=BufferPool,name=" + pool)
+    ManagementFactory.newPlatformMXBeanProxy(ManagementFactory.getPlatformMBeanServer,
+      name.toString, classOf[BufferPoolMXBean])
+  }
+
+  /**
+   * Get the current executor level memory metrics.
+   *
+   * @param memoryManager the memory manager
+   * @param direct the direct memory buffer pool
+   * @param mapped the mapped memory buffer pool
+   * @return the executor memory metrics
+   */
+  def getCurrentExecutorMetrics(
+      memoryManager: MemoryManager,
+      direct: BufferPoolMXBean,
+      mapped: BufferPoolMXBean) : ExecutorMetrics = {
+    val onHeapExecutionMemoryUsed = memoryManager.onHeapExecutionMemoryUsed
+    val offHeapExecutionMemoryUsed = memoryManager.offHeapExecutionMemoryUsed
+    val onHeapStorageMemoryUsed = memoryManager.onHeapStorageMemoryUsed
+    val offHeapStorageMemoryUsed = memoryManager.offHeapStorageMemoryUsed
+    new ExecutorMetrics(System.currentTimeMillis(),
+      ManagementFactory.getMemoryMXBean.getHeapMemoryUsage().getUsed(),
+      ManagementFactory.getMemoryMXBean.getNonHeapMemoryUsage().getUsed(),
+      onHeapExecutionMemoryUsed,
+      offHeapExecutionMemoryUsed,
+      onHeapStorageMemoryUsed,
+      offHeapStorageMemoryUsed,
+      onHeapExecutionMemoryUsed + onHeapStorageMemoryUsed, // on heap unified memory
+      offHeapExecutionMemoryUsed + offHeapStorageMemoryUsed, // off heap unified memory
+      direct.getMemoryUsed,
+      mapped.getMemoryUsed)
+  }
 }
