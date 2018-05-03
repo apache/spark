@@ -18,15 +18,17 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.Utils
 
 /**
@@ -201,7 +203,40 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     assert(mostImportantFeature !== mostIF)
   }
 
+  test("runWithValidation stops early and performs better on a validation dataset") {
+    val validationIndicatorCol = "validationIndicator"
+    val trainDF = trainData.toDF().withColumn(validationIndicatorCol, lit(false))
+    val validationDF = validationData.toDF().withColumn(validationIndicatorCol, lit(true))
 
+    val numIter = 20
+    for (lossType <- GBTRegressor.supportedLossTypes) {
+      val gbt = new GBTRegressor()
+        .setSeed(123)
+        .setMaxDepth(2)
+        .setLossType(lossType)
+        .setMaxIter(numIter)
+      val modelWithoutValidation = gbt.fit(trainDF)
+
+      gbt.setValidationIndicatorCol(validationIndicatorCol)
+      val modelWithValidation = gbt.fit(trainDF.union(validationDF))
+
+      val evaluationArrayWithoutValidation = GradientBoostedTrees
+        .evaluateEachIteration(validationData, modelWithoutValidation.trees,
+          modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
+          OldAlgo.Regression)
+
+      val evaluationArrayWithValidation = GradientBoostedTrees
+        .evaluateEachIteration(validationData, modelWithValidation.trees,
+          modelWithValidation.treeWeights, modelWithValidation.getOldLossType,
+          OldAlgo.Regression)
+
+      assert(evaluationArrayWithoutValidation.length === numIter)
+      // run with validation stop early
+      assert(evaluationArrayWithValidation.length < numIter)
+      // run with validation has better performance
+      assert(evaluationArrayWithValidation.last < evaluationArrayWithoutValidation.last)
+    }
+  }
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
