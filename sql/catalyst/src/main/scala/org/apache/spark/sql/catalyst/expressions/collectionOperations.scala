@@ -445,7 +445,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
           )
         }
       )
-    } else {
+    } else if (right.dataType.asInstanceOf[ArrayType].containsNull) {
       arr2.foreach(elementType, (_, v) =>
         if (v == null) {
           return null
@@ -522,6 +522,8 @@ case class ArraysOverlap(left: Expression, right: Expression)
       code
     }
   }
+
+  override def prettyName: String = "arrays_overlap"
 }
 
 /**
