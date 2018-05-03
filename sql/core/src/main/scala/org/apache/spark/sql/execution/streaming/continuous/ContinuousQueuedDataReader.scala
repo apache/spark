@@ -44,7 +44,7 @@ class ContinuousQueuedDataReader(
 
   // Important sequencing - we must get our starting point before the provider threads start running
   private var currentOffset: PartitionOffset =
-    ContinuousDataSourceRDD.getBaseReader(reader).getOffset
+    ContinuousDataSourceRDD.getContinuousReader(reader).getOffset
   private var currentEpoch: Long =
     context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
@@ -133,7 +133,7 @@ class ContinuousQueuedDataReader(
 
     override def run(): Unit = {
       TaskContext.setTaskContext(context)
-      val baseReader = ContinuousDataSourceRDD.getBaseReader(reader)
+      val baseReader = ContinuousDataSourceRDD.getContinuousReader(reader)
       try {
         while (!context.isInterrupted && !context.isCompleted()) {
           if (!reader.next()) {

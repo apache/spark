@@ -101,7 +101,8 @@ class ContinuousDataSourceRDD(
 }
 
 object ContinuousDataSourceRDD {
-  private[continuous] def getBaseReader(reader: DataReader[UnsafeRow]): ContinuousDataReader[_] = {
+  private[continuous] def getContinuousReader(
+      reader: DataReader[UnsafeRow]): ContinuousDataReader[_] = {
     reader match {
       case r: ContinuousDataReader[UnsafeRow] => r
       case wrapped: RowToUnsafeDataReader =>
