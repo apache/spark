@@ -514,10 +514,9 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String],
+    forceNullableSchema: Boolean)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
-
-  val forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA)
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
@@ -532,14 +531,21 @@ case class JsonToStructs(
       schema = JsonExprUtils.validateSchemaLiteral(schema),
       options = Map.empty[String, String],
       child = child,
-      timeZoneId = None)
+      timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = JsonExprUtils.validateSchemaLiteral(schema),
       options = JsonExprUtils.convertToMapData(options),
       child = child,
-      timeZoneId = None)
+      timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
+
+  // Used in `org.apache.spark.sql.functions`
+  def this(schema: DataType, options: Map[String, String], child: Expression) =
+    this(schema, options, child, timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | ArrayType(_: StructType, _) =>
