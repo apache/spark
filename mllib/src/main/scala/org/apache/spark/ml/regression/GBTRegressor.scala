@@ -159,7 +159,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     instr.logNumFeatures(numFeatures)
 
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
-      $(seed), $(featureSubsetStrategy))
+      $(seed), $(featureSubsetStrategy), instr = OptionalInstrumentation.create(instr))
     val m = new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
     instr.logSuccess(m)
     m

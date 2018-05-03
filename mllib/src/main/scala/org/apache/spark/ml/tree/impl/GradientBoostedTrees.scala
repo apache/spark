@@ -43,17 +43,20 @@ private[spark] object GradientBoostedTrees {
       input: RDD[LabeledPoint],
       boostingStrategy: OldBoostingStrategy,
       seed: Long,
-      featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      featureSubsetStrategy: String,
+      instr: OptionalInstrumentation = OptionalInstrumentation
+        .create(GradientBoostedTrees.getClass)
+      ): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
         GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false,
-          seed, featureSubsetStrategy)
+          seed, featureSubsetStrategy, instr = instr)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false,
-          seed, featureSubsetStrategy)
+          seed, featureSubsetStrategy, instr = instr)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by gradient boosting.")
     }
@@ -76,12 +79,15 @@ private[spark] object GradientBoostedTrees {
       validationInput: RDD[LabeledPoint],
       boostingStrategy: OldBoostingStrategy,
       seed: Long,
-      featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      featureSubsetStrategy: String,
+      instr: OptionalInstrumentation = OptionalInstrumentation
+        .create(GradientBoostedTrees.getClass)
+      ): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
         GradientBoostedTrees.boost(input, validationInput, boostingStrategy,
-          validate = true, seed, featureSubsetStrategy)
+          validate = true, seed, featureSubsetStrategy, instr = instr)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(
@@ -89,7 +95,7 @@ private[spark] object GradientBoostedTrees {
         val remappedValidationInput = validationInput.map(
           x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedValidationInput, boostingStrategy,
-          validate = true, seed, featureSubsetStrategy)
+          validate = true, seed, featureSubsetStrategy, instr = instr)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }

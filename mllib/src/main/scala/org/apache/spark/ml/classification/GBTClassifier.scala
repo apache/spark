@@ -177,7 +177,7 @@ class GBTClassifier @Since("1.4.0") (
     instr.logNumClasses(numClasses)
 
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
-      $(seed), $(featureSubsetStrategy))
+      $(seed), $(featureSubsetStrategy), instr = OptionalInstrumentation.create(instr))
     val m = new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
     instr.logSuccess(m)
     m
