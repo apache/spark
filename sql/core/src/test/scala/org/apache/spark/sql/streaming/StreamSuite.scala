@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -513,6 +514,133 @@ class StreamSuite extends StreamTest {
     }
   }
 
+  test("explain-continuous") {
+    val inputData = ContinuousMemoryStream[Int]
+    val df = inputData.toDS().map(_ * 2).filter(_ > 5)
+
+    // Test `df.explain`
+    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explainString =
+      spark.sessionState
+        .executePlan(explain)
+        .executedPlan
+        .executeCollect()
+        .map(_.getString(0))
+        .mkString("\n")
+    assert(explainString.contains("Filter"))
+    assert(explainString.contains("MapElements"))
+    assert(!explainString.contains("LocalTableScan"))
+
+    // Test StreamingQuery.display
+    val q = df.writeStream.queryName("memory_continuous_explain")
+      .outputMode(OutputMode.Update()).format("memory")
+      .trigger(Trigger.Continuous("1 seconds"))
+      .start()
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
+    try {
+      // in continuous mode, the query will be run even there's no data
+      // sleep a bit to ensure initialization
+      waitForLastExecution(q)
+
+      val explainWithoutExtended = q.explainInternal(false)
+
+      print(explainWithoutExtended)
+
+      // `extended = false` only displays the physical plan.
+      assert("Streaming RelationV2 ContinuousMemoryStream".r
+        .findAllMatchIn(explainWithoutExtended).size === 0)
+      assert("ScanV2 ContinuousMemoryStream".r
+        .findAllMatchIn(explainWithoutExtended).size === 1)
+
+      val explainWithExtended = q.explainInternal(true)
+      // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+      // plan.
+      assert("Streaming RelationV2 ContinuousMemoryStream".r
+        .findAllMatchIn(explainWithExtended).size === 3)
+      assert("ScanV2 ContinuousMemoryStream".r
+        .findAllMatchIn(explainWithExtended).size === 1)
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("codegen-microbatch") {
+    import org.apache.spark.sql.execution.debug._
+
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDS().map(_ * 2).filter(_ > 5)
+
+    // Test StreamingQuery.codegen
+    val q = df.writeStream.queryName("memory_microbatch_codegen")
+      .outputMode(OutputMode.Update)
+      .format("memory")
+      .trigger(Trigger.ProcessingTime("1 seconds"))
+      .start()
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
+    try {
+      assert("No physical plan. Waiting for data." === codegenString(q))
+      assert(codegenStringSeq(q).isEmpty)
+
+      inputData.addData(1, 2, 3, 4, 5)
+      q.processAllAvailable()
+
+      // just ensure that it doesn't raise any error
+      // it will provide debug information on last execution
+      q.debug()
+
+      val codegenStr = codegenString(q)
+      assert(codegenStr.contains("Found 1 WholeStageCodegen subtrees."))
+      // assuming that code is generated for the test query
+      assert(codegenStr.contains("Generated code:"))
+
+      val codegenStrSeq = codegenStringSeq(q)
+      assert(codegenStrSeq.nonEmpty)
+      assert(codegenStrSeq.head._1.contains("*(1)"))
+      assert(codegenStrSeq.head._2.contains("codegenStageId=1"))
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("codegen-continuous") {
+    import org.apache.spark.sql.execution.debug._
+
+    val inputData = ContinuousMemoryStream[Int]
+    val df = inputData.toDS().map(_ * 2).filter(_ > 5)
+
+    // Test StreamingQuery.codegen
+    val q = df.writeStream.queryName("memory_continuous_codegen")
+      .outputMode(OutputMode.Update)
+      .format("memory")
+      .trigger(Trigger.Continuous("1 seconds"))
+      .start()
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
+    try {
+      // in continuous mode, the query will be run even there's no data
+      // sleep a bit to ensure initialization
+      waitForLastExecution(q)
+
+      // just ensure that it doesn't raise any error
+      // it will provide the message that continuous mode doesn't support debug
+      q.debug()
+
+      val codegenStr = codegenString(q)
+      assert(codegenStr.contains("Found 1 WholeStageCodegen subtrees."))
+      // assuming that code is generated for the test query
+      assert(codegenStr.contains("Generated code:"))
+
+      val codegenStrSeq = codegenStringSeq(q)
+      assert(codegenStrSeq.nonEmpty)
+      assert(codegenStrSeq.head._1.contains("*(1)"))
+      assert(codegenStrSeq.head._2.contains("codegenStageId=1"))
+    } finally {
+      q.stop()
+    }
+  }
+
   test("SPARK-19065: dropDuplicates should not create expressions using the same id") {
     withTempPath { testPath =>
       val data = Seq((1, 2), (2, 3), (3, 4))
@@ -829,6 +957,18 @@ class StreamSuite extends StreamTest {
       assert(query.exception.isEmpty)
     }
   }
+
+  private def waitForLastExecution(q: StreamExecution): Unit = {
+    var elapsed = 0
+    val timeout = 2000
+    while (q.lastExecution == null && elapsed < timeout) {
+      Thread.sleep(100)
+      elapsed += 100
+    }
+
+    assert(elapsed < timeout, "Exceeds max timeout")
+  }
+
 }
 
 abstract class FakeSource extends StreamSourceProvider {

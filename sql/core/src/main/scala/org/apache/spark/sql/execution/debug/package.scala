@@ -29,6 +29,9 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.continuous.WriteToContinuousDataSourceExec
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
 /**
@@ -40,6 +43,15 @@ import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
  *   sql("SELECT 1").debug()
  *   sql("SELECT 1").debugCodegen()
  * }}}
+ *
+ * or for streaming case (structured streaming):
+ * {{{
+ *   import org.apache.spark.sql.execution.debug._
+ *   val query = df.writeStream.<...>.start()
+ *   query.debug()
+ *   query.debugCodegen()
+ * }}}
+ *
  */
 package object debug {
 
@@ -89,22 +101,61 @@ package object debug {
   }
 
   /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan into one String
+   *
+   * @param query the streaming query for codegen
+   * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
+   */
+  def codegenString(query: StreamingQuery): String = {
+    val msg = query match {
+      case w: StreamExecution if w.lastExecution != null =>
+        codegenString(w.lastExecution.executedPlan)
+
+      case w: StreamExecution if w.lastExecution == null =>
+        "No physical plan. Waiting for data."
+
+      case _ => "Only supported for StreamExecution."
+    }
+    msg
+  }
+
+  /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan
+   *
+   * @param query the streaming query for codegen
+   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   */
+  def codegenStringSeq(query: StreamingQuery): Seq[(String, String)] = {
+    val planAndCodes = query match {
+      case w: StreamExecution if w.lastExecution != null =>
+        codegenStringSeq(w.lastExecution.executedPlan)
+
+      case _ => Seq.empty
+    }
+    planAndCodes
+  }
+
+  /* Helper function to reuse duplicated code block between batch and streaming. */
+  private def debugInternal(plan: SparkPlan): Unit = {
+    val visited = new collection.mutable.HashSet[TreeNodeRef]()
+    val debugPlan = plan transform {
+      case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
+        visited += new TreeNodeRef(s)
+        DebugExec(s)
+    }
+    debugPrint(s"Results returned: ${debugPlan.execute().count()}")
+    debugPlan.foreach {
+      case d: DebugExec => d.dumpStats()
+      case _ =>
+    }
+  }
+
+  /**
    * Augments [[Dataset]]s with debug methods.
    */
   implicit class DebugQuery(query: Dataset[_]) extends Logging {
     def debug(): Unit = {
-      val plan = query.queryExecution.executedPlan
-      val visited = new collection.mutable.HashSet[TreeNodeRef]()
-      val debugPlan = plan transform {
-        case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
-          visited += new TreeNodeRef(s)
-          DebugExec(s)
-      }
-      debugPrint(s"Results returned: ${debugPlan.execute().count()}")
-      debugPlan.foreach {
-        case d: DebugExec => d.dumpStats()
-        case _ =>
-      }
+      debugInternal(query.queryExecution.executedPlan)
     }
 
     /**
@@ -113,6 +164,30 @@ package object debug {
      */
     def debugCodegen(): Unit = {
       debugPrint(codegenString(query.queryExecution.executedPlan))
+    }
+  }
+
+  implicit class DebugStreamQuery(query: StreamingQuery) extends Logging {
+    def debug(): Unit = {
+      query match {
+        case w: StreamExecution =>
+          if (w.lastExecution == null) {
+            debugPrint("No physical plan. Waiting for data.")
+          } else {
+            val executedPlan = w.lastExecution.executedPlan
+            if (executedPlan.find(_.isInstanceOf[WriteToContinuousDataSourceExec]).isDefined) {
+              debugPrint("Debug on continuous mode is not supported.")
+            } else {
+              debugInternal(executedPlan)
+            }
+          }
+
+        case _ => debugPrint("Only supported for StreamExecution.")
+      }
+    }
+
+    def debugCodegen(): Unit = {
+      debugPrint(codegenString(query))
     }
   }
 
