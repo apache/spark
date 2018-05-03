@@ -419,7 +419,7 @@ final class ShuffleBlockFetcherIterator(
             //
             // There is not an explicit test for SortShuffleWriter but the underlying APIs that
             // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
-            // which returns a zero-size from commitAndGet() in case the no records were written
+            // which returns a zero-size from commitAndGet() in case no records were written
             // since the last call.
             val msg = s"Received a zero-size buffer for block $blockId from $address " +
               s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
