@@ -1043,7 +1043,7 @@ case class StringToTimestampWithoutTimezone(child: Expression, timeZoneId: Optio
     val tz = ctx.addReferenceObj("timeZone", timeZone)
     val longOpt = ctx.freshName("longOpt")
     val eval = child.genCode(ctx)
-    val code = s"""
+    val code = code"""
        |${eval.code}
        |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = true;
        |${CodeGenerator.JAVA_LONG} ${ev.value} = ${CodeGenerator.defaultValue(TimestampType)};
