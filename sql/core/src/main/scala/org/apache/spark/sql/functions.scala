@@ -283,6 +283,7 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
+   * @note the function is non-deterministic because its result depends on order of rows.
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -291,6 +292,7 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
+   * @note the function is non-deterministic because its result depends on order of rows.
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -299,6 +301,7 @@ object functions {
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
+   * @note the function is non-deterministic because its result depends on order of rows.
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -307,6 +310,7 @@ object functions {
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
+   * @note the function is non-deterministic because its result depends on order of rows.
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -422,6 +426,7 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note the function is non-deterministic because its result depends on order of rows.
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -435,6 +440,7 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note the function is non-deterministic because its result depends on order of rows.
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -448,6 +454,7 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note the function is non-deterministic because its result depends on order of rows.
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -459,6 +466,7 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note the function is non-deterministic because its result depends on order of rows.
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -535,6 +543,7 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note the function is non-deterministic
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -548,6 +557,7 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note the function is non-deterministic
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -561,6 +571,7 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note the function is non-deterministic
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -572,6 +583,7 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note the function is non-deterministic
    * @group agg_funcs
    * @since 1.3.0
    */
