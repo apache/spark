@@ -870,24 +870,14 @@ object DateTimeUtils {
    * If time1 and time2 having the same day of month, or both are the last day of month,
    * it returns an integer (time under a day will be ignored).
    *
-   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
-   * 8 digits.
+   * Otherwise, the difference is calculated based on 31 days per month.
+   * If `roundOff` is set to true, the result is rounded to 8 decimal places.
    */
-  def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp): Double = {
-    monthsBetween(time1, time2, defaultTimeZone())
-  }
-
-  /**
-   * Returns number of months between time1 and time2. time1 and time2 are expressed in
-   * microseconds since 1.1.1970.
-   *
-   * If time1 and time2 having the same day of month, or both are the last day of month,
-   * it returns an integer (time under a day will be ignored).
-   *
-   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
-   * 8 digits.
-   */
-  def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp, timeZone: TimeZone): Double = {
+  def monthsBetween(
+      time1: SQLTimestamp,
+      time2: SQLTimestamp,
+      roundOff: Boolean,
+      timeZone: TimeZone): Double = {
     val millis1 = time1 / 1000L
     val millis2 = time2 / 1000L
     val date1 = millisToDays(millis1, timeZone)
@@ -898,16 +888,25 @@ object DateTimeUtils {
     val months1 = year1 * 12 + monthInYear1
     val months2 = year2 * 12 + monthInYear2
 
+    val monthDiff = (months1 - months2).toDouble
+
     if (dayInMonth1 == dayInMonth2 || ((daysToMonthEnd1 == 0) && (daysToMonthEnd2 == 0))) {
-      return (months1 - months2).toDouble
+      return monthDiff
     }
-    // milliseconds is enough for 8 digits precision on the right side
-    val timeInDay1 = millis1 - daysToMillis(date1, timeZone)
-    val timeInDay2 = millis2 - daysToMillis(date2, timeZone)
-    val timesBetween = (timeInDay1 - timeInDay2).toDouble / MILLIS_PER_DAY
-    val diff = (months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
-    // rounding to 8 digits
-    math.round(diff * 1e8) / 1e8
+    // using milliseconds can cause precision loss with more than 8 digits
+    // we follow Hive's implementation which uses seconds
+    val secondsInDay1 = (millis1 - daysToMillis(date1, timeZone)) / 1000L
+    val secondsInDay2 = (millis2 - daysToMillis(date2, timeZone)) / 1000L
+    val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
+    // 2678400D is the number of seconds in 31 days
+    // every month is considered to be 31 days long in this function
+    val diff = monthDiff + secondsDiff / 2678400D
+    if (roundOff) {
+      // rounding to 8 digits
+      math.round(diff * 1e8) / 1e8
+    } else {
+      diff
+    }
   }
 
   // Thursday = 0 since 1970/Jan/01 => Thursday

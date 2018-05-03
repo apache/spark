@@ -33,8 +33,8 @@ import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
 
@@ -87,12 +87,23 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   def getInitSteps: Int = $(initSteps)
 
   /**
+   * Validates the input schema.
+   * @param schema input schema
+   */
+  private[clustering] def validateSchema(schema: StructType): Unit = {
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, false))
+
+    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
+  }
+  /**
    * Validates and transforms the input schema.
    * @param schema input schema
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    validateSchema(schema)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
@@ -125,8 +136,11 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
+
     val predictUDF = udf((vector: Vector) => predict(vector))
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+
+    dataset.withColumn($(predictionCol),
+      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
   }
 
   @Since("1.5.0")
@@ -146,8 +160,10 @@ class KMeansModel private[ml] (
   // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
-    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    val data: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+    validateSchema(dataset.schema)
+
+    val data: RDD[OldVector] = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol))
+      .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
     parentModel.computeCost(data)
@@ -264,7 +280,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
         sparkSession.read.parquet(dataPath).as[OldData].head().clusterCenters
       }
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -335,7 +351,9 @@ class KMeans @Since("1.5.0") (
     transformSchema(dataset.schema, logging = true)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+    val instances: RDD[OldVector] = dataset.select(
+      DatasetUtils.columnToVector(dataset, getFeaturesCol))
+      .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 

@@ -268,12 +268,7 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
             compressionCodecs = compressCodecs,
             tableCompressionCodecs = compressCodecs) {
             case (tableCodec, sessionCodec, realCodec, tableSize) =>
-              // For non-partitioned table and when convertMetastore is true, Expect session-level
-              // take effect, and in other cases expect table-level take effect
-              // TODO: It should always be table-level taking effect when the bug(SPARK-22926)
-              // is fixed
-              val expectCodec =
-                if (convertMetastore && !isPartitioned) sessionCodec else tableCodec.get
+              val expectCodec = tableCodec.get
               assert(expectCodec == realCodec)
               assert(checkTableSize(
                 format, expectCodec, isPartitioned, convertMetastore, usingCTAS, tableSize))

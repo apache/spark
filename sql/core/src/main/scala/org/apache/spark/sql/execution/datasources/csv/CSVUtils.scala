@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import org.apache.spark.input.PortableDataStream
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -131,4 +134,29 @@ object CSVUtils {
     schema.foreach(field => verifyType(field.dataType))
   }
 
+  /**
+   * Sample CSV dataset as configured by `samplingRatio`.
+   */
+  def sample(csv: Dataset[String], options: CSVOptions): Dataset[String] = {
+    require(options.samplingRatio > 0,
+      s"samplingRatio (${options.samplingRatio}) should be greater than 0")
+    if (options.samplingRatio > 0.99) {
+      csv
+    } else {
+      csv.sample(withReplacement = false, options.samplingRatio, 1)
+    }
+  }
+
+  /**
+   * Sample CSV RDD as configured by `samplingRatio`.
+   */
+  def sample(csv: RDD[Array[String]], options: CSVOptions): RDD[Array[String]] = {
+    require(options.samplingRatio > 0,
+      s"samplingRatio (${options.samplingRatio}) should be greater than 0")
+    if (options.samplingRatio > 0.99) {
+      csv
+    } else {
+      csv.sample(withReplacement = false, options.samplingRatio, 1)
+    }
+  }
 }

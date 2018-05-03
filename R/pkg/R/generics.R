@@ -757,6 +757,18 @@ setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCoun
 #' @name NULL
 setGeneric("array_contains", function(x, value) { standardGeneric("array_contains") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_max", function(x) { standardGeneric("array_max") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_min", function(x) { standardGeneric("array_min") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_position", function(x, value) { standardGeneric("array_position") })
+
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
@@ -885,6 +897,10 @@ setGeneric("decode", function(x, charset) { standardGeneric("decode") })
 #' @rdname column_window_functions
 #' @name NULL
 setGeneric("dense_rank", function(x = "missing") { standardGeneric("dense_rank") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("element_at", function(x, extraction) { standardGeneric("element_at") })
 
 #' @rdname column_string_functions
 #' @name NULL
