@@ -75,6 +75,10 @@ class ContinuousQueuedDataReader(
     this.close()
   })
 
+  private def shouldStop() = {
+    context.isInterrupted() || context.isCompleted()
+  }
+
   /**
    * Return the next UnsafeRow to be read in the current epoch, or null if the epoch is done.
    *
@@ -86,7 +90,7 @@ class ContinuousQueuedDataReader(
     var currentEntry: ContinuousRecord = null
 
     while (currentEntry == null) {
-      if (context.isInterrupted() || context.isCompleted()) {
+      if (shouldStop()) {
         // Force the epoch to end here. The writer will notice the context is interrupted
         // or completed and not start a new one. This makes it possible to achieve clean
         // shutdown of the streaming query.
@@ -135,10 +139,10 @@ class ContinuousQueuedDataReader(
       TaskContext.setTaskContext(context)
       val baseReader = ContinuousDataSourceRDD.getContinuousReader(reader)
       try {
-        while (!context.isInterrupted && !context.isCompleted()) {
+        while (!shouldStop()) {
           if (!reader.next()) {
             // Check again, since reader.next() might have blocked through an incoming interrupt.
-            if (!context.isInterrupted && !context.isCompleted()) {
+            if (!shouldStop()) {
               throw new IllegalStateException(
                 "Continuous reader reported no elements! Reader should have blocked waiting.")
             } else {
