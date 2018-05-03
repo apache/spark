@@ -424,7 +424,7 @@ class GaussianMixture @Since("2.0.0") (
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
     model.setSummary(Some(summary))
     instr.logNamedValue("logLikelihood", logLikelihood)
-    instr.logNamedValue("clusterSizes", summary.clusterSizes.toString)
+    instr.logNamedValue("clusterSizes", summary.clusterSizes.mkString(", "))
     instr.logSuccess(model)
     model
   }

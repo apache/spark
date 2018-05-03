@@ -279,7 +279,7 @@ class BisectingKMeans @Since("2.0.0") (
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
-    instr.logNamedValue("clusterSizes", summary.clusterSizes.toString)
+    instr.logNamedValue("clusterSizes", summary.clusterSizes.mkString(", "))
     instr.logSuccess(model)
     model
   }
