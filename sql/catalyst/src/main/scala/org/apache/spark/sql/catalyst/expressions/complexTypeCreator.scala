@@ -26,7 +26,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
 
 /**
  * Returns an Array containing the evaluation of all children expressions.
