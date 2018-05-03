@@ -905,7 +905,7 @@ object DateTimeUtils {
    * returns, time of day will be ignored.
    *
    * Otherwise, the difference is calculated based on 31 days per month.
-   * If `roundOff` is set to true, the result is rounded to 8 decimal places.
+   * The result is rounded to 8 decimal places if `roundOff` is set to true.
    */
   def monthsBetween(
       time1: SQLTimestamp,
