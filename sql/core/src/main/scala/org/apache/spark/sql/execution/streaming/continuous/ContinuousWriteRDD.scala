@@ -47,7 +47,7 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
       SparkEnv.get)
     var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
-    do {
+    while (!context.isInterrupted() && !context.isCompleted()) {
       var dataWriter: DataWriter[InternalRow] = null
       // write the data and commit this writer.
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
@@ -78,7 +78,7 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
         if (dataWriter != null) dataWriter.abort()
         logError(s"Writer for partition ${context.partitionId()} aborted.")
       })
-    } while (!context.isInterrupted() && !context.isCompleted())
+    }
 
     Iterator()
   }
