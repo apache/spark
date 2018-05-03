@@ -21,7 +21,10 @@ import java.io.Closeable
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{Partition, SparkEnv, SparkException, TaskContext}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
@@ -132,7 +135,7 @@ class ContinuousQueuedDataReader(
    */
   class DataReaderThread extends Thread(
       s"continuous-reader--${context.partitionId()}--" +
-        s"${context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)}") {
+        s"${context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)}") with Logging {
     @volatile private[continuous] var failureReason: Throwable = _
 
     override def run(): Unit = {
@@ -153,13 +156,19 @@ class ContinuousQueuedDataReader(
           queue.put(ContinuousRow(reader.get().copy(), baseReader.getOffset))
         }
       } catch {
-        case _: InterruptedException if context.isInterrupted() =>
+        case _: InterruptedException =>
           // Continuous shutdown always involves an interrupt; do nothing and shut down quietly.
+          logInfo(s"shutting down interrupted data reader thread $getName")
+
+        case NonFatal(t) =>
+          failureReason = t
+          logWarning("data reader thread failed", t)
+          // If we throw from this thread, we may kill the executor. Let the parent thread handle
+          // it.
 
         case t: Throwable =>
           failureReason = t
-          // Don't rethrow the exception in this thread. It's not needed, and the default Spark
-          // exception handler will kill the executor.
+          throw t
       } finally {
         reader.close()
       }
