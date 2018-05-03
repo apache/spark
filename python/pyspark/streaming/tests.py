@@ -507,6 +507,10 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.batchInfosCompleted = []
             self.batchInfosStarted = []
             self.batchInfosSubmitted = []
+            self.streamingStartedTime = []
+
+        def onStreamingStarted(self, streamingStarted):
+            self.streamingStartedTime.append(streamingStarted.time)
 
         def onBatchSubmitted(self, batchSubmitted):
             self.batchInfosSubmitted.append(batchSubmitted.batchInfo())
@@ -530,8 +534,11 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         batchInfosSubmitted = batch_collector.batchInfosSubmitted
         batchInfosStarted = batch_collector.batchInfosStarted
         batchInfosCompleted = batch_collector.batchInfosCompleted
+        streamingStartedTime = batch_collector.streamingStartedTime
 
         self.wait_for(batchInfosCompleted, 4)
+
+        self.assertEqual(len(streamingStartedTime), 1)
 
         self.assertGreaterEqual(len(batchInfosSubmitted), 4)
         for info in batchInfosSubmitted:
@@ -1583,11 +1590,11 @@ if __name__ == "__main__":
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
         if xmlrunner:
-            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=3).run(tests)
+            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2).run(tests)
             if not result.wasSuccessful():
                 failed = True
         else:
-            result = unittest.TextTestRunner(verbosity=3).run(tests)
+            result = unittest.TextTestRunner(verbosity=2).run(tests)
             if not result.wasSuccessful():
                 failed = True
     sys.exit(failed)

@@ -437,7 +437,8 @@ object SQLConf {
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
-         "when reading data stored in HDFS.")
+         "when reading data stored in HDFS. This configuration will be deprecated in the future " +
+         "releases and replaced by spark.files.ignoreMissingFiles.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1206,6 +1207,13 @@ object SQLConf {
           "V1 Sources.")
       .stringConf
       .createWithDefault("")
+
+  val REJECT_TIMEZONE_IN_STRING = buildConf("spark.sql.function.rejectTimezoneInString")
+    .internal()
+    .doc("If true, `to_utc_timestamp` and `from_utc_timestamp` return null if the input string " +
+      "contains a timezone part, e.g. `2000-10-10 00:00:00+00:00`.")
+    .booleanConf
+    .createWithDefault(true)
 
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value

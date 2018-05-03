@@ -19,6 +19,8 @@ package org.apache.spark.ml.util
 
 import java.util.UUID
 
+import scala.reflect.ClassTag
+
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -40,7 +42,8 @@ import org.apache.spark.sql.Dataset
  * @tparam E the type of the estimator
  */
 private[spark] class Instrumentation[E <: Estimator[_]] private (
-    estimator: E, dataset: RDD[_]) extends Logging {
+    val estimator: E,
+    val dataset: RDD[_]) extends Logging {
 
   private val id = UUID.randomUUID()
   private val prefix = {
@@ -103,6 +106,10 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
     logNamedValue(Instrumentation.loggerTags.numClasses, num)
   }
 
+  def logNumExamples(num: Long): Unit = {
+    logNamedValue(Instrumentation.loggerTags.numExamples, num)
+  }
+
   /**
    * Logs the value with customized name field.
    */
@@ -111,6 +118,10 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   def logNamedValue(name: String, value: Long): Unit = {
+    log(compact(render(name -> value)))
+  }
+
+  def logNamedValue(name: String, value: Double): Unit = {
     log(compact(render(name -> value)))
   }
 
@@ -131,6 +142,8 @@ private[spark] object Instrumentation {
     val numFeatures = "numFeatures"
     val numClasses = "numClasses"
     val numExamples = "numExamples"
+    val meanOfLabels = "meanOfLabels"
+    val varianceOfLabels = "varianceOfLabels"
   }
 
   /**
@@ -149,4 +162,57 @@ private[spark] object Instrumentation {
     new Instrumentation[E](estimator, dataset)
   }
 
+}
+
+/**
+ * A small wrapper that contains an optional `Instrumentation` object.
+ * Provide some log methods, if the containing `Instrumentation` object is defined,
+ * will log via it, otherwise will log via common logger.
+ */
+private[spark] class OptionalInstrumentation private(
+    val instrumentation: Option[Instrumentation[_ <: Estimator[_]]],
+    val className: String) extends Logging {
+
+  protected override def logName: String = className
+
+  override def logInfo(msg: => String) {
+    instrumentation match {
+      case Some(instr) => instr.logInfo(msg)
+      case None => super.logInfo(msg)
+    }
+  }
+
+  override def logWarning(msg: => String) {
+    instrumentation match {
+      case Some(instr) => instr.logWarning(msg)
+      case None => super.logWarning(msg)
+    }
+  }
+
+  override def logError(msg: => String) {
+    instrumentation match {
+      case Some(instr) => instr.logError(msg)
+      case None => super.logError(msg)
+    }
+  }
+}
+
+private[spark] object OptionalInstrumentation {
+
+  /**
+   * Creates an `OptionalInstrumentation` object from an existing `Instrumentation` object.
+   */
+  def create[E <: Estimator[_]](instr: Instrumentation[E]): OptionalInstrumentation = {
+    new OptionalInstrumentation(Some(instr),
+      instr.estimator.getClass.getName.stripSuffix("$"))
+  }
+
+  /**
+   * Creates an `OptionalInstrumentation` object from a `Class` object.
+   * The created `OptionalInstrumentation` object will log messages via common logger and use the
+   * specified class name as logger name.
+   */
+  def create(clazz: Class[_]): OptionalInstrumentation = {
+    new OptionalInstrumentation(None, clazz.getName.stripSuffix("$"))
+  }
 }
