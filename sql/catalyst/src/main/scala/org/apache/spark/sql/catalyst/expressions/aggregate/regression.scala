@@ -182,7 +182,8 @@ case class RegrIntercept(y: Expression, x: Expression)
   override lazy val updateExpressions: Seq[Expression] = updateIfNotNull(updateExpressionsDef)
 
   override val evaluateExpression: Expression = {
-    If(n === Literal(0.0), Literal.create(null, DoubleType), xAvg - (ck / yMk) * yAvg)
+    If(n === Literal(0.0) || yMk === Literal(0.0), Literal.create(null, DoubleType),
+      xAvg - (ck / yMk) * yAvg)
   }
 
   override def prettyName: String = "regr_intercept"
