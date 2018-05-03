@@ -26,6 +26,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * Returns an Array containing the evaluation of all children expressions.
@@ -37,10 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
   """)
-case class CreateArray(children: Seq[Expression], defaultElementType: DataType = StringType)
-  extends Expression {
-
-  def this(children: Seq[Expression]) = this(children, StringType)
+case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -50,7 +48,7 @@ case class CreateArray(children: Seq[Expression], defaultElementType: DataType =
 
   override def dataType: ArrayType = {
     ArrayType(
-      children.headOption.map(_.dataType).getOrElse(defaultElementType),
+      children.headOption.map(_.dataType).getOrElse(StringType),
       containsNull = children.exists(_.nullable))
   }
 

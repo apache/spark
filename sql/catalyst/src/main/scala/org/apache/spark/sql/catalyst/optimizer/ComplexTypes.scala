@@ -41,14 +41,14 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
         createNamedStructLike.valExprs(ordinal)
 
       // Remove redundant array indexing.
-      case GetArrayStructFields(CreateArray(elems, _), field, ordinal, _, _) =>
+      case GetArrayStructFields(CreateArray(elems), field, ordinal, _, _) =>
         // Instead of selecting the field on the entire array, select it from each member
         // of the array. Pushing down the operation this way may open other optimizations
         // opportunities (i.e. struct(...,x,...).x)
         CreateArray(elems.map(GetStructField(_, ordinal, Some(field.name))))
 
       // Remove redundant map lookup.
-      case ga @ GetArrayItem(CreateArray(elems, _), IntegerLiteral(idx)) =>
+      case ga @ GetArrayItem(CreateArray(elems), IntegerLiteral(idx)) =>
         // Instead of creating the array and then selecting one row, remove array creation
         // altogether.
         if (idx >= 0 && idx < elems.size) {

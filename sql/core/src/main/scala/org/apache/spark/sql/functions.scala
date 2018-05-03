@@ -1028,7 +1028,9 @@ object functions {
    * @group normal_funcs
    * @since 2.4.0
    */
-  def array(elementType: DataType): Column = withExpr { CreateArray(Seq.empty, elementType) }
+  def array(elementType: DataType): Column = withExpr {
+    Literal.create(Seq.empty, ArrayType(elementType, false))
+  }
 
   /**
    * Creates a new map column. The input columns must be grouped as key-value pairs, e.g.
