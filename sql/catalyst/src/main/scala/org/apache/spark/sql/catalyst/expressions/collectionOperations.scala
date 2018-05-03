@@ -432,31 +432,36 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val arr1 = a1.asInstanceOf[ArrayData]
     val arr2 = a2.asInstanceOf[ArrayData]
     if (arr1.numElements() > 0) {
+      val set2 = arr2.array.toSet
       arr1.foreach(elementType, (_, v1) =>
         if (v1 == null) {
           hasNull = true
-        } else {
-          arr2.foreach(elementType, (_, v2) =>
-            if (v2 == null) {
-              hasNull = true
-            } else if (v1 == v2) {
-              return true
-            }
-          )
+        } else if (set2.contains(v1)) {
+          return true
         }
       )
-    } else if (right.dataType.asInstanceOf[ArrayType].containsNull) {
-      arr2.foreach(elementType, (_, v) =>
-        if (v == null) {
-          return null
-        }
-      )
+      if (!hasNull && containsNull(arr2, right.dataType.asInstanceOf[ArrayType])) {
+        hasNull = true
+      }
+    } else if (containsNull(arr2, right.dataType.asInstanceOf[ArrayType])) {
+      hasNull = true
     }
     if (hasNull) {
       null
     } else {
       false
     }
+  }
+
+  def containsNull(arr: ArrayData, dt: ArrayType): Boolean = {
+    if (dt.containsNull) {
+      arr.foreach(elementType, (_, v) =>
+        if (v == null) {
+          return true
+        }
+      )
+    }
+    false
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -479,25 +484,25 @@ case class ArraysOverlap(left: Expression, right: Expression)
       } else {
         ""
       }
+      val javaElementClass = CodeGenerator.boxedType(elementType)
+      val javaSet = classOf[java.util.HashSet[_]].getName
+      val set2 = ctx.freshName("set")
       s"""
          |if ($a1.numElements() > 0) {
+         |  $javaSet<$javaElementClass> $set2 = new $javaSet<$javaElementClass>();
+         |  for (int $i2 = 0; $i2 < $a2.numElements(); $i2 ++) {
+         |    ${nullSafeElementCodegen(right.dataType.asInstanceOf[ArrayType], a2, i2,
+                  s"$set2.add($getValue2);", s"${ev.isNull} = true;")}
+         |  }
          |  for (int $i1 = 0; $i1 < $a1.numElements(); $i1 ++) {
          |    ${nullSafeElementCodegen(left.dataType.asInstanceOf[ArrayType], a1, i1,
                 s"""
-                   |for (int $i2 = 0; $i2 < $a2.numElements(); $i2 ++) {
-                   |  ${nullSafeElementCodegen(right.dataType.asInstanceOf[ArrayType], a2, i2,
-                  s"""
-                     |if (${ctx.genEqual(elementType, getValue1, getValue2)}) {
-                     |  ${ev.isNull} = false;
-                     |  ${ev.value} = true;
-                     |  break;
-                     |}
-                      """.stripMargin, s"${ev.isNull} = true;")}
-                   |}
-                   |if (${ev.value}) {
+                   |if ($set2.contains($getValue1)) {
+                   |  ${ev.isNull} = false;
+                   |  ${ev.value} = true;
                    |  break;
                    |}
-                 """.stripMargin, s"${ev.isNull} = true;")}
+                   |""".stripMargin, s"${ev.isNull} = true;")}
          |  }
          |} $leftEmptyCode
          |""".stripMargin
