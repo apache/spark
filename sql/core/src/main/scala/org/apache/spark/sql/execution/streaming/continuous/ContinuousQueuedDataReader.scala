@@ -58,7 +58,7 @@ class ContinuousQueuedDataReader(
   private val queue = new ArrayBlockingQueue[ContinuousRecord](dataQueueSize)
 
   private val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
-  private val epochEndpoint = EpochCoordinatorRef.get(
+  private val epochCoordEndpoint = EpochCoordinatorRef.get(
     context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
 
   private val epochMarkerExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
@@ -107,7 +107,7 @@ class ContinuousQueuedDataReader(
 
     currentEntry match {
       case EpochMarker =>
-        epochEndpoint.send(ReportPartitionOffset(
+        epochCoordEndpoint.send(ReportPartitionOffset(
           context.partitionId(), currentEpoch, currentOffset))
         currentEpoch += 1
         null
@@ -169,7 +169,7 @@ class ContinuousQueuedDataReader(
   class EpochMarkerGenerator extends Runnable with Logging {
     @volatile private[continuous] var failureReason: Throwable = _
 
-    private val epochEndpoint = EpochCoordinatorRef.get(
+    private val epochCoordEndpoint = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
     // Note that this is *not* the same as the currentEpoch in [[ContinuousDataQueuedReader]]! That
     // field represents the epoch wrt the data being processed. The currentEpoch here is just a
@@ -178,7 +178,7 @@ class ContinuousQueuedDataReader(
 
     override def run(): Unit = {
       try {
-        val newEpoch = epochEndpoint.askSync[Long](GetCurrentEpoch)
+        val newEpoch = epochCoordEndpoint.askSync[Long](GetCurrentEpoch)
         // It's possible to fall more than 1 epoch behind if a GetCurrentEpoch RPC ends up taking
         // a while. We catch up by injecting enough epoch markers immediately to catch up. This will
         // result in some epochs being empty for this partition, but that's fine.
