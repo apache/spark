@@ -103,10 +103,12 @@ class ContinuousQueuedDataReader(
         currentEntry = EpochMarker
       } else {
         if (dataReaderThread.failureReason != null) {
-          throw new SparkException("data read failed", dataReaderThread.failureReason)
+          throw new SparkException("Data read failed", dataReaderThread.failureReason)
         }
         if (epochMarkerGenerator.failureReason != null) {
-          throw new SparkException("epoch poll failed", epochMarkerGenerator.failureReason)
+          throw new SparkException(
+            "Epoch marker generation failed",
+            epochMarkerGenerator.failureReason)
         }
         currentEntry = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }
