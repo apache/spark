@@ -833,6 +833,10 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @name NULL
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("data_type", function(x) { standardGeneric("data_type") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
