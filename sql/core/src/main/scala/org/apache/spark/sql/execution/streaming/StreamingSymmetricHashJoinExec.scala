@@ -187,6 +187,12 @@ case class StreamingSymmetricHashJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
+  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    (stateWatermarkPredicates.left.nonEmpty || stateWatermarkPredicates.right.nonEmpty) &&
+      eventTimeWatermark.isDefined &&
+      newMetadata.batchWatermarkMs > eventTimeWatermark.get
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val stateStoreCoord = sqlContext.sessionState.streamingQueryManager.stateStoreCoordinator
     val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
@@ -319,8 +325,7 @@ case class StreamingSymmetricHashJoinExec(
         // outer join) if possible. In all cases, nothing needs to be outputted, hence the removal
         // needs to be done greedily by immediately consuming the returned iterator.
         val cleanupIter = joinType match {
-          case Inner =>
-            leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
+          case Inner => leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
           case LeftOuter => rightSideJoiner.removeOldState()
           case RightOuter => leftSideJoiner.removeOldState()
           case _ => throwBadJoinTypeException()
