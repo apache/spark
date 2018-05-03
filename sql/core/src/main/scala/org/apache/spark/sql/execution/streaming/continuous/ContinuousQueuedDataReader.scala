@@ -29,25 +29,11 @@ import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
 import org.apache.spark.util.ThreadUtils
 
 /**
- * The record types in a continuous processing buffer.
- */
-sealed trait ContinuousRecord
-case object EpochMarker extends ContinuousRecord
-case class ContinuousRow(row: UnsafeRow, offset: PartitionOffset) extends ContinuousRecord
-
-/**
  * A wrapper for a continuous processing data reader, including a reading queue and epoch markers.
  *
  * This will be instantiated once per partition - successive calls to compute() in the
  * [[ContinuousDataSourceRDD]] will reuse the same reader. This is required to get continuity of
- * offsets across epochs.
- *
- * The RDD is responsible for advancing two fields here, since they need to be updated in line
- * with the data flow:
- *  * currentOffset - contains the offset of the most recent row which a compute() iterator has sent
- *    upwards. The RDD is responsible for advancing this.
- *  * currentEpoch - the epoch which is currently occurring. The RDD is responsible for incrementing
- *    this before ending the compute() iterator.
+ * offsets across epochs. Each compute() should call the next() method here until null is returned.
  */
 class ContinuousQueuedDataReader(
     factory: DataReaderFactory[UnsafeRow],
@@ -57,12 +43,23 @@ class ContinuousQueuedDataReader(
   private val reader = factory.createDataReader()
 
   // Important sequencing - we must get our starting point before the provider threads start running
-  var currentOffset: PartitionOffset = ContinuousDataSourceRDD.getBaseReader(reader).getOffset
-  var currentEpoch: Long = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
+  private var currentOffset: PartitionOffset =
+    ContinuousDataSourceRDD.getBaseReader(reader).getOffset
+  private var currentEpoch: Long =
+    context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
+
+  /**
+   * The record types in the read buffer.
+   */
+  sealed trait ContinuousRecord
+  case object EpochMarker extends ContinuousRecord
+  case class ContinuousRow(row: UnsafeRow, offset: PartitionOffset) extends ContinuousRecord
 
   private val queue = new ArrayBlockingQueue[ContinuousRecord](dataQueueSize)
 
   private val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
+  private val epochEndpoint = EpochCoordinatorRef.get(
+    context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
 
   private val epochMarkerExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     s"epoch-poll--$coordinatorId--${context.partitionId()}")
@@ -78,7 +75,13 @@ class ContinuousQueuedDataReader(
     this.close()
   })
 
-  def next(): ContinuousRecord = {
+  /**
+   * Return the next UnsafeRow to be read in the current epoch, or null if the epoch is done.
+   *
+   * After returning null, the [[ContinuousDataSourceRDD]] compute() for the following epoch
+   * will call next() again to start getting rows.
+   */
+  def next(): UnsafeRow = {
     val POLL_TIMEOUT_MS = 1000
     var currentEntry: ContinuousRecord = null
 
@@ -102,7 +105,16 @@ class ContinuousQueuedDataReader(
       }
     }
 
-    currentEntry
+    currentEntry match {
+      case EpochMarker =>
+        epochEndpoint.send(ReportPartitionOffset(
+          context.partitionId(), currentEpoch, currentOffset))
+        currentEpoch += 1
+        null
+      case ContinuousRow(row, offset) =>
+        currentOffset = offset
+        row
+    }
   }
 
   override def close(): Unit = {

@@ -60,10 +60,10 @@ class ContinuousDataSourceRDD(
     }.toArray
   }
 
-  // Initializes the per-task reader if not already done, and then produces the UnsafeRow
-  // iterator for the current epoch.
-  // Note that the iterator is also responsible for advancing some fields in the per-task
-  // reader that need to be shared across epochs.
+  /**
+   * Initialize the shared reader for this partition if needed, then read rows from it until
+   * it returns null to signal the end of the epoch.
+   */
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
     // If attempt number isn't 0, this is a task retry, which we don't support.
     if (context.attemptNumber() != 0) {
@@ -81,24 +81,13 @@ class ContinuousDataSourceRDD(
       partition.queueReader
     }
 
-    val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
-    val epochEndpoint = EpochCoordinatorRef.get(coordinatorId, SparkEnv.get)
     new NextIterator[UnsafeRow] {
       override def getNext(): UnsafeRow = {
         readerForPartition.next() match {
-          // epoch boundary marker
-          case EpochMarker =>
-            epochEndpoint.send(ReportPartitionOffset(
-              context.partitionId(),
-              readerForPartition.currentEpoch,
-              readerForPartition.currentOffset))
-            readerForPartition.currentEpoch += 1
+          case null =>
             finished = true
             null
-          // real row
-          case ContinuousRow(row, offset) =>
-            readerForPartition.currentOffset = offset
-            row
+          case row => row
         }
       }
 
