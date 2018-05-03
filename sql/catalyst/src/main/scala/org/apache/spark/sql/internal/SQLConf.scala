@@ -1208,6 +1208,13 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val REJECT_TIMEZONE_IN_STRING = buildConf("spark.sql.function.rejectTimezoneInString")
+    .internal()
+    .doc("If true, `to_utc_timestamp` and `from_utc_timestamp` return null if the input string " +
+      "contains a timezone part, e.g. `2000-10-10 00:00:00+00:00`.")
+    .booleanConf
+    .createWithDefault(true)
+
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
