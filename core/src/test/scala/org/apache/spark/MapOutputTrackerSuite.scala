@@ -147,7 +147,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(1000L)))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
       Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
