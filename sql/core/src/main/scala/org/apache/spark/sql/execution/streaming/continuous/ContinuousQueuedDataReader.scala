@@ -154,7 +154,7 @@ class ContinuousQueuedDataReader(
    * The epoch marker component of [[ContinuousQueuedDataReader]]. Populates the queue with
    * (null, null) when a new epoch marker arrives.
    */
-  class EpochMarkerGenerator extends Thread with Logging {
+  class EpochMarkerGenerator extends Runnable with Logging {
     @volatile private[continuous] var failureReason: Throwable = _
 
     private val epochEndpoint = EpochCoordinatorRef.get(
