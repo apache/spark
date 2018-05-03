@@ -152,7 +152,7 @@ class ContinuousQueuedDataReader(
 
   /**
    * The epoch marker component of [[ContinuousQueuedDataReader]]. Populates the queue with
-   * (null, null) when a new epoch marker arrives.
+   * EpochMarker when a new epoch marker arrives.
    */
   class EpochMarkerGenerator extends Runnable with Logging {
     @volatile private[continuous] var failureReason: Throwable = _
