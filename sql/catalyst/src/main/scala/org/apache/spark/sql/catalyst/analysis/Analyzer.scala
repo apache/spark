@@ -981,7 +981,7 @@ class Analyzer(
     // support CURRENT_DATE and CURRENT_TIMESTAMP
     val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
     val name = nameParts.head
-    val func = literalFunctions.find(e => resolver(e.prettyName, name))
+    val func = literalFunctions.find(e => caseInsensitiveResolution(e.prettyName, name))
     func.map(wrapper)
   }
 
