@@ -312,18 +312,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getKeepLastCheckpoint: Boolean = $(keepLastCheckpoint)
 
   /**
-   * Validates the input schema.
-   * @param schema input schema
-   */
-  private[clustering] def validateSchema(schema: StructType): Unit = {
-    val typeCandidates = List( new VectorUDT,
-      new ArrayType(DoubleType, false),
-      new ArrayType(FloatType, false))
-
-    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
-  }
-
-  /**
    * Validates and transforms the input schema.
    *
    * @param schema input schema
@@ -357,7 +345,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
             s" must be >= 1.  Found value: $getTopicConcentration")
       }
     }
-    validateSchema(schema)
+    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
     SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }
 

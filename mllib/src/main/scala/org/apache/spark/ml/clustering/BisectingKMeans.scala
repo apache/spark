@@ -22,18 +22,16 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
   BisectingKMeansModel => MLlibBisectingKMeansModel}
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 
 /**
@@ -70,23 +68,12 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
   def getMinDivisibleClusterSize: Double = $(minDivisibleClusterSize)
 
   /**
-   * Validates the input schema.
-   * @param schema input schema
-   */
-  private[clustering] def validateSchema(schema: StructType): Unit = {
-    val typeCandidates = List( new VectorUDT,
-      new ArrayType(DoubleType, false),
-      new ArrayType(FloatType, false))
-
-    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
-  }
-  /**
    * Validates and transforms the input schema.
    * @param schema input schema
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateSchema(schema)
+    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
@@ -144,11 +131,8 @@ class BisectingKMeansModel private[ml] (
    */
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
-    validateSchema(dataset.schema)
-    val data: RDD[OldVector] = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol))
-      .rdd.map {
-      case Row(point: Vector) => OldVectors.fromML(point)
-    }
+    SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
+    val data = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
     parentModel.computeCost(data)
   }
 
@@ -275,10 +259,7 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
     transformSchema(dataset.schema, logging = true)
-    val rdd: RDD[OldVector] = dataset
-      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol)).rdd.map {
-      case Row(point: Vector) => OldVectors.fromML(point)
-    }
+    val rdd = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
 
     val instr = Instrumentation.create(this, rdd)
     instr.logParams(featuresCol, predictionCol, k, maxIter, seed, minDivisibleClusterSize)

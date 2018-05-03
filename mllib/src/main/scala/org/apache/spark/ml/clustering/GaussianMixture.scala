@@ -34,7 +34,7 @@ import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatr
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 
 /**
@@ -57,25 +57,13 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   def getK: Int = $(k)
 
   /**
-   * Validates the input schema.
-   * @param schema input schema
-   */
-  private[clustering] def validateSchema(schema: StructType): Unit = {
-    val typeCandidates = List( new VectorUDT,
-      new ArrayType(DoubleType, false),
-      new ArrayType(FloatType, false))
-
-    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
-  }
-
-  /**
    * Validates and transforms the input schema.
    *
    * @param schema input schema
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateSchema(schema)
+    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
     val schemaWithPredictionCol = SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
     SchemaUtils.appendColumn(schemaWithPredictionCol, $(probabilityCol), new VectorUDT)
   }
