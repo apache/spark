@@ -112,6 +112,7 @@ case class WindowExec(
    *
    * @param frame to evaluate. This can either be a Row or Range frame.
    * @param bound with respect to the row.
+   * @param timeZone the session local timezone for time related calculations.
    * @return a bound ordering object.
    */
   private[this] def createBoundOrdering(
