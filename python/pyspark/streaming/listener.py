@@ -23,6 +23,12 @@ class StreamingListener(object):
     def __init__(self):
         pass
 
+    def onStreamingStarted(self, streamingStarted):
+        """
+        Called when the streaming has been started.
+        """
+        pass
+
     def onReceiverStarted(self, receiverStarted):
         """
         Called when a receiver has been started

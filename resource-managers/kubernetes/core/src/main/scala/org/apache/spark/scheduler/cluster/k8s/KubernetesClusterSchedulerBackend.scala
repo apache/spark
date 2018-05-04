@@ -32,6 +32,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointAddress, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorExited, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
@@ -45,7 +46,7 @@ trait SchedulerBackendSpecificHandlers {
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     rpcEnv: RpcEnv,
-    executorPodFactory: ExecutorPodFactory,
+    executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     allocatorExecutor: ScheduledExecutorService,
     requestExecutorsService: ExecutorService)
@@ -155,14 +156,27 @@ private[spark] class KubernetesClusterSchedulerBackend(
           for (_ <- 0 until math.min(
             currentTotalExpectedExecutors - runningExecutorsToPods.size, podAllocationSize)) {
             val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
-            val executorPod = executorPodFactory.createExecutorPod(
+            val executorConf = KubernetesConf.createExecutorConf(
+              conf,
               executorId,
               applicationId(),
+<<<<<<< HEAD
               driverUrl,
               conf.getExecutorEnv,
               getDriverPod(),
               currentNodeToLocalTaskCount)
             executorsToAllocate(executorId) = executorPod
+=======
+              driverPod)
+            val executorPod = executorBuilder.buildFromFeatures(executorConf)
+            val podWithAttachedContainer = new PodBuilder(executorPod.pod)
+              .editOrNewSpec()
+                .addToContainers(executorPod.container)
+                .endSpec()
+              .build()
+
+            executorsToAllocate(executorId) = podWithAttachedContainer
+>>>>>>> master
             logInfo(
               s"Requesting a new executor, total executors is now ${runningExecutorsToPods.size}")
           }

@@ -96,7 +96,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
 
         case _ =>
           throw new IllegalArgumentException(
-            s"Output mode $outputMode is not supported by MemorySink")
+            s"Output mode $outputMode is not supported by MemorySinkV2")
       }
     } else {
       logDebug(s"Skipping already committed batch: $batchId")
@@ -107,7 +107,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
     batches.clear()
   }
 
-  override def toString(): String = "MemorySink"
+  override def toString(): String = "MemorySinkV2"
 }
 
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row]) extends WriterCommitMessage {}
@@ -175,7 +175,7 @@ class MemoryDataWriter(partition: Int, outputMode: OutputMode)
 
 
 /**
- * Used to query the data that has been written into a [[MemorySink]].
+ * Used to query the data that has been written into a [[MemorySinkV2]].
  */
 case class MemoryPlanV2(sink: MemorySinkV2, override val output: Seq[Attribute]) extends LeafNode {
   private val sizePerRow = output.map(_.dataType.defaultSize).sum

@@ -24,8 +24,6 @@ if sys.version >= '3':
 else:
     intlike = (int, long)
 
-from abc import ABCMeta, abstractmethod
-
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
@@ -407,7 +405,7 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None,  allowUnquotedControlChars=None):
+             multiLine=None,  allowUnquotedControlChars=None, lineSep=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -470,6 +468,8 @@ class DataStreamReader(OptionUtils):
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -484,7 +484,7 @@ class DataStreamReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars)
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:

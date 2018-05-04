@@ -237,7 +237,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
         featuresStd(i) == 0.0 && featuresSummarizer.mean(i) != 0.0 }) {
-      logWarning("Fitting AFTSurvivalRegressionModel without intercept on dataset with " +
+      instr.logWarning("Fitting AFTSurvivalRegressionModel without intercept on dataset with " +
         "constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero " +
         "columns. This behavior is different from R survival::survreg.")
     }
@@ -423,7 +423,7 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
           .head()
       val model = new AFTSurvivalRegressionModel(metadata.uid, coefficients, intercept, scale)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

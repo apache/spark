@@ -91,7 +91,8 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
     ExprCode(code = s"""${eval.code}
        |if (${eval.isNull} || !${eval.value}) {
        |  throw new RuntimeException($errMsgField);
-       |}""".stripMargin, isNull = "true", value = "null")
+       |}""".stripMargin, isNull = TrueLiteral,
+      value = JavaCode.defaultLiteral(dataType))
   }
 
   override def sql: String = s"assert_true(${child.sql})"
@@ -123,7 +124,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
        46707d92-02f4-4817-8116-a4c3b23e6266
   """)
 // scalastyle:on line.size.limit
-case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Nondeterministic {
+case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful {
 
   def this() = this(None)
 
@@ -150,6 +151,8 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
       "new org.apache.spark.sql.catalyst.util.RandomUUIDGenerator(" +
       s"${randomSeed.get}L + partitionIndex);")
     ev.copy(code = s"final UTF8String ${ev.value} = $randomGen.getNextUUIDUTF8String();",
-      isNull = "false")
+      isNull = FalseLiteral)
   }
+
+  override def freshCopy(): Uuid = Uuid(randomSeed)
 }

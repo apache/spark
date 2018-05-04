@@ -43,6 +43,12 @@ object LocalRelation {
   }
 }
 
+/**
+ * Logical plan node for scanning data from a local collection.
+ *
+ * @param data The local collection holding the data. It doesn't need to be sent to executors
+ *             and then doesn't need to be serializable.
+ */
 case class LocalRelation(
     output: Seq[Attribute],
     data: Seq[InternalRow] = Nil,

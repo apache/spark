@@ -2055,11 +2055,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       expr: String,
       expectedNonNullableColumns: Seq[String]): Unit = {
     val dfWithFilter = df.where(s"isnotnull($expr)").selectExpr(expr)
-    // In the logical plan, all the output columns of input dataframe are nullable
-    dfWithFilter.queryExecution.optimizedPlan.collect {
-      case e: Filter => assert(e.output.forall(_.nullable))
-    }
-
     dfWithFilter.queryExecution.executedPlan.collect {
       // When the child expression in isnotnull is null-intolerant (i.e. any null input will
       // result in null output), the involved columns are converted to not nullable;

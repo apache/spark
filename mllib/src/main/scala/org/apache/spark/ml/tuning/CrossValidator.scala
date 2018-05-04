@@ -234,8 +234,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
         .setEstimator(estimator)
         .setEvaluator(evaluator)
         .setEstimatorParamMaps(estimatorParamMaps)
-      DefaultParamsReader.getAndSetParams(cv, metadata,
-        skipParams = Option(List("estimatorParamMaps")))
+      metadata.getAndSetParams(cv, skipParams = Option(List("estimatorParamMaps")))
       cv
     }
   }
@@ -267,6 +266,17 @@ class CrossValidatorModel private[ml] (
   private[tuning] def setSubModels(subModels: Option[Array[Array[Model[_]]]])
     : CrossValidatorModel = {
     _subModels = subModels
+    this
+  }
+
+  // A Python-friendly auxiliary method
+  private[tuning] def setSubModels(subModels: JList[JList[Model[_]]])
+    : CrossValidatorModel = {
+    _subModels = if (subModels != null) {
+      Some(subModels.asScala.toArray.map(_.asScala.toArray))
+    } else {
+      None
+    }
     this
   }
 
@@ -413,8 +423,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       model.set(model.estimator, estimator)
         .set(model.evaluator, evaluator)
         .set(model.estimatorParamMaps, estimatorParamMaps)
-      DefaultParamsReader.getAndSetParams(model, metadata,
-        skipParams = Option(List("estimatorParamMaps")))
+      metadata.getAndSetParams(model, skipParams = Option(List("estimatorParamMaps")))
       model
     }
   }

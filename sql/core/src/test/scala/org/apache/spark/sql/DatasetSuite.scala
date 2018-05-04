@@ -1453,6 +1453,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val group2 = cached.groupBy("x").agg(min(col("z")) as "value")
     checkAnswer(group1.union(group2), Row(4, 5) :: Row(1, 2) :: Row(4, 6) :: Row(1, 3) :: Nil)
   }
+
+  test("SPARK-23835: null primitive data type should throw NullPointerException") {
+    val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
+    intercept[NullPointerException](ds.as[(Int, Int)].collect())
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)

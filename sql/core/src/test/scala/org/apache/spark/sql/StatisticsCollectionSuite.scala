@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -26,6 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -242,6 +245,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
+    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier(table)))
     Seq(false, true).foreach { autoUpdate =>
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
@@ -269,6 +273,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
               assert(fetched3.get.sizeInBytes == fetched1.get.sizeInBytes)
             } else {
               checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+              // SPARK-19724: clean up the previous table location.
+              waitForTasksToFinish()
+              Utils.deleteRecursively(tableLoc)
             }
           }
         }
@@ -372,6 +379,34 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             }
           }
         }
+      }
+    }
+  }
+
+  test("Simple queries must be working, if CBO is turned on") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("TBL1", "TBL") {
+        import org.apache.spark.sql.functions._
+        val df = spark.range(1000L).select('id,
+          'id * 2 as "FLD1",
+          'id * 12 as "FLD2",
+          lit("aaa") + 'id as "fld3")
+        df.write
+          .mode(SaveMode.Overwrite)
+          .bucketBy(10, "id", "FLD1", "FLD2")
+          .sortBy("id", "FLD1", "FLD2")
+          .saveAsTable("TBL")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS ")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
+        val df2 = spark.sql(
+          """
+             |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
+             |FROM tbl t1
+             |JOIN tbl t2 on t1.id=t2.id
+             |WHERE  t1.fld3 IN (-123.23,321.23)
+          """.stripMargin)
+        df2.createTempView("TBL2")
+        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
       }
     }
   }

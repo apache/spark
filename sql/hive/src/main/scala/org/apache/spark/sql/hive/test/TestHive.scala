@@ -175,6 +175,9 @@ private[hive] class TestHiveSparkSession(
       loadTestTables)
   }
 
+  SparkSession.setDefaultSession(this)
+  SparkSession.setActiveSession(this)
+
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",

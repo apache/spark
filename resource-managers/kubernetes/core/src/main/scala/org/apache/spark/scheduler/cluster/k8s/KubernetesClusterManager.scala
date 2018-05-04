@@ -20,8 +20,8 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.{Config, KubernetesClient}
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
-import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap, SparkKubernetesClientFactory}
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -75,6 +75,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager
 
     val executorSecretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
       sc.conf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
+<<<<<<< HEAD
     val mountSecretBootstrap = if (executorSecretNamesToMountPaths.nonEmpty) {
       Some(new MountSecretsBootstrap(executorSecretNamesToMountPaths))
     } else {
@@ -89,8 +90,15 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager
     }
     val sparkConf = sc.getConf
     val kubernetesClient = modeHandler.createKubernetesClient(sparkConf)
-
-    val executorPodFactory = new ExecutorPodFactory(sc.conf, mountSecretBootstrap)
+=======
+    val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
+      KUBERNETES_MASTER_INTERNAL_URL,
+      Some(sc.conf.get(KUBERNETES_NAMESPACE)),
+      KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+      sc.conf,
+      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
+      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+>>>>>>> master
 
     val allocatorExecutor = ThreadUtils
       .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
@@ -99,7 +107,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
       sc.env.rpcEnv,
-      executorPodFactory,
+      new KubernetesExecutorBuilder,
       kubernetesClient,
       allocatorExecutor,
       requestExecutorsService)
