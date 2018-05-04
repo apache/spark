@@ -486,7 +486,9 @@ class LegacyAccumulatorWrapper[R, T](
     param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
   private[spark] var _value = initialValue  // Current value on driver
 
-  override def isZero: Boolean = _value == param.zero(initialValue)
+  @transient private lazy val _zero = param.zero(initialValue)
+
+  override def isZero: Boolean = _value.asInstanceOf[AnyRef].eq(_zero.asInstanceOf[AnyRef])
 
   override def copy(): LegacyAccumulatorWrapper[R, T] = {
     val acc = new LegacyAccumulatorWrapper(initialValue, param)
@@ -495,7 +497,7 @@ class LegacyAccumulatorWrapper[R, T](
   }
 
   override def reset(): Unit = {
-    _value = param.zero(initialValue)
+    _value = _zero
   }
 
   override def add(v: T): Unit = _value = param.addAccumulator(_value, v)
