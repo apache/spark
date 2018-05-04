@@ -69,7 +69,5 @@ class WatermarkTracker extends Logging {
     }
   }
 
-  def watermarkUpdated: Boolean = synchronized { updated }
-
   def currentWatermark: Long = synchronized { watermarkMs }
 }
