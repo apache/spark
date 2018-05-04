@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.sources.v2.DataFormat;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.ReadSupport;
@@ -29,7 +30,7 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceReader, SupportsScanUnsafeRow {
+  class Reader implements DataSourceReader {
     private final StructType schema = new StructType().add("i", "int").add("j", "int");
 
     @Override
@@ -38,7 +39,7 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<UnsafeRow>> createUnsafeRowReaderFactories() {
+    public List<DataReaderFactory> createDataReaderFactories() {
       return java.util.Arrays.asList(
         new JavaUnsafeRowDataReaderFactory(0, 5),
         new JavaUnsafeRowDataReaderFactory(5, 10));
@@ -46,7 +47,7 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
   }
 
   static class JavaUnsafeRowDataReaderFactory
-      implements DataReaderFactory<UnsafeRow>, DataReader<UnsafeRow> {
+      implements DataReaderFactory, DataReader<UnsafeRow> {
     private int start;
     private int end;
     private UnsafeRow row;
@@ -59,7 +60,12 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<UnsafeRow> createDataReader() {
+    public DataFormat dataFormat() {
+      return DataFormat.UNSAFE_ROW;
+    }
+
+    @Override
+    public DataReader<UnsafeRow> createUnsafeRowDataReader() {
       return new JavaUnsafeRowDataReaderFactory(start - 1, end);
     }
 

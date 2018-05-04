@@ -26,7 +26,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
 import org.apache.spark.sql.execution.streaming.sources.RateStreamProvider
-import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.sources.v2.{DataFormat, DataSourceOptions}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
@@ -67,7 +67,7 @@ class RateStreamContinuousReader(options: DataSourceOptions)
 
   override def getStartOffset(): Offset = offset
 
-  override def createDataReaderFactories(): java.util.List[DataReaderFactory[Row]] = {
+  override def createDataReaderFactories(): java.util.List[DataReaderFactory] = {
     val partitionStartMap = offset match {
       case off: RateStreamOffset => off.partitionToValueAndRunTimeMs
       case off =>
@@ -90,8 +90,7 @@ class RateStreamContinuousReader(options: DataSourceOptions)
         start.runTimeMs,
         i,
         numPartitions,
-        perPartitionRate)
-        .asInstanceOf[DataReaderFactory[Row]]
+        perPartitionRate).asInstanceOf[DataReaderFactory]
     }.asJava
   }
 
@@ -119,21 +118,11 @@ case class RateStreamContinuousDataReaderFactory(
     partitionIndex: Int,
     increment: Long,
     rowsPerSecond: Double)
-  extends ContinuousDataReaderFactory[Row] {
+  extends ContinuousDataReaderFactory {
 
-  override def createDataReaderWithOffset(offset: PartitionOffset): DataReader[Row] = {
-    val rateStreamOffset = offset.asInstanceOf[RateStreamPartitionOffset]
-    require(rateStreamOffset.partition == partitionIndex,
-      s"Expected partitionIndex: $partitionIndex, but got: ${rateStreamOffset.partition}")
-    new RateStreamContinuousDataReader(
-      rateStreamOffset.currentValue,
-      rateStreamOffset.currentTimeMs,
-      partitionIndex,
-      increment,
-      rowsPerSecond)
-  }
+  override def dataFormat(): DataFormat = DataFormat.ROW
 
-  override def createDataReader(): DataReader[Row] =
+  override def createRowDataReader(): ContinuousDataReader[Row] =
     new RateStreamContinuousDataReader(
       startValue, startTimeMs, partitionIndex, increment, rowsPerSecond)
 }

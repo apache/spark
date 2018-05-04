@@ -45,7 +45,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
   class Reader(path: String, conf: Configuration) extends DataSourceReader {
     override def readSchema(): StructType = schema
 
-    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
+    override def createDataReaderFactories(): JList[DataReaderFactory] = {
       val dataPath = new Path(path)
       val fs = dataPath.getFileSystem(conf)
       if (fs.exists(dataPath)) {
@@ -56,7 +56,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
           val serializableConf = new SerializableConfiguration(conf)
           new SimpleCSVDataReaderFactory(
             f.getPath.toUri.toString,
-            serializableConf): DataReaderFactory[Row]
+            serializableConf): DataReaderFactory
         }.toList.asJava
       } else {
         Collections.emptyList()
@@ -157,13 +157,15 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
 }
 
 class SimpleCSVDataReaderFactory(path: String, conf: SerializableConfiguration)
-  extends DataReaderFactory[Row] with DataReader[Row] {
+  extends DataReaderFactory with DataReader[Row] {
 
   @transient private var lines: Iterator[String] = _
   @transient private var currentLine: String = _
   @transient private var inputStream: FSDataInputStream = _
 
-  override def createDataReader(): DataReader[Row] = {
+  override def dataFormat(): DataFormat = DataFormat.ROW
+
+  override def createRowDataReader(): DataReader[Row] = {
     val filePath = new Path(path)
     val fs = filePath.getFileSystem(conf.value)
     inputStream = fs.open(filePath)

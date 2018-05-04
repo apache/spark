@@ -33,8 +33,8 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeR
 import org.apache.spark.sql.{Encoder, Row, SQLContext}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream.GetRecord
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions}
-import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataFormat, DataSourceOptions}
+import org.apache.spark.sql.sources.v2.reader.{ContinuousDataReaderFactory, DataReaderFactory}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.RpcUtils
@@ -99,7 +99,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     )
   }
 
-  override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = {
+  override def createDataReaderFactories(): ju.List[DataReaderFactory] = {
     synchronized {
       val endpointName = s"ContinuousMemoryStreamRecordEndpoint-${java.util.UUID.randomUUID()}-$id"
       endpointRef =
@@ -108,7 +108,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       startOffset.partitionNums.map {
         case (part, index) =>
           new ContinuousMemoryStreamDataReaderFactory(
-            endpointName, part, index): DataReaderFactory[Row]
+            endpointName, part, index): DataReaderFactory
       }.toList.asJava
     }
   }
@@ -160,8 +160,11 @@ object ContinuousMemoryStream {
 class ContinuousMemoryStreamDataReaderFactory(
     driverEndpointName: String,
     partition: Int,
-    startOffset: Int) extends DataReaderFactory[Row] {
-  override def createDataReader: ContinuousMemoryStreamDataReader =
+    startOffset: Int) extends ContinuousDataReaderFactory {
+
+  override def dataFormat(): DataFormat = DataFormat.ROW
+
+  override def createRowDataReader: ContinuousMemoryStreamDataReader =
     new ContinuousMemoryStreamDataReader(driverEndpointName, partition, startOffset)
 }
 

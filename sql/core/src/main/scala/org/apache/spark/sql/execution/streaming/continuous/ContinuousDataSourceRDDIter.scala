@@ -20,41 +20,58 @@ package org.apache.spark.sql.execution.streaming.continuous
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, RowToUnsafeDataReader}
+import org.apache.spark.sql.execution.datasources.v2.RowToUnsafeDataReader
+import org.apache.spark.sql.sources.v2.DataFormat
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, PartitionOffset}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
+
+class ContinuousDataSourceRDDPartition(
+    val index: Int,
+    val factory: ContinuousDataReaderFactory) extends Partition with Serializable
 
 class ContinuousDataSourceRDD(
     sc: SparkContext,
     sqlContext: SQLContext,
-    @transient private val readerFactories: Seq[DataReaderFactory[UnsafeRow]])
-  extends RDD[UnsafeRow](sc, Nil) {
+    @transient private val readerFactories: Seq[ContinuousDataReaderFactory],
+    schema: StructType)
+  extends RDD[InternalRow](sc, Nil) {
 
   private val dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize
   private val epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs
 
   override protected def getPartitions: Array[Partition] = {
     readerFactories.zipWithIndex.map {
-      case (readerFactory, index) => new DataSourceRDDPartition(index, readerFactory)
+      case (readerFactory, index) => new ContinuousDataSourceRDDPartition(index, readerFactory)
     }.toArray
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     // If attempt number isn't 0, this is a task retry, which we don't support.
     if (context.attemptNumber() != 0) {
       throw new ContinuousTaskRetryException()
     }
 
-    val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]]
-      .readerFactory.createDataReader()
+    val factory = split.asInstanceOf[ContinuousDataSourceRDDPartition].factory
+    val reader = factory.dataFormat() match {
+      case DataFormat.ROW =>
+        new RowToUnsafeContinuousDataReader(
+          factory.createRowDataReader().asInstanceOf[ContinuousDataReader[Row]],
+          RowEncoder.apply(schema).resolveAndBind())
+
+      case DataFormat.UNSAFE_ROW => factory.createUnsafeRowDataReader()
+
+      case other =>
+        throw new IllegalArgumentException(s"Illegal data format specified: $other")
+    }
 
     val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
 
@@ -71,7 +88,7 @@ class ContinuousDataSourceRDD(
       epochPollRunnable, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
 
     // Important sequencing - we must get start offset before the data reader thread begins
-    val startOffset = ContinuousDataSourceRDD.getBaseReader(reader).getOffset
+    val startOffset = reader.getOffset
 
     val dataReaderFailed = new AtomicBoolean(false)
     val dataReaderThread = new DataReaderThread(reader, queue, context, dataReaderFailed)
@@ -133,7 +150,7 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readerFactory.preferredLocations()
+    split.asInstanceOf[ContinuousDataSourceRDDPartition].factory.preferredLocations()
   }
 }
 
@@ -168,7 +185,7 @@ class EpochPollRunnable(
 }
 
 class DataReaderThread(
-    reader: DataReader[UnsafeRow],
+    reader: ContinuousDataReader[UnsafeRow],
     queue: BlockingQueue[(UnsafeRow, PartitionOffset)],
     context: TaskContext,
     failedFlag: AtomicBoolean)
@@ -179,7 +196,6 @@ class DataReaderThread(
 
   override def run(): Unit = {
     TaskContext.setTaskContext(context)
-    val baseReader = ContinuousDataSourceRDD.getBaseReader(reader)
     try {
       while (!context.isInterrupted && !context.isCompleted()) {
         if (!reader.next()) {
@@ -192,7 +208,7 @@ class DataReaderThread(
           }
         }
 
-        queue.put((reader.get().copy(), baseReader.getOffset))
+        queue.put((reader.get().copy(), reader.getOffset))
       }
     } catch {
       case _: InterruptedException if context.isInterrupted() =>
@@ -209,14 +225,10 @@ class DataReaderThread(
   }
 }
 
-object ContinuousDataSourceRDD {
-  private[continuous] def getBaseReader(reader: DataReader[UnsafeRow]): ContinuousDataReader[_] = {
-    reader match {
-      case r: ContinuousDataReader[UnsafeRow] => r
-      case wrapped: RowToUnsafeDataReader =>
-        wrapped.rowReader.asInstanceOf[ContinuousDataReader[Row]]
-      case _ =>
-        throw new IllegalStateException(s"Unknown continuous reader type ${reader.getClass}")
-    }
-  }
+class RowToUnsafeContinuousDataReader(
+    rowReader: ContinuousDataReader[Row],
+    encoder: ExpressionEncoder[Row])
+  extends RowToUnsafeDataReader(rowReader, encoder) with ContinuousDataReader[UnsafeRow] {
+
+  override def getOffset: PartitionOffset = rowReader.getOffset
 }

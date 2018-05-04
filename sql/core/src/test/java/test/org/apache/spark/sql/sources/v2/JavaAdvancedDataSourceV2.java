@@ -24,6 +24,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.GreaterThan;
+import org.apache.spark.sql.sources.v2.DataFormat;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.ReadSupport;
@@ -79,8 +80,8 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createDataReaderFactories() {
-      List<DataReaderFactory<Row>> res = new ArrayList<>();
+    public List<DataReaderFactory> createDataReaderFactories() {
+      List<DataReaderFactory> res = new ArrayList<>();
 
       Integer lowerBound = null;
       for (Filter filter : filters) {
@@ -107,7 +108,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
   }
 
-  static class JavaAdvancedDataReaderFactory implements DataReaderFactory<Row>, DataReader<Row> {
+  static class JavaAdvancedDataReaderFactory implements DataReaderFactory, DataReader<Row> {
     private int start;
     private int end;
     private StructType requiredSchema;
@@ -119,7 +120,12 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<Row> createDataReader() {
+    public DataFormat dataFormat() {
+      return DataFormat.ROW;
+    }
+
+    @Override
+    public DataReader<Row> createRowDataReader() {
       return new JavaAdvancedDataReaderFactory(start - 1, end, requiredSchema);
     }
 
