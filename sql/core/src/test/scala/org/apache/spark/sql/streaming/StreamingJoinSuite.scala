@@ -192,7 +192,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       CheckLastBatch((1, 5, 11)),
       AddData(rightInput, (1, 10)),
       CheckLastBatch(), // no match as neither 5, nor 10 from leftTime is less than rightTime 10 - 5
-      assertNumStateRows(total = 3, updated = 1),
+      assertNumStateRows(total = 3, updated = 3),
 
       // Increase event time watermark to 20s by adding data with time = 30s on both inputs
       AddData(leftInput, (1, 3), (1, 30)),
@@ -276,14 +276,14 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       CheckAnswer(),
       AddData(rightInput, (1, 14), (1, 15), (1, 25), (1, 26), (1, 30), (1, 31)),
       CheckLastBatch((1, 20, 15), (1, 20, 25), (1, 20, 26), (1, 20, 30)),
-      assertNumStateRows(total = 7, updated = 6),
+      assertNumStateRows(total = 7, updated = 7),
 
       // If rightTime = 60, then it matches only leftTime = [50, 65]
       AddData(rightInput, (1, 60)),
       CheckLastBatch(),                // matches with nothing on the left
       AddData(leftInput, (1, 49), (1, 50), (1, 65), (1, 66)),
       CheckLastBatch((1, 50, 60), (1, 65, 60)),
-      assertNumStateRows(total = 12, updated = 4),
+      assertNumStateRows(total = 12, updated = 5),
 
       // Event time watermark = min(left: 66 - delay 20 = 46, right: 60 - delay 30 = 30) = 30
       // Left state value watermark = 30 - 10 = slightly less than 20 (since condition has <=)
@@ -573,7 +573,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       // nulls won't show up until the next batch after the watermark advances.
       MultiAddData(leftInput, 21)(rightInput, 22),
       CheckLastBatch(),
-      assertNumStateRows(total = 12, updated = 2),
+      assertNumStateRows(total = 12, updated = 12),
       AddData(leftInput, 22),
       CheckLastBatch(Row(22, 30, 44, 66), Row(1, 10, 2, null), Row(2, 10, 4, null)),
       assertNumStateRows(total = 3, updated = 1)
@@ -591,7 +591,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       // nulls won't show up until the next batch after the watermark advances.
       MultiAddData(leftInput, 21)(rightInput, 22),
       CheckLastBatch(),
-      assertNumStateRows(total = 12, updated = 2),
+      assertNumStateRows(total = 12, updated = 12),
       AddData(leftInput, 22),
       CheckLastBatch(Row(22, 30, 44, 66), Row(6, 10, null, 18), Row(7, 10, null, 21)),
       assertNumStateRows(total = 3, updated = 1)
@@ -630,7 +630,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         CheckLastBatch((1, 1, 5, 10)),
         AddData(rightInput, (1, 11)),
         CheckLastBatch(), // no match as left time is too low
-        assertNumStateRows(total = 5, updated = 1),
+        assertNumStateRows(total = 5, updated = 5),
 
         // Increase event time watermark to 20s by adding data with time = 30s on both inputs
         AddData(leftInput, (1, 7), (1, 30)),
@@ -668,7 +668,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       CheckLastBatch(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(3, 10, 6, null)),
       MultiAddData(leftInput, 20)(rightInput, 21),
       CheckLastBatch(),
-      assertNumStateRows(total = 5, updated = 2),
+      assertNumStateRows(total = 5, updated = 5),  // 1...3 added, but 20 and 21 not added
       AddData(rightInput, 20),
       CheckLastBatch(
         Row(20, 30, 40, 60)),
@@ -678,7 +678,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       CheckLastBatch((40, 50, 80, 120), (41, 50, 82, 123)),
       MultiAddData(leftInput, 70)(rightInput, 71),
       CheckLastBatch(),
-      assertNumStateRows(total = 6, updated = 2),
+      assertNumStateRows(total = 6, updated = 6),  // all inputs added since last check
       AddData(rightInput, 70),
       CheckLastBatch((70, 80, 140, 210)),
       assertNumStateRows(total = 3, updated = 1),
@@ -687,7 +687,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       CheckLastBatch(),
       MultiAddData(leftInput, 1000)(rightInput, 1001),
       CheckLastBatch(),
-      assertNumStateRows(total = 8, updated = 2),
+      assertNumStateRows(total = 8, updated = 5),  // 101...103 added, but 1000 and 1001 not added
       AddData(rightInput, 1000),
       CheckLastBatch(
         Row(1000, 1010, 2000, 3000),
