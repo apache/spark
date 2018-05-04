@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.util.TimeZone
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
@@ -27,6 +28,9 @@ import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.{BinaryPre
 class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SortPrefix") {
+    // Explicitly choose a time zone, since Date objects can create different values depending on
+    // local time zone of the machine on which the test is running
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     val b1 = Literal.create(false, BooleanType)
     val b2 = Literal.create(true, BooleanType)
     val i1 = Literal.create(20132983, IntegerType)
@@ -57,7 +61,7 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(SortPrefix(SortOrder(l2, Ascending)), -20132983L)
     // For some reason, the Literal.create code gives us the number of days since the epoch
     checkEvaluation(SortPrefix(SortOrder(d1, Ascending)), 17649L)
-    checkEvaluation(SortPrefix(SortOrder(t1, Ascending)), millis*1000)
+    checkEvaluation(SortPrefix(SortOrder(t1, Ascending)), millis * 1000)
     checkEvaluation(SortPrefix(SortOrder(f1, Ascending)),
       DoublePrefixComparator.computePrefix(f1.value.asInstanceOf[Float].toDouble))
     checkEvaluation(SortPrefix(SortOrder(f2, Ascending)),
