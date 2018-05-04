@@ -20,7 +20,7 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.ArraySortUtil.NullOrder
+import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
@@ -120,7 +120,7 @@ case class MapValues(child: Expression)
 /**
  * Common base class for [[SortArray]] and [[ArraySort]].
  */
-trait ArraySortUtil extends ExpectsInputTypes {
+trait ArraySortLike extends ExpectsInputTypes {
   protected def arrayExpression: Expression
 
   protected def nullOrder: NullOrder
@@ -187,9 +187,9 @@ trait ArraySortUtil extends ExpectsInputTypes {
     val array = ctx.freshName("array")
     val c = ctx.freshName("c")
     if (elementType == NullType) {
-      s"${ev.value} = (($arrayData) $base).copy();"
+      s"${ev.value} = $base.copy();"
     } else {
-      val dataTypes = ctx.addReferenceObj("dataType", elementType)
+      val elementTypeTerm = ctx.addReferenceObj("elementTypeTerm", elementType)
       val sortOrder = ctx.freshName("sortOrder")
       val o1 = ctx.freshName("o1")
       val o2 = ctx.freshName("o2")
@@ -207,7 +207,7 @@ trait ArraySortUtil extends ExpectsInputTypes {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
       s"""
-         |Object[] $array = (Object[]) (($arrayData) $base).toObjectArray($dataTypes);
+         |Object[] $array = (Object[]) $base.toObjectArray($elementTypeTerm);
          |final int $sortOrder = $order ? 1 : -1;
          |java.util.Arrays.sort($array, new java.util.Comparator() {
          |  @Override public int compare(Object $o1, Object $o2) {
@@ -229,7 +229,7 @@ trait ArraySortUtil extends ExpectsInputTypes {
 
 }
 
-object ArraySortUtil {
+object ArraySortLike {
   type NullOrder = Int
   // Least: place null element at the first of the array for ascending order
   // Greatest: place null element at the end of the array for ascending order
@@ -258,7 +258,7 @@ object ArraySortUtil {
   """)
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
-  extends BinaryExpression with ArraySortUtil {
+  extends BinaryExpression with ArraySortLike {
 
   def this(e: Expression) = this(e, Literal(true))
 
@@ -316,7 +316,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   """,
   since = "2.4.0")
 // scalastyle:on line.size.limit
-case class ArraySort(child: Expression) extends UnaryExpression with ArraySortUtil {
+case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLike {
 
   override def dataType: DataType = child.dataType
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
