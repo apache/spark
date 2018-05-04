@@ -19,11 +19,9 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.DataSourceV2
-import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.util.Utils
 
 /**
@@ -49,16 +47,9 @@ trait DataSourceV2StringFormat {
   def options: Map[String, String]
 
   /**
-   * The created data source reader. Here we use it to get the filters that has been pushed down
-   * so far, itself doesn't take part in the equals/hashCode.
+   * The filters which have been pushed to the data source.
    */
-  def reader: DataSourceReader
-
-  private lazy val filters = reader match {
-    case s: SupportsPushDownCatalystFilters => s.pushedCatalystFilters().toSet
-    case s: SupportsPushDownFilters => s.pushedFilters().toSet
-    case _ => Set.empty
-  }
+  def pushedFilters: Seq[Expression]
 
   private def sourceName: String = source match {
     case registered: DataSourceRegister => registered.shortName()
@@ -68,8 +59,8 @@ trait DataSourceV2StringFormat {
   def metadataString: String = {
     val entries = scala.collection.mutable.ArrayBuffer.empty[(String, String)]
 
-    if (filters.nonEmpty) {
-      entries += "Filters" -> filters.mkString("[", ", ", "]")
+    if (pushedFilters.nonEmpty) {
+      entries += "Filters" -> pushedFilters.mkString("[", ", ", "]")
     }
 
     // TODO: we should only display some standard options like path, table, etc.

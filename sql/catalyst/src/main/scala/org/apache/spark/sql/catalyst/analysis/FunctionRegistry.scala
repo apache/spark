@@ -410,6 +410,7 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[Slice]("slice"),
+    expression[Size]("cardinality"),
     expression[SortArray]("sort_array"),
     expression[ArrayMin]("array_min"),
     expression[ArrayMax]("array_max"),
@@ -534,7 +535,9 @@ object FunctionRegistry {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-          val validParametersCount = constructors.map(_.getParameterCount).distinct.sorted
+          val validParametersCount = constructors
+            .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
+            .map(_.getParameterCount).distinct.sorted
           val expectedNumberOfParameters = if (validParametersCount.length == 1) {
             validParametersCount.head.toString
           } else {

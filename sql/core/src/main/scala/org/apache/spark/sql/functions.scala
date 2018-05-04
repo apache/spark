@@ -3189,7 +3189,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    JsonToStructs(schema, options, e.expr)
+    new JsonToStructs(schema, options, e.expr)
   }
 
   /**
