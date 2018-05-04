@@ -129,13 +129,18 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     var is: InputStream = null
     try {
       is = path match {
-        case Some(f) => new FileInputStream(f)
-        case None => Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_METRICS_CONF_FILENAME)
+        case Some(f) =>
+          logInfo(s"Loading metrics properties from file $f")
+          new FileInputStream(f)
+        case None =>
+          logInfo(s"Loading metrics properties from resource $DEFAULT_METRICS_CONF_FILENAME")
+          Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_METRICS_CONF_FILENAME)
       }
 
       if (is != null) {
         properties.load(is)
       }
+      logInfo(s"Metrics properties: " + properties.toString)
     } catch {
       case e: Exception =>
         val file = path.getOrElse(DEFAULT_METRICS_CONF_FILENAME)
