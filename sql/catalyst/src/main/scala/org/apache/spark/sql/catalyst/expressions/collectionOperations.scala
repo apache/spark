@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Comparator
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -44,8 +46,9 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    TypeCoercion.findWiderTypeForTwo(left.dataType, right.dataType) match {
-      case Some(ArrayType(_, _)) => TypeCheckResult.TypeCheckSuccess
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, _), ArrayType(e2, _)) if e1.sameType(e2) =>
+        TypeCheckResult.TypeCheckSuccess
       case _ => TypeCheckResult.TypeCheckFailure(s"input to function $prettyName should have " +
         s"been two ${ArrayType.simpleString}s with same element type, but it's " +
         s"[${left.dataType.simpleString}, ${right.dataType.simpleString}]")
@@ -432,7 +435,13 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val arr1 = a1.asInstanceOf[ArrayData]
     val arr2 = a2.asInstanceOf[ArrayData]
     if (arr1.numElements() > 0) {
-      val set2 = arr2.array.toSet
+      val set2 = new mutable.HashSet[Any]
+      arr2.foreach(elementType, (_, v) =>
+        if (v == null) {
+          hasNull = true
+        } else {
+          set2 += v
+        })
       arr1.foreach(elementType, (_, v1) =>
         if (v1 == null) {
           hasNull = true
@@ -440,9 +449,6 @@ case class ArraysOverlap(left: Expression, right: Expression)
           return true
         }
       )
-      if (!hasNull && containsNull(arr2, right.dataType.asInstanceOf[ArrayType])) {
-        hasNull = true
-      }
     } else if (containsNull(arr2, right.dataType.asInstanceOf[ArrayType])) {
       hasNull = true
     }
