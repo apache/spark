@@ -215,6 +215,10 @@ private[spark] case class GetMapOutputStatuses(shuffleId: Int)
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 private[spark] case class CheckNoMissingPartitions(shuffleId: Int)
   extends MapOutputTrackerMessage
+private[spark] case class CheckAndRegisterShuffle(shuffleId: Int, numMaps: Int)
+  extends MapOutputTrackerMessage
+private[spark] case class RegisterMapOutput(shuffleId: Int, mapId: Int, status: MapStatus)
+  extends MapOutputTrackerMessage
 
 private[spark] case class GetMapOutputMessage(shuffleId: Int, context: RpcCallContext)
 
@@ -237,12 +241,24 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       stop()
 
     case CheckNoMissingPartitions(shuffleId: Int) =>
-      logInfo("")
+      logInfo(s"Checking missing partitions for $shuffleId")
       if (tracker.findMissingPartitions(shuffleId).isEmpty) {
         context.reply(true)
       } else {
         context.reply(false)
       }
+
+    case CheckAndRegisterShuffle(shuffleId: Int, numMaps: Int) =>
+      logInfo(s"Trying to register shuffle $shuffleId")
+      if (!tracker.shuffleStatuses.contains(shuffleId)) {
+        tracker.registerShuffle(shuffleId, numMaps)
+        logDebug(s"Shuffle $shuffleId doesn't exist, register it now")
+      }
+      context.reply(true)
+
+    case RegisterMapOutput(shuffleId: Int, mapId: Int, status: MapStatus) =>
+      tracker.registerMapOutput(shuffleId, mapId, status)
+      context.reply(true)
   }
 }
 
@@ -782,7 +798,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
  * MapOutputTrackerWorker for continuous processing, its mainly difference with MapOutputTracker
  * is waiting for a time when the upstream's map output status not ready.
  */
-private[spark] class ContinuousProcessingMapOutputTrackerWorker(conf: SparkConf)
+private[spark] class ContinuousMapOutputTrackerWorker(conf: SparkConf)
   extends MapOutputTrackerWorker(conf) {
   /**
     * Get or fetch the array of MapStatuses for a given shuffle ID. NOTE: clients MUST synchronize
@@ -797,6 +813,17 @@ private[spark] class ContinuousProcessingMapOutputTrackerWorker(conf: SparkConf)
       }
     }
     super.getStatuses(shuffleId)
+  }
+
+  def checkAndRegisterShuffle(shuffleId: Int, numMaps: Int): Unit = {
+    // check local cache first to avoid frequency connect to master
+    if (!mapStatuses.contains(shuffleId)) {
+      askTracker(CheckAndRegisterShuffle(shuffleId, numMaps))
+    }
+  }
+
+  def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus): Unit = {
+    askTracker(RegisterMapOutput(shuffleId: Int, mapId: Int, status: MapStatus))
   }
 }
 

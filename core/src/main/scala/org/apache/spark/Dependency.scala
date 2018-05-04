@@ -96,6 +96,30 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
 }
 
+/**
+ * :: DeveloperApi ::
+ * Represents a dependency on the output of a shuffle stage of continuous type.
+ */
+@DeveloperApi
+class ContinuousShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
+    dep: ShuffleDependency[K, V, C], continuousEpoch: Int, totalShuffleNum: Int)
+  extends ShuffleDependency[K, V, C](
+    dep.rdd,
+    dep.partitioner,
+    dep.serializer,
+    dep.keyOrdering,
+    dep.aggregator,
+    dep.mapSideCombine) {
+
+  val baseShuffleId: Int = super.shuffleId
+
+  override val shuffleId: Int = continuousEpoch * totalShuffleNum + baseShuffleId
+
+  override val shuffleHandle: ShuffleHandle = dep.rdd.context.env.shuffleManager.registerShuffle(
+    shuffleId, dep.rdd.partitions.length, this)
+
+  dep.rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
+}
 
 /**
  * :: DeveloperApi ::

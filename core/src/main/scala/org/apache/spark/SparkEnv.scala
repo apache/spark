@@ -140,6 +140,7 @@ object SparkEnv extends Logging {
 
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
+  private[spark] val START_EPOCH_KEY = "__continuous_start_epoch"
 
   def set(e: SparkEnv) {
     env = e
@@ -305,7 +306,7 @@ object SparkEnv extends Logging {
     val mapOutputTracker = if (isDriver) {
       new MapOutputTrackerMaster(conf, broadcastManager, isLocal)
     } else if (isContinuous) {
-      new ContinuousProcessingMapOutputTrackerWorker(conf)
+      new ContinuousMapOutputTrackerWorker(conf)
     } else {
       new MapOutputTrackerWorker(conf)
     }
@@ -319,7 +320,9 @@ object SparkEnv extends Logging {
     // Let the user specify short names for shuffle managers
     val shortShuffleMgrNames = Map(
       "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
-      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
+      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
+      "continuous" ->
+        classOf[org.apache.spark.sql.execution.streaming.continuous.ContinuousShuffleManager])
     val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
     val shuffleMgrClass =
       shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
