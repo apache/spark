@@ -23,7 +23,7 @@ import java.util.TimeZone
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.{BinaryPrefixComparator, DoublePrefixComparator, StringPrefixComparator}
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
 
 class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -52,6 +52,8 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val dec1 = Literal(Decimal(20132983L, 10, 2))
     val dec2 = Literal(Decimal(20132983L, 19, 2))
     val dec3 = Literal(Decimal(20132983L, 21, 2))
+    val list1 = Literal(List(1, 2), ArrayType(IntegerType))
+    val nullVal = Literal.create(null, IntegerType)
 
     checkEvaluation(SortPrefix(SortOrder(b1, Ascending)), 0L)
     checkEvaluation(SortPrefix(SortOrder(b2, Ascending)), 1L)
@@ -82,5 +84,7 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(SortPrefix(SortOrder(dec2, Ascending)), 2013298L)
     checkEvaluation(SortPrefix(SortOrder(dec3, Ascending)),
       DoublePrefixComparator.computePrefix(201329.83d))
+    checkEvaluation(SortPrefix(SortOrder(list1, Ascending)), 0L)
+    checkEvaluation(SortPrefix(SortOrder(nullVal, Ascending)), null)
   }
 }

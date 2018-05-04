@@ -148,39 +148,43 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       (!child.isAscending && child.nullOrdering == NullsLast)
   }
 
+  private lazy val calcPrefix: Any => Long = child.child.dataType match {
+    case BooleanType => (raw: Any) =>
+      if (raw.asInstanceOf[Boolean]) 1 else 0
+    case _: IntegralType =>
+      _.asInstanceOf[java.lang.Number].longValue()
+    case DateType | TimestampType =>
+      _.asInstanceOf[java.lang.Number].longValue()
+    case FloatType | DoubleType => (raw: Any) => {
+      val dVal = raw.asInstanceOf[java.lang.Number].doubleValue()
+      DoublePrefixComparator.computePrefix(dVal)
+    }
+    case StringType => (raw: Any) =>
+      StringPrefixComparator.computePrefix(raw.asInstanceOf[UTF8String])
+    case BinaryType => (raw: Any) =>
+      BinaryPrefixComparator.computePrefix(raw.asInstanceOf[Array[Byte]])
+    case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS => (raw: Any) => {
+      val value = raw.asInstanceOf[Decimal]
+      if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
+        value.toUnscaledLong
+      } else {
+        val p = Decimal.MAX_LONG_DIGITS
+        val s = p - (dt.precision - dt.scale)
+        if (value.changePrecision(p, s)) value.toUnscaledLong else Long.MinValue
+      }
+    }
+    case dt: DecimalType => (raw: Any) =>
+      DoublePrefixComparator.computePrefix(raw.asInstanceOf[Decimal].toDouble)
+    case dt => (Any) => 0L
+  }
+
   override def eval(input: InternalRow): Any = {
     val value = child.child.eval(input)
     if (value == null) {
-      return null
+      null
+    } else {
+      calcPrefix(value)
     }
-    val prefix = child.child.dataType match {
-      case BooleanType =>
-        if (value.asInstanceOf[Boolean]) 1L else 0L
-      case _: IntegralType =>
-        value.asInstanceOf[java.lang.Number].longValue()
-      case DateType | TimestampType =>
-        value.asInstanceOf[java.lang.Number].longValue()
-      case FloatType | DoubleType =>
-        val dVal = value.asInstanceOf[java.lang.Number].doubleValue()
-        DoublePrefixComparator.computePrefix(dVal)
-      case StringType =>
-        StringPrefixComparator.computePrefix(value.asInstanceOf[UTF8String])
-      case BinaryType =>
-        BinaryPrefixComparator.computePrefix(value.asInstanceOf[Array[Byte]])
-      case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        val dtValue = value.asInstanceOf[Decimal]
-        if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-          dtValue.toUnscaledLong
-        } else {
-          val p = Decimal.MAX_LONG_DIGITS
-          val s = p - (dt.precision - dt.scale)
-          if (dtValue.changePrecision(p, s)) dtValue.toUnscaledLong else Long.MinValue
-        }
-      case dt: DecimalType =>
-        val dtValue = value.asInstanceOf[Decimal].toDouble
-        DoublePrefixComparator.computePrefix(dtValue)
-    }
-    prefix
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
