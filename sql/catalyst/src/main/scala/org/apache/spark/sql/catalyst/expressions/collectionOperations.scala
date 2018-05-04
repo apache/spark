@@ -3275,7 +3275,7 @@ case class ArrayDistinct(child: Expression)
 object ArraySetUtils {
   val kindUnion = 1
 
-  def toUnsafeIntArray(hs: OpenHashSet[Int]): UnsafeArrayData = {
+  def toArrayDataInt(hs: OpenHashSet[Int]): ArrayData = {
     val array = new Array[Int](hs.size)
     var pos = hs.nextPos(0)
     var i = 0
@@ -3284,10 +3284,18 @@ object ArraySetUtils {
       pos = hs.nextPos(pos + 1)
       i += 1
     }
-    UnsafeArrayData.fromPrimitiveArray(array)
+
+    val numBytes = 4L * array.length
+    val unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes(array.length) +
+      org.apache.spark.unsafe.array.ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
+    if (unsafeArraySizeInBytes <= Integer.MAX_VALUE) {
+      UnsafeArrayData.fromPrimitiveArray(array)
+    } else {
+      new GenericArrayData(array)
+    }
   }
 
-  def toUnsafeLongArray(hs: OpenHashSet[Long]): UnsafeArrayData = {
+  def toArrayDataLong(hs: OpenHashSet[Long]): ArrayData = {
     val array = new Array[Long](hs.size)
     var pos = hs.nextPos(0)
     var i = 0
@@ -3296,7 +3304,15 @@ object ArraySetUtils {
       pos = hs.nextPos(pos + 1)
       i += 1
     }
-    UnsafeArrayData.fromPrimitiveArray(array)
+
+    val numBytes = 8L * array.length
+    val unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes(array.length) +
+      org.apache.spark.unsafe.array.ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
+    if (unsafeArraySizeInBytes <= Integer.MAX_VALUE) {
+      UnsafeArrayData.fromPrimitiveArray(array)
+    } else {
+      new GenericArrayData(array)
+    }
   }
 
   def arrayUnion(array1: ArrayData, array2: ArrayData, et: DataType): ArrayData = {
@@ -3357,7 +3373,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
             hs2.add(ary2.getInt(i))
             i += 1
           }
-          ArraySetUtils.toUnsafeIntArray(intEval(ary1, hs2))
+          ArraySetUtils.toArrayDataInt(intEval(ary1, hs2))
         case LongType =>
           // avoid boxing of primitive long array elements
           val hs2 = new OpenHashSet[Long]
@@ -3366,7 +3382,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
             hs2.add(ary2.getLong(i))
             i += 1
           }
-          ArraySetUtils.toUnsafeLongArray(longEval(ary1, hs2))
+          ArraySetUtils.toArrayDataLong(longEval(ary1, hs2))
         case _ =>
           val hs2 = new OpenHashSet[Any]
           var i = 0
@@ -3387,23 +3403,34 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val i = ctx.freshName("i")
+    val ary = ctx.freshName("ary")
     val arraySetUtils = "org.apache.spark.sql.catalyst.expressions.ArraySetUtils"
     val genericArrayData = classOf[GenericArrayData].getName
     val unsafeArrayData = classOf[UnsafeArrayData].getName
     val openHashSet = classOf[OpenHashSet[_]].getName
-    val et = s"org.apache.spark.sql.types.DataTypes.$elementType"
-    val (postFix, classTag, getter, arrayBuilder, javaTypeName) = if (!cn) {
+    val (postFix, classTag, getter, javaTypeName, arrayBuilder) = if (!cn) {
       val ptName = CodeGenerator.primitiveTypeName(elementType)
       elementType match {
-        case ByteType | ShortType | IntegerType =>
-          (s"$$mcI$$sp", s"scala.reflect.ClassTag$$.MODULE$$.$ptName()", s"get$ptName($i)",
-            s"$unsafeArrayData.fromPrimitiveArray", CodeGenerator.javaType(elementType))
-        case LongType =>
-          (s"$$mcJ$$sp", s"scala.reflect.ClassTag$$.MODULE$$.$ptName()", s"get$ptName($i)",
-            s"$unsafeArrayData.fromPrimitiveArray", "long")
+        case ByteType | ShortType | IntegerType | LongType =>
+          (if (elementType == LongType) s"$$mcJ$$sp" else s"$$mcI$$sp",
+            s"scala.reflect.ClassTag$$.MODULE$$.$ptName()", s"get$ptName($i)",
+            CodeGenerator.javaType(elementType),
+            s"""
+             |long numBytes = (long) ${elementType.defaultSize} * $ary.length;
+             |long unsafeArraySizeInBytes =
+             |  $unsafeArrayData.calculateHeaderPortionInBytes($ary.length) +
+             |    org.apache.spark.unsafe.array.ByteArrayMethods
+             |      .roundNumberOfBytesToNearestWord(numBytes);
+             |if (unsafeArraySizeInBytes <= Integer.MAX_VALUE) {
+             |  ${ev.value} = $unsafeArrayData.fromPrimitiveArray($ary);
+             |} else {
+             |  ${ev.value} = new $genericArrayData($ary);
+             |}
+           """.stripMargin)
         case _ =>
+          val et = ctx.addReferenceObj("elementType", elementType)
           ("", s"scala.reflect.ClassTag$$.MODULE$$.Object()", s"get($i, $et)",
-            s"new $genericArrayData", "Object")
+           "Object", s"${ev.value} = new $genericArrayData($ary);")
       }
     } else {
       ("", "", "", "", "")
@@ -3413,7 +3440,6 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
     val hs2 = ctx.freshName("hs2")
     val invalidPos = ctx.freshName("invalidPos")
     val pos = ctx.freshName("pos")
-    val ary = ctx.freshName("ary")
     nullSafeCodeGen(ctx, ev, (ary1, ary2) => {
       if (classTag != "") {
         val secondLoop = codeGen(ctx, hs2, hs, s"$ary1.numElements()", s"$ary1.$getter", i,
@@ -3433,7 +3459,8 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
            |  $pos = $hs.nextPos($pos + 1);
            |  $i++;
            |}
-           |${ev.value} = $arrayBuilder($ary);
+           |
+           |$arrayBuilder
          """.stripMargin
       } else {
         val setOp = if (typeId == ArraySetUtils.kindUnion) {
@@ -3441,6 +3468,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
         } else {
           ""
         }
+        val et = ctx.addReferenceObj("elementTypeUtil", elementType)
         s"${ev.value} = $arraySetUtils$$.MODULE$$.array$setOp($ary1, $ary2, $et);"
       }
     })
