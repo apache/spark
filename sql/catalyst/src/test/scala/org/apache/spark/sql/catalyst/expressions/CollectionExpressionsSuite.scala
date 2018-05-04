@@ -70,11 +70,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapEntries(mi2), null)
 
     // Non-primitive-type keys/values
-    val ms0 = Literal.create(Map("a" -> "a", "b" -> null, "c" -> "b"), MapType(StringType, StringType))
+    val ms0 = Literal.create(Map("a" -> "c", "b" -> null), MapType(StringType, StringType))
     val ms1 = Literal.create(Map[Int, Int](), MapType(StringType, StringType))
     val ms2 = Literal.create(null, MapType(StringType, StringType))
 
-    checkEvaluation(MapEntries(ms0), Seq(r("a", "a"), r("b", null), r("c", "b")))
+    checkEvaluation(MapEntries(ms0), Seq(r("a", "c"), r("b", null)))
     checkEvaluation(MapEntries(ms1), Seq.empty)
     checkEvaluation(MapEntries(ms2), null)
   }
