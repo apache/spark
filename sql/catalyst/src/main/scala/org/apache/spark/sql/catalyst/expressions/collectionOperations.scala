@@ -3272,7 +3272,7 @@ case class ArrayDistinct(child: Expression)
   override def prettyName: String = "array_distinct"
 }
 
-object ArraySetUtils {
+object ArraySetLike {
   val kindUnion = 1
 
   def toArrayDataInt(hs: OpenHashSet[Int]): ArrayData = {
@@ -3288,7 +3288,8 @@ object ArraySetUtils {
     val numBytes = 4L * array.length
     val unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes(array.length) +
       org.apache.spark.unsafe.array.ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
-    if (unsafeArraySizeInBytes <= Integer.MAX_VALUE) {
+    // Since UnsafeArrayData.fromPrimitiveArray() uses long[], max elements * 8 bytes can be used
+    if (unsafeArraySizeInBytes <= Integer.MAX_VALUE * 8) {
       UnsafeArrayData.fromPrimitiveArray(array)
     } else {
       new GenericArrayData(array)
@@ -3308,7 +3309,8 @@ object ArraySetUtils {
     val numBytes = 8L * array.length
     val unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes(array.length) +
       org.apache.spark.unsafe.array.ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
-    if (unsafeArraySizeInBytes <= Integer.MAX_VALUE) {
+    // Since UnsafeArrayData.fromPrimitiveArray() uses long[], max elements * 8 bytes can be used
+    if (unsafeArraySizeInBytes <= Integer.MAX_VALUE * 8) {
       UnsafeArrayData.fromPrimitiveArray(array)
     } else {
       new GenericArrayData(array)
@@ -3331,25 +3333,11 @@ object ArraySetUtils {
   }
 }
 
-abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
+abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
   def typeId: Int
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val r = super.checkInputDataTypes()
-    if ((r == TypeCheckResult.TypeCheckSuccess) &&
-      (left.dataType.asInstanceOf[ArrayType].elementType !=
-        right.dataType.asInstanceOf[ArrayType].elementType)) {
-      TypeCheckResult.TypeCheckFailure("Element type in both arrays must be the same")
-    } else {
-      r
-    }
-  }
 
   override def dataType: DataType = left.dataType
 
-  private def elementType = dataType.asInstanceOf[ArrayType].elementType
   private def cn = left.dataType.asInstanceOf[ArrayType].containsNull ||
     right.dataType.asInstanceOf[ArrayType].containsNull
 
@@ -3373,7 +3361,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
             hs2.add(ary2.getInt(i))
             i += 1
           }
-          ArraySetUtils.toArrayDataInt(intEval(ary1, hs2))
+          ArraySetLike.toArrayDataInt(intEval(ary1, hs2))
         case LongType =>
           // avoid boxing of primitive long array elements
           val hs2 = new OpenHashSet[Long]
@@ -3382,7 +3370,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
             hs2.add(ary2.getLong(i))
             i += 1
           }
-          ArraySetUtils.toArrayDataLong(longEval(ary1, hs2))
+          ArraySetLike.toArrayDataLong(longEval(ary1, hs2))
         case _ =>
           val hs2 = new OpenHashSet[Any]
           var i = 0
@@ -3393,8 +3381,8 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
           new GenericArrayData(genericEval(ary1, hs2, elementType).iterator.toArray)
       }
     } else {
-      if (typeId == ArraySetUtils.kindUnion) {
-        ArraySetUtils.arrayUnion(ary1, ary2, elementType)
+      if (typeId == ArraySetLike.kindUnion) {
+        ArraySetLike.arrayUnion(ary1, ary2, elementType)
       } else {
         null
       }
@@ -3404,7 +3392,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val i = ctx.freshName("i")
     val ary = ctx.freshName("ary")
-    val arraySetUtils = "org.apache.spark.sql.catalyst.expressions.ArraySetUtils"
+    val arraySetUtils = "org.apache.spark.sql.catalyst.expressions.ArraySetLike"
     val genericArrayData = classOf[GenericArrayData].getName
     val unsafeArrayData = classOf[UnsafeArrayData].getName
     val openHashSet = classOf[OpenHashSet[_]].getName
@@ -3463,7 +3451,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
            |$arrayBuilder
          """.stripMargin
       } else {
-        val setOp = if (typeId == ArraySetUtils.kindUnion) {
+        val setOp = if (typeId == ArraySetLike.kindUnion) {
           "Union"
         } else {
           ""
@@ -3489,8 +3477,8 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
        array(1, 2, 3, 5)
   """,
   since = "2.4.0")
-case class ArrayUnion(left: Expression, right: Expression) extends ArraySetUtils {
-  override def typeId: Int = ArraySetUtils.kindUnion
+case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike {
+  override def typeId: Int = ArraySetLike.kindUnion
 
   override def intEval(ary: ArrayData, hs2: OpenHashSet[Int]): OpenHashSet[Int] = {
     var i = 0
