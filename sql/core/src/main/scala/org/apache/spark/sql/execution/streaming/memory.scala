@@ -222,11 +222,20 @@ class MemoryStreamDataReaderFactory(records: Array[UnsafeRow])
   }
 }
 
+/** A common trait for MemorySinks with methods used for testing */
+trait MemorySinkBase extends BaseStreamingSink {
+  def allData: Seq[Row]
+  def latestBatchData: Seq[Row]
+  def dataSinceBatch(sinceBatchId: Long): Seq[Row]
+  def latestBatchId: Option[Long]
+}
+
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink with Logging {
+class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink
+  with MemorySinkBase with Logging {
 
   private case class AddedData(batchId: Long, data: Array[Row])
 
@@ -236,7 +245,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
-    batches.map(_.data).flatten
+    batches.flatMap(_.data)
   }
 
   def latestBatchId: Option[Long] = synchronized {
@@ -244,6 +253,10 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
   }
 
   def latestBatchData: Seq[Row] = synchronized { batches.lastOption.toSeq.flatten(_.data) }
+
+  def dataSinceBatch(sinceBatchId: Long): Seq[Row] = synchronized {
+    batches.filter(_.batchId > sinceBatchId).flatMap(_.data)
+  }
 
   def toDebugString: String = synchronized {
     batches.map { case AddedData(batchId, data) =>
