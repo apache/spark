@@ -29,7 +29,7 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
     with ListenerBus[ExternalCatalogEventListener, ExternalCatalogEvent] {
   import CatalogTypes.TablePartitionSpec
 
-  override def unwrapped: ExternalCatalog = delegate
+  def unwrapped: ExternalCatalog = delegate
 
   override protected def doPostEvent(
       listener: ExternalCatalogEventListener,

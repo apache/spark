@@ -84,7 +84,7 @@ private[hive] class TestHiveSharedState(
     hiveClient: Option[HiveClient] = None)
   extends SharedState(sc) {
 
-  override lazy val externalCatalog: ExternalCatalog = {
+  override lazy val externalCatalog: ExternalCatalogWithListener = {
     new ExternalCatalogWithListener(new TestHiveExternalCatalog(
       sc.conf,
       sc.hadoopConfiguration,

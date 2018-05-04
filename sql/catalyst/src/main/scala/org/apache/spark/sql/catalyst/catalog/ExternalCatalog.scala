@@ -33,9 +33,6 @@ import org.apache.spark.sql.types.StructType
 trait ExternalCatalog {
   import CatalogTypes.TablePartitionSpec
 
-  // Returns the underlying catalog class (e.g., HiveExternalCatalog).
-  def unwrapped: ExternalCatalog = this
-
   // --------------------------------------------------------------------------
   // Utils
   // --------------------------------------------------------------------------
