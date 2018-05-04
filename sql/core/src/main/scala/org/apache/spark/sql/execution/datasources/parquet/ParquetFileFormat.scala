@@ -417,9 +417,9 @@ class ParquetFileFormat
         // ParquetRecordReader returns UnsafeRow
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz), parquetFilter)
+          new ParquetRecordReader[InternalRow](new ParquetReadSupport(convertTz), parquetFilter)
         } else {
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz))
+          new ParquetRecordReader[InternalRow](new ParquetReadSupport(convertTz))
         }
         val iter = new RecordReaderIterator(reader)
         // SPARK-23457 Register a task completion lister before `initialization`.
@@ -435,10 +435,11 @@ class ParquetFileFormat
         // Object, then we can defer the cast until later!
         if (partitionSchema.length == 0) {
           // There is no partition columns
-          iter.asInstanceOf[Iterator[InternalRow]]
+          iter
         } else {
-          iter.asInstanceOf[Iterator[InternalRow]]
-            .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+          iter.map(d => joinedRow(d, file.partitionValues))
+//          iter.asInstanceOf[Iterator[InternalRow]]
+//              .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
         }
       }
     }
