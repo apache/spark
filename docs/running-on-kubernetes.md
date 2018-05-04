@@ -562,6 +562,13 @@ specific to Spark on Kubernetes.
     parallelism, e.g., number of tasks an executor can run concurrently is not affected by this.
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.maxInitFailures</code></td>
+  <td>10</td>
+  <td>
+    Maximum number of times executors are allowed to fail with an Init:Error state before failing the application. Note that Init:Error failures should not be caused by Spark itself because Spark does not attach init-containers to pods. Init-containers can be attached by the cluster itself. Users should check with their cluster administrator if these kinds of failures to start the executor pod occur frequently.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.limit.cores</code></td>
   <td>(none)</td>
   <td>
