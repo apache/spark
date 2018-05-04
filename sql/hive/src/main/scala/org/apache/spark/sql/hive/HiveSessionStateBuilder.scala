@@ -42,8 +42,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    * Create a Hive aware resource loader.
    */
   override protected lazy val resourceLoader: HiveSessionResourceLoader = {
-    val client: HiveClient = externalCatalog.client
-    new HiveSessionResourceLoader(session, client)
+    new HiveSessionResourceLoader(session, () => externalCatalog.client)
   }
 
   /**
@@ -51,8 +50,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    */
   override protected lazy val catalog: HiveSessionCatalog = {
     val catalog = new HiveSessionCatalog(
-      externalCatalog,
-      session.sharedState.globalTempViewManager,
+      () => externalCatalog,
+      () => session.sharedState.globalTempViewManager,
       new HiveMetastoreCatalog(session),
       functionRegistry,
       conf,
@@ -105,8 +104,9 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
 
 class HiveSessionResourceLoader(
     session: SparkSession,
-    client: HiveClient)
+    clientBuilder: () => HiveClient)
   extends SessionResourceLoader(session) {
+  private lazy val client = clientBuilder()
   override def addJar(path: String): Unit = {
     client.addJar(path)
     super.addJar(path)

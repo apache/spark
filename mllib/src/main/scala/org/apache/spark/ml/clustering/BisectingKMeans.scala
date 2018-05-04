@@ -26,7 +26,8 @@ import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
+import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
+  BisectingKMeansModel => MLlibBisectingKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
@@ -38,8 +39,8 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 /**
  * Common params for BisectingKMeans and BisectingKMeansModel
  */
-private[clustering] trait BisectingKMeansParams extends Params
-  with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
+private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
+  with HasFeaturesCol with HasSeed with HasPredictionCol with HasDistanceMeasure {
 
   /**
    * The desired number of leaf clusters. Must be &gt; 1. Default: 4.
@@ -103,6 +104,10 @@ class BisectingKMeansModel private[ml] (
   /** @group setParam */
   @Since("2.1.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group expertSetParam */
+  @Since("2.4.0")
+  def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -188,7 +193,7 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
       val dataPath = new Path(path, "data").toString
       val mllibModel = MLlibBisectingKMeansModel.load(sc, dataPath)
       val model = new BisectingKMeansModel(metadata.uid, mllibModel)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -248,6 +253,10 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("2.0.0")
   def setMinDivisibleClusterSize(value: Double): this.type = set(minDivisibleClusterSize, value)
 
+  /** @group expertSetParam */
+  @Since("2.4.0")
+  def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
     transformSchema(dataset.schema, logging = true)
@@ -263,6 +272,7 @@ class BisectingKMeans @Since("2.0.0") (
       .setMaxIterations($(maxIter))
       .setMinDivisibleClusterSize($(minDivisibleClusterSize))
       .setSeed($(seed))
+      .setDistanceMeasure($(distanceMeasure))
     val parentModel = bkm.run(rdd)
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(

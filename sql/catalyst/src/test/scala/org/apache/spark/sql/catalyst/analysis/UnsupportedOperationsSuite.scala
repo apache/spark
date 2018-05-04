@@ -621,6 +621,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append,
     expectedMsgs = Seq("monotonically_increasing_id"))
 
+  assertSupportedForContinuousProcessing(
+    "TypedFilter", TypedFilter(
+      null,
+      null,
+      null,
+      null,
+      new TestStreamingRelationV2(attribute)), OutputMode.Append())
 
   /*
     =======================================================================================
@@ -771,6 +778,16 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     }
   }
 
+  /** Assert that the logical plan is supported for continuous procsssing mode */
+  def assertSupportedForContinuousProcessing(
+    name: String,
+    plan: LogicalPlan,
+    outputMode: OutputMode): Unit = {
+    test(s"continuous processing - $name: supported") {
+      UnsupportedOperationChecker.checkForContinuous(plan, outputMode)
+    }
+  }
+
   /**
    * Assert that the logical plan is not supported inside a streaming plan.
    *
@@ -839,5 +856,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {
     def this(attribute: Attribute) = this(Seq(attribute))
     override def isStreaming: Boolean = true
+  }
+
+  case class TestStreamingRelationV2(output: Seq[Attribute]) extends LeafNode {
+    def this(attribute: Attribute) = this(Seq(attribute))
+    override def isStreaming: Boolean = true
+    override def nodeName: String = "StreamingRelationV2"
   }
 }

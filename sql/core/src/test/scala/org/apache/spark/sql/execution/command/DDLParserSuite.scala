@@ -236,7 +236,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       Seq(
         FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
         FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
-      isTemp = true, ifNotExists = false, replace = false)
+      isTemp = true, ignoreIfExists = false, replace = false)
     val expected2 = CreateFunctionCommand(
       Some("hello"),
       "world",
@@ -244,7 +244,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       Seq(
         FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
         FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false, ifNotExists = false, replace = false)
+      isTemp = false, ignoreIfExists = false, replace = false)
     val expected3 = CreateFunctionCommand(
       None,
       "helloworld3",
@@ -252,7 +252,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       Seq(
         FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
         FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
-      isTemp = true, ifNotExists = false, replace = true)
+      isTemp = true, ignoreIfExists = false, replace = true)
     val expected4 = CreateFunctionCommand(
       Some("hello"),
       "world1",
@@ -260,7 +260,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       Seq(
         FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
         FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false, ifNotExists = false, replace = true)
+      isTemp = false, ignoreIfExists = false, replace = true)
     val expected5 = CreateFunctionCommand(
       Some("hello"),
       "world2",
@@ -268,7 +268,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       Seq(
         FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
         FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false, ifNotExists = true, replace = false)
+      isTemp = false, ignoreIfExists = true, replace = false)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)

@@ -20,7 +20,6 @@
 #' S4 class that represents a FPGrowthModel
 #'
 #' @param jobj a Java object reference to the backing Scala FPGrowthModel
-#' @export
 #' @note FPGrowthModel since 2.2.0
 setClass("FPGrowthModel", slots = list(jobj = "jobj"))
 
@@ -45,7 +44,6 @@ setClass("FPGrowthModel", slots = list(jobj = "jobj"))
 #' @rdname spark.fpGrowth
 #' @name spark.fpGrowth
 #' @aliases spark.fpGrowth,SparkDataFrame-method
-#' @export
 #' @examples
 #' \dontrun{
 #' raw_data <- read.df(
@@ -109,7 +107,6 @@ setMethod("spark.fpGrowth", signature(data = "SparkDataFrame"),
 #'         and \code{freq} (frequency of the itemset).
 #' @rdname spark.fpGrowth
 #' @aliases freqItemsets,FPGrowthModel-method
-#' @export
 #' @note spark.freqItemsets(FPGrowthModel) since 2.2.0
 setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
           function(object) {
@@ -125,7 +122,6 @@ setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
 #'         and \code{condfidence} (confidence).
 #' @rdname spark.fpGrowth
 #' @aliases associationRules,FPGrowthModel-method
-#' @export
 #' @note spark.associationRules(FPGrowthModel) since 2.2.0
 setMethod("spark.associationRules", signature(object = "FPGrowthModel"),
           function(object) {
@@ -138,7 +134,6 @@ setMethod("spark.associationRules", signature(object = "FPGrowthModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted values.
 #' @rdname spark.fpGrowth
 #' @aliases predict,FPGrowthModel-method
-#' @export
 #' @note predict(FPGrowthModel) since 2.2.0
 setMethod("predict", signature(object = "FPGrowthModel"),
           function(object, newData) {
@@ -153,7 +148,6 @@ setMethod("predict", signature(object = "FPGrowthModel"),
 #'                  if the output path exists.
 #' @rdname spark.fpGrowth
 #' @aliases write.ml,FPGrowthModel,character-method
-#' @export
 #' @seealso \link{read.ml}
 #' @note write.ml(FPGrowthModel, character) since 2.2.0
 setMethod("write.ml", signature(object = "FPGrowthModel", path = "character"),

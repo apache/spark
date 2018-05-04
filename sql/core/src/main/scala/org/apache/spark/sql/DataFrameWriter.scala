@@ -174,7 +174,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * predicates on the partitioned columns. In order for partitioning to work well, the number
    * of distinct values in each column should typically be less than tens of thousands.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 1.4.0
    */
@@ -188,7 +189,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Buckets the output by the given columns. If specified, the output is laid out on the file
    * system similar to Hive's bucketing scheme.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 2.0
    */
@@ -202,7 +204,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Sorts the output in each bucket by the given columns.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 2.0
    */
@@ -240,7 +243,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val ds = cls.newInstance()
       ds match {
         case ws: WriteSupport =>
-          val options = new DataSourceV2Options((extraOptions ++
+          val options = new DataSourceOptions((extraOptions ++
             DataSourceV2Utils.extractSessionConfigs(
               ds = ds.asInstanceOf[DataSourceV2],
               conf = df.sparkSession.sessionState.conf)).asJava)
@@ -311,7 +314,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     if (partitioningColumns.isDefined) {
       throw new AnalysisException(
         "insertInto() can't be used together with partitionBy(). " +
-          "Partition columns have already be defined for the table. " +
+          "Partition columns have already been defined for the table. " +
           "It is not necessary to use partitionBy()."
       )
     }
@@ -515,6 +518,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
+   * files. If it is not set, the UTF-8 charset will be used. </li>
+   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -584,6 +590,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
    * </ul>
    *
    * @since 1.6.0

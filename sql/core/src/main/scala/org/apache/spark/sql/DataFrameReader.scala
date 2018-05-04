@@ -21,6 +21,8 @@ import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
+import com.fasterxml.jackson.databind.ObjectMapper
+
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.api.java.JavaRDD
@@ -34,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, ReadSupportWithSchema}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -73,6 +75,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Specifies the schema by using the input DDL-formatted string. Some data sources (e.g. JSON) can
    * infer the input schema automatically from data. By specifying the schema here, the underlying
    * data source can skip the schema inference step, and thus speed up data loading.
+   *
+   * {{{
+   *   spark.read.schema("a INT, b STRING, c DOUBLE").csv("test.csv")
+   * }}}
    *
    * @since 2.3.0
    */
@@ -167,7 +173,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def load(path: String): DataFrame = {
-    option("path", path).load(Seq.empty: _*) // force invocation of `load(...varargs...)`
+    // force invocation of `load(...varargs...)`
+    option(DataSourceOptions.PATH_KEY, path).load(Seq.empty: _*)
   }
 
   /**
@@ -185,39 +192,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val ds = cls.newInstance()
-      val options = new DataSourceV2Options((extraOptions ++
-        DataSourceV2Utils.extractSessionConfigs(
-          ds = ds.asInstanceOf[DataSourceV2],
-          conf = sparkSession.sessionState.conf)).asJava)
-
-      // Streaming also uses the data source V2 API. So it may be that the data source implements
-      // v2, but has no v2 implementation for batch reads. In that case, we fall back to loading
-      // the dataframe as a v1 source.
-      val reader = (ds, userSpecifiedSchema) match {
-        case (ds: ReadSupportWithSchema, Some(schema)) =>
-          ds.createReader(schema, options)
-
-        case (ds: ReadSupport, None) =>
-          ds.createReader(options)
-
-        case (ds: ReadSupportWithSchema, None) =>
-          throw new AnalysisException(s"A schema needs to be specified when using $ds.")
-
-        case (ds: ReadSupport, Some(schema)) =>
-          val reader = ds.createReader(options)
-          if (reader.readSchema() != schema) {
-            throw new AnalysisException(s"$ds does not allow user-specified schemas.")
-          }
-          reader
-
-        case _ => null // fall back to v1
-      }
-
-      if (reader == null) {
-        loadV1Source(paths: _*)
+      val ds = cls.newInstance().asInstanceOf[DataSourceV2]
+      if (ds.isInstanceOf[ReadSupport] || ds.isInstanceOf[ReadSupportWithSchema]) {
+        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          ds = ds, conf = sparkSession.sessionState.conf)
+        val pathsOption = {
+          val objectMapper = new ObjectMapper()
+          DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
+        }
+        Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
+          ds, extraOptions.toMap ++ sessionOptions + pathsOption,
+          userSpecifiedSchema = userSpecifiedSchema))
       } else {
-        Dataset.ofRows(sparkSession, DataSourceV2Relation(reader))
+        loadV1Source(paths: _*)
       }
     } else {
       loadV1Source(paths: _*)
@@ -364,12 +351,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.
    *   <ul>
-   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
-   *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep
-   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
-   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
-   *     during parsing. When inferring a schema, it implicitly adds a `columnNameOfCorruptRecord`
-   *     field in an output schema.</li>
+   *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
+   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To
+   *     keep corrupt records, an user can set a string type field named
+   *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have the
+   *     field, it drops corrupt records during parsing. When inferring a schema, it implicitly
+   *     adds a `columnNameOfCorruptRecord` field in an output schema.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
@@ -385,6 +372,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
+   * <li>`encoding` (by default it is not set): allows to forcibly set one of standard basic
+   * or extended encoding for the JSON files. For example UTF-16BE, UTF-32LE. If the encoding
+   * is not specified and `multiLine` is set to `true`, it will be detected automatically.</li>
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
+   * <li>`samplingRatio` (default is 1.0): defines fraction of input JSON objects used
+   * for schema inferring.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -545,6 +539,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
+   * <li>`samplingRatio` (default is 1.0): defines fraction of rows used for schema inferring.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): a flag indicating whether or not leading
    * whitespaces from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `false`): a flag indicating whether or not trailing
@@ -569,12 +564,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
-   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
-   *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep
+   *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
+   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To keep
    *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
    *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
-   *     during parsing. When a length of parsed CSV tokens is shorter than an expected length
-   *     of a schema, it sets `null` for extra fields.</li>
+   *     during parsing. A record with less/more tokens than schema is not a corrupted record to
+   *     CSV. When it meets a record having fewer tokens than the length of the schema, sets
+   *     `null` to extra fields. When the record has more tokens than the length of the schema,
+   *     it drops extra tokens.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
@@ -664,14 +661,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    *
-   * You can set the following text-specific option(s) for reading text files:
-   * <ul>
-   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * </ul>
-   * By default, each line in the text files is a new row in the resulting DataFrame.
-   *
-   * Usage example:
+   * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
    *   spark.read.text("/path/to/spark/README.md")
@@ -679,6 +669,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   // Java:
    *   spark.read().text("/path/to/spark/README.md")
    * }}}
+   *
+   * You can set the following text-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
+   * </ul>
    *
    * @param paths input paths
    * @since 1.6.0
@@ -703,11 +701,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
    *
-   * You can set the following textFile-specific option(s) for reading text files:
-   * <ul>
-   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * </ul>
    * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
@@ -716,6 +709,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   // Java:
    *   spark.read().textFile("/path/to/spark/README.md")
    * }}}
+   *
+   * You can set the following textFile-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
+   * </ul>
    *
    * @param paths input path
    * @since 2.0.0

@@ -21,8 +21,8 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.ReadSupport;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.DataTypes;
@@ -33,7 +33,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader, SupportsScanColumnarBatch {
+  class Reader implements DataSourceReader, SupportsScanColumnarBatch {
     private final StructType schema = new StructType().add("i", "int").add("j", "int");
 
     @Override
@@ -42,12 +42,14 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<ReadTask<ColumnarBatch>> createBatchReadTasks() {
-      return java.util.Arrays.asList(new JavaBatchReadTask(0, 50), new JavaBatchReadTask(50, 90));
+    public List<DataReaderFactory<ColumnarBatch>> createBatchDataReaderFactories() {
+      return java.util.Arrays.asList(
+               new JavaBatchDataReaderFactory(0, 50), new JavaBatchDataReaderFactory(50, 90));
     }
   }
 
-  static class JavaBatchReadTask implements ReadTask<ColumnarBatch>, DataReader<ColumnarBatch> {
+  static class JavaBatchDataReaderFactory
+      implements DataReaderFactory<ColumnarBatch>, DataReader<ColumnarBatch> {
     private int start;
     private int end;
 
@@ -57,7 +59,7 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
     private OnHeapColumnVector j;
     private ColumnarBatch batch;
 
-    JavaBatchReadTask(int start, int end) {
+    JavaBatchDataReaderFactory(int start, int end) {
       this.start = start;
       this.end = end;
     }
@@ -69,7 +71,7 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
       ColumnVector[] vectors = new ColumnVector[2];
       vectors[0] = i;
       vectors[1] = j;
-      this.batch = new ColumnarBatch(new StructType().add("i", "int").add("j", "int"), vectors, BATCH_SIZE);
+      this.batch = new ColumnarBatch(vectors);
       return this;
     }
 
@@ -106,7 +108,7 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
 
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
+  public DataSourceReader createReader(DataSourceOptions options) {
     return new Reader();
   }
 }

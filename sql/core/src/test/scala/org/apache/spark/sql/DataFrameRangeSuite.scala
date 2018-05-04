@@ -154,7 +154,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
   test("Cancelling stage in a query with Range.") {
     val listener = new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        eventually(timeout(10.seconds)) {
+        eventually(timeout(10.seconds), interval(1.millis)) {
           assert(DataFrameRangeSuite.stageToKill > 0)
         }
         sparkContext.cancelStage(DataFrameRangeSuite.stageToKill)
@@ -166,7 +166,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString()) {
         DataFrameRangeSuite.stageToKill = -1
         val ex = intercept[SparkException] {
-          spark.range(1000000000L).map { x =>
+          spark.range(0, 100000000000L, 1, 1).map { x =>
             DataFrameRangeSuite.stageToKill = TaskContext.get().stageId()
             x
           }.toDF("id").agg(sum("id")).collect()
@@ -184,6 +184,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
         assert(sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
       }
     }
+    sparkContext.removeSparkListener(listener)
   }
 
   test("SPARK-20430 Initialize Range parameters in a driver side") {

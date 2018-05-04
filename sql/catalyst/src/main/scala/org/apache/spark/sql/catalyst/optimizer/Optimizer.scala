@@ -85,9 +85,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveRedundantProject,
-        SimplifyCreateStructOps,
-        SimplifyCreateArrayOps,
-        SimplifyCreateMapOps,
+        SimplifyExtractValueOps,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
@@ -140,6 +138,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     operatorOptimizationBatch) :+
     Batch("Join Reorder", Once,
       CostBasedJoinReorder) :+
+    Batch("Remove Redundant Sorts", Once,
+      RemoveRedundantSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
@@ -155,7 +155,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RewritePredicateSubquery,
       ColumnPruning,
       CollapseProject,
-      RemoveRedundantProject)
+      RemoveRedundantProject) :+
+    Batch("UpdateAttributeReferences", Once,
+      UpdateNullabilityInAttributeReferences)
   }
 
   /**
@@ -352,7 +354,6 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
-    //   - If neither side is limited, limit the side that is estimated to be bigger.
     case LocalLimit(exp, join @ Join(left, right, joinType, _)) =>
       val newJoin = joinType match {
         case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
@@ -636,10 +637,11 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * constraints. These filters are currently inserted to the existing conditions in the Filter
  * operators and on either side of Join operators.
  *
- * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
- * LeftSemi joins.
+ * Note: While this optimization is applicable to a lot of types of join, it primarily benefits
+ * Inner and LeftSemi joins.
  */
-object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
+object InferFiltersFromConstraints extends Rule[LogicalPlan]
+  with PredicateHelper with ConstraintHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (SQLConf.get.constraintPropagationEnabled) {
@@ -660,21 +662,51 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       }
 
     case join @ Join(left, right, joinType, conditionOpt) =>
-      // Only consider constraints that can be pushed down completely to either the left or the
-      // right child
-      val constraints = join.constraints.filter { c =>
-        c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
+      joinType match {
+        // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
+        // inner join, it just drops the right side in the final output.
+        case _: InnerLike | LeftSemi =>
+          val allConstraints = getAllConstraints(left, right, conditionOpt)
+          val newLeft = inferNewFilter(left, allConstraints)
+          val newRight = inferNewFilter(right, allConstraints)
+          join.copy(left = newLeft, right = newRight)
+
+        // For right outer join, we can only infer additional filters for left side.
+        case RightOuter =>
+          val allConstraints = getAllConstraints(left, right, conditionOpt)
+          val newLeft = inferNewFilter(left, allConstraints)
+          join.copy(left = newLeft)
+
+        // For left join, we can only infer additional filters for right side.
+        case LeftOuter | LeftAnti =>
+          val allConstraints = getAllConstraints(left, right, conditionOpt)
+          val newRight = inferNewFilter(right, allConstraints)
+          join.copy(right = newRight)
+
+        case _ => join
       }
-      // Remove those constraints that are already enforced by either the left or the right child
-      val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
-      val newConditionOpt = conditionOpt match {
-        case Some(condition) =>
-          val newFilters = additionalConstraints -- splitConjunctivePredicates(condition)
-          if (newFilters.nonEmpty) Option(And(newFilters.reduce(And), condition)) else None
-        case None =>
-          additionalConstraints.reduceOption(And)
-      }
-      if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
+  }
+
+  private def getAllConstraints(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      conditionOpt: Option[Expression]): Set[Expression] = {
+    val baseConstraints = left.constraints.union(right.constraints)
+      .union(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil).toSet)
+    baseConstraints.union(inferAdditionalConstraints(baseConstraints))
+  }
+
+  private def inferNewFilter(plan: LogicalPlan, constraints: Set[Expression]): LogicalPlan = {
+    val newPredicates = constraints
+      .union(constructIsNotNullConstraints(constraints, plan.output))
+      .filter { c =>
+        c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
+      } -- plan.constraints
+    if (newPredicates.isEmpty) {
+      plan
+    } else {
+      Filter(newPredicates.reduce(And), plan)
+    }
   }
 }
 
@@ -731,6 +763,33 @@ object EliminateSorts extends Rule[LogicalPlan] {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) child else s.copy(order = newOrders)
+  }
+}
+
+/**
+ * Removes redundant Sort operation. This can happen:
+ * 1) if the child is already sorted
+ * 2) if there is another Sort operator separated by 0...n Project/Filter operators
+ */
+object RemoveRedundantSorts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case Sort(orders, true, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
+      child
+    case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
+  }
+
+  def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = plan match {
+    case Sort(_, _, child) => recursiveRemoveSort(child)
+    case other if canEliminateSort(other) =>
+      other.withNewChildren(other.children.map(recursiveRemoveSort))
+    case _ => plan
+  }
+
+  def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
+    case p: Project => p.projectList.forall(_.deterministic)
+    case f: Filter => f.condition.deterministic
+    case _: ResolvedHint => true
+    case _ => false
   }
 }
 
@@ -1108,15 +1167,19 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
    */
   def isCartesianProduct(join: Join): Boolean = {
     val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
-    !conditions.map(_.references).exists(refs => refs.exists(join.left.outputSet.contains)
-        && refs.exists(join.right.outputSet.contains))
+
+    conditions match {
+      case Seq(Literal.FalseLiteral) | Seq(Literal(null, BooleanType)) => false
+      case _ => !conditions.map(_.references).exists(refs =>
+        refs.exists(join.left.outputSet.contains) && refs.exists(join.right.outputSet.contains))
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan =
     if (SQLConf.get.crossJoinEnabled) {
       plan
     } else plan transform {
-      case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, condition)
+      case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _)
         if isCartesianProduct(j) =>
           throw new AnalysisException(
             s"""Detected cartesian product for ${j.joinType.sql} join between logical plans
@@ -1299,8 +1362,27 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
  */
 object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case a @ Aggregate(grouping, _, _) =>
+    case a @ Aggregate(grouping, _, _) if grouping.size > 1 =>
       val newGrouping = ExpressionSet(grouping).toSeq
-      a.copy(groupingExpressions = newGrouping)
+      if (newGrouping.size == grouping.size) {
+        a
+      } else {
+        a.copy(groupingExpressions = newGrouping)
+      }
+  }
+}
+
+/**
+ * Updates nullability in [[AttributeReference]]s if nullability is different between
+ * non-leaf plan's expressions and the children output.
+ */
+object UpdateNullabilityInAttributeReferences extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case p if !p.isInstanceOf[LeafNode] =>
+      val nullabilityMap = AttributeMap(p.children.flatMap(_.output).map { x => x -> x.nullable })
+      p transformExpressions {
+        case ar: AttributeReference if nullabilityMap.contains(ar) =>
+          ar.withNullability(nullabilityMap(ar))
+      }
   }
 }

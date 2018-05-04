@@ -18,36 +18,32 @@
 package org.apache.spark.sql.execution.streaming.continuous
 
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, RowToUnsafeDataReader}
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousDataReader, PartitionOffset}
-import org.apache.spark.sql.streaming.ProcessingTime
-import org.apache.spark.util.{SystemClock, ThreadUtils}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, PartitionOffset}
+import org.apache.spark.util.ThreadUtils
 
 class ContinuousDataSourceRDD(
     sc: SparkContext,
     sqlContext: SQLContext,
-    @transient private val readTasks: java.util.List[ReadTask[UnsafeRow]])
+    @transient private val readerFactories: Seq[DataReaderFactory[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
   private val dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize
   private val epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs
 
   override protected def getPartitions: Array[Partition] = {
-    readTasks.asScala.zipWithIndex.map {
-      case (readTask, index) => new DataSourceRDDPartition(index, readTask)
+    readerFactories.zipWithIndex.map {
+      case (readerFactory, index) => new DataSourceRDDPartition(index, readerFactory)
     }.toArray
   }
 
@@ -57,7 +53,8 @@ class ContinuousDataSourceRDD(
       throw new ContinuousTaskRetryException()
     }
 
-    val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readTask.createDataReader()
+    val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]]
+      .readerFactory.createDataReader()
 
     val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
 
@@ -136,7 +133,7 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readTask.preferredLocations()
+    split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readerFactory.preferredLocations()
   }
 }
 
