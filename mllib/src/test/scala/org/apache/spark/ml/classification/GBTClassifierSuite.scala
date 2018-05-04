@@ -383,21 +383,30 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       gbt.setValidationIndicatorCol(validationIndicatorCol)
       val modelWithValidation = gbt.fit(trainDF.union(validationDF))
 
-      val evaluationArrayWithoutValidation = GradientBoostedTrees
+      // early stop
+      assert(modelWithValidation.numTrees < numIter)
+
+      val (errorWithoutValidation, errorWithValidation) = {
+        val remappedRdd = validationData.map(x => new LabeledPoint(2 * x.label - 1, x.features))
+        (GradientBoostedTrees.computeError(remappedRdd, modelWithoutValidation.trees,
+          modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType),
+          GradientBoostedTrees.computeError(remappedRdd, modelWithValidation.trees,
+            modelWithValidation.treeWeights, modelWithValidation.getOldLossType))
+      }
+      assert(errorWithValidation <= errorWithoutValidation)
+
+      val evaluationArray = GradientBoostedTrees
         .evaluateEachIteration(validationData, modelWithoutValidation.trees,
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
           OldAlgo.Classification)
-
-      val evaluationArrayWithValidation = GradientBoostedTrees
-        .evaluateEachIteration(validationData, modelWithValidation.trees,
-          modelWithValidation.treeWeights, modelWithValidation.getOldLossType,
-          OldAlgo.Classification)
-
-      assert(evaluationArrayWithoutValidation.length === numIter)
-      // run with validation stop early
-      assert(evaluationArrayWithValidation.length < numIter)
-      // run with validation has better performance
-      assert(evaluationArrayWithValidation.last < evaluationArrayWithoutValidation.last)
+      assert(evaluationArray.length === numIter)
+      assert(evaluationArray(modelWithValidation.numTrees) >
+        evaluationArray(modelWithValidation.numTrees - 1))
+      var i = 1
+      while (i < modelWithValidation.numTrees) {
+        assert(evaluationArray(i) <= evaluationArray(i - 1))
+        i += 1
+      }
     }
   }
 

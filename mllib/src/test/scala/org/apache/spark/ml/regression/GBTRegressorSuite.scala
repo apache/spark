@@ -219,21 +219,30 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       gbt.setValidationIndicatorCol(validationIndicatorCol)
       val modelWithValidation = gbt.fit(trainDF.union(validationDF))
 
-      val evaluationArrayWithoutValidation = GradientBoostedTrees
+      // early stop
+      assert(modelWithValidation.numTrees < numIter)
+
+      val errorWithoutValidation = GradientBoostedTrees.computeError(validationData,
+        modelWithoutValidation.trees, modelWithoutValidation.treeWeights,
+        modelWithoutValidation.getOldLossType)
+      val errorWithValidation = GradientBoostedTrees.computeError(validationData,
+        modelWithValidation.trees, modelWithValidation.treeWeights,
+        modelWithValidation.getOldLossType)
+
+      assert(errorWithValidation <= errorWithoutValidation)
+
+      val evaluationArray = GradientBoostedTrees
         .evaluateEachIteration(validationData, modelWithoutValidation.trees,
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
           OldAlgo.Regression)
-
-      val evaluationArrayWithValidation = GradientBoostedTrees
-        .evaluateEachIteration(validationData, modelWithValidation.trees,
-          modelWithValidation.treeWeights, modelWithValidation.getOldLossType,
-          OldAlgo.Regression)
-
-      assert(evaluationArrayWithoutValidation.length === numIter)
-      // run with validation stop early
-      assert(evaluationArrayWithValidation.length < numIter)
-      // run with validation has better performance
-      assert(evaluationArrayWithValidation.last < evaluationArrayWithoutValidation.last)
+      assert(evaluationArray.length === numIter)
+      assert(evaluationArray(modelWithValidation.numTrees) >
+        evaluationArray(modelWithValidation.numTrees - 1))
+      var i = 1
+      while (i < modelWithValidation.numTrees) {
+        assert(evaluationArray(i) <= evaluationArray(i - 1))
+        i += 1
+      }
     }
   }
 
