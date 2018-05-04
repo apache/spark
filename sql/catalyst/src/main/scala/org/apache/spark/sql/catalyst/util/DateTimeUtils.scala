@@ -888,20 +888,6 @@ object DateTimeUtils {
    * microseconds since 1.1.1970.
    *
    * If time1 and time2 are on the same day of month, or both are the last day of month,
-   * time of a day will be ignored.
-   *
-   * Otherwise, the difference is calculated based on 31 days per month, and rounded to
-   * 8 digits.
-   */
-  def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp): Double = {
-    monthsBetween(time1, time2, defaultTimeZone())
-  }
-
-  /**
-   * Returns number of months between time1 and time2. time1 and time2 are expressed in
-   * microseconds since 1.1.1970.
-   *
-   * If time1 and time2 are on the same day of month, or both are the last day of month,
    * returns, time of day will be ignored.
    *
    * Otherwise, the difference is calculated based on 31 days per month.
