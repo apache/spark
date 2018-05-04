@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.{lang => jl, util => ju}
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability

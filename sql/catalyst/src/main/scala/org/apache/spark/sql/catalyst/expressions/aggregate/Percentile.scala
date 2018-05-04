@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-
 import java.util
 
 import org.apache.spark.SparkException
