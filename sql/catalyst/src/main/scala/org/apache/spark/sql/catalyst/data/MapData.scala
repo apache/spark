@@ -20,27 +20,32 @@ package org.apache.spark.sql.catalyst.data
 import org.apache.spark.sql.types.DataType
 
 /**
- * This is an internal data representation for map type in Spark SQL. This should not implement
- * `equals` and `hashCode` because the type cannot be used as join keys, grouping keys, or
- * in equality tests. See SPARK-9415 and PR#13847 for the discussions.
+ * Represents a map in Spark SQL that holds data values in Spark's internal representation of the
+ * map's key and value types. For more information on Spark's internal representation, see
+ * [[org.apache.spark.sql.catalyst.data]].
+ *
+ * This does not implement `equals` and `hashCode` because maps cannot be used as join keys,
+ * grouping keys, or in equality tests. See SPARK-9415 and PR#13847 for more information.
  */
 abstract class MapData extends Serializable {
 
-  def numElements(): Int
+  def numElements: Int
 
-  def keyArray(): ArrayData
+  def keyArray: ArrayData
 
-  def valueArray(): ArrayData
+  def valueArray: ArrayData
 
   def copy(): MapData
 
   def foreach(keyType: DataType, valueType: DataType, f: (Any, Any) => Unit): Unit = {
-    val length = numElements()
-    val keys = keyArray()
-    val values = valueArray()
+    val length = numElements
+    val keys = keyArray
+    val keyAccessor = InternalRow.getAccessor(keyType)
+    val values = valueArray
+    val valueAccessor = InternalRow.getAccessor(valueType)
     var i = 0
     while (i < length) {
-      f(keys.get(i, keyType), values.get(i, valueType))
+      f(keyAccessor(keys, i), valueAccessor(values, i))
       i += 1
     }
   }

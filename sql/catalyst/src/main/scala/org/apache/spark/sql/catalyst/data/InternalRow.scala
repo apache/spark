@@ -19,35 +19,28 @@ package org.apache.spark.sql.catalyst.data
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.BinaryType
+import org.apache.spark.sql.types.ByteType
+import org.apache.spark.sql.types.CalendarIntervalType
+import org.apache.spark.sql.types.DateType
+import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.FloatType
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.ShortType
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * An abstract class for row used internally in Spark SQL, which only contains the columns as
- * internal types.
+ * Represents a row in Spark SQL that holds data values in Spark's internal representation.
+ *
+ * For more information on Spark's internal representation, see
+ * [[org.apache.spark.sql.catalyst.data]].
  */
-abstract class InternalRow extends SpecializedGetters with Serializable {
+abstract class InternalRow extends SpecializedGetters with SpecializedSetters with Serializable {
 
   def numFields: Int
-
-  // This is only use for test and will throw a null pointer exception if the position is null.
-  def getString(ordinal: Int): String = getUTF8String(ordinal).toString
-
-  def setNullAt(i: Int): Unit
-
-  /**
-   * Updates the value at column `i`. Note that after updating, the given value will be kept in this
-   * row, and the caller side should guarantee that this value won't be changed afterwards.
-   */
-  def update(i: Int, value: Any): Unit
-
-  // default implementation (slow)
-  def setBoolean(i: Int, value: Boolean): Unit = update(i, value)
-  def setByte(i: Int, value: Byte): Unit = update(i, value)
-  def setShort(i: Int, value: Short): Unit = update(i, value)
-  def setInt(i: Int, value: Int): Unit = update(i, value)
-  def setLong(i: Int, value: Long): Unit = update(i, value)
-  def setFloat(i: Int, value: Float): Unit = update(i, value)
-  def setDouble(i: Int, value: Double): Unit = update(i, value)
 
   /**
    * Update the decimal column at `i`.
@@ -67,7 +60,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
     val len = numFields
     var i = 0
     while (i < len) {
-      if (isNullAt(i)) { return true }
+      if (isNullAt(i)) return true
       i += 1
     }
     false

@@ -1088,7 +1088,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
           case CalendarIntervalType =>
             assert(r1.getInterval(ordinal) === r2.get(ordinal).asInstanceOf[CalendarInterval])
           case ArrayType(childType, n) =>
-            val a1 = r1.getArray(ordinal).array
+            val a1 = r1.getArray(ordinal).toObjectArray(childType)
             val a2 = r2.getList(ordinal).toArray
             assert(a1.length == a2.length, "Seed = " + seed)
             childType match {
