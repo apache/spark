@@ -1343,8 +1343,8 @@ the following case-insensitive options:
     <td>
       The number of seconds the driver will wait for a Statement object to execute to the given
       number of seconds. Zero means there is no limit. In the write path, this option depends on
-      how JDBC drivers implement the API `setQueryTimeout`, e.g., the h2 JDBC driver checks
-      the timeout of each query instead of an entire JDBC batch.
+      how JDBC drivers implement the API <code>setQueryTimeout</code>, e.g., the h2 JDBC driver
+      checks the timeout of each query instead of an entire JDBC batch.
     </td>
   </tr>
 
