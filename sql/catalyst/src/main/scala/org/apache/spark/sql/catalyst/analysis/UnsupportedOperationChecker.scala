@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -348,12 +349,16 @@ object UnsupportedOperationChecker {
               _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
               _: TypedFilter) =>
         case node if node.nodeName == "StreamingRelationV2" =>
+        case _ if plan.conf.getConf(SQLConf.ALLOW_ALL_CONTINUOUS_OPERATORS) =>
+          // allow anything if flag is set
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")
       }
 
       subPlan.expressions.foreach { e =>
         if (e.collectLeaves().exists {
+          case _ if plan.conf.getConf(SQLConf.ALLOW_ALL_CONTINUOUS_OPERATORS) =>
+            false // allow anything if flag is set
           case (_: CurrentTimestamp | _: CurrentDate) => true
           case _ => false
         }) {
