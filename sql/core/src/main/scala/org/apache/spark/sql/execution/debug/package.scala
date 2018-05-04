@@ -108,11 +108,12 @@ package object debug {
    */
   def codegenString(query: StreamingQuery): String = {
     val msg = query match {
-      case w: StreamExecution if w.lastExecution != null =>
-        codegenString(w.lastExecution.executedPlan)
-
-      case w: StreamExecution if w.lastExecution == null =>
-        "No physical plan. Waiting for data."
+      case w: StreamExecution =>
+        if (w.lastExecution != null) {
+          codegenString(w.lastExecution.executedPlan)
+        } else {
+          "No physical plan. Waiting for data."
+        }
 
       case _ => "Only supported for StreamExecution."
     }
