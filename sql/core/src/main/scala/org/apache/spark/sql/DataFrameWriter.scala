@@ -348,6 +348,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"'$operation' does not support bucketing right now")
       case (false, true) =>
         throw new AnalysisException(s"'$operation' does not support sorting right now")
+      case _ =>
     }
   }
 
