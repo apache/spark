@@ -1407,6 +1407,7 @@ def hash(*cols):
     jc = sc._jvm.functions.hash(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
+
 @ignore_unicode_prefix
 def data_type(col):
     """Returns the data type of the given column.
