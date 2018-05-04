@@ -172,6 +172,7 @@ trait ArraySortLike extends ExpectsInputTypes {
   }
 
   def elementType: DataType = arrayExpression.dataType.asInstanceOf[ArrayType].elementType
+  def containsNull: Boolean = arrayExpression.dataType.asInstanceOf[ArrayType].containsNull
 
   def sortEval(array: Any, ascending: Boolean): Any = {
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
@@ -184,6 +185,7 @@ trait ArraySortLike extends ExpectsInputTypes {
   def sortCodegen(ctx: CodegenContext, ev: ExprCode, base: String, order: String): String = {
     val arrayData = classOf[ArrayData].getName
     val genericArrayData = classOf[GenericArrayData].getName
+    val unsafeArrayData = classOf[UnsafeArrayData].getName
     val array = ctx.freshName("array")
     val c = ctx.freshName("c")
     if (elementType == NullType) {
@@ -206,23 +208,40 @@ trait ArraySortLike extends ExpectsInputTypes {
       } else {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
+      val nonNullPrimitiveAscendingSort =
+        if (CodeGenerator.isPrimitiveType(elementType) && !containsNull) {
+          val javaType = CodeGenerator.javaType(elementType)
+          val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
+          s"""
+             |if ($order) {
+             |  $javaType[] $array = $base.to${primitiveTypeName}Array();
+             |  java.util.Arrays.sort($array);
+             |  ${ev.value} = $unsafeArrayData.fromPrimitiveArray($array);
+             |} else
+           """.stripMargin
+        } else {
+          ""
+        }
       s"""
-         |Object[] $array = $base.toObjectArray($elementTypeTerm);
-         |final int $sortOrder = $order ? 1 : -1;
-         |java.util.Arrays.sort($array, new java.util.Comparator() {
-         |  @Override public int compare(Object $o1, Object $o2) {
-         |    if ($o1 == null && $o2 == null) {
-         |      return 0;
-         |    } else if ($o1 == null) {
-         |      return $sortOrder * $nullOrder;
-         |    } else if ($o2 == null) {
-         |      return -$sortOrder * $nullOrder;
+         |$nonNullPrimitiveAscendingSort
+         |{
+         |  Object[] $array = $base.toObjectArray($elementTypeTerm);
+         |  final int $sortOrder = $order ? 1 : -1;
+         |  java.util.Arrays.sort($array, new java.util.Comparator() {
+         |    @Override public int compare(Object $o1, Object $o2) {
+         |      if ($o1 == null && $o2 == null) {
+         |        return 0;
+         |      } else if ($o1 == null) {
+         |        return $sortOrder * $nullOrder;
+         |      } else if ($o2 == null) {
+         |        return -$sortOrder * $nullOrder;
+         |      }
+         |      $comp
+         |      return $sortOrder * $c;
          |    }
-         |    $comp
-         |    return $sortOrder * $c;
-         |  }
-         |});
-         |${ev.value} = new $genericArrayData($array);
+         |  });
+         |  ${ev.value} = new $genericArrayData($array);
+         |}
        """.stripMargin
     }
   }
