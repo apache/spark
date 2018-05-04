@@ -26,9 +26,8 @@ import scala.annotation.tailrec
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow, MapData}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32

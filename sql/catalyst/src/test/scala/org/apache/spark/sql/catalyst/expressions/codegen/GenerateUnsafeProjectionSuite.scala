@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow, MapData}
 import org.apache.spark.sql.catalyst.expressions.BoundReference
-import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.types.{DataType, Decimal, StringType, StructType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 

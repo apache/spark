@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.catalyst.data
 
-import org.apache.spark.sql.catalyst.data.ArrayData
 import org.apache.spark.sql.types.DataType
 
 /**

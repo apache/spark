@@ -25,7 +25,7 @@ import scala.util.Try
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow, MapData}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._

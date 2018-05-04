@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.{Map => JavaMap}
 
-import org.apache.spark.sql.catalyst.data.ArrayData
+import org.apache.spark.sql.catalyst.data.{ArrayData, MapData}
 
 class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) extends MapData {
   require(keyArray.numElements() == valueArray.numElements())

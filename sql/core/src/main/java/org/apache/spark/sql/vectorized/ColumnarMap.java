@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.vectorized;
 
-import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.sql.catalyst.data.MapData;
 
 /**
  * Map abstraction in {@link ColumnVector}.
