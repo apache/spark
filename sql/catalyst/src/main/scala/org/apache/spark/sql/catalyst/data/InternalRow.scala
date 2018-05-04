@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.data
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 

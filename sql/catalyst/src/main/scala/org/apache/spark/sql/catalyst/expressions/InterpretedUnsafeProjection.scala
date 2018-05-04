@@ -17,9 +17,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.data.InternalRow
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
-import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{UserDefinedType, _}
 import org.apache.spark.unsafe.Platform
 

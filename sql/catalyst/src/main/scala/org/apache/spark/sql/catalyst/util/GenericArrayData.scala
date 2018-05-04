@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.data.InternalRow
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 

@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.data.InternalRow
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

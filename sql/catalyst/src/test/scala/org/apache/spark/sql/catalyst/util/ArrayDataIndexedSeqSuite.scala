@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.catalyst.data.ArrayData
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.{FromUnsafeProjection, UnsafeArrayData, UnsafeProjection}
 import org.apache.spark.sql.types._

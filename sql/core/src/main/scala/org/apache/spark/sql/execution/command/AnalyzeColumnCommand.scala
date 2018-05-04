@@ -22,11 +22,10 @@ import scala.collection.mutable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTableType}
-import org.apache.spark.sql.catalyst.data.InternalRow
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._

@@ -21,7 +21,7 @@ import org.apache.hadoop.io._
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 import org.apache.orc.storage.serde2.io.{DateWritable, HiveDecimalWritable}
 
-import org.apache.spark.sql.catalyst.data.InternalRow
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._

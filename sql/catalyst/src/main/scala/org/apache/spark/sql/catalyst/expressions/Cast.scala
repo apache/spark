@@ -21,7 +21,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.data.InternalRow
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._

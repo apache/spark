@@ -21,9 +21,9 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
-import org.apache.spark.sql.catalyst.data.InternalRow
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, CreateArray, Literal, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {

@@ -22,7 +22,7 @@ import scala.math.Ordering
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.data.ArrayData
 
 /**
  * Companion object for ArrayType.

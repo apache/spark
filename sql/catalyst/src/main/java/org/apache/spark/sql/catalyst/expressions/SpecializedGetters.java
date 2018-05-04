@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.catalyst.data.InternalRow;
-import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.data.ArrayData;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.catalyst.util.MapData;

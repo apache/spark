@@ -15,26 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.catalyst.data
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
-import org.apache.spark.sql.types._
-
-object ArrayData {
-  def toArrayData(input: Any): ArrayData = input match {
-    case a: Array[Boolean] => UnsafeArrayData.fromPrimitiveArray(a)
-    case a: Array[Byte] => UnsafeArrayData.fromPrimitiveArray(a)
-    case a: Array[Short] => UnsafeArrayData.fromPrimitiveArray(a)
-    case a: Array[Int] => UnsafeArrayData.fromPrimitiveArray(a)
-    case a: Array[Long] => UnsafeArrayData.fromPrimitiveArray(a)
-    case a: Array[Float] => UnsafeArrayData.fromPrimitiveArray(a)
-    case a: Array[Double] => UnsafeArrayData.fromPrimitiveArray(a)
-    case other => new GenericArrayData(other)
-  }
-}
+import org.apache.spark.sql.catalyst.util.ArrayDataIndexedSeq
+import org.apache.spark.sql.types.DataType
 
 abstract class ArrayData extends SpecializedGetters with Serializable {
   def numElements(): Int
@@ -170,26 +157,15 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
   }
 }
 
-/**
- * Implements an `IndexedSeq` interface for `ArrayData`. Notice that if the original `ArrayData`
- * is a primitive array and contains null elements, it is better to ask for `IndexedSeq[Any]`,
- * instead of `IndexedSeq[Int]`, in order to keep the null elements.
- */
-class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends IndexedSeq[T] {
-
-  private val accessor: (SpecializedGetters, Int) => Any = InternalRow.getAccessor(dataType)
-
-  override def apply(idx: Int): T =
-    if (0 <= idx && idx < arrayData.numElements()) {
-      if (arrayData.isNullAt(idx)) {
-        null.asInstanceOf[T]
-      } else {
-        accessor(arrayData, idx).asInstanceOf[T]
-      }
-    } else {
-      throw new IndexOutOfBoundsException(
-        s"Index $idx must be between 0 and the length of the ArrayData.")
-    }
-
-  override def length: Int = arrayData.numElements()
+object ArrayData {
+  def toArrayData(input: Any): ArrayData = input match {
+    case a: Array[Boolean] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Byte] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Short] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Int] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Long] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Float] => UnsafeArrayData.fromPrimitiveArray(a)
+    case a: Array[Double] => UnsafeArrayData.fromPrimitiveArray(a)
+    case other => new GenericArrayData(other)
+  }
 }

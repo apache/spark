@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.catalyst.data.ArrayData
 import org.apache.spark.sql.types.DataType
 
 /**
