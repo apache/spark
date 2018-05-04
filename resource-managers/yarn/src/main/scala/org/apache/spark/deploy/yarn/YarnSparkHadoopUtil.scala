@@ -199,7 +199,7 @@ object YarnSparkHadoopUtil {
     // add the list of available namenodes for all namespaces in HDFS federation
     val hadoopFilesystems = Option(hadoopConf.get("dfs.nameservices"))
       .toSeq.flatMap(_.split(","))
-      .map(ns => hadoopConf.get(s"dfs.namenode.rpc-address.$ns"))
+      .flatMap(ns => Option(hadoopConf.get(s"dfs.namenode.rpc-address.$ns")))
       .map(nn => new Path(s"hdfs://$nn").getFileSystem(hadoopConf))
 
     val stagingFS = sparkConf.get(STAGING_DIR)
