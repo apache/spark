@@ -307,6 +307,37 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
       Row(1, null) :: Row(2, null) :: Nil)
   }
+
+  test("ReplicateRows generator") {
+    val df = spark.range(1)
+
+    // Empty DataFrame suppress the result generation
+    checkAnswer(spark.emptyDataFrame.selectExpr("replicate_rows(1, 1, 2, 3)"), Nil)
+
+    checkAnswer(df.selectExpr("replicate_rows(1, 2.5)"), Row(1, 2.5) :: Nil)
+    checkAnswer(df.selectExpr("replicate_rows(1, null)"), Row(1, null) :: Nil)
+    checkAnswer(df.selectExpr("replicate_rows(3, 'row1')"),
+      Row(3, "row1") :: Row(3, "row1") :: Row(3, "row1") :: Nil)
+    checkAnswer(df.selectExpr("replicate_rows(-1, 2.5)"), Nil)
+
+    // The data for the same column should have the same type.
+    val msg1 = intercept[AnalysisException] {
+      df.selectExpr("replicate_rows(1)")
+    }.getMessage
+    assert(msg1.contains("requires at least 2 arguments"))
+
+    // The data for the same column should have the same type.
+    val msg2 = intercept[AnalysisException] {
+      df.selectExpr("replicate_rows('a', 1)")
+    }.getMessage
+    assert(msg2.contains("The number of rows must be a positive long value."))
+
+    val msg3 = intercept[AnalysisException] {
+      df.selectExpr("replicate_rows(null, 1)")
+    }.getMessage
+    assert(msg3.contains("The number of rows must be a positive long value."))
+
+  }
 }
 
 case class EmptyGenerator() extends Generator {

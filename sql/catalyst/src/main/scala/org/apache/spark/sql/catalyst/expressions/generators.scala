@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 
+
 /**
  * An expression that produces zero or more rows given a single input row.
  *
@@ -219,6 +220,51 @@ case class Stack(children: Seq[Expression]) extends Generator {
          |$code
          |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
        """.stripMargin, isNull = FalseLiteral)
+  }
+}
+
+/**
+ * Replicate the row based N times. N is specified as the first argument to the function.
+ * {{{
+ *   SELECT replicate_rows(2, "val1", "val2") ->
+ *   2  val1  val2
+ *   2  val1  val2
+ *  }}}
+ */
+@ExpressionDescription(
+usage = "_FUNC_(n, expr1, ..., exprk) - Replicates `expr1`, ..., `exprk` into `n` rows.",
+examples = """
+    Examples:
+      > SELECT _FUNC_(2, "val1", "val2");
+       2  val1  val2
+       2  val1  val2
+  """)
+case class ReplicateRows(children: Seq[Expression]) extends Generator with CodegenFallback {
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length < 2) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least 2 arguments.")
+    } else if (children.head.dataType != LongType) {
+      TypeCheckResult.TypeCheckFailure("The number of rows must be a positive long value.")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def elementSchema: StructType =
+    StructType(children.zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
+  })
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val numRows = children.head.eval(input).asInstanceOf[Long]
+    val values = children.map(_.eval(input)).toArray
+    Range.Long(0, numRows, 1).map { i =>
+      val fields = new Array[Any](children.length)
+      for (col <- 0 until children.length) {
+        fields.update(col, values(col))
+      }
+      InternalRow(fields: _*)
+    }
   }
 }
 
