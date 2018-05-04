@@ -144,20 +144,44 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
   test("SPARK-24149: retrieve all namenodes from HDFS") {
     val sparkConf = new SparkConf()
-    val hadoopConf = new Configuration()
-    hadoopConf.set("fs.defaultFS", "hdfs://localhost:8020")
-    hadoopConf.set("dfs.nameservices", "ns1,ns2")
-    hadoopConf.set("dfs.namenode.rpc-address.ns1", "localhost:8020")
-    hadoopConf.set("dfs.namenode.rpc-address.ns2", "localhost:8021")
-    val expected = Set(new Path("hdfs://localhost:8020").getFileSystem(hadoopConf),
-      new Path("hdfs://localhost:8021").getFileSystem(hadoopConf))
-    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, hadoopConf) should be (expected)
+    val basicFederationConf = new Configuration()
+    basicFederationConf.set("fs.defaultFS", "hdfs://localhost:8020")
+    basicFederationConf.set("dfs.nameservices", "ns1,ns2")
+    basicFederationConf.set("dfs.namenode.rpc-address.ns1", "localhost:8020")
+    basicFederationConf.set("dfs.namenode.rpc-address.ns2", "localhost:8021")
+    val basicFederationExpected = Set(
+      new Path("hdfs://localhost:8020").getFileSystem(basicFederationConf),
+      new Path("hdfs://localhost:8021").getFileSystem(basicFederationConf))
+    val basicFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(
+      sparkConf, basicFederationConf)
+    basicFederationResult should be (basicFederationExpected)
+
+    // when viewfs is enabled, namespaces are handled by it, so we don't need to take care of them
+    val viewFsConf = new Configuration()
+    viewFsConf.addResource(basicFederationConf)
+    viewFsConf.set("fs.defaultFS", "viewfs://clusterX/")
+    viewFsConf.set("fs.viewfs.mounttable.clusterX.link./home", "hdfs://localhost:8020/")
+    val viewFsExpected = Set(new Path("viewfs://clusterX/").getFileSystem(viewFsConf))
+    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, viewFsConf) should be (viewFsExpected)
+
     // invalid config should not throw NullPointerException
-    hadoopConf.unset("dfs.namenode.rpc-address.ns2")
-    val expected2 = Set(new Path("hdfs://localhost:8020").getFileSystem(hadoopConf))
-    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, hadoopConf) should be (expected2)
+    val invalidFederationConf = new Configuration()
+    invalidFederationConf.addResource(basicFederationConf)
+    invalidFederationConf.unset("dfs.namenode.rpc-address.ns2")
+    val invalidFederationExpected = Set(
+      new Path("hdfs://localhost:8020").getFileSystem(invalidFederationConf))
+    val invalidFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(
+      sparkConf, invalidFederationConf)
+    invalidFederationResult should be (invalidFederationExpected)
+
     // no namespaces defined, ie. old case
-    hadoopConf.unset("dfs.nameservices")
-    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, hadoopConf) should be (expected2)
+    val noFederationConf = new Configuration()
+    noFederationConf.set("fs.defaultFS", "hdfs://localhost:8020")
+    val noFederationExpected = Set(
+      new Path("hdfs://localhost:8020").getFileSystem(noFederationConf))
+    val noFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, noFederationConf)
+    noFederationResult should be (noFederationExpected)
   }
+
+
 }

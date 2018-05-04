@@ -196,15 +196,21 @@ object YarnSparkHadoopUtil {
       .map(new Path(_).getFileSystem(hadoopConf))
       .toSet
 
-    // add the list of available namenodes for all namespaces in HDFS federation
-    val hadoopFilesystems = Option(hadoopConf.get("dfs.nameservices"))
-      .toSeq.flatMap(_.split(","))
-      .flatMap(ns => Option(hadoopConf.get(s"dfs.namenode.rpc-address.$ns")))
-      .map(nn => new Path(s"hdfs://$nn").getFileSystem(hadoopConf))
-
     val stagingFS = sparkConf.get(STAGING_DIR)
       .map(new Path(_).getFileSystem(hadoopConf))
       .getOrElse(FileSystem.get(hadoopConf))
+
+    // add the list of available namenodes for all namespaces in HDFS federation
+    // if ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens
+    // for its namespaces
+    val hadoopFilesystems = if (stagingFS.getScheme == "viewfs") {
+      Set.empty
+    } else {
+      Option(hadoopConf.get("dfs.nameservices"))
+        .toSeq.flatMap(_.split(","))
+        .flatMap(ns => Option(hadoopConf.get(s"dfs.namenode.rpc-address.$ns")))
+        .map(nn => new Path(s"hdfs://$nn").getFileSystem(hadoopConf))
+    }
 
     filesystemsToAccess ++ hadoopFilesystems + stagingFS
   }
