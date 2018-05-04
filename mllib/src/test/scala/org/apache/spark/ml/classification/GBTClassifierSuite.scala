@@ -366,17 +366,12 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("model evaluateEachIteration") {
-    for (lossType <- Seq("logistic")) {
-      val gbt = new GBTClassifier()
-        .setMaxDepth(2)
-        .setMaxIter(2)
-        .setLossType(lossType)
-      val model = gbt.fit(trainData.toDF)
-      val eval1 = model.evaluateEachIteration(validationData.toDF)
-      val eval2 = GradientBoostedTrees.evaluateEachIteration(validationData,
-        model.trees, model.treeWeights, model.getOldLossType, OldAlgo.Classification)
-      assert(eval1 === eval2)
-    }
+    val gbt = new GBTClassifier()
+      .setMaxDepth(2)
+      .setMaxIter(2)
+    val model = gbt.fit(trainData.toDF)
+    val eval = model.evaluateEachIteration(validationData.toDF)
+    assert(Vectors.dense(eval) ~== Vectors.dense(1.7641, 1.8209) relTol 1E-3)
   }
 
   /////////////////////////////////////////////////////////////////////////////

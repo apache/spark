@@ -275,13 +275,12 @@ class GBTRegressionModel private[ml](
    * @param dataset Dataset for validation.
    */
   @Since("2.4.0")
-  def evaluateEachIteration(dataset: Dataset[_]): Array[Double] = {
+  def evaluateEachIteration(dataset: Dataset[_], loss: String): Array[Double] = {
     val data = dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
       case Row(label: Double, features: Vector) => LabeledPoint(label, features)
     }
-    GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights, getOldLossType,
-      OldAlgo.Regression
-    )
+    GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights,
+      convertToOldLossType(loss), OldAlgo.Regression)
   }
 
   @Since("2.0.0")

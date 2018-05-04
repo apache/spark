@@ -20,8 +20,9 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
+import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -202,17 +203,16 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("model evaluateEachIteration") {
-    for (lossType <- Seq("squared", "absolute")) {
-      val gbt = new GBTRegressor()
-        .setMaxDepth(2)
-        .setMaxIter(2)
-        .setLossType(lossType)
-      val model = gbt.fit(trainData.toDF)
-      val eval1 = model.evaluateEachIteration(validationData.toDF)
-      val eval2 = GradientBoostedTrees.evaluateEachIteration(validationData,
-        model.trees, model.treeWeights, model.getOldLossType, OldAlgo.Regression)
-      assert(eval1 === eval2)
-    }
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setMaxIter(2)
+      .setLossType("squared")
+    val model = gbt.fit(trainData.toDF)
+    val eval1 = model.evaluateEachIteration(validationData.toDF, "squared")
+    assert(Vectors.dense(eval1) ~== Vectors.dense(0.3736, 0.3745) relTol 1E-3)
+
+    val eval2 = model.evaluateEachIteration(validationData.toDF, "absolute")
+    assert(Vectors.dense(eval2) ~== Vectors.dense(0.3908, 0.3931) relTol 1E-3)
   }
 
   /////////////////////////////////////////////////////////////////////////////
