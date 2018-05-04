@@ -199,8 +199,8 @@ class InMemoryCatalog(
       // to create the table directory and write out data before we create this table, to avoid
       // exposing a partial written table.
       val needDefaultTableLocation =
-      tableDefinition.tableType == CatalogTableType.MANAGED &&
-        tableDefinition.storage.locationUri.isEmpty
+        tableDefinition.tableType == CatalogTableType.MANAGED &&
+          tableDefinition.storage.locationUri.isEmpty
 
       val tableWithLocation = if (needDefaultTableLocation) {
         val defaultTableLocation = new Path(new Path(catalog(db).db.locationUri), table)
