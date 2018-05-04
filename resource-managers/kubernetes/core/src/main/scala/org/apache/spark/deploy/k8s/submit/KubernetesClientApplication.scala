@@ -140,13 +140,6 @@ private[spark] class Client(
           throw e
       }
 
-      if (waitForAppCompletion) {
-        logInfo(s"Waiting for application $appName to finish...")
-        watcher.awaitCompletion()
-        logInfo(s"Application $appName finished.")
-      } else {
-        logInfo(s"Deployed Spark application $appName into Kubernetes.")
-      }
     }
   }
 

@@ -160,23 +160,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
               conf,
               executorId,
               applicationId(),
-<<<<<<< HEAD
-              driverUrl,
-              conf.getExecutorEnv,
-              getDriverPod(),
-              currentNodeToLocalTaskCount)
-            executorsToAllocate(executorId) = executorPod
-=======
-              driverPod)
+              getDriverPod())
             val executorPod = executorBuilder.buildFromFeatures(executorConf)
             val podWithAttachedContainer = new PodBuilder(executorPod.pod)
               .editOrNewSpec()
-                .addToContainers(executorPod.container)
-                .endSpec()
+              .addToContainers(executorPod.container)
+              .endSpec()
               .build()
 
             executorsToAllocate(executorId) = podWithAttachedContainer
->>>>>>> master
             logInfo(
               s"Requesting a new executor, total executors is now ${runningExecutorsToPods.size}")
           }

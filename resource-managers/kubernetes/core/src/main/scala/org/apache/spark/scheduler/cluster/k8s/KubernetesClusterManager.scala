@@ -20,7 +20,7 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.{Config, KubernetesClient}
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -57,7 +57,12 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager
          None)
   }
 
-  val modeHandler: ManagerSpecificHandlers = null
+  val modeHandler: ManagerSpecificHandlers = {
+    new java.io.File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH).exists() match {
+      case true => new InClusterHandlers()
+      case false => new OutClusterHandlers()
+    }
+  }
 
   override def createKubernetesClient(sparkConf: SparkConf): KubernetesClient =
      modeHandler.createKubernetesClient(sparkConf)
@@ -69,36 +74,12 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager
   }
 
   override def createSchedulerBackend(
-      sc: SparkContext,
-      masterURL: String,
-      scheduler: TaskScheduler): SchedulerBackend = {
-
+                                       sc: SparkContext,
+                                       masterURL: String,
+                                       scheduler: TaskScheduler): SchedulerBackend = {
     val executorSecretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
       sc.conf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
-<<<<<<< HEAD
-    val mountSecretBootstrap = if (executorSecretNamesToMountPaths.nonEmpty) {
-      Some(new MountSecretsBootstrap(executorSecretNamesToMountPaths))
-    } else {
-      None
-    }
-
-    val modeHandler: ManagerSpecificHandlers = {
-      new java.io.File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH).exists() match {
-        case true => new InClusterHandlers()
-        case false => new OutClusterHandlers()
-      }
-    }
-    val sparkConf = sc.getConf
-    val kubernetesClient = modeHandler.createKubernetesClient(sparkConf)
-=======
-    val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
-      KUBERNETES_MASTER_INTERNAL_URL,
-      Some(sc.conf.get(KUBERNETES_NAMESPACE)),
-      KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
-      sc.conf,
-      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
-      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
->>>>>>> master
+    val kubernetesClient = createKubernetesClient(sc.getConf)
 
     val allocatorExecutor = ThreadUtils
       .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
