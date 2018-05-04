@@ -524,11 +524,11 @@ class TypeCoercionSuite extends AnalysisTest {
   test("cast NullType for expressions that implement ExpectsInputTypes") {
     import TypeCoercionSuite._
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       AnyTypeUnaryExpression(Literal.create(null, NullType)),
       AnyTypeUnaryExpression(Literal.create(null, NullType)))
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
   }
@@ -536,11 +536,11 @@ class TypeCoercionSuite extends AnalysisTest {
   test("cast NullType for binary operators") {
     import TypeCoercionSuite._
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)))
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       NumericTypeBinaryOperator(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
   }
@@ -823,7 +823,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("type coercion for CaseKeyWhen") {
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
     )
@@ -1275,7 +1275,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("SPARK-17117 null type coercion in divide") {
-    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
+    val rules = Seq(FunctionArgumentConversion, Division, new ImplicitTypeCasts(conf))
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
