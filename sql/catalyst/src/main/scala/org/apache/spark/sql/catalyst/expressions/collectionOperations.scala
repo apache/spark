@@ -207,7 +207,7 @@ trait ArraySortLike extends ExpectsInputTypes {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
       s"""
-         |Object[] $array = (Object[]) $base.toObjectArray($elementTypeTerm);
+         |Object[] $array = $base.toObjectArray($elementTypeTerm);
          |final int $sortOrder = $order ? 1 : -1;
          |java.util.Arrays.sort($array, new java.util.Comparator() {
          |  @Override public int compare(Object $o1, Object $o2) {
