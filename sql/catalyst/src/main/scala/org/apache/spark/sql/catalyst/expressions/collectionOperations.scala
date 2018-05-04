@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -482,21 +481,12 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |${ev.value} = new $arrayClass($values);
        """.stripMargin
     } else {
-      val sizeInBytes = ctx.freshName("sizeInBytes")
-      val bytesArray = ctx.freshName("bytesArray")
       val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
       s"""
          |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
          |  $resLength = 0;
          |}
-         |${CodeGenerator.JAVA_INT} $sizeInBytes =
-         |  UnsafeArrayData.calculateHeaderPortionInBytes($resLength) +
-         |  ${classOf[ByteArrayMethods].getName}.roundNumberOfBytesToNearestWord(
-         |    ${elementType.defaultSize} * $resLength);
-         |byte[] $bytesArray = new byte[$sizeInBytes];
-         |UnsafeArrayData $values = new UnsafeArrayData();
-         |Platform.putLong($bytesArray, ${Platform.BYTE_ARRAY_OFFSET}, $resLength);
-         |$values.pointTo($bytesArray, ${Platform.BYTE_ARRAY_OFFSET}, $sizeInBytes);
+         |${ctx.createUnsafeArray(values, resLength, elementType, s" $prettyName failed.")}
          |for (int $i = 0; $i < $resLength; $i ++) {
          |  if ($inputArray.isNullAt($i + $startIdx)) {
          |    $values.setNullAt($i);
@@ -1107,24 +1097,11 @@ case class Concat(children: Seq[Expression]) extends Expression {
   }
 
   private def genCodeForPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
-    val arrayName = ctx.freshName("array")
-    val arraySizeName = ctx.freshName("size")
     val counter = ctx.freshName("counter")
     val arrayData = ctx.freshName("arrayData")
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    val unsafeArraySizeInBytes = s"""
-      |long $arraySizeName = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-      |  $numElemName,
-      |  ${elementType.defaultSize});
-      |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
-      |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $arraySizeName +
-      |    " bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH bytes" +
-      |    " for UnsafeArrayData.");
-      |}
-      """.stripMargin
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
     s"""
@@ -1132,11 +1109,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
        |  public ArrayData concat($javaType[] args) {
        |    ${nullArgumentProtection()}
        |    $numElemCode
-       |    $unsafeArraySizeInBytes
-       |    byte[] $arrayName = new byte[(int)$arraySizeName];
-       |    UnsafeArrayData $arrayData = new UnsafeArrayData();
-       |    Platform.putLong($arrayName, $baseOffset, $numElemName);
-       |    $arrayData.pointTo($arrayName, $baseOffset, (int)$arraySizeName);
+       |    ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
        |    int $counter = 0;
        |    for (int y = 0; y < ${children.length}; y++) {
        |      for (int z = 0; z < args[y].numElements(); z++) {
@@ -1288,34 +1261,16 @@ case class Flatten(child: Expression) extends UnaryExpression {
       ctx: CodegenContext,
       childVariableName: String,
       arrayDataName: String): String = {
-    val arrayName = ctx.freshName("array")
-    val arraySizeName = ctx.freshName("size")
     val counter = ctx.freshName("counter")
     val tempArrayDataName = ctx.freshName("tempArrayData")
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
-    val unsafeArraySizeInBytes = s"""
-      |long $arraySizeName = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-      |  $numElemName,
-      |  ${elementType.defaultSize});
-      |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
-      |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-      |    $arraySizeName + " bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH" +
-      |    " bytes for UnsafeArrayData.");
-      |}
-      """.stripMargin
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
-
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
     s"""
     |$numElemCode
-    |$unsafeArraySizeInBytes
-    |byte[] $arrayName = new byte[(int)$arraySizeName];
-    |UnsafeArrayData $tempArrayDataName = new UnsafeArrayData();
-    |Platform.putLong($arrayName, $baseOffset, $numElemName);
-    |$tempArrayDataName.pointTo($arrayName, $baseOffset, (int)$arraySizeName);
+    |${ctx.createUnsafeArray(tempArrayDataName, numElemName, elementType, s" $prettyName failed.")}
     |int $counter = 0;
     |for (int k = 0; k < $childVariableName.numElements(); k++) {
     |  ArrayData arr = $childVariableName.getArray(k);
