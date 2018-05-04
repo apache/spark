@@ -117,6 +117,16 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("spark")
 
+  val KUBERNETES_EXECUTOR_MAX_INIT_ERRORS =
+    ConfigBuilder("spark.kubernetes.executor.maxInitFailures")
+      .doc("Maximum number of times executors are allowed to fail with an Init:Error state" +
+        " before failing the application. Note that Init:Error failures should not be caused" +
+        " by Spark itself because Spark does not attach init-containers to pods. Init-containers" +
+        " can be attached by the cluster itself. Users should check with their cluster" +
+        " administrator if these kinds of failures to start the executor pod occur frequently.")
+      .intConf
+      .createWithDefault(10)
+
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")

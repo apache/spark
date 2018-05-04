@@ -56,6 +56,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val executorPodsByIPs = new ConcurrentHashMap[String, Pod]()
   private val podsWithKnownExitReasons = new ConcurrentHashMap[String, ExecutorExited]()
   private val disconnectedPodsByExecutorIdPendingRemoval = new ConcurrentHashMap[String, Pod]()
+  private val failedInitExecutors = new mutable.HashSet[String]
+  private val executorMaxInitErrors = conf.get(KUBERNETES_EXECUTOR_MAX_INIT_ERRORS)
 
   private val kubernetesNamespace = conf.get(KUBERNETES_NAMESPACE)
 
@@ -330,6 +332,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
         case Action.MODIFIED if (podPhase == "Init:Error" || podPhase == "Init:CrashLoopBackoff")
           && pod.getMetadata.getDeletionTimestamp == null =>
+          val executorId = getExecutorId(pod)
+          failedInitExecutors.add(executorId)
+          if (failedInitExecutors.size >= executorMaxInitErrors) {
+            val errorMessage = s"Aborting Spark application because $executorMaxInitErrors executors
+              s" failed to start. The maximum number of allowed startup failures is" +
+              s" $executorMaxInitErrors. Please contact your cluster administrator or increase" +
+              s" your setting of ${KUBERNETES_EXECUTOR_MAX_INIT_ERRORS.key}."
+            logError(errorMessage)
+            KubernetesClusterSchedulerBackend.this.scheduler.sc.stopInNewThread()
+            throw new SparkException(errorMessage)
+          }
           handleFailedPod(action, pod, podName, podIP)
 
         case Action.DELETED | Action.ERROR =>
