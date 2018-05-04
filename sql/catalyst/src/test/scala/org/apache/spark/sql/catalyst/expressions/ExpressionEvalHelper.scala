@@ -98,6 +98,9 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
         if (expected.isNaN) result.isNaN else expected == result
       case (result: Float, expected: Float) =>
         if (expected.isNaN) result.isNaN else expected == result
+      case (result: UnsafeRow, expected: GenericInternalRow) =>
+        val structType = exprDataType.asInstanceOf[StructType]
+        result.toSeq(structType) == expected.toSeq(structType)
       case (result: Row, expected: InternalRow) => result.toSeq == expected.toSeq(result.schema)
       case _ =>
         result == expected

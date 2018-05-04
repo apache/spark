@@ -408,6 +408,7 @@ object FunctionRegistry {
     expression[ElementAt]("element_at"),
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
+    expression[MapEntries]("map_entries"),
     expression[Size]("size"),
     expression[Size]("cardinality"),
     expression[SortArray]("sort_array"),
