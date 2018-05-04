@@ -183,11 +183,10 @@ class ContinuousMemoryStreamDataReader(
   private var current: Option[Row] = None
 
   override def next(): Boolean = {
-    current = None
+    current = getRecord
     while (current.isEmpty) {
       Thread.sleep(10)
-      current = endpoint.askSync[Option[Row]](
-          GetRecord(ContinuousMemoryStreamPartitionOffset(partition, currentOffset)))
+      current = getRecord
     }
     currentOffset += 1
     true
@@ -199,6 +198,10 @@ class ContinuousMemoryStreamDataReader(
 
   override def getOffset: ContinuousMemoryStreamPartitionOffset =
     ContinuousMemoryStreamPartitionOffset(partition, currentOffset)
+
+  private def getRecord: Option[Row] =
+    endpoint.askSync[Option[Row]](
+      GetRecord(ContinuousMemoryStreamPartitionOffset(partition, currentOffset)))
 }
 
 case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])
