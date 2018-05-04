@@ -114,7 +114,7 @@ class ContinuousQueuedDataReader(
     currentEntry match {
       case EpochMarker =>
         epochCoordEndpoint.send(ReportPartitionOffset(
-          context.partitionId(), ContinuousWriteRDD.currentEpoch.get().get(), currentOffset))
+          context.partitionId(), EpochTracker.getCurrentEpoch, currentOffset))
         null
       case ContinuousRow(row, offset) =>
         currentOffset = offset

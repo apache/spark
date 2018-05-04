@@ -45,7 +45,7 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
     val epochCoordinator = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       SparkEnv.get)
-    ContinuousWriteRDD.currentEpoch.get().set(
+    EpochTracker.initializeCurrentEpoch(
       context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
 
     while (!context.isInterrupted() && !context.isCompleted()) {
@@ -57,22 +57,22 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
           dataWriter = writeTask.createDataWriter(
             context.partitionId(),
             context.attemptNumber(),
-            ContinuousWriteRDD.currentEpoch.get().get())
+            EpochTracker.getCurrentEpoch)
           while (dataIterator.hasNext) {
             dataWriter.write(dataIterator.next())
           }
           logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch ${ContinuousWriteRDD.currentEpoch.get().get()} is committing.")
+            s"in epoch ${EpochTracker.getCurrentEpoch} is committing.")
           val msg = dataWriter.commit()
           epochCoordinator.send(
             CommitPartitionEpoch(
               context.partitionId(),
-              ContinuousWriteRDD.currentEpoch.get().get(),
+              EpochTracker.getCurrentEpoch,
               msg)
           )
           logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch ${ContinuousWriteRDD.currentEpoch.get().get()} committed.")
-          ContinuousWriteRDD.currentEpoch.get().incrementAndGet()
+            s"in epoch ${EpochTracker.getCurrentEpoch} committed.")
+          EpochTracker.incrementCurrentEpoch()
         } catch {
           case _: InterruptedException =>
           // Continuous shutdown always involves an interrupt. Just finish the task.
@@ -92,13 +92,5 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
   override def clearDependencies() {
     super.clearDependencies()
     prev = null
-  }
-}
-
-object ContinuousWriteRDD {
-  // The current epoch. Note that this is a shared reference; ContinuousWriteRDD.compute() will
-  // update the underlying AtomicLong as it finishes epochs. Other code should only read the value.
-  val currentEpoch: InheritableThreadLocal[AtomicLong] = new InheritableThreadLocal[AtomicLong] {
-    override def initialValue() = new AtomicLong(0)
   }
 }
