@@ -430,6 +430,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       sql("select arrays_overlap(array(array(1)), array('a'))")
     }
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(null, null)")
+    }
   }
 
   test("array_join function") {
