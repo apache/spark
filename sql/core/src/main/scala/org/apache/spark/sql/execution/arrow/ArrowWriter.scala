@@ -23,8 +23,7 @@ import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
 import org.apache.arrow.vector.types.pojo.ArrowType
 
-import org.apache.spark.sql.catalyst.data.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.data.{InternalRow, SpecializedGetters}
 import org.apache.spark.sql.types._
 
 object ArrowWriter {

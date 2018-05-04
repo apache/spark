@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow, SpecializedGetters}
 import org.apache.spark.sql.types._
 
 /**

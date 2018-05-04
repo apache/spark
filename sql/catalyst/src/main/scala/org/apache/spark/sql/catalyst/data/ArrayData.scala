@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.data
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.catalyst.util.ArrayDataIndexedSeq
 import org.apache.spark.sql.types.DataType
 

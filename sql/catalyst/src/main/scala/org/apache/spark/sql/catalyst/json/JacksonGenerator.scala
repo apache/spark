@@ -22,8 +22,7 @@ import java.nio.charset.StandardCharsets
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow, MapData}
-import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow, MapData, SpecializedGetters}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 

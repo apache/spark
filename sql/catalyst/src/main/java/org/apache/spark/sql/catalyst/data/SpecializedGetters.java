@@ -15,13 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions;
+package org.apache.spark.sql.catalyst.data;
 
-import org.apache.spark.sql.catalyst.data.InternalRow;
-import org.apache.spark.sql.catalyst.data.ArrayData;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.sql.catalyst.data.MapData;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
