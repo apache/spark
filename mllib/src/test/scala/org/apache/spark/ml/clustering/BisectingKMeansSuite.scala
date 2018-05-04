@@ -17,15 +17,16 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.language.existentials
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.DistanceMeasure
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType}
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 class BisectingKMeansSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -186,37 +187,24 @@ class BisectingKMeansSuite
   }
 
   test("BisectingKMeans with Array input") {
-    val featuresColNameD = "array_double_features"
-    val featuresColNameF = "array_float_features"
-    val doubleUDF = udf { (features: Vector) =>
-      val featureArray = Array.fill[Double](features.size)(0.0)
-      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
-      featureArray
+    def trainTransfromAndComputeCost(dataset: Dataset[_]): (DataFrame, Double) = {
+      val model = new BisectingKMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
+      (model.transform(dataset), model.computeCost(dataset))
     }
-    val floatUDF = udf { (features: Vector) =>
-      val featureArray = Array.fill[Float](features.size)(0.0f)
-      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
-      featureArray
-    }
-    val newdatasetD = dataset.withColumn(featuresColNameD, doubleUDF(col("features")))
-      .drop("features")
-    val newdatasetF = dataset.withColumn(featuresColNameF, floatUDF(col("features")))
-      .drop("features")
-    assert(newdatasetD.schema(featuresColNameD).dataType.equals(new ArrayType(DoubleType, false)))
-    assert(newdatasetF.schema(featuresColNameF).dataType.equals(new ArrayType(FloatType, false)))
 
-    val bkmD = new BisectingKMeans()
-      .setK(k).setMaxIter(1).setFeaturesCol(featuresColNameD).setSeed(1)
-    val bkmF = new BisectingKMeans()
-      .setK(k).setMaxIter(1).setFeaturesCol(featuresColNameF).setSeed(1)
-    val modelD = bkmD.fit(newdatasetD)
-    val modelF = bkmF.fit(newdatasetF)
-    val transformedD = modelD.transform(newdatasetD)
-    val transformedF = modelF.transform(newdatasetF)
-    val predictDifference = transformedD.select("prediction")
+    val (newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val (transformed, trueCost) = trainTransfromAndComputeCost(dataset)
+    val (transformedD, doubleArrayCost) = trainTransfromAndComputeCost(newDatasetD)
+    val (transformedF, floatArrayCost) = trainTransfromAndComputeCost(newDatasetF)
+
+    val predictDifferenceD = transformed.select("prediction")
+      .except(transformedD.select("prediction"))
+    assert(predictDifferenceD.count() == 0)
+    val predictDifferenceF = transformed.select("prediction")
       .except(transformedF.select("prediction"))
-    assert(predictDifference.count() == 0)
-    assert(modelD.computeCost(newdatasetD) == modelF.computeCost(newdatasetF) )
+    assert(predictDifferenceF.count() == 0)
+    assert(trueCost ~== doubleArrayCost absTol 1e-6)
+    assert(trueCost ~== floatArrayCost absTol 1e-6)
   }
 }
 

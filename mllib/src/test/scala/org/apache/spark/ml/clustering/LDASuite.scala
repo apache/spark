@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.language.existentials
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkFunSuite
@@ -25,8 +27,6 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType}
 
 object LDASuite {
   def generateLDAData(
@@ -326,41 +326,18 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("LDA with Array input") {
-    val featuresColNameD = "array_double_features"
-    val featuresColNameF = "array_float_features"
-    val doubleUDF = udf { (features: Vector) =>
-      val featureArray = Array.fill[Double](features.size)(0.0)
-      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
-      featureArray
+    def trainAndLogLikehoodAndPerplexity(dataset: Dataset[_]): (Double, Double) = {
+      val model = new LDA().setK(k).setOptimizer("online").setMaxIter(1).setSeed(1).fit(dataset)
+      (model.logLikelihood(dataset), model.logPerplexity(dataset))
     }
-    val floatUDF = udf { (features: Vector) =>
-      val featureArray = Array.fill[Float](features.size)(0.0f)
-      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
-      featureArray
-    }
-    val newdatasetD = dataset.withColumn(featuresColNameD, doubleUDF(col("features")))
-      .drop("features")
-    val newdatasetF = dataset.withColumn(featuresColNameF, floatUDF(col("features")))
-      .drop("features")
-    assert(newdatasetD.schema(featuresColNameD).dataType.equals(new ArrayType(DoubleType, false)))
-    assert(newdatasetF.schema(featuresColNameF).dataType.equals(new ArrayType(FloatType, false)))
 
-    val ldaD = new LDA().setK(k).setOptimizer("online")
-      .setMaxIter(1).setFeaturesCol(featuresColNameD).setSeed(1)
-    val ldaF = new LDA().setK(k).setOptimizer("online").
-      setMaxIter(1).setFeaturesCol(featuresColNameF).setSeed(1)
-    val modelD = ldaD.fit(newdatasetD)
-    val modelF = ldaF.fit(newdatasetF)
-
-    // logLikelihood, logPerplexity
-    val llD = modelD.logLikelihood(newdatasetD)
-    val llF = modelF.logLikelihood(newdatasetF)
-    // assert(llD == llF)
+    val (newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val (ll, lp) = trainAndLogLikehoodAndPerplexity(dataset)
+    val (llD, lpD) = trainAndLogLikehoodAndPerplexity(newDatasetD)
+    val (llF, lpF) = trainAndLogLikehoodAndPerplexity(newDatasetF)
+    // TODO: need to compare the result once we fix the seed issue for LDA (SPARK-22210)
     assert(llD <= 0.0 && llD != Double.NegativeInfinity)
     assert(llF <= 0.0 && llF != Double.NegativeInfinity)
-    val lpD = modelD.logPerplexity(newdatasetD)
-    val lpF = modelF.logPerplexity(newdatasetF)
-    // assert(lpD == lpF)
     assert(lpD >= 0.0 && lpD != Double.NegativeInfinity)
     assert(lpF >= 0.0 && lpF != Double.NegativeInfinity)
   }

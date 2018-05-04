@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.language.existentials
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -24,10 +26,7 @@ import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType}
-
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
@@ -260,39 +259,29 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("GaussianMixture with Array input") {
-    val featuresColNameD = "array_double_features"
-    val featuresColNameF = "array_float_features"
-    val doubleUDF = udf { (features: Vector) =>
-      val featureArray = Array.fill[Double](features.size)(0.0)
-      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
-      featureArray
+    def trainAndTransfrom(dataset: Dataset[_]): DataFrame = {
+      val model = new GaussianMixture().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
+      model.transform(dataset)
     }
-    val floatUDF = udf { (features: Vector) =>
-      val featureArray = Array.fill[Float](features.size)(0.0f)
-      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
-      featureArray
-    }
-    val newdatasetD = dataset.withColumn(featuresColNameD, doubleUDF(col("features")))
-      .drop("features")
-    val newdatasetF = dataset.withColumn(featuresColNameF, floatUDF(col("features")))
-      .drop("features")
-    assert(newdatasetD.schema(featuresColNameD).dataType.equals(new ArrayType(DoubleType, false)))
-    assert(newdatasetF.schema(featuresColNameF).dataType.equals(new ArrayType(FloatType, false)))
 
-    val gmD = new GaussianMixture().setK(k).setMaxIter(1)
-      .setFeaturesCol(featuresColNameD).setSeed(1)
-    val gmF = new GaussianMixture().setK(k).setMaxIter(1)
-      .setFeaturesCol(featuresColNameF).setSeed(1)
-    val modelD = gmD.fit(newdatasetD)
-    val modelF = gmF.fit(newdatasetF)
-    val transformedD = modelD.transform(newdatasetD)
-    val transformedF = modelF.transform(newdatasetF)
-    val predictDifference = transformedD.select("prediction")
+    val (newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val transformed = trainAndTransfrom(dataset)
+    val transformedD = trainAndTransfrom(newDatasetD)
+    val transformedF = trainAndTransfrom(newDatasetF)
+
+    val predictDifferenceD = transformed.select("prediction")
+      .except(transformedD.select("prediction"))
+    assert(predictDifferenceD.count() == 0)
+    val predictDifferenceF = transformed.select("prediction")
       .except(transformedF.select("prediction"))
-    assert(predictDifference.count() == 0)
-    val probabilityDifference = transformedD.select("probability")
+    assert(predictDifferenceF.count() == 0)
+
+    val probabilityDifferenceD = transformed.select("probability")
+      .except(transformedD.select("probability"))
+    assert(probabilityDifferenceD.count() == 0)
+    val probabilityDifferenceF = transformed.select("probability")
       .except(transformedF.select("probability"))
-    assert(probabilityDifference.count() == 0)
+    assert(probabilityDifferenceF.count() == 0)
   }
 }
 

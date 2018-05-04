@@ -105,7 +105,7 @@ private[spark] object SchemaUtils {
 
   /**
    * Check whether the given column in the schema is one of the supporting vector type: Vector,
-   * Array[Dloat]. Array[Double]
+   * Array[Float]. Array[Double]
    * @param schema input schema
    * @param colName column name
    */

@@ -247,4 +247,14 @@ object MLTestingUtils extends SparkFunSuite {
     }
     models.sliding(2).foreach { case Seq(m1, m2) => modelEquals(m1, m2)}
   }
+
+  def generateArrayFeatureDataset(dataset: Dataset[_]): (Dataset[_], Dataset[_]) = {
+    val doubleUDF = udf { (features: Vector) => features.toArray.map(_.toFloat.toDouble)}
+    val floatUDF = udf { (features: Vector) => features.toArray.map(_.toFloat)}
+    val newDatasetD = dataset.withColumn("features", doubleUDF(col("features")))
+    val newDatasetF = dataset.withColumn("features", floatUDF(col("features")))
+    assert(newDatasetD.schema("features").dataType.equals(new ArrayType(DoubleType, false)))
+    assert(newDatasetF.schema("features").dataType.equals(new ArrayType(FloatType, false)))
+    (newDatasetD, newDatasetF)
+  }
 }
