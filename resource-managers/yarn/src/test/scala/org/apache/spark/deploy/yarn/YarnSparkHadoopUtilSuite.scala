@@ -21,11 +21,11 @@ import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.io.Text
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -141,4 +141,22 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
   }
 
+  test("SPARK-24149: retrieve all namenodes from HDFS") {
+    val sparkConf = new SparkConf()
+    val hadoopConf = new Configuration()
+    hadoopConf.set("fs.defaultFS", "hdfs://localhost:8020")
+    hadoopConf.set("dfs.nameservices", "ns1,ns2")
+    hadoopConf.set("dfs.namenode.rpc-address.ns1", "localhost:8020")
+    hadoopConf.set("dfs.namenode.rpc-address.ns2", "localhost:8021")
+    val expected = Set(new Path("hdfs://localhost:8020").getFileSystem(hadoopConf),
+      new Path("hdfs://localhost:8021").getFileSystem(hadoopConf))
+    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, hadoopConf) should be (expected)
+    // invalid config should not throw NullPointerException
+    hadoopConf.unset("dfs.namenode.rpc-address.ns2")
+    val expected2 = Set(new Path("hdfs://localhost:8020").getFileSystem(hadoopConf))
+    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, hadoopConf) should be (expected2)
+    // no namespaces defined, ie. old case
+    hadoopConf.unset("dfs.nameservices")
+    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, hadoopConf) should be (expected2)
+  }
 }
