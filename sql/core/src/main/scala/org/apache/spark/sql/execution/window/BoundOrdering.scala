@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.window
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Projection
 
 

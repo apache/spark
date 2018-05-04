@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.{FunSpec, Matchers}
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
 

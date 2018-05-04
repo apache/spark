@@ -21,7 +21,7 @@ import java.io.Closeable
 
 import org.apache.hadoop.mapreduce.RecordReader
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 
 /**
  * An adaptor from a Hadoop [[RecordReader]] to an [[Iterator]] over the values returned.

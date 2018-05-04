@@ -23,7 +23,7 @@ import java.util.LinkedList;
 import scala.collection.Iterator;
 
 import org.apache.spark.TaskContext;
-import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.data.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 
 /**

@@ -25,7 +25,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.io.Text
 import sun.nio.cs.StreamDecoder
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object CreateJacksonParser extends Serializable {

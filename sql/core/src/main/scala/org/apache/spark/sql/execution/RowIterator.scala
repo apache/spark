@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.NoSuchElementException
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 
 /**
  * An internal iterator interface which presents a more restrictive API than

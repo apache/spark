@@ -21,7 +21,7 @@ import java.{util => ju}
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.config
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, TypedImperativeAggregate}
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter

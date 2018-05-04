@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources.v2.writer;
 import java.io.IOException;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.catalyst.data.InternalRow;
 
 /**
  * A data writer returned by {@link DataWriterFactory#createDataWriter(int, int, long)} and is
@@ -54,7 +55,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * Spark only accepts the commit message that arrives first and ignore others.
  *
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.Row} for normal data
- * source writers, or {@link org.apache.spark.sql.catalyst.InternalRow} for data source writers
+ * source writers, or {@link InternalRow} for data source writers
  * that mix in {@link SupportsWriteInternalRow}.
  */
 @InterfaceStability.Evolving

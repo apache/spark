@@ -23,7 +23,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcOutputFormat
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 import org.apache.spark.sql.types._
 

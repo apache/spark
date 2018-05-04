@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.annotation.tailrec
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform

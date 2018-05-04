@@ -27,7 +27,7 @@ import java.util.Map;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.data.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;

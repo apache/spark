@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects._

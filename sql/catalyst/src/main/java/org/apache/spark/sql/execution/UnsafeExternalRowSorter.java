@@ -29,7 +29,7 @@ import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.internal.config.package$;
-import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.data.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.Platform;

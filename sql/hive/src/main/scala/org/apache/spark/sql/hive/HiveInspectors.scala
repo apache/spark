@@ -28,11 +28,10 @@ import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructF
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.{catalyst, types, AnalysisException}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.types
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -55,7 +54,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *  Complex Types =>
  *    Map: `MapData`
  *    List: `ArrayData`
- *    Struct: [[org.apache.spark.sql.catalyst.InternalRow]]
+ *    Struct: [[catalyst.data.InternalRow]]
  *    Union: NOT SUPPORTED YET
  *  The Complex types plays as a container, which can hold arbitrary data types.
  *

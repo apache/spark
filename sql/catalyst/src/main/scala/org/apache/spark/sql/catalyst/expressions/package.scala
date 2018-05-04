@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import com.google.common.collect.Maps
 
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{StructField, StructType}
 

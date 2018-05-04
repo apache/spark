@@ -22,7 +22,7 @@ import java.util.Random
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificInternalRow}
 import org.apache.spark.sql.types.{DataType, IntegerType}
 

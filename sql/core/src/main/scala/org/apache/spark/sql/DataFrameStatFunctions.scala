@@ -18,11 +18,10 @@
 package org.apache.spark.sql
 
 import java.{lang => jl, util => ju}
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._

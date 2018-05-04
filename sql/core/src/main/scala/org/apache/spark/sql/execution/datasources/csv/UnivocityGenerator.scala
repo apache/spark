@@ -21,7 +21,7 @@ import java.io.Writer
 
 import com.univocity.parsers.csv.CsvWriter
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 

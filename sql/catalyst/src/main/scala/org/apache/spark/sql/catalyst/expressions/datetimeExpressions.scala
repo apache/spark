@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._

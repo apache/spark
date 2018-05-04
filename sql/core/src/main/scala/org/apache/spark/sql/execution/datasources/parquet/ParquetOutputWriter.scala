@@ -22,7 +22,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.data.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
