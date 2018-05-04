@@ -95,4 +95,41 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(exprValues(3).isInstanceOf[VariableValue] && exprValues(3).code == "expr2")
     assert(exprValues(4).isInstanceOf[LiteralValue] && exprValues(4).code == "100")
   }
+
+  test("Throws exception when interpolating unexcepted object in code block") {
+    val obj = TestClass(100)
+    val e = intercept[IllegalArgumentException] {
+      code"$obj"
+    }
+    assert(e.getMessage().contains(s"Can not interpolate ${obj.getClass.getName}"))
+  }
+
+  test("replace expr values in code block") {
+    val statement = JavaCode.expression("1 + 1", IntegerType)
+    val isNull = JavaCode.isNullVariable("expr1_isNull")
+    val exprInFunc = JavaCode.variable("expr1", IntegerType)
+
+    val code =
+      code"""
+           |callFunc(int $statement) {
+           |  boolean $isNull = false;
+           |  int $exprInFunc = $statement + 1;
+           |}""".stripMargin
+
+    val aliasedParam = JavaCode.variable("aliased", statement.javaType)
+    val aliasedInputs = code.asInstanceOf[CodeBlock].blockInputs.map {
+      case _: SimpleExprValue => aliasedParam
+      case other => other
+    }
+    val aliasedCode = CodeBlock(code.asInstanceOf[CodeBlock].codeParts, aliasedInputs).stripMargin
+    val expected =
+      code"""
+           |callFunc(int $aliasedParam) {
+           |  boolean $isNull = false;
+           |  int $exprInFunc = $aliasedParam + 1;
+           |}""".stripMargin
+    assert(aliasedCode.toString == expected.toString)
+  }
 }
+
+private case class TestClass(a: Int)
