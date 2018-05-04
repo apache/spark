@@ -1367,7 +1367,8 @@ class PersistenceTest(SparkSessionTestCase):
         path = tempfile.mkdtemp()
         lr_path = path + "/lr-pmml"
         model.write().format("pmml").save(lr_path)
-        pmml_text = self.sc.textFile(lr_path).collect()
+        pmml_text_list = self.sc.textFile(lr_path).collect()
+        pmml_text = "\n".join(pmml_text_list)
         self.assertIn("Apache Spark", pmml_text)
         self.assertIn("xs:element", pmml_text)
 
