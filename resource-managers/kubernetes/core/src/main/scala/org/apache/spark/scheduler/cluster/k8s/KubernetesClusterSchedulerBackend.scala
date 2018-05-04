@@ -335,8 +335,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
           val executorId = getExecutorId(pod)
           failedInitExecutors.add(executorId)
           if (failedInitExecutors.size >= executorMaxInitErrors) {
-            val errorMessage = s"Aborting Spark application because $executorMaxInitErrors executors
-              s" failed to start. The maximum number of allowed startup failures is" +
+            val errorMessage = s"Aborting Spark application because $executorMaxInitErrors" +
+              s" executors failed to start. The maximum number of allowed startup failures is" +
               s" $executorMaxInitErrors. Please contact your cluster administrator or increase" +
               s" your setting of ${KUBERNETES_EXECUTOR_MAX_INIT_ERRORS.key}."
             logError(errorMessage)
