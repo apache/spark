@@ -2606,7 +2606,6 @@ setMethod("rand", signature(seed = "missing"),
           })
 
 #' @rdname column_nonaggregate_functions
-#' Note: the function is non-deterministic in general case.
 #' @aliases rand,numeric-method
 #' @note rand(numeric) since 1.5.0
 setMethod("rand", signature(seed = "numeric"),
@@ -2630,7 +2629,6 @@ setMethod("randn", signature(seed = "missing"),
           })
 
 #' @rdname column_nonaggregate_functions
-#' Note: the function is non-deterministic in general case.
 #' @aliases randn,numeric-method
 #' @note randn(numeric) since 1.5.0
 setMethod("randn", signature(seed = "numeric"),
