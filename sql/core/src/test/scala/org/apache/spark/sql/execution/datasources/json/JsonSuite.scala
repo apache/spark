@@ -2262,7 +2262,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     withTempPath { path =>
       val df = spark.createDataset(Seq(("Dog", 42)))
       df.write
-        .options(Map("encoding" -> encoding, "lineSep" -> "\n"))
+        .options(Map("encoding" -> encoding))
         .json(path.getCanonicalPath)
 
       checkEncoding(
@@ -2286,15 +2286,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-23723: wrong output encoding") {
     val encoding = "UTF-128"
-    val exception = intercept[UnsupportedCharsetException] {
+    val exception = intercept[SparkException] {
       withTempPath { path =>
         val df = spark.createDataset(Seq((0)))
         df.write
-          .options(Map("encoding" -> encoding, "lineSep" -> "\n"))
+          .options(Map("encoding" -> encoding))
           .json(path.getCanonicalPath)
       }
-    }
+    }.getCause.getCause.getCause
 
+    assert(exception.isInstanceOf[java.nio.charset.UnsupportedCharsetException])
     assert(exception.getMessage == encoding)
   }
 
@@ -2407,5 +2408,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(
       spark.read.option("mode", "PERMISSIVE").option("encoding", "UTF-8").json(Seq(badJson).toDS()),
       Row(badJson))
+  }
+
+  test("SPARK-24190: restrictions for JSONOptions in read") {
+    val exception = intercept[IllegalArgumentException] {
+      spark.read
+        .option("encoding", "UTF-16")
+        .json(testFile("test-data/utf16LE.json"))
+        .count()
+    }
+    assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
   }
 }

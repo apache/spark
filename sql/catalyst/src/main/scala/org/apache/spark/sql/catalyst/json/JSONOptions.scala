@@ -94,31 +94,15 @@ private[sql] class JSONOptions(
     sep
   }
 
+  protected def checkedEncoding(enc: String): String = enc
+
   /**
    * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
-   * If the encoding is not specified (None), it will be detected automatically
+   * If the encoding is not specified (None) in read, it will be detected automatically
    * when the multiLine option is set to `true`.
    */
   val encoding: Option[String] = parameters.get("encoding")
-    .orElse(parameters.get("charset")).map { enc =>
-      // The following encodings are not supported in per-line mode (multiline is false)
-      // because they cause some problems in reading files with BOM which is supposed to
-      // present in the files with such encodings. After splitting input files by lines,
-      // only the first lines will have the BOM which leads to impossibility for reading
-      // the rest lines. Besides of that, the lineSep option must have the BOM in such
-      // encodings which can never present between lines.
-      val blacklist = Seq(Charset.forName("UTF-16"), Charset.forName("UTF-32"))
-      val isBlacklisted = blacklist.contains(Charset.forName(enc))
-      require(multiLine || !isBlacklisted,
-        s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
-           | ${blacklist.mkString(", ")}""".stripMargin)
-
-      val isLineSepRequired = !(multiLine == false &&
-        Charset.forName(enc) != StandardCharsets.UTF_8 && lineSeparator.isEmpty)
-      require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
-
-      enc
-  }
+    .orElse(parameters.get("charset")).map(checkedEncoding)
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
     lineSep.getBytes(encoding.getOrElse("UTF-8"))
@@ -135,5 +119,42 @@ private[sql] class JSONOptions(
     factory.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
       allowBackslashEscapingAnyCharacter)
     factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
+  }
+}
+
+private[sql] class JSONOptionsInRead(
+    @transient private val parameters: CaseInsensitiveMap[String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String)
+  extends JSONOptions(parameters, defaultTimeZoneId, defaultColumnNameOfCorruptRecord) {
+
+  def this(
+    parameters: Map[String, String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String = "") = {
+    this(
+      CaseInsensitiveMap(parameters),
+      defaultTimeZoneId,
+      defaultColumnNameOfCorruptRecord)
+  }
+
+  protected override def checkedEncoding(enc: String): String = {
+    // The following encodings are not supported in per-line mode (multiline is false)
+    // because they cause some problems in reading files with BOM which is supposed to
+    // present in the files with such encodings. After splitting input files by lines,
+    // only the first lines will have the BOM which leads to impossibility for reading
+    // the rest lines. Besides of that, the lineSep option must have the BOM in such
+    // encodings which can never present between lines.
+    val blacklist = Seq(Charset.forName("UTF-16"), Charset.forName("UTF-32"))
+    val isBlacklisted = blacklist.contains(Charset.forName(enc))
+    require(multiLine || !isBlacklisted,
+      s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
+         | ${blacklist.mkString(", ")}""".stripMargin)
+
+    val isLineSepRequired = !(multiLine == false &&
+      Charset.forName(enc) != StandardCharsets.UTF_8 && lineSeparator.isEmpty)
+    require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
+
+    enc
   }
 }
