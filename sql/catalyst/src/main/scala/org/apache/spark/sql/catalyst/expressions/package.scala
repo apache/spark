@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.util.Locale
 
 import com.google.common.collect.Maps
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
