@@ -577,8 +577,7 @@ class StreamSuite extends StreamTest {
       .format("memory")
       .trigger(Trigger.ProcessingTime("1 seconds"))
       .start()
-      .asInstanceOf[StreamingQueryWrapper]
-      .streamingQuery
+
     try {
       assert("No physical plan. Waiting for data." === codegenString(q))
       assert(codegenStringSeq(q).isEmpty)
@@ -616,12 +615,11 @@ class StreamSuite extends StreamTest {
       .format("memory")
       .trigger(Trigger.Continuous("1 seconds"))
       .start()
-      .asInstanceOf[StreamingQueryWrapper]
-      .streamingQuery
+
     try {
       // in continuous mode, the query will be run even there's no data
       // sleep a bit to ensure initialization
-      waitForLastExecution(q)
+      waitForLastExecution(q.asInstanceOf[StreamingQueryWrapper].streamingQuery)
 
       // just ensure that it doesn't raise any error
       // it will provide the message that continuous mode doesn't support debug

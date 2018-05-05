@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.continuous.WriteToContinuousDataSourceExec
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
@@ -107,7 +107,7 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(query: StreamingQuery): String = {
-    val msg = query match {
+    val msg = unwrapStreamingQueryWrapper(query) match {
       case w: StreamExecution =>
         if (w.lastExecution != null) {
           codegenString(w.lastExecution.executedPlan)
@@ -127,7 +127,7 @@ package object debug {
    * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenStringSeq(query: StreamingQuery): Seq[(String, String)] = {
-    val planAndCodes = query match {
+    val planAndCodes = unwrapStreamingQueryWrapper(query) match {
       case w: StreamExecution if w.lastExecution != null =>
         codegenStringSeq(w.lastExecution.executedPlan)
 
@@ -151,6 +151,13 @@ package object debug {
     }
   }
 
+  private def unwrapStreamingQueryWrapper(query: StreamingQuery): StreamingQuery = {
+    query match {
+      case wrapper: StreamingQueryWrapper => wrapper.streamingQuery
+      case _ => query
+    }
+  }
+
   /**
    * Augments [[Dataset]]s with debug methods.
    */
@@ -170,7 +177,7 @@ package object debug {
 
   implicit class DebugStreamQuery(query: StreamingQuery) extends Logging {
     def debug(): Unit = {
-      query match {
+      unwrapStreamingQueryWrapper(query) match {
         case w: StreamExecution =>
           if (w.lastExecution == null) {
             debugPrint("No physical plan. Waiting for data.")
