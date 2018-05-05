@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -32,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Catalogs}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
@@ -619,6 +621,12 @@ class SparkSession private(
    * @since 2.0.0
    */
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
+
+  @transient private lazy val catalogs = new mutable.HashMap[String, CatalogPlugin]()
+
+  private[sql] def catalog(name: String): CatalogPlugin = synchronized {
+    catalogs.getOrElseUpdate(name, Catalogs.load(name, sessionState.conf))
+  }
 
   /**
    * Returns the specified table/view as a `DataFrame`.
