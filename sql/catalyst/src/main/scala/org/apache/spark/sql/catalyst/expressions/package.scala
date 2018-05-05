@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
-import com.google.common.collect.Maps
+import java.util.Locale
 
+import com.google.common.collect.Maps
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
@@ -147,13 +148,13 @@ package object expressions  {
 
     /** Map to use for direct case insensitive attribute lookups. */
     @transient private lazy val direct: Map[String, Seq[Attribute]] = {
-      unique(attrs.groupBy(_.name.toLowerCase))
+      unique(attrs.groupBy(_.name.toLowerCase(Locale.ROOT)))
     }
 
     /** Map to use for qualified case insensitive attribute lookups. */
     @transient private val qualified: Map[(String, String), Seq[Attribute]] = {
       val grouped = attrs.filter(_.qualifier.isDefined).groupBy { a =>
-        (a.qualifier.get.toLowerCase, a.name.toLowerCase)
+        (a.qualifier.get.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
       }
       unique(grouped)
     }
@@ -176,7 +177,7 @@ package object expressions  {
       // and the second element will be List("c").
       val matches = nameParts match {
         case qualifier +: name +: nestedFields =>
-          val key = (qualifier.toLowerCase, name.toLowerCase)
+          val key = (qualifier.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
           val attributes = collectMatches(name, qualified.get(key)).filter { a =>
             resolver(qualifier, a.qualifier.get)
           }
@@ -189,7 +190,7 @@ package object expressions  {
       val (candidates, nestedFields) = matches match {
         case (Seq(), _) =>
           val name = nameParts.head
-          val attributes = collectMatches(name, direct.get(name.toLowerCase))
+          val attributes = collectMatches(name, direct.get(name.toLowerCase(Locale.ROOT)))
           (attributes, nameParts.tail)
         case _ => matches
       }
@@ -218,7 +219,7 @@ package object expressions  {
 
         case ambiguousReferences =>
           // More than one match.
-          val referenceNames = ambiguousReferences.mkString(", ")
+          val referenceNames = ambiguousReferences.map(_.qualifiedName).mkString(", ")
           throw new AnalysisException(s"Reference '$name' is ambiguous, could be: $referenceNames.")
       }
     }
