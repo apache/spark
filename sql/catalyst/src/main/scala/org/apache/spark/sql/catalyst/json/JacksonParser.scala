@@ -129,7 +129,8 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw new RuntimeException(s"Cannot parse $other as FloatType.")
+            case other => throw new RuntimeException(
+              s"Cannot parse $other as ${FloatType.simpleString}.")
           }
       }
 
@@ -144,7 +145,8 @@ class JacksonParser(
             case "NaN" => Double.NaN
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
-            case other => throw new RuntimeException(s"Cannot parse $other as DoubleType.")
+            case other =>
+              throw new RuntimeException(s"Cannot parse $other as ${DoubleType.simpleString}.")
           }
       }
 

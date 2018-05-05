@@ -45,8 +45,8 @@ private[sql] class JacksonGenerator(
 
   // `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
   require(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType],
-    "JacksonGenerator only supports to be initialized with a StructType " +
-      s"or MapType but got ${dataType.simpleString}")
+    s"JacksonGenerator only supports to be initialized with a ${StructType.simpleString} " +
+      s"or ${MapType.simpleString} but got ${dataType.simpleString}")
 
   // `ValueWriter`s for all fields of the schema
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
