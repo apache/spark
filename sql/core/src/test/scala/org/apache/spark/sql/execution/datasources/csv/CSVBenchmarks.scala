@@ -20,6 +20,7 @@ import java.io.File
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Column, Row, SparkSession}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Benchmark, Utils}
 
@@ -81,22 +82,21 @@ object CSVBenchmarks {
     val benchmark = new Benchmark(s"Wide rows with $colsNum columns", rowsNum)
 
     withTempPath { path =>
-      // scalastyle:off println
-      benchmark.out.println("Preparing data for benchmarking ...")
-      // scalastyle:on println
-
-      val fields = for (i <- 0 until colsNum) yield StructField(s"col$i", IntegerType)
+      val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
       val schema = StructType(fields)
       val values = (0 until colsNum).map(i => i.toString).mkString(",")
       val columnNames = schema.fieldNames
 
-      val rdd = spark.sparkContext.range(0, rowsNum, 1)
-        .map(_ => Row.fromSeq((0 until colsNum)))
-      val df = spark.createDataFrame(rdd, schema)
-      df.write.option("header", true).csv(path.getAbsolutePath)
+      spark.range(rowsNum)
+        .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
+        .write.option("header", true)
+        .csv(path.getAbsolutePath)
 
       val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
 
+      benchmark.addCase(s"Select $colsNum columns", 3) { _ =>
+        ds.select("*").filter((row: Row) => true).count()
+      }
       val cols100 = columnNames.take(100).map(Column(_))
       benchmark.addCase(s"Select 100 columns", 3) { _ =>
         ds.select(cols100: _*).filter((row: Row) => true).count()
@@ -110,8 +110,9 @@ object CSVBenchmarks {
 
       Wide rows with 1000 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       --------------------------------------------------------------------------------------------
-      Select 100 columns                      33388 / 33661          0.0       33388.3       1.0X
-      Select one column                       22825 / 23111          0.0       22825.5       1.5X
+      Select 1000 columns                    87971 / 106054          0.0       87970.7       1.0X
+      Select 100 columns                      26335 / 28599          0.0       26334.8       3.3X
+      Select one column                       18345 / 18569          0.1       18345.3       4.8X
       */
       benchmark.run()
     }
