@@ -271,9 +271,11 @@ final class ShuffleBlockFetcherIterator(
 
     for ((address, blockInfos) <- blocksByAddress) {
       if (address.executorId == blockManager.blockManagerId.executorId) {
-        blockInfos.find(_._2 < 0) match {
-          case Some((blockId, size)) =>
+        blockInfos.find(_._2 <= 0) match {
+          case Some((blockId, size)) if size < 0 =>
             throw new BlockException(blockId, "Negative block size " + size)
+          case Some((blockId, size)) if size == 0 =>
+            throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
           case None => // do nothing.
         }
         localBlocks ++= blockInfos.map(_._1)
