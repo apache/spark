@@ -122,10 +122,10 @@ trait Block extends JavaCode {
   // The expressions to be evaluated inside this block.
   def exprValues: Seq[ExprValue]
 
-  // This will be called during string interpolation.
+  // Returns java code string for this code block.
   override def toString: String = _marginChar match {
-    case Some(c) => code.stripMargin(c)
-    case _ => code
+    case Some(c) => code.stripMargin(c).trim
+    case _ => code.trim
   }
 
   // The leading prefix that should be stripped from each line.
@@ -142,14 +142,13 @@ trait Block extends JavaCode {
     this
   }
 
+  // Concatenates this block with other block.
   def + (other: Block): Block
 }
 
 object Block {
 
   val CODE_BLOCK_BUFFER_LENGTH: Int = 512
-
-  implicit def blockToString(block: Block): String = block.toString
 
   implicit def blocksToBlock(blocks: Seq[Block]): Block = Blocks(blocks)
 

@@ -125,7 +125,7 @@ trait CodegenSupport extends SparkPlan {
         val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         val code = code"""
           |$evaluateInputs
-          |${ev.code.trim}
+          |${ev.code}
          """.stripMargin
         ExprCode(code, FalseLiteral, ev.value)
       } else {
@@ -260,7 +260,7 @@ trait CodegenSupport extends SparkPlan {
    * them to be evaluated twice.
    */
   protected def evaluateVariables(variables: Seq[ExprCode]): String = {
-    val evaluate = variables.filter(_.code != "").map(_.code.trim).mkString("\n")
+    val evaluate = variables.filter(_.code.toString != "").map(_.code.toString).mkString("\n")
     variables.foreach(_.code = EmptyBlock)
     evaluate
   }
@@ -276,7 +276,7 @@ trait CodegenSupport extends SparkPlan {
     val evaluateVars = new StringBuilder
     variables.zipWithIndex.foreach { case (ev, i) =>
       if (ev.code != "" && required.contains(attributes(i))) {
-        evaluateVars.append(ev.code.trim + "\n")
+        evaluateVars.append(ev.code.toString + "\n")
         ev.code = EmptyBlock
       }
     }

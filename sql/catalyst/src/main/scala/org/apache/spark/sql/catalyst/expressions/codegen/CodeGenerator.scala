@@ -989,7 +989,7 @@ class CodegenContext {
       val eval = expr.genCode(this)
       val state = SubExprEliminationState(eval.isNull, eval.value)
       e.foreach(localSubExprEliminationExprs.put(_, state))
-      eval.code.trim
+      eval.code.toString
     }
     SubExprCodes(codes, localSubExprEliminationExprs.toMap)
   }
@@ -1017,7 +1017,7 @@ class CodegenContext {
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
-           |  ${eval.code.trim}
+           |  ${eval.code}
            |  $isNull = ${eval.isNull};
            |  $value = ${eval.value};
            |}

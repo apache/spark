@@ -344,7 +344,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
          |  }
          |
          |  public UnsafeRow apply(InternalRow ${ctx.INPUT_ROW}) {
-         |    ${eval.code.trim}
+         |    ${eval.code}
          |    return ${eval.value};
          |  }
          |

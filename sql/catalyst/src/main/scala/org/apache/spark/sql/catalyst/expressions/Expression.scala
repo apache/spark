@@ -121,7 +121,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
-    if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+    if (eval.code.toString.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
@@ -138,7 +138,7 @@ abstract class Expression extends TreeNode[Expression] {
       val funcFullName = ctx.addNewFunction(funcName,
         s"""
            |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
-           |  ${eval.code.trim}
+           |  ${eval.code}
            |  $setIsNull
            |  return ${eval.value};
            |}

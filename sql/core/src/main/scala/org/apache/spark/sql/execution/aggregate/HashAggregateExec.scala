@@ -771,8 +771,8 @@ case class HashAggregateExec(
     val findOrInsertRegularHashMap: String =
       s"""
          |// generate grouping key
-         |${unsafeRowKeyCode.code.trim}
-         |${hashEval.code.trim}
+         |${unsafeRowKeyCode.code}
+         |${hashEval.code}
          |if ($checkFallbackForBytesToBytesMap) {
          |  // try to get the buffer from hash map
          |  $unsafeRowBuffer =
