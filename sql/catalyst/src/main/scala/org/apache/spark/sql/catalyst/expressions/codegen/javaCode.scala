@@ -112,10 +112,6 @@ object JavaCode {
   def isNullExpression(code: String): SimpleExprValue = {
     expression(code, BooleanType)
   }
-
-  def block(code: String): Block = {
-    CodeBlock(codeParts = Seq(code), blockInputs = Seq.empty)
-  }
 }
 
 /**
