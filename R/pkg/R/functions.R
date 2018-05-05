@@ -684,7 +684,7 @@ setMethod("hash",
 #'
 #' @rdname column_misc_functions
 #' @aliases data_type data_type,Column-method
-#' @examples \dontrun{data_type(df$c)}
+#' @note data_type since 2.3.0
 setMethod("data_type",
           signature(x = "Column"),
           function(x) {

@@ -833,10 +833,6 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @name NULL
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
-#' @rdname column_misc_functions
-#' @name NULL
-setGeneric("data_type", function(x) { standardGeneric("data_type") })
-
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
@@ -844,10 +840,6 @@ setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
-
-#' @rdname column_misc_functions
-#' @name NULL
-setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 
 #' @rdname column_window_functions
 #' @name NULL
@@ -860,6 +852,10 @@ setGeneric("current_date", function(x = "missing") { standardGeneric("current_da
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("current_timestamp", function(x = "missing") { standardGeneric("current_timestamp") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("data_type", function(x) { standardGeneric("data_type") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
@@ -952,6 +948,10 @@ setGeneric("grouping_bit", function(x) { standardGeneric("grouping_bit") })
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("grouping_id", function(x, ...) { standardGeneric("grouping_id") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 
 #' @rdname column_math_functions
 #' @name NULL
