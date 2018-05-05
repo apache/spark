@@ -64,7 +64,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     val (preprocess, assigns, postprocess, arrayData) =
       GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
     ev.copy(
-      code = code"$preprocess" + code"$assigns" + code"$postprocess",
+      code = code"${preprocess}${assigns}${postprocess}",
       value = JavaCode.variable(arrayData, dataType),
       isNull = FalseLiteral)
   }

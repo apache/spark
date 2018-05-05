@@ -39,7 +39,7 @@ class CodeBlockSuite extends SparkFunSuite {
     val expected =
       s"""
         |boolean expr1_isNull = false;
-        |int expr1 = ${JavaCode.defaultLiteral(IntegerType)};""".stripMargin
+        |int expr1 = ${JavaCode.defaultLiteral(IntegerType)};""".stripMargin.trim
     assert(code1.toString == expected)
 
     val code2 =
@@ -83,7 +83,7 @@ class CodeBlockSuite extends SparkFunSuite {
        |boolean expr1_isNull = false;
        |int expr1 = -1;
        |boolean expr2_isNull = true;
-       |int expr2 = 100;""".stripMargin
+       |int expr2 = 100;""".stripMargin.trim
 
     assert(code.toString == expected)
 

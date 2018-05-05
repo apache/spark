@@ -205,7 +205,7 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[Any]) extends Bloc
 
 case class Blocks(blocks: Seq[Block]) extends Block {
   override def exprValues: Seq[ExprValue] = blocks.flatMap(_.exprValues)
-  override def code: String = blocks.map(_.toString).mkString
+  override def code: String = blocks.map(_.toString).mkString("\n")
 
   override def + (other: Block): Block = other match {
     case c: CodeBlock => Blocks(blocks :+ c)
