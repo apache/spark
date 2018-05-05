@@ -94,10 +94,10 @@ object Rand {
 }
 
 /** Generate a random column with i.i.d. values drawn from the standard normal distribution. */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed" +
-    " (i.i.d.) values drawn from the standard normal distribution." +
-    " The function is non-deterministic",
+  usage = """_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.
+    Note that the function is non-deterministic in general case.""",
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -107,6 +107,7 @@ object Rand {
       > SELECT _FUNC_(null);
        1.1164209726833079
   """)
+// scalastyle:on line.size.limit
 case class Randn(child: Expression) extends RDG {
 
   def this() = this(Literal(Utils.random.nextLong(), LongType))

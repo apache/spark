@@ -804,6 +804,8 @@ setMethod("factorial",
 #'
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#' Note: the function is non-deterministic because its results depends on order of rows which
+#' may be non-deterministic after a shuffle.
 #'
 #' @param na.rm a logical value indicating whether NA values should be stripped
 #'        before the computation proceeds.
@@ -818,7 +820,6 @@ setMethod("factorial",
 #' first(df$c, TRUE)
 #' }
 #' @note first(characterOrColumn) since 1.4.0
-#' @note the function is non-deterministic because its result depends on order of rows.
 setMethod("first",
           signature(x = "characterOrColumn"),
           function(x, na.rm = FALSE) {
@@ -948,6 +949,8 @@ setMethod("kurtosis",
 #'
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#' Note: the function is non-deterministic because its results depends on order of rows which
+#' may be non-deterministic after a shuffle.
 #'
 #' @param x column to compute on.
 #' @param na.rm a logical value indicating whether NA values should be stripped
@@ -964,7 +967,6 @@ setMethod("kurtosis",
 #' last(df$c, TRUE)
 #' }
 #' @note last since 1.4.0
-#' @note the function is non-deterministic because its result depends on order of rows.
 setMethod("last",
           signature(x = "characterOrColumn"),
           function(x, na.rm = FALSE) {
@@ -1202,13 +1204,13 @@ setMethod("minute",
 #' 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
 #' This is equivalent to the MONOTONICALLY_INCREASING_ID function in SQL.
 #' The method should be used with no argument.
+#' Note: the function is non-deterministic because its result depends on partition IDs.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases monotonically_increasing_id monotonically_increasing_id,missing-method
 #' @examples
 #'
 #' \dontrun{head(select(df, monotonically_increasing_id()))}
-#' @note the function is non-deterministic because its result depends on partition IDs.
 setMethod("monotonically_increasing_id",
           signature("missing"),
           function() {
@@ -2586,6 +2588,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' @details
 #' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
 #' samples from U[0.0, 1.0].
+#' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
 #' @param seed a random seed. Can be missing.
@@ -2596,7 +2599,6 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' tmp <- mutate(df, r1 = rand(), r2 = rand(10), r3 = randn(), r4 = randn(10))
 #' head(tmp)}
 #' @note rand since 1.5.0
-#' @note the function is non-deterministic in general case.
 setMethod("rand", signature(seed = "missing"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "rand")
@@ -2604,9 +2606,9 @@ setMethod("rand", signature(seed = "missing"),
           })
 
 #' @rdname column_nonaggregate_functions
+#' Note: the function is non-deterministic in general case.
 #' @aliases rand,numeric-method
 #' @note rand(numeric) since 1.5.0
-#' @note the function is non-deterministic in general case.
 setMethod("rand", signature(seed = "numeric"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "rand", as.integer(seed))
@@ -2616,11 +2618,11 @@ setMethod("rand", signature(seed = "numeric"),
 #' @details
 #' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples
 #' from the standard normal distribution.
+#' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases randn randn,missing-method
 #' @note randn since 1.5.0
-#' @note the function is non-deterministic in general case.
 setMethod("randn", signature(seed = "missing"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "randn")
@@ -2628,9 +2630,9 @@ setMethod("randn", signature(seed = "missing"),
           })
 
 #' @rdname column_nonaggregate_functions
+#' Note: the function is non-deterministic in general case.
 #' @aliases randn,numeric-method
 #' @note randn(numeric) since 1.5.0
-#' @note the function is non-deterministic in general case.
 setMethod("randn", signature(seed = "numeric"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "randn", as.integer(seed))
@@ -3181,6 +3183,8 @@ setMethod("create_map",
 
 #' @details
 #' \code{collect_list}: Creates a list of objects with duplicates.
+#' Note: the function is non-deterministic because the order of collected results depends
+#' on order of rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_list collect_list,Column-method
@@ -3191,7 +3195,6 @@ setMethod("create_map",
 #' collect(select(df2, collect_list(df2$gear)))
 #' collect(select(df2, collect_set(df2$gear)))}
 #' @note collect_list since 2.3.0
-#' @note the function is non-deterministic because its result depends on order of rows.
 setMethod("collect_list",
           signature(x = "Column"),
           function(x) {
@@ -3201,11 +3204,12 @@ setMethod("collect_list",
 
 #' @details
 #' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
+#' Note: the function is non-deterministic because the order of collected results depends
+#' on order of rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_set collect_set,Column-method
 #' @note collect_set since 2.3.0
-#' @note the function is non-deterministic because its result depends on order of rows.
 setMethod("collect_set",
           signature(x = "Column"),
           function(x) {
