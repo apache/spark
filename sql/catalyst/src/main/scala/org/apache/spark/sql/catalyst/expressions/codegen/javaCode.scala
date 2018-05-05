@@ -132,7 +132,9 @@ trait Block extends JavaCode {
     case _ => code
   }
 
-  var _marginChar: Option[Char] = None
+  // The leading prefix that should be stripped from each line.
+  // By default we strip blanks or control characters followed by '|' from the line.
+  var _marginChar: Option[Char] = Some('|')
 
   def stripMargin(c: Char): this.type = {
     _marginChar = Some(c)
@@ -148,6 +150,9 @@ trait Block extends JavaCode {
 }
 
 object Block {
+
+  val CODE_BLOCK_BUFFER_LENGTH: Int = 512
+
   implicit def blockToString(block: Block): String = block.toString
 
   implicit def blocksToBlock(blocks: Seq[Block]): Block = Blocks(blocks)
@@ -187,10 +192,11 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[Any]) extends Bloc
   override def code: String = {
     val strings = codeParts.iterator
     val inputs = blockInputs.iterator
-    var buf = new StringBuffer(strings.next)
+    val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
+    buf append StringContext.treatEscapes(strings.next)
     while (strings.hasNext) {
       buf append inputs.next
-      buf append strings.next
+      buf append StringContext.treatEscapes(strings.next)
     }
     buf.toString
   }

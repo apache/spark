@@ -112,7 +112,7 @@ abstract class Expression extends TreeNode[Expression] {
       reduceCodeSize(ctx, eval)
       if (eval.code.toString.nonEmpty) {
         // Add `this` in the comment.
-        eval.copy(code = JavaCode.block(s"${ctx.registerComment(this.toString)}\n") + eval.code)
+        eval.copy(code = code"${ctx.registerComment(this.toString)}\n" + eval.code)
       } else {
         eval
       }
