@@ -96,7 +96,11 @@ case class DataSourceV2ScanExec(
           sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
           sparkContext.env)
         .askSync[Unit](SetReaderPartitions(readerFactories.size))
-      new ContinuousDataSourceRDD(sparkContext, sqlContext, readerFactories)
+      new ContinuousDataSourceRDD(
+        sparkContext,
+        sqlContext.conf.continuousStreamingExecutorQueueSize,
+        sqlContext.conf.continuousStreamingExecutorPollIntervalMs,
+        readerFactories)
         .asInstanceOf[RDD[InternalRow]]
 
     case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
