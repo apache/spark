@@ -686,6 +686,17 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val CODEGEN_OBJECT_FALLBACK = buildConf("spark.sql.test.codegenObject.fallback")
+    .doc("Determines the behavior of any factories extending `CodegenObjectFactory`" +
+      " during tests. `fallback` means trying codegen first and then fallbacking to" +
+      "interpreted if any compile error happens. Disabling fallback if `codegen-only`." +
+      "`interpreted-only` skips codegen and goes interpreted path always. Note that" +
+      "this config works only for tests. In production it always runs with `fallback` mode")
+    .internal()
+    .stringConf
+    .checkValues(Set("fallback", "codegen-only", "interpreted-only"))
+    .createWithDefault("fallback")
+
   val CODEGEN_FALLBACK = buildConf("spark.sql.codegen.fallback")
     .internal()
     .doc("When true, (whole stage) codegen could be temporary disabled for the part of query that" +

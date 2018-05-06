@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
+
 /**
  * Catches compile error during code generation.
  */
@@ -31,37 +34,33 @@ object CodegenError {
   }
 }
 
-trait CodegenObjectFactoryBase[IN, OUT] {
-  protected def createObject(in: IN): OUT
-  protected def createCodeGeneratedObject(in: IN): OUT
-  protected def createInterpretedObject(in: IN): OUT
-}
-
 /**
  * A factory which can be used to create objects that have both codegen and interpreted
  * implementations. This tries to create codegen object first, if any compile error happens,
  * it fallbacks to interpreted version.
  */
-trait CodegenObjectFactory[IN, OUT] extends CodegenObjectFactoryBase[IN, OUT] {
-  override protected def createObject(in: IN): OUT = try {
-    createCodeGeneratedObject(in)
-  } catch {
-    case CodegenError(_) => createInterpretedObject(in)
+abstract class CodegenObjectFactory[IN, OUT] {
+
+  // Creates wanted object. First trying codegen implementation. If any compile error happens,
+  // fallbacks to interpreted version.
+  def createObject(in: IN): OUT = {
+    val fallbackMode = SQLConf.get.getConf(SQLConf.CODEGEN_OBJECT_FALLBACK)
+    // Only in tests, we can use `SQLConf.CODEGEN_OBJECT_FALLBACK` to choose codegen/interpreted
+    // only path.
+    if (Utils.isTesting && fallbackMode != "fallback") {
+      fallbackMode match {
+        case "codegen-only" => createCodeGeneratedObject(in)
+        case "interpreted-only" => createInterpretedObject(in)
+      }
+    } else {
+      try {
+        createCodeGeneratedObject(in)
+      } catch {
+        case CodegenError(_) => createInterpretedObject(in)
+      }
+    }
   }
-}
 
-/**
- * A factory which can be used to create codegen objects without fallback to interpreted version.
- */
-trait CodegenObjectFactoryWithoutFallback[IN, OUT] extends CodegenObjectFactoryBase[IN, OUT] {
-  override protected def createObject(in: IN): OUT =
-    createCodeGeneratedObject(in)
-}
-
-/**
- * A factory which can be used to create objects with interpreted implementation.
- */
-trait InterpretedCodegenObjectFactory[IN, OUT] extends CodegenObjectFactoryBase[IN, OUT] {
-  override protected def createObject(in: IN): OUT =
-    createInterpretedObject(in)
+  protected def createCodeGeneratedObject(in: IN): OUT
+  protected def createInterpretedObject(in: IN): OUT
 }

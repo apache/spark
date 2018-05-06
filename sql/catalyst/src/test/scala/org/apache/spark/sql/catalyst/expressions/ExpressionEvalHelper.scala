@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
+import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
@@ -40,7 +41,7 @@ import org.apache.spark.util.Utils
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
  */
-trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
+trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBase {
   self: SparkFunSuite =>
 
   protected def create_row(values: Any*): InternalRow = {
@@ -196,33 +197,27 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-    checkEvaluationWithUnsafeProjection(expression, expected, inputRow,
-      CodegenUnsafeProjectionCreator)
-    checkEvaluationWithUnsafeProjection(expression, expected, inputRow,
-      InterpretedUnsafeProjectionCreator)
-  }
+    for (fallbackMode <- Seq("codegen-only", "interpreted-only")) {
+      withSQLConf(SQLConf.CODEGEN_OBJECT_FALLBACK.key -> fallbackMode) {
+        val factory = UnsafeProjection
+        val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow, factory)
+        val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
 
-  protected def checkEvaluationWithUnsafeProjection(
-      expression: Expression,
-      expected: Any,
-      inputRow: InternalRow,
-      factory: UnsafeProjectionCreator): Unit = {
-    val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow, factory)
-    val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
-
-    if (expected == null) {
-      if (!unsafeRow.isNullAt(0)) {
-        val expectedRow = InternalRow(expected, expected)
-        fail("Incorrect evaluation in unsafe mode: " +
-          s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
-      }
-    } else {
-      val lit = InternalRow(expected, expected)
-      val expectedRow =
-        factory.create(Array(expression.dataType, expression.dataType)).apply(lit)
-      if (unsafeRow != expectedRow) {
-        fail("Incorrect evaluation in unsafe mode: " +
-          s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
+        if (expected == null) {
+          if (!unsafeRow.isNullAt(0)) {
+            val expectedRow = InternalRow(expected, expected)
+            fail("Incorrect evaluation in unsafe mode: " +
+              s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
+          }
+        } else {
+          val lit = InternalRow(expected, expected)
+          val expectedRow =
+            factory.create(Array(expression.dataType, expression.dataType)).apply(lit)
+          if (unsafeRow != expectedRow) {
+            fail("Incorrect evaluation in unsafe mode: " +
+              s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
+          }
+        }
       }
     }
   }
@@ -230,7 +225,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
   protected def evaluateWithUnsafeProjection(
       expression: Expression,
       inputRow: InternalRow = EmptyRow,
-      factory: UnsafeProjectionCreator = CodegenUnsafeProjectionCreator): InternalRow = {
+      factory: UnsafeProjection.type = UnsafeProjection): InternalRow = {
     // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
     // some expression is reusing variable names across different instances.
     // This behavior is tested in ExpressionEvalHelperSuite.

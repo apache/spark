@@ -24,21 +24,27 @@ import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, _}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
-class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
+class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestBase {
 
   private def roundedSize(size: Int) = ByteArrayMethods.roundNumberOfBytesToNearestWord(size)
 
   private def testWithFactory(
     name: String)(
-    f: UnsafeProjectionCreator => Unit): Unit = {
+    f: UnsafeProjection.type => Unit): Unit = {
+    val factory = UnsafeProjection
     test(name) {
-      f(CodegenUnsafeProjectionCreator)
-      f(InterpretedUnsafeProjectionCreator)
+      for (fallbackMode <- Seq("codegen-only", "interpreted-only")) {
+        withSQLConf(SQLConf.CODEGEN_OBJECT_FALLBACK.key -> fallbackMode) {
+          f(factory)
+        }
+      }
     }
   }
 

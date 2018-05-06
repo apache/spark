@@ -109,10 +109,9 @@ abstract class UnsafeProjection extends Projection {
 }
 
 /**
- * The factory base class for `UnsafeProjection`.
+ * The factory object for `UnsafeProjection`.
  */
-abstract class UnsafeProjectionCreator extends
-    CodegenObjectFactoryBase[Seq[Expression], UnsafeProjection] {
+object UnsafeProjection extends CodegenObjectFactory[Seq[Expression], UnsafeProjection] {
 
   override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
     GenerateUnsafeProjection.generate(in)
@@ -154,7 +153,7 @@ abstract class UnsafeProjectionCreator extends
    * Returns an UnsafeProjection for given sequence of bound Expressions.
    */
   def create(exprs: Seq[Expression]): UnsafeProjection = {
-    createProjection(toUnsafeExprs(exprs))
+    createObject(toUnsafeExprs(exprs))
   }
 
   def create(expr: Expression): UnsafeProjection = create(Seq(expr))
@@ -167,16 +166,6 @@ abstract class UnsafeProjectionCreator extends
     create(toBoundExprs(exprs, inputSchema))
   }
 
-  /**
-   * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
-   */
-  protected[sql] def createProjection(exprs: Seq[Expression]): UnsafeProjection =
-    createObject(exprs)
-}
-
-// A `UnsafeProjectionCreator` can fallback to interpreted version if codegen compile error happens.
-object UnsafeProjection extends UnsafeProjectionCreator
-    with CodegenObjectFactory[Seq[Expression], UnsafeProjection] {
   /**
    * Same as other create()'s but allowing enabling/disabling subexpression elimination.
    * The param `subexpressionEliminationEnabled` doesn't guarantee to work. For example,
@@ -194,25 +183,6 @@ object UnsafeProjection extends UnsafeProjectionCreator
     }
   }
 }
-
-// Codegen version `UnsafeProjectionCreator`.
-object CodegenUnsafeProjectionCreator extends UnsafeProjectionCreator
-    with CodegenObjectFactoryWithoutFallback[Seq[Expression], UnsafeProjection] {
-  /**
-   * Same as other create()'s but allowing enabling/disabling subexpression elimination.
-   */
-  def create(
-      exprs: Seq[Expression],
-      inputSchema: Seq[Attribute],
-      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
-    val unsafeExprs = toUnsafeExprs(toBoundExprs(exprs, inputSchema))
-    GenerateUnsafeProjection.generate(unsafeExprs, subexpressionEliminationEnabled)
-  }
-}
-
-// Interpreted version `UnsafeProjectionCreator`.
-object InterpretedUnsafeProjectionCreator extends UnsafeProjectionCreator
-    with InterpretedCodegenObjectFactory[Seq[Expression], UnsafeProjection]
 
 /**
  * A projection that could turn UnsafeRow into GenericInternalRow
