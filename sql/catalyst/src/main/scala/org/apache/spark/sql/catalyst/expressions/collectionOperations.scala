@@ -567,11 +567,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
         union.put(k, v)
       )
     }
-    val (keyArray, valueArray) = union.entrySet().toArray().map { e =>
-      val e2 = e.asInstanceOf[java.util.Map.Entry[Any, Any]]
-      (e2.getKey, e2.getValue)
-    }.unzip
-    new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
+    ArrayBasedMapData(union, (k: Any) => k, (v: Any) => v)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -596,8 +592,8 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
       """.stripMargin
 
     val assignments = mapCodes.zipWithIndex.map { case (m, i) =>
-      val initCode = mapCodes(i).code
-      val valueVarName = mapCodes(i).value.code
+      val initCode = m.code
+      val valueVarName = m.value.code
       s"""
          |$initCode
          |$mapRefArrayName[$i] = $valueVarName;
