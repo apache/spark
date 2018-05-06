@@ -8,6 +8,9 @@ CREATE TEMPORARY VIEW tab1 AS SELECT * FROM VALUES
     AS tab1(c1, c2, c3);
 
 -- Requires 2 arguments at minimum.
+SELECT replicate_rows() FROM tab1;
+
+-- Requires 2 arguments at minimum.
 SELECT replicate_rows(c1) FROM tab1;
 
 -- First argument should be a numeric type.
