@@ -723,6 +723,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal("###,###,###,###,###.####")), "15,159,339,180,002,773.2778")
     checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal("##.###")), null)
     assert(FormatNumber(Literal.create(null, NullType), Literal("##.###")).resolved === false)
+
+    checkEvaluation(FormatNumber(Literal(12332.123456), Literal("#,###,###,###,###,###,##0")),
+      "12,332")
+    checkEvaluation(FormatNumber(
+      Literal.create(null, IntegerType), Literal.create(null, NullType)), null)
+    checkEvaluation(FormatNumber(
+      Literal.create(null, NullType), Literal.create(null, NullType)), null)
   }
 
   test("find in set") {

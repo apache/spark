@@ -2140,12 +2140,12 @@ case class FormatNumber(x: Expression, d: Expression)
         case IntegerType =>
           val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
           val i = ctx.freshName("i")
-          val lastDIntValue =
+          val lastDValue =
             ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
           s"""
             if ($d >= 0) {
               $pattern.delete(0, $pattern.length());
-              if ($d != $lastDIntValue) {
+              if ($d != $lastDValue) {
                 $pattern.append("$defaultFormat");
 
                 if ($d > 0) {
@@ -2154,7 +2154,7 @@ case class FormatNumber(x: Expression, d: Expression)
                     $pattern.append("0");
                   }
                 }
-                $lastDIntValue = $d;
+                $lastDValue = $d;
                 $numberFormat.applyLocalizedPattern($pattern.toString());
               }
               ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
@@ -2164,13 +2164,12 @@ case class FormatNumber(x: Expression, d: Expression)
             }
            """
         case StringType =>
-          val lastDStringValue =
-            ctx.addMutableState("String", "lastDValue", v => s"""$v = "$defaultFormat";""")
+          val lastDValue = ctx.addMutableState("String", "lastDValue", v => s"""$v = null;""")
           val dValue = ctx.addMutableState("String", "dValue")
           s"""
             $dValue = $d.toString();
-            if (!$dValue.equals($lastDStringValue)) {
-              $lastDStringValue = $dValue;
+            if (!$dValue.equals($lastDValue)) {
+              $lastDValue = $dValue;
               if ($dValue.isEmpty()) {
                 $numberFormat.applyLocalizedPattern("$defaultFormat");
               } else {
@@ -2178,6 +2177,11 @@ case class FormatNumber(x: Expression, d: Expression)
               }
             }
             ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
+           """
+        case NullType =>
+          s"""
+            ${ev.value} = null;
+            ${ev.isNull} = true;
            """
       }
     })
