@@ -920,7 +920,7 @@ setGeneric("expr", function(x) { standardGeneric("expr") })
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("flatten", function(x, value) { standardGeneric("flatten") })
+setGeneric("flatten", function(x) { standardGeneric("flatten") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
