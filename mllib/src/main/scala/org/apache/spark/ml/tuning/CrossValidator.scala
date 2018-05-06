@@ -234,8 +234,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
         .setEstimator(estimator)
         .setEvaluator(evaluator)
         .setEstimatorParamMaps(estimatorParamMaps)
-      DefaultParamsReader.getAndSetParams(cv, metadata,
-        skipParams = Option(List("estimatorParamMaps")))
+      metadata.getAndSetParams(cv, skipParams = Option(List("estimatorParamMaps")))
       cv
     }
   }
@@ -424,8 +423,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       model.set(model.estimator, estimator)
         .set(model.evaluator, evaluator)
         .set(model.estimatorParamMaps, estimatorParamMaps)
-      DefaultParamsReader.getAndSetParams(model, metadata,
-        skipParams = Option(List("estimatorParamMaps")))
+      metadata.getAndSetParams(model, skipParams = Option(List("estimatorParamMaps")))
       model
     }
   }

@@ -289,7 +289,7 @@ class SQLAppStatusListener(
   private def onDriverAccumUpdates(event: SparkListenerDriverAccumUpdates): Unit = {
     val SparkListenerDriverAccumUpdates(executionId, accumUpdates) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
-      exec.driverAccumUpdates = accumUpdates.toMap
+      exec.driverAccumUpdates = exec.driverAccumUpdates ++ accumUpdates
       update(exec)
     }
   }

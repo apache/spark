@@ -45,8 +45,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val inMemoryRelation = InMemoryRelation(useCompression = true, 5, storageLevel, plan, None,
       data.logicalPlan)
 
-    assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
-    inMemoryRelation.cachedColumnBuffers.collect().head match {
+    assert(inMemoryRelation.cacheBuilder.cachedColumnBuffers.getStorageLevel == storageLevel)
+    inMemoryRelation.cacheBuilder.cachedColumnBuffers.collect().head match {
       case _: CachedBatch =>
       case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
     }
@@ -337,7 +337,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
+    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
   }
 
   test("access primitive-type columns in CachedBatch without whole stage codegen") {

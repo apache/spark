@@ -217,8 +217,6 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   override def copy(extra: ParamMap): Bucketizer = {
     defaultCopy[Bucketizer](extra).setParent(parent)
   }
-
-  override def write: MLWriter = new Bucketizer.BucketizerWriter(this)
 }
 
 @Since("1.6.0")
@@ -293,28 +291,6 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
           insertPos - 1
         }
       }
-    }
-  }
-
-
-  private[Bucketizer] class BucketizerWriter(instance: Bucketizer) extends MLWriter {
-
-    override protected def saveImpl(path: String): Unit = {
-      // SPARK-23377: The default params will be saved and loaded as user-supplied params.
-      // Once `inputCols` is set, the default value of `outputCol` param causes the error
-      // when checking exclusive params. As a temporary to fix it, we skip the default value
-      // of `outputCol` if `inputCols` is set when saving the metadata.
-      // TODO: If we modify the persistence mechanism later to better handle default params,
-      // we can get rid of this.
-      var paramWithoutOutputCol: Option[JValue] = None
-      if (instance.isSet(instance.inputCols)) {
-        val params = instance.extractParamMap().toSeq
-        val jsonParams = params.filter(_.param != instance.outputCol).map { case ParamPair(p, v) =>
-          p.name -> parse(p.jsonEncode(v))
-        }.toList
-        paramWithoutOutputCol = Some(render(jsonParams))
-      }
-      DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = paramWithoutOutputCol)
     }
   }
 

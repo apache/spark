@@ -308,7 +308,6 @@ object FunctionRegistry {
     expression[BitLength]("bit_length"),
     expression[Length]("char_length"),
     expression[Length]("character_length"),
-    expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
     expression[Elt]("elt"),
@@ -402,15 +401,21 @@ object FunctionRegistry {
     // collection functions
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
+    expression[ArrayJoin]("array_join"),
+    expression[ArrayPosition]("array_position"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
+    expression[ElementAt]("element_at"),
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
     expression[Size]("size"),
+    expression[Size]("cardinality"),
     expression[SortArray]("sort_array"),
     expression[ArrayMin]("array_min"),
     expression[ArrayMax]("array_max"),
     expression[Reverse]("reverse"),
+    expression[Concat]("concat"),
+    expression[Flatten]("flatten"),
     CreateStruct.registryEntry,
 
     // misc functions
@@ -529,7 +534,9 @@ object FunctionRegistry {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-          val validParametersCount = constructors.map(_.getParameterCount).distinct.sorted
+          val validParametersCount = constructors
+            .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
+            .map(_.getParameterCount).distinct.sorted
           val expectedNumberOfParameters = if (validParametersCount.length == 1) {
             validParametersCount.head.toString
           } else {

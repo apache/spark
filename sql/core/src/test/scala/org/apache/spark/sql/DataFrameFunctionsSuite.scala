@@ -341,6 +341,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("size(a)"),
       Seq(Row(2), Row(0), Row(3), Row(-1))
     )
+
+    checkAnswer(
+      df.selectExpr("cardinality(a)"),
+      Seq(Row(2L), Row(0L), Row(3L), Row(-1L))
+    )
   }
 
   test("map size function") {
@@ -411,6 +416,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+  }
+
+  test("array_join function") {
+    val df = Seq(
+      (Seq[String]("a", "b"), ","),
+      (Seq[String]("a", null, "b"), ","),
+      (Seq.empty[String], ",")
+    ).toDF("x", "delimiter")
+
+    checkAnswer(
+      df.select(array_join(df("x"), ";")),
+      Seq(Row("a;b"), Row("a;b"), Row(""))
+    )
+    checkAnswer(
+      df.select(array_join(df("x"), ";", "NULL")),
+      Seq(Row("a;b"), Row("a;NULL;b"), Row(""))
+    )
+    checkAnswer(
+      df.selectExpr("array_join(x, delimiter)"),
+      Seq(Row("a,b"), Row("a,b"), Row("")))
+    checkAnswer(
+      df.selectExpr("array_join(x, delimiter, 'NULL')"),
+      Seq(Row("a,b"), Row("a,NULL,b"), Row("")))
   }
 
   test("array_min function") {
@@ -532,6 +560,246 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     intercept[AnalysisException] {
       oneRowDF.selectExpr("reverse(map(1, 'a'))")
+    }
+  }
+
+  test("array position function") {
+    val df = Seq(
+      (Seq[Int](1, 2), "x"),
+      (Seq[Int](), "x")
+    ).toDF("a", "b")
+
+    checkAnswer(
+      df.select(array_position(df("a"), 1)),
+      Seq(Row(1L), Row(0L))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(a, 1)"),
+      Seq(Row(1L), Row(0L))
+    )
+
+    checkAnswer(
+      df.select(array_position(df("a"), null)),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(a, null)"),
+      Seq(Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_position(array(array(1), null)[0], 1)"),
+      Seq(Row(1L), Row(1L))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
+      Seq(Row(1L), Row(1L))
+    )
+  }
+
+  test("element_at function") {
+    val df = Seq(
+      (Seq[String]("1", "2", "3")),
+      (Seq[String](null, "")),
+      (Seq[String]())
+    ).toDF("a")
+
+    intercept[Exception] {
+      checkAnswer(
+        df.select(element_at(df("a"), 0)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+    }.getMessage.contains("SQL array indices start at 1")
+    intercept[Exception] {
+      checkAnswer(
+        df.select(element_at(df("a"), 1.1)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+    }
+    checkAnswer(
+      df.select(element_at(df("a"), 4)),
+      Seq(Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.select(element_at(df("a"), 1)),
+      Seq(Row("1"), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(element_at(df("a"), -1)),
+      Seq(Row("3"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("element_at(a, 4)"),
+      Seq(Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("element_at(a, 1)"),
+      Seq(Row("1"), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("element_at(a, -1)"),
+      Seq(Row("3"), Row(""), Row(null))
+    )
+  }
+
+  test("concat function - arrays") {
+    val nseqi : Seq[Int] = null
+    val nseqs : Seq[String] = null
+    val df = Seq(
+
+      (Seq(1), Seq(2, 3), Seq(5L, 6L), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
+      (Seq(1, 0), Seq.empty[Int], Seq(2L), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
+    ).toDF("i1", "i2", "i3", "in", "s1", "s2", "s3", "sn")
+
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codeGen on
+
+    // Simple test cases
+    checkAnswer(
+      df.selectExpr("array(1, 2, 3L)"),
+      Seq(Row(Seq(1L, 2L, 3L)), Row(Seq(1L, 2L, 3L)))
+    )
+
+    checkAnswer (
+      df.select(concat($"i1", $"s1")),
+      Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
+    )
+    checkAnswer(
+      df.select(concat($"i1", $"i2", $"i3")),
+      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
+    )
+    checkAnswer(
+      df.filter(dummyFilter($"i1")).select(concat($"i1", $"i2", $"i3")),
+      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
+    )
+    checkAnswer(
+      df.selectExpr("concat(array(1, null), i2, i3)"),
+      Seq(Row(Seq(1, null, 2, 3, 5, 6)), Row(Seq(1, null, 2)))
+    )
+    checkAnswer(
+      df.select(concat($"s1", $"s2", $"s3")),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+    checkAnswer(
+      df.selectExpr("concat(s1, s2, s3)"),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+    checkAnswer(
+      df.filter(dummyFilter($"s1"))select(concat($"s1", $"s2", $"s3")),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+
+    // Null test cases
+    checkAnswer(
+      df.select(concat($"i1", $"in")),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(concat($"in", $"i1")),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(concat($"s1", $"sn")),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(concat($"sn", $"s1")),
+      Seq(Row(null), Row(null))
+    )
+
+    // Type error test cases
+    intercept[AnalysisException] {
+      df.selectExpr("concat(i1, i2, null)")
+    }
+
+    intercept[AnalysisException] {
+      df.selectExpr("concat(i1, array(i1, i2))")
+    }
+
+    val e = intercept[AnalysisException] {
+      df.selectExpr("concat(map(1, 2), map(3, 4))")
+    }
+    assert(e.getMessage.contains("string, binary or array"))
+  }
+
+  test("flatten function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
+    val oneRowDF = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
+
+    // Test cases with a primitive type
+    val intDF = Seq(
+      (Seq(Seq(1, 2, 3), Seq(4, 5), Seq(6))),
+      (Seq(Seq(1, 2))),
+      (Seq(Seq(1), Seq.empty)),
+      (Seq(Seq.empty, Seq(1))),
+      (Seq(Seq.empty, Seq.empty)),
+      (Seq(Seq(1), null)),
+      (Seq(null, Seq(1))),
+      (Seq(null, null))
+    ).toDF("i")
+
+    val intDFResult = Seq(
+      Row(Seq(1, 2, 3, 4, 5, 6)),
+      Row(Seq(1, 2)),
+      Row(Seq(1)),
+      Row(Seq(1)),
+      Row(Seq.empty),
+      Row(null),
+      Row(null),
+      Row(null))
+
+    checkAnswer(intDF.select(flatten($"i")), intDFResult)
+    checkAnswer(intDF.filter(dummyFilter($"i"))select(flatten($"i")), intDFResult)
+    checkAnswer(intDF.selectExpr("flatten(i)"), intDFResult)
+    checkAnswer(
+      oneRowDF.selectExpr("flatten(array(arr, array(null, 5), array(6, null)))"),
+      Seq(Row(Seq(1, 2, 3, null, 5, 6, null))))
+
+    // Test cases with non-primitive types
+    val strDF = Seq(
+      (Seq(Seq("a", "b"), Seq("c"), Seq("d", "e", "f"))),
+      (Seq(Seq("a", "b"))),
+      (Seq(Seq("a", null), Seq(null, "b"), Seq(null, null))),
+      (Seq(Seq("a"), Seq.empty)),
+      (Seq(Seq.empty, Seq("a"))),
+      (Seq(Seq.empty, Seq.empty)),
+      (Seq(Seq("a"), null)),
+      (Seq(null, Seq("a"))),
+      (Seq(null, null))
+    ).toDF("s")
+
+    val strDFResult = Seq(
+      Row(Seq("a", "b", "c", "d", "e", "f")),
+      Row(Seq("a", "b")),
+      Row(Seq("a", null, null, "b", null, null)),
+      Row(Seq("a")),
+      Row(Seq("a")),
+      Row(Seq.empty),
+      Row(null),
+      Row(null),
+      Row(null))
+
+    checkAnswer(strDF.select(flatten($"s")), strDFResult)
+    checkAnswer(strDF.filter(dummyFilter($"s")).select(flatten($"s")), strDFResult)
+    checkAnswer(strDF.selectExpr("flatten(s)"), strDFResult)
+    checkAnswer(
+      oneRowDF.selectExpr("flatten(array(array(arr, arr), array(arr)))"),
+      Seq(Row(Seq(Seq(1, 2, 3), Seq(1, 2, 3), Seq(1, 2, 3)))))
+
+    // Error test cases
+    intercept[AnalysisException] {
+      oneRowDF.select(flatten($"arr"))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.select(flatten($"i"))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.select(flatten($"s"))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("flatten(null)")
     }
   }
 
