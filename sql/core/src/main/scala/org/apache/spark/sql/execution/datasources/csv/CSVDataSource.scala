@@ -186,7 +186,7 @@ object TextInputCSVDataSource extends CSVDataSource {
           sparkSession,
           paths = paths,
           className = classOf[TextFileFormat].getName,
-          options = options.textOptions
+          options = options.parameters
         ).resolveRelation(checkFilesExist = false))
         .select("value").as[String](Encoders.STRING)
     } else {
@@ -252,7 +252,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
     val paths = inputPaths.map(_.getPath)
     val name = paths.mkString(",")
     val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
-      options.textOptions))
+      options.parameters))
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration
 

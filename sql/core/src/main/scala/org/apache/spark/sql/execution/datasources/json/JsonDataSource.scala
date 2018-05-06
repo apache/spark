@@ -121,7 +121,7 @@ object TextInputJsonDataSource extends JsonDataSource {
         sparkSession,
         paths = paths,
         className = classOf[TextFileFormat].getName,
-        options = parsedOptions.textOptions
+        options = parsedOptions.parameters
       ).resolveRelation(checkFilesExist = false))
       .select("value").as(Encoders.STRING)
   }
@@ -174,7 +174,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parsedOptions: JSONOptions): RDD[PortableDataStream] = {
     val paths = inputPaths.map(_.getPath)
     val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
-      parsedOptions.textOptions))
+      parsedOptions.parameters))
     val conf = job.getConfiguration
     val name = paths.mkString(",")
     FileInputFormat.setInputPaths(job, paths: _*)
