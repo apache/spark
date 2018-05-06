@@ -149,7 +149,7 @@ private[csv] class CsvOutputWriter(
     params: CSVOptions) extends OutputWriter with Logging {
 
   private val charset = Charset.forName(params.charset)
-  
+
   private val writer = CodecStreams.createOutputStreamWriter(
     context,
     new Path(path),
