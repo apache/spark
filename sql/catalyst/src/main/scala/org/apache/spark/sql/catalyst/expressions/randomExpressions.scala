@@ -68,7 +68,8 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
        0.8446490682263027
       > SELECT _FUNC_(null);
        0.8446490682263027
-  """)
+  """,
+  note = "The function is non-deterministic in general case.")
 // scalastyle:on line.size.limit
 case class Rand(child: Expression) extends RDG {
 
@@ -96,8 +97,7 @@ object Rand {
 /** Generate a random column with i.i.d. values drawn from the standard normal distribution. */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.
-    Note that the function is non-deterministic in general case.""",
+  usage = """_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.""",
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -106,7 +106,8 @@ object Rand {
        1.1164209726833079
       > SELECT _FUNC_(null);
        1.1164209726833079
-  """)
+  """,
+  note = "The function is non-deterministic in general case.")
 // scalastyle:on line.size.limit
 case class Randn(child: Expression) extends RDG {
 
