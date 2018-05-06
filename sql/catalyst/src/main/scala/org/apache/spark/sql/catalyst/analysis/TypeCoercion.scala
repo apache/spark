@@ -708,12 +708,11 @@ object TypeCoercion {
    * if necessary.
    */
   object ReplicateRowsCoercion extends TypeCoercionRule {
-    private val acceptedTypes = Seq(LongType, IntegerType, ShortType, ByteType)
+    private val acceptedTypes = Seq(IntegerType, ShortType, ByteType)
     override def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case s @ ReplicateRows(children)
-        if s.childrenResolved && acceptedTypes.contains(s.children.head.dataType) =>
-        val numRowExpr = s.children.head
-        val castedExpr = ImplicitTypeCasts.implicitCast(numRowExpr, LongType).getOrElse(numRowExpr)
+      case s @ ReplicateRows(children) if s.childrenResolved &&
+        s.children.head.dataType != LongType && acceptedTypes.contains(s.children.head.dataType) =>
+        val castedExpr = Cast(s.children.head, LongType)
         ReplicateRows(Seq(castedExpr) ++ s.children.tail)
     }
   }

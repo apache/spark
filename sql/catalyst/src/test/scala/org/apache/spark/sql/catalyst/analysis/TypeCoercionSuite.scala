@@ -1353,31 +1353,6 @@ class TypeCoercionSuite extends AnalysisTest {
         SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing))
     )
   }
-
-  test("type coercion for ReplicateRows") {
-    val rule = TypeCoercion.ReplicateRowsCoercion
-    // Cast is setup to promote the first expression to Long
-    // for numeric types.
-    ruleTest(rule,
-      ReplicateRows(Seq(1.toShort, Literal("rowdata"))),
-      ReplicateRows(Seq(Cast(1.toShort, LongType), Literal("rowdata"))))
-    ruleTest(rule,
-        ReplicateRows(Seq(1, Literal("rowdata"))),
-        ReplicateRows(Seq(Cast(1, LongType), Literal("rowdata"))))
-    ruleTest(rule,
-      ReplicateRows(Seq(1.toByte, Literal("rowdata"))),
-      ReplicateRows(Seq(Cast(1.toByte, LongType), Literal("rowdata"))))
-
-    // No cast here since the expected type is Long.
-    ruleTest(rule,
-      ReplicateRows(Seq(1L, Literal("rowdata"))),
-      ReplicateRows(Seq(1L, Literal("rowdata"))))
-
-    // No type coercion when first expression is a non numeric type.
-    ruleTest(rule,
-      ReplicateRows(Seq(Literal("invalid"), Literal("rowdata"))),
-      ReplicateRows(Seq(Literal("invalid"), Literal("rowdata"))))
-  }
 }
 
 

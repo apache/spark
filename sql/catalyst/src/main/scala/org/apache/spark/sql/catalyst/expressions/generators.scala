@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 
-
 /**
  * An expression that produces zero or more rows given a single input row.
  *
@@ -224,7 +223,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
 }
 
 /**
- * Replicate the row based N times. N is specified as the first argument to the function.
+ * Replicate the row N times. N is specified as the first argument to the function.
  * {{{
  *   SELECT replicate_rows(2, "val1", "val2") ->
  *   2  val1  val2
@@ -232,7 +231,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
  *  }}}
  */
 @ExpressionDescription(
-usage = "_FUNC_(n, expr1, ..., exprk) - Replicates `expr1`, ..., `exprk` into `n` rows.",
+usage = "_FUNC_(n, expr1, ..., exprk) - Replicates `n`, `expr1`, ..., `exprk` into `n` rows.",
 examples = """
     Examples:
       > SELECT _FUNC_(2, "val1", "val2");
