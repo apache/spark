@@ -167,7 +167,7 @@ case class CreateDataSourceTableAsSelectCommand(
         sparkSession, table, table.storage.locationUri, child, SaveMode.Append, tableExists = true)
     } else {
       assert(table.schema.isEmpty)
-
+      sparkSession.sessionState.catalog.validateTableLocation(table)
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
         Some(sessionState.catalog.defaultTablePath(table.identifier))
       } else {
@@ -181,7 +181,8 @@ case class CreateDataSourceTableAsSelectCommand(
         // the schema of df). It is important since the nullability may be changed by the relation
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
-      sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+      // Table location is already validated. No need to check it again during table creation.
+      sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
 
       result match {
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&

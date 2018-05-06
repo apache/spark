@@ -132,7 +132,7 @@ object functions {
    * Returns a sort expression based on ascending order of the column,
    * and null values return before non-null values.
    * {{{
-   *   df.sort(asc_nulls_last("dept"), desc("age"))
+   *   df.sort(asc_nulls_first("dept"), desc("age"))
    * }}}
    *
    * @group sort_funcs
@@ -2229,16 +2229,6 @@ object functions {
   def base64(e: Column): Column = withExpr { Base64(e.expr) }
 
   /**
-   * Concatenates multiple input columns together into a single column.
-   * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
-
-  /**
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
@@ -2463,14 +2453,6 @@ object functions {
   def repeat(str: Column, n: Int): Column = withExpr {
     StringRepeat(str.expr, lit(n).expr)
   }
-
-  /**
-   * Reverses the string column and returns it as a new string column.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def reverse(str: Column): Column = withExpr { StringReverse(str.expr) }
 
   /**
    * Trim the spaces from right end for the specified string value.
@@ -2709,11 +2691,22 @@ object functions {
 
   /**
    * Returns number of months between dates `date1` and `date2`.
+   * The result is rounded off to 8 digits.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def months_between(date1: Column, date2: Column): Column = withExpr {
-    MonthsBetween(date1.expr, date2.expr)
+    new MonthsBetween(date1.expr, date2.expr)
+  }
+
+  /**
+   * Returns number of months between dates `date1` and `date2`. If `roundOff` is set to true, the
+   * result is rounded off to 8 digits; it is not rounded otherwise.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def months_between(date1: Column, date2: Column, roundOff: Boolean): Column = withExpr {
+    MonthsBetween(date1.expr, date2.expr, lit(roundOff).expr)
   }
 
   /**
@@ -3047,6 +3040,60 @@ object functions {
   }
 
   /**
+   * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
+   * `nullReplacement`.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_join(column: Column, delimiter: String, nullReplacement: String): Column = withExpr {
+    ArrayJoin(column.expr, Literal(delimiter), Some(Literal(nullReplacement)))
+  }
+
+  /**
+   * Concatenates the elements of `column` using the `delimiter`.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_join(column: Column, delimiter: String): Column = withExpr {
+    ArrayJoin(column.expr, Literal(delimiter), None)
+  }
+
+  /**
+   * Concatenates multiple input columns together into a single column.
+   * The function works with strings, binary and compatible array columns.
+   *
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
+
+  /**
+   * Locates the position of the first occurrence of the value in the given array as long.
+   * Returns null if either of the arguments are null.
+   *
+   * @note The position is not zero based, but 1 based index. Returns 0 if value
+   * could not be found in array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_position(column: Column, value: Any): Column = withExpr {
+    ArrayPosition(column.expr, Literal(value))
+  }
+
+  /**
+   * Returns element of array at given index in value if column is array. Returns value for
+   * the given key in value if column is map.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def element_at(column: Column, value: Any): Column = withExpr {
+    ElementAt(column.expr, Literal(value))
+  }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
@@ -3132,7 +3179,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    JsonToStructs(schema, options, e.expr)
+    new JsonToStructs(schema, options, e.expr)
   }
 
   /**
@@ -3299,6 +3346,37 @@ object functions {
    * @since 1.5.0
    */
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
+
+  /**
+   * Returns the minimum value in the array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_min(e: Column): Column = withExpr { ArrayMin(e.expr) }
+
+  /**
+   * Returns the maximum value in the array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
+
+  /**
+   * Returns a reversed string or an array with reverse order of elements.
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def reverse(e: Column): Column = withExpr { Reverse(e.expr) }
+
+  /**
+   * Creates a single array from an array of arrays. If a structure of nested arrays is deeper than
+   * two levels, only one level of nesting is removed.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
 
   /**
    * Returns an unordered array containing the keys of the map.

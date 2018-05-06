@@ -1543,12 +1543,12 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
                  solver="l-bfgs", initialWeights=None, probabilityCol="probability",
-                 rawPredicitionCol="rawPrediction"):
+                 rawPredictionCol="rawPrediction"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
                  solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
-                 rawPredicitionCol="rawPrediction")
+                 rawPredictionCol="rawPrediction")
         """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1562,12 +1562,12 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
                   solver="l-bfgs", initialWeights=None, probabilityCol="probability",
-                  rawPredicitionCol="rawPrediction"):
+                  rawPredictionCol="rawPrediction"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
                   solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
-                  rawPredicitionCol="rawPrediction"):
+                  rawPredictionCol="rawPrediction"):
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self._input_kwargs

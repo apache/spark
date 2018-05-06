@@ -426,19 +426,11 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
   """,
   since = "2.3.0")
 // scalastyle:on line.size.limit
-case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  @transient private lazy val c = {
-    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-  }
+case class DayOfWeek(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    c.get(Calendar.DAY_OF_WEEK)
+    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    cal.get(Calendar.DAY_OF_WEEK)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -453,6 +445,49 @@ case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCas
         ${ev.value} = $c.get($cal.DAY_OF_WEEK);
       """
     })
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2009-07-30');
+       3
+  """,
+  since = "2.4.0")
+// scalastyle:on line.size.limit
+case class WeekDay(child: Expression) extends DayWeek {
+
+  override protected def nullSafeEval(date: Any): Any = {
+    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    (cal.get(Calendar.DAY_OF_WEEK) + 5 ) % 7
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, time => {
+      val cal = classOf[Calendar].getName
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      val c = "calWeekDay"
+      ctx.addImmutableStateIfNotExists(cal, c,
+        v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+      s"""
+        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
+        ${ev.value} = ($c.get($cal.DAY_OF_WEEK) + 5) % 7;
+      """
+    })
+  }
+}
+
+abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  @transient protected lazy val cal: Calendar = {
+    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
   }
 }
 
@@ -813,7 +848,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     val df = classOf[DateFormat].getName
     if (format.foldable) {
       if (formatter == null) {
-        ExprCode("", "true", "(UTF8String) null")
+        ExprCode.forNullValue(StringType)
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)
@@ -982,6 +1017,48 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
+ * A special expression used to convert the string input of `to/from_utc_timestamp` to timestamp,
+ * which requires the timestamp string to not have timezone information, otherwise null is returned.
+ */
+case class StringToTimestampWithoutTimezone(child: Expression, timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def dataType: DataType = TimestampType
+  override def nullable: Boolean = true
+  override def toString: String = child.toString
+  override def sql: String = child.sql
+
+  override def nullSafeEval(input: Any): Any = {
+    DateTimeUtils.stringToTimestamp(
+      input.asInstanceOf[UTF8String], timeZone, rejectTzInString = true).orNull
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val longOpt = ctx.freshName("longOpt")
+    val eval = child.genCode(ctx)
+    val code = s"""
+       |${eval.code}
+       |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = true;
+       |${CodeGenerator.JAVA_LONG} ${ev.value} = ${CodeGenerator.defaultValue(TimestampType)};
+       |if (!${eval.isNull}) {
+       |  scala.Option<Long> $longOpt = $dtu.stringToTimestamp(${eval.value}, $tz, true);
+       |  if ($longOpt.isDefined()) {
+       |    ${ev.value} = ((Long) $longOpt.get()).longValue();
+       |    ${ev.isNull} = false;
+       |  }
+       |}
+     """.stripMargin
+    ev.copy(code = code)
+  }
+}
+
+/**
  * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
  * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
  * '2017-07-14 03:40:00.0'.
@@ -1121,38 +1198,49 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between `timestamp1` and `timestamp2`.",
+  usage = """
+    _FUNC_(timestamp1, timestamp2[, roundOff]) - Returns number of months between `timestamp1` and `timestamp2`.
+      The result is rounded to 8 decimal places by default. Set roundOff=false otherwise."""",
   examples = """
     Examples:
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
        3.94959677
+      > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30', false);
+       3.9495967741935485
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+case class MonthsBetween(
+    date1: Expression,
+    date2: Expression,
+    roundOff: Expression,
+    timeZoneId: Option[String] = None)
+  extends TernaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
-  def this(date1: Expression, date2: Expression) = this(date1, date2, None)
+  def this(date1: Expression, date2: Expression) = this(date1, date2, Literal.TrueLiteral, None)
 
-  override def left: Expression = date1
-  override def right: Expression = date2
+  def this(date1: Expression, date2: Expression, roundOff: Expression) =
+    this(date1, date2, roundOff, None)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
+  override def children: Seq[Expression] = Seq(date1, date2, roundOff)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType, BooleanType)
 
   override def dataType: DataType = DoubleType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(t1: Any, t2: Any): Any = {
-    DateTimeUtils.monthsBetween(t1.asInstanceOf[Long], t2.asInstanceOf[Long], timeZone)
+  override def nullSafeEval(t1: Any, t2: Any, roundOff: Any): Any = {
+    DateTimeUtils.monthsBetween(
+      t1.asInstanceOf[Long], t2.asInstanceOf[Long], roundOff.asInstanceOf[Boolean], timeZone)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (l, r) => {
-      s"""$dtu.monthsBetween($l, $r, $tz)"""
+    defineCodeGen(ctx, ev, (d1, d2, roundOff) => {
+      s"""$dtu.monthsBetween($d1, $d2, $roundOff, $tz)"""
     })
   }
 

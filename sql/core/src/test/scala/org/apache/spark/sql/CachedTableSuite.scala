@@ -22,6 +22,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.spark.CleanerListener
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
@@ -52,7 +53,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     val plan = spark.table(tableName).queryExecution.sparkPlan
     plan.collect {
       case InMemoryTableScanExec(_, _, relation) =>
-        relation.cachedColumnBuffers.id
+        relation.cacheBuilder.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
     }.head
@@ -78,7 +79,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
     plan.collect {
       case InMemoryTableScanExec(_, _, relation) =>
-        getNumInMemoryTablesRecursively(relation.child) + 1
+        getNumInMemoryTablesRecursively(relation.cachedPlan) + 1
     }.sum
   }
 
@@ -200,7 +201,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     spark.catalog.cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
       spark.table("testData").queryExecution.withCachedData.collect {
-        case r @ InMemoryRelation(_, _, _, _, _: InMemoryTableScanExec, _) => r
+        case r: InMemoryRelation if r.cachedPlan.isInstanceOf[InMemoryTableScanExec] => r
       }.size
     }
 
@@ -367,12 +368,12 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     val toBeCleanedAccIds = new HashSet[Long]
 
     val accId1 = spark.table("t1").queryExecution.withCachedData.collect {
-      case i: InMemoryRelation => i.sizeInBytesStats.id
+      case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
     }.head
     toBeCleanedAccIds += accId1
 
     val accId2 = spark.table("t1").queryExecution.withCachedData.collect {
-      case i: InMemoryRelation => i.sizeInBytesStats.id
+      case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
     }.head
     toBeCleanedAccIds += accId2
 
@@ -793,5 +794,30 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         }
       }
     }
+  }
+
+  private def checkIfNoJobTriggered[T](f: => T): T = {
+    var numJobTrigered = 0
+    val jobListener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        numJobTrigered += 1
+      }
+    }
+    sparkContext.addSparkListener(jobListener)
+    try {
+      val result = f
+      sparkContext.listenerBus.waitUntilEmpty(10000L)
+      assert(numJobTrigered === 0)
+      result
+    } finally {
+      sparkContext.removeSparkListener(jobListener)
+    }
+  }
+
+  test("SPARK-23880 table cache should be lazy and don't trigger any jobs") {
+    val cachedData = checkIfNoJobTriggered {
+      spark.range(1002).filter('id > 1000).orderBy('id.desc).cache()
+    }
+    assert(cachedData.collect === Seq(1001))
   }
 }

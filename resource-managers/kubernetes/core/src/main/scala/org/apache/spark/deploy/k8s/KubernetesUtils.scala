@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s
 
+import io.fabric8.kubernetes.api.model.LocalObjectReference
+
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 

@@ -420,7 +420,7 @@ Refer to the [R API docs](api/R/spark.svmLinear.html) for more details.
 
 [OneVsRest](http://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest) is an example of a machine learning reduction for performing multiclass classification given a base classifier that can perform binary classification efficiently.  It is also known as "One-vs-All."
 
-`OneVsRest` is implemented as an `Estimator`. For the base classifier it takes instances of `Classifier` and creates a binary classification problem for each of the k classes. The classifier for class i is trained to predict whether the label is i or not, distinguishing class i from all other classes.
+`OneVsRest` is implemented as an `Estimator`. For the base classifier, it takes instances of `Classifier` and creates a binary classification problem for each of the k classes. The classifier for class i is trained to predict whether the label is i or not, distinguishing class i from all other classes.
 
 Predictions are done by evaluating each binary classifier and the index of the most confident classifier is output as label.
 
@@ -908,7 +908,7 @@ Refer to the [R API docs](api/R/spark.survreg.html) for more details.
 belongs to the family of regression algorithms. Formally isotonic regression is a problem where
 given a finite set of real numbers `$Y = {y_1, y_2, ..., y_n}$` representing observed responses
 and `$X = {x_1, x_2, ..., x_n}$` the unknown response values to be fitted
-finding a function that minimises
+finding a function that minimizes
 
 `\begin{equation}
   f(x) = \sum_{i=1}^n w_i (y_i - x_i)^2
@@ -927,7 +927,7 @@ We implement a
 which uses an approach to
 [parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
 The training input is a DataFrame which contains three columns
-label, features and weight. Additionally IsotonicRegression algorithm has one
+label, features and weight. Additionally, IsotonicRegression algorithm has one
 optional parameter called $isotonic$ defaulting to true.
 This argument specifies if the isotonic regression is
 isotonic (monotonically increasing) or antitonic (monotonically decreasing).

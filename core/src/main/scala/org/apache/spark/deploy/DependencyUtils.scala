@@ -25,15 +25,17 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
-private[deploy] object DependencyUtils {
+private[deploy] object DependencyUtils extends Logging {
 
   def resolveMavenDependencies(
       packagesExclusions: String,
       packages: String,
       repositories: String,
-      ivyRepoPath: String): String = {
+      ivyRepoPath: String,
+      ivySettingsPath: Option[String]): String = {
     val exclusions: Seq[String] =
       if (!StringUtils.isBlank(packagesExclusions)) {
         packagesExclusions.split(",")
@@ -41,10 +43,12 @@ private[deploy] object DependencyUtils {
         Nil
       }
     // Create the IvySettings, either load from file or build defaults
-    val ivySettings = sys.props.get("spark.jars.ivySettings").map { ivySettingsFile =>
-      SparkSubmitUtils.loadIvySettings(ivySettingsFile, Option(repositories), Option(ivyRepoPath))
-    }.getOrElse {
-      SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
+    val ivySettings = ivySettingsPath match {
+      case Some(path) =>
+        SparkSubmitUtils.loadIvySettings(path, Option(repositories), Option(ivyRepoPath))
+
+      case None =>
+        SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
     }
 
     SparkSubmitUtils.resolveMavenCoordinates(packages, ivySettings, exclusions = exclusions)
@@ -72,7 +76,7 @@ private[deploy] object DependencyUtils {
   def addJarsToClassPath(jars: String, loader: MutableURLClassLoader): Unit = {
     if (jars != null) {
       for (jar <- jars.split(",")) {
-        SparkSubmit.addJarToClasspath(jar, loader)
+        addJarToClasspath(jar, loader)
       }
     }
   }
@@ -146,6 +150,31 @@ private[deploy] object DependencyUtils {
         case (resolved, _) => resolved
       }
     }.mkString(",")
+  }
+
+  def addJarToClasspath(localJar: String, loader: MutableURLClassLoader): Unit = {
+    val uri = Utils.resolveURI(localJar)
+    uri.getScheme match {
+      case "file" | "local" =>
+        val file = new File(uri.getPath)
+        if (file.exists()) {
+          loader.addURL(file.toURI.toURL)
+        } else {
+          logWarning(s"Local jar $file does not exist, skipping.")
+        }
+      case _ =>
+        logWarning(s"Skip remote jar $uri.")
+    }
+  }
+
+  /**
+   * Merge a sequence of comma-separated file lists, some of which may be null to indicate
+   * no files, into a single comma-separated string.
+   */
+  def mergeFileLists(lists: String*): String = {
+    val merged = lists.filterNot(StringUtils.isBlank)
+      .flatMap(Utils.stringToSeq)
+    if (merged.nonEmpty) merged.mkString(",") else null
   }
 
   private def splitOnFragment(path: String): (URI, Option[String]) = {
