@@ -288,6 +288,8 @@ final class ShuffleBlockFetcherIterator(
           val (blockId, size) = iterator.next()
           if (size < 0) {
             throw new BlockException(blockId, "Negative block size " + size)
+          } else if (size == 0) {
+            throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
           } else {
             curBlocks += ((blockId, size))
             remoteBlocks += blockId
