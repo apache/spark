@@ -684,7 +684,7 @@ setMethod("hash",
 #'
 #' @rdname column_misc_functions
 #' @aliases data_type data_type,Column-method
-#' @note data_type since 2.3.0
+#' @note data_type since 2.4.0
 setMethod("data_type",
           signature(x = "Column"),
           function(x) {
