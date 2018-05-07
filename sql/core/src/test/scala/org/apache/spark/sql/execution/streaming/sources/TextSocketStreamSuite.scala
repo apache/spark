@@ -33,6 +33,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
@@ -300,7 +301,44 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
   }
 
-  /**
+  test("continuous data") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val reader = new TextSocketContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
+        "port" -> serverThread.port.toString).asJava))
+    reader.setStartOffset(Optional.empty())
+    val tasks = reader.createDataReaderFactories()
+    assert(tasks.size == 2)
+
+    val numRecords = 10
+    val data = scala.collection.mutable.ListBuffer[Int]()
+    val offsets = scala.collection.mutable.ListBuffer[Int]()
+    import org.scalatest.time.SpanSugar._
+    failAfter(5 seconds) {
+      // inject rows, read and check the data and offsets
+      for (i <- 0 until numRecords) {
+        serverThread.enqueue(i.toString)
+      }
+      tasks.asScala.foreach {
+        case t: TextSocketContinuousDataReaderFactory =>
+          val r = t.createDataReader().asInstanceOf[TextSocketContinuousDataReader]
+          for (i <- 0 until numRecords / 2) {
+            r.next()
+            offsets.append(r.getOffset().asInstanceOf[TextSocketPartitionOffset].offset)
+            data.append(r.get().getString(0).toInt)
+          }
+          assert(offsets.toSeq == Range.inclusive(1, 5))
+          assert(data.toSeq == Range(t.partitionId, 10, 2))
+          offsets.clear()
+          data.clear()
+        case _ => throw new IllegalStateException("Unexpected task type")
+      }
+    }
+  }
+
+          /**
    * This class tries to mimic the behavior of netcat, so that we can ensure
    * TextSocketStream supports netcat, which only accepts the first connection
    * and exits the process when the first connection is closed.

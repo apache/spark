@@ -291,7 +291,7 @@ class TextSocketContinuousDataReader(
 
   override def getOffset: PartitionOffset = TextSocketPartitionOffset(partitionId, currentOffset)
 
-  def getRecord: Option[Row] =
+  private def getRecord: Option[Row] =
     endpoint.askSync[Option[Row]](GetRecord(TextSocketPartitionOffset(partitionId, currentOffset)))
 
 }
