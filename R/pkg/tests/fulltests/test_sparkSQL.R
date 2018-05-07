@@ -1479,8 +1479,8 @@ test_that("column functions", {
   df5 <- createDataFrame(list(list(a = "010101")))
   expect_equal(collect(select(df5, conv(df5$a, 2, 16)))[1, 1], "15")
 
-  # Test array_contains(), array_max(), array_min(), array_position(), element_at()
-  # and sort_array()
+  # Test array_contains(), array_max(), array_min(), array_position(), element_at(),
+  # sort_array() and reverse()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
   result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
   expect_equal(result, c(TRUE, FALSE))
@@ -1502,11 +1502,20 @@ test_that("column functions", {
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
 
-  # Test flattern
+  result <- collect(select(df, reverse(df[[1]])))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L), list(4L, 5L, 6L)))
+
+  # Test flattern()
   df <- createDataFrame(list(list(list(list(1L, 2L), list(3L, 4L))),
                         list(list(list(5L, 6L), list(7L, 8L)))))
   result <- collect(select(df, flatten(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, 4L), list(5L, 6L, 7L, 8L)))
+
+  # Test concat()
+  df <- createDataFrame(list(list(list(1L, 2L, 3L), list(4L, 5L, 6L)),
+                        list(list(7L, 8L, 9L), list(10L, 11L, 12L))))
+  result <- collect(select(df, concat(df[[1]], df[[2]])))[[1]]
+  expect_equal(result, list(list(1L, 2L, 3L, 4L, 5L, 6L), list(7L, 8L, 9L, 10L, 11L, 12L)))
 
   # Test map_keys(), map_values() and element_at()
   df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))

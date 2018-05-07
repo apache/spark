@@ -209,6 +209,7 @@ NULL
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21)))
 #' head(select(tmp, flatten(tmp$v1)))
+#' head(select(tmp, reverse(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
@@ -1254,19 +1255,6 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{reverse}: Reverses the string column and returns it as a new string column.
-#'
-#' @rdname column_string_functions
-#' @aliases reverse reverse,Column-method
-#' @note reverse since 1.5.0
-setMethod("reverse",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "reverse", x@jc)
-            column(jc)
-          })
-
-#' @details
 #' \code{rint}: Returns the double value that is closest in value to the argument and
 #' is equal to a mathematical integer.
 #'
@@ -2040,34 +2028,6 @@ setMethod("countDistinct",
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
                               jcols)
-            column(jc)
-          })
-
-#' @details
-#' \code{concat}: Concatenates multiple input columns together into a single column.
-#' If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
-#'
-#' @rdname column_string_functions
-#' @aliases concat concat,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' # concatenate strings
-#' tmp <- mutate(df, s1 = concat(df$Class, df$Sex),
-#'                   s2 = concat(df$Class, df$Sex, df$Age),
-#'                   s3 = concat(df$Class, df$Sex, df$Age, df$Class),
-#'                   s4 = concat_ws("_", df$Class, df$Sex),
-#'                   s5 = concat_ws("+", df$Class, df$Sex, df$Age, df$Survived))
-#' head(tmp)}
-#' @note concat since 1.5.0
-setMethod("concat",
-          signature(x = "Column"),
-          function(x, ...) {
-            jcols <- lapply(list(x, ...), function(x) {
-              stopifnot(class(x) == "Column")
-              x@jc
-            })
-            jc <- callJStatic("org.apache.spark.sql.functions", "concat", jcols)
             column(jc)
           })
 
@@ -3037,7 +2997,26 @@ setMethod("array_position",
           })
 
 #' @details
-#' \code{flatten}: Transforms an array of arrays into a single array.
+#' \code{concat}: Concatenates multiple input columns together into a single column.
+#' The function works with strings, binary and compatible array columns.
+#'
+#' @rdname column_collection_functions
+#' @aliases concat concat,Column-method
+#' @note concat since 1.5.0
+setMethod("concat",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "concat", jcols)
+            column(jc)
+          })
+
+#' @details
+#' \code{flatten}: creates a single array from an array of arrays.
+#' If a structure of nested arrays is deeper than two levels, only one level of nesting is removed.
 #'
 #' @rdname column_collection_functions
 #' @aliases flatten flatten,Column-method
@@ -3046,6 +3025,19 @@ setMethod("flatten",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "flatten", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{reverse}: returns a reversed string or an array with reverse order of elements.
+#'
+#' @rdname column_collection_functions
+#' @aliases reverse reverse,Column-method
+#' @note reverse since 1.5.0
+setMethod("reverse",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "reverse", x@jc)
             column(jc)
           })
 
