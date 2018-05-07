@@ -57,21 +57,21 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
           dataWriter = writeTask.createDataWriter(
             context.partitionId(),
             context.attemptNumber(),
-            EpochTracker.getCurrentEpoch)
+            EpochTracker.getCurrentEpoch.get)
           while (dataIterator.hasNext) {
             dataWriter.write(dataIterator.next())
           }
           logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch ${EpochTracker.getCurrentEpoch} is committing.")
+            s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")
           val msg = dataWriter.commit()
           epochCoordinator.send(
             CommitPartitionEpoch(
               context.partitionId(),
-              EpochTracker.getCurrentEpoch,
+              EpochTracker.getCurrentEpoch.get,
               msg)
           )
           logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch ${EpochTracker.getCurrentEpoch} committed.")
+            s"in epoch ${EpochTracker.getCurrentEpoch.get} committed.")
           EpochTracker.incrementCurrentEpoch()
         } catch {
           case _: InterruptedException =>

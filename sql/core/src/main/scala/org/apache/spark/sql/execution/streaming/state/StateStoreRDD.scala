@@ -75,8 +75,8 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     // If we're in continuous processing mode, we should get the store version for the current
     // epoch rather than the one at planning time.
     val currentVersion = EpochTracker.getCurrentEpoch match {
-      case -1 => storeVersion
-      case value => value
+      case None => storeVersion
+      case Some(value) => value
     }
 
     store = StateStore.get(
