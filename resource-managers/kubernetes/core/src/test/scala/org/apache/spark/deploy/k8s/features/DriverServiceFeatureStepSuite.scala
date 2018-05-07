@@ -66,7 +66,8 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Map.empty,
-        Map.empty))
+        Map.empty,
+        Nil))
     assert(configurationStep.configurePod(SparkPod.initialPod()) === SparkPod.initialPod())
     assert(configurationStep.getAdditionalKubernetesResources().size === 1)
     assert(configurationStep.getAdditionalKubernetesResources().head.isInstanceOf[Service])
@@ -96,7 +97,8 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Map.empty,
-        Map.empty))
+        Map.empty,
+        Nil))
     val expectedServiceName = SHORT_RESOURCE_NAME_PREFIX +
       DriverServiceFeatureStep.DRIVER_SVC_POSTFIX
     val expectedHostName = s"$expectedServiceName.my-namespace.svc"
@@ -116,7 +118,8 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Map.empty,
-        Map.empty))
+        Map.empty,
+        Nil))
     val resolvedService = configurationStep
       .getAdditionalKubernetesResources()
       .head
@@ -145,7 +148,8 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Map.empty,
-        Map.empty),
+        Map.empty,
+        Nil),
       clock)
     val driverService = configurationStep
       .getAdditionalKubernetesResources()
@@ -171,7 +175,8 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
           Map.empty,
           Map.empty,
           Map.empty,
-          Map.empty),
+          Map.empty,
+          Nil),
         clock)
       fail("The driver bind address should not be allowed.")
     } catch {
@@ -195,7 +200,8 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
           Map.empty,
           Map.empty,
           Map.empty,
-          Map.empty),
+          Map.empty,
+          Nil),
         clock)
       fail("The driver host address should not be allowed.")
     } catch {

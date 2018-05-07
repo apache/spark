@@ -110,14 +110,7 @@ private[spark] class BasicDriverFeatureStep(
         .endSpec()
       .build()
 
-    val (driverPodWithVolumes, driverContainerVolumes) =
-      KubernetesVolumeUtils.addVolumes(
-        driverPod,
-        driverContainer,
-        conf.sparkConf,
-        KUBERNETES_DRIVER_VOLUMES_PREFIX)
-
-    SparkPod(driverPodWithVolumes, driverContainerVolumes)
+    SparkPod(driverPod, driverContainer)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {

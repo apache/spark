@@ -55,7 +55,8 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleAnnotations: Map[String, String],
     roleSecretNamesToMountPaths: Map[String, String],
     roleSecretEnvNamesToKeyRefs: Map[String, String],
-    roleEnvs: Map[String, String]) {
+    roleEnvs: Map[String, String],
+    roleVolumes: Iterable[KubernetesVolumeSpec]) {
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
 
@@ -134,6 +135,8 @@ private[spark] object KubernetesConf {
       sparkConf, KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX)
     val driverEnvs = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_ENV_PREFIX)
+    val driverVolumes = KubernetesVolumeUtils.parseVolumesWithPrefix(
+      sparkConf, KUBERNETES_DRIVER_VOLUMES_PREFIX)
 
     KubernetesConf(
       sparkConfWithMainAppJar,
@@ -144,7 +147,8 @@ private[spark] object KubernetesConf {
       driverAnnotations,
       driverSecretNamesToMountPaths,
       driverSecretEnvNamesToKeyRefs,
-      driverEnvs)
+      driverEnvs,
+      driverVolumes)
   }
 
   def createExecutorConf(
@@ -176,6 +180,8 @@ private[spark] object KubernetesConf {
     val executorEnvSecrets = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX)
     val executorEnv = sparkConf.getExecutorEnv.toMap
+    val executorVolumes = KubernetesVolumeUtils.parseVolumesWithPrefix(
+      sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
 
     KubernetesConf(
       sparkConf.clone(),
@@ -186,6 +192,7 @@ private[spark] object KubernetesConf {
       executorAnnotations,
       executorMountSecrets,
       executorEnvSecrets,
-      executorEnv)
+      executorEnv,
+      executorVolumes)
   }
 }
