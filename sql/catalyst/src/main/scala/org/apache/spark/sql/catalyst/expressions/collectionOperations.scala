@@ -657,8 +657,8 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
       s"""
         |$init
         |$codes
-        |  $mapMerge
-        |  if (!${ev.isNull}) {
+        |$mapMerge
+        |if (!${ev.isNull}) {
         |  $createMapData
         |}
       """.stripMargin
