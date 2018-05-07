@@ -339,7 +339,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       collectionCls match {
         case null =>
-          assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
+          assert(result.asInstanceOf[ArrayData].toIntArray().toSeq == expected)
         case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
           assert(result.asInstanceOf[java.util.List[_]].asScala.toSeq == expected)
         case s if classOf[Seq[_]].isAssignableFrom(s) =>

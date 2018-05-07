@@ -71,7 +71,6 @@ public final class ColumnarArray extends ArrayData {
   public double[] toDoubleArray() { return data.getDoubles(offset, length); }
 
   // TODO: this is extremely expensive.
-  @Override
   public Object[] array() {
     DataType dt = data.dataType();
     Object[] list = new Object[length];
