@@ -52,10 +52,11 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    val sqlConf = sparkSession.sessionState.conf
     val parsedOptions = new JSONOptions(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      options + ("streamingSchemaInference" -> sqlConf.streamingSchemaInference.toString),
+      sqlConf.sessionLocalTimeZone,
+      sqlConf.columnNameOfCorruptRecord)
     JsonDataSource(parsedOptions).inferSchema(
       sparkSession, files, parsedOptions)
   }
@@ -99,10 +100,11 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
+    val sqlConf = sparkSession.sessionState.conf
     val parsedOptions = new JSONOptions(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      options + ("streamingSchemaInference" -> sqlConf.streamingSchemaInference.toString),
+      sqlConf.sessionLocalTimeZone,
+      sqlConf.columnNameOfCorruptRecord)
 
     val actualSchema =
       StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))

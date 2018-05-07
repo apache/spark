@@ -70,7 +70,7 @@ private[sql] object JsonInferSchema {
     }.fold(StructType(Nil))(
       compatibleRootType(columnNameOfCorruptRecord, parseMode))
 
-    canonicalizeType(rootType) match {
+    canonicalizeType(rootType, configOptions) match {
       case Some(st: StructType) => st
       case _ =>
         // canonicalizeType erases all empty structs, including the only one we want to keep
@@ -178,10 +178,10 @@ private[sql] object JsonInferSchema {
   /**
    * Convert NullType to StringType and remove StructTypes with no fields
    */
-  private def canonicalizeType(tpe: DataType): Option[DataType] = tpe match {
+  private def canonicalizeType(tpe: DataType, options: JSONOptions): Option[DataType] = tpe match {
     case at @ ArrayType(elementType, _) =>
       for {
-        canonicalType <- canonicalizeType(elementType)
+        canonicalType <- canonicalizeType(elementType, options)
       } yield {
         at.copy(canonicalType)
       }
@@ -190,7 +190,7 @@ private[sql] object JsonInferSchema {
       val canonicalFields: Array[StructField] = for {
         field <- fields
         if field.name.length > 0
-        canonicalType <- canonicalizeType(field.dataType)
+        canonicalType <- canonicalizeType(field.dataType, options)
       } yield {
         field.copy(dataType = canonicalType)
       }
@@ -202,7 +202,7 @@ private[sql] object JsonInferSchema {
         None
       }
 
-    case NullType => Some(StringType)
+    case NullType if !options.dropFieldIfAllNull => Some(StringType)
     case other => Some(other)
   }
 

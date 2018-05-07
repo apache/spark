@@ -73,6 +73,18 @@ private[sql] class JSONOptions(
   val columnNameOfCorruptRecord =
     parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
 
+  // Whether file-based streaming sources will ignore column of all null values or empty
+  // array during JSON schema inference.
+  val dropFieldIfAllNull = {
+    val streamingSchemaInference =
+      parameters.get("streamingSchemaInference").map(_.toBoolean).getOrElse(false)
+    val _dropFieldIfAllNull =
+      parameters.get("dropFieldIfAllNull").map(_.toBoolean).getOrElse(false)
+
+    // We could set true at `dropFieldIfAllNull` iff `spark.sql.streaming.schemaInference` enabled
+    streamingSchemaInference && _dropFieldIfAllNull
+  }
+
   val timeZone: TimeZone = DateTimeUtils.getTimeZone(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 

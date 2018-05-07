@@ -329,8 +329,13 @@ class JacksonParser(
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
       values += fieldConverter.apply(parser)
     }
-
-    new GenericArrayData(values.toArray)
+    // Canonicalize arrays; an array is null if all its elements are null
+    // TODO: Reconsider this
+    if (options.dropFieldIfAllNull && values.forall(_ == null)) {
+      null
+    } else {
+      new GenericArrayData(values.toArray)
+    }
   }
 
   /**
