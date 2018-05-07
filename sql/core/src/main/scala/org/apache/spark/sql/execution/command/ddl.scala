@@ -889,13 +889,17 @@ object DDLUtils {
    * Throws exception if outputPath tries to overwrite inputpath.
    */
   def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
+    if (isInReadPath(query, outputPath)) {
+      throw new AnalysisException(
+        "Cannot overwrite a path that is also being read from.")
+    }
+  }
+
+  def isInReadPath(query: LogicalPlan, outputPath: Path): Boolean = {
     val inputPaths = query.collect {
       case LogicalRelation(r: HadoopFsRelation, _, _, _) => r.location.rootPaths
     }.flatten
 
-    if (inputPaths.contains(outputPath)) {
-      throw new AnalysisException(
-        "Cannot overwrite a path that is also being read from.")
-    }
+    inputPaths.contains(outputPath)
   }
 }

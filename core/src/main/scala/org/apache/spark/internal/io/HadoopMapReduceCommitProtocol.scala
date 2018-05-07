@@ -17,13 +17,14 @@
 
 package org.apache.spark.internal.io
 
+import java.io.IOException
 import java.util.{Date, UUID}
 
 import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configurable
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -83,6 +84,12 @@ class HadoopMapReduceCommitProtocol(
    * destination directory at the end, if `dynamicPartitionOverwrite` is true.
    */
   @transient private var partitionPaths: mutable.Set[String] = null
+
+  /**
+   * Tracks files will be delete when commit the job
+   */
+  @transient private val pathsToDelete: mutable.Map[FileSystem,
+    mutable.Set[Path]] = mutable.HashMap()
 
   /**
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
@@ -163,6 +170,8 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
+    cleanPathToDelete()
+
     committer.commitJob(jobContext)
 
     if (hasValidPath) {
@@ -233,6 +242,43 @@ class HadoopMapReduceCommitProtocol(
     for ((src, _) <- addedAbsPathFiles) {
       val tmp = new Path(src)
       tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
+    }
+  }
+
+  /**
+   * now just record the file to be delete
+   */
+  override def deleteWithJob(fs: FileSystem, path: Path,
+      canDeleteNow: Boolean = true): Boolean = {
+    if (canDeleteNow) {
+      super.deleteWithJob(fs, path)
+    } else {
+      val set = if (pathsToDelete.contains(fs)) {
+        pathsToDelete(fs)
+      } else {
+        new mutable.HashSet[Path]()
+      }
+
+      set.add(path)
+      pathsToDelete.put(fs, set)
+      true
+    }
+  }
+
+  private def cleanPathToDelete(): Unit = {
+    // first delete the should delete special file
+    for (fs <- pathsToDelete.keys) {
+      for (path <- pathsToDelete(fs)) {
+        try {
+          if (!fs.delete(path, true)) {
+            logWarning(s"Delete path ${path} fail at job commit time")
+          }
+        } catch {
+          case ex: IOException =>
+            throw new IOException(s"Unable to clear output " +
+                s"file ${path} at job commit time", ex)
+        }
+      }
     }
   }
 }

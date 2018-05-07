@@ -189,7 +189,6 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       }
 
       val outputPath = t.location.rootPaths.head
-      if (overwrite) DDLUtils.verifyNotReadPath(actualQuery, outputPath)
 
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
 

@@ -231,16 +231,16 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
-  test("it is not allowed to write to a table while querying it.") {
-    val message = intercept[AnalysisException] {
-      sql(
+  test("allowed to write to a table while querying it.") {
+    val df = sql(s"SELECT * FROM jsonTable")
+    sql(
         s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jsonTable
       """.stripMargin)
-    }.getMessage
-    assert(
-      message.contains("Cannot overwrite a path that is also being read from."),
-      "INSERT OVERWRITE to a table while querying it should not be allowed.")
+
+    checkAnswer(
+      sql("SELECT * FROM jsonTable"),
+      df)
   }
 
   test("Caching")  {

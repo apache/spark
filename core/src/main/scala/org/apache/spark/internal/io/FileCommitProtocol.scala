@@ -120,8 +120,9 @@ abstract class FileCommitProtocol {
    * Specifies that a file should be deleted with the commit of this job. The default
    * implementation deletes the file immediately.
    */
-  def deleteWithJob(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
-    fs.delete(path, recursive)
+  def deleteWithJob(fs: FileSystem, path: Path,
+      canDeleteNow: Boolean = true): Boolean = {
+    fs.delete(path, true)
   }
 
   /**

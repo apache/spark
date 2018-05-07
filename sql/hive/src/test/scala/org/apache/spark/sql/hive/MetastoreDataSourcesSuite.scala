@@ -1184,7 +1184,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  test("insertInto - source and target are the same table") {
+  test("insertInto - source and target can be the same table") {
     val tableName = "tab1"
     withTable(tableName) {
       Seq((1, 2)).toDF("i", "j").write.saveAsTable(tableName)
@@ -1204,10 +1204,11 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         table(tableName),
         Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2)))
 
-      val e = intercept[AnalysisException] {
-        table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
-      }.getMessage
-      assert(e.contains(s"Cannot overwrite a path that is also being read from"))
+      table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
+      checkAnswer(
+        table(tableName),
+        Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2))
+      )
     }
   }
 

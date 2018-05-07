@@ -114,7 +114,9 @@ case class InsertIntoHadoopFsRelationCommand(
           // For dynamic partition overwrite, do not delete partition directories ahead.
           true
         } else {
-          deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+          val outputCheck = DDLUtils.isInReadPath(query, outputPath)
+          deleteMatchingPartitions(fs, outputCheck, qualifiedOutputPath,
+              customPartitionLocations, committer)
           true
         }
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
@@ -190,6 +192,7 @@ case class InsertIntoHadoopFsRelationCommand(
    */
   private def deleteMatchingPartitions(
       fs: FileSystem,
+      outputCheck: Boolean,
       qualifiedOutputPath: Path,
       customPartitionLocations: Map[TablePartitionSpec, String],
       committer: FileCommitProtocol): Unit = {
@@ -207,9 +210,23 @@ case class InsertIntoHadoopFsRelationCommand(
     }
     // first clear the path determined by the static partition keys (e.g. /table/foo=1)
     val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
-    if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
-      throw new IOException(s"Unable to clear output " +
-        s"directory $staticPrefixPath prior to writing to it")
+    if (fs.exists(staticPrefixPath)) {
+      if (staticPartitionPrefix.isEmpty && outputCheck) {
+        // input contain output, only delete output sub files when job commit
+          val files = fs.listFiles(staticPrefixPath, false)
+          while (files.hasNext) {
+            val file = files.next()
+            if (!committer.deleteWithJob(fs, file.getPath, false)) {
+              throw new IOException(s"Unable to clear output " +
+                s"directory ${file.getPath} prior to writing to it")
+            }
+          }
+      } else {
+        if (!committer.deleteWithJob(fs, staticPrefixPath, true)) {
+          throw new IOException(s"Unable to clear output " +
+            s"directory $staticPrefixPath prior to writing to it")
+        }
+      }
     }
     // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
     for ((spec, customLoc) <- customPartitionLocations) {
@@ -248,4 +265,5 @@ case class InsertIntoHadoopFsRelationCommand(
       }
     }.toMap
   }
+
 }
