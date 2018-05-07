@@ -59,10 +59,12 @@ class PathOutputCommitProtocol(
     dynamicPartitionOverwrite: Boolean = false)
   extends HadoopMapReduceCommitProtocol(jobId, destination, false) with Serializable {
 
-  @transient var committer: PathOutputCommitter = _
+  /** The committer created. */
+  @transient private var committer: PathOutputCommitter = _
 
   require(destination != null, "Null destination specified")
 
+  /** The destination path. This is serializable in Hadoop 3. */
   val destPath: Path  = new Path(destination)
 
   logDebug(s"Instantiated committer with job ID=$jobId;" +
@@ -89,7 +91,7 @@ class PathOutputCommitProtocol(
    *         [[PathOutputCommitter]].
    */
   override protected def setupCommitter(
-    context: TaskAttemptContext): PathOutputCommitter = {
+      context: TaskAttemptContext): PathOutputCommitter = {
 
     logDebug(s"Setting up committer for path $destination")
     committer = PathOutputCommitterFactory.createCommitter(destPath, context)
@@ -133,9 +135,9 @@ class PathOutputCommitProtocol(
    * @return a path as a string
    */
   override def newTaskTempFile(
-    taskContext: TaskAttemptContext,
-    dir: Option[String],
-    ext: String): String = {
+      taskContext: TaskAttemptContext,
+      dir: Option[String],
+      ext: String): String = {
 
     val workDir = committer.getWorkPath
     val parent = dir.map(d => new Path(workDir, d)).getOrElse(workDir)
@@ -146,6 +148,17 @@ class PathOutputCommitProtocol(
 
   /**
    * Absolute files are still renamed into place with a warning.
+   * The created file will be committed through the `rename()` operation
+   * of the filesystem/filestore connector, which may be a slow `O(data)`
+   * copy. Because directory listings are *not* used to determine which files
+   * to commit, even when a store has listing inconsistency (i.e. Amazon S3),
+   * there is no risk of that affecting the operation.
+   * Similarly, because the superclass's implementation of this method uses
+   * a UUID in the source name, eventual consistency on an update will not be
+   * an issue.
+   * There is a very small risk that Amazon S3's brief caching of 404s
+   * can cause any probes for the file to fail if the task is committed
+   * immediately after the file was created.
    *
    * @param taskContext task
    * @param absoluteDir destination dir
@@ -188,8 +201,8 @@ class PathOutputCommitProtocol(
   }
 
   override def commitJob(
-    jobContext: JobContext,
-    taskCommits: Seq[FileCommitProtocol.TaskCommitMessage]): Unit = {
+      jobContext: JobContext,
+      taskCommits: Seq[FileCommitProtocol.TaskCommitMessage]): Unit = {
     logDebug(s"commit job with ${taskCommits.length} task commit message(s)")
     super.commitJob(jobContext, taskCommits)
   }
@@ -215,8 +228,8 @@ class PathOutputCommitProtocol(
   }
 
   override def commitTask(
-    taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
-    logDebug("Commit task")
+      taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
+      logDebug("Commit task")
     super.commitTask(taskContext)
   }
 
