@@ -3040,6 +3040,16 @@ object functions {
   }
 
   /**
+   * Returns an array containing all the elements in `x` from index `start` (or starting from the
+   * end if `start` is negative) with the specified `length`.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def slice(x: Column, start: Int, length: Int): Column = withExpr {
+    Slice(x.expr, Literal(start), Literal(length))
+  }
+
+  /**
    * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
    * `nullReplacement`.
    * @group collection_funcs

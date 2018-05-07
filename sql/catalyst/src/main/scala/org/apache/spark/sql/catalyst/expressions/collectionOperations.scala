@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -528,6 +527,129 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_contains"
+}
+
+/**
+ * Slices an array according to the requested start index and length
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(x, start, length) - Subsets array x starting from index start (or starting from the end if start is negative) with the specified length.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, 4), 2, 2);
+       [2,3]
+      > SELECT _FUNC_(array(1, 2, 3, 4), -2, 2);
+       [3,4]
+  """, since = "2.4.0")
+// scalastyle:on line.size.limit
+case class Slice(x: Expression, start: Expression, length: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = x.dataType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, IntegerType)
+
+  override def children: Seq[Expression] = Seq(x, start, length)
+
+  lazy val elementType: DataType = x.dataType.asInstanceOf[ArrayType].elementType
+
+  override def nullSafeEval(xVal: Any, startVal: Any, lengthVal: Any): Any = {
+    val startInt = startVal.asInstanceOf[Int]
+    val lengthInt = lengthVal.asInstanceOf[Int]
+    val arr = xVal.asInstanceOf[ArrayData]
+    val startIndex = if (startInt == 0) {
+      throw new RuntimeException(
+        s"Unexpected value for start in function $prettyName: SQL array indices start at 1.")
+    } else if (startInt < 0) {
+      startInt + arr.numElements()
+    } else {
+      startInt - 1
+    }
+    if (lengthInt < 0) {
+      throw new RuntimeException(s"Unexpected value for length in function $prettyName: " +
+        "length must be greater than or equal to 0.")
+    }
+    // startIndex can be negative if start is negative and its absolute value is greater than the
+    // number of elements in the array
+    if (startIndex < 0 || startIndex >= arr.numElements()) {
+      return new GenericArrayData(Array.empty[AnyRef])
+    }
+    val data = arr.toSeq[AnyRef](elementType)
+    new GenericArrayData(data.slice(startIndex, startIndex + lengthInt))
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (x, start, length) => {
+      val startIdx = ctx.freshName("startIdx")
+      val resLength = ctx.freshName("resLength")
+      val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
+      s"""
+         |${CodeGenerator.JAVA_INT} $startIdx = $defaultIntValue;
+         |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
+         |if ($start == 0) {
+         |  throw new RuntimeException("Unexpected value for start in function $prettyName: "
+         |    + "SQL array indices start at 1.");
+         |} else if ($start < 0) {
+         |  $startIdx = $start + $x.numElements();
+         |} else {
+         |  // arrays in SQL are 1-based instead of 0-based
+         |  $startIdx = $start - 1;
+         |}
+         |if ($length < 0) {
+         |  throw new RuntimeException("Unexpected value for length in function $prettyName: "
+         |    + "length must be greater than or equal to 0.");
+         |} else if ($length > $x.numElements() - $startIdx) {
+         |  $resLength = $x.numElements() - $startIdx;
+         |} else {
+         |  $resLength = $length;
+         |}
+         |${genCodeForResult(ctx, ev, x, startIdx, resLength)}
+       """.stripMargin
+    })
+  }
+
+  def genCodeForResult(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      inputArray: String,
+      startIdx: String,
+      resLength: String): String = {
+    val values = ctx.freshName("values")
+    val i = ctx.freshName("i")
+    val getValue = CodeGenerator.getValue(inputArray, elementType, s"$i + $startIdx")
+    if (!CodeGenerator.isPrimitiveType(elementType)) {
+      val arrayClass = classOf[GenericArrayData].getName
+      s"""
+         |Object[] $values;
+         |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
+         |  $values = new Object[0];
+         |} else {
+         |  $values = new Object[$resLength];
+         |  for (int $i = 0; $i < $resLength; $i ++) {
+         |    $values[$i] = $getValue;
+         |  }
+         |}
+         |${ev.value} = new $arrayClass($values);
+       """.stripMargin
+    } else {
+      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+      s"""
+         |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
+         |  $resLength = 0;
+         |}
+         |${ctx.createUnsafeArray(values, resLength, elementType, s" $prettyName failed.")}
+         |for (int $i = 0; $i < $resLength; $i ++) {
+         |  if ($inputArray.isNullAt($i + $startIdx)) {
+         |    $values.setNullAt($i);
+         |  } else {
+         |    $values.set$primitiveValueTypeName($i, $getValue);
+         |  }
+         |}
+         |${ev.value} = $values;
+       """.stripMargin
+    }
+  }
 }
 
 /**
@@ -1127,24 +1249,11 @@ case class Concat(children: Seq[Expression]) extends Expression {
   }
 
   private def genCodeForPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
-    val arrayName = ctx.freshName("array")
-    val arraySizeName = ctx.freshName("size")
     val counter = ctx.freshName("counter")
     val arrayData = ctx.freshName("arrayData")
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    val unsafeArraySizeInBytes = s"""
-      |long $arraySizeName = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-      |  $numElemName,
-      |  ${elementType.defaultSize});
-      |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
-      |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $arraySizeName +
-      |    " bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH bytes" +
-      |    " for UnsafeArrayData.");
-      |}
-      """.stripMargin
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
     s"""
@@ -1152,11 +1261,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
        |  public ArrayData concat($javaType[] args) {
        |    ${nullArgumentProtection()}
        |    $numElemCode
-       |    $unsafeArraySizeInBytes
-       |    byte[] $arrayName = new byte[(int)$arraySizeName];
-       |    UnsafeArrayData $arrayData = new UnsafeArrayData();
-       |    Platform.putLong($arrayName, $baseOffset, $numElemName);
-       |    $arrayData.pointTo($arrayName, $baseOffset, (int)$arraySizeName);
+       |    ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
        |    int $counter = 0;
        |    for (int y = 0; y < ${children.length}; y++) {
        |      for (int z = 0; z < args[y].numElements(); z++) {
@@ -1308,34 +1413,16 @@ case class Flatten(child: Expression) extends UnaryExpression {
       ctx: CodegenContext,
       childVariableName: String,
       arrayDataName: String): String = {
-    val arrayName = ctx.freshName("array")
-    val arraySizeName = ctx.freshName("size")
     val counter = ctx.freshName("counter")
     val tempArrayDataName = ctx.freshName("tempArrayData")
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
-    val unsafeArraySizeInBytes = s"""
-      |long $arraySizeName = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-      |  $numElemName,
-      |  ${elementType.defaultSize});
-      |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
-      |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-      |    $arraySizeName + " bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH" +
-      |    " bytes for UnsafeArrayData.");
-      |}
-      """.stripMargin
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
-
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
     s"""
     |$numElemCode
-    |$unsafeArraySizeInBytes
-    |byte[] $arrayName = new byte[(int)$arraySizeName];
-    |UnsafeArrayData $tempArrayDataName = new UnsafeArrayData();
-    |Platform.putLong($arrayName, $baseOffset, $numElemName);
-    |$tempArrayDataName.pointTo($arrayName, $baseOffset, (int)$arraySizeName);
+    |${ctx.createUnsafeArray(tempArrayDataName, numElemName, elementType, s" $prettyName failed.")}
     |int $counter = 0;
     |for (int k = 0; k < $childVariableName.numElements(); k++) {
     |  ArrayData arr = $childVariableName.getArray(k);
