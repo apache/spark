@@ -585,27 +585,27 @@ case class ArraysOverlap(left: Expression, right: Expression)
     var hasNull = false
     val arr1 = a1.asInstanceOf[ArrayData]
     val arr2 = a2.asInstanceOf[ArrayData]
-    val (biggestArr, smallestArr) = if (arr1.numElements() > arr2.numElements()) {
-      (arr1, arr2)
+    val (bigger, smaller, biggerDt) = if (arr1.numElements() > arr2.numElements()) {
+      (arr1, arr2, left.dataType.asInstanceOf[ArrayType])
     } else {
-      (arr2, arr1)
+      (arr2, arr1, right.dataType.asInstanceOf[ArrayType])
     }
-    if (smallestArr.numElements() > 0) {
+    if (smaller.numElements() > 0) {
       val smallestSet = new mutable.HashSet[Any]
-      smallestArr.foreach(elementType, (_, v) =>
+      smaller.foreach(elementType, (_, v) =>
         if (v == null) {
           hasNull = true
         } else {
           smallestSet += v
         })
-      biggestArr.foreach(elementType, (_, v1) =>
+      bigger.foreach(elementType, (_, v1) =>
         if (v1 == null) {
           hasNull = true
         } else if (smallestSet.contains(v1)) {
           return true
         }
       )
-    } else if (containsNull(biggestArr, right.dataType.asInstanceOf[ArrayType])) {
+    } else if (containsNull(bigger, biggerDt)) {
       hasNull = true
     }
     if (hasNull) {
@@ -617,27 +617,30 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   def containsNull(arr: ArrayData, dt: ArrayType): Boolean = {
     if (dt.containsNull) {
-      arr.foreach(elementType, (_, v) =>
-        if (v == null) {
-          return true
-        }
-      )
+      var i = 0
+      var hasNull = false
+      while (i < arr.numElements && !hasNull) {
+        hasNull = arr.isNullAt(i)
+        i += 1
+      }
+      hasNull
+    } else {
+      false
     }
-    false
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (a1, a2) => {
       val i = ctx.freshName("i")
-      val smallestArray = ctx.freshName("smallestArray")
-      val biggestArray = ctx.freshName("biggestArray")
-      val getFromSmallest = CodeGenerator.getValue(smallestArray, elementType, i)
-      val getFromBiggest = CodeGenerator.getValue(biggestArray, elementType, i)
-      val leftEmptyCode = if (right.dataType.asInstanceOf[ArrayType].containsNull) {
+      val smaller = ctx.freshName("smallerArray")
+      val bigger = ctx.freshName("biggerArray")
+      val getFromSmaller = CodeGenerator.getValue(smaller, elementType, i)
+      val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
+      val smallerEmptyCode = if (inputTypes.exists(_.asInstanceOf[ArrayType].containsNull)) {
         s"""
            |else {
-           |  for (int $i = 0; $i < $biggestArray.numElements(); $i ++) {
-           |    if ($biggestArray.isNullAt($i)) {
+           |  for (int $i = 0; $i < $bigger.numElements(); $i ++) {
+           |    if ($bigger.isNullAt($i)) {
            |      ${ev.isNull} = true;
            |      break;
            |    }
@@ -650,13 +653,13 @@ case class ArraysOverlap(left: Expression, right: Expression)
       val javaElementClass = CodeGenerator.boxedType(elementType)
       val javaSet = classOf[java.util.HashSet[_]].getName
       val set2 = ctx.freshName("set")
-      val addToSetFromSmallestCode = nullSafeElementCodegen(right.dataType.asInstanceOf[ArrayType],
-        smallestArray, i, s"$set2.add($getFromSmallest);", s"${ev.isNull} = true;")
-      val elementIsInSetCode = nullSafeElementCodegen(left.dataType.asInstanceOf[ArrayType],
-        biggestArray,
+      val addToSetFromSmallerCode = nullSafeElementCodegen(
+        smaller, i, s"$set2.add($getFromSmaller);", s"${ev.isNull} = true;")
+      val elementIsInSetCode = nullSafeElementCodegen(
+        bigger,
         i,
         s"""
-           |if ($set2.contains($getFromBiggest)) {
+           |if ($set2.contains($getFromBigger)) {
            |  ${ev.isNull} = false;
            |  ${ev.value} = true;
            |  break;
@@ -664,42 +667,41 @@ case class ArraysOverlap(left: Expression, right: Expression)
            |""".stripMargin,
         s"${ev.isNull} = true;")
       s"""
-         |ArrayData $smallestArray;
-         |ArrayData $biggestArray;
+         |ArrayData $smaller;
+         |ArrayData $bigger;
          |if ($a1.numElements() > $a2.numElements()) {
-         |  $biggestArray = $a1;
-         |  $smallestArray = $a2;
+         |  $bigger = $a1;
+         |  $smaller = $a2;
          |} else {
-         |  $smallestArray = $a1;
-         |  $biggestArray = $a2;
+         |  $smaller = $a1;
+         |  $bigger = $a2;
          |}
-         |if ($smallestArray.numElements() > 0) {
+         |if ($smaller.numElements() > 0) {
          |  $javaSet<$javaElementClass> $set2 = new $javaSet<$javaElementClass>();
-         |  for (int $i = 0; $i < $smallestArray.numElements(); $i ++) {
-         |    $addToSetFromSmallestCode
+         |  for (int $i = 0; $i < $smaller.numElements(); $i ++) {
+         |    $addToSetFromSmallerCode
          |  }
-         |  for (int $i = 0; $i < $biggestArray.numElements(); $i ++) {
+         |  for (int $i = 0; $i < $bigger.numElements(); $i ++) {
          |    $elementIsInSetCode
          |  }
-         |} $leftEmptyCode
+         |} $smallerEmptyCode
          |""".stripMargin
     })
   }
 
   def nullSafeElementCodegen(
-      arrayType: ArrayType,
       arrayVar: String,
       index: String,
       code: String,
       isNullCode: String): String = {
-    if (arrayType.containsNull) {
+    if (inputTypes.exists(_.asInstanceOf[ArrayType].containsNull)) {
       s"""
          |if ($arrayVar.isNullAt($index)) {
          |  $isNullCode
          |} else {
          |  $code
          |}
-       """.stripMargin
+         |""".stripMargin
     } else {
       code
     }

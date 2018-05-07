@@ -3047,7 +3047,7 @@ object functions {
    */
   def arrays_overlap(a1: Column, a2: Column): Column = withExpr {
     ArraysOverlap(a1.expr, a2.expr)
-   }
+  }
 
   /**
    * Returns an array containing all the elements in `x` from index `start` (or starting from the
