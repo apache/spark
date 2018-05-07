@@ -29,15 +29,15 @@ import org.apache.spark.sql.types.DataType
  * [[org.apache.spark.sql.catalyst.data]].
  */
 abstract class ArrayData extends SpecializedGetters with SpecializedSetters with Serializable {
-  def numElements: Int
+  def numElements(): Int
 
   def copy(): ArrayData
 
   def toSeq[T](dataType: DataType): IndexedSeq[T] =
     new ArrayDataIndexedSeq[T](this, dataType)
 
-  def toBooleanArray: Array[Boolean] = {
-    val size = numElements
+  def toBooleanArray(): Array[Boolean] = {
+    val size = numElements()
     val values = new Array[Boolean](size)
     var i = 0
     while (i < size) {
@@ -47,8 +47,8 @@ abstract class ArrayData extends SpecializedGetters with SpecializedSetters with
     values
   }
 
-  def toByteArray: Array[Byte] = {
-    val size = numElements
+  def toByteArray(): Array[Byte] = {
+    val size = numElements()
     val values = new Array[Byte](size)
     var i = 0
     while (i < size) {
@@ -58,8 +58,8 @@ abstract class ArrayData extends SpecializedGetters with SpecializedSetters with
     values
   }
 
-  def toShortArray: Array[Short] = {
-    val size = numElements
+  def toShortArray(): Array[Short] = {
+    val size = numElements()
     val values = new Array[Short](size)
     var i = 0
     while (i < size) {
@@ -69,8 +69,8 @@ abstract class ArrayData extends SpecializedGetters with SpecializedSetters with
     values
   }
 
-  def toIntArray: Array[Int] = {
-    val size = numElements
+  def toIntArray(): Array[Int] = {
+    val size = numElements()
     val values = new Array[Int](size)
     var i = 0
     while (i < size) {
@@ -80,8 +80,8 @@ abstract class ArrayData extends SpecializedGetters with SpecializedSetters with
     values
   }
 
-  def toLongArray: Array[Long] = {
-    val size = numElements
+  def toLongArray(): Array[Long] = {
+    val size = numElements()
     val values = new Array[Long](size)
     var i = 0
     while (i < size) {
@@ -91,8 +91,8 @@ abstract class ArrayData extends SpecializedGetters with SpecializedSetters with
     values
   }
 
-  def toFloatArray: Array[Float] = {
-    val size = numElements
+  def toFloatArray(): Array[Float] = {
+    val size = numElements()
     val values = new Array[Float](size)
     var i = 0
     while (i < size) {
@@ -102,8 +102,8 @@ abstract class ArrayData extends SpecializedGetters with SpecializedSetters with
     values
   }
 
-  def toDoubleArray: Array[Double] = {
-    val size = numElements
+  def toDoubleArray(): Array[Double] = {
+    val size = numElements()
     val values = new Array[Double](size)
     var i = 0
     while (i < size) {
@@ -116,7 +116,7 @@ abstract class ArrayData extends SpecializedGetters with SpecializedSetters with
   def toObjectArray(elementType: DataType): Array[AnyRef] = toArray[AnyRef](elementType: DataType)
 
   private[sql] def toArray[T: ClassTag](elementType: DataType): Array[T] = {
-    val size = numElements
+    val size = numElements()
     val accessor = InternalRow.getAccessor(elementType)
     val values = new Array[T](size)
     var i = 0
@@ -132,7 +132,7 @@ abstract class ArrayData extends SpecializedGetters with SpecializedSetters with
   }
 
   def foreach(elementType: DataType, f: (Int, Any) => Unit): Unit = {
-    val size = numElements
+    val size = numElements()
     val accessor = InternalRow.getAccessor(elementType)
     var i = 0
     while (i < size) {

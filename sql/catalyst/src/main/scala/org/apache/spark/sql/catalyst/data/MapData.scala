@@ -29,19 +29,19 @@ import org.apache.spark.sql.types.DataType
  */
 abstract class MapData extends Serializable {
 
-  def numElements: Int
+  def numElements(): Int
 
-  def keyArray: ArrayData
+  def keyArray(): ArrayData
 
-  def valueArray: ArrayData
+  def valueArray(): ArrayData
 
   def copy(): MapData
 
   def foreach(keyType: DataType, valueType: DataType, f: (Any, Any) => Unit): Unit = {
-    val length = numElements
-    val keys = keyArray
+    val length = numElements()
+    val keys = keyArray()
     val keyAccessor = InternalRow.getAccessor(keyType)
-    val values = valueArray
+    val values = valueArray()
     val valueAccessor = InternalRow.getAccessor(valueType)
     var i = 0
     while (i < length) {
