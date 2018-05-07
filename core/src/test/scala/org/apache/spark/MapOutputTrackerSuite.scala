@@ -309,9 +309,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
     tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
-      Array(size0, size1000, size0, size10000)))
+      Array(size0, size1000, size0, size10000), 1))
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
-      Array(size10000, size0, size1000, size0)))
+      Array(size10000, size0, size1000, size0), 1))
     assert(tracker.containsShuffle(10))
     assert(tracker.getMapSizesByExecutorId(10, 0, 4).toSeq ===
         Seq(
