@@ -443,7 +443,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     val oldCount = statusStore.executionsList().size
 
     val expectedAccumValue = 12345
-    val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue)
+    val expectedAccumValue2 = 54321
+    val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue, expectedAccumValue2)
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
       override lazy val executedPlan = physicalPlan
@@ -466,10 +467,14 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
+    val driverMetric2 = physicalPlan.metrics("dummy2")
     val expectedValue = SQLMetrics.stringValue(driverMetric.metricType, Seq(expectedAccumValue))
+    val expectedValue2 = SQLMetrics.stringValue(driverMetric2.metricType, Seq(expectedAccumValue2))
 
     assert(metrics.contains(driverMetric.id))
     assert(metrics(driverMetric.id) === expectedValue)
+    assert(metrics.contains(driverMetric2.id))
+    assert(metrics(driverMetric2.id) === expectedValue2)
   }
 
   test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
@@ -562,20 +567,31 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
  * A dummy [[org.apache.spark.sql.execution.SparkPlan]] that updates a [[SQLMetrics]]
  * on the driver.
  */
-private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExecNode {
+private case class MyPlan(sc: SparkContext, expectedValue: Long, expectedValue2: Long)
+  extends LeafExecNode {
+
   override def sparkContext: SparkContext = sc
   override def output: Seq[Attribute] = Seq()
 
   override val metrics: Map[String, SQLMetric] = Map(
-    "dummy" -> SQLMetrics.createMetric(sc, "dummy"))
+    "dummy" -> SQLMetrics.createMetric(sc, "dummy"),
+    "dummy2" -> SQLMetrics.createMetric(sc, "dummy2"))
 
   override def doExecute(): RDD[InternalRow] = {
     longMetric("dummy") += expectedValue
+    longMetric("dummy2") += expectedValue2
+
+    // postDriverMetricUpdates may happen multiple time in a query.
+    // (normally from different operators, but for the sake of testing, from one operator)
+    SQLMetrics.postDriverMetricUpdates(
+      sc,
+      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      Seq(metrics("dummy")))
 
     SQLMetrics.postDriverMetricUpdates(
       sc,
       sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
-      metrics.values.toSeq)
+      Seq(metrics("dummy2")))
     sc.emptyRDD
   }
 }

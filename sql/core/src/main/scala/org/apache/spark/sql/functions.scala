@@ -3050,6 +3050,16 @@ object functions {
    }
 
   /**
+   * Returns an array containing all the elements in `x` from index `start` (or starting from the
+   * end if `start` is negative) with the specified `length`.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def slice(x: Column, start: Int, length: Int): Column = withExpr {
+    Slice(x.expr, Literal(start), Literal(length))
+  }
+
+  /**
    * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
    * `nullReplacement`.
    * @group collection_funcs
@@ -3102,6 +3112,15 @@ object functions {
   def element_at(column: Column, value: Any): Column = withExpr {
     ElementAt(column.expr, Literal(value))
   }
+
+  /**
+   * Sorts the input array in ascending order. The elements of the input array must be orderable.
+   * Null elements will be placed at the end of the returned array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
 
   /**
    * Creates a new row for each element in the given array or map column.
@@ -3189,7 +3208,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    JsonToStructs(schema, options, e.expr)
+    new JsonToStructs(schema, options, e.expr)
   }
 
   /**
@@ -3342,6 +3361,7 @@ object functions {
   /**
    * Sorts the input array for the given column in ascending order,
    * according to the natural ordering of the array elements.
+   * Null elements will be placed at the beginning of the returned array.
    *
    * @group collection_funcs
    * @since 1.5.0
@@ -3351,6 +3371,8 @@ object functions {
   /**
    * Sorts the input array for the given column in ascending or descending order,
    * according to the natural ordering of the array elements.
+   * Null elements will be placed at the beginning of the returned array in ascending order or
+   * at the end of the returned array in descending order.
    *
    * @group collection_funcs
    * @since 1.5.0
