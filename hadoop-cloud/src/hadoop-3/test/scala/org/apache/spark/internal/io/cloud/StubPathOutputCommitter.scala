@@ -34,9 +34,14 @@ class StubPathOutputCommitter(
     workPath: Path,
     context: TaskAttemptContext) extends PathOutputCommitter(workPath, context) {
 
-  var setup: Boolean = false
-  var committed: Boolean = false
-  var aborted: Boolean = false
+  var jobSetup: Boolean = false
+  var jobCommitted: Boolean = false
+  var jobAborted: Boolean = false
+
+  var taskSetup: Boolean = false
+  var taskCommitted: Boolean = false
+  var taskAborted: Boolean = false
+  var needsTaskCommit: Boolean = true
 
   override def getOutputPath: Path = outputPath
 
@@ -45,37 +50,37 @@ class StubPathOutputCommitter(
   }
 
   override def setupTask(taskAttemptContext: TaskAttemptContext): Unit = {
-    setup = true
+    taskSetup = true
   }
 
   override def abortTask(taskAttemptContext: TaskAttemptContext): Unit = {
-    aborted = true
-  }
-
-  override def setupJob(jobContext: JobContext): Unit = {
-    setup = true
+    taskAborted = true
   }
 
   override def commitTask(taskAttemptContext: TaskAttemptContext): Unit = {
-    committed = true
+    taskCommitted = true
+  }
+
+  override def setupJob(jobContext: JobContext): Unit = {
+    jobSetup = true
   }
 
   override def commitJob(jobContext: JobContext): Unit = {
-    committed = true
+    jobCommitted = true
   }
 
   override def abortJob(
       jobContext: JobContext,
       state: JobStatus.State): Unit = {
-    aborted = true
+    jobAborted = true
   }
 
   override def needsTaskCommit(taskAttemptContext: TaskAttemptContext): Boolean = {
-    true
+    needsTaskCommit
   }
 
-  override def toString(): String  = s"StubPathOutputCommitter(setup=$setup," +
-    s" committed=$committed, aborted=$aborted)"
+  override def toString(): String  = s"StubPathOutputCommitter(setup=$jobSetup," +
+    s" committed=$jobCommitted, aborted=$jobAborted)"
 }
 
 /**

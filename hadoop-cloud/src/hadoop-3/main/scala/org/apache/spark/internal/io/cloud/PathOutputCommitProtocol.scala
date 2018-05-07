@@ -54,21 +54,18 @@ import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
  * @throws IOException when an unsupported dynamicPartitionOverwrite option is supplied.
  */
 class PathOutputCommitProtocol(
-  jobId: String,
-  destination: String,
-  dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(
-    jobId,
-    destination,
-    false) with Serializable {
+    jobId: String,
+    destination: String,
+    dynamicPartitionOverwrite: Boolean = false)
+  extends HadoopMapReduceCommitProtocol(jobId, destination, false) with Serializable {
 
   @transient var committer: PathOutputCommitter = _
 
   require(destination != null, "Null destination specified")
 
-  val destPath = new Path(destination)
+  val destPath: Path  = new Path(destination)
 
-  logInfo(s"Instantiated committer with job ID=$jobId;" +
+  logDebug(s"Instantiated committer with job ID=$jobId;" +
     s" destination=$destPath;" +
     s" dynamicPartitionOverwrite=$dynamicPartitionOverwrite")
 
@@ -76,8 +73,10 @@ class PathOutputCommitProtocol(
     // until there's explicit extensions to the PathOutputCommitProtocols
     // to support the spark mechanism, it's left to the individual committer
     // choice to handle partitioning.
-    throw new IOException("PathOutputCommitProtocol does not support dynamicPartitionOverwrite")
+    throw new IOException(PathOutputCommitProtocol.UNSUPPORTED)
   }
+
+  def getDestination(): String = destination
 
   import PathOutputCommitProtocol._
 
@@ -92,7 +91,7 @@ class PathOutputCommitProtocol(
   override protected def setupCommitter(
     context: TaskAttemptContext): PathOutputCommitter = {
 
-    logInfo(s"Setting up committer for path $destination")
+    logDebug(s"Setting up committer for path $destination")
     committer = PathOutputCommitterFactory.createCommitter(destPath, context)
 
     // Special feature to force out the FileOutputCommitter, so as to guarantee
@@ -105,12 +104,12 @@ class PathOutputCommitProtocol(
       val factory = PathOutputCommitterFactory.getCommitterFactory(
         destPath,
         context.getConfiguration)
-      logInfo(s"Using committer factory $factory")
+      logDebug(s"Using committer factory $factory")
       committer = factory.createOutputCommitter(destPath, context)
     }
 
-    logInfo(s"Using committer ${committer.getClass}")
-    logInfo(s"Committer details: $committer")
+    logDebug(s"Using committer ${committer.getClass}")
+    logDebug(s"Committer details: $committer")
     if (committer.isInstanceOf[FileOutputCommitter]) {
       require(!rejectFileOutput,
         s"Committer created is the FileOutputCommitter $committer")
@@ -119,7 +118,7 @@ class PathOutputCommitProtocol(
         // If FileOutputCommitter says its job commit is repeatable, it means
         // it is using the v2 algorithm, which is not safe for task commit
         // failures. Warn
-        logWarning(s"Committer $committer may not be tolerant of task commit failures")
+        logDebug(s"Committer $committer may not be tolerant of task commit failures")
       }
     }
     committer
@@ -141,7 +140,7 @@ class PathOutputCommitProtocol(
     val workDir = committer.getWorkPath
     val parent = dir.map(d => new Path(workDir, d)).getOrElse(workDir)
     val file = new Path(parent, buildFilename(taskContext, ext))
-    logInfo(s"Creating task file $file for dir $dir and ext $ext")
+    logDebug(s"Creating task file $file for dir $dir and ext $ext")
     file.toString
   }
 
@@ -159,8 +158,7 @@ class PathOutputCommitProtocol(
     ext: String): String = {
 
     val file = super.newTaskTempFileAbsPath(taskContext, absoluteDir, ext)
-    logWarning(
-      s"Creating temporary file $file for absolute path for dir $absoluteDir")
+    logInfo(s"Creating temporary file $file for absolute path for dir $absoluteDir")
     file
   }
 
@@ -185,19 +183,21 @@ class PathOutputCommitProtocol(
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
-    logInfo("setup job")
+    logDebug("setup job")
     super.setupJob(jobContext)
   }
 
   override def commitJob(
     jobContext: JobContext,
     taskCommits: Seq[FileCommitProtocol.TaskCommitMessage]): Unit = {
-    logInfo(s"commit job with ${taskCommits.length} task commit message(s)")
+    logDebug(s"commit job with ${taskCommits.length} task commit message(s)")
     super.commitJob(jobContext, taskCommits)
   }
 
   /**
    * Abort the job; log and ignore any IO exception thrown.
+   * This is invariably invoked in an exception handler; raising
+   * an exception here will lose the root cause of the failure.
    *
    * @param jobContext job context
    */
@@ -216,17 +216,18 @@ class PathOutputCommitProtocol(
 
   override def commitTask(
     taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
-    logInfo("Commit task")
+    logDebug("Commit task")
     super.commitTask(taskContext)
   }
 
   /**
    * Abort the task; log and ignore any failure thrown.
-   *
+   * This is invariably invoked in an exception handler; raising
+   * an exception here will lose the root cause of the failure.
    * @param taskContext context
    */
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
-    logInfo("Abort task")
+    logDebug("Abort task")
     try {
       super.abortTask(taskContext)
     } catch {
@@ -236,7 +237,8 @@ class PathOutputCommitProtocol(
   }
 
   override def onTaskCommit(msg: TaskCommitMessage): Unit = {
-    logInfo(s"onTaskCommit($msg)")
+    logDebug(s"onTaskCommit($msg)")
+    super.onTaskCommit(msg)
   }
 }
 
@@ -257,4 +259,9 @@ object PathOutputCommitProtocol {
    * Default behavior: accept the file output.
    */
   val REJECT_FILE_OUTPUT_DEFVAL = false
+
+  /** Error string for tests. */
+  private[cloud] val UNSUPPORTED = "PathOutputCommitProtocol does not support" +
+    " dynamicPartitionOverwrite"
+
 }

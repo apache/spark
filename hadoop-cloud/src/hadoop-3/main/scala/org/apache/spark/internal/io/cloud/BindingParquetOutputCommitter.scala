@@ -41,7 +41,7 @@ class BindingParquetOutputCommitter(
     context: TaskAttemptContext)
   extends ParquetOutputCommitter(path, context) with Logging {
 
-  logInfo(s"${this.getClass.getName} binding to configured PathOutputCommitter and dest $path")
+  logDebug(s"${this.getClass.getName} binding to configured PathOutputCommitter and dest $path")
 
   val committer = new BindingPathOutputCommitter(path, context)
 
@@ -95,6 +95,8 @@ class BindingParquetOutputCommitter(
 
   /**
    * Abort the job; log and ignore any IO exception thrown.
+   * This is invariably invoked in an exception handler; raising
+   * an exception here will lose the root cause of the failure.
    *
    * @param jobContext job context
    * @param state final state of the job
@@ -106,6 +108,8 @@ class BindingParquetOutputCommitter(
       committer.abortJob(jobContext, state)
     } catch {
       case e: IOException =>
+        // swallow exception to avoid problems when called within exception
+        // handlers
         logWarning("Abort job failed", e)
     }
   }

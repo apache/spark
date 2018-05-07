@@ -81,21 +81,30 @@ import org.apache.spark.sql.internal.SQLConf
 package object cloud {
 
   /**
+   * The classname to use when referring to the path output committer.
+   */
+  val PATH_COMMIT_PROTOCOL_CLASSNAME: String = classOf[PathOutputCommitProtocol].getName
+
+  /**
+   * The name of the parquet committer.
+   */
+  val PARQUET_COMMITTER_CLASSNAME: String = classOf[BindingParquetOutputCommitter].getName
+
+  /**
    * Options for committer setup.
    * When applied to a spark configuration, this will set the
    * Dataframe output to use the factory mechanism for writing data for
    * all file formats.
    */
   val COMMITTER_BINDING_OPTIONS: Map[String, String] = Map(
-    SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
-      classOf[BindingParquetOutputCommitter].getName,
-    SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
-      classOf[PathOutputCommitProtocol].getName)
+    SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key -> PARQUET_COMMITTER_CLASSNAME,
+    SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key -> PATH_COMMIT_PROTOCOL_CLASSNAME)
 
   /**
    * Set the options defined in [[cloud.COMMITTER_BINDING_OPTIONS]] on the
    * spark context.
    *
+   * Warning: this is purely experimental.
    * @param sparkConf spark configuration to bind.
    */
   def bind(sparkConf: SparkConf): Unit = {
