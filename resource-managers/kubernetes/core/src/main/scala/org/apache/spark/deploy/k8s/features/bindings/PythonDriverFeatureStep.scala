@@ -16,42 +16,55 @@
  */
 package org.apache.spark.deploy.k8s.features.bindings
 
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model.ContainerBuilder
+import io.fabric8.kubernetes.api.model.EnvVar
+import io.fabric8.kubernetes.api.model.EnvVarBuilder
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 
 private[spark] class PythonDriverFeatureStep(
-  kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
+  kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
   extends KubernetesFeatureConfigStep {
   override def configurePod(pod: SparkPod): SparkPod = {
-    val mainResource = kubernetesConf.pySparkMainResource()
-    require(mainResource.isDefined, "PySpark Main Resource must be defined")
-    val otherPyFiles = kubernetesConf.pyFiles().map(pyFile =>
-      KubernetesUtils.resolveFileUrisAndPath(pyFile.split(","))
-        .mkString(":")).getOrElse("")
-    val withPythonPrimaryFileContainer = new ContainerBuilder(pod.container)
-      .addNewEnv()
-        .withName(ENV_PYSPARK_ARGS)
-        .withValue(kubernetesConf.pySparkAppArgs().getOrElse(""))
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_PYSPARK_PRIMARY)
-        .withValue(KubernetesUtils.resolveFileUri(mainResource.get))
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_PYSPARK_FILES)
-        .withValue(if (otherPyFiles == "") {""} else otherPyFiles)
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_PYSPARK_PYTHON_VERSION)
-        .withValue(kubernetesConf.pySparkPythonVersion())
-        .endEnv()
-      .build()
-    SparkPod(pod.pod, withPythonPrimaryFileContainer)
+    val roleConf = kubernetesConf.roleSpecificConf
+    require(roleConf.mainAppResource.isDefined, "PySpark Main Resource must be defined")
+    val maybePythonArgs: Option[EnvVar] = Option(roleConf.appArgs).filter(_.nonEmpty).map(
+      s =>
+        new EnvVarBuilder()
+          .withName(ENV_PYSPARK_ARGS)
+          .withValue(s.mkString(","))
+          .build())
+    val maybePythonFiles: Option[EnvVar] = kubernetesConf.pyFiles().map(
+      pyFiles =>
+        new EnvVarBuilder()
+          .withName(ENV_PYSPARK_FILES)
+          .withValue(KubernetesUtils.resolveFileUrisAndPath(pyFiles.split(","))
+            .mkString(":"))
+          .build())
+    val envSeq : Seq[EnvVar] =
+      Seq(new EnvVarBuilder()
+          .withName(ENV_PYSPARK_PRIMARY)
+          .withValue(KubernetesUtils.resolveFileUri(kubernetesConf.pySparkMainResource().get))
+        .build(),
+          new EnvVarBuilder()
+          .withName(ENV_PYSPARK_PYTHON_VERSION)
+          .withValue(kubernetesConf.pySparkPythonVersion())
+        .build())
+    val pythonEnvs = envSeq ++
+      maybePythonArgs.toSeq ++
+      maybePythonFiles.toSeq
+
+    val withPythonPrimaryContainer = new ContainerBuilder(pod.container)
+        .addAllToEnv(pythonEnvs.asJava).build()
+
+    SparkPod(pod.pod, withPythonPrimaryContainer)
   }
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
 

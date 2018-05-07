@@ -214,7 +214,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val kubernetesResourceNamePrefix = {
       s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
     }
-    sparkConf.set("spark.kubernetes.python.pyFiles", clientArguments.maybePyFiles.getOrElse(""))
+    sparkConf.set(KUBERNETES_PYSPARK_PY_FILES, clientArguments.maybePyFiles.getOrElse(""))
     val kubernetesConf = KubernetesConf.createDriverConf(
       sparkConf,
       appName,
