@@ -3094,6 +3094,15 @@ object functions {
   }
 
   /**
+   * Sorts the input array in ascending order. The elements of the input array must be orderable.
+   * Null elements will be placed at the end of the returned array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
@@ -3332,6 +3341,7 @@ object functions {
   /**
    * Sorts the input array for the given column in ascending order,
    * according to the natural ordering of the array elements.
+   * Null elements will be placed at the beginning of the returned array.
    *
    * @group collection_funcs
    * @since 1.5.0
@@ -3341,6 +3351,8 @@ object functions {
   /**
    * Sorts the input array for the given column in ascending or descending order,
    * according to the natural ordering of the array elements.
+   * Null elements will be placed at the beginning of the returned array in ascending order or
+   * at the end of the returned array in descending order.
    *
    * @group collection_funcs
    * @since 1.5.0
