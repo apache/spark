@@ -410,6 +410,7 @@ object FunctionRegistry {
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
     expression[Size]("size"),
+    expression[Slice]("slice"),
     expression[Size]("cardinality"),
     expression[SortArray]("sort_array"),
     expression[ArrayMin]("array_min"),

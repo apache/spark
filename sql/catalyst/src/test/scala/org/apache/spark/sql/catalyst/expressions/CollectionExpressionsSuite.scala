@@ -136,6 +136,34 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
 
+  test("Slice") {
+    val a0 = Literal.create(Seq(1, 2, 3, 4, 5, 6), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[String]("a", "b", "c", "d"), ArrayType(StringType))
+    val a2 = Literal.create(Seq[String]("", null, "a", "b"), ArrayType(StringType))
+    val a3 = Literal.create(Seq(1, 2, null, 4), ArrayType(IntegerType))
+
+    checkEvaluation(Slice(a0, Literal(1), Literal(2)), Seq(1, 2))
+    checkEvaluation(Slice(a0, Literal(-3), Literal(2)), Seq(4, 5))
+    checkEvaluation(Slice(a0, Literal(4), Literal(10)), Seq(4, 5, 6))
+    checkEvaluation(Slice(a0, Literal(-1), Literal(2)), Seq(6))
+    checkExceptionInExpression[RuntimeException](Slice(a0, Literal(1), Literal(-1)),
+      "Unexpected value for length")
+    checkExceptionInExpression[RuntimeException](Slice(a0, Literal(0), Literal(1)),
+      "Unexpected value for start")
+    checkEvaluation(Slice(a0, Literal(-20), Literal(1)), Seq.empty[Int])
+    checkEvaluation(Slice(a1, Literal(-20), Literal(1)), Seq.empty[String])
+    checkEvaluation(Slice(a0, Literal.create(null, IntegerType), Literal(2)), null)
+    checkEvaluation(Slice(a0, Literal(2), Literal.create(null, IntegerType)), null)
+    checkEvaluation(Slice(Literal.create(null, ArrayType(IntegerType)), Literal(1), Literal(2)),
+      null)
+
+    checkEvaluation(Slice(a1, Literal(1), Literal(2)), Seq("a", "b"))
+    checkEvaluation(Slice(a2, Literal(1), Literal(2)), Seq("", null))
+    checkEvaluation(Slice(a0, Literal(10), Literal(1)), Seq.empty[Int])
+    checkEvaluation(Slice(a1, Literal(10), Literal(1)), Seq.empty[String])
+    checkEvaluation(Slice(a3, Literal(2), Literal(3)), Seq(2, null, 4))
+  }
+
   test("ArrayJoin") {
     def testArrays(
         arrays: Seq[Expression],

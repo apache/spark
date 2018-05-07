@@ -442,6 +442,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("slice function") {
+    val df = Seq(
+      Seq(1, 2, 3),
+      Seq(4, 5)
+    ).toDF("x")
+
+    val answer = Seq(Row(Seq(2, 3)), Row(Seq(5)))
+
+    checkAnswer(df.select(slice(df("x"), 2, 2)), answer)
+    checkAnswer(df.selectExpr("slice(x, 2, 2)"), answer)
+
+    val answerNegative = Seq(Row(Seq(3)), Row(Seq(5)))
+    checkAnswer(df.select(slice(df("x"), -1, 1)), answerNegative)
+    checkAnswer(df.selectExpr("slice(x, -1, 1)"), answerNegative)
+  }
+
   test("array_join function") {
     val df = Seq(
       (Seq[String]("a", "b"), ","),
