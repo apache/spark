@@ -2313,7 +2313,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("SPARK-23723: write json in UTF-16 with multiline off") {
+  test("SPARK-23723: write json in UTF-16/32 with multiline off") {
     Seq("UTF-16", "UTF-32").foreach { encoding =>
       withTempPath { path =>
         val ds = spark.createDataset(Seq(
