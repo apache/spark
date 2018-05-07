@@ -546,7 +546,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       taskContext,
       transfer,
       blockManager,
-      blocksByAddress,
+      blocksByAddress.toIterator,
       (_, in) => in,
       48 * 1024 * 1024,
       Int.MaxValue,
