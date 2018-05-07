@@ -201,22 +201,17 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   }
 
   test("KMean with Array input") {
-    def trainTransfromAndComputeCost(dataset: Dataset[_]): (DataFrame, Double) = {
+    def trainAndComputeCost(dataset: Dataset[_]): Double = {
       val model = new KMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
-      (model.transform(dataset), model.computeCost(dataset))
+      model.computeCost(dataset)
     }
 
-    val (newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
-    val (transformed, trueCost) = trainTransfromAndComputeCost(dataset)
-    val (transformedD, doubleArrayCost) = trainTransfromAndComputeCost(newDatasetD)
-    val (transformedF, floatArrayCost) = trainTransfromAndComputeCost(newDatasetF)
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val trueCost = trainAndComputeCost(newDataset)
+    val doubleArrayCost = trainAndComputeCost(newDatasetD)
+    val floatArrayCost = trainAndComputeCost(newDatasetF)
 
-    val predictDifferenceD = transformed.select("prediction")
-      .except(transformedD.select("prediction"))
-    assert(predictDifferenceD.count() == 0)
-    val predictDifferenceF = transformed.select("prediction")
-      .except(transformedF.select("prediction"))
-    assert(predictDifferenceF.count() == 0)
+    // checking the cost is fine enough as a sanity check
     assert(trueCost ~== doubleArrayCost absTol 1e-6)
     assert(trueCost ~== floatArrayCost absTol 1e-6)
   }

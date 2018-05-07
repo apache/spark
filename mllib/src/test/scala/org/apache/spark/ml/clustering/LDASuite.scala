@@ -326,15 +326,15 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("LDA with Array input") {
-    def trainAndLogLikehoodAndPerplexity(dataset: Dataset[_]): (Double, Double) = {
+    def trainAndLogLikelihoodAndPerplexity(dataset: Dataset[_]): (Double, Double) = {
       val model = new LDA().setK(k).setOptimizer("online").setMaxIter(1).setSeed(1).fit(dataset)
       (model.logLikelihood(dataset), model.logPerplexity(dataset))
     }
 
-    val (newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
-    val (ll, lp) = trainAndLogLikehoodAndPerplexity(dataset)
-    val (llD, lpD) = trainAndLogLikehoodAndPerplexity(newDatasetD)
-    val (llF, lpF) = trainAndLogLikehoodAndPerplexity(newDatasetF)
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val (ll, lp) = trainAndLogLikelihoodAndPerplexity(newDataset)
+    val (llD, lpD) = trainAndLogLikelihoodAndPerplexity(newDatasetD)
+    val (llF, lpF) = trainAndLogLikelihoodAndPerplexity(newDatasetF)
     // TODO: need to compare the result once we fix the seed issue for LDA (SPARK-22210)
     assert(llD <= 0.0 && llD != Double.NegativeInfinity)
     assert(llF <= 0.0 && llF != Double.NegativeInfinity)

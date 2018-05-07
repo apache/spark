@@ -259,29 +259,19 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("GaussianMixture with Array input") {
-    def trainAndTransfrom(dataset: Dataset[_]): DataFrame = {
+    def trainAndComputlogLikelihood(dataset: Dataset[_]): Double = {
       val model = new GaussianMixture().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
-      model.transform(dataset)
+      model.summary.logLikelihood
     }
 
-    val (newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
-    val transformed = trainAndTransfrom(dataset)
-    val transformedD = trainAndTransfrom(newDatasetD)
-    val transformedF = trainAndTransfrom(newDatasetF)
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val trueLikelihood = trainAndComputlogLikelihood(newDataset)
+    val doubleLikelihood = trainAndComputlogLikelihood(newDatasetD)
+    val floatLikelihood = trainAndComputlogLikelihood(newDatasetF)
 
-    val predictDifferenceD = transformed.select("prediction")
-      .except(transformedD.select("prediction"))
-    assert(predictDifferenceD.count() == 0)
-    val predictDifferenceF = transformed.select("prediction")
-      .except(transformedF.select("prediction"))
-    assert(predictDifferenceF.count() == 0)
-
-    val probabilityDifferenceD = transformed.select("probability")
-      .except(transformedD.select("probability"))
-    assert(probabilityDifferenceD.count() == 0)
-    val probabilityDifferenceF = transformed.select("probability")
-      .except(transformedF.select("probability"))
-    assert(probabilityDifferenceF.count() == 0)
+    // checking the cost is fine enough as a sanity check
+    assert(trueLikelihood == doubleLikelihood)
+    assert(trueLikelihood == floatLikelihood)
   }
 }
 
