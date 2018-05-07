@@ -353,6 +353,36 @@ case class Join(
 }
 
 /**
+ * Append data to an existing DataSourceV2 table.
+ */
+case class AppendData(
+    table: LogicalPlan,
+    query: LogicalPlan,
+    isByName: Boolean) extends LogicalPlan {
+  override def children: Seq[LogicalPlan] = Seq(query)
+  override def output: Seq[Attribute] = Seq.empty
+
+  override lazy val resolved: Boolean = {
+    query.output.size == table.output.size && query.output.zip(table.output).forall {
+      case (inAttr, outAttr) =>
+          inAttr.name == outAttr.name &&                // names must match
+          outAttr.dataType.sameType(inAttr.dataType) && // types must match
+          (outAttr.nullable || !inAttr.nullable)        // must accept null or never produce nulls
+    }
+  }
+}
+
+object AppendData {
+  def byName(table: LogicalPlan, df: LogicalPlan): AppendData = {
+    new AppendData(table, df, true)
+  }
+
+  def byPosition(table: LogicalPlan, query: LogicalPlan): AppendData = {
+    new AppendData(table, query, false)
+  }
+}
+
+/**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
  * concrete implementations during analysis.
  *
