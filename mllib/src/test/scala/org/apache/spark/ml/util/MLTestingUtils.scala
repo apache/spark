@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasWeightCol}
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
@@ -249,19 +249,23 @@ object MLTestingUtils extends SparkFunSuite {
   }
 
   /**
-   * Helper function for testing different input types for features. Given a DataFrame, generate
-   * three output DataFrames: one having vector feature column with float precision, one having
-   * double array feature column with float precision, and one having float array feature column.
+   * Helper function for testing different input types for "features" column. Given a DataFrame,
+   * generate three output DataFrames: one having vector "features" column with float precision,
+   * one having double array "features" column with float precision, and one having float array
+   * "features" column.
    */
-  def generateArrayFeatureDataset(dataset: Dataset[_]): (Dataset[_], Dataset[_], Dataset[_]) = {
-    val toFloatVectorUDF = udf { (features: Vector) => features.toArray.map(_.toFloat).toVector}
+  def generateArrayFeatureDataset(dataset: Dataset[_],
+    featuresColName: String = "features"): (Dataset[_], Dataset[_], Dataset[_]) = {
+    val toFloatVectorUDF = udf { (features: Vector) =>
+      Vectors.dense(features.toArray.map(_.toFloat.toDouble))}
     val toDoubleArrayUDF = udf { (features: Vector) => features.toArray}
     val toFloatArrayUDF = udf { (features: Vector) => features.toArray.map(_.toFloat)}
-    val newDataset = dataset.withColumn("features", toFloatVectorUDF(col("features")))
-    val newDatasetD = dataset.withColumn("features", toDoubleArrayUDF(col("features")))
-    val newDatasetF = dataset.withColumn("features", toFloatArrayUDF(col("features")))
-    assert(newDatasetD.schema("features").dataType.equals(new ArrayType(DoubleType, false)))
-    assert(newDatasetF.schema("features").dataType.equals(new ArrayType(FloatType, false)))
+    val newDataset = dataset.withColumn(featuresColName, toFloatVectorUDF(col(featuresColName)))
+    val newDatasetD = newDataset.withColumn(featuresColName, toDoubleArrayUDF(col(featuresColName)))
+    val newDatasetF = newDataset.withColumn(featuresColName, toFloatArrayUDF(col(featuresColName)))
+    assert(newDataset.schema(featuresColName).dataType.equals(new VectorUDT))
+    assert(newDatasetD.schema(featuresColName).dataType.equals(new ArrayType(DoubleType, false)))
+    assert(newDatasetF.schema(featuresColName).dataType.equals(new ArrayType(FloatType, false)))
     (newDataset, newDatasetD, newDatasetF)
   }
 }

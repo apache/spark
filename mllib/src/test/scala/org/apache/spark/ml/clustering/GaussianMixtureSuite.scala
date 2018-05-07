@@ -270,8 +270,8 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val floatLikelihood = trainAndComputlogLikelihood(newDatasetF)
 
     // checking the cost is fine enough as a sanity check
-    assert(trueLikelihood == doubleLikelihood)
-    assert(trueLikelihood == floatLikelihood)
+    assert(trueLikelihood ~== doubleLikelihood absTol 1e-6)
+    assert(trueLikelihood ~== floatLikelihood absTol 1e-6)
   }
 }
 

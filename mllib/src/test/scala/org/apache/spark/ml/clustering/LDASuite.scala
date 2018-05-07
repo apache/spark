@@ -335,7 +335,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val (ll, lp) = trainAndLogLikelihoodAndPerplexity(newDataset)
     val (llD, lpD) = trainAndLogLikelihoodAndPerplexity(newDatasetD)
     val (llF, lpF) = trainAndLogLikelihoodAndPerplexity(newDatasetF)
-    // TODO: need to compare the result once we fix the seed issue for LDA (SPARK-22210)
+    // TODO: need to compare the results once we fix the seed issue for LDA (SPARK-22210)
     assert(llD <= 0.0 && llD != Double.NegativeInfinity)
     assert(llF <= 0.0 && llF != Double.NegativeInfinity)
     assert(lpD >= 0.0 && lpD != Double.NegativeInfinity)
