@@ -160,6 +160,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapConcat(Seq()),
       Map())
 
+    // force split expressions for input in generated code
+    checkEvaluation(MapConcat(Seq(m0, m2, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0,
+      m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0,
+      m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0)),
+      mutable.LinkedHashMap("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5"))
+
     // argument checking
     assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
     assert(MapConcat(Seq(m5, m6)).checkInputDataTypes().isSuccess)
