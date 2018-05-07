@@ -28,9 +28,7 @@ import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
 class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SortPrefix") {
-    // Explicitly choose a time zone, since Date objects can create different values depending on
-    // local time zone of the machine on which the test is running
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+
     val b1 = Literal.create(false, BooleanType)
     val b2 = Literal.create(true, BooleanType)
     val i1 = Literal.create(20132983, IntegerType)
@@ -38,7 +36,15 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val l1 = Literal.create(20132983, LongType)
     val l2 = Literal.create(-20132983, LongType)
     val millis = 1524954911000L;
-    val d1 = Literal.create(new java.sql.Date(millis), DateType)
+    // Explicitly choose a time zone, since Date objects can create different values depending on
+    // local time zone of the machine on which the test is running
+    val oldDefaultTZ = TimeZone.getDefault
+    val d1 = try {
+      TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+      Literal.create(new java.sql.Date(millis), DateType)
+    } finally {
+      TimeZone.setDefault(oldDefaultTZ)
+    }
     val t1 = Literal.create(new Timestamp(millis), TimestampType)
     val f1 = Literal.create(0.7788229f, FloatType)
     val f2 = Literal.create(-0.7788229f, FloatType)
