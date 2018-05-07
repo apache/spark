@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -197,7 +198,6 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val byteArraySize = ctx.freshName("byteArraySize")
     val data = ctx.freshName("byteArray")
     val unsafeRow = ctx.freshName("unsafeRow")
-    val structSize = ctx.freshName("structSize")
     val unsafeArrayData = ctx.freshName("unsafeArrayData")
     val structsOffset = ctx.freshName("structsOffset")
     val calculateArraySize = "UnsafeArrayData.calculateSizeOfUnderlyingByteArray"
@@ -205,6 +205,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
 
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
     val longSize = LongType.defaultSize
+    val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + longSize * 2
     val keyTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
     val valueTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
 
@@ -222,12 +223,11 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     }
 
     s"""
-       |final int $structSize = ${UnsafeRow.calculateBitSetWidthInBytes(2) + longSize * 2};
-       |final long $byteArraySize = $calculateArraySize($numElements, $longSize + $structSize);
-       |final int $structsOffset = $calculateHeader($numElements) + $numElements * $longSize;
+       |final long $byteArraySize = $calculateArraySize($numElements, ${longSize + structSize});
        |if ($byteArraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
        |  ${genCodeForAnyElements(ctx, keys, values, arrayData, numElements)}
        |} else {
+       |  final int $structsOffset = $calculateHeader($numElements) + $numElements * $longSize;
        |  final byte[] $data = new byte[(int)$byteArraySize];
        |  UnsafeArrayData $unsafeArrayData = new UnsafeArrayData();
        |  Platform.putLong($data, $baseOffset, $numElements);
