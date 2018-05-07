@@ -122,7 +122,6 @@ class ContinuousExecution(
             s"Batch $latestEpochId was committed without end epoch offsets!")
         }
         committedOffsets = nextOffsets.toStreamProgress(sources)
-
         currentBatchId = latestEpochId + 1
 
         logDebug(s"Resuming at epoch $currentBatchId with committed offsets $committedOffsets")
