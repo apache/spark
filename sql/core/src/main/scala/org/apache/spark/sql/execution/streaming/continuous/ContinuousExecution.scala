@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
+import java.lang.Thread.UncaughtExceptionHandler
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.function.UnaryOperator
 
 import scala.collection.JavaConverters._
@@ -233,9 +235,15 @@ class ContinuousExecution(
               }
               false
             } else if (isActive) {
-              currentBatchId = epochEndpoint.askSync[Long](IncrementAndGetEpoch)
-              logInfo(s"New epoch $currentBatchId is starting.")
-              true
+              val maxBacklogExceeded = epochEndpoint.askSync[Boolean](CheckIfMaxBacklogIsExceeded)
+              if (maxBacklogExceeded) {
+                throw new IllegalStateException(
+                  "Size of the epochs queue has exceeded maximum allowed epoch backlog.")
+              } else {
+                currentBatchId = epochEndpoint.askSync[Long](IncrementAndGetEpoch)
+                logInfo(s"New epoch $currentBatchId is starting.")
+                true
+              }
             } else {
               false
             }
@@ -248,7 +256,12 @@ class ContinuousExecution(
       }
     }, s"epoch update thread for $prettyIdString")
 
+    val throwableReference: AtomicReference[Throwable] = new AtomicReference[Throwable]()
     try {
+      epochUpdateThread.setUncaughtExceptionHandler(new UncaughtExceptionHandler {
+        override def uncaughtException(thread: Thread, throwable: Throwable): Unit =
+          throwableReference.set(throwable)
+      })
       epochUpdateThread.setDaemon(true)
       epochUpdateThread.start()
 
@@ -267,6 +280,11 @@ class ContinuousExecution(
 
       epochUpdateThread.interrupt()
       epochUpdateThread.join()
+
+      val throwable: Throwable = throwableReference.get()
+      if (throwable != null && throwable.isInstanceOf[IllegalStateException]) {
+        throw throwable.asInstanceOf[IllegalStateException]
+      }
 
       stopSources()
       sparkSession.sparkContext.cancelJobGroup(runId.toString)

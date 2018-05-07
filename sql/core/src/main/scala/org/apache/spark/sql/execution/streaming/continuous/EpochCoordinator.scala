@@ -45,6 +45,11 @@ private[sql] case object IncrementAndGetEpoch extends EpochCoordinatorMessage
  */
 private[sql] case object StopContinuousExecutionWrites extends EpochCoordinatorMessage
 
+/**
+ * Returns boolean indicating if size of the epochs queue has exceeded maximum epoch backlog.
+ */
+private[sql] case object CheckIfMaxBacklogIsExceeded extends EpochCoordinatorMessage
+
 // Init messages
 /**
  * Set the reader and writer partition counts. Tasks may not be started until the coordinator
@@ -125,6 +130,7 @@ private[continuous] class EpochCoordinator(
 
   private val maxEpochBacklog = session.sqlContext.conf.maxEpochBacklog
 
+  private var maxEpochBacklogExceeded: Boolean = false
   private var queryWritesStopped: Boolean = false
 
   private var numReaderPartitions: Int = _
@@ -156,8 +162,7 @@ private[continuous] class EpochCoordinator(
       // otherwise commit it.
       if (lastCommittedEpoch != epoch - 1) {
         if (epochsWaitingToBeCommitted.size == maxEpochBacklog) {
-          logError("Epochs queue has reached maximum epoch backlog. " +
-            "Not remembering this and further epochs until size of the queue decreases.")
+          maxEpochBacklogExceeded = true
         } else {
           logDebug(s"Epoch $epoch has received commits from all partitions " +
             s"and is waiting for epoch ${epoch - 1} to be committed first.")
@@ -253,5 +258,8 @@ private[continuous] class EpochCoordinator(
     case StopContinuousExecutionWrites =>
       queryWritesStopped = true
       context.reply(())
+
+    case CheckIfMaxBacklogIsExceeded =>
+      context.reply(maxEpochBacklogExceeded)
   }
 }
