@@ -885,7 +885,7 @@ object DateTimeUtils {
 
   /**
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
-   * microseconds since 1.1.1970.
+   * microseconds since 1.1.1970. If time1 is later than time2, the result is positive.
    *
    * If time1 and time2 are on the same day of month, or both are the last day of month,
    * returns, time of day will be ignored.
