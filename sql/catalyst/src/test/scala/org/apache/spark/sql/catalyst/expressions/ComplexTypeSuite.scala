@@ -186,6 +186,37 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("CreateMapFromArray") {
+    def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
+      // catalyst map is order-sensitive, so we create ListMap here to preserve the elements order.
+      scala.collection.immutable.ListMap(keys.zip(values): _*)
+    }
+
+    val intSeq = Seq(5, 10, 15, 20, 25)
+    val longSeq = intSeq.map(_.toLong)
+    val strSeq = intSeq.map(_.toString)
+    val intWithNullSeq = Seq[java.lang.Integer](5, 10, null, 20, 25)
+    val longWithNullSeq = intSeq.map(java.lang.Long.valueOf(_))
+
+    val intArray = Literal.create(intSeq, ArrayType(IntegerType, false))
+    val longArray = Literal.create(longSeq, ArrayType(LongType, false))
+    val strArray = Literal.create(strSeq, ArrayType(StringType, false))
+
+    val intwithNullArray = Literal.create(intWithNullSeq, ArrayType(IntegerType, true))
+    val longwithNullArray = Literal.create(longWithNullSeq, ArrayType(LongType, true))
+
+    checkEvaluation(CreateMapFromArray(intArray, longArray), createMap(intSeq, longSeq))
+    checkEvaluation(CreateMapFromArray(intArray, strArray), createMap(intSeq, strSeq))
+    checkEvaluation(
+      CreateMapFromArray(strArray, intwithNullArray), createMap(strSeq, intWithNullSeq))
+    checkEvaluation(
+      CreateMapFromArray(strArray, longwithNullArray), createMap(strSeq, longWithNullSeq))
+    intercept[RuntimeException] {
+      checkEvaluation(
+        CreateMapFromArray(intArray, Literal.create(Seq(1), ArrayType(IntegerType))), null)
+    }
+  }
+
   test("CreateStruct") {
     val row = create_row(1, 2, 3)
     val c1 = 'a.int.at(0)

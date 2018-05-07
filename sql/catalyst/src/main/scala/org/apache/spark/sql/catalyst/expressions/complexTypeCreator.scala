@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -231,6 +231,69 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
        final MapData ${ev.value} = new $mapClass($keyArrayData, $valueArrayData);
       """
     ev.copy(code = code)
+  }
+
+  override def prettyName: String = "map"
+}
+
+/**
+ * Returns a catalyst Map containing the two arrays in children expressions as keys and values.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(keys, values) - Creates a map with a pair of the given key/value arrays. All elements
+      in keys should not be null""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_([1.0, 3.0], ['2', '4']);
+       {1.0:"2",3.0:"4"}
+  """, since = "2.4.0")
+case class CreateMapFromArray(left: Expression, right: Expression)
+    extends BinaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(_, cn), ArrayType(_, _)) =>
+        if (!cn) {
+          TypeCheckResult.TypeCheckSuccess
+        } else {
+          TypeCheckResult.TypeCheckFailure("All of the given keys should be non-null")
+        }
+      case _ =>
+        TypeCheckResult.TypeCheckFailure("The given two arguments should be an array")
+    }
+  }
+
+  override def dataType: DataType = {
+    MapType(
+      keyType = left.dataType.asInstanceOf[ArrayType].elementType,
+      valueType = right.dataType.asInstanceOf[ArrayType].elementType,
+      valueContainsNull = left.dataType.asInstanceOf[ArrayType].containsNull)
+  }
+
+  override def nullable: Boolean = false
+
+  override def nullSafeEval(keyArray: Any, valueArray: Any): Any = {
+    val keyArrayData = keyArray.asInstanceOf[ArrayData]
+    val valueArrayData = valueArray.asInstanceOf[ArrayData]
+    if (keyArrayData.numElements != valueArrayData.numElements) {
+      throw new RuntimeException("The given two arrays should have the same length")
+    }
+    new ArrayBasedMapData(keyArrayData.copy(), valueArrayData.copy())
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (keyArrayData, valueArrayData) => {
+      val arrayBasedMapData = classOf[ArrayBasedMapData].getName
+      s"""
+         |if ($keyArrayData.numElements() != $valueArrayData.numElements()) {
+         |  throw new RuntimeException("The given two arrays should have the same length");
+         |}
+         |${ev.value} = new $arrayBasedMapData($keyArrayData.copy(), $valueArrayData.copy());
+       """
+    })
   }
 
   override def prettyName: String = "map"
