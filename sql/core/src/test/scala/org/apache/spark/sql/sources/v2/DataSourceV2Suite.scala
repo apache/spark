@@ -323,21 +323,22 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-23315: get output from canonicalized data source v2 related plans") {
-    def checkCanonicalizedOutput(df: DataFrame, numOutput: Int): Unit = {
+    def checkCanonicalizedOutput(
+        df: DataFrame, logicalNumOutput: Int, physicalNumOutput: Int): Unit = {
       val logical = df.queryExecution.optimizedPlan.collect {
         case d: DataSourceV2Relation => d
       }.head
-      assert(logical.canonicalized.output.length == numOutput)
+      assert(logical.canonicalized.output.length == logicalNumOutput)
 
       val physical = df.queryExecution.executedPlan.collect {
         case d: DataSourceV2ScanExec => d
       }.head
-      assert(physical.canonicalized.output.length == numOutput)
+      assert(physical.canonicalized.output.length == physicalNumOutput)
     }
 
     val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
-    checkCanonicalizedOutput(df, 2)
-    checkCanonicalizedOutput(df.select('i), 1)
+    checkCanonicalizedOutput(df, 2, 2)
+    checkCanonicalizedOutput(df.select('i), 2, 1)
   }
 }
 
