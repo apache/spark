@@ -172,8 +172,10 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_VOLUMES_PREFIX = "spark.kubernetes.executor.volumes."
 
   val KUBERNETES_VOLUMES_HOSTPATH_KEY = "hostPath"
+  val KUBERNETES_VOLUMES_PVC_KEY = "persistentVolumeClaim"
   val KUBERNETES_VOLUMES_MOUNT_KEY = "mount"
   val KUBERNETES_VOLUMES_PATH_KEY = "path"
+  val KUBERNETES_VOLUMES_CLAIM_NAME_KEY = "claimName"
   val KUBERNETES_VOLUMES_READONLY_KEY = "readOnly"
   val KUBERNETES_VOLUMES_OPTIONS_KEY = "options"
 

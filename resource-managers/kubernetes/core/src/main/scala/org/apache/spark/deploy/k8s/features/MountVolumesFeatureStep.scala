@@ -61,6 +61,14 @@ private[spark] class MountVolumesFeatureStep(
             .withHostPath(new HostPathVolumeSource(hostPath))
             .withName(spec.volumeName)
             .build()
+
+        case KUBERNETES_VOLUMES_PVC_KEY =>
+          val claimName = spec.optionsSpec(KUBERNETES_VOLUMES_CLAIM_NAME_KEY)
+          new VolumeBuilder()
+            .withPersistentVolumeClaim(
+              new PersistentVolumeClaimVolumeSource(claimName, spec.mountReadOnly))
+            .withName(spec.volumeName)
+            .build()
       }
 
       (volumeMount, volume)
