@@ -35,7 +35,7 @@ private[columnar] trait NullableColumnAccessor extends ColumnAccessor {
     nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
     pos = 0
 
-    underlyingBuffer.position(underlyingBuffer.position + 4 + nullCount * 4)
+    underlyingBuffer.position(underlyingBuffer.position() + 4 + nullCount * 4)
     super.initialize()
   }
 

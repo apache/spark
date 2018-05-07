@@ -48,7 +48,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.metrics.metricRegistry.counter(s"queue.$SHARED_QUEUE.numDroppedEvents").getCount
   }
 
-  private def queueSize(bus: LiveListenerBus): Int = {
+  private def sharedQueueSize(bus: LiveListenerBus): Int = {
     bus.metrics.metricRegistry.getGauges().get(s"queue.$SHARED_QUEUE.size").getValue()
       .asInstanceOf[Int]
   }
@@ -73,12 +73,11 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val conf = new SparkConf()
     val counter = new BasicJobCounter
     val bus = new LiveListenerBus(conf)
-    bus.addToSharedQueue(counter)
 
     // Metrics are initially empty.
     assert(bus.metrics.numEventsPosted.getCount === 0)
     assert(numDroppedEvents(bus) === 0)
-    assert(queueSize(bus) === 0)
+    assert(bus.queuedEvents.size === 0)
     assert(eventProcessingTimeCount(bus) === 0)
 
     // Post five events:
@@ -87,7 +86,10 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Five messages should be marked as received and queued, but no messages should be posted to
     // listeners yet because the the listener bus hasn't been started.
     assert(bus.metrics.numEventsPosted.getCount === 5)
-    assert(queueSize(bus) === 5)
+    assert(bus.queuedEvents.size === 5)
+
+    // Add the counter to the bus after messages have been queued for later delivery.
+    bus.addToSharedQueue(counter)
     assert(counter.count === 0)
 
     // Starting listener bus should flush all buffered events
@@ -95,8 +97,11 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     Mockito.verify(mockMetricsSystem).registerSource(bus.metrics)
     bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(counter.count === 5)
-    assert(queueSize(bus) === 0)
+    assert(sharedQueueSize(bus) === 0)
     assert(eventProcessingTimeCount(bus) === 5)
+
+    // After the bus is started, there should be no more queued events.
+    assert(bus.queuedEvents === null)
 
     // After listener bus has stopped, posting events should not increment counter
     bus.stop()
@@ -188,18 +193,18 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Post a message to the listener bus and wait for processing to begin:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     listenerStarted.acquire()
-    assert(queueSize(bus) === 0)
+    assert(sharedQueueSize(bus) === 0)
     assert(numDroppedEvents(bus) === 0)
 
     // If we post an additional message then it should remain in the queue because the listener is
     // busy processing the first event:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    assert(queueSize(bus) === 1)
+    assert(sharedQueueSize(bus) === 1)
     assert(numDroppedEvents(bus) === 0)
 
     // The queue is now full, so any additional events posted to the listener will be dropped:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    assert(queueSize(bus) === 1)
+    assert(sharedQueueSize(bus) === 1)
     assert(numDroppedEvents(bus) === 1)
 
     // Allow the the remaining events to be processed so we can stop the listener bus:

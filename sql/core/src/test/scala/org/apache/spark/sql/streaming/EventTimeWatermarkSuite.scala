@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.{util => ju}
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Calendar, Date}
 
 import org.scalatest.{BeforeAndAfter, Matchers}
 
@@ -28,6 +28,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 
 class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matchers with Logging {
@@ -137,20 +138,12 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
         assert(e.get("watermark") === formatTimestamp(5))
       },
       AddData(inputData2, 25),
-      CheckAnswer(),
-      assertEventStats { e =>
-        assert(e.get("max") === formatTimestamp(25))
-        assert(e.get("min") === formatTimestamp(25))
-        assert(e.get("avg") === formatTimestamp(25))
-        assert(e.get("watermark") === formatTimestamp(5))
-      },
-      AddData(inputData2, 25),
       CheckAnswer((10, 3)),
       assertEventStats { e =>
         assert(e.get("max") === formatTimestamp(25))
         assert(e.get("min") === formatTimestamp(25))
         assert(e.get("avg") === formatTimestamp(25))
-        assert(e.get("watermark") === formatTimestamp(15))
+        assert(e.get("watermark") === formatTimestamp(5))
       }
     )
   }
@@ -167,15 +160,12 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testStream(windowedAggregation)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
-      CheckLastBatch(),
+      CheckNewAnswer(),
       AddData(inputData, 25),   // Advance watermark to 15 seconds
-      CheckLastBatch(),
-      assertNumStateRows(3),
-      AddData(inputData, 25),   // Emit items less than watermark and drop their state
-      CheckLastBatch((10, 5)),
+      CheckNewAnswer((10, 5)),
       assertNumStateRows(2),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
-      CheckLastBatch(),
+      CheckNewAnswer(),
       assertNumStateRows(2)
     )
   }
@@ -193,15 +183,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testStream(windowedAggregation, OutputMode.Update)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
-      CheckLastBatch((10, 5), (15, 1)),
+      CheckNewAnswer((10, 5), (15, 1)),
       AddData(inputData, 25),     // Advance watermark to 15 seconds
-      CheckLastBatch((25, 1)),
-      assertNumStateRows(3),
+      CheckNewAnswer((25, 1)),
+      assertNumStateRows(2),
       AddData(inputData, 10, 25), // Ignore 10 as its less than watermark
-      CheckLastBatch((25, 2)),
+      CheckNewAnswer((25, 2)),
       assertNumStateRows(2),
       AddData(inputData, 10),     // Should not emit anything as data less than watermark
-      CheckLastBatch(),
+      CheckNewAnswer(),
       assertNumStateRows(2)
     )
   }
@@ -218,7 +208,11 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .agg(count("*") as 'count)
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    def monthsSinceEpoch(date: Date): Int = { date.getYear * 12 + date.getMonth }
+    def monthsSinceEpoch(date: Date): Int = {
+      val cal = Calendar.getInstance()
+      cal.setTime(date)
+      cal.get(Calendar.YEAR) * 12 + cal.get(Calendar.MONTH)
+    }
 
     testStream(aggWithWatermark)(
       AddData(input, currentTimeMs / 1000),
@@ -247,56 +241,25 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testStream(df)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
-      CheckLastBatch(),
+      CheckAnswer(),
       AddData(inputData, 25), // Advance watermark to 15 seconds
-      StopStream,
-      StartStream(),
-      CheckLastBatch(),
-      AddData(inputData, 25), // Evict items less than previous watermark.
-      CheckLastBatch((10, 5)),
+      CheckAnswer((10, 5)),
       StopStream,
       AssertOnQuery { q => // purge commit and clear the sink
-        val commit = q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
-        q.batchCommitLog.purge(commit)
+        val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L)
+        q.commitLog.purge(commit)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
       StartStream(),
-      CheckLastBatch((10, 5)), // Recompute last batch and re-evict timestamp 10
-      AddData(inputData, 30), // Advance watermark to 20 seconds
-      CheckLastBatch(),
+      AddData(inputData, 10, 27, 30), // Advance watermark to 20 seconds, 10 should be ignored
+      CheckAnswer((15, 1)),
       StopStream,
-      StartStream(), // Watermark should still be 15 seconds
-      AddData(inputData, 17),
-      CheckLastBatch(), // We still do not see next batch
-      AddData(inputData, 30), // Advance watermark to 20 seconds
-      CheckLastBatch(),
-      AddData(inputData, 30), // Evict items less than previous watermark.
-      CheckLastBatch((15, 2)) // Ensure we see next window
-    )
-  }
-
-  test("dropping old data") {
-    val inputData = MemoryStream[Int]
-
-    val windowedAggregation = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
-        .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
-        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
-
-    testStream(windowedAggregation)(
-      AddData(inputData, 10, 11, 12),
-      CheckAnswer(),
-      AddData(inputData, 25),     // Advance watermark to 15 seconds
-      CheckAnswer(),
-      AddData(inputData, 25),     // Evict items less than previous watermark.
-      CheckAnswer((10, 3)),
-      AddData(inputData, 10),     // 10 is later than 15 second watermark
-      CheckAnswer((10, 3)),
-      AddData(inputData, 25),
-      CheckAnswer((10, 3))        // Should not emit an incorrect partial result.
+      StartStream(),
+      AddData(inputData, 17), // Watermark should still be 20 seconds, 17 should be ignored
+      CheckAnswer((15, 1)),
+      AddData(inputData, 40), // Advance watermark to 30 seconds, emit first data 25
+      CheckNewAnswer((25, 2))
     )
   }
 
@@ -417,8 +380,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 10),
       CheckAnswer(),
       AddData(inputData, 25), // Advance watermark to 15 seconds
-      CheckAnswer(),
-      AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 1))
     )
   }
@@ -497,8 +458,35 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  test("test no-data flag") {
+    val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
+
+    def testWithFlag(flag: Boolean): Unit = withClue(s"with $flagKey = $flag") {
+      val inputData = MemoryStream[Int]
+      val windowedAggregation = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+      testStream(windowedAggregation)(
+        StartStream(additionalConfs = Map(flagKey -> flag.toString)),
+        AddData(inputData, 10, 11, 12, 13, 14, 15),
+        CheckNewAnswer(),
+        AddData(inputData, 25), // Advance watermark to 15 seconds
+        // Check if there is new answer if flag is set, no new answer otherwise
+        if (flag) CheckNewAnswer((10, 5)) else CheckNewAnswer()
+      )
+    }
+
+    testWithFlag(true)
+    testWithFlag(false)
+  }
+
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
-    val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
+    q.processAllAvailable()
+    val progressWithData = q.recentProgress.lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
     true
   }

@@ -73,8 +73,6 @@ import org.apache.spark.util.PeriodicCheckpointer
  *
  * @param checkpointInterval  RDDs will be checkpointed at this interval
  * @tparam T  RDD element type
- *
- * TODO: Move this out of MLlib?
  */
 private[spark] class PeriodicRDDCheckpointer[T](
     checkpointInterval: Int,

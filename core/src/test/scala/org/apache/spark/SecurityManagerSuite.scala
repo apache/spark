@@ -18,7 +18,13 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.charset.StandardCharsets.UTF_8
+import java.security.PrivilegedExceptionAction
 
+import org.apache.hadoop.security.UserGroupInformation
+
+import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
 
@@ -364,55 +370,14 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.checkModifyPermissions("user1") === false)
   }
 
-  test("ssl on setup") {
-    val conf = SSLSampleConfigs.sparkSSLConfig()
-    val expectedAlgorithms = Set(
-    "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
-    "TLS_RSA_WITH_AES_256_CBC_SHA256",
-    "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256",
-    "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
-    "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256",
-    "SSL_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
-    "SSL_RSA_WITH_AES_256_CBC_SHA256",
-    "SSL_DHE_RSA_WITH_AES_256_CBC_SHA256",
-    "SSL_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
-    "SSL_DHE_RSA_WITH_AES_128_CBC_SHA256")
-
-    val securityManager = new SecurityManager(conf)
-
-    assert(securityManager.fileServerSSLOptions.enabled === true)
-
-    assert(securityManager.sslSocketFactory.isDefined === true)
-    assert(securityManager.hostnameVerifier.isDefined === true)
-
-    assert(securityManager.fileServerSSLOptions.trustStore.isDefined === true)
-    assert(securityManager.fileServerSSLOptions.trustStore.get.getName === "truststore")
-    assert(securityManager.fileServerSSLOptions.keyStore.isDefined === true)
-    assert(securityManager.fileServerSSLOptions.keyStore.get.getName === "keystore")
-    assert(securityManager.fileServerSSLOptions.trustStorePassword === Some("password"))
-    assert(securityManager.fileServerSSLOptions.keyStorePassword === Some("password"))
-    assert(securityManager.fileServerSSLOptions.keyPassword === Some("password"))
-    assert(securityManager.fileServerSSLOptions.protocol === Some("TLSv1.2"))
-    assert(securityManager.fileServerSSLOptions.enabledAlgorithms === expectedAlgorithms)
-  }
-
-  test("ssl off setup") {
-    val file = File.createTempFile("SSLOptionsSuite", "conf", Utils.createTempDir())
-
-    System.setProperty("spark.ssl.configFile", file.getAbsolutePath)
-    val conf = new SparkConf()
-
-    val securityManager = new SecurityManager(conf)
-
-    assert(securityManager.fileServerSSLOptions.enabled === false)
-    assert(securityManager.sslSocketFactory.isDefined === false)
-    assert(securityManager.hostnameVerifier.isDefined === false)
-  }
-
   test("missing secret authentication key") {
     val conf = new SparkConf().set("spark.authenticate", "true")
+    val mgr = new SecurityManager(conf)
     intercept[IllegalArgumentException] {
-      new SecurityManager(conf)
+      mgr.getSecretKey()
+    }
+    intercept[IllegalArgumentException] {
+      mgr.initializeAuth()
     }
   }
 
@@ -428,6 +393,43 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
       .set(SecurityManager.SPARK_AUTH_CONF, "true")
       .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
     assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
+  }
+
+  test("secret key generation") {
+    Seq(
+      ("yarn", true),
+      ("local", true),
+      ("local[*]", true),
+      ("local[1, 2]", true),
+      ("local-cluster[2, 1, 1024]", false),
+      ("invalid", false)
+    ).foreach { case (master, shouldGenerateSecret) =>
+      val conf = new SparkConf()
+        .set(NETWORK_AUTH_ENABLED, true)
+        .set(SparkLauncher.SPARK_MASTER, master)
+      val mgr = new SecurityManager(conf)
+
+      UserGroupInformation.createUserForTesting("authTest", Array()).doAs(
+        new PrivilegedExceptionAction[Unit]() {
+          override def run(): Unit = {
+            if (shouldGenerateSecret) {
+              mgr.initializeAuth()
+              val creds = UserGroupInformation.getCurrentUser().getCredentials()
+              val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
+              assert(secret != null)
+              assert(new String(secret, UTF_8) === mgr.getSecretKey())
+            } else {
+              intercept[IllegalArgumentException] {
+                mgr.initializeAuth()
+              }
+              intercept[IllegalArgumentException] {
+                mgr.getSecretKey()
+              }
+            }
+          }
+        }
+      )
+    }
   }
 
 }

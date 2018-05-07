@@ -206,7 +206,7 @@ private[spark] class SerializerManager(
     val autoPick = !blockId.isInstanceOf[StreamBlockId]
     getSerializer(classTag, autoPick)
       .newInstance()
-      .deserializeStream(wrapForCompression(blockId, inputStream))
+      .deserializeStream(wrapForCompression(blockId, stream))
       .asIterator.asInstanceOf[Iterator[T]]
   }
 }

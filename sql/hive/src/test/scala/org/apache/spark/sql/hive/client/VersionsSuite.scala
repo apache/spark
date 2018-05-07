@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.io.{ByteArrayOutputStream, File, PrintStream, PrintWriter}
 import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -50,6 +51,8 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
+  override protected val enableAutoThreadAudit = false
+
   import HiveClientBuilder.buildClient
 
   /**
@@ -73,7 +76,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   }
 
   test("success sanity check") {
-    val badClient = buildClient(HiveUtils.hiveExecutionVersion, new Configuration())
+    val badClient = buildClient(HiveUtils.builtinHiveVersion, new Configuration())
     val db = new CatalogDatabase("default", "desc", new URI("loc"), Map())
     badClient.createDatabase(db, ignoreIfExists = true)
   }
@@ -81,7 +84,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   test("hadoop configuration preserved") {
     val hadoopConf = new Configuration()
     hadoopConf.set("test", "success")
-    val client = buildClient(HiveUtils.hiveExecutionVersion, hadoopConf)
+    val client = buildClient(HiveUtils.builtinHiveVersion, hadoopConf)
     assert("success" === client.getConf("test", null))
   }
 
@@ -108,7 +111,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1")
+  private val versions =
+    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3")
 
   private var client: HiveClient = null
 
@@ -123,7 +127,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
       // hive.metastore.schema.verification from false to true since 2.0
       // For details, see the JIRA HIVE-6113 and HIVE-12463
-      if (version == "2.0" || version == "2.1") {
+      if (version == "2.0" || version == "2.1" || version == "2.2" || version == "2.3") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
         hadoopConf.set("hive.metastore.schema.verification", "false")
       }
@@ -161,6 +165,15 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
+    }
+
+    test(s"$version: createDatabase with null description") {
+      withTempDir { tmpDir =>
+        val dbWithNullDesc =
+          CatalogDatabase("dbWithNullDesc", description = null, tmpDir.toURI, Map())
+        client.createDatabase(dbWithNullDesc, ignoreIfExists = true)
+        assert(client.getDatabase("dbWithNullDesc").description == "")
+      }
     }
 
     test(s"$version: setCurrentDatabase") {
@@ -411,15 +424,18 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
+      val parameters = Map(StatsSetupConst.TOTAL_SIZE -> "0", StatsSetupConst.NUM_FILES -> "1")
       val newLocation = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
       val storage = storageFormat.copy(
         locationUri = Some(newLocation),
         // needed for 0.12 alter partitions
         serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-      val partition = CatalogTablePartition(spec, storage)
+      val partition = CatalogTablePartition(spec, storage, parameters)
       client.alterPartitions("default", "src_part", Seq(partition))
       assert(client.getPartition("default", "src_part", spec)
         .storage.locationUri == Some(newLocation))
+      assert(client.getPartition("default", "src_part", spec)
+        .parameters.get(StatsSetupConst.TOTAL_SIZE) == Some("0"))
     }
 
     test(s"$version: dropPartitions") {
@@ -622,6 +638,46 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
+    test(s"$version: CREATE Partitioned TABLE AS SELECT") {
+      withTable("tbl") {
+        versionSpark.sql(
+          """
+            |CREATE TABLE tbl(c1 string)
+            |PARTITIONED BY (ds STRING)
+          """.stripMargin)
+        versionSpark.sql("INSERT OVERWRITE TABLE tbl partition (ds='2') SELECT '1'")
+
+        assert(versionSpark.table("tbl").collect().toSeq == Seq(Row("1", "2")))
+        val partMeta = versionSpark.sessionState.catalog.getPartition(
+          TableIdentifier("tbl"), spec = Map("ds" -> "2")).parameters
+        val totalSize = partMeta.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val numFiles = partMeta.get(StatsSetupConst.NUM_FILES).map(_.toLong)
+        // Except 0.12, all the following versions will fill the Hive-generated statistics
+        if (version == "0.12") {
+          assert(totalSize.isEmpty && numFiles.isEmpty)
+        } else {
+          assert(totalSize.nonEmpty && numFiles.nonEmpty)
+        }
+
+        versionSpark.sql(
+          """
+            |ALTER TABLE tbl PARTITION (ds='2')
+            |SET SERDEPROPERTIES ('newKey' = 'vvv')
+          """.stripMargin)
+        val newPartMeta = versionSpark.sessionState.catalog.getPartition(
+          TableIdentifier("tbl"), spec = Map("ds" -> "2")).parameters
+
+        val newTotalSize = newPartMeta.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val newNumFiles = newPartMeta.get(StatsSetupConst.NUM_FILES).map(_.toLong)
+        // Except 0.12, all the following versions will fill the Hive-generated statistics
+        if (version == "0.12") {
+          assert(newTotalSize.isEmpty && newNumFiles.isEmpty)
+        } else {
+          assert(newTotalSize.nonEmpty && newNumFiles.nonEmpty)
+        }
+      }
+    }
+
     test(s"$version: Delete the temporary staging directory and files after each insert") {
       withTempDir { tmpDir =>
         withTable("tab") {
@@ -773,7 +829,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
            """.stripMargin
           )
 
-          val errorMsg = "data type mismatch: cannot cast DecimalType(2,1) to BinaryType"
+          val errorMsg = "data type mismatch: cannot cast decimal(2,1) to binary"
 
           if (isPartitioned) {
             val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"
@@ -802,7 +858,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: read avro file containing decimal") {
       val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
-      val location = new File(url.getFile)
+      val location = new File(url.getFile).toURI.toString
 
       val tableName = "tab1"
       val avroSchema =
@@ -841,6 +897,75 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
+    test(s"$version: SPARK-17920: Insert into/overwrite avro table") {
+      // skipped because it's failed in the condition on Windows
+      assume(!(Utils.isWindows && version == "0.12"))
+      withTempDir { dir =>
+        val avroSchema =
+          """
+            |{
+            |  "name": "test_record",
+            |  "type": "record",
+            |  "fields": [{
+            |    "name": "f0",
+            |    "type": [
+            |      "null",
+            |      {
+            |        "precision": 38,
+            |        "scale": 2,
+            |        "type": "bytes",
+            |        "logicalType": "decimal"
+            |      }
+            |    ]
+            |  }]
+            |}
+          """.stripMargin
+        val schemaFile = new File(dir, "avroDecimal.avsc")
+        val writer = new PrintWriter(schemaFile)
+        writer.write(avroSchema)
+        writer.close()
+        val schemaPath = schemaFile.toURI.toString
+
+        val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
+        val srcLocation = new File(url.getFile).toURI.toString
+        val destTableName = "tab1"
+        val srcTableName = "tab2"
+
+        withTable(srcTableName, destTableName) {
+          versionSpark.sql(
+            s"""
+               |CREATE EXTERNAL TABLE $srcTableName
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+               |WITH SERDEPROPERTIES ('respectSparkSchema' = 'true')
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+               |LOCATION '$srcLocation'
+               |TBLPROPERTIES ('avro.schema.url' = '$schemaPath')
+           """.stripMargin
+          )
+
+          versionSpark.sql(
+            s"""
+               |CREATE TABLE $destTableName
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+               |WITH SERDEPROPERTIES ('respectSparkSchema' = 'true')
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+               |TBLPROPERTIES ('avro.schema.url' = '$schemaPath')
+           """.stripMargin
+          )
+          versionSpark.sql(
+            s"""INSERT OVERWRITE TABLE $destTableName SELECT * FROM $srcTableName""")
+          val result = versionSpark.table(srcTableName).collect()
+          assert(versionSpark.table(destTableName).collect() === result)
+          versionSpark.sql(
+            s"""INSERT INTO TABLE $destTableName SELECT * FROM $srcTableName""")
+          assert(versionSpark.table(destTableName).collect().toSeq === result ++ result)
+        }
+      }
+    }
     // TODO: add more tests.
   }
 }

@@ -19,30 +19,28 @@ package org.apache.spark.sql.sources.v2.reader;
 
 import java.util.List;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 
 /**
- * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to output {@link UnsafeRow} directly and avoid the row copy at Spark side.
  * This is an experimental and unstable interface, as {@link UnsafeRow} is not public and may get
  * changed in the future Spark versions.
  */
-@InterfaceStability.Evolving
-@Experimental
 @InterfaceStability.Unstable
-public interface SupportsScanUnsafeRow extends DataSourceV2Reader {
+public interface SupportsScanUnsafeRow extends DataSourceReader {
 
   @Override
-  default List<ReadTask<Row>> createReadTasks() {
+  default List<DataReaderFactory<Row>> createDataReaderFactories() {
     throw new IllegalStateException(
-        "createReadTasks should not be called with SupportsScanUnsafeRow.");
+      "createDataReaderFactories not supported by default within SupportsScanUnsafeRow");
   }
 
   /**
-   * Similar to {@link DataSourceV2Reader#createReadTasks()}, but returns data in unsafe row format.
+   * Similar to {@link DataSourceReader#createDataReaderFactories()},
+   * but returns data in unsafe row format.
    */
-  List<ReadTask<UnsafeRow>> createUnsafeRowReadTasks();
+  List<DataReaderFactory<UnsafeRow>> createUnsafeRowReaderFactories();
 }

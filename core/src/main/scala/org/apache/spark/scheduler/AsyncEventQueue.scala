@@ -127,8 +127,8 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
       throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
     }
     if (stopped.compareAndSet(false, true)) {
-      eventQueue.put(POISON_PILL)
       eventCount.incrementAndGet()
+      eventQueue.put(POISON_PILL)
     }
     dispatchThread.join()
   }
@@ -166,7 +166,7 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
           val prevLastReportTimestamp = lastReportTimestamp
           lastReportTimestamp = System.currentTimeMillis()
           val previous = new java.util.Date(prevLastReportTimestamp)
-          logWarning(s"Dropped $droppedEvents events from $name since $previous.")
+          logWarning(s"Dropped $droppedCount events from $name since $previous.")
         }
       }
     }

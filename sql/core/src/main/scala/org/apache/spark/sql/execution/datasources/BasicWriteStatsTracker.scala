@@ -22,7 +22,7 @@ import java.io.FileNotFoundException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
@@ -44,7 +44,6 @@ case class BasicWriteTaskStats(
 
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
- * @param hadoopConf
  */
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   extends WriteTaskStatsTracker with Logging {
@@ -106,6 +105,13 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
 
   override def getFinalStats(): WriteTaskStats = {
     statCurrentFile()
+
+    // Reports bytesWritten and recordsWritten to the Spark output metrics.
+    Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
+      outputMetrics.setBytesWritten(numBytes)
+      outputMetrics.setRecordsWritten(numRows)
+    }
+
     if (submittedFiles != numFiles) {
       logInfo(s"Expected $submittedFiles files, but only saw $numFiles. " +
         "This could be due to the output format not writing empty files, " +
@@ -147,12 +153,29 @@ class BasicWriteJobStatsTracker(
       totalNumOutput += summary.numRows
     }
 
-    metrics("numFiles").add(numFiles)
-    metrics("numOutputBytes").add(totalNumBytes)
-    metrics("numOutputRows").add(totalNumOutput)
-    metrics("numParts").add(numPartitions)
+    metrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
+    metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
+    metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
+    metrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).add(numPartitions)
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
+  }
+}
+
+object BasicWriteJobStatsTracker {
+  private val NUM_FILES_KEY = "numFiles"
+  private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
+  private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
+  private val NUM_PARTS_KEY = "numParts"
+
+  def metrics: Map[String, SQLMetric] = {
+    val sparkContext = SparkContext.getActive.get
+    Map(
+      NUM_FILES_KEY -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+      NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
+      NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
+    )
   }
 }

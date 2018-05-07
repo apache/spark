@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * This suite is used to test [[LogicalPlan]]'s `resolveOperators` and make sure it can correctly
- * skips sub-trees that have already been marked as analyzed.
+ * This suite is used to test [[LogicalPlan]]'s `transformUp/transformDown` plus analysis barrier
+ * and make sure it can correctly skip sub-trees that have already been analyzed.
  */
 class LogicalPlanSuite extends SparkFunSuite {
   private var invocationCount = 0
@@ -36,38 +36,52 @@ class LogicalPlanSuite extends SparkFunSuite {
 
   private val testRelation = LocalRelation()
 
-  test("resolveOperator runs on operators") {
+  test("transformUp runs on operators") {
     invocationCount = 0
     val plan = Project(Nil, testRelation)
-    plan resolveOperators function
+    plan transformUp function
 
+    assert(invocationCount === 1)
+
+    invocationCount = 0
+    plan transformDown function
     assert(invocationCount === 1)
   }
 
-  test("resolveOperator runs on operators recursively") {
+  test("transformUp runs on operators recursively") {
     invocationCount = 0
     val plan = Project(Nil, Project(Nil, testRelation))
-    plan resolveOperators function
+    plan transformUp function
 
+    assert(invocationCount === 2)
+
+    invocationCount = 0
+    plan transformDown function
     assert(invocationCount === 2)
   }
 
-  test("resolveOperator skips all ready resolved plans") {
+  test("transformUp skips all ready resolved plans wrapped in analysis barrier") {
     invocationCount = 0
-    val plan = Project(Nil, Project(Nil, testRelation))
-    plan.foreach(_.setAnalyzed())
-    plan resolveOperators function
+    val plan = AnalysisBarrier(Project(Nil, Project(Nil, testRelation)))
+    plan transformUp function
 
+    assert(invocationCount === 0)
+
+    invocationCount = 0
+    plan transformDown function
     assert(invocationCount === 0)
   }
 
-  test("resolveOperator skips partially resolved plans") {
+  test("transformUp skips partially resolved plans wrapped in analysis barrier") {
     invocationCount = 0
-    val plan1 = Project(Nil, testRelation)
+    val plan1 = AnalysisBarrier(Project(Nil, testRelation))
     val plan2 = Project(Nil, plan1)
-    plan1.foreach(_.setAnalyzed())
-    plan2 resolveOperators function
+    plan2 transformUp function
 
+    assert(invocationCount === 1)
+
+    invocationCount = 0
+    plan2 transformDown function
     assert(invocationCount === 1)
   }
 

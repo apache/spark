@@ -21,18 +21,24 @@ import java.io.File
 
 import scala.collection.mutable.HashMap
 
+import org.apache.spark.TestUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.SparkPlanInfo
-import org.apache.spark.sql.execution.ui.SparkPlanGraph
+import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.util.Utils
 
 
 trait SQLMetricsTestUtils extends SQLTestUtils {
-
   import testImplicits._
+
+  protected def currentExecutionIds(): Set[Long] = {
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+    statusStore.executionsList.map(_.executionId).toSet
+  }
+
+  protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
 
   /**
    * Get execution metrics for the SQL execution and verify metrics values.
@@ -41,24 +47,22 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
    * @param func the function can produce execution id after running.
    */
   private def verifyWriteDataMetrics(metricsValues: Seq[Int])(func: => Unit): Unit = {
-    val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
+    val previousExecutionIds = currentExecutionIds()
     // Run the given function to trigger query execution.
     func
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
-    val executionIds =
-      spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
+    val executionIds = currentExecutionIds().diff(previousExecutionIds)
     assert(executionIds.size == 1)
     val executionId = executionIds.head
 
-    val executionData = spark.sharedState.listener.getExecution(executionId).get
-    val executedNode = executionData.physicalPlanGraph.nodes.head
+    val executedNode = statusStore.planGraph(executionId).nodes.head
 
     val metricsNames = Seq(
       "number of written files",
       "number of dynamic part",
       "number of output rows")
 
-    val metrics = spark.sharedState.listener.getExecutionMetrics(executionId)
+    val metrics = statusStore.executionMetrics(executionId)
 
     metricsNames.zip(metricsValues).foreach { case (metricsName, expected) =>
       val sqlMetric = executedNode.metrics.find(_.name == metricsName)
@@ -88,7 +92,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
         (0 until 100).map(i => (i, i + 1)).toDF("i", "j").repartition(2)
           .write.format(dataFormat).mode("overwrite").insertInto(tableName)
       }
-      assert(Utils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
+      assert(TestUtils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
     }
   }
 
@@ -118,7 +122,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
           .mode("overwrite")
           .insertInto(tableName)
       }
-      assert(Utils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
+      assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
     }
   }
 
@@ -134,22 +138,21 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
        expectedNumOfJobs: Int,
        expectedNodeIds: Set[Long],
        enableWholeStage: Boolean = false): Option[Map[Long, (String, Map[String, Any])]] = {
-    val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
+    val previousExecutionIds = currentExecutionIds()
     withSQLConf("spark.sql.codegen.wholeStage" -> enableWholeStage.toString) {
       df.collect()
     }
     sparkContext.listenerBus.waitUntilEmpty(10000)
-    val executionIds =
-      spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
+    val executionIds = currentExecutionIds().diff(previousExecutionIds)
     assert(executionIds.size === 1)
     val executionId = executionIds.head
-    val jobs = spark.sharedState.listener.getExecution(executionId).get.jobs
+    val jobs = statusStore.execution(executionId).get.jobs
     // Use "<=" because there is a race condition that we may miss some jobs
     // TODO Change it to "=" once we fix the race condition that missing the JobStarted event.
     assert(jobs.size <= expectedNumOfJobs)
     if (jobs.size == expectedNumOfJobs) {
       // If we can track all jobs, check the metric values
-      val metricValues = spark.sharedState.listener.getExecutionMetrics(executionId)
+      val metricValues = statusStore.executionMetrics(executionId)
       val metrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
         df.queryExecution.executedPlan)).allNodes.filter { node =>
         expectedNodeIds.contains(node.id)

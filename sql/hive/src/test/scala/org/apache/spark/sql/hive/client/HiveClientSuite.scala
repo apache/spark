@@ -67,6 +67,7 @@ class HiveClientSuite(version: String)
   }
 
   override def beforeAll() {
+    super.beforeAll()
     client = init(true)
   }
 
@@ -76,6 +77,15 @@ class HiveClientSuite(version: String)
       Seq(parseExpression("ds=20170101")))
 
     assert(filteredPartitions.size == testPartitionCount)
+  }
+
+  test("getPartitionsByFilter: ds<=>20170101") {
+    // Should return all partitions where <=> is not supported
+    testMetastorePartitionFiltering(
+      "ds<=>20170101",
+      20170101 to 20170103,
+      0 to 23,
+      "aa" :: "ab" :: "ba" :: "bb" :: Nil)
   }
 
   test("getPartitionsByFilter: ds=20170101") {
@@ -190,6 +200,10 @@ class HiveClientSuite(version: String)
     testMetastorePartitionFiltering(
       "chunk in ('ab', 'ba') and ((ds=20170101 and h>=8) or (ds=20170102 and h<8))",
       day1 :: day2 :: Nil)
+  }
+
+  test("create client with sharesHadoopClasses = false") {
+    buildClient(new Configuration(), sharesHadoopClasses = false)
   }
 
   private def testMetastorePartitionFiltering(

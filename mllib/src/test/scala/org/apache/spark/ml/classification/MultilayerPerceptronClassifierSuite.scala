@@ -17,22 +17,17 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions._
 
-class MultilayerPerceptronClassifierSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -75,12 +70,22 @@ class MultilayerPerceptronClassifierSuite
       .setMaxIter(100)
       .setSolver("l-bfgs")
     val model = trainer.fit(dataset)
-    val result = model.transform(dataset)
     MLTestingUtils.checkCopyAndUids(trainer, model)
-    val predictionAndLabels = result.select("prediction", "label").collect()
-    predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
-      assert(p == l)
+    testTransformer[(Vector, Double)](dataset.toDF(), model, "prediction", "label") {
+      case Row(p: Double, l: Double) => assert(p == l)
     }
+  }
+
+  test("prediction on single instance") {
+    val layers = Array[Int](2, 5, 2)
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(123L)
+      .setMaxIter(100)
+      .setSolver("l-bfgs")
+    val model = trainer.fit(dataset)
+    testPredictionModelSinglePrediction(model, dataset)
   }
 
   test("Predicted class probabilities: calibration on toy dataset") {
@@ -99,13 +104,12 @@ class MultilayerPerceptronClassifierSuite
       .setMaxIter(100)
       .setSolver("l-bfgs")
     val model = trainer.fit(strongDataset)
-    val result = model.transform(strongDataset)
-    result.select("probability", "expectedProbability").collect().foreach {
-      case Row(p: Vector, e: Vector) =>
-        assert(p ~== e absTol 1e-3)
+    testTransformer[(Vector, Double, Vector)](strongDataset.toDF(), model,
+      "probability", "expectedProbability") {
+      case Row(p: Vector, e: Vector) => assert(p ~== e absTol 1e-3)
     }
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, MultilayerPerceptronClassificationModel](model, strongDataset)
+      Vector, MultilayerPerceptronClassificationModel](this, model, strongDataset)
   }
 
   test("test model probability") {
@@ -118,11 +122,10 @@ class MultilayerPerceptronClassifierSuite
       .setSolver("l-bfgs")
     val model = trainer.fit(dataset)
     model.setProbabilityCol("probability")
-    val result = model.transform(dataset)
-    val features2prob = udf { features: Vector => model.mlpModel.predict(features) }
-    result.select(features2prob(col("features")), col("probability")).collect().foreach {
-      case Row(p1: Vector, p2: Vector) =>
-        assert(p1 ~== p2 absTol 1e-3)
+    testTransformer[(Vector, Double)](dataset.toDF(), model, "features", "probability") {
+      case Row(features: Vector, prob: Vector) =>
+        val prob2 = model.mlpModel.predict(features)
+        assert(prob ~== prob2 absTol 1e-3)
     }
   }
 
@@ -175,9 +178,6 @@ class MultilayerPerceptronClassifierSuite
     val model = trainer.fit(dataFrame)
     val numFeatures = dataFrame.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
-    val mlpPredictionAndLabels = model.transform(dataFrame).select("prediction", "label").rdd.map {
-      case Row(p: Double, l: Double) => (p, l)
-    }
     // train multinomial logistic regression
     val lr = new LogisticRegressionWithLBFGS()
       .setIntercept(true)
@@ -189,8 +189,12 @@ class MultilayerPerceptronClassifierSuite
       lrModel.predict(data.rdd.map(p => OldVectors.fromML(p.features))).zip(data.rdd.map(_.label))
     // MLP's predictions should not differ a lot from LR's.
     val lrMetrics = new MulticlassMetrics(lrPredictionAndLabels)
-    val mlpMetrics = new MulticlassMetrics(mlpPredictionAndLabels)
-    assert(mlpMetrics.confusionMatrix.asML ~== lrMetrics.confusionMatrix.asML absTol 100)
+    testTransformerByGlobalCheckFunc[(Double, Vector)](dataFrame, model, "prediction", "label") {
+      rows: Seq[Row] =>
+        val mlpPredictionAndLabels = rows.map(x => (x.getDouble(0), x.getDouble(1)))
+        val mlpMetrics = new MulticlassMetrics(sc.makeRDD(mlpPredictionAndLabels))
+        assert(mlpMetrics.confusionMatrix.asML ~== lrMetrics.confusionMatrix.asML absTol 100)
+    }
   }
 
   test("read/write: MultilayerPerceptronClassifier") {

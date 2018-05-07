@@ -20,7 +20,6 @@ package org.apache.spark.storage
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -31,8 +30,8 @@ import org.apache.commons.lang3.RandomUtils
 import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.TimeLimits._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
@@ -44,8 +43,9 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempFileManager}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, TempFileManager}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
@@ -57,9 +57,12 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with LocalSparkContext with ResetSystemProperties
-  with EncryptionFunSuite {
+  with EncryptionFunSuite with TimeLimits {
 
   import BlockManagerSuite._
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   var conf: SparkConf = null
   var store: BlockManager = null
@@ -87,7 +90,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       testConf: Option[SparkConf] = None): BlockManager = {
     val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
     bmConf.set("spark.testing.memory", maxMem.toString)
-    bmConf.set("spark.memory.offHeap.size", maxMem.toString)
+    bmConf.set(MEMORY_OFFHEAP_SIZE.key, maxMem.toString)
     val serializer = new KryoSerializer(bmConf)
     val encryptionKey = if (bmConf.get(IO_ENCRYPTION_ENABLED)) {
       Some(CryptoStreamUtils.createKey(bmConf))
@@ -1322,9 +1325,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("SPARK-20640: Shuffle registration timeout and maxAttempts conf are working") {
     val tryAgainMsg = "test_spark_20640_try_again"
+    val timingoutExecutor = "timingoutExecutor"
+    val tryAgainExecutor = "tryAgainExecutor"
+    val succeedingExecutor = "succeedingExecutor"
+
     // a server which delays response 50ms and must try twice for success.
     def newShuffleServer(port: Int): (TransportServer, Int) = {
-      val attempts = new mutable.HashMap[String, Int]()
+      val failure = new Exception(tryAgainMsg)
+      val success = ByteBuffer.wrap(new Array[Byte](0))
+
+      var secondExecutorFailedOnce = false
+      var thirdExecutorFailedOnce = false
+
       val handler = new NoOpRpcHandler {
         override def receive(
             client: TransportClient,
@@ -1332,15 +1344,26 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
             callback: RpcResponseCallback): Unit = {
           val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
           msgObj match {
-            case exec: RegisterExecutor =>
-              Thread.sleep(50)
-              val attempt = attempts.getOrElse(exec.execId, 0) + 1
-              attempts(exec.execId) = attempt
-              if (attempt < 2) {
-                callback.onFailure(new Exception(tryAgainMsg))
-                return
-              }
-              callback.onSuccess(ByteBuffer.wrap(new Array[Byte](0)))
+
+            case exec: RegisterExecutor if exec.execId == timingoutExecutor =>
+              () // No reply to generate client-side timeout
+
+            case exec: RegisterExecutor
+              if exec.execId == tryAgainExecutor && !secondExecutorFailedOnce =>
+              secondExecutorFailedOnce = true
+              callback.onFailure(failure)
+
+            case exec: RegisterExecutor if exec.execId == tryAgainExecutor =>
+              callback.onSuccess(success)
+
+            case exec: RegisterExecutor
+              if exec.execId == succeedingExecutor && !thirdExecutorFailedOnce =>
+              thirdExecutorFailedOnce = true
+              callback.onFailure(failure)
+
+            case exec: RegisterExecutor if exec.execId == succeedingExecutor =>
+              callback.onSuccess(success)
+
           }
         }
       }
@@ -1349,6 +1372,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val transCtx = new TransportContext(transConf, handler, true)
       (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
     }
+
     val candidatePort = RandomUtils.nextInt(1024, 65536)
     val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
       newShuffleServer, conf, "ShuffleServer")
@@ -1357,21 +1381,21 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     conf.set("spark.shuffle.service.port", shufflePort.toString)
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
-    var e = intercept[SparkException]{
-      makeBlockManager(8000, "executor1")
+    var e = intercept[SparkException] {
+      makeBlockManager(8000, timingoutExecutor)
     }.getMessage
     assert(e.contains("TimeoutException"))
 
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
-    e = intercept[SparkException]{
-      makeBlockManager(8000, "executor2")
+    e = intercept[SparkException] {
+      makeBlockManager(8000, tryAgainExecutor)
     }.getMessage
     assert(e.contains(tryAgainMsg))
 
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "2")
-    makeBlockManager(8000, "executor3")
+    makeBlockManager(8000, succeedingExecutor)
     server.close()
   }
 
@@ -1449,6 +1473,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 }
 
 private object BlockManagerSuite {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   private implicit class BlockManagerTestUtils(store: BlockManager) {
 

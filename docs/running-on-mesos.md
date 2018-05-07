@@ -47,7 +47,7 @@ To install Apache Mesos from source, follow these steps:
 
 1. Download a Mesos release from a
    [mirror](http://www.apache.org/dyn/closer.lua/mesos/{{site.MESOS_VERSION}}/)
-2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
+2. Follow the Mesos [Getting Started](http://mesos.apache.org/getting-started) page for compiling and
    installing Mesos
 
 **Note:** If you want to run Mesos without installing it into the default paths on your system
@@ -81,6 +81,27 @@ a Spark driver program configured to connect to Mesos.
 
 Alternatively, you can also install Spark in the same location in all the Mesos slaves, and configure
 `spark.mesos.executor.home` (defaults to SPARK_HOME) to point to that location.
+
+## Authenticating to Mesos
+
+When Mesos Framework authentication is enabled it is necessary to provide a principal and secret by which to authenticate Spark to Mesos.  Each Spark job will register with Mesos as a separate framework.
+
+Depending on your deployment environment you may wish to create a single set of framework credentials that are shared across all users or create framework credentials for each user.  Creating and managing framework credentials should be done following the Mesos [Authentication documentation](http://mesos.apache.org/documentation/latest/authentication/).
+
+Framework credentials may be specified in a variety of ways depending on your deployment environment and security requirements.  The most simple way is to specify the `spark.mesos.principal` and `spark.mesos.secret` values directly in your Spark configuration.  Alternatively you may specify these values indirectly by instead specifying `spark.mesos.principal.file` and `spark.mesos.secret.file`, these settings point to files containing the principal and secret.  These files must be plaintext files in UTF-8 encoding.  Combined with appropriate file ownership and mode/ACLs this provides a more secure way to specify these credentials.
+
+Additionally, if you prefer to use environment variables you can specify all of the above via environment variables instead, the environment variable names are simply the configuration settings uppercased with `.` replaced with `_` e.g. `SPARK_MESOS_PRINCIPAL`.
+
+### Credential Specification Preference Order
+
+Please note that if you specify multiple ways to obtain the credentials then the following preference order applies.  Spark will use the first valid value found and any subsequent values are ignored:
+
+- `spark.mesos.principal` configuration setting
+- `SPARK_MESOS_PRINCIPAL` environment variable
+- `spark.mesos.principal.file` configuration setting
+- `SPARK_MESOS_PRINCIPAL_FILE` environment variable
+
+An equivalent order applies for the secret.  Essentially we prefer the configuration to be specified directly rather than indirectly by files, and we prefer that configuration settings are used over environment variables.
 
 ## Uploading Spark Package
 
@@ -154,12 +175,12 @@ can find the results of the driver from the Mesos Web UI.
 To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
 passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
 
-By setting the Mesos proxy config property (requires mesos version >= 1.4), `--conf spark.mesos.proxy.baseURL=http://localhost:5050` when launching the dispacther, the mesos sandbox URI for each driver is added to the mesos dispatcher UI.
+By setting the Mesos proxy config property (requires mesos version >= 1.4), `--conf spark.mesos.proxy.baseURL=http://localhost:5050` when launching the dispatcher, the mesos sandbox URI for each driver is added to the mesos dispatcher UI.
 
 If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
 
 The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
-For more information about these configurations please refer to the configurations [doc](configurations.html#deploy).
+For more information about these configurations please refer to the configurations [doc](configuration.html#deploy).
 
 You can also specify any additional jars required by the `MesosClusterDispatcher` in the classpath by setting the environment variable SPARK_DAEMON_CLASSPATH in spark-env.
 
@@ -203,8 +224,8 @@ details and default values.
 
 Executors are brought up eagerly when the application starts, until
 `spark.cores.max` is reached.  If you don't set `spark.cores.max`, the
-Spark application will reserve all resources offered to it by Mesos,
-so we of course urge you to set this variable in any sort of
+Spark application will consume all resources offered to it by Mesos,
+so we, of course, urge you to set this variable in any sort of
 multi-tenant cluster, including one which runs multiple concurrent
 Spark applications.
 
@@ -212,14 +233,14 @@ The scheduler will start executors round-robin on the offers Mesos
 gives it, but there are no spread guarantees, as Mesos does not
 provide such guarantees on the offer stream.
 
-In this mode spark executors will honor port allocation if such is
-provided from the user. Specifically if the user defines
+In this mode Spark executors will honor port allocation if such is
+provided from the user. Specifically, if the user defines
 `spark.blockManager.port` in Spark configuration,
 the mesos scheduler will check the available offers for a valid port
 range containing the port numbers. If no such range is available it will
 not launch any task. If no restriction is imposed on port numbers by the
 user, ephemeral ports are used as usual. This port honouring implementation
-implies one task per host if the user defines a port. In the future network
+implies one task per host if the user defines a port. In the future network,
 isolation shall be supported.
 
 The benefit of coarse-grained mode is much lower startup overhead, but
@@ -263,7 +284,10 @@ resource offers will be accepted.
 conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
 {% endhighlight %}
 
-For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will
+be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+
+To constrain where driver tasks are run, use `spark.mesos.driver.constraints`
 
 # Mesos Docker Support
 
@@ -424,7 +448,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.principal</code></td>
   <td>(none)</td>
   <td>
-    Set the principal with which Spark framework will use to authenticate with Mesos.
+    Set the principal with which Spark framework will use to authenticate with Mesos.  You can also specify this via the environment variable `SPARK_MESOS_PRINCIPAL`.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.principal.file</code></td>
+  <td>(none)</td>
+  <td>
+    Set the file containing the principal with which Spark framework will use to authenticate with Mesos.  Allows specifying the principal indirectly in more security conscious deployments.  The file must be readable by the user launching the job and be UTF-8 encoded plaintext.  You can also specify this via the environment variable `SPARK_MESOS_PRINCIPAL_FILE`.
   </td>
 </tr>
 <tr>
@@ -432,7 +463,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Set the secret with which Spark framework will use to authenticate with Mesos. Used, for example, when
-    authenticating with the registry.
+    authenticating with the registry.  You can also specify this via the environment variable `SPARK_MESOS_SECRET`.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.secret.file</code></td>
+  <td>(none)</td>
+  <td>
+    Set the file containing the secret with which Spark framework will use to authenticate with Mesos. Used, for example, when
+    authenticating with the registry.  Allows for specifying the secret indirectly in more security conscious deployments.  The file must be readable by the user launching the job and be UTF-8 encoded plaintext.  You can also specify this via the environment variable `SPARK_MESOS_SECRET_FILE`.
   </td>
 </tr>
 <tr>
@@ -447,7 +486,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.constraints</code></td>
   <td>(none)</td>
   <td>
-    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos Attributes & Resources</a> for more information on attributes.
+    Attribute-based constraints on mesos resource offers. By default, all resource offers will be accepted. This setting
+    applies only to executors. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos
+    Attributes & Resources</a> for more information on attributes.
     <ul>
       <li>Scalar constraints are matched with "less than equal" semantics i.e. value in the constraint must be less than or equal to the value in the resource offer.</li>
       <li>Range constraints are matched with "contains" semantics i.e. value in the constraint must be within the resource offer's value.</li>
@@ -455,6 +496,14 @@ See the [configuration page](configuration.html) for information on Spark config
       <li>Text constraints are matched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
       <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
     </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.constraints</code></td>
+  <td>(none)</td>
+  <td>
+    Same as <code>spark.mesos.constraints</code> except applied to drivers when launched through the dispatcher. By default,
+    all offers with sufficient resources will be accepted.
   </td>
 </tr>
 <tr>
@@ -678,6 +727,30 @@ See the [configuration page](configuration.html) for information on Spark config
     it tears down the driver framework by killing all its 
     executors. The default value is zero, meaning no timeout: if the 
     driver disconnects, the master immediately tears down the framework.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td><code>120s</code></td>
+  <td>
+    Time to consider unused resources refused, serves as a fallback of
+    `spark.mesos.rejectOfferDurationForUnmetConstraints`,
+    `spark.mesos.rejectOfferDurationForReachedMaxCores`
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForUnmetConstraints</code></td>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td>
+    Time to consider unused resources refused with unmet constraints
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForReachedMaxCores</code></td>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td>
+    Time to consider unused resources refused when maximum number of cores
+    <code>spark.cores.max</code> is reached
   </td>
 </tr>
 </table>

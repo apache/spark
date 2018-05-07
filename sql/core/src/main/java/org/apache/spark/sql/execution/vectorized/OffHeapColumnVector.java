@@ -19,8 +19,12 @@ package org.apache.spark.sql.execution.vectorized;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.OffHeapMemoryBlock;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Column data backed using offheap memory.
@@ -57,7 +61,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   private long nulls;
   private long data;
 
-  // Set iff the type is array.
+  // Only set if type is Array or Map.
   private long lengthData;
   private long offsetData;
 
@@ -73,14 +77,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     reset();
   }
 
-  @Override
+  /**
+   * Returns the off heap pointer for the values buffer.
+   */
+  @VisibleForTesting
   public long valuesNativeAddress() {
     return data;
-  }
-
-  @Override
-  public long nullsNativeAddress() {
-    return nulls;
   }
 
   @Override
@@ -109,7 +111,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public void putNull(int rowId) {
     Platform.putByte(null, nulls + rowId, (byte) 1);
     ++numNulls;
-    anyNullsSet = true;
   }
 
   @Override
@@ -118,13 +119,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 1);
     }
-    anyNullsSet = true;
     numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (!anyNullsSet) return;
+    if (!hasNull()) return;
     long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 0);
@@ -203,6 +203,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     byte[] array = new byte[count];
     Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
     return array;
+  }
+
+  @Override
+  protected UTF8String getBytesAsUTF8String(int rowId, int count) {
+    return new UTF8String(new OffHeapMemoryBlock(data + rowId, count));
   }
 
   //
@@ -522,20 +527,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     return result;
   }
 
-  @Override
-  public void loadBytes(ColumnVector.Array array) {
-    if (array.tmpByteArray.length < array.length) array.tmpByteArray = new byte[array.length];
-    Platform.copyMemory(
-        null, data + array.offset, array.tmpByteArray, Platform.BYTE_ARRAY_OFFSET, array.length);
-    array.byteArray = array.tmpByteArray;
-    array.byteArrayOffset = 0;
-  }
-
   // Split out the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
     int oldCapacity = (nulls == 0L) ? 0 : capacity;
-    if (this.resultArray != null) {
+    if (isArray() || type instanceof MapType) {
       this.lengthData =
           Platform.reallocateMemory(lengthData, oldCapacity * 4, newCapacity * 4);
       this.offsetData =
@@ -550,7 +546,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     } else if (type instanceof LongType || type instanceof DoubleType ||
         DecimalType.is64BitDecimalType(type) || type instanceof TimestampType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 8, newCapacity * 8);
-    } else if (resultStruct != null) {
+    } else if (childColumns != null) {
       // Nothing to store.
     } else {
       throw new RuntimeException("Unhandled " + type);

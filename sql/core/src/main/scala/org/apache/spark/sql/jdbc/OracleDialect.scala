@@ -18,7 +18,10 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, Timestamp, Types}
+import java.util.TimeZone
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -28,6 +31,13 @@ private case object OracleDialect extends JdbcDialect {
   private[jdbc] val TIMESTAMPTZ = -101
 
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+
+  private def supportTimeZoneTypes: Boolean = {
+    val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
+    // TODO: support timezone types when users are not using the JVM timezone, which
+    // is the default value of SESSION_LOCAL_TIMEZONE
+    timeZone == TimeZone.getDefault
+  }
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -49,7 +59,8 @@ private case object OracleDialect extends JdbcDialect {
           case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
           case _ => None
         }
-      case TIMESTAMPTZ => Some(TimestampType) // Value for Timestamp with Time Zone in Oracle
+      case TIMESTAMPTZ if supportTimeZoneTypes
+        => Some(TimestampType) // Value for Timestamp with Time Zone in Oracle
       case BINARY_FLOAT => Some(FloatType) // Value for OracleTypes.BINARY_FLOAT
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case _ => None

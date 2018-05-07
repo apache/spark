@@ -41,6 +41,7 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
+import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
@@ -80,7 +81,8 @@ private[yarn] class YarnAllocator(
   private val releasedContainers = Collections.newSetFromMap[ContainerId](
     new ConcurrentHashMap[ContainerId, java.lang.Boolean])
 
-  private val numExecutorsRunning = new AtomicInteger(0)
+  private val runningExecutors = Collections.newSetFromMap[String](
+    new ConcurrentHashMap[String, java.lang.Boolean]())
 
   private val numExecutorsStarting = new AtomicInteger(0)
 
@@ -109,7 +111,7 @@ private[yarn] class YarnAllocator(
     sparkConf.get(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).getOrElse(-1L)
 
   @volatile private var targetNumExecutors =
-    YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf)
+    SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
 
   private var currentNodeBlacklist = Set.empty[String]
 
@@ -165,7 +167,7 @@ private[yarn] class YarnAllocator(
     clock = newClock
   }
 
-  def getNumExecutorsRunning: Int = numExecutorsRunning.get()
+  def getNumExecutorsRunning: Int = runningExecutors.size()
 
   def getNumExecutorsFailed: Int = synchronized {
     val endTime = clock.getTimeMillis()
@@ -241,12 +243,11 @@ private[yarn] class YarnAllocator(
    * Request that the ResourceManager release the container running the specified executor.
    */
   def killExecutor(executorId: String): Unit = synchronized {
-    if (executorIdToContainer.contains(executorId)) {
-      val container = executorIdToContainer.get(executorId).get
-      internalReleaseContainer(container)
-      numExecutorsRunning.decrementAndGet()
-    } else {
-      logWarning(s"Attempted to kill unknown executor $executorId!")
+    executorIdToContainer.get(executorId) match {
+      case Some(container) if !releasedContainers.contains(container.getId) =>
+        internalReleaseContainer(container)
+        runningExecutors.remove(executorId)
+      case _ => logWarning(s"Attempted to kill unknown executor $executorId!")
     }
   }
 
@@ -273,7 +274,7 @@ private[yarn] class YarnAllocator(
         "Launching executor count: %d. Cluster resources: %s.")
         .format(
           allocatedContainers.size,
-          numExecutorsRunning.get,
+          runningExecutors.size,
           numExecutorsStarting.get,
           allocateResponse.getAvailableResources))
 
@@ -285,7 +286,7 @@ private[yarn] class YarnAllocator(
       logDebug("Completed %d containers".format(completedContainers.size))
       processCompletedContainers(completedContainers.asScala)
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
-        .format(completedContainers.size, numExecutorsRunning.get))
+        .format(completedContainers.size, runningExecutors.size))
     }
   }
 
@@ -299,9 +300,9 @@ private[yarn] class YarnAllocator(
     val pendingAllocate = getPendingAllocate
     val numPendingAllocate = pendingAllocate.size
     val missing = targetNumExecutors - numPendingAllocate -
-      numExecutorsStarting.get - numExecutorsRunning.get
+      numExecutorsStarting.get - runningExecutors.size
     logDebug(s"Updating resource requests, target: $targetNumExecutors, " +
-      s"pending: $numPendingAllocate, running: ${numExecutorsRunning.get}, " +
+      s"pending: $numPendingAllocate, running: ${runningExecutors.size}, " +
       s"executorsStarting: ${numExecutorsStarting.get}")
 
     if (missing > 0) {
@@ -501,7 +502,7 @@ private[yarn] class YarnAllocator(
         s"for executor with ID $executorId")
 
       def updateInternalState(): Unit = synchronized {
-        numExecutorsRunning.incrementAndGet()
+        runningExecutors.add(executorId)
         numExecutorsStarting.decrementAndGet()
         executorIdToContainer(executorId) = container
         containerIdToExecutorId(container.getId) = executorId
@@ -512,7 +513,7 @@ private[yarn] class YarnAllocator(
         allocatedContainerToHostMap.put(containerId, executorHostname)
       }
 
-      if (numExecutorsRunning.get < targetNumExecutors) {
+      if (runningExecutors.size() < targetNumExecutors) {
         numExecutorsStarting.incrementAndGet()
         if (launchContainers) {
           launcherPool.execute(new Runnable {
@@ -553,7 +554,7 @@ private[yarn] class YarnAllocator(
       } else {
         logInfo(("Skip launching executorRunnable as running executors count: %d " +
           "reached target executors count: %d.").format(
-          numExecutorsRunning.get, targetNumExecutors))
+          runningExecutors.size, targetNumExecutors))
       }
     }
   }
@@ -568,7 +569,11 @@ private[yarn] class YarnAllocator(
       val exitReason = if (!alreadyReleased) {
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
-        numExecutorsRunning.decrementAndGet()
+        containerIdToExecutorId.get(containerId) match {
+          case Some(executorId) => runningExecutors.remove(executorId)
+          case None => logWarning(s"Cannot find executorId for container: ${containerId.toString}")
+        }
+
         logInfo("Completed container %s%s (state: %s, exit status: %s)".format(
           containerId,
           onHostStr,
@@ -735,7 +740,8 @@ private object YarnAllocator {
   def memLimitExceededLogMessage(diagnostics: String, pattern: Pattern): String = {
     val matcher = pattern.matcher(diagnostics)
     val diag = if (matcher.find()) " " + matcher.group() + "." else ""
-    ("Container killed by YARN for exceeding memory limits." + diag
-      + " Consider boosting spark.yarn.executor.memoryOverhead.")
+    s"Container killed by YARN for exceeding memory limits. $diag " +
+      "Consider boosting spark.yarn.executor.memoryOverhead or " +
+      "disabling yarn.nodemanager.vmem-check-enabled because of YARN-4714."
   }
 }

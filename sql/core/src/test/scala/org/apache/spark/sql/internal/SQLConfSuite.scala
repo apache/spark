@@ -221,35 +221,6 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
-  test("MAX_CASES_BRANCHES") {
-    withTable("tab1") {
-      spark.range(10).write.saveAsTable("tab1")
-      val sql_one_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 END FROM tab1"
-      val sql_two_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 ELSE 0 END FROM tab1"
-
-      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "0") {
-        assert(!sql(sql_one_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-        assert(!sql(sql_two_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-      }
-
-      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "1") {
-        assert(sql(sql_one_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-        assert(!sql(sql_two_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-      }
-
-      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "2") {
-        assert(sql(sql_one_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-        assert(sql(sql_two_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-      }
-    }
-  }
-
   test("static SQL conf comes from SparkConf") {
     val previousValue = sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
     try {
@@ -281,4 +252,62 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(null == spark.conf.get("spark.sql.nonexistent", null))
     assert("<undefined>" == spark.conf.get("spark.sql.nonexistent", "<undefined>"))
   }
+
+  test("SPARK-10365: PARQUET_OUTPUT_TIMESTAMP_TYPE") {
+    spark.sessionState.conf.clear()
+
+    // check default value
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.INT96)
+
+    // PARQUET_INT64_AS_TIMESTAMP_MILLIS should be respected.
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS, true)
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS)
+
+    // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority over PARQUET_INT64_AS_TIMESTAMP_MILLIS
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "timestamp_micros")
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "int96")
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.INT96)
+
+    // test invalid conf value
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "invalid")
+    }
+
+    spark.sessionState.conf.clear()
+  }
+
+  test("SPARK-22779: correctly compute default value for fallback configs") {
+    val fallback = SQLConf.buildConf("spark.sql.__test__.spark_22779")
+      .fallbackConf(SQLConf.PARQUET_COMPRESSION)
+
+    assert(spark.sessionState.conf.getConfString(fallback.key) ===
+      SQLConf.PARQUET_COMPRESSION.defaultValue.get)
+    assert(spark.sessionState.conf.getConfString(fallback.key, "lzo") === "lzo")
+
+    val displayValue = spark.sessionState.conf.getAllDefinedConfs
+      .find { case (key, _, _) => key == fallback.key }
+      .map { case (_, v, _) => v }
+      .get
+    assert(displayValue === fallback.defaultValueString)
+
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_COMPRESSION, "gzip")
+    assert(spark.sessionState.conf.getConfString(fallback.key) === "gzip")
+
+    spark.sessionState.conf.setConf(fallback, "lzo")
+    assert(spark.sessionState.conf.getConfString(fallback.key) === "lzo")
+
+    val newDisplayValue = spark.sessionState.conf.getAllDefinedConfs
+      .find { case (key, _, _) => key == fallback.key }
+      .map { case (_, v, _) => v }
+      .get
+    assert(newDisplayValue === "lzo")
+
+    SQLConf.unregister(fallback)
+  }
+
 }

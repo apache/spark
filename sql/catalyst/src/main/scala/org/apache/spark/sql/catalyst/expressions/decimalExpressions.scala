@@ -70,10 +70,12 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
 case class PromotePrecision(child: Expression) extends UnaryExpression {
   override def dataType: DataType = child.dataType
   override def eval(input: InternalRow): Any = child.eval(input)
+  /** Just a simple pass-through for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")
   override def prettyName: String = "promote_precision"
   override def sql: String = child.sql
+  override lazy val canonicalized: Expression = child.canonicalized
 }
 
 /**

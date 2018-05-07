@@ -25,10 +25,10 @@ all_modules = []
 @total_ordering
 class Module(object):
     """
-    A module is the basic abstraction in our test runner script. Each module consists of a set of
-    source files, a set of test commands, and a set of dependencies on other modules. We use modules
-    to define a dependency graph that lets determine which tests to run based on which files have
-    changed.
+    A module is the basic abstraction in our test runner script. Each module consists of a set
+    of source files, a set of test commands, and a set of dependencies on other modules. We use
+    modules to define a dependency graph that let us determine which tests to run based on which
+    files have changed.
     """
 
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(), environ={},
@@ -400,6 +400,7 @@ pyspark_sql = Module(
         "pyspark.sql.functions",
         "pyspark.sql.readwriter",
         "pyspark.sql.streaming",
+        "pyspark.sql.udf",
         "pyspark.sql.window",
         "pyspark.sql.tests",
     ]
@@ -418,6 +419,10 @@ pyspark_streaming = Module(
     source_file_regexes=[
         "python/pyspark/streaming"
     ],
+    environ={
+        "ENABLE_FLUME_TESTS": "1",
+        "ENABLE_KAFKA_0_8_TESTS": "1"
+    },
     python_test_goals=[
         "pyspark.streaming.util",
         "pyspark.streaming.tests",
@@ -466,6 +471,7 @@ pyspark_ml = Module(
         "pyspark.ml.evaluation",
         "pyspark.ml.feature",
         "pyspark.ml.fpm",
+        "pyspark.ml.image",
         "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",
         "pyspark.ml.regression",
@@ -529,6 +535,14 @@ mesos = Module(
     source_file_regexes=["resource-managers/mesos/"],
     build_profile_flags=["-Pmesos"],
     sbt_test_goals=["mesos/test"]
+)
+
+kubernetes = Module(
+    name="kubernetes",
+    dependencies=[],
+    source_file_regexes=["resource-managers/kubernetes"],
+    build_profile_flags=["-Pkubernetes"],
+    sbt_test_goals=["kubernetes/test"]
 )
 
 # The root module is a dummy module which is used to run all of the tests.

@@ -195,7 +195,7 @@ SELECT t1.x.y.* FROM t1
 struct<>
 -- !query 22 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't1.x.y.*' give input columns 'i1';
+cannot resolve 't1.x.y.*' given input columns 'i1';
 
 
 -- !query 23

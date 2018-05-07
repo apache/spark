@@ -20,6 +20,7 @@ package org.apache.spark.status
 import java.io.File
 
 import scala.annotation.meta.getter
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
@@ -66,6 +67,19 @@ private[spark] object KVUtils extends Logging {
     }
 
     db
+  }
+
+  /** Turns a KVStoreView into a Scala sequence, applying a filter. */
+  def viewToSeq[T](
+      view: KVStoreView[T],
+      max: Int)
+      (filter: T => Boolean): Seq[T] = {
+    val iter = view.closeableIterator()
+    try {
+      iter.asScala.filter(filter).take(max).toList
+    } finally {
+      iter.close()
+    }
   }
 
   private[spark] class MetadataMismatchException extends Exception

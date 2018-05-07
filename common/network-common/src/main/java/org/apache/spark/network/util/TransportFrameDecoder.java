@@ -29,7 +29,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 /**
  * A customized frame decoder that allows intercepting raw data.
  * <p>
- * This behaves like Netty's frame decoder (with harcoded parameters that match this library's
+ * This behaves like Netty's frame decoder (with hard coded parameters that match this library's
  * needs), except it allows an interceptor to be installed to read data directly before it's
  * framed.
  * <p>

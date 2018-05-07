@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
@@ -71,7 +71,7 @@ class CacheManager extends Logging {
 
   /** Clears all cached tables. */
   def clearCache(): Unit = writeLock {
-    cachedData.asScala.foreach(_.cachedRepresentation.cachedColumnBuffers.unpersist())
+    cachedData.asScala.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
     cachedData.clear()
   }
 
@@ -94,14 +94,13 @@ class CacheManager extends Logging {
       logWarning("Asked to cache already cached data.")
     } else {
       val sparkSession = query.sparkSession
-      cachedData.add(CachedData(
-        planToCache,
-        InMemoryRelation(
-          sparkSession.sessionState.conf.useCompression,
-          sparkSession.sessionState.conf.columnBatchSize,
-          storageLevel,
-          sparkSession.sessionState.executePlan(planToCache).executedPlan,
-          tableName)))
+      val inMemoryRelation = InMemoryRelation(
+        sparkSession.sessionState.conf.useCompression,
+        sparkSession.sessionState.conf.columnBatchSize, storageLevel,
+        sparkSession.sessionState.executePlan(planToCache).executedPlan,
+        tableName,
+        planToCache)
+      cachedData.add(CachedData(planToCache, inMemoryRelation))
     }
   }
 
@@ -120,7 +119,7 @@ class CacheManager extends Logging {
     while (it.hasNext) {
       val cd = it.next()
       if (cd.plan.find(_.sameResult(plan)).isDefined) {
-        cd.cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
+        cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
         it.remove()
       }
     }
@@ -139,16 +138,15 @@ class CacheManager extends Logging {
     while (it.hasNext) {
       val cd = it.next()
       if (condition(cd.plan)) {
-        cd.cachedRepresentation.cachedColumnBuffers.unpersist()
+        cd.cachedRepresentation.cacheBuilder.clearCache()
         // Remove the cache entry before we create a new one, so that we can have a different
         // physical plan.
         it.remove()
+        val plan = spark.sessionState.executePlan(cd.plan).executedPlan
         val newCache = InMemoryRelation(
-          useCompression = cd.cachedRepresentation.useCompression,
-          batchSize = cd.cachedRepresentation.batchSize,
-          storageLevel = cd.cachedRepresentation.storageLevel,
-          child = spark.sessionState.executePlan(cd.plan).executedPlan,
-          tableName = cd.cachedRepresentation.tableName)
+          cacheBuilder = cd.cachedRepresentation
+            .cacheBuilder.copy(cachedPlan = plan)(_cachedColumnBuffers = null),
+          logicalPlan = cd.plan)
         needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }
@@ -169,6 +167,13 @@ class CacheManager extends Logging {
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
+      // Do not lookup the cache by hint node. Hint node is special, we should ignore it when
+      // canonicalizing plans, so that plans which are same except hint can hit the same cache.
+      // However, we also want to keep the hint info after cache lookup. Here we skip the hint
+      // node, so that the returned caching plan won't replace the hint node and drop the hint info
+      // from the original plan.
+      case hint: ResolvedHint => hint
+
       case currentFragment =>
         lookupCachedData(currentFragment)
           .map(_.cachedRepresentation.withOutput(currentFragment.output))

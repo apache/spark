@@ -18,7 +18,7 @@ rem limitations under the License.
 rem
 
 rem Figure out where the Spark framework is installed
-set SPARK_HOME=%~dp0..
+call "%~dp0find-spark-home.cmd"
 
 call "%SPARK_HOME%\bin\load-spark-env.cmd"
 set _SPARK_CMD_USAGE=Usage: bin\pyspark.cmd [options]

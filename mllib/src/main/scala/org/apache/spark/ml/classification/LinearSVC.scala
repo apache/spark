@@ -316,7 +316,7 @@ class LinearSVCModel private[classification] (
     BLAS.dot(features, coefficients) + intercept
   }
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     if (margin(features) > $(threshold)) 1.0 else 0.0
   }
 
@@ -377,7 +377,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
       val Row(coefficients: Vector, intercept: Double) =
         data.select("coefficients", "intercept").head()
       val model = new LinearSVCModel(metadata.uid, coefficients, intercept)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

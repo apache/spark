@@ -17,27 +17,19 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.sql.{DataFrame, Row}
 
-object StopWordsRemoverSuite extends SparkFunSuite {
-  def testStopWordsRemover(t: StopWordsRemover, dataset: Dataset[_]): Unit = {
-    t.transform(dataset)
-      .select("filtered", "expected")
-      .collect()
-      .foreach { case Row(tokens, wantedTokens) =>
-        assert(tokens === wantedTokens)
+class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
+
+  def testStopWordsRemover(t: StopWordsRemover, dataFrame: DataFrame): Unit = {
+    testTransformer[(Array[String], Array[String])](dataFrame, t, "filtered", "expected") {
+       case Row(tokens: Seq[_], wantedTokens: Seq[_]) =>
+         assert(tokens === wantedTokens)
     }
   }
-}
-
-class StopWordsRemoverSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
-
-  import StopWordsRemoverSuite._
-  import testImplicits._
 
   test("StopWordsRemover default") {
     val remover = new StopWordsRemover()
@@ -151,9 +143,10 @@ class StopWordsRemoverSuite
       .setOutputCol(outputCol)
     val dataSet = Seq((Seq("The", "the", "swift"), Seq("swift"))).toDF("raw", outputCol)
 
-    val thrown = intercept[IllegalArgumentException] {
-      testStopWordsRemover(remover, dataSet)
-    }
-    assert(thrown.getMessage == s"requirement failed: Column $outputCol already exists.")
+    testTransformerByInterceptingException[(Array[String], Array[String])](
+      dataSet,
+      remover,
+      s"requirement failed: Column $outputCol already exists.",
+      "expected")
   }
 }

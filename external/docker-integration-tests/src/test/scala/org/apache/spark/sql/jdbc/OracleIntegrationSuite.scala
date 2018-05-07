@@ -18,11 +18,12 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
-import java.util.Properties
+import java.util.{Properties, TimeZone}
 import java.math.BigDecimal
 
-import org.apache.spark.sql.{DataFrame, Row, SaveMode}
-import org.apache.spark.sql.execution.{WholeStageCodegenExec, RowDataSourceScanExec}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -77,6 +78,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     conn.prepareStatement(
       "INSERT INTO ts_with_timezone VALUES " +
         "(1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO ts_with_timezone VALUES " +
+        "(2, to_timestamp_tz('1999-12-01 12:00:00 PST','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
     conn.commit()
 
     conn.prepareStatement(
@@ -233,6 +237,63 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val rows = dfRead.collect()
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(1).equals("class java.sql.Timestamp"))
+  }
+
+  test("Column type TIMESTAMP with SESSION_LOCAL_TIMEZONE is different from default") {
+    val defaultJVMTimeZone = TimeZone.getDefault
+    // Pick the timezone different from the current default time zone of JVM
+    val sofiaTimeZone = TimeZone.getTimeZone("Europe/Sofia")
+    val shanghaiTimeZone = TimeZone.getTimeZone("Asia/Shanghai")
+    val localSessionTimeZone =
+      if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
+      val e = intercept[java.sql.SQLException] {
+        val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+        dfRead.collect()
+      }.getMessage
+      assert(e.contains("Unrecognized SQL type -101"))
+    }
+  }
+
+  /**
+   * Change the Time Zone `timeZoneId` of JVM before executing `f`, then switches back to the
+   * original after `f` returns.
+   * @param timeZoneId the ID for a TimeZone, either an abbreviation such as "PST", a full name such
+   *                   as "America/Los_Angeles", or a custom ID such as "GMT-8:00".
+   */
+  private def withTimeZone(timeZoneId: String)(f: => Unit): Unit = {
+    val originalLocale = TimeZone.getDefault
+    try {
+      // Add Locale setting
+      TimeZone.setDefault(TimeZone.getTimeZone(timeZoneId))
+      f
+    } finally {
+      TimeZone.setDefault(originalLocale)
+    }
+  }
+
+  test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
+    def checkRow(row: Row, ts: String): Unit = {
+      assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
+    }
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
+      val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+      withTimeZone("PST") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
+      }
+
+      withTimeZone("UTC") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 20:00:00"))))
+      }
+    }
   }
 
   test("SPARK-18004: Make sure date or timestamp related predicate is pushed down correctly") {

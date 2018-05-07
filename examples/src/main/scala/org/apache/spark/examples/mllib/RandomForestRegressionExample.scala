@@ -55,8 +55,8 @@ object RandomForestRegressionExample {
       (point.label, prediction)
     }
     val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
-    println("Test Mean Squared Error = " + testMSE)
-    println("Learned regression forest model:\n" + model.toDebugString)
+    println(s"Test Mean Squared Error = $testMSE")
+    println(s"Learned regression forest model:\n ${model.toDebugString}")
 
     // Save and load model
     model.save(sc, "target/tmp/myRandomForestRegressionModel")
