@@ -164,12 +164,18 @@ setMethod("alias",
 #' @aliases substr,Column-method
 #'
 #' @param x a Column.
-#' @param start starting position.
+#' @param start starting position. It should be 1-base.
 #' @param stop ending position.
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(list(list(a="abcdef")))
+#' collect(select(df, substr(df$a, 1, 4))) # the result is `abcd`.
+#' collect(select(df, substr(df$a, 2, 4))) # the result is `bcd`.
+#' }
 #' @note substr since 1.4.0
 setMethod("substr", signature(x = "Column"),
           function(x, start, stop) {
-            jc <- callJMethod(x@jc, "substr", as.integer(start - 1), as.integer(stop - start + 1))
+            jc <- callJMethod(x@jc, "substr", as.integer(start), as.integer(stop - start + 1))
             column(jc)
           })
 
