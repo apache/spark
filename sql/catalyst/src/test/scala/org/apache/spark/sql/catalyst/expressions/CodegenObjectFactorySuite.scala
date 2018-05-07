@@ -29,7 +29,7 @@ class CodegenObjectFactorySuite extends SparkFunSuite with PlanTestBase {
   private def testCodegenFactory[IN, OUT](factory: CodegenObjectFactory[IN, OUT],
       input: IN, checkerForCodegen: OUT => Unit, checkerForInterpreted: OUT => Unit) = {
 
-    val modes = Seq("codegen-only", "interpreted-only")
+    val modes = Seq("CODEGEN_ONLY", "NO_CODEGEN")
       .zip(Seq(checkerForCodegen, checkerForInterpreted))
 
     for ((fallbackMode, checker) <- modes) {

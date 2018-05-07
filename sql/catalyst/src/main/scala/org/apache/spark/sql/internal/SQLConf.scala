@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.util.Utils
 
@@ -688,14 +689,14 @@ object SQLConf {
 
   val CODEGEN_OBJECT_FALLBACK = buildConf("spark.sql.test.codegenObject.fallback")
     .doc("Determines the behavior of any factories extending `CodegenObjectFactory`" +
-      " during tests. `fallback` means trying codegen first and then fallbacking to" +
-      "interpreted if any compile error happens. Disabling fallback if `codegen-only`." +
-      "`interpreted-only` skips codegen and goes interpreted path always. Note that" +
-      "this config works only for tests. In production it always runs with `fallback` mode")
+      " during tests. `AUTO` means trying codegen first and then fallbacking to" +
+      "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`." +
+      "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that" +
+      "this config works only for tests.")
     .internal()
     .stringConf
-    .checkValues(Set("fallback", "codegen-only", "interpreted-only"))
-    .createWithDefault("fallback")
+    .checkValues(CodegenObjectFactoryMode.values.map(_.toString))
+    .createWithDefault(CodegenObjectFactoryMode.AUTO.toString)
 
   val CODEGEN_FALLBACK = buildConf("spark.sql.codegen.fallback")
     .internal()

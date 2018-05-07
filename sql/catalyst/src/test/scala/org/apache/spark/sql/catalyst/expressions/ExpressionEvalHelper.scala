@@ -197,7 +197,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-    for (fallbackMode <- Seq("codegen-only", "interpreted-only")) {
+    for (fallbackMode <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
       withSQLConf(SQLConf.CODEGEN_OBJECT_FALLBACK.key -> fallbackMode) {
         val factory = UnsafeProjection
         val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow, factory)

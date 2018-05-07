@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -35,22 +36,35 @@ object CodegenError {
 }
 
 /**
+ * Defines values for `SQLConf` config of fallback mode. Use for test only.
+ */
+object CodegenObjectFactoryMode extends Enumeration {
+  val AUTO, CODEGEN_ONLY, NO_CODEGEN = Value
+
+  def currentMode: CodegenObjectFactoryMode.Value = {
+    // If we weren't on task execution, accesses that config.
+    if (TaskContext.get == null) {
+      val config = SQLConf.get.getConf(SQLConf.CODEGEN_OBJECT_FALLBACK)
+      CodegenObjectFactoryMode.withName(config)
+    } else {
+      CodegenObjectFactoryMode.AUTO
+    }
+  }
+}
+
+/**
  * A factory which can be used to create objects that have both codegen and interpreted
  * implementations. This tries to create codegen object first, if any compile error happens,
  * it fallbacks to interpreted version.
  */
 abstract class CodegenObjectFactory[IN, OUT] {
 
-  // Creates wanted object. First trying codegen implementation. If any compile error happens,
-  // fallbacks to interpreted version.
   def createObject(in: IN): OUT = {
-    val fallbackMode = SQLConf.get.getConf(SQLConf.CODEGEN_OBJECT_FALLBACK)
-    // Only in tests, we can use `SQLConf.CODEGEN_OBJECT_FALLBACK` to choose codegen/interpreted
-    // only path.
-    if (Utils.isTesting && fallbackMode != "fallback") {
-      fallbackMode match {
-        case "codegen-only" => createCodeGeneratedObject(in)
-        case "interpreted-only" => createInterpretedObject(in)
+    // We are allowed to choose codegen-only or no-codegen modes if under tests.
+    if (Utils.isTesting && CodegenObjectFactoryMode.currentMode != CodegenObjectFactoryMode.AUTO) {
+      CodegenObjectFactoryMode.currentMode match {
+        case CodegenObjectFactoryMode.CODEGEN_ONLY => createCodeGeneratedObject(in)
+        case CodegenObjectFactoryMode.NO_CODEGEN => createInterpretedObject(in)
       }
     } else {
       try {
