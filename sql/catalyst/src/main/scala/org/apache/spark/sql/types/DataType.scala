@@ -27,6 +27,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
@@ -334,6 +335,67 @@ object DataType {
             }
 
       case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
+  /**
+   * Returns true if the write data type can be read using the read data type.
+   *
+   * The write type is compatible with the read type if:
+   * - Both types are arrays, the array element types are compatible, and element nullability is
+   *   compatible (read allows nulls or write does not contain nulls).
+   * - Both types are maps and the map key and value types are compatible, and value nullability
+   *   is compatible  (read allows nulls or write does not contain nulls).
+   * - Both types are structs and each field in the read struct is present in the write struct and
+   *   compatible (including nullability), or is nullable if the write struct does not contain the
+   *   field. Write-side structs are not compatible if they contain fields that are not present in
+   *   the read-side struct.
+   * - Both types are atomic and are the same type
+   *
+   * This method does not allow type promotion such as, write type int with read type long.
+   *
+   * Extra fields in write-side structs are not allowed to avoid accidentally writing data that
+   * the read schema will not read, and to ensure map key equality is not changed when data is read.
+   *
+   * @param write a write-side data type to validate against the read type
+   * @param read a read-side data type
+   * @return true if data written with the write type can be read using the read type
+   */
+  def canWrite(
+      write: DataType,
+      read: DataType,
+      resolver: Resolver): Boolean = {
+    (write, read) match {
+      case (wArr: ArrayType, rArr: ArrayType) =>
+        canWrite(wArr.elementType, rArr.elementType, resolver) &&
+            (rArr.containsNull || !wArr.containsNull)
+
+      case (wMap: MapType, rMap: MapType) =>
+        // map keys cannot include data fields not in the read schema without changing equality when
+        // read. map keys can be missing fields as long as they are nullable in the read schema.
+        canWrite(wMap.keyType, rMap.keyType, resolver) &&
+            canWrite(wMap.valueType, rMap.valueType, resolver) &&
+            (rMap.valueContainsNull || !wMap.valueContainsNull)
+
+      case (StructType(writeFields), StructType(readFields)) =>
+        lazy val hasNoExtraFields =
+          (writeFields.map(_.name).toSet -- readFields.map(_.name)).isEmpty
+
+        readFields.forall { readField =>
+          writeFields.find(writeField => resolver(writeField.name, readField.name)) match {
+            case Some(writeField) =>
+              canWrite(writeField.dataType, readField.dataType, resolver) &&
+                  (readField.nullable || !writeField.nullable)
+
+            case None =>
+              // the write schema doesn't have the field, so it must be nullable in the read schema
+              readField.nullable
+          }
+        } && hasNoExtraFields
+
+      case (w, r) =>
+        // the write and read types are atomic and must be the same
+        w.sameType(r)
     }
   }
 }

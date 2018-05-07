@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
-  RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -341,6 +340,36 @@ case class Join(
     case NaturalJoin(_) => false
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
+  }
+}
+
+/**
+ * Append data to an existing table.
+ */
+case class AppendData(
+    table: NamedRelation,
+    query: LogicalPlan,
+    isByName: Boolean) extends LogicalPlan {
+  override def children: Seq[LogicalPlan] = Seq(query)
+  override def output: Seq[Attribute] = Seq.empty
+
+  override lazy val resolved: Boolean = {
+    query.output.size == table.output.size && query.output.zip(table.output).forall {
+      case (inAttr, outAttr) =>
+          inAttr.name == outAttr.name &&                // names must match
+          outAttr.dataType.sameType(inAttr.dataType) && // types must match
+          (outAttr.nullable || !inAttr.nullable)        // must accept null or never produce nulls
+    }
+  }
+}
+
+object AppendData {
+  def byName(table: NamedRelation, df: LogicalPlan): AppendData = {
+    new AppendData(table, df, true)
+  }
+
+  def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
+    new AppendData(table, query, false)
   }
 }
 
