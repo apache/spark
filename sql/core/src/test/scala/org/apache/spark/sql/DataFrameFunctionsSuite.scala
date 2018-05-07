@@ -64,6 +64,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("map with array") {
     val df1 = Seq((Seq(1, 2), Seq("a", "b"))).toDF("k", "v")
+    val expectedType = MapType(IntegerType, StringType, valueContainsNull = true)
+    val row = df1.select(map_fromarray($"k", $"v")).first()
+    assert(row.schema(0).dataType === expectedType)
+    assert(row.getMap[Int, String](0) === Map(1 -> "a", 2 -> "b"))
     checkAnswer(df1.select(map_fromarray($"k", $"v")), Seq(Row(Map(1 -> "a", 2 -> "b"))))
 
     val df2 = Seq((Seq(1, 2), Seq(null, "b"))).toDF("k", "v")

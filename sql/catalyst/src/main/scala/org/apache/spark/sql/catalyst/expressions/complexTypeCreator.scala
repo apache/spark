@@ -270,10 +270,10 @@ case class CreateMapFromArray(left: Expression, right: Expression)
     MapType(
       keyType = left.dataType.asInstanceOf[ArrayType].elementType,
       valueType = right.dataType.asInstanceOf[ArrayType].elementType,
-      valueContainsNull = left.dataType.asInstanceOf[ArrayType].containsNull)
+      valueContainsNull = right.dataType.asInstanceOf[ArrayType].containsNull)
   }
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = left.nullable || right.nullable
 
   override def nullSafeEval(keyArray: Any, valueArray: Any): Any = {
     val keyArrayData = keyArray.asInstanceOf[ArrayData]
