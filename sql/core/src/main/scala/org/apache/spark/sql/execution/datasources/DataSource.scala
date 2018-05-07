@@ -266,7 +266,7 @@ case class DataSource(
           sparkSession = sparkSession,
           path = path,
           fileFormatClassName = className,
-          initialSchema = sourceInfo.schema,
+          schema = sourceInfo.schema,
           partitionColumns = sourceInfo.partitionColumns,
           metadataPath = metadataPath,
           options = caseInsensitiveOptions)

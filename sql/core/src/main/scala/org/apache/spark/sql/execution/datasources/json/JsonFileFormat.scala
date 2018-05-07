@@ -43,8 +43,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val parsedOptions = new JSONOptions(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
-      sparkSession.sessionState.conf.ignoreNullFieldsInStreamingSchemaInference)
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val jsonDataSource = JsonDataSource(parsedOptions)
     jsonDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
@@ -56,8 +55,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val parsedOptions = new JSONOptions(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
-      sparkSession.sessionState.conf.ignoreNullFieldsInStreamingSchemaInference)
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     JsonDataSource(parsedOptions).inferSchema(
       sparkSession, files, parsedOptions)
   }
@@ -71,8 +69,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val parsedOptions = new JSONOptions(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
-      sparkSession.sessionState.conf.ignoreNullFieldsInStreamingSchemaInference)
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     parsedOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -105,8 +102,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val parsedOptions = new JSONOptions(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
-      sparkSession.sessionState.conf.ignoreNullFieldsInStreamingSchemaInference)
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     val actualSchema =
       StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))

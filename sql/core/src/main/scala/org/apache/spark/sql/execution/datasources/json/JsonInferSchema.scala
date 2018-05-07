@@ -101,10 +101,6 @@ private[sql] object JsonInferSchema {
   private def inferField(parser: JsonParser, configOptions: JSONOptions): DataType = {
     import com.fasterxml.jackson.core.JsonToken._
     parser.getCurrentToken match {
-      // TODO: We need to check if this is a streaming mode
-      case null | VALUE_NULL if configOptions.ignoreNullFieldsInStreamingSchemaInference =>
-        TypePlaceholder
-
       case null | VALUE_NULL => NullType
 
       case FIELD_NAME =>
@@ -135,18 +131,10 @@ private[sql] object JsonInferSchema {
         StructType(fields)
 
       case START_ARRAY =>
-        // If this JSON array is empty and `ignoreNullFieldsInStreamingSchemaInference` is true,
-        // we use `TypePlaceholder` (This type will be resolved by using a first-encountered
-        // value in incoming batches.
-        var elementType: DataType = if (configOptions.ignoreNullFieldsInStreamingSchemaInference) {
-          // TODO: We need to check if this is a streaming mode
-          TypePlaceholder
-        } else {
-          // Otherwise, we use `NullType` as a placeholder
-          NullType
-        }
+        // If this JSON array is empty, we use NullType as a placeholder.
         // If this array is not empty in other JSON objects, we can resolve
         // the type as we pass through all JSON objects.
+        var elementType: DataType = NullType
         while (nextUntil(parser, END_ARRAY)) {
           elementType = compatibleType(
             elementType, inferField(parser, configOptions))
@@ -347,10 +335,6 @@ private[sql] object JsonInferSchema {
           compatibleType(DecimalType.forType(t1), t2)
         case (t1: DecimalType, t2: IntegralType) =>
           compatibleType(t1, DecimalType.forType(t2))
-
-        // If `TypePlaceholder` found, return the other type
-        case (t1, TypePlaceholder) => t1
-        case (TypePlaceholder, t2) => t2
 
         // strings and every string is a Json object.
         case (_, _) => StringType

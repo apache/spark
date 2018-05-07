@@ -115,7 +115,7 @@ object RowEncoder {
         inputObject :: Nil,
         returnNullable = false)
 
-    case _: StringType =>
+    case StringType =>
       StaticInvoke(
         classOf[UTF8String],
         StringType,
@@ -291,7 +291,7 @@ object RowEncoder {
       Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]),
         returnNullable = false)
 
-    case _: StringType =>
+    case StringType =>
       Invoke(input, "toString", ObjectType(classOf[String]), returnNullable = false)
 
     case ArrayType(et, nullable) =>

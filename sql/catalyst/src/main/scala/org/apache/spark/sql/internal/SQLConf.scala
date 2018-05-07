@@ -905,14 +905,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val IGNORE_NULL_FIELDS_STREAMING_SCHEMA_INFERENCE =
-    buildConf("spark.sql.streaming.schemaInference.ignoreNullFields")
-      .internal()
-      .doc("Whether file-based streaming sources will ignore column of all null values or " +
-        "empty array during JSON schema inference")
-      .booleanConf
-      .createWithDefault(false)
-
   val STREAMING_POLLING_DELAY =
     buildConf("spark.sql.streaming.pollingDelay")
       .internal()
@@ -1323,9 +1315,6 @@ class SQLConf extends Serializable with Logging {
   def fileSourceLogCleanupDelay: Long = getConf(FILE_SOURCE_LOG_CLEANUP_DELAY)
 
   def streamingSchemaInference: Boolean = getConf(STREAMING_SCHEMA_INFERENCE)
-
-  def ignoreNullFieldsInStreamingSchemaInference: Boolean =
-    getConf(IGNORE_NULL_FIELDS_STREAMING_SCHEMA_INFERENCE)
 
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
 
