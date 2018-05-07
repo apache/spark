@@ -28,16 +28,7 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
   test("not enabled") {
     val ex = intercept[AnalysisException] {
       val input = ContinuousMemoryStream.singlePartition[Int]
-
-      testStream(input.toDF().agg(max('value)), OutputMode.Complete)(
-        AddData(input, 0, 1, 2),
-        CheckAnswer(2),
-        StopStream,
-        AddData(input, 3, 4, 5),
-        StartStream(),
-        CheckAnswer(5),
-        AddData(input, -1, -2, -3),
-        CheckAnswer(5))
+      testStream(input.toDF().agg(max('value)), OutputMode.Complete)()
     }
 
     assert(ex.getMessage.contains("Continuous processing does not support Aggregate operations"))
