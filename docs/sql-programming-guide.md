@@ -964,7 +964,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     Sets the compression codec used when writing Parquet files. If either `compression` or
     `parquet.compression` is specified in the table-specific options/properties, the precedence would be
     `compression`, `parquet.compression`, `spark.sql.parquet.compression.codec`. Acceptable values include:
-    none, uncompressed, snappy, gzip, lzo.
+    none, uncompressed, snappy, gzip, lzo, brotli, lz4, zstd.
   </td>
 </tr>
 <tr>
