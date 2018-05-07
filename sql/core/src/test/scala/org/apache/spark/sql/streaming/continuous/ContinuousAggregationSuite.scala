@@ -35,7 +35,7 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
   }
 
   test("basic") {
-    withSQLConf(("spark.sql.streaming.continuous.allowAllOperators", "true")) {
+    withSQLConf(("spark.sql.streaming.unsupportedOperationCheck", "false")) {
       val input = ContinuousMemoryStream.singlePartition[Int]
 
       testStream(input.toDF().agg(max('value)), OutputMode.Complete)(
@@ -51,7 +51,7 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
   }
 
   test("repeated restart") {
-    withSQLConf(("spark.sql.streaming.continuous.allowAllOperators", "true")) {
+    withSQLConf(("spark.sql.streaming.unsupportedOperationCheck", "false")) {
       val input = ContinuousMemoryStream.singlePartition[Int]
 
       testStream(input.toDF().agg(max('value)), OutputMode.Complete)(

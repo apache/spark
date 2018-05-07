@@ -1245,14 +1245,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ALLOW_ALL_CONTINUOUS_OPERATORS =
-    buildConf("spark.sql.streaming.continuous.allowAllOperators")
-      .internal()
-      .doc("Don't do unsupported operation check for continuous processing. Intended only for " +
-        "development use.")
-      .booleanConf
-      .createWithDefault(false)
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
