@@ -597,11 +597,13 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
       s"""
          |$initCode
          |$mapRefArrayName[$i] = $valueVarName;
-         |if ($valueVarName == null) {
-         |  ${ev.isNull} = true;
-         |}
        """.stripMargin
-    }.mkString("\n")
+    }
+
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = assignments,
+      funcName = "mapConcat",
+      extraArguments = (s"${mapDataClass}[]", mapRefArrayName) :: Nil)
 
     val index1Name = ctx.freshName("idx1")
     val index2Name = ctx.freshName("idx2")
@@ -616,6 +618,10 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
         |$hashMapClass<Object, Object> $unionMapName = new $hashMapClass<Object, Object>();
         |for (int $index1Name = 0; $index1Name < $mapRefArrayName.length; $index1Name++) {
         |  $mapDataClass $mapDataName = $mapRefArrayName[$index1Name];
+        |  if ($mapDataName == null) {
+        |    ${ev.isNull} = true;
+        |    break;
+        |  }
         |  $arrayDataClass $kaName = $mapDataName.keyArray();
         |  $arrayDataClass $vaName = $mapDataName.valueArray();
         |  for (int $index2Name = 0; $index2Name < $kaName.numElements(); $index2Name++) {
@@ -650,9 +656,9 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
     val code =
       s"""
         |$init
-        |$assignments
-        |if (!${ev.isNull}) {
+        |$codes
         |  $mapMerge
+        |  if (!${ev.isNull}) {
         |  $createMapData
         |}
       """.stripMargin
