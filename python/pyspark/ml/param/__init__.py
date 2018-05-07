@@ -27,7 +27,7 @@ import numpy as np
 
 from py4j.java_gateway import JavaObject
 
-from pyspark.ml.linalg import DenseVector, Vector
+from pyspark.ml.linalg import DenseVector, Vector, Matrix
 from pyspark.ml.util import Identifiable
 
 
@@ -168,6 +168,15 @@ class TypeConverters(object):
             if all(map(lambda v: TypeConverters._is_numeric(v), value)):
                 return DenseVector(value)
         raise TypeError("Could not convert %s to vector" % value)
+
+    @staticmethod
+    def toMatrix(value):
+        """
+        Convert a value to a MLlib Matrix, if possible.
+        """
+        if isinstance(value, Matrix):
+            return value
+        raise TypeError("Could not convert %s to matrix" % value)
 
     @staticmethod
     def toFloat(value):
@@ -321,7 +330,7 @@ class Params(Identifiable):
         Tests whether this instance contains a param with a given
         (string) name.
         """
-        if isinstance(paramName, str):
+        if isinstance(paramName, basestring):
             p = getattr(self, paramName, None)
             return isinstance(p, Param)
         else:
@@ -372,7 +381,19 @@ class Params(Identifiable):
             extra = dict()
         that = copy.copy(self)
         that._paramMap = {}
+        that._defaultParamMap = {}
         return self._copyValues(that, extra)
+
+    def set(self, param, value):
+        """
+        Sets a parameter in the embedded param map.
+        """
+        self._shouldOwn(param)
+        try:
+            value = param.typeConverter(value)
+        except ValueError as e:
+            raise ValueError('Invalid param value given for param "%s". %s' % (param.name, e))
+        self._paramMap[param] = value
 
     def _shouldOwn(self, param):
         """
@@ -392,7 +413,7 @@ class Params(Identifiable):
         if isinstance(param, Param):
             self._shouldOwn(param)
             return param
-        elif isinstance(param, str):
+        elif isinstance(param, basestring):
             return self.getParam(param)
         else:
             raise ValueError("Cannot resolve %r as a param." % param)
@@ -452,12 +473,16 @@ class Params(Identifiable):
         :param extra: extra params to be copied
         :return: the target instance with param values copied
         """
-        if extra is None:
-            extra = dict()
-        paramMap = self.extractParamMap(extra)
-        for p in self.params:
-            if p in paramMap and to.hasParam(p.name):
-                to._set(**{p.name: paramMap[p]})
+        paramMap = self._paramMap.copy()
+        if extra is not None:
+            paramMap.update(extra)
+        for param in self.params:
+            # copy default params
+            if param in self._defaultParamMap and to.hasParam(param.name):
+                to._defaultParamMap[to.getParam(param.name)] = self._defaultParamMap[param]
+            # copy explicitly set params
+            if param in paramMap and to.hasParam(param.name):
+                to._set(**{param.name: paramMap[param]})
         return to
 
     def _resetUid(self, newUid):

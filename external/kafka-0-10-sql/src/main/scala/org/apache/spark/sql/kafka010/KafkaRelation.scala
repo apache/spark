@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.UUID
 
 import org.apache.kafka.common.TopicPartition
 
@@ -33,9 +34,9 @@ import org.apache.spark.unsafe.types.UTF8String
 
 private[kafka010] class KafkaRelation(
     override val sqlContext: SQLContext,
-    kafkaReader: KafkaOffsetReader,
-    executorKafkaParams: ju.Map[String, Object],
+    strategy: ConsumerStrategy,
     sourceOptions: Map[String, String],
+    specifiedKafkaParams: Map[String, String],
     failOnDataLoss: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
     endingOffsets: KafkaOffsetRangeLimit)
@@ -53,9 +54,27 @@ private[kafka010] class KafkaRelation(
   override def schema: StructType = KafkaOffsetReader.kafkaSchema
 
   override def buildScan(): RDD[Row] = {
+    // Each running query should use its own group id. Otherwise, the query may be only assigned
+    // partial data since Kafka will assign partitions to multiple consumers having the same group
+    // id. Hence, we should generate a unique id for each query.
+    val uniqueGroupId = s"spark-kafka-relation-${UUID.randomUUID}"
+
+    val kafkaOffsetReader = new KafkaOffsetReader(
+      strategy,
+      KafkaSourceProvider.kafkaParamsForDriver(specifiedKafkaParams),
+      sourceOptions,
+      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+
     // Leverage the KafkaReader to obtain the relevant partition offsets
-    val fromPartitionOffsets = getPartitionOffsets(startingOffsets)
-    val untilPartitionOffsets = getPartitionOffsets(endingOffsets)
+    val (fromPartitionOffsets, untilPartitionOffsets) = {
+      try {
+        (getPartitionOffsets(kafkaOffsetReader, startingOffsets),
+          getPartitionOffsets(kafkaOffsetReader, endingOffsets))
+      } finally {
+        kafkaOffsetReader.close()
+      }
+    }
+
     // Obtain topicPartitions in both from and until partition offset, ignoring
     // topic partitions that were added and/or deleted between the two above calls.
     if (fromPartitionOffsets.keySet != untilPartitionOffsets.keySet) {
@@ -82,6 +101,8 @@ private[kafka010] class KafkaRelation(
       offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
 
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
+    val executorKafkaParams =
+      KafkaSourceProvider.kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId)
     val rdd = new KafkaSourceRDD(
       sqlContext.sparkContext, executorKafkaParams, offsetRanges,
       pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer = false).map { cr =>
@@ -98,6 +119,7 @@ private[kafka010] class KafkaRelation(
   }
 
   private def getPartitionOffsets(
+      kafkaReader: KafkaOffsetReader,
       kafkaOffsets: KafkaOffsetRangeLimit): Map[TopicPartition, Long] = {
     def validateTopicPartitions(partitions: Set[TopicPartition],
       partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
@@ -121,4 +143,7 @@ private[kafka010] class KafkaRelation(
         validateTopicPartitions(partitions, partitionOffsets)
     }
   }
+
+  override def toString: String =
+    s"KafkaRelation(strategy=$strategy, start=$startingOffsets, end=$endingOffsets)"
 }

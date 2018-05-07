@@ -53,8 +53,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *     java.sql.Date
  *     java.sql.Timestamp
  *  Complex Types =>
- *    Map: [[MapData]]
- *    List: [[ArrayData]]
+ *    Map: `MapData`
+ *    List: `ArrayData`
  *    Struct: [[org.apache.spark.sql.catalyst.InternalRow]]
  *    Union: NOT SUPPORTED YET
  *  The Complex types plays as a container, which can hold arbitrary data types.

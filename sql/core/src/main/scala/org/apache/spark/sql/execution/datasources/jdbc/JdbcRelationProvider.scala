@@ -29,6 +29,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
+    import JDBCOptions._
+
     val jdbcOptions = new JDBCOptions(parameters)
     val partitionColumn = jdbcOptions.partitionColumn
     val lowerBound = jdbcOptions.lowerBound
@@ -36,10 +38,13 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val numPartitions = jdbcOptions.numPartitions
 
     val partitionInfo = if (partitionColumn.isEmpty) {
-      assert(lowerBound.isEmpty && upperBound.isEmpty)
+      assert(lowerBound.isEmpty && upperBound.isEmpty, "When 'partitionColumn' is not specified, " +
+        s"'$JDBC_LOWER_BOUND' and '$JDBC_UPPER_BOUND' are expected to be empty")
       null
     } else {
-      assert(lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty)
+      assert(lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty,
+        s"When 'partitionColumn' is specified, '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', and " +
+          s"'$JDBC_NUM_PARTITIONS' are also required")
       JDBCPartitioningInfo(
         partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
@@ -63,13 +68,13 @@ class JdbcRelationProvider extends CreatableRelationProvider
           case SaveMode.Overwrite =>
             if (options.isTruncate && isCascadingTruncateTable(options.url) == Some(false)) {
               // In this case, we should truncate table and then load.
-              truncateTable(conn, options.table)
+              truncateTable(conn, options)
               val tableSchema = JdbcUtils.getSchemaOption(conn, options)
               saveTable(df, tableSchema, isCaseSensitive, options)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, options.table)
-              createTable(conn, df.schema, options)
+              createTable(conn, df, options)
               saveTable(df, Some(df.schema), isCaseSensitive, options)
             }
 
@@ -87,7 +92,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
-        createTable(conn, df.schema, options)
+        createTable(conn, df, options)
         saveTable(df, Some(df.schema), isCaseSensitive, options)
       }
     } finally {

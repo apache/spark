@@ -21,7 +21,7 @@ import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration.{Duration, SECONDS}
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -95,12 +95,12 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
   }
 
   /**
-   * A map from partition -> results for all tasks of a job when you call this test framework's
+   * A map from partition to results for all tasks of a job when you call this test framework's
    * [[submit]] method.  Two important considerations:
    *
    * 1. If there is a job failure, results may or may not be empty.  If any tasks succeed before
    * the job has failed, they will get included in `results`.  Instead, check for job failure by
-   * checking [[failure]].  (Also see [[assertDataStructuresEmpty()]])
+   * checking [[failure]]. (Also see `assertDataStructuresEmpty()`)
    *
    * 2. This only gets cleared between tests.  So you'll need to do special handling if you submit
    * more than one job in one test.
@@ -260,7 +260,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
    */
   def awaitJobTermination(jobFuture: Future[_], duration: Duration): Unit = {
     try {
-      Await.ready(jobFuture, duration)
+      ThreadUtils.awaitReady(jobFuture, duration)
     } catch {
       case te: TimeoutException if backendException.get() != null =>
         val msg = raw"""
@@ -410,7 +410,8 @@ private[spark] abstract class MockBackend(
     }
   }
 
-  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
+  override def killTask(
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {
     // We have to implement this b/c of SPARK-15385.
     // Its OK for this to be a no-op, because even if a backend does implement killTask,
     // it really can only be "best-effort" in any case, and the scheduler should be robust to that.
@@ -552,10 +553,10 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    */
   testScheduler("multi-stage job") {
 
-    def stageToOutputParts(stageId: Int): Int = {
-      stageId match {
+    def shuffleIdToOutputParts(shuffleId: Int): Int = {
+      shuffleId match {
         case 0 => 10
-        case 2 => 20
+        case 1 => 20
         case _ => 30
       }
     }
@@ -576,11 +577,12 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
         // b/c the stage numbering is non-deterministic, so stage number alone doesn't tell
         // us what to check
       }
-
       (task.stageId, task.stageAttemptId, task.partitionId) match {
         case (stage, 0, _) if stage < 4 =>
+          val shuffleId =
+            scheduler.stageIdToStage(stage).asInstanceOf[ShuffleMapStage].shuffleDep.shuffleId
           backend.taskSuccess(taskDescription,
-            DAGSchedulerSuite.makeMapStatus("hostA", stageToOutputParts(stage)))
+            DAGSchedulerSuite.makeMapStatus("hostA", shuffleIdToOutputParts(shuffleId)))
         case (4, 0, partition) =>
           backend.taskSuccess(taskDescription, 4321 + partition)
       }
@@ -623,6 +625,8 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
           backend.taskFailed(taskDescription, fetchFailed)
         case (1, _, partition) =>
           backend.taskSuccess(taskDescription, 42 + partition)
+        case unmatched =>
+          fail(s"Unexpected shuffle output $unmatched")
       }
     }
     withBackend(runBackend _) {

@@ -25,9 +25,9 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.InternalRow
 
 /**
  * The data type for User Defined Types (UDTs).
@@ -167,6 +167,15 @@ private[sql] class PythonUserDefinedType(
 }
 
 object UserDefinedType {
+
+  /**
+   * Get the sqlType of a (potential) [[UserDefinedType]].
+   */
+  def sqlType(dt: DataType): DataType = dt match {
+    case udt: UserDefinedType[_] => udt.sqlType
+    case _ => dt
+  }
+
   private[spark] lazy val inputRow = new GenericInternalRow(1)
 
   private lazy val rowEncoderMap: mutable.HashMap[DataType, ExpressionEncoder[Row]] =

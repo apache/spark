@@ -22,16 +22,15 @@ import java.util.Arrays
 
 import com.amazonaws.services.kinesis.clientlibrary.exceptions._
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 import org.mockito.Matchers._
 import org.mockito.Matchers.{eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, Matchers}
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
-import org.apache.spark.util.Utils
 
 /**
  * Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor
@@ -60,11 +59,6 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
-  }
-
-  test("check serializability of SerializableAWSCredentials") {
-    Utils.deserialize[SerializableAWSCredentials](
-      Utils.serialize(new SerializableAWSCredentials("x", "y")))
   }
 
   test("process records including store and set checkpointer") {

@@ -66,7 +66,6 @@ import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 import org.apache.spark.util.AccumulatorV2;
-import org.apache.spark.util.LongAccumulator;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -153,14 +152,16 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     }
 
     // For test purpose.
-    // If the predefined accumulator exists, the row group number to read will be updated
-    // to the accumulator. So we can check if the row groups are filtered or not in test case.
+    // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
+    // will be updated to the accumulator. So we can check if the row groups are filtered or not
+    // in test case.
     TaskContext taskContext = TaskContext$.MODULE$.get();
     if (taskContext != null) {
-      Option<AccumulatorV2<?, ?>> accu = taskContext.taskMetrics()
-        .lookForAccumulatorByName("numRowGroups");
-      if (accu.isDefined()) {
-        ((LongAccumulator)accu.get()).add((long)blocks.size());
+      Option<AccumulatorV2<?, ?>> accu = taskContext.taskMetrics().externalAccums().lastOption();
+      if (accu.isDefined() && accu.get().getClass().getSimpleName().equals("NumRowGroupsAcc")) {
+        @SuppressWarnings("unchecked")
+        AccumulatorV2<Integer, Integer> intAccum = (AccumulatorV2<Integer, Integer>) accu.get();
+        intAccum.add(blocks.size());
       }
     }
   }
@@ -169,7 +170,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    * Returns the list of files at 'path' recursively. This skips files that are ignored normally
    * by MapReduce.
    */
-  public static List<String> listDirectory(File path) throws IOException {
+  public static List<String> listDirectory(File path) {
     List<String> result = new ArrayList<>();
     if (path.isDirectory()) {
       for (File f: path.listFiles()) {
@@ -196,7 +197,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     Configuration config = new Configuration();
     config.set("spark.sql.parquet.binaryAsString", "false");
     config.set("spark.sql.parquet.int96AsTimestamp", "false");
-    config.set("spark.sql.parquet.writeLegacyFormat", "false");
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
@@ -222,7 +222,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
     }
-    this.sparkSchema = new ParquetSchemaConverter(config).convert(requestedSchema);
+    this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(
         config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
@@ -231,7 +231,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   }
 
   @Override
-  public Void getCurrentKey() throws IOException, InterruptedException {
+  public Void getCurrentKey() {
     return null;
   }
 
@@ -259,7 +259,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     }
 
     @Override
-    int nextInt() throws IOException {
+    int nextInt() {
       return delegate.readInteger();
     }
   }
@@ -279,15 +279,15 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected static final class NullIntIterator extends IntIterator {
     @Override
-    int nextInt() throws IOException { return 0; }
+    int nextInt() { return 0; }
   }
 
   /**
    * Creates a reader for definition and repetition levels, returning an optimized one if
    * the levels are not needed.
    */
-  protected static IntIterator createRLEIterator(int maxLevel, BytesInput bytes,
-                                              ColumnDescriptor descriptor) throws IOException {
+  protected static IntIterator createRLEIterator(
+      int maxLevel, BytesInput bytes, ColumnDescriptor descriptor) throws IOException {
     try {
       if (maxLevel == 0) return new NullIntIterator();
       return new RLEIntIterator(

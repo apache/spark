@@ -56,7 +56,7 @@ public class ProtocolSuite {
         NettyUtils.createFrameDecoder(), MessageDecoder.INSTANCE);
 
     while (!serverChannel.outboundMessages().isEmpty()) {
-      clientChannel.writeInbound(serverChannel.readOutbound());
+      clientChannel.writeOneInbound(serverChannel.readOutbound());
     }
 
     assertEquals(1, clientChannel.inboundMessages().size());
@@ -72,7 +72,7 @@ public class ProtocolSuite {
         NettyUtils.createFrameDecoder(), MessageDecoder.INSTANCE);
 
     while (!clientChannel.outboundMessages().isEmpty()) {
-      serverChannel.writeInbound(clientChannel.readOutbound());
+      serverChannel.writeOneInbound(clientChannel.readOutbound());
     }
 
     assertEquals(1, serverChannel.inboundMessages().size());

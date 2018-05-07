@@ -29,8 +29,8 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, BroadcastBlockId, StorageLevel}
-import org.apache.spark.util.{ByteBufferInputStream, Utils}
+import org.apache.spark.storage._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
@@ -99,7 +99,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private def calcChecksum(block: ByteBuffer): Int = {
     val adler = new Adler32()
     if (block.hasArray) {
-      adler.update(block.array, block.arrayOffset + block.position, block.limit - block.position)
+      adler.update(block.array, block.arrayOffset + block.position(), block.limit()
+        - block.position())
     } else {
       val bytes = new Array[Byte](block.remaining())
       block.duplicate.get(bytes)
@@ -141,10 +142,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   }
 
   /** Fetch torrent blocks from the driver and/or other executors. */
-  private def readBlocks(): Array[ChunkedByteBuffer] = {
+  private def readBlocks(): Array[BlockData] = {
     // Fetch chunks of data. Note that all these chunks are stored in the BlockManager and reported
     // to the driver, so other executors can pull these chunks from this executor as well.
-    val blocks = new Array[ChunkedByteBuffer](numBlocks)
+    val blocks = new Array[BlockData](numBlocks)
     val bm = SparkEnv.get.blockManager
 
     for (pid <- Random.shuffle(Seq.range(0, numBlocks))) {
@@ -173,7 +174,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
                 throw new SparkException(
                   s"Failed to store $pieceId of $broadcastId in local BlockManager")
               }
-              blocks(pid) = b
+              blocks(pid) = new ByteBufferBlockData(b, true)
             case None =>
               throw new SparkException(s"Failed to get $pieceId of $broadcastId")
           }
@@ -205,32 +206,50 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
     TorrentBroadcast.synchronized {
-      setConf(SparkEnv.get.conf)
-      val blockManager = SparkEnv.get.blockManager
-      blockManager.getLocalValues(broadcastId) match {
-        case Some(blockResult) =>
-          if (blockResult.data.hasNext) {
-            val x = blockResult.data.next().asInstanceOf[T]
-            releaseLock(broadcastId)
-            x
-          } else {
-            throw new SparkException(s"Failed to get locally stored broadcast data: $broadcastId")
-          }
-        case None =>
-          logInfo("Started reading broadcast variable " + id)
-          val startTimeMs = System.currentTimeMillis()
-          val blocks = readBlocks().flatMap(_.getChunks())
-          logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
+      val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
 
-          val obj = TorrentBroadcast.unBlockifyObject[T](
-            blocks, SparkEnv.get.serializer, compressionCodec)
-          // Store the merged copy in BlockManager so other tasks on this executor don't
-          // need to re-fetch it.
-          val storageLevel = StorageLevel.MEMORY_AND_DISK
-          if (!blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
-            throw new SparkException(s"Failed to store $broadcastId in BlockManager")
-          }
-          obj
+      Option(broadcastCache.get(broadcastId)).map(_.asInstanceOf[T]).getOrElse {
+        setConf(SparkEnv.get.conf)
+        val blockManager = SparkEnv.get.blockManager
+        blockManager.getLocalValues(broadcastId) match {
+          case Some(blockResult) =>
+            if (blockResult.data.hasNext) {
+              val x = blockResult.data.next().asInstanceOf[T]
+              releaseLock(broadcastId)
+
+              if (x != null) {
+                broadcastCache.put(broadcastId, x)
+              }
+
+              x
+            } else {
+              throw new SparkException(s"Failed to get locally stored broadcast data: $broadcastId")
+            }
+          case None =>
+            logInfo("Started reading broadcast variable " + id)
+            val startTimeMs = System.currentTimeMillis()
+            val blocks = readBlocks()
+            logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
+
+            try {
+              val obj = TorrentBroadcast.unBlockifyObject[T](
+                blocks.map(_.toInputStream()), SparkEnv.get.serializer, compressionCodec)
+              // Store the merged copy in BlockManager so other tasks on this executor don't
+              // need to re-fetch it.
+              val storageLevel = StorageLevel.MEMORY_AND_DISK
+              if (!blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
+                throw new SparkException(s"Failed to store $broadcastId in BlockManager")
+              }
+
+              if (obj != null) {
+                broadcastCache.put(broadcastId, obj)
+              }
+
+              obj
+            } finally {
+              blocks.foreach(_.dispose())
+            }
+        }
       }
     }
   }
@@ -277,12 +296,11 @@ private object TorrentBroadcast extends Logging {
   }
 
   def unBlockifyObject[T: ClassTag](
-      blocks: Array[ByteBuffer],
+      blocks: Array[InputStream],
       serializer: Serializer,
       compressionCodec: Option[CompressionCodec]): T = {
     require(blocks.nonEmpty, "Cannot unblockify an empty array of blocks")
-    val is = new SequenceInputStream(
-      blocks.iterator.map(new ByteBufferInputStream(_)).asJavaEnumeration)
+    val is = new SequenceInputStream(blocks.iterator.asJavaEnumeration)
     val in: InputStream = compressionCodec.map(c => c.compressedInputStream(is)).getOrElse(is)
     val ser = serializer.newInstance()
     val serIn = ser.deserializeStream(in)

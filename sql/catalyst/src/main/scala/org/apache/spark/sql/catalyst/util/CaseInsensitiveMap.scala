@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.Locale
+
 /**
  * Builds a map in which keys are case insensitive. Input map can be accessed for cases where
  * case-sensitive information is required. The primary constructor is marked private to avoid
@@ -26,11 +28,12 @@ package org.apache.spark.sql.catalyst.util
 class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Map[String, T]
   with Serializable {
 
-  val keyLowerCasedMap = originalMap.map(kv => kv.copy(_1 = kv._1.toLowerCase))
+  val keyLowerCasedMap = originalMap.map(kv => kv.copy(_1 = kv._1.toLowerCase(Locale.ROOT)))
 
-  override def get(k: String): Option[T] = keyLowerCasedMap.get(k.toLowerCase)
+  override def get(k: String): Option[T] = keyLowerCasedMap.get(k.toLowerCase(Locale.ROOT))
 
-  override def contains(k: String): Boolean = keyLowerCasedMap.contains(k.toLowerCase)
+  override def contains(k: String): Boolean =
+    keyLowerCasedMap.contains(k.toLowerCase(Locale.ROOT))
 
   override def +[B1 >: T](kv: (String, B1)): Map[String, B1] = {
     new CaseInsensitiveMap(originalMap + kv)

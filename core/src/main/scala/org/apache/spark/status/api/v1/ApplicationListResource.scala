@@ -20,10 +20,8 @@ import java.util.{Date, List => JList}
 import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.deploy.history.ApplicationHistoryInfo
-
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class ApplicationListResource(uiRoot: UIRoot) {
+private[v1] class ApplicationListResource extends ApiRequestContext {
 
   @GET
   def appList(
@@ -65,34 +63,5 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       attempt.endTime.getTime <= maxEndDate.timestamp)
     val endTimeOk = endTimeOkForRunning || endTimeOkForCompleted
     startTimeOk && endTimeOk
-  }
-}
-
-private[spark] object ApplicationsListResource {
-  def appHistoryInfoToPublicAppInfo(app: ApplicationHistoryInfo): ApplicationInfo = {
-    new ApplicationInfo(
-      id = app.id,
-      name = app.name,
-      coresGranted = None,
-      maxCores = None,
-      coresPerExecutor = None,
-      memoryPerExecutorMB = None,
-      attempts = app.attempts.map { internalAttemptInfo =>
-        new ApplicationAttemptInfo(
-          attemptId = internalAttemptInfo.attemptId,
-          startTime = new Date(internalAttemptInfo.startTime),
-          endTime = new Date(internalAttemptInfo.endTime),
-          duration =
-            if (internalAttemptInfo.endTime > 0) {
-              internalAttemptInfo.endTime - internalAttemptInfo.startTime
-            } else {
-              0
-            },
-          lastUpdated = new Date(internalAttemptInfo.lastUpdated),
-          sparkUser = internalAttemptInfo.sparkUser,
-          completed = internalAttemptInfo.completed
-        )
-      }
-    )
   }
 }

@@ -28,12 +28,13 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, QueryTest, Row, UDT}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -53,6 +54,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val numbersFile = "test-data/numbers.csv"
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
+  private val valueMalformedFile = "test-data/value-malformed.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -125,6 +127,22 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     verifyCars(cars, withHeader = true, checkTypes = true)
+  }
+
+  test("simple csv test with string dataset") {
+    val csvDataset = spark.read.text(testFile(carsFile)).as[String]
+    val cars = spark.read
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .csv(csvDataset)
+
+    verifyCars(cars, withHeader = true, checkTypes = true)
+
+    val carsWithoutHeader = spark.read
+      .option("header", "false")
+      .csv(csvDataset)
+
+    verifyCars(carsWithoutHeader, withHeader = false, checkTypes = false)
   }
 
   test("test inferring booleans") {
@@ -242,12 +260,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test for DROPMALFORMED parsing mode") {
-    val cars = spark.read
-      .format("csv")
-      .options(Map("header" -> "true", "mode" -> "dropmalformed"))
-      .load(testFile(carsFile))
+    Seq(false, true).foreach { multiLine =>
+      val cars = spark.read
+        .format("csv")
+        .option("multiLine", multiLine)
+        .options(Map("header" -> "true", "mode" -> "dropmalformed"))
+        .load(testFile(carsFile))
 
-    assert(cars.select("year").collect().size === 2)
+      assert(cars.select("year").collect().size === 2)
+    }
   }
 
   test("test for blank column names on read and select columns") {
@@ -262,14 +283,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test for FAILFAST parsing mode") {
-    val exception = intercept[SparkException]{
-      spark.read
-      .format("csv")
-      .options(Map("header" -> "true", "mode" -> "failfast"))
-      .load(testFile(carsFile)).collect()
-    }
+    Seq(false, true).foreach { multiLine =>
+      val exception = intercept[SparkException] {
+        spark.read
+          .format("csv")
+          .option("multiLine", multiLine)
+          .options(Map("header" -> "true", "mode" -> "failfast"))
+          .load(testFile(carsFile)).collect()
+      }
 
-    assert(exception.getMessage.contains("Malformed line in FAILFAST mode: 2015,Chevy,Volt"))
+      assert(exception.getMessage.contains("Malformed CSV record"))
+    }
   }
 
   test("test for tokens more than the fields in the schema") {
@@ -457,19 +481,53 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("save csv with quote escaping, using charToEscapeQuoteEscaping option") {
+    withTempPath { path =>
+
+      // original text
+      val df1 = Seq(
+        """You are "beautiful"""",
+        """Yes, \"in the inside"\"""
+      ).toDF()
+
+      // text written in CSV with following options:
+      // quote character: "
+      // escape character: \
+      // character to escape quote escaping: #
+      val df2 = Seq(
+        """"You are \"beautiful\""""",
+        """"Yes, #\\"in the inside\"#\""""
+      ).toDF()
+
+      df2.coalesce(1).write.text(path.getAbsolutePath)
+
+      val df3 = spark.read
+        .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\\")
+        .option("charToEscapeQuoteEscaping", "#")
+        .load(path.getAbsolutePath)
+
+      checkAnswer(df1, df3)
+    }
+  }
+
   test("commented lines in CSV data") {
-    val results = spark.read
-      .format("csv")
-      .options(Map("comment" -> "~", "header" -> "false"))
-      .load(testFile(commentsFile))
-      .collect()
+    Seq("false", "true").foreach { multiLine =>
 
-    val expected =
-      Seq(Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
-        Seq("6", "7", "8", "9", "0", "2015-08-21 16:58:01"),
-        Seq("1", "2", "3", "4", "5", "2015-08-23 18:00:42"))
+      val results = spark.read
+        .format("csv")
+        .options(Map("comment" -> "~", "header" -> "false", "multiLine" -> multiLine))
+        .load(testFile(commentsFile))
+        .collect()
 
-    assert(results.toSeq.map(_.toSeq) === expected)
+      val expected =
+        Seq(Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
+          Seq("6", "7", "8", "9", "0", "2015-08-21 16:58:01"),
+          Seq("1", "2", "3", "4", "5", "2015-08-23 18:00:42"))
+
+      assert(results.toSeq.map(_.toSeq) === expected)
+    }
   }
 
   test("inferring schema with commented lines in CSV data") {
@@ -700,12 +758,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.getMessage
       assert(msg.contains("CSV data source does not support array<double> data type"))
 
-      msg = intercept[SparkException] {
+      msg = intercept[UnsupportedOperationException] {
         val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
         spark.range(1).write.csv(csvDir)
         spark.read.schema(schema).csv(csvDir).collect()
-      }.getCause.getMessage
-      assert(msg.contains("Unsupported type: array"))
+      }.getMessage
+      assert(msg.contains("CSV data source does not support array<double> data type."))
     }
   }
 
@@ -734,13 +792,14 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(iso8601timestampsPath)
 
       // This will load back the timestamps as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val iso8601Timestamps = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(iso8601timestampsPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ", Locale.US)
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US)
       val expectedTimestamps = timestamps.collect().map { r =>
         // This should be ISO8601 formatted string.
         Row(iso8501.format(r.toSeq.head))
@@ -767,10 +826,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(iso8601datesPath)
 
       // This will load back the dates as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val iso8601dates = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(iso8601datesPath)
 
       val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
@@ -825,10 +885,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(datesWithFormatPath)
 
       // This will load back the dates as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val stringDatesWithFormat = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(datesWithFormatPath)
       val expectedStringDatesWithFormat = Seq(
         Row("2015/08/26"),
@@ -856,10 +917,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val stringTimestampsWithFormat = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(timestampsWithFormatPath)
       val expectedStringTimestampsWithFormat = Seq(
         Row("2015/08/26 18:00"),
@@ -884,14 +946,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .format("csv")
         .option("header", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val stringTimestampsWithFormat = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(timestampsWithFormatPath)
       val expectedStringTimestampsWithFormat = Seq(
         Row("2015/08/27 01:00"),
@@ -905,7 +968,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .option("inferSchema", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .load(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)
@@ -957,5 +1020,306 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       checkAnswer(df, Row(1, null))
     }
+  }
+
+  test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
+    Seq(false, true).foreach { multiLine =>
+      val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+      // We use `PERMISSIVE` mode by default if invalid string is given.
+      val df1 = spark
+        .read
+        .option("mode", "abcd")
+        .option("multiLine", multiLine)
+        .schema(schema)
+        .csv(testFile(valueMalformedFile))
+      checkAnswer(df1,
+        Row(null, null) ::
+        Row(1, java.sql.Date.valueOf("1983-08-04")) ::
+        Nil)
+
+      // If `schema` has `columnNameOfCorruptRecord`, it should handle corrupt records
+      val columnNameOfCorruptRecord = "_unparsed"
+      val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
+      val df2 = spark
+        .read
+        .option("mode", "Permissive")
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .option("multiLine", multiLine)
+        .schema(schemaWithCorrField1)
+        .csv(testFile(valueMalformedFile))
+      checkAnswer(df2,
+        Row(null, null, "0,2013-111-11 12:13:14") ::
+        Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
+        Nil)
+
+      // We put a `columnNameOfCorruptRecord` field in the middle of a schema
+      val schemaWithCorrField2 = new StructType()
+        .add("a", IntegerType)
+        .add(columnNameOfCorruptRecord, StringType)
+        .add("b", TimestampType)
+      val df3 = spark
+        .read
+        .option("mode", "permissive")
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .option("multiLine", multiLine)
+        .schema(schemaWithCorrField2)
+        .csv(testFile(valueMalformedFile))
+      checkAnswer(df3,
+        Row(null, "0,2013-111-11 12:13:14", null) ::
+        Row(1, null, java.sql.Date.valueOf("1983-08-04")) ::
+        Nil)
+
+      val errMsg = intercept[AnalysisException] {
+        spark
+          .read
+          .option("mode", "PERMISSIVE")
+          .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+          .option("multiLine", multiLine)
+          .schema(schema.add(columnNameOfCorruptRecord, IntegerType))
+          .csv(testFile(valueMalformedFile))
+          .collect
+      }.getMessage
+      assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
+    }
+  }
+
+  test("SPARK-19610: Parse normal multi-line CSV files") {
+    val primitiveFieldAndType = Seq(
+      """"
+        |string","integer
+        |
+        |
+        |","long
+        |
+        |","bigInteger",double,boolean,null""".stripMargin,
+      """"this is a
+        |simple
+        |string.","
+        |
+        |10","
+        |21474836470","92233720368547758070","
+        |
+        |1.7976931348623157E308",true,""".stripMargin)
+
+    withTempPath { path =>
+      primitiveFieldAndType.toDF("value").coalesce(1).write.text(path.getAbsolutePath)
+
+      val df = spark.read
+        .option("header", true)
+        .option("multiLine", true)
+        .csv(path.getAbsolutePath)
+
+      // Check if headers have new lines in the names.
+      val actualFields = df.schema.fieldNames.toSeq
+      val expectedFields =
+        Seq("\nstring", "integer\n\n\n", "long\n\n", "bigInteger", "double", "boolean", "null")
+      assert(actualFields === expectedFields)
+
+      // Check if the rows have new lines in the values.
+      val expected = Row(
+        "this is a\nsimple\nstring.",
+        "\n\n10",
+        "\n21474836470",
+        "92233720368547758070",
+        "\n\n1.7976931348623157E308",
+        "true",
+         null)
+      checkAnswer(df, expected)
+    }
+  }
+
+  test("Empty file produces empty dataframe with empty schema") {
+    Seq(false, true).foreach { multiLine =>
+      val df = spark.read.format("csv")
+        .option("header", true)
+        .option("multiLine", multiLine)
+        .load(testFile(emptyFile))
+
+      assert(df.schema === spark.emptyDataFrame.schema)
+      checkAnswer(df, spark.emptyDataFrame)
+    }
+  }
+
+  test("Empty string dataset produces empty dataframe and keep user-defined schema") {
+    val df1 = spark.read.csv(spark.emptyDataset[String])
+    assert(df1.schema === spark.emptyDataFrame.schema)
+    checkAnswer(df1, spark.emptyDataFrame)
+
+    val schema = StructType(StructField("a", StringType) :: Nil)
+    val df2 = spark.read.schema(schema).csv(spark.emptyDataset[String])
+    assert(df2.schema === schema)
+  }
+
+  test("ignoreLeadingWhiteSpace and ignoreTrailingWhiteSpace options - read") {
+    val input = " a,b  , c "
+
+    // For reading, default of both `ignoreLeadingWhiteSpace` and`ignoreTrailingWhiteSpace`
+    // are `false`. So, these are excluded.
+    val combinations = Seq(
+      (true, true),
+      (false, true),
+      (true, false))
+
+    // Check if read rows ignore whitespaces as configured.
+    val expectedRows = Seq(
+      Row("a", "b", "c"),
+      Row(" a", "b", " c"),
+      Row("a", "b  ", "c "))
+
+    combinations.zip(expectedRows)
+      .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
+        val df = spark.read
+          .option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
+          .option("ignoreTrailingWhiteSpace", ignoreTrailingWhiteSpace)
+          .csv(Seq(input).toDS())
+
+        checkAnswer(df, expected)
+      }
+  }
+
+  test("SPARK-18579: ignoreLeadingWhiteSpace and ignoreTrailingWhiteSpace options - write") {
+    val df = Seq((" a", "b  ", " c ")).toDF()
+
+    // For writing, default of both `ignoreLeadingWhiteSpace` and `ignoreTrailingWhiteSpace`
+    // are `true`. So, these are excluded.
+    val combinations = Seq(
+      (false, false),
+      (false, true),
+      (true, false))
+
+    // Check if written lines ignore each whitespaces as configured.
+    val expectedLines = Seq(
+      " a,b  , c ",
+      " a,b, c",
+      "a,b  ,c ")
+
+    combinations.zip(expectedLines)
+      .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
+        withTempPath { path =>
+          df.write
+            .option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
+            .option("ignoreTrailingWhiteSpace", ignoreTrailingWhiteSpace)
+            .csv(path.getAbsolutePath)
+
+          // Read back the written lines.
+          val readBack = spark.read.text(path.getAbsolutePath)
+          checkAnswer(readBack, Row(expected))
+        }
+      }
+  }
+
+  test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
+    val exception = intercept[SparkException] {
+      spark.read.schema("a DOUBLE")
+        .option("mode", "FAILFAST")
+        .csv(Seq("10u12").toDS())
+        .collect()
+    }
+    assert(exception.getMessage.contains("""input string: "10u12""""))
+
+    val count = spark.read.schema("a FLOAT")
+      .option("mode", "DROPMALFORMED")
+      .csv(Seq("10u12").toDS())
+      .count()
+    assert(count == 0)
+
+    val results = spark.read.schema("a FLOAT")
+      .option("mode", "PERMISSIVE")
+      .csv(Seq("10u12").toDS())
+    checkAnswer(results, Row(null))
+  }
+
+  test("SPARK-20978: Fill the malformed column when the number of tokens is less than schema") {
+    val df = spark.read
+      .schema("a string, b string, unparsed string")
+      .option("columnNameOfCorruptRecord", "unparsed")
+      .csv(Seq("a").toDS())
+    checkAnswer(df, Row("a", null, "a"))
+  }
+
+  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
+    "from a file") {
+    val columnNameOfCorruptRecord = "_corrupt_record"
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", TimestampType)
+      .add(columnNameOfCorruptRecord, StringType)
+    // negative cases
+    val msg = intercept[AnalysisException] {
+      spark
+        .read
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .csv(testFile(valueMalformedFile))
+        .select(columnNameOfCorruptRecord)
+        .collect()
+    }.getMessage
+    assert(msg.contains("only include the internal corrupt record column"))
+    intercept[org.apache.spark.sql.catalyst.errors.TreeNodeException[_]] {
+      spark
+        .read
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .csv(testFile(valueMalformedFile))
+        .filter($"_corrupt_record".isNotNull)
+        .count()
+    }
+    // workaround
+    val df = spark
+      .read
+      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+      .schema(schema)
+      .csv(testFile(valueMalformedFile))
+      .cache()
+    assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
+    assert(df.filter($"_corrupt_record".isNull).count() == 1)
+    checkAnswer(
+      df.select(columnNameOfCorruptRecord),
+      Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
+    )
+  }
+
+  test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
+    // Set default values for the DataSource parameters to make sure
+    // that whole test file is mapped to only one partition. This will guarantee
+    // reliable sampling of the input file.
+    withSQLConf(
+      "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
+      "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
+    )(withTempPath { path =>
+      val ds = sampledTestData.coalesce(1)
+      ds.write.text(path.getAbsolutePath)
+
+      val readback = spark.read
+        .option("inferSchema", true).option("samplingRatio", 0.1)
+        .csv(path.getCanonicalPath)
+      assert(readback.schema == new StructType().add("_c0", IntegerType))
+    })
+  }
+
+  test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
+    val ds = sampledTestData.coalesce(1)
+    val readback = spark.read
+      .option("inferSchema", true).option("samplingRatio", 0.1)
+      .csv(ds)
+
+    assert(readback.schema == new StructType().add("_c0", IntegerType))
+  }
+
+  test("SPARK-23846: samplingRatio is out of the range (0, 1.0]") {
+    val ds = spark.range(0, 100, 1, 1).map(_.toString)
+
+    val errorMsg0 = intercept[IllegalArgumentException] {
+      spark.read.option("inferSchema", true).option("samplingRatio", -1).csv(ds)
+    }.getMessage
+    assert(errorMsg0.contains("samplingRatio (-1.0) should be greater than 0"))
+
+    val errorMsg1 = intercept[IllegalArgumentException] {
+      spark.read.option("inferSchema", true).option("samplingRatio", 0).csv(ds)
+    }.getMessage
+    assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
+
+    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 1.0).csv(ds)
+    assert(sampled.count() == ds.count())
   }
 }

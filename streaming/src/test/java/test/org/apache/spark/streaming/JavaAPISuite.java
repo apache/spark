@@ -29,7 +29,6 @@ import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.Seconds;
 import org.apache.spark.streaming.StreamingContextState;
 import org.apache.spark.streaming.StreamingContextSuite;
-import org.apache.spark.streaming.Time;
 import scala.Tuple2;
 
 import org.apache.hadoop.conf.Configuration;
@@ -268,7 +267,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<String> mapped = stream.mapPartitions(in -> {
         StringBuilder out = new StringBuilder();
         while (in.hasNext()) {
-          out.append(in.next().toUpperCase(Locale.ENGLISH));
+          out.append(in.next().toUpperCase(Locale.ROOT));
         }
         return Arrays.asList(out.toString()).iterator();
       });
@@ -608,7 +607,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList("a","t","h","l","e","t","i","c","s"));
 
     JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaDStream<String> flatMapped = stream.flatMap(x -> Arrays.asList(x.split("(?!^)")).iterator());
+    JavaDStream<String> flatMapped =
+      stream.flatMap(x -> Arrays.asList(x.split("(?!^)")).iterator());
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<String>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
@@ -1314,7 +1314,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         ssc, inputData, 1);
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, String> mapped = pairStream.mapValues(s -> s.toUpperCase(Locale.ENGLISH));
+    JavaPairDStream<String, String> mapped =
+      pairStream.mapValues(s -> s.toUpperCase(Locale.ROOT));
 
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);

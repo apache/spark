@@ -116,4 +116,12 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
     val expected = relation.window(Seq('b), Seq('a), Seq()).analyze
     comparePlans(optimized, expected)
   }
+
+  test("do not remove output attributes from a subquery") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = Subquery(relation.select('a as "a", 'b as "b").where('b < 10).select('a).analyze)
+    val optimized = Optimize.execute(query)
+    val expected = Subquery(relation.select('a as "a", 'b).where('b < 10).select('a).analyze)
+    comparePlans(optimized, expected)
+  }
 }

@@ -137,7 +137,9 @@ def run_tests(tests_timeout):
     if test_result_code == 0:
         test_result_note = ' * This patch passes all tests.'
     else:
-        test_result_note = ' * This patch **fails %s**.' % failure_note_by_errcode[test_result_code]
+        note = failure_note_by_errcode.get(
+            test_result_code, "due to an unknown error code, %s" % test_result_code)
+        test_result_note = ' * This patch **fails %s**.' % note
 
     return [test_result_code, test_result_note]
 
@@ -179,8 +181,8 @@ def main():
     short_commit_hash = ghprb_actual_commit[0:7]
 
     # format: http://linux.die.net/man/1/timeout
-    # must be less than the timeout configured on Jenkins (currently 300m)
-    tests_timeout = "250m"
+    # must be less than the timeout configured on Jenkins (currently 350m)
+    tests_timeout = "300m"
 
     # Array to capture all test names to run on the pull request. These tests are represented
     # by their file equivalents in the dev/tests/ directory.

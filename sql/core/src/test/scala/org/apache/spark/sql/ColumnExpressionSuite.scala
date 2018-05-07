@@ -39,6 +39,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
   }
 
+  private lazy val nullData = Seq(
+    (Some(1), Some(1)), (Some(1), Some(2)), (Some(1), None), (None, None)).toDF("a", "b")
+
   test("column names with space") {
     val df = Seq((1, "a")).toDF("name with space", "name.with.dot")
 
@@ -284,23 +287,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("<=>") {
     checkAnswer(
-      testData2.filter($"a" === 1),
-      testData2.collect().toSeq.filter(r => r.getInt(0) == 1))
-
-    checkAnswer(
-      testData2.filter($"a" === $"b"),
-      testData2.collect().toSeq.filter(r => r.getInt(0) == r.getInt(1)))
-  }
-
-  test("=!=") {
-    val nullData = spark.createDataFrame(sparkContext.parallelize(
-      Row(1, 1) ::
-      Row(1, 2) ::
-      Row(1, null) ::
-      Row(null, null) :: Nil),
-      StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType))))
-
-    checkAnswer(
       nullData.filter($"b" <=> 1),
       Row(1, 1) :: Nil)
 
@@ -321,7 +307,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       nullData2.filter($"a" <=> null),
       Row(null) :: Nil)
+  }
 
+  test("=!=") {
+    checkAnswer(
+      nullData.filter($"b" =!= 1),
+      Row(1, 2) :: Nil)
+
+    checkAnswer(nullData.filter($"b" =!= null), Nil)
+
+    checkAnswer(
+      nullData.filter($"a" =!= $"b"),
+      Row(1, 2) :: Nil)
   }
 
   test(">") {
@@ -533,6 +530,63 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("input_file_name, input_file_block_start, input_file_block_length - more than one source") {
+    withTempView("tempView1") {
+      withTable("tab1", "tab2") {
+        val data = sparkContext.parallelize(0 to 9).toDF("id")
+        data.write.saveAsTable("tab1")
+        data.write.saveAsTable("tab2")
+        data.createOrReplaceTempView("tempView1")
+        Seq("input_file_name", "input_file_block_start", "input_file_block_length").foreach { f =>
+          val e = intercept[AnalysisException] {
+            sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
+          }.getMessage
+          assert(e.contains(s"'$f' does not support more than one source"))
+        }
+
+        def checkResult(
+            fromClause: String,
+            exceptionExpected: Boolean,
+            numExpectedRows: Int = 0): Unit = {
+          val stmt = s"SELECT *, input_file_name() FROM ($fromClause)"
+          if (exceptionExpected) {
+            val e = intercept[AnalysisException](sql(stmt)).getMessage
+            assert(e.contains("'input_file_name' does not support more than one source"))
+          } else {
+            assert(sql(stmt).count() == numExpectedRows)
+          }
+        }
+
+        checkResult(
+          "SELECT * FROM tab1 UNION ALL SELECT * FROM tab2 UNION ALL SELECT * FROM tab2",
+          exceptionExpected = false,
+          numExpectedRows = 30)
+
+        checkResult(
+          "(SELECT * FROM tempView1 NATURAL JOIN tab2) UNION ALL SELECT * FROM tab2",
+          exceptionExpected = false,
+          numExpectedRows = 20)
+
+        checkResult(
+          "(SELECT * FROM tab1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tempView1",
+          exceptionExpected = false,
+          numExpectedRows = 20)
+
+        checkResult(
+          "(SELECT * FROM tempView1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tab2",
+          exceptionExpected = true)
+
+        checkResult(
+          "(SELECT * FROM tab1 NATURAL JOIN tab2) UNION ALL SELECT * FROM tab2",
+          exceptionExpected = true)
+
+        checkResult(
+          "(SELECT * FROM tab1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tab2",
+          exceptionExpected = true)
+      }
+    }
+  }
+
   test("input_file_name, input_file_block_start, input_file_block_length - FileScanRDD") {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10).toDF("id")
@@ -711,5 +765,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData2.select($"a".bitwiseXOR($"b").bitwiseXOR(39)),
       testData2.collect().toSeq.map(r => Row(r.getInt(0) ^ r.getInt(1) ^ 39)))
+  }
+
+  test("typedLit") {
+    val df = Seq(Tuple1(0)).toDF("a")
+    // Only check the types `lit` cannot handle
+    checkAnswer(
+      df.select(typedLit(Seq(1, 2, 3))),
+      Row(Seq(1, 2, 3)) :: Nil)
+    checkAnswer(
+      df.select(typedLit(Map("a" -> 1, "b" -> 2))),
+      Row(Map("a" -> 1, "b" -> 2)) :: Nil)
+    checkAnswer(
+      df.select(typedLit(("a", 2, 1.0))),
+      Row(Row("a", 2, 1.0)) :: Nil)
   }
 }

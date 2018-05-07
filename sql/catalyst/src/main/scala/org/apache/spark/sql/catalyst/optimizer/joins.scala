@@ -24,15 +24,17 @@ import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
  * one condition.
  *
  * The order of joins will not be changed if all of them already have at least one condition.
+ *
+ * If star schema detection is enabled, reorder the star join plans based on heuristics.
  */
 object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
-
   /**
    * Join a list of plans together and push down the conditions into them.
    *
@@ -42,7 +44,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @param conditions a list of condition for join.
    */
   @tailrec
-  def createOrderedJoin(input: Seq[(LogicalPlan, InnerLike)], conditions: Seq[Expression])
+  final def createOrderedJoin(input: Seq[(LogicalPlan, InnerLike)], conditions: Seq[Expression])
     : LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
@@ -83,9 +85,19 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case j @ ExtractFiltersAndInnerJoins(input, conditions)
+    case ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
-      createOrderedJoin(input, conditions)
+      if (SQLConf.get.starSchemaDetection && !SQLConf.get.cboEnabled) {
+        val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
+        if (starJoinPlan.nonEmpty) {
+          val rest = input.filterNot(starJoinPlan.contains(_))
+          createOrderedJoin(starJoinPlan ++ rest, conditions)
+        } else {
+          createOrderedJoin(input, conditions)
+        }
+      } else {
+        createOrderedJoin(input, conditions)
+      }
   }
 }
 
@@ -121,8 +133,8 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     val leftConditions = conditions.filter(_.references.subsetOf(join.left.outputSet))
     val rightConditions = conditions.filter(_.references.subsetOf(join.right.outputSet))
 
-    val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull)
-    val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
+    lazy val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull)
+    lazy val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
 
     join.joinType match {
       case RightOuter if leftHasNonNullPredicate => Inner

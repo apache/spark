@@ -19,8 +19,8 @@ package org.apache.spark.streaming.receiver
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.StorageLevel

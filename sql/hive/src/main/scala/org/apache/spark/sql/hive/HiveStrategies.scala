@@ -17,17 +17,24 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.IOException
+import java.util.Locale
+
+import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan,
+    ScriptTransformation}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 
 /**
@@ -80,7 +87,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
     }
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) =>
       // Finds the database name if the name does not exist.
       val dbName = t.identifier.database.getOrElse(session.catalog.currentDatabase)
@@ -91,18 +98,43 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 
       // Infers the schema, if empty, because the schema could be determined by Hive
       // serde.
-      val catalogTable = if (query.isEmpty) {
-        val withSchema = HiveUtils.inferSchema(withStorage)
-        if (withSchema.schema.length <= 0) {
+      val withSchema = if (query.isEmpty) {
+        val inferred = HiveUtils.inferSchema(withStorage)
+        if (inferred.schema.length <= 0) {
           throw new AnalysisException("Unable to infer the schema. " +
-            s"The schema specification is required to create the table ${withSchema.identifier}.")
+            s"The schema specification is required to create the table ${inferred.identifier}.")
         }
-        withSchema
+        inferred
       } else {
         withStorage
       }
 
-      c.copy(tableDesc = catalogTable)
+      c.copy(tableDesc = withSchema)
+  }
+}
+
+class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case relation: HiveTableRelation
+        if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      val table = relation.tableMeta
+      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+        try {
+          val hadoopConf = session.sessionState.newHadoopConf()
+          val tablePath = new Path(table.location)
+          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+          fs.getContentSummary(tablePath).getLength
+        } catch {
+          case e: IOException =>
+            logWarning("Failed to get table size from hdfs.", e)
+            session.sessionState.conf.defaultSizeInBytes
+        }
+      } else {
+        session.sessionState.conf.defaultSizeInBytes
+      }
+
+      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+      relation.copy(tableMeta = withStats)
   }
 }
 
@@ -113,30 +145,99 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
  * `PreprocessTableInsertion`.
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case InsertIntoTable(table: MetastoreRelation, partSpec, query, overwrite, ifNotExists) =>
-      InsertIntoHiveTable(table, partSpec, query, overwrite, ifNotExists)
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case InsertIntoTable(r: HiveTableRelation, partSpec, query, overwrite, ifPartitionNotExists)
+        if DDLUtils.isHiveTable(r.tableMeta) =>
+      InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
+        ifPartitionNotExists, query.output)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
+      DDLUtils.checkDataColNames(tableDesc)
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-      CreateHiveTableAsSelectCommand(tableDesc, query, mode)
+      DDLUtils.checkDataColNames(tableDesc)
+      CreateHiveTableAsSelectCommand(tableDesc, query, query.output, mode)
+
+    case InsertIntoDir(isLocal, storage, provider, child, overwrite)
+        if DDLUtils.isHiveTable(provider) =>
+      val outputPath = new Path(storage.locationUri.get)
+      if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
+
+      InsertIntoHiveDirCommand(isLocal, storage, child, overwrite, child.output)
   }
 }
 
 /**
- * Replaces `SimpleCatalogRelation` with [[MetastoreRelation]] if its table provider is hive.
+ * Relation conversion from metastore relations to data source relations for better performance
+ *
+ * - When writing to non-partitioned Hive-serde Parquet/Orc tables
+ * - When scanning Hive-serde Parquet/ORC tables
+ *
+ * This rule must be run before all other DDL post-hoc resolution rules, i.e.
+ * `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
  */
-class FindHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
-        if DDLUtils.isHiveTable(s.metadata) =>
-      i.copy(table =
-        MetastoreRelation(s.metadata.database, s.metadata.identifier.table)(s.metadata, session))
+case class RelationConversions(
+    conf: SQLConf,
+    sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
+  private def isConvertible(relation: HiveTableRelation): Boolean = {
+    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+      serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+  }
 
-    case s: SimpleCatalogRelation if DDLUtils.isHiveTable(s.metadata) =>
-      MetastoreRelation(s.metadata.database, s.metadata.identifier.table)(s.metadata, session)
+  // Return true for Apache ORC and Hive ORC-related configuration names.
+  // Note that Spark doesn't support configurations like `hive.merge.orcfile.stripe.level`.
+  private def isOrcProperty(key: String) =
+    key.startsWith("orc.") || key.contains(".orc.")
+
+  private def isParquetProperty(key: String) =
+    key.startsWith("parquet.") || key.contains(".parquet.")
+
+  private def convert(relation: HiveTableRelation): LogicalRelation = {
+    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+
+    // Consider table and storage properties. For properties existing in both sides, storage
+    // properties will supersede table properties.
+    if (serde.contains("parquet")) {
+      val options = relation.tableMeta.properties.filterKeys(isParquetProperty) ++
+        relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
+        conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
+      sessionCatalog.metastoreCatalog
+        .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
+    } else {
+      val options = relation.tableMeta.properties.filterKeys(isOrcProperty) ++
+        relation.tableMeta.storage.properties
+      if (conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
+        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
+          relation,
+          options,
+          classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat],
+          "orc")
+      } else {
+        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
+          relation,
+          options,
+          classOf[org.apache.spark.sql.hive.orc.OrcFileFormat],
+          "orc")
+      }
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformUp {
+      // Write path
+      case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
+        // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
+          if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
+            !r.isPartitioned && isConvertible(r) =>
+        InsertIntoTable(convert(r), partition, query, overwrite, ifPartitionNotExists)
+
+      // Read path
+      case relation: HiveTableRelation
+          if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
+        convert(relation)
+    }
   }
 }
 
@@ -161,10 +262,10 @@ private[hive] trait HiveStrategies {
    */
   object HiveTableScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
+      case PhysicalOperation(projectList, predicates, relation: HiveTableRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.
-        val partitionKeyIds = AttributeSet(relation.partitionKeys)
+        val partitionKeyIds = AttributeSet(relation.partitionCols)
         val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
           !predicate.references.isEmpty &&
           predicate.references.subsetOf(partitionKeyIds)

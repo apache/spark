@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
@@ -64,7 +64,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return the approximate quantiles at the given probabilities
    *
    * @note null and NaN values will be removed from the numerical column before calculation. If
-   *   the dataframe is empty or all rows contain null or NaN, null is returned.
+   *   the dataframe is empty or the column only contains null or NaN, an empty array is returned.
    *
    * @since 2.0.0
    */
@@ -72,8 +72,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    val res = approxQuantile(Array(col), probabilities, relativeError)
-    Option(res).map(_.head).orNull
+    approxQuantile(Array(col), probabilities, relativeError).head
   }
 
   /**
@@ -89,8 +88,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities of each column
    *
-   * @note Rows containing any null or NaN values will be removed before calculation. If
-   *   the dataframe is empty or all rows contain null or NaN, null is returned.
+   * @note null and NaN values will be ignored in numerical columns before calculation. For
+   *   columns only containing null or NaN values, an empty array is returned.
    *
    * @since 2.2.0
    */
@@ -98,13 +97,11 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
-    // TODO: Update NaN/null handling to keep consistent with the single-column version
-    try {
-      StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
-        probabilities, relativeError).map(_.toArray).toArray
-    } catch {
-      case e: NoSuchElementException => null
-    }
+    StatFunctions.multipleApproxQuantiles(
+      df.select(cols.map(col): _*),
+      cols,
+      probabilities,
+      relativeError).map(_.toArray).toArray
   }
 
 
@@ -554,7 +551,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
         )
     }
 
-    singleCol.queryExecution.toRdd.aggregate(zero)(
+    singleCol.queryExecution.toRdd.treeAggregate(zero)(
       (filter: BloomFilter, row: InternalRow) => {
         updater(filter, row)
         filter

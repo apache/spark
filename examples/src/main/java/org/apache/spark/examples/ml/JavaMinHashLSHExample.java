@@ -42,7 +42,7 @@ import static org.apache.spark.sql.functions.col;
 /**
  * An example demonstrating MinHashLSH.
  * Run with:
- *   bin/run-example org.apache.spark.examples.ml.JavaMinHashLSHExample
+ *   bin/run-example ml.JavaMinHashLSHExample
  */
 public class JavaMinHashLSHExample {
   public static void main(String[] args) {

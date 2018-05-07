@@ -58,13 +58,16 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   private var schema: StructType = _
 
   // `ValueWriter`s for all fields of the schema
-  private var rootFieldWriters: Seq[ValueWriter] = _
+  private var rootFieldWriters: Array[ValueWriter] = _
 
   // The Parquet `RecordConsumer` to which all `InternalRow`s are written
   private var recordConsumer: RecordConsumer = _
 
   // Whether to write data in legacy Parquet format compatible with Spark 1.4 and prior versions
   private var writeLegacyParquetFormat: Boolean = _
+
+  // Which parquet timestamp type to use when writing.
+  private var outputTimestampType: SQLConf.ParquetOutputTimestampType.Value = _
 
   // Reusable byte array used to write timestamps as Parquet INT96 values
   private val timestampBuffer = new Array[Byte](12)
@@ -80,9 +83,16 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       assert(configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key) != null)
       configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean
     }
-    this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
 
-    val messageType = new ParquetSchemaConverter(configuration).convert(schema)
+    this.outputTimestampType = {
+      val key = SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key
+      assert(configuration.get(key) != null)
+      SQLConf.ParquetOutputTimestampType.withName(configuration.get(key))
+    }
+
+    this.rootFieldWriters = schema.map(_.dataType).map(makeWriter).toArray[ValueWriter]
+
+    val messageType = new SparkToParquetSchemaConverter(configuration).convert(schema)
     val metadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
 
     logInfo(
@@ -106,7 +116,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   }
 
   private def writeFields(
-      row: InternalRow, schema: StructType, fieldWriters: Seq[ValueWriter]): Unit = {
+      row: InternalRow, schema: StructType, fieldWriters: Array[ValueWriter]): Unit = {
     var i = 0
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
@@ -154,19 +164,22 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
             Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
 
       case TimestampType =>
-        (row: SpecializedGetters, ordinal: Int) => {
-          // TODO Writes `TimestampType` values as `TIMESTAMP_MICROS` once parquet-mr implements it
-          // Currently we only support timestamps stored as INT96, which is compatible with Hive
-          // and Impala.  However, INT96 is to be deprecated.  We plan to support `TIMESTAMP_MICROS`
-          // defined in the parquet-format spec.  But up until writing, the most recent parquet-mr
-          // version (1.8.1) hasn't implemented it yet.
+        outputTimestampType match {
+          case SQLConf.ParquetOutputTimestampType.INT96 =>
+            (row: SpecializedGetters, ordinal: Int) =>
+              val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
+              val buf = ByteBuffer.wrap(timestampBuffer)
+              buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
+              recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
 
-          // NOTE: Starting from Spark 1.5, Spark SQL `TimestampType` only has microsecond
-          // precision.  Nanosecond parts of timestamp values read from INT96 are simply stripped.
-          val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
-          val buf = ByteBuffer.wrap(timestampBuffer)
-          buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
-          recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
+          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
+            (row: SpecializedGetters, ordinal: Int) =>
+              recordConsumer.addLong(row.getLong(ordinal))
+
+          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
+            (row: SpecializedGetters, ordinal: Int) =>
+              val millis = DateTimeUtils.toMillis(row.getLong(ordinal))
+              recordConsumer.addLong(millis)
         }
 
       case BinaryType =>
@@ -177,7 +190,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
         makeDecimalWriter(precision, scale)
 
       case t: StructType =>
-        val fieldWriters = t.map(_.dataType).map(makeWriter)
+        val fieldWriters = t.map(_.dataType).map(makeWriter).toArray[ValueWriter]
         (row: SpecializedGetters, ordinal: Int) =>
           consumeGroup {
             writeFields(row.getStruct(ordinal, t.length), t, fieldWriters)

@@ -26,6 +26,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
@@ -65,7 +66,18 @@ trait FileFormat {
   }
 
   /**
-   * Returns whether a file with `path` could be splitted or not.
+   * Returns concrete column vector class names for each column to be used in a columnar batch
+   * if this format supports returning columnar batch.
+   */
+  def vectorTypes(
+      requiredSchema: StructType,
+      partitionSchema: StructType,
+      sqlConf: SQLConf): Option[Seq[String]] = {
+    None
+  }
+
+  /**
+   * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(
       sparkSession: SparkSession,
@@ -90,7 +102,7 @@ trait FileFormat {
    * @param options A set of string -> string configuration options.
    * @return
    */
-  def buildReader(
+  protected def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -98,8 +110,6 @@ trait FileFormat {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    // TODO: Remove this default implementation when the other formats have been ported
-    // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
     throw new UnsupportedOperationException(s"buildReader is not supported for $this")
   }
 

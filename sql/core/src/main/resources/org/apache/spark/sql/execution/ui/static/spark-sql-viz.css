@@ -32,7 +32,7 @@
   stroke-width: 1px;
 }
 
-/* Hightlight the SparkPlan node name */
+/* Highlight the SparkPlan node name */
 #plan-viz-graph svg text :first-child {
   font-weight: bold;
 }

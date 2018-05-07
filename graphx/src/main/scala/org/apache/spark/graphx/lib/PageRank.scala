@@ -162,7 +162,8 @@ object PageRank extends Logging {
       iteration += 1
     }
 
-    rankGraph
+    // SPARK-18847 If the graph has sinks (vertices with no outgoing edges) correct the sum of ranks
+    normalizeRankSum(rankGraph, personalized)
   }
 
   /**
@@ -179,7 +180,8 @@ object PageRank extends Logging {
    * @param resetProb The random reset probability
    * @param sources The list of sources to compute personalized pagerank from
    * @return the graph with vertex attributes
-   *         containing the pagerank relative to all starting nodes (as a sparse vector) and
+   *         containing the pagerank relative to all starting nodes (as a sparse vector
+   *         indexed by the position of nodes in the sources list) and
    *         edge attributes the normalized edge weight
    */
   def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
@@ -194,6 +196,8 @@ object PageRank extends Logging {
 
     // TODO if one sources vertex id is outside of the int range
     // we won't be able to store its activations in a sparse vector
+    require(sources.max <= Int.MaxValue.toLong,
+      s"This implementation currently only works for source vertex ids at most ${Int.MaxValue}")
     val zero = Vectors.sparse(sources.size, List()).asBreeze
     val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
       val v = Vectors.sparse(sources.size, Array(i), Array(1.0)).asBreeze
@@ -222,18 +226,18 @@ object PageRank extends Logging {
       // Propagates the message along outbound edges
       // and adding start nodes back in with activation resetProb
       val rankUpdates = rankGraph.aggregateMessages[BV[Double]](
-        ctx => ctx.sendToDst(ctx.srcAttr :* ctx.attr),
-        (a : BV[Double], b : BV[Double]) => a :+ b, TripletFields.Src)
+        ctx => ctx.sendToDst(ctx.srcAttr *:* ctx.attr),
+        (a : BV[Double], b : BV[Double]) => a +:+ b, TripletFields.Src)
 
       rankGraph = rankGraph.outerJoinVertices(rankUpdates) {
         (vid, oldRank, msgSumOpt) =>
-          val popActivations: BV[Double] = msgSumOpt.getOrElse(zero) :* (1.0 - resetProb)
+          val popActivations: BV[Double] = msgSumOpt.getOrElse(zero) *:* (1.0 - resetProb)
           val resetActivations = if (sourcesInitMapBC.value contains vid) {
-            sourcesInitMapBC.value(vid) :* resetProb
+            sourcesInitMapBC.value(vid) *:* resetProb
           } else {
             zero
           }
-          popActivations :+ resetActivations
+          popActivations +:+ resetActivations
         }.cache()
 
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
@@ -245,8 +249,10 @@ object PageRank extends Logging {
       i += 1
     }
 
+    // SPARK-18847 If the graph has sinks (vertices with no outgoing edges) correct the sum of ranks
+    val rankSums = rankGraph.vertices.values.fold(zero)(_ +:+ _)
     rankGraph.mapVertices { (vid, attr) =>
-      Vectors.fromBreeze(attr)
+      Vectors.fromBreeze(attr /:/ rankSums)
     }
   }
 
@@ -297,7 +303,7 @@ object PageRank extends Logging {
     val src: VertexId = srcId.getOrElse(-1L)
 
     // Initialize the pagerankGraph with each edge attribute
-    // having weight 1/outDegree and each vertex with attribute 1.0.
+    // having weight 1/outDegree and each vertex with attribute 0.
     val pagerankGraph: Graph[(Double, Double), Double] = graph
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) {
@@ -307,7 +313,7 @@ object PageRank extends Logging {
       .mapTriplets( e => 1.0 / e.srcAttr )
       // Set the vertex attributes to (initialPR, delta = 0)
       .mapVertices { (id, attr) =>
-        if (id == src) (1.0, Double.NegativeInfinity) else (0.0, 0.0)
+        if (id == src) (0.0, Double.NegativeInfinity) else (0.0, 0.0)
       }
       .cache()
 
@@ -322,13 +328,12 @@ object PageRank extends Logging {
     def personalizedVertexProgram(id: VertexId, attr: (Double, Double),
       msgSum: Double): (Double, Double) = {
       val (oldPR, lastDelta) = attr
-      var teleport = oldPR
-      val delta = if (src==id) resetProb else 0.0
-      teleport = oldPR*delta
-
-      val newPR = teleport + (1.0 - resetProb) * msgSum
-      val newDelta = if (lastDelta == Double.NegativeInfinity) newPR else newPR - oldPR
-      (newPR, newDelta)
+      val newPR = if (lastDelta == Double.NegativeInfinity) {
+        1.0
+      } else {
+        oldPR + (1.0 - resetProb) * msgSum
+      }
+      (newPR, newPR - oldPR)
     }
 
     def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
@@ -353,9 +358,23 @@ object PageRank extends Logging {
         vertexProgram(id, attr, msgSum)
     }
 
-    Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
+    val rankGraph = Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
       vp, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
-  } // end of deltaPageRank
 
+    // SPARK-18847 If the graph has sinks (vertices with no outgoing edges) correct the sum of ranks
+    normalizeRankSum(rankGraph, personalized)
+  }
+
+  // Normalizes the sum of ranks to n (or 1 if personalized)
+  private def normalizeRankSum(rankGraph: Graph[Double, Double], personalized: Boolean) = {
+    val rankSum = rankGraph.vertices.values.sum()
+    if (personalized) {
+      rankGraph.mapVertices((id, rank) => rank / rankSum)
+    } else {
+      val numVertices = rankGraph.numVertices
+      val correctionFactor = numVertices.toDouble / rankSum
+      rankGraph.mapVertices((id, rank) => rank * correctionFactor)
+    }
+  }
 }

@@ -17,13 +17,12 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
 import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
-import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
@@ -83,7 +82,8 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
 private[yarn] class LocalityPreferredContainerPlacementStrategy(
     val sparkConf: SparkConf,
     val yarnConf: Configuration,
-    val resource: Resource) {
+    val resource: Resource,
+    resolver: SparkRackResolver) {
 
   /**
    * Calculate each container's node locality and rack locality
@@ -139,7 +139,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
         // still be allocated with new container request.
         val hosts = preferredLocalityRatio.filter(_._2 > 0).keys.toArray
         val racks = hosts.map { h =>
-          RackResolver.resolve(yarnConf, h).getNetworkLocation
+          resolver.resolve(yarnConf, h)
         }.toSet
         containerLocalityPreferences += ContainerLocalityPreferences(hosts, racks.toArray)
 

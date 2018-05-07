@@ -31,11 +31,15 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 object MLTestingUtils extends SparkFunSuite {
-  def checkCopy(model: Model[_]): Unit = {
+
+  def checkCopyAndUids[T <: Estimator[_]](estimator: T, model: Model[_]): Unit = {
+    assert(estimator.uid === model.uid, "Model uid does not match parent estimator")
+
+    // copied model must have the same parent
     val copied = model.copy(ParamMap.empty)
       .asInstanceOf[Model[_]]
-    assert(copied.parent.uid == model.parent.uid)
     assert(copied.parent == model.parent)
+    assert(copied.parent.uid == model.parent.uid)
   }
 
   def checkNumericTypes[M <: Model[M], T <: Estimator[M]](
@@ -87,30 +91,6 @@ object MLTestingUtils extends SparkFunSuite {
     }
   }
 
-  def checkNumericTypesALS(
-      estimator: ALS,
-      spark: SparkSession,
-      column: String,
-      baseType: NumericType)
-      (check: (ALSModel, ALSModel) => Unit)
-      (check2: (ALSModel, ALSModel, DataFrame) => Unit): Unit = {
-    val dfs = genRatingsDFWithNumericCols(spark, column)
-    val expected = estimator.fit(dfs(baseType))
-    val actuals = dfs.keys.filter(_ != baseType).map(t => (t, estimator.fit(dfs(t))))
-    actuals.foreach { case (_, actual) => check(expected, actual) }
-    actuals.foreach { case (t, actual) => check2(expected, actual, dfs(t)) }
-
-    val baseDF = dfs(baseType)
-    val others = baseDF.columns.toSeq.diff(Seq(column)).map(col)
-    val cols = Seq(col(column).cast(StringType)) ++ others
-    val strDF = baseDF.select(cols: _*)
-    val thrown = intercept[IllegalArgumentException] {
-      estimator.fit(strDF)
-    }
-    assert(thrown.getMessage.contains(
-      s"$column must be of type NumericType but was actually of type StringType"))
-  }
-
   def checkNumericTypes[T <: Evaluator](evaluator: T, spark: SparkSession): Unit = {
     val dfs = genEvaluatorDFWithNumericLabelCol(spark, "label", "prediction")
     val expected = evaluator.evaluate(dfs(DoubleType))
@@ -156,7 +136,6 @@ object MLTestingUtils extends SparkFunSuite {
       featuresColName: String = "features",
       censorColName: String = "censor"): Map[NumericType, DataFrame] = {
     val df = spark.createDataFrame(Seq(
-      (0, Vectors.dense(0)),
       (1, Vectors.dense(1)),
       (2, Vectors.dense(2)),
       (3, Vectors.dense(3)),
@@ -170,26 +149,6 @@ object MLTestingUtils extends SparkFunSuite {
       t -> TreeTests.setMetadata(castDF, 0, labelColName, featuresColName)
         .withColumn(censorColName, lit(0.0))
         .withColumn(weightColName, round(rand(seed = 42)).cast(t))
-    }.toMap
-  }
-
-  def genRatingsDFWithNumericCols(
-      spark: SparkSession,
-      column: String): Map[NumericType, DataFrame] = {
-    val df = spark.createDataFrame(Seq(
-      (0, 10, 1.0),
-      (1, 20, 2.0),
-      (2, 30, 3.0),
-      (3, 40, 4.0),
-      (4, 50, 5.0)
-    )).toDF("user", "item", "rating")
-
-    val others = df.columns.toSeq.diff(Seq(column)).map(col)
-    val types: Seq[NumericType] =
-      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-    types.map { t =>
-      val cols = Seq(col(column).cast(t)) ++ others
-      t -> df.select(cols: _*)
     }.toMap
   }
 
@@ -260,12 +219,13 @@ object MLTestingUtils extends SparkFunSuite {
       data: Dataset[LabeledPoint],
       estimator: E with HasWeightCol,
       numClasses: Int,
-      modelEquals: (M, M) => Unit): Unit = {
+      modelEquals: (M, M) => Unit,
+      outlierRatio: Int): Unit = {
     import data.sqlContext.implicits._
     val outlierDS = data.withColumn("weight", lit(1.0)).as[Instance].flatMap {
       case Instance(l, w, f) =>
         val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
-        List.fill(3)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
+        List.fill(outlierRatio)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
     }
     val trueModel = estimator.set(estimator.weightCol, "").fit(data)
     val outlierModel = estimator.set(estimator.weightCol, "weight").fit(outlierDS)

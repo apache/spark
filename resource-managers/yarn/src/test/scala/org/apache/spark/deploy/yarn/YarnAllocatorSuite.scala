@@ -17,12 +17,9 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.{Arrays, List => JList}
-
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic
-import org.apache.hadoop.net.DNSToSwitchMapping
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -31,31 +28,23 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.YarnAllocator._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
 
-class MockResolver extends DNSToSwitchMapping {
+class MockResolver extends SparkRackResolver {
 
-  override def resolve(names: JList[String]): JList[String] = {
-    if (names.size > 0 && names.get(0) == "host3") Arrays.asList("/rack2")
-    else Arrays.asList("/rack1")
+  override def resolve(conf: Configuration, hostName: String): String = {
+    if (hostName == "host3") "/rack2" else "/rack1"
   }
 
-  override def reloadCachedMappings() {}
-
-  def reloadCachedMappings(names: JList[String]) {}
 }
 
 class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   val conf = new YarnConfiguration()
-  conf.setClass(
-    CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
-    classOf[MockResolver], classOf[DNSToSwitchMapping])
-
   val sparkConf = new SparkConf()
   sparkConf.set("spark.driver.host", "localhost")
   sparkConf.set("spark.driver.port", "4040")
@@ -111,7 +100,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       rmClient,
       appAttemptId,
       new SecurityManager(sparkConf),
-      Map())
+      Map(),
+      new MockResolver())
   }
 
   def createContainer(host: String): Container = {
@@ -261,9 +251,53 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Finished", 0)
     }
     handler.updateResourceRequests()
-    handler.processCompletedContainers(statuses.toSeq)
+    handler.processCompletedContainers(statuses)
     handler.getNumExecutorsRunning should be (0)
     handler.getPendingAllocate.size should be (1)
+  }
+
+  test("kill same executor multiple times") {
+    val handler = createAllocator(2)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.getNumExecutorsRunning should be (2)
+    handler.getPendingAllocate.size should be (0)
+
+    val executorToKill = handler.executorIdToContainer.keys.head
+    handler.killExecutor(executorToKill)
+    handler.getNumExecutorsRunning should be (1)
+    handler.killExecutor(executorToKill)
+    handler.killExecutor(executorToKill)
+    handler.killExecutor(executorToKill)
+    handler.getNumExecutorsRunning should be (1)
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map.empty, Set.empty)
+    handler.updateResourceRequests()
+    handler.getPendingAllocate.size should be (1)
+  }
+
+  test("process same completed container multiple times") {
+    val handler = createAllocator(2)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.getNumExecutorsRunning should be (2)
+    handler.getPendingAllocate.size should be (0)
+
+    val statuses = Seq(container1, container1, container2).map { c =>
+      ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Finished", 0)
+    }
+    handler.processCompletedContainers(statuses)
+    handler.getNumExecutorsRunning should be (0)
+
   }
 
   test("lost executor removed from backend") {
@@ -282,7 +316,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Failed", -1)
     }
     handler.updateResourceRequests()
-    handler.processCompletedContainers(statuses.toSeq)
+    handler.processCompletedContainers(statuses)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
     handler.getPendingAllocate.size should be (2)

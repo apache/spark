@@ -42,9 +42,13 @@ import org.apache.spark.sql.types._
 
 private[hive] case class HiveSimpleUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends Expression with HiveInspectors with CodegenFallback with Logging {
+  extends Expression
+  with HiveInspectors
+  with CodegenFallback
+  with Logging
+  with UserDefinedExpression {
 
-  override def deterministic: Boolean = isUDFDeterministic
+  override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = true
 
@@ -108,21 +112,26 @@ private[hive] case class HiveSimpleUDF(
 private[hive] class DeferredObjectAdapter(oi: ObjectInspector, dataType: DataType)
   extends DeferredObject with HiveInspectors {
 
+  private val wrapper = wrapperFor(oi, dataType)
   private var func: () => Any = _
   def set(func: () => Any): Unit = {
     this.func = func
   }
   override def prepare(i: Int): Unit = {}
-  override def get(): AnyRef = wrap(func(), oi, dataType)
+  override def get(): AnyRef = wrapper(func()).asInstanceOf[AnyRef]
 }
 
 private[hive] case class HiveGenericUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends Expression with HiveInspectors with CodegenFallback with Logging {
+  extends Expression
+  with HiveInspectors
+  with CodegenFallback
+  with Logging
+  with UserDefinedExpression {
 
   override def nullable: Boolean = true
 
-  override def deterministic: Boolean = isUDFDeterministic
+  override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def foldable: Boolean =
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]
@@ -190,7 +199,7 @@ private[hive] case class HiveGenericUDTF(
     name: String,
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression])
-  extends Generator with HiveInspectors with CodegenFallback {
+  extends Generator with HiveInspectors with CodegenFallback with UserDefinedExpression {
 
   @transient
   protected lazy val function: GenericUDTF = {
@@ -302,7 +311,9 @@ private[hive] case class HiveUDAFFunction(
     isUDAFBridgeRequired: Boolean = false,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[GenericUDAFEvaluator.AggregationBuffer] with HiveInspectors {
+  extends TypedImperativeAggregate[GenericUDAFEvaluator.AggregationBuffer]
+  with HiveInspectors
+  with UserDefinedExpression {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)

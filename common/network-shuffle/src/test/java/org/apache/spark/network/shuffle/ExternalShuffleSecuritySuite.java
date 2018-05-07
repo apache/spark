@@ -97,7 +97,7 @@ public class ExternalShuffleSecuritySuite {
     }
 
     ExternalShuffleClient client =
-      new ExternalShuffleClient(testConf, new TestSecretKeyHolder(appId, secretKey), true);
+      new ExternalShuffleClient(testConf, new TestSecretKeyHolder(appId, secretKey), true, 5000);
     client.init(appId);
     // Registration either succeeds or throws an exception.
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(), "exec0",

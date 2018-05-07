@@ -26,8 +26,8 @@ import scala.reflect.ClassTag
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 
 /**
  * The references to rdd and splitIndex are transient because redundant information is stored

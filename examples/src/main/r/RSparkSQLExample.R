@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 
+# To run this example use
+# ./bin/spark-submit examples/src/main/r/RSparkSQLExample.R
+
 library(SparkR)
 
 # $example on:init_session$
@@ -108,6 +111,12 @@ df <- read.df("examples/src/main/resources/people.json", "json")
 namesAndAges <- select(df, "name", "age")
 write.df(namesAndAges, "namesAndAges.parquet", "parquet")
 # $example off:manual_load_options$
+
+
+# $example on:manual_load_options_csv$
+df <- read.df("examples/src/main/resources/people.csv", "csv")
+namesAndAges <- select(df, "name", "age")
+# $example off:manual_load_options_csv$
 
 
 # $example on:direct_sql$

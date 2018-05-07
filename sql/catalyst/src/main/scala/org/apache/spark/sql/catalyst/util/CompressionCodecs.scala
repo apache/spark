@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.Locale
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress._
@@ -38,7 +40,7 @@ object CompressionCodecs {
    * If it is already a class name, just return it.
    */
   def getCodecClassName(name: String): String = {
-    val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase, name)
+    val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase(Locale.ROOT), name)
     try {
       // Validate the codec name
       if (codecName != null) {

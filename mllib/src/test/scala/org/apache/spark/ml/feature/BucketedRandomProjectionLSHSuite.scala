@@ -20,16 +20,15 @@ package org.apache.spark.ml.feature
 import breeze.numerics.{cos, sin}
 import breeze.numerics.constants.Pi
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Dataset, Row}
 
-class BucketedRandomProjectionLSHSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   @transient var dataset: Dataset[_] = _
 
@@ -49,6 +48,14 @@ class BucketedRandomProjectionLSHSuite
     ParamsSuite.checkParams(model)
   }
 
+  test("setters") {
+    val model = new BucketedRandomProjectionLSHModel("brp", Array(Vectors.dense(0.0, 1.0)))
+      .setInputCol("testkeys")
+      .setOutputCol("testvalues")
+    assert(model.getInputCol  === "testkeys")
+    assert(model.getOutputCol === "testvalues")
+  }
+
   test("BucketedRandomProjectionLSH: default params") {
     val brp = new BucketedRandomProjectionLSH
     assert(brp.getNumHashTables === 1.0)
@@ -63,7 +70,7 @@ class BucketedRandomProjectionLSHSuite
     }
     val mh = new BucketedRandomProjectionLSH()
     val settings = Map("inputCol" -> "keys", "outputCol" -> "values", "bucketLength" -> 1.0)
-    testEstimatorAndModelReadWrite(mh, dataset, settings, checkModelData)
+    testEstimatorAndModelReadWrite(mh, dataset, settings, settings, checkModelData)
   }
 
   test("hashFunction") {
@@ -89,9 +96,27 @@ class BucketedRandomProjectionLSHSuite
       .setOutputCol("values")
       .setBucketLength(1.0)
       .setSeed(12345)
-    val unitVectors = brp.fit(dataset).randUnitVectors
+    val brpModel = brp.fit(dataset)
+    val unitVectors = brpModel.randUnitVectors
     unitVectors.foreach { v: Vector =>
       assert(Vectors.norm(v, 2.0) ~== 1.0 absTol 1e-14)
+    }
+
+    MLTestingUtils.checkCopyAndUids(brp, brpModel)
+  }
+
+  test("BucketedRandomProjectionLSH: streaming transform") {
+    val brp = new BucketedRandomProjectionLSH()
+      .setNumHashTables(2)
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setBucketLength(1.0)
+      .setSeed(12345)
+    val brpModel = brp.fit(dataset)
+
+    testTransformer[Tuple1[Vector]](dataset.toDF(), brpModel, "values") {
+      case Row(values: Seq[_]) =>
+        assert(values.length === brp.getNumHashTables)
     }
   }
 

@@ -19,18 +19,17 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Union}
 import org.apache.spark.sql.types._
 
 
-class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
+class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
   private val analyzer = new Analyzer(catalog, conf)
 
@@ -91,8 +90,14 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
     checkType(Average(d1), DecimalType(6, 5))
 
     checkType(Add(Add(d1, d2), d1), DecimalType(7, 2))
+    checkType(Add(Add(d1, d1), d1), DecimalType(4, 1))
+    checkType(Add(d1, Add(d1, d1)), DecimalType(4, 1))
     checkType(Add(Add(Add(d1, d2), d1), d2), DecimalType(8, 2))
     checkType(Add(Add(d1, d2), Add(d1, d2)), DecimalType(7, 2))
+    checkType(Subtract(Subtract(d2, d1), d1), DecimalType(7, 2))
+    checkType(Multiply(Multiply(d1, d1), d2), DecimalType(11, 4))
+    checkType(Divide(d2, Add(d1, d1)), DecimalType(10, 6))
+    checkType(Sum(Add(d1, d1)), DecimalType(13, 1))
   }
 
   test("Comparison operations") {
@@ -131,19 +136,19 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
 
   test("maximum decimals") {
     for (expr <- Seq(d1, d2, i, u)) {
-      checkType(Add(expr, u), DecimalType.SYSTEM_DEFAULT)
-      checkType(Subtract(expr, u), DecimalType.SYSTEM_DEFAULT)
+      checkType(Add(expr, u), DecimalType(38, 17))
+      checkType(Subtract(expr, u), DecimalType(38, 17))
     }
 
-    checkType(Multiply(d1, u), DecimalType(38, 19))
-    checkType(Multiply(d2, u), DecimalType(38, 20))
-    checkType(Multiply(i, u), DecimalType(38, 18))
-    checkType(Multiply(u, u), DecimalType(38, 36))
+    checkType(Multiply(d1, u), DecimalType(38, 16))
+    checkType(Multiply(d2, u), DecimalType(38, 14))
+    checkType(Multiply(i, u), DecimalType(38, 7))
+    checkType(Multiply(u, u), DecimalType(38, 6))
 
-    checkType(Divide(u, d1), DecimalType(38, 18))
-    checkType(Divide(u, d2), DecimalType(38, 19))
-    checkType(Divide(u, i), DecimalType(38, 23))
-    checkType(Divide(u, u), DecimalType(38, 18))
+    checkType(Divide(u, d1), DecimalType(38, 17))
+    checkType(Divide(u, d2), DecimalType(38, 16))
+    checkType(Divide(u, i), DecimalType(38, 18))
+    checkType(Divide(u, u), DecimalType(38, 6))
 
     checkType(Remainder(d1, u), DecimalType(19, 18))
     checkType(Remainder(d2, u), DecimalType(21, 18))

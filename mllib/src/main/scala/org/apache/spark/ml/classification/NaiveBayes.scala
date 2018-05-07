@@ -28,7 +28,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.types.DoubleType
 
 /**
  * Params for Naive Bayes Classifiers.
@@ -408,7 +407,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
         .head()
       val model = new NaiveBayesModel(metadata.uid, pi, theta)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

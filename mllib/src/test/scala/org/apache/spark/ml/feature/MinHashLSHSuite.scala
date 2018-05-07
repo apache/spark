@@ -17,14 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.sql.{Dataset, Row}
 
-class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
 
   @transient var dataset: Dataset[_] = _
 
@@ -43,6 +42,14 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     ParamsSuite.checkParams(model)
   }
 
+  test("setters") {
+    val model = new MinHashLSHModel("mh", randCoefficients = Array((1, 0)))
+      .setInputCol("testkeys")
+      .setOutputCol("testvalues")
+    assert(model.getInputCol  === "testkeys")
+    assert(model.getOutputCol === "testvalues")
+  }
+
   test("MinHashLSH: default params") {
     val rp = new MinHashLSH
     assert(rp.getNumHashTables === 1.0)
@@ -54,7 +61,16 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     }
     val mh = new MinHashLSH()
     val settings = Map("inputCol" -> "keys", "outputCol" -> "values")
-    testEstimatorAndModelReadWrite(mh, dataset, settings, checkModelData)
+    testEstimatorAndModelReadWrite(mh, dataset, settings, settings, checkModelData)
+  }
+
+  test("Model copy and uid checks") {
+    val mh = new MinHashLSH()
+      .setInputCol("keys")
+      .setOutputCol("values")
+    val model = mh.fit(dataset)
+    assert(mh.uid === model.uid)
+    MLTestingUtils.checkCopyAndUids(mh, model)
   }
 
   test("hashFunction") {
@@ -157,5 +173,21 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(mh, df1, df2, 0.5)
     assert(precision == 1.0)
     assert(recall >= 0.7)
+  }
+
+  test("MinHashLSHModel.transform should work with Structured Streaming") {
+    val localSpark = spark
+    import localSpark.implicits._
+
+    val model = new MinHashLSHModel("mh", randCoefficients = Array((1, 0)))
+    model.set(model.inputCol, "keys")
+    testTransformer[Tuple1[Vector]](dataset.toDF(), model, "keys", model.getOutputCol) {
+      case Row(_: Vector, output: Seq[_]) =>
+        assert(output.length === model.randCoefficients.length)
+        // no AND-amplification yet: SPARK-18450, so each hash output is of length 1
+        output.foreach {
+          case hashOutput: Vector => assert(hashOutput.size === 1)
+        }
+    }
   }
 }

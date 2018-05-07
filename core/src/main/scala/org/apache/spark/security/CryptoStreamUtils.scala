@@ -17,19 +17,22 @@
 package org.apache.spark.security
 
 import java.io.{InputStream, OutputStream}
+import java.nio.ByteBuffer
+import java.nio.channels.{ReadableByteChannel, WritableByteChannel}
 import java.util.Properties
 import javax.crypto.KeyGenerator
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
 import scala.collection.JavaConverters._
 
+import com.google.common.io.ByteStreams
 import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.network.util.CryptoUtils
+import org.apache.spark.network.util.{CryptoUtils, JavaUtils}
 
 /**
  * A util class for manipulating IO encryption and decryption streams.
@@ -48,12 +51,27 @@ private[spark] object CryptoStreamUtils extends Logging {
       os: OutputStream,
       sparkConf: SparkConf,
       key: Array[Byte]): OutputStream = {
-    val properties = toCryptoConf(sparkConf)
-    val iv = createInitializationVector(properties)
+    val params = new CryptoParams(key, sparkConf)
+    val iv = createInitializationVector(params.conf)
     os.write(iv)
-    val transformationStr = sparkConf.get(IO_CRYPTO_CIPHER_TRANSFORMATION)
-    new CryptoOutputStream(transformationStr, properties, os,
-      new SecretKeySpec(key, "AES"), new IvParameterSpec(iv))
+    new CryptoOutputStream(params.transformation, params.conf, os, params.keySpec,
+      new IvParameterSpec(iv))
+  }
+
+  /**
+   * Wrap a `WritableByteChannel` for encryption.
+   */
+  def createWritableChannel(
+      channel: WritableByteChannel,
+      sparkConf: SparkConf,
+      key: Array[Byte]): WritableByteChannel = {
+    val params = new CryptoParams(key, sparkConf)
+    val iv = createInitializationVector(params.conf)
+    val helper = new CryptoHelperChannel(channel)
+
+    helper.write(ByteBuffer.wrap(iv))
+    new CryptoOutputStream(params.transformation, params.conf, helper, params.keySpec,
+      new IvParameterSpec(iv))
   }
 
   /**
@@ -63,12 +81,27 @@ private[spark] object CryptoStreamUtils extends Logging {
       is: InputStream,
       sparkConf: SparkConf,
       key: Array[Byte]): InputStream = {
-    val properties = toCryptoConf(sparkConf)
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
-    is.read(iv, 0, iv.length)
-    val transformationStr = sparkConf.get(IO_CRYPTO_CIPHER_TRANSFORMATION)
-    new CryptoInputStream(transformationStr, properties, is,
-      new SecretKeySpec(key, "AES"), new IvParameterSpec(iv))
+    ByteStreams.readFully(is, iv)
+    val params = new CryptoParams(key, sparkConf)
+    new CryptoInputStream(params.transformation, params.conf, is, params.keySpec,
+      new IvParameterSpec(iv))
+  }
+
+  /**
+   * Wrap a `ReadableByteChannel` for decryption.
+   */
+  def createReadableChannel(
+      channel: ReadableByteChannel,
+      sparkConf: SparkConf,
+      key: Array[Byte]): ReadableByteChannel = {
+    val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
+    val buf = ByteBuffer.wrap(iv)
+    JavaUtils.readFully(channel, buf)
+
+    val params = new CryptoParams(key, sparkConf)
+    new CryptoInputStream(params.transformation, params.conf, channel, params.keySpec,
+      new IvParameterSpec(iv))
   }
 
   def toCryptoConf(conf: SparkConf): Properties = {
@@ -102,4 +135,34 @@ private[spark] object CryptoStreamUtils extends Logging {
     }
     iv
   }
+
+  /**
+   * This class is a workaround for CRYPTO-125, that forces all bytes to be written to the
+   * underlying channel. Since the callers of this API are using blocking I/O, there are no
+   * concerns with regards to CPU usage here.
+   */
+  private class CryptoHelperChannel(sink: WritableByteChannel) extends WritableByteChannel {
+
+    override def write(src: ByteBuffer): Int = {
+      val count = src.remaining()
+      while (src.hasRemaining()) {
+        sink.write(src)
+      }
+      count
+    }
+
+    override def isOpen(): Boolean = sink.isOpen()
+
+    override def close(): Unit = sink.close()
+
+  }
+
+  private class CryptoParams(key: Array[Byte], sparkConf: SparkConf) {
+
+    val keySpec = new SecretKeySpec(key, "AES")
+    val transformation = sparkConf.get(IO_CRYPTO_CIPHER_TRANSFORMATION)
+    val conf = toCryptoConf(sparkConf)
+
+  }
+
 }

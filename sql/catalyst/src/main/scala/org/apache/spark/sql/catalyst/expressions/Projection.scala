@@ -101,33 +101,38 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
 
 /**
  * A projection that returns UnsafeRow.
+ *
+ * CAUTION: the returned projection object should *not* be assumed to be thread-safe.
  */
 abstract class UnsafeProjection extends Projection {
   override def apply(row: InternalRow): UnsafeRow
 }
 
-object UnsafeProjection {
-
+trait UnsafeProjectionCreator {
   /**
    * Returns an UnsafeProjection for given StructType.
+   *
+   * CAUTION: the returned projection object is *not* thread-safe.
    */
   def create(schema: StructType): UnsafeProjection = create(schema.fields.map(_.dataType))
 
   /**
    * Returns an UnsafeProjection for given Array of DataTypes.
+   *
+   * CAUTION: the returned projection object is *not* thread-safe.
    */
   def create(fields: Array[DataType]): UnsafeProjection = {
     create(fields.zipWithIndex.map(x => BoundReference(x._2, x._1, true)))
   }
 
   /**
-   * Returns an UnsafeProjection for given sequence of Expressions (bounded).
+   * Returns an UnsafeProjection for given sequence of bound Expressions.
    */
   def create(exprs: Seq[Expression]): UnsafeProjection = {
     val unsafeExprs = exprs.map(_ transform {
       case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
     })
-    GenerateUnsafeProjection.generate(unsafeExprs)
+    createProjection(unsafeExprs)
   }
 
   def create(expr: Expression): UnsafeProjection = create(Seq(expr))
@@ -138,6 +143,18 @@ object UnsafeProjection {
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
     create(exprs.map(BindReferences.bindReference(_, inputSchema)))
+  }
+
+  /**
+   * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
+   */
+  protected def createProjection(exprs: Seq[Expression]): UnsafeProjection
+}
+
+object UnsafeProjection extends UnsafeProjectionCreator {
+
+  override protected def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
+    GenerateUnsafeProjection.generate(exprs)
   }
 
   /**

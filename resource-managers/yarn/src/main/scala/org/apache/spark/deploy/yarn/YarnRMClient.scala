@@ -29,7 +29,6 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.util.Utils
 
 /**
  * Handles registering and unregistering the application with the YARN ResourceManager.
@@ -55,7 +54,7 @@ private[spark] class YarnRMClient extends Logging {
       driverRef: RpcEndpointRef,
       conf: YarnConfiguration,
       sparkConf: SparkConf,
-      uiAddress: String,
+      uiAddress: Option[String],
       uiHistoryAddress: String,
       securityMgr: SecurityManager,
       localResources: Map[String, LocalResource]
@@ -65,13 +64,18 @@ private[spark] class YarnRMClient extends Logging {
     amClient.start()
     this.uiHistoryAddress = uiHistoryAddress
 
+    val trackingUrl = uiAddress.getOrElse {
+      if (sparkConf.get(ALLOW_HISTORY_SERVER_TRACKING_URL)) uiHistoryAddress else ""
+    }
+
     logInfo("Registering the ApplicationMaster")
     synchronized {
-      amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
+      amClient.registerApplicationMaster(driverRef.address.host, driverRef.address.port,
+        trackingUrl)
       registered = true
     }
     new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr,
-      localResources)
+      localResources, new SparkRackResolver())
   }
 
   /**
@@ -88,7 +92,7 @@ private[spark] class YarnRMClient extends Logging {
 
   /** Returns the attempt ID. */
   def getAttemptId(): ApplicationAttemptId = {
-    YarnSparkHadoopUtil.get.getContainerId.getApplicationAttemptId()
+    YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
   }
 
   /** Returns the configuration for the AmIpFilter to add to the Spark UI. */

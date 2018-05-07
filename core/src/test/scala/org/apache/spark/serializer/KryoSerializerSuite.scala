@@ -76,6 +76,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("basic types") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
@@ -106,6 +109,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("pairs") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
@@ -130,12 +136,16 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("Scala data structures") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(List[Int]())
     check(List[Int](1, 2, 3))
+    check(Seq[Int](1, 2, 3))
     check(List[String]())
     check(List[String]("x", "y", "z"))
     check(None)
@@ -189,7 +199,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
       // Check that very long ranges don't get written one element at a time
-      assert(ser.serialize(t).limit < 100)
+      assert(ser.serialize(t).limit() < 100)
     }
     check(1 to 1000000)
     check(1 to 1000000 by 2)
@@ -266,7 +276,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("kryo with collect for specialized tuples") {
-    assert (sc.parallelize( Array((1, 11), (2, 22), (3, 33)) ).collect().head === (1, 11))
+    assert (sc.parallelize( Array((1, 11), (2, 22), (3, 33)) ).collect().head === ((1, 11)))
   }
 
   test("kryo with SerializableHyperLogLog") {
@@ -465,7 +475,7 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
     val deserializationStream = serInstance.deserializeStream(new ByteArrayInputStream(worldWorld))
     assert(deserializationStream.readValue[Any]() === world)
     deserializationStream.close()
-    assert(serInstance.deserialize[Any](helloHello) === (hello, hello))
+    assert(serInstance.deserialize[Any](helloHello) === ((hello, hello)))
   }
 }
 

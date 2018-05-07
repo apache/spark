@@ -24,8 +24,10 @@ import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -322,8 +324,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .option("partitionColumn", "foo")
         .save()
     }.getMessage
-    assert(e.contains("If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
-      " and 'numPartitions' are required."))
+    assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
+      "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
+      "'numPartitions'"))
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
@@ -361,5 +364,155 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       sql("INSERT OVERWRITE TABLE PEOPLE_VIEW SELECT * FROM PEOPLE")
       assert(sql("select * from people_view").count() == 2)
     }
+  }
+
+  test("SPARK-10849: test schemaString - from createTableColumnTypes option values") {
+    def testCreateTableColDataTypes(types: Seq[String]): Unit = {
+      val colTypes = types.zipWithIndex.map { case (t, i) => (s"col$i", t) }
+      val schema = colTypes
+        .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
+      val createTableColTypes =
+        colTypes.map { case (col, dataType) => s"$col $dataType" }.mkString(", ")
+      val df = spark.createDataFrame(sparkContext.parallelize(Seq(Row.empty)), schema)
+
+      val expectedSchemaStr =
+        colTypes.map { case (col, dataType) => s""""$col" $dataType """ }.mkString(", ")
+
+      assert(JdbcUtils.schemaString(df, url1, Option(createTableColTypes)) == expectedSchemaStr)
+    }
+
+    testCreateTableColDataTypes(Seq("boolean"))
+    testCreateTableColDataTypes(Seq("tinyint", "smallint", "int", "bigint"))
+    testCreateTableColDataTypes(Seq("float", "double"))
+    testCreateTableColDataTypes(Seq("string", "char(10)", "varchar(20)"))
+    testCreateTableColDataTypes(Seq("decimal(10,0)", "decimal(10,5)"))
+    testCreateTableColDataTypes(Seq("date", "timestamp"))
+    testCreateTableColDataTypes(Seq("binary"))
+  }
+
+  test("SPARK-10849: create table using user specified column type and verify on target table") {
+    def testUserSpecifiedColTypes(
+        df: DataFrame,
+        createTableColTypes: String,
+        expectedTypes: Map[String, String]): Unit = {
+      df.write
+        .mode(SaveMode.Overwrite)
+        .option("createTableColumnTypes", createTableColTypes)
+        .jdbc(url1, "TEST.DBCOLTYPETEST", properties)
+
+      // verify the data types of the created table by reading the database catalog of H2
+      val query =
+        """
+          |(SELECT column_name, type_name, character_maximum_length
+          | FROM information_schema.columns WHERE table_name = 'DBCOLTYPETEST')
+        """.stripMargin
+      val rows = spark.read.jdbc(url1, query, properties).collect()
+
+      rows.foreach { row =>
+        val typeName = row.getString(1)
+        // For CHAR and VARCHAR, we also compare the max length
+        if (typeName.contains("CHAR")) {
+          val charMaxLength = row.getInt(2)
+          assert(expectedTypes(row.getString(0)) == s"$typeName($charMaxLength)")
+        } else {
+          assert(expectedTypes(row.getString(0)) == typeName)
+        }
+      }
+    }
+
+    val data = Seq[Row](Row(1, "dave", "Boston"))
+    val schema = StructType(
+      StructField("id", IntegerType) ::
+        StructField("first#name", StringType) ::
+        StructField("city", StringType) :: Nil)
+    val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+
+    // out-of-order
+    val expected1 = Map("id" -> "BIGINT", "first#name" -> "VARCHAR(123)", "city" -> "CHAR(20)")
+    testUserSpecifiedColTypes(df, "`first#name` VARCHAR(123), id BIGINT, city CHAR(20)", expected1)
+    // partial schema
+    val expected2 = Map("id" -> "INTEGER", "first#name" -> "VARCHAR(123)", "city" -> "CHAR(20)")
+    testUserSpecifiedColTypes(df, "`first#name` VARCHAR(123), city CHAR(20)", expected2)
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      // should still respect the original column names
+      val expected = Map("id" -> "INTEGER", "first#name" -> "VARCHAR(123)", "city" -> "CLOB")
+      testUserSpecifiedColTypes(df, "`FiRsT#NaMe` VARCHAR(123)", expected)
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val schema = StructType(
+        StructField("id", IntegerType) ::
+          StructField("First#Name", StringType) ::
+          StructField("city", StringType) :: Nil)
+      val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+      val expected = Map("id" -> "INTEGER", "First#Name" -> "VARCHAR(123)", "city" -> "CLOB")
+      testUserSpecifiedColTypes(df, "`First#Name` VARCHAR(123)", expected)
+    }
+  }
+
+  test("SPARK-10849: jdbc CreateTableColumnTypes option with invalid data type") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val msg = intercept[ParseException] {
+      df.write.mode(SaveMode.Overwrite)
+        .option("createTableColumnTypes", "name CLOB(2000)")
+        .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+    }.getMessage()
+    assert(msg.contains("DataType clob(2000) is not supported."))
+  }
+
+  test("SPARK-10849: jdbc CreateTableColumnTypes option with invalid syntax") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val msg = intercept[ParseException] {
+      df.write.mode(SaveMode.Overwrite)
+        .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
+        .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+    }.getMessage()
+    assert(msg.contains("extraneous input"))
+  }
+
+  test("SPARK-10849: jdbc CreateTableColumnTypes duplicate columns") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+      val msg = intercept[AnalysisException] {
+        df.write.mode(SaveMode.Overwrite)
+          .option("createTableColumnTypes", "name CHAR(20), id int, NaMe VARCHAR(100)")
+          .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+      }.getMessage()
+      assert(msg.contains(
+        "Found duplicate column(s) in the createTableColumnTypes option value: `name`"))
+    }
+  }
+
+  test("SPARK-10849: jdbc CreateTableColumnTypes invalid columns") {
+    // schema2 has the column "id" and "name"
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val msg = intercept[AnalysisException] {
+        df.write.mode(SaveMode.Overwrite)
+          .option("createTableColumnTypes", "firstName CHAR(20), id int")
+          .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+      }.getMessage()
+      assert(msg.contains("createTableColumnTypes option column firstName not found in " +
+        "schema struct<name:string,id:int>"))
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val msg = intercept[AnalysisException] {
+        df.write.mode(SaveMode.Overwrite)
+          .option("createTableColumnTypes", "id int, Name VARCHAR(100)")
+          .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+      }.getMessage()
+      assert(msg.contains("createTableColumnTypes option column Name not found in " +
+        "schema struct<name:string,id:int>"))
+    }
+  }
+
+  test("SPARK-19726: INSERT null to a NOT NULL column") {
+    val e = intercept[SparkException] {
+      sql("INSERT INTO PEOPLE1 values (null, null)")
+    }.getMessage
+    assert(e.contains("NULL not allowed for column \"NAME\""))
   }
 }

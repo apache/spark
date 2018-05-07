@@ -17,18 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import java.nio.charset.{Charset, StandardCharsets}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
@@ -54,7 +56,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    JsonDataSource(parsedOptions).infer(
+    JsonDataSource(parsedOptions).inferSchema(
       sparkSession, files, parsedOptions)
   }
 
@@ -102,12 +104,38 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
+    val actualSchema =
+      StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    // Check a field requirement for corrupt records here to throw an exception in a driver side
+    dataSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+      val f = dataSchema(corruptFieldIndex)
+      if (f.dataType != StringType || !f.nullable) {
+        throw new AnalysisException(
+          "The field for corrupt records must be string type and nullable")
+      }
+    }
+
+    if (requiredSchema.length == 1 &&
+      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      throw new AnalysisException(
+        "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
+        "referenced columns only include the internal corrupt record column\n" +
+        s"(named _corrupt_record by default). For example:\n" +
+        "spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()\n" +
+        "and spark.read.schema(schema).json(file).select(\"_corrupt_record\").show().\n" +
+        "Instead, you can cache or save the parsed results and then send the same query.\n" +
+        "For example, val df = spark.read.schema(schema).json(file).cache() and then\n" +
+        "df.filter($\"_corrupt_record\".isNotNull).count()."
+      )
+    }
+
     (file: PartitionedFile) => {
-      val parser = new JacksonParser(requiredSchema, parsedOptions)
+      val parser = new JacksonParser(actualSchema, parsedOptions)
       JsonDataSource(parsedOptions).readFile(
         broadcastedHadoopConf.value.value,
         file,
-        parser)
+        parser,
+        requiredSchema)
     }
   }
 
@@ -125,7 +153,13 @@ private[json] class JsonOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
 
-  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
+  private val encoding = options.encoding match {
+    case Some(charsetName) => Charset.forName(charsetName)
+    case None => StandardCharsets.UTF_8
+  }
+
+  private val writer = CodecStreams.createOutputStreamWriter(
+    context, new Path(path), encoding)
 
   // create the Generator without separator inserted between 2 records
   private[this] val gen = new JacksonGenerator(dataSchema, writer, options)

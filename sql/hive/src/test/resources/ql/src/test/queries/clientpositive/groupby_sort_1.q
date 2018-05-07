@@ -248,7 +248,7 @@ SELECT * FROM outputTbl4 ORDER BY key1, key2, key3;
 
 set hive.map.aggr=true;
 set hive.multigroupby.singlereducer=false;
-set mapred.reduce.tasks=31;
+set mapreduce.job.reduces=31;
 
 CREATE TABLE DEST1(key INT, cnt INT);
 CREATE TABLE DEST2(key INT, val STRING, cnt INT);

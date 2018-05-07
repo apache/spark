@@ -26,7 +26,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * An exception thrown if RpcTimeout modifies a [[TimeoutException]].
+ * An exception thrown if RpcTimeout modifies a `TimeoutException`.
  */
 private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
   extends TimeoutException(message) { initCause(cause) }
@@ -125,9 +125,9 @@ private[spark] object RpcTimeout {
     var foundProp: Option[(String, String)] = None
     while (itr.hasNext && foundProp.isEmpty) {
       val propKey = itr.next()
-      conf.getOption(propKey).foreach { prop => foundProp = Some(propKey, prop) }
+      conf.getOption(propKey).foreach { prop => foundProp = Some((propKey, prop)) }
     }
-    val finalProp = foundProp.getOrElse(timeoutPropList.head, defaultValue)
+    val finalProp = foundProp.getOrElse((timeoutPropList.head, defaultValue))
     val timeout = { Utils.timeStringAsSeconds(finalProp._2).seconds }
     new RpcTimeout(timeout, finalProp._1)
   }

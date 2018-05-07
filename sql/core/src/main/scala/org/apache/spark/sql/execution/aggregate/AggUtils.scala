@@ -263,9 +263,6 @@ object AggUtils {
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      // We will group by the original grouping expression, plus an additional expression for the
-      // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
-      // expressions will be [key, value].
       createAggregate(
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
@@ -311,7 +308,7 @@ object AggUtils {
     val saved =
       StateStoreSaveExec(
         groupingAttributes,
-        stateId = None,
+        stateInfo = None,
         outputMode = None,
         eventTimeWatermark = None,
         partialMerged2)

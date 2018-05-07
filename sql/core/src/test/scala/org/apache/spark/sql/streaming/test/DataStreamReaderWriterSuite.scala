@@ -18,20 +18,22 @@
 package org.apache.spark.sql.streaming.test
 
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
+import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
-import org.scalatest.PrivateMethodTester.PrivateMethod
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
-import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.streaming.{ProcessingTime => DeprecatedProcessingTime, _}
+import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -86,7 +88,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
         import spark.implicits._
 
-        Seq[Int]().toDS().toDF()
+        spark.internalCreateDataFrame(spark.sparkContext.emptyRDD, schema, isStreaming = true)
       }
 
       override def stop() {}
@@ -107,7 +109,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   }
 }
 
-class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with PrivateMethodTester {
+class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -125,7 +127,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
         .save()
     }
     Seq("'write'", "not", "streaming Dataset/DataFrame").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -346,7 +348,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
     q = df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .trigger(ProcessingTime.create(100, TimeUnit.SECONDS))
+      .trigger(ProcessingTime(100, TimeUnit.SECONDS))
       .start()
     q.stop()
 
@@ -371,60 +373,25 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
       .option("checkpointLocation", checkpointLocationURI.toString)
       .trigger(ProcessingTime(10.seconds))
       .start()
+    q.processAllAvailable()
     q.stop()
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.sqlContext,
-      s"$checkpointLocationURI/sources/0",
-      None,
-      "org.apache.spark.sql.streaming.test",
-      Map.empty)
+      any(),
+      meq(s"${makeQualifiedPath(checkpointLocationURI.toString)}/sources/0"),
+      meq(None),
+      meq("org.apache.spark.sql.streaming.test"),
+      meq(Map.empty))
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.sqlContext,
-      s"$checkpointLocationURI/sources/1",
-      None,
-      "org.apache.spark.sql.streaming.test",
-      Map.empty)
+      any(),
+      meq(s"${makeQualifiedPath(checkpointLocationURI.toString)}/sources/1"),
+      meq(None),
+      meq("org.apache.spark.sql.streaming.test"),
+      meq(Map.empty))
   }
 
   private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
-
-  test("supported strings in outputMode(string)") {
-    val outputModeMethod = PrivateMethod[OutputMode]('outputMode)
-
-    def testMode(outputMode: String, expected: OutputMode): Unit = {
-      val df = spark.readStream
-        .format("org.apache.spark.sql.streaming.test")
-        .load()
-      val w = df.writeStream
-      w.outputMode(outputMode)
-      val setOutputMode = w invokePrivate outputModeMethod()
-      assert(setOutputMode === expected)
-    }
-
-    testMode("append", OutputMode.Append)
-    testMode("Append", OutputMode.Append)
-    testMode("complete", OutputMode.Complete)
-    testMode("Complete", OutputMode.Complete)
-    testMode("update", OutputMode.Update)
-    testMode("Update", OutputMode.Update)
-  }
-
-  test("unsupported strings in outputMode(string)") {
-    def testMode(outputMode: String): Unit = {
-      val acceptedModes = Seq("append", "update", "complete")
-      val df = spark.readStream
-        .format("org.apache.spark.sql.streaming.test")
-        .load()
-      val w = df.writeStream
-      val e = intercept[IllegalArgumentException](w.outputMode(outputMode))
-      (Seq("output mode", "unknown", outputMode) ++ acceptedModes).foreach { s =>
-        assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
-      }
-    }
-    testMode("Xyz")
-  }
 
   test("check foreach() catches null writers") {
     val df = spark.readStream
@@ -434,7 +401,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
     var w = df.writeStream
     var e = intercept[IllegalArgumentException](w.foreach(null))
     Seq("foreach", "null").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -451,23 +418,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
     var w = df.writeStream.partitionBy("value")
     var e = intercept[AnalysisException](w.foreach(foreachWriter).start())
     Seq("foreach", "partitioning").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
-  }
-
-  test("ConsoleSink can be correctly loaded") {
-    LastOptions.clear()
-    val df = spark.readStream
-      .format("org.apache.spark.sql.streaming.test")
-      .load()
-
-    val sq = df.writeStream
-      .format("console")
-      .option("checkpointLocation", newMetadataDir)
-      .trigger(ProcessingTime(2.seconds))
-      .start()
-
-    sq.awaitTermination(2000L)
   }
 
   test("prevent all column partitioning") {
@@ -481,16 +433,6 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
           .start(path)
       }
     }
-  }
-
-  test("ConsoleSink should not require checkpointLocation") {
-    LastOptions.clear()
-    val df = spark.readStream
-      .format("org.apache.spark.sql.streaming.test")
-      .load()
-
-    val sq = df.writeStream.format("console").start()
-    sq.stop()
   }
 
   private def testMemorySinkCheckpointRecovery(chkLoc: String, provideInWriter: Boolean): Unit = {
@@ -674,8 +616,9 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
   test("temp checkpoint dir should be deleted if a query is stopped without errors") {
     import testImplicits._
     val query = MemoryStream[Int].toDS.writeStream.format("console").start()
+    query.processAllAvailable()
     val checkpointDir = new Path(
-      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.checkpointRoot)
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
     val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
     assert(fs.exists(checkpointDir))
     query.stop()
@@ -687,7 +630,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
     val input = MemoryStream[Int]
     val query = input.toDS.map(_ / 0).writeStream.format("console").start()
     val checkpointDir = new Path(
-      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.checkpointRoot)
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
     val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
     assert(fs.exists(checkpointDir))
     input.addData(1)
@@ -695,5 +638,17 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
       query.awaitTermination()
     }
     assert(fs.exists(checkpointDir))
+  }
+
+  test("SPARK-20431: Specify a schema by using a DDL-formatted string") {
+    spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .schema("aa INT")
+      .load()
+
+    assert(LastOptions.schema.isDefined)
+    assert(LastOptions.schema.get === StructType(StructField("aa", IntegerType) :: Nil))
+
+    LastOptions.clear()
   }
 }

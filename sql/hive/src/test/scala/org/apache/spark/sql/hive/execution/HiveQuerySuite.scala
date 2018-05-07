@@ -80,7 +80,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   private def assertUnsupportedFeature(body: => Unit): Unit = {
     val e = intercept[ParseException] { body }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
   }
 
   // Testing the Broadcast based join for cartesian join (cross join)
@@ -370,21 +370,23 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     """.stripMargin)
 
   test("SPARK-7270: consider dynamic partition when comparing table output") {
-    sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
-    sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
+    withTable("test_partition", "ptest") {
+      sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+      sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
-    val analyzedPlan = sql(
-      """
+      val analyzedPlan = sql(
+        """
         |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
         |SELECT 'a', 'c' from ptest
       """.stripMargin).queryExecution.analyzed
 
-    assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
+      assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
       var hasCast = false
-      analyzedPlan.collect {
-        case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
+        analyzedPlan.collect {
+          case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
+        }
+        hasCast
       }
-      hasCast
     }
   }
 
@@ -435,13 +437,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("transform with SerDe2") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTable("small_src") {
+      sql("CREATE TABLE small_src(key INT, value STRING)")
+      sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
 
-    sql("CREATE TABLE small_src(key INT, value STRING)")
-    sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
-
-    val expected = sql("SELECT key FROM small_src").collect().head
-    val res = sql(
-      """
+      val expected = sql("SELECT key FROM small_src").collect().head
+      val res = sql(
+        """
         |SELECT TRANSFORM (key) ROW FORMAT SERDE
         |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
         |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
@@ -453,7 +455,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         |FROM small_src
       """.stripMargin.replaceAll(System.lineSeparator(), " ")).collect().head
 
-    assert(expected(0) === res(0))
+      assert(expected(0) === res(0))
+    }
   }
 
   createQueryTest("transform with SerDe3",
@@ -780,78 +783,26 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
-    val q0 = sql(s"CREATE TABLE $tableName(key INT, value STRING)")
+    withTable(tableName) {
+      val q0 = sql(s"CREATE TABLE $tableName(key INT, value STRING)")
 
-    // If the table was not created, the following assertion would fail
-    assert(Try(table(tableName)).isSuccess)
+      // If the table was not created, the following assertion would fail
+      assert(Try(table(tableName)).isSuccess)
 
-    // If the CREATE TABLE command got executed again, the following assertion would fail
-    assert(Try(q0.count()).isSuccess)
-  }
-
-  test("DESCRIBE commands") {
-    sql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
-
-    sql(
-      """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
-        |SELECT key, value
-      """.stripMargin)
-
-    // Describe a table
-    assertResult(
-      Array(
-        Row("key", "int", null),
-        Row("value", "string", null),
-        Row("dt", "string", null),
-        Row("# Partition Information", "", ""),
-        Row("# col_name", "data_type", "comment"),
-        Row("dt", "string", null))
-    ) {
-      sql("DESCRIBE test_describe_commands1")
-        .select('col_name, 'data_type, 'comment)
-        .collect()
-    }
-
-    // Describe a table with a fully qualified table name
-    assertResult(
-      Array(
-        Row("key", "int", null),
-        Row("value", "string", null),
-        Row("dt", "string", null),
-        Row("# Partition Information", "", ""),
-        Row("# col_name", "data_type", "comment"),
-        Row("dt", "string", null))
-    ) {
-      sql("DESCRIBE default.test_describe_commands1")
-        .select('col_name, 'data_type, 'comment)
-        .collect()
-    }
-
-    // Describe a temporary view.
-    val testData =
-      TestHive.sparkContext.parallelize(
-        TestData(1, "str1") ::
-        TestData(1, "str2") :: Nil)
-    testData.toDF().createOrReplaceTempView("test_describe_commands2")
-
-    assertResult(
-      Array(
-        Row("a", "int", null),
-        Row("b", "string", null))
-    ) {
-      sql("DESCRIBE test_describe_commands2")
-        .select('col_name, 'data_type, 'comment)
-        .collect()
+      // If the CREATE TABLE command got executed again, the following assertion would fail
+      assert(Try(q0.count()).isSuccess)
     }
   }
 
   test("SPARK-2263: Insert Map<K, V> values") {
-    sql("CREATE TABLE m(value MAP<INT, STRING>)")
-    sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
-    sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).foreach {
-      case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
-        assert(map.size === 1)
-        assert(map.head === (key, value))
+    withTable("m") {
+      sql("CREATE TABLE m(value MAP<INT, STRING>)")
+      sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
+      sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).foreach {
+        case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
+          assert(map.size === 1)
+          assert(map.head === ((key, value)))
+      }
     }
   }
 

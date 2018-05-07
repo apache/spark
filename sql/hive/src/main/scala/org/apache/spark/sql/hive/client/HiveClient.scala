@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -37,6 +38,12 @@ private[hive] trait HiveClient {
 
   /** Returns the configuration for the given key in the current session. */
   def getConf(key: String, defaultValue: String): String
+
+  /**
+   * Return the associated Hive SessionState of this [[HiveClientImpl]]
+   * @return [[Any]] not SessionState to avoid linkage error
+   */
+  def getState: Any
 
   /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
@@ -84,10 +91,25 @@ private[hive] trait HiveClient {
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
   /** Alter a table whose name matches the one specified in `table`, assuming it exists. */
-  final def alterTable(table: CatalogTable): Unit = alterTable(table.identifier.table, table)
+  final def alterTable(table: CatalogTable): Unit = {
+    alterTable(table.database, table.identifier.table, table)
+  }
 
-  /** Updates the given table with new metadata, optionally renaming the table. */
-  def alterTable(tableName: String, table: CatalogTable): Unit
+  /**
+   * Updates the given table with new metadata, optionally renaming the table or
+   * moving across different database.
+   */
+  def alterTable(dbName: String, tableName: String, table: CatalogTable): Unit
+
+  /**
+   * Updates the given table with a new data schema and table properties, and keep everything else
+   * unchanged.
+   *
+   * TODO(cloud-fan): it's a little hacky to introduce the schema table properties here in
+   * `HiveClient`, but we don't have a cleaner solution now.
+   */
+  def alterTableDataSchema(
+    dbName: String, tableName: String, newDataSchema: StructType, schemaProps: Map[String, String])
 
   /** Creates a new database with the given name. */
   def createDatabase(database: CatalogDatabase, ignoreIfExists: Boolean): Unit
@@ -208,7 +230,6 @@ private[hive] trait HiveClient {
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit
 
@@ -217,7 +238,6 @@ private[hive] trait HiveClient {
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit
 
   /** Loads new dynamic partitions into an existing table. */
@@ -227,8 +247,7 @@ private[hive] trait HiveClient {
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit
+      numDP: Int): Unit
 
   /** Create a function in an existing database. */
   def createFunction(db: String, func: CatalogFunction): Unit

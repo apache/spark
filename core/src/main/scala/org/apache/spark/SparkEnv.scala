@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 import java.net.Socket
+import java.util.Locale
 
 import scala.collection.mutable
 import scala.util.Properties
@@ -176,7 +177,7 @@ object SparkEnv extends Logging {
       SparkContext.DRIVER_IDENTIFIER,
       bindAddress,
       advertiseAddress,
-      port,
+      Option(port),
       isLocal,
       numCores,
       ioEncryptionKey,
@@ -193,7 +194,6 @@ object SparkEnv extends Logging {
       conf: SparkConf,
       executorId: String,
       hostname: String,
-      port: Int,
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       isLocal: Boolean): SparkEnv = {
@@ -202,7 +202,7 @@ object SparkEnv extends Logging {
       executorId,
       hostname,
       hostname,
-      port,
+      None,
       isLocal,
       numCores,
       ioEncryptionKey
@@ -219,7 +219,7 @@ object SparkEnv extends Logging {
       executorId: String,
       bindAddress: String,
       advertiseAddress: String,
-      port: Int,
+      port: Option[Int],
       isLocal: Boolean,
       numUsableCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
@@ -234,6 +234,10 @@ object SparkEnv extends Logging {
     }
 
     val securityManager = new SecurityManager(conf, ioEncryptionKey)
+    if (isDriver) {
+      securityManager.initializeAuth()
+    }
+
     ioEncryptionKey.foreach { _ =>
       if (!securityManager.isEncryptionEnabled()) {
         logWarning("I/O encryption enabled without RPC encryption: keys will be visible on the " +
@@ -242,17 +246,12 @@ object SparkEnv extends Logging {
     }
 
     val systemName = if (isDriver) driverSystemName else executorSystemName
-    val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port, conf,
-      securityManager, clientMode = !isDriver)
+    val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port.getOrElse(-1), conf,
+      securityManager, numUsableCores, !isDriver)
 
     // Figure out which port RpcEnv actually bound to in case the original port is 0 or occupied.
-    // In the non-driver case, the RPC env's address may be null since it may not be listening
-    // for incoming connections.
     if (isDriver) {
       conf.set("spark.driver.port", rpcEnv.address.port.toString)
-    } else if (rpcEnv.address != null) {
-      conf.set("spark.executor.port", rpcEnv.address.port.toString)
-      logInfo(s"Setting spark.executor.port to: ${rpcEnv.address.port.toString}")
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
@@ -319,7 +318,8 @@ object SparkEnv extends Logging {
       "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
       "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
     val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
-    val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
+    val shuffleMgrClass =
+      shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
     val useLegacyMemoryManager = conf.getBoolean("spark.memory.useLegacyMode", false)
@@ -424,7 +424,7 @@ object SparkEnv extends Logging {
       if (!conf.contains("spark.scheduler.mode")) {
         Seq(("spark.scheduler.mode", schedulingMode))
       } else {
-        Seq[(String, String)]()
+        Seq.empty[(String, String)]
       }
     val sparkProperties = (conf.getAll ++ schedulerMode).sorted
 

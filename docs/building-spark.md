@@ -49,7 +49,7 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phadoop-2.7 -Phive -Phive-thriftserver -Pmesos -Pyarn
+    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phadoop-2.7 -Phive -Phive-thriftserver -Pmesos -Pyarn -Pkubernetes
 
 This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
 
@@ -91,17 +91,29 @@ like ZooKeeper and Hadoop itself.
 
     ./build/mvn -Pmesos -DskipTests clean package
 
-## Building for Scala 2.10
-To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:
+## Building with Kubernetes support
 
-    ./dev/change-scala-version.sh 2.10
-    ./build/mvn -Pyarn -Dscala-2.10 -DskipTests clean package
+    ./build/mvn -Pkubernetes -DskipTests clean package
+    
+## Building with Kafka 0.8 support
 
-Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.2.0.
+Kafka 0.8 support must be explicitly enabled with the `kafka-0-8` profile.
+Note: Kafka 0.8 support is deprecated as of Spark 2.3.0.
+
+    ./build/mvn -Pkafka-0-8 -DskipTests clean package
+
+Kafka 0.10 support is still automatically built.
+
+## Building with Flume support
+
+Apache Flume support must be explicitly enabled with the `flume` profile.
+Note: Flume support is deprecated as of Spark 2.3.0.
+
+    ./build/mvn -Pflume -DskipTests clean package
 
 ## Building submodules individually
 
-It's possible to build Spark sub-modules using the `mvn -pl` option.
+It's possible to build Spark submodules using the `mvn -pl` option.
 
 For instance, you can build the Spark Streaming module using:
 
@@ -119,7 +131,7 @@ should run continuous compilation (i.e. wait for changes). However, this has not
 extensively. A couple of gotchas to note:
 
 * it only scans the paths `src/main` and `src/test` (see
-[docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
+[docs](http://davidb.github.io/scala-maven-plugin/example_cc.html)), so it will only work
 from within certain submodules that have that structure.
 
 * you'll typically need to run `mvn install` from the project root for compilation within
@@ -131,20 +143,6 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
     $ ./build/mvn install
     $ cd core
     $ ../build/mvn scala:cc
-
-## Speeding up Compilation with Zinc
-
-[Zinc](https://github.com/typesafehub/zinc) is a long-running server version of SBT's incremental
-compiler. When run locally as a background process, it speeds up builds of Scala-based projects
-like Spark. Developers who regularly recompile Spark with Maven will be the most interested in
-Zinc. The project site gives instructions for building and running `zinc`; OS X users can
-install it using `brew install zinc`.
-
-If using the `build/mvn` package `zinc` will automatically be downloaded and leveraged for all
-builds. This process will auto-start after the first time `build/mvn` is called and bind to port
-3030 unless the `ZINC_PORT` environment variable is set. The `zinc` process can subsequently be
-shut down at any time by running `build/zinc-<version>/bin/zinc -shutdown` and will automatically
-restart whenever `build/mvn` is called.
 
 ## Building with SBT
 
@@ -159,10 +157,16 @@ can be set to control the SBT build. For example:
 
 To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
 in interactive mode by running `build/sbt`, and then run all build commands at the command
-prompt. For more recommendations on reducing build time, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
+prompt.
 
-## Encrypted Filesystems
+## Speeding up Compilation
+
+Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
+(for developers who build with Maven) or by avoiding re-compilation of the assembly JAR (for
+developers who build with SBT).  For more information about how to do this, refer to the
+[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#reducing-build-times).
+
+## Encrypted Filesystems
 
 When building on an encrypted filesystem (if your home directory is encrypted, for example), then the Spark build might fail with a "Filename too long" error. As a workaround, add the following in the configuration args of the `scala-maven-plugin` in the project `pom.xml`:
 
@@ -190,29 +194,16 @@ The following is an example of a command to run the tests:
 
     ./build/mvn test
 
-The ScalaTest plugin also supports running only a specific Scala test suite as follows:
-
-    ./build/mvn -P... -Dtest=none -DwildcardSuites=org.apache.spark.repl.ReplSuite test
-    ./build/mvn -P... -Dtest=none -DwildcardSuites=org.apache.spark.repl.* test
-
-or a Java test:
-
-    ./build/mvn test -P... -DwildcardSuites=none -Dtest=org.apache.spark.streaming.JavaAPISuite
-
 ## Testing with SBT
 
 The following is an example of a command to run the tests:
 
     ./build/sbt test
 
-To run only a specific test suite as follows:
+## Running Individual Tests
 
-    ./build/sbt "test-only org.apache.spark.repl.ReplSuite"
-    ./build/sbt "test-only org.apache.spark.repl.*"
-
-To run test suites of a specific sub project as follows:
-
-    ./build/sbt core/test
+For information about how to run individual tests, refer to the
+[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#running-individual-tests).
 
 ## PySpark pip installable
 
@@ -239,9 +230,11 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 ## Running R Tests
 
-To run the SparkR tests you will need to install the R package `testthat`
-(run `install.packages(testthat)` from R shell).  You can run just the SparkR tests using
-the command:
+To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
+
+    R -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
+
+You can run just the SparkR tests using the command:
 
     ./R/run-tests.sh
 
@@ -253,7 +246,7 @@ Once installed, the `docker` service needs to be started, if not already running
 On Linux, this can be done by `sudo service docker start`.
 
     ./build/mvn install -DskipTests
-    ./build/mvn -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
+    ./build/mvn test -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
 
 or
 

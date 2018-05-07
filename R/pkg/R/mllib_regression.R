@@ -21,21 +21,18 @@
 #' S4 class that represents a AFTSurvivalRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
-#' @export
 #' @note AFTSurvivalRegressionModel since 2.0.0
 setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a generalized linear model
 #'
 #' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
-#' @export
 #' @note GeneralizedLinearRegressionModel since 2.0.0
 setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents an IsotonicRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala IsotonicRegressionModel
-#' @export
 #' @note IsotonicRegressionModel since 2.1.0
 setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
@@ -53,29 +50,49 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #'               Currently these families are supported: \code{binomial}, \code{gaussian},
-#'               \code{Gamma}, and \code{poisson}.
+#'               \code{Gamma}, \code{poisson} and \code{tweedie}.
+#'
+#'               Note that there are two ways to specify the tweedie family.
+#'               \itemize{
+#'                \item Set \code{family = "tweedie"} and specify the var.power and link.power;
+#'                \item When package \code{statmod} is loaded, the tweedie family is specified
+#'                using the family definition therein, i.e., \code{tweedie(var.power, link.power)}.
+#'               }
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param regParam regularization parameter for L2 regularization.
+#' @param var.power the power in the variance function of the Tweedie distribution which provides
+#'                      the relationship between the variance and mean of the distribution. Only
+#'                      applicable to the Tweedie family.
+#' @param link.power the index in the power link function. Only applicable to the Tweedie family.
+#' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
+#'                               decide the base level of a string feature as the last category
+#'                               after ordering is dropped when encoding strings. Supported options
+#'                               are "frequencyDesc", "frequencyAsc", "alphabetDesc", and
+#'                               "alphabetAsc". The default value is "frequencyDesc". When the
+#'                               ordering is set to "alphabetDesc", this drops the same category
+#'                               as R when encoding strings.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance
+#'                  offsets as 0.0. The feature specified as offset has a constant coefficient of
+#'                  1.0.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model.
 #' @rdname spark.glm
 #' @name spark.glm
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
-#' df <- createDataFrame(iris)
-#' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family = "gaussian")
+#' t <- as.data.frame(Titanic, stringsAsFactors = FALSE)
+#' df <- createDataFrame(t)
+#' model <- spark.glm(df, Freq ~ Sex + Age, family = "gaussian")
 #' summary(model)
 #'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
-#' head(select(fitted, "Sepal_Length", "prediction"))
+#' head(select(fitted, "Freq", "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -84,14 +101,43 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' # can also read back the saved model and print
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
+#'
+#' # note that the default string encoding is different from R's glm
+#' model2 <- glm(Freq ~ Sex + Age, family = "gaussian", data = t)
+#' summary(model2)
+#' # use stringIndexerOrderType = "alphabetDesc" to force string encoding
+#' # to be consistent with R
+#' model3 <- spark.glm(df, Freq ~ Sex + Age, family = "gaussian",
+#'                    stringIndexerOrderType = "alphabetDesc")
+#' summary(model3)
+#'
+#' # fit tweedie model
+#' model <- spark.glm(df, Freq ~ Sex + Age, family = "tweedie",
+#'                    var.power = 1.2, link.power = 0)
+#' summary(model)
+#'
+#' # use the tweedie family from statmod
+#' library(statmod)
+#' model <- spark.glm(df, Freq ~ Sex + Age, family = tweedie(1.2, 0))
+#' summary(model)
 #' }
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
-                   regParam = 0.0) {
+                   regParam = 0.0, var.power = 0.0, link.power = 1.0 - var.power,
+                   stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
+                                              "alphabetDesc", "alphabetAsc"),
+                   offsetCol = NULL) {
+
+            stringIndexerOrderType <- match.arg(stringIndexerOrderType)
             if (is.character(family)) {
-              family <- get(family, mode = "function", envir = parent.frame())
+              # Handle when family = "tweedie"
+              if (tolower(family) == "tweedie") {
+                family <- list(family = "tweedie", link = NULL)
+              } else {
+                family <- get(family, mode = "function", envir = parent.frame())
+              }
             }
             if (is.function(family)) {
               family <- family()
@@ -100,16 +146,33 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               print(family)
               stop("'family' not recognized")
             }
+            # Handle when family = statmod::tweedie()
+            if (tolower(family$family) == "tweedie" && !is.null(family$variance)) {
+              var.power <- log(family$variance(exp(1)))
+              link.power <- log(family$linkfun(exp(1)))
+              family <- list(family = "tweedie", link = NULL)
+            }
 
             formula <- paste(deparse(formula), collapse = "")
-            if (is.null(weightCol)) {
-              weightCol <- ""
+            if (!is.null(weightCol) && weightCol == "") {
+              weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
+            }
+
+            if (!is.null(offsetCol)) {
+              offsetCol <- as.character(offsetCol)
+              if (nchar(offsetCol) == 0) {
+                offsetCol <- NULL
+              }
             }
 
             # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, tolower(family$family), family$link,
-                                tol, as.integer(maxIter), as.character(weightCol), regParam)
+                                tol, as.integer(maxIter), weightCol, regParam,
+                                as.double(var.power), as.double(link.power),
+                                stringIndexerOrderType, offsetCol)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -124,40 +187,58 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #'               Currently these families are supported: \code{binomial}, \code{gaussian},
-#'               \code{Gamma}, and \code{poisson}.
+#'               \code{poisson}, \code{Gamma}, and \code{tweedie}.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
 #' @param maxit integer giving the maximal number of IRLS iterations.
+#' @param var.power the index of the power variance function in the Tweedie family.
+#' @param link.power the index of the power link function in the Tweedie family.
+#' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
+#'                               decide the base level of a string feature as the last category
+#'                               after ordering is dropped when encoding strings. Supported options
+#'                               are "frequencyDesc", "frequencyAsc", "alphabetDesc", and
+#'                               "alphabetAsc". The default value is "frequencyDesc". When the
+#'                               ordering is set to "alphabetDesc", this drops the same category
+#'                               as R when encoding strings.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance
+#'                  offsets as 0.0. The feature specified as offset has a constant coefficient of
+#'                  1.0.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
-#' @export
+#' @aliases glm
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
-#' df <- createDataFrame(iris)
-#' model <- glm(Sepal_Length ~ Sepal_Width, df, family = "gaussian")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- glm(Freq ~ Sex + Age, df, family = "gaussian")
 #' summary(model)
 #' }
 #' @note glm since 1.5.0
 #' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
-          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL) {
-            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol)
+          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL,
+                   var.power = 0.0, link.power = 1.0 - var.power,
+                   stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
+                                              "alphabetDesc", "alphabetAsc"),
+                   offsetCol = NULL) {
+            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol,
+                      var.power = var.power, link.power = link.power,
+                      stringIndexerOrderType = stringIndexerOrderType,
+                      offsetCol = offsetCol)
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
 
 #' @param object a fitted generalized linear model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list of components includes at least the \code{coefficients} (coefficients matrix, which includes
-#'         coefficients, standard error of coefficients, t value and p value),
+#'         The list of components includes at least the \code{coefficients} (coefficients matrix,
+#'         which includes coefficients, standard error of coefficients, t value and p value),
 #'         \code{null.deviance} (null/residual degrees of freedom), \code{aic} (AIC)
-#'         and \code{iter} (number of iterations IRLS takes). If there are collinear columns in the data,
-#'         the coefficients matrix only provides coefficients.
+#'         and \code{iter} (number of iterations IRLS takes). If there are collinear columns in
+#'         the data, the coefficients matrix only provides coefficients.
 #' @rdname spark.glm
-#' @export
 #' @note summary(GeneralizedLinearRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           function(object) {
@@ -170,9 +251,10 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             deviance <- callJMethod(jobj, "rDeviance")
             df.null <- callJMethod(jobj, "rResidualDegreeOfFreedomNull")
             df.residual <- callJMethod(jobj, "rResidualDegreeOfFreedom")
-            aic <- callJMethod(jobj, "rAic")
             iter <- callJMethod(jobj, "rNumIterations")
             family <- callJMethod(jobj, "rFamily")
+            aic <- callJMethod(jobj, "rAic")
+            if (family == "tweedie" && aic == 0) aic <- NA
             deviance.resid <- if (is.loaded) {
               NULL
             } else {
@@ -202,7 +284,6 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 
 #' @rdname spark.glm
 #' @param x summary object of fitted generalized linear model returned by \code{summary} function.
-#' @export
 #' @note print.summary.GeneralizedLinearRegressionModel since 2.0.0
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   if (x$is.loaded) {
@@ -236,7 +317,6 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 #' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
 #'         "prediction".
 #' @rdname spark.glm
-#' @export
 #' @note predict(GeneralizedLinearRegressionModel) since 1.5.0
 setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, newData) {
@@ -250,7 +330,6 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.glm
-#' @export
 #' @note write.ml(GeneralizedLinearRegressionModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -275,7 +354,6 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #' @rdname spark.isoreg
 #' @aliases spark.isoreg,SparkDataFrame,formula-method
 #' @name spark.isoreg
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -305,13 +383,15 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
           function(data, formula, isotonic = TRUE, featureIndex = 0, weightCol = NULL) {
             formula <- paste(deparse(formula), collapse = "")
 
-            if (is.null(weightCol)) {
-              weightCol <- ""
+            if (!is.null(weightCol) && weightCol == "") {
+              weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
                                 data@sdf, formula, as.logical(isotonic), as.integer(featureIndex),
-                                as.character(weightCol))
+                                weightCol)
             new("IsotonicRegressionModel", jobj = jobj)
           })
 
@@ -322,7 +402,6 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 #'         and \code{predictions} (predictions associated with the boundaries at the same index).
 #' @rdname spark.isoreg
 #' @aliases summary,IsotonicRegressionModel-method
-#' @export
 #' @note summary(IsotonicRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "IsotonicRegressionModel"),
           function(object) {
@@ -339,7 +418,6 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted values.
 #' @rdname spark.isoreg
 #' @aliases predict,IsotonicRegressionModel,SparkDataFrame-method
-#' @export
 #' @note predict(IsotonicRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "IsotonicRegressionModel"),
           function(object, newData) {
@@ -354,7 +432,6 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 #'
 #' @rdname spark.isoreg
 #' @aliases write.ml,IsotonicRegressionModel,character-method
-#' @export
 #' @note write.ml(IsotonicRegression, character) since 2.1.0
 setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -372,10 +449,21 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', ':', '+', and '-'.
 #'                Note that operator '.' is not supported currently.
+#' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the
+#'                         dimensions of features or the number of partitions are large, this
+#'                         param could be adjusted to a larger size. This is an expert parameter.
+#'                         Default value should be good for most cases.
+#' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
+#'                               decide the base level of a string feature as the last category
+#'                               after ordering is dropped when encoding strings. Supported options
+#'                               are "frequencyDesc", "frequencyAsc", "alphabetDesc", and
+#'                               "alphabetAsc". The default value is "frequencyDesc". When the
+#'                               ordering is set to "alphabetDesc", this drops the same category
+#'                               as R when encoding strings.
+#' @param ... additional arguments passed to the method.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
 #' @seealso survival: \url{https://cran.r-project.org/package=survival}
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(ovarian)
@@ -396,10 +484,14 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' }
 #' @note spark.survreg since 2.0.0
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula) {
+          function(data, formula, aggregationDepth = 2,
+                   stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
+                                              "alphabetDesc", "alphabetAsc")) {
+            stringIndexerOrderType <- match.arg(stringIndexerOrderType)
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
-                                "fit", formula, data@sdf)
+                                "fit", formula, data@sdf, as.integer(aggregationDepth),
+                                stringIndexerOrderType)
             new("AFTSurvivalRegressionModel", jobj = jobj)
           })
 
@@ -411,7 +503,6 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #'         The list includes the model's \code{coefficients} (features, coefficients,
 #'         intercept and log(scale)).
 #' @rdname spark.survreg
-#' @export
 #' @note summary(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
           function(object) {
@@ -431,7 +522,6 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted values
 #'         on the original scale of the data (mean predicted value at scale = 1.0).
 #' @rdname spark.survreg
-#' @export
 #' @note predict(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
           function(object, newData) {
@@ -444,7 +534,6 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @param overwrite overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #' @rdname spark.survreg
-#' @export
 #' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
 #' @seealso \link{write.ml}
 setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),

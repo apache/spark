@@ -19,15 +19,16 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -45,7 +46,7 @@ case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
 class CacheManager extends Logging {
 
   @transient
-  private val cachedData = new scala.collection.mutable.ArrayBuffer[CachedData]
+  private val cachedData = new java.util.LinkedList[CachedData]
 
   @transient
   private val cacheLock = new ReentrantReadWriteLock
@@ -70,7 +71,7 @@ class CacheManager extends Logging {
 
   /** Clears all cached tables. */
   def clearCache(): Unit = writeLock {
-    cachedData.foreach(_.cachedRepresentation.cachedColumnBuffers.unpersist())
+    cachedData.asScala.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
     cachedData.clear()
   }
 
@@ -88,51 +89,91 @@ class CacheManager extends Logging {
       query: Dataset[_],
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
-    val planToCache = query.queryExecution.analyzed
+    val planToCache = query.logicalPlan
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sparkSession = query.sparkSession
-      cachedData +=
-        CachedData(
-          planToCache,
-          InMemoryRelation(
-            sparkSession.sessionState.conf.useCompression,
-            sparkSession.sessionState.conf.columnBatchSize,
-            storageLevel,
-            sparkSession.sessionState.executePlan(planToCache).executedPlan,
-            tableName))
+      val inMemoryRelation = InMemoryRelation(
+        sparkSession.sessionState.conf.useCompression,
+        sparkSession.sessionState.conf.columnBatchSize, storageLevel,
+        sparkSession.sessionState.executePlan(planToCache).executedPlan,
+        tableName,
+        planToCache)
+      cachedData.add(CachedData(planToCache, inMemoryRelation))
     }
   }
 
   /**
-   * Tries to remove the data for the given [[Dataset]] from the cache.
-   * No operation, if it's already uncached.
+   * Un-cache all the cache entries that refer to the given plan.
    */
-  def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Boolean = writeLock {
-    val planToCache = query.queryExecution.analyzed
-    val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
-    val found = dataIndex >= 0
-    if (found) {
-      cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
-      cachedData.remove(dataIndex)
+  def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Unit = writeLock {
+    uncacheQuery(query.sparkSession, query.logicalPlan, blocking)
+  }
+
+  /**
+   * Un-cache all the cache entries that refer to the given plan.
+   */
+  def uncacheQuery(spark: SparkSession, plan: LogicalPlan, blocking: Boolean): Unit = writeLock {
+    val it = cachedData.iterator()
+    while (it.hasNext) {
+      val cd = it.next()
+      if (cd.plan.find(_.sameResult(plan)).isDefined) {
+        cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
+        it.remove()
+      }
     }
-    found
+  }
+
+  /**
+   * Tries to re-cache all the cache entries that refer to the given plan.
+   */
+  def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = writeLock {
+    recacheByCondition(spark, _.find(_.sameResult(plan)).isDefined)
+  }
+
+  private def recacheByCondition(spark: SparkSession, condition: LogicalPlan => Boolean): Unit = {
+    val it = cachedData.iterator()
+    val needToRecache = scala.collection.mutable.ArrayBuffer.empty[CachedData]
+    while (it.hasNext) {
+      val cd = it.next()
+      if (condition(cd.plan)) {
+        cd.cachedRepresentation.cacheBuilder.clearCache()
+        // Remove the cache entry before we create a new one, so that we can have a different
+        // physical plan.
+        it.remove()
+        val plan = spark.sessionState.executePlan(cd.plan).executedPlan
+        val newCache = InMemoryRelation(
+          cacheBuilder = cd.cachedRepresentation
+            .cacheBuilder.copy(cachedPlan = plan)(_cachedColumnBuffers = null),
+          logicalPlan = cd.plan)
+        needToRecache += cd.copy(cachedRepresentation = newCache)
+      }
+    }
+
+    needToRecache.foreach(cachedData.add)
   }
 
   /** Optionally returns cached data for the given [[Dataset]] */
   def lookupCachedData(query: Dataset[_]): Option[CachedData] = readLock {
-    lookupCachedData(query.queryExecution.analyzed)
+    lookupCachedData(query.logicalPlan)
   }
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
   def lookupCachedData(plan: LogicalPlan): Option[CachedData] = readLock {
-    cachedData.find(cd => plan.sameResult(cd.plan))
+    cachedData.asScala.find(cd => plan.sameResult(cd.plan))
   }
 
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
+      // Do not lookup the cache by hint node. Hint node is special, we should ignore it when
+      // canonicalizing plans, so that plans which are same except hint can hit the same cache.
+      // However, we also want to keep the hint info after cache lookup. Here we skip the hint
+      // node, so that the returned caching plan won't replace the hint node and drop the hint info
+      // from the original plan.
+      case hint: ResolvedHint => hint
+
       case currentFragment =>
         lookupCachedData(currentFragment)
           .map(_.cachedRepresentation.withOutput(currentFragment.output))
@@ -145,39 +186,17 @@ class CacheManager extends Logging {
   }
 
   /**
-   * Invalidates the cache of any data that contains `plan`. Note that it is possible that this
-   * function will over invalidate.
-   */
-  def invalidateCache(plan: LogicalPlan): Unit = writeLock {
-    cachedData.foreach {
-      case data if data.plan.collect { case p if p.sameResult(plan) => p }.nonEmpty =>
-        data.cachedRepresentation.recache()
-      case _ =>
-    }
-  }
-
-  /**
-   * Invalidates the cache of any data that contains `resourcePath` in one or more
+   * Tries to re-cache all the cache entries that contain `resourcePath` in one or more
    * `HadoopFsRelation` node(s) as part of its logical plan.
    */
-  def invalidateCachedPath(
-      sparkSession: SparkSession, resourcePath: String): Unit = writeLock {
+  def recacheByPath(spark: SparkSession, resourcePath: String): Unit = writeLock {
     val (fs, qualifiedPath) = {
       val path = new Path(resourcePath)
-      val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-      (fs, path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+      val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
+      (fs, fs.makeQualified(path))
     }
 
-    cachedData.foreach {
-      case data if data.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined =>
-        val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
-        if (dataIndex >= 0) {
-          data.cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
-          cachedData.remove(dataIndex)
-        }
-        sparkSession.sharedState.cacheManager.cacheQuery(Dataset.ofRows(sparkSession, data.plan))
-      case _ => // Do Nothing
-    }
+    recacheByCondition(spark, _.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined)
   }
 
   /**

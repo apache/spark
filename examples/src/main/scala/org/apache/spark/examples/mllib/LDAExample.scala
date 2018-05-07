@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import java.util.Locale
+
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
@@ -131,7 +133,7 @@ object LDAExample {
     // Run LDA.
     val lda = new LDA()
 
-    val optimizer = params.algorithm.toLowerCase match {
+    val optimizer = params.algorithm.toLowerCase(Locale.ROOT) match {
       case "em" => new EMLDAOptimizer
       // add (1.0 / actualCorpusSize) to MiniBatchFraction be more robust on tiny datasets.
       case "online" => new OnlineLDAOptimizer().setMiniBatchFraction(0.05 + 1.0 / actualCorpusSize)

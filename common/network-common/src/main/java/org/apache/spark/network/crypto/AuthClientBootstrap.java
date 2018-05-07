@@ -50,7 +50,6 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
 
   private final TransportConf conf;
   private final String appId;
-  private final String authUser;
   private final SecretKeyHolder secretKeyHolder;
 
   public AuthClientBootstrap(
@@ -65,7 +64,6 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
     // required by the protocol. At some point, though, it would be better for the actual app ID
     // to be provided here.
     this.appId = appId;
-    this.authUser = secretKeyHolder.getSaslUser(appId);
     this.secretKeyHolder = secretKeyHolder;
   }
 
@@ -97,8 +95,8 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
   private void doSparkAuth(TransportClient client, Channel channel)
     throws GeneralSecurityException, IOException {
 
-    String secretKey = secretKeyHolder.getSecretKey(authUser);
-    try (AuthEngine engine = new AuthEngine(authUser, secretKey, conf)) {
+    String secretKey = secretKeyHolder.getSecretKey(appId);
+    try (AuthEngine engine = new AuthEngine(appId, secretKey, conf)) {
       ClientChallenge challenge = engine.challenge();
       ByteBuf challengeData = Unpooled.buffer(challenge.encodedLength());
       challenge.encode(challengeData);
