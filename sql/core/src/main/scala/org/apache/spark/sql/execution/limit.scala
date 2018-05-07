@@ -127,36 +127,13 @@ case class TakeOrderedAndProjectExec(
     projectList: Seq[NamedExpression],
     child: SparkPlan) extends UnaryExecNode {
 
-  val sortInMemThreshold = conf.sortInMemForLimitThreshold
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    if (limit < sortInMemThreshold) {
-      super.requiredChildDistribution
-    } else {
-      Seq(AllTuples)
-    }
-  }
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    if (limit < sortInMemThreshold) {
-      super.requiredChildOrdering
-    } else {
-      Seq(sortOrder)
-    }
-  }
-
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
   }
 
   override def executeCollect(): Array[InternalRow] = {
-
-    val data = if (limit < sortInMemThreshold) {
-      val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
-      child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    } else {
-      child.execute().map(_.copy()).take(limit)
-    }
+    val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
+    val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
     if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
       data.map(r => proj(r).copy())
@@ -168,47 +145,22 @@ case class TakeOrderedAndProjectExec(
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
   protected override def doExecute(): RDD[InternalRow] = {
-    if (limit < sortInMemThreshold) {
-      val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
-      val localTopK: RDD[InternalRow] = {
-        child.execute().map(_.copy()).mapPartitions { iter =>
-          org.apache.spark.util.collection.Utils.takeOrdered(iter, limit)(ord)
-        }
+    val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
+    val localTopK: RDD[InternalRow] = {
+      child.execute().map(_.copy()).mapPartitions { iter =>
+        org.apache.spark.util.collection.Utils.takeOrdered(iter, limit)(ord)
       }
-      val shuffled = new ShuffledRowRDD(
-        ShuffleExchangeExec.prepareShuffleDependency(
-          localTopK, child.output, SinglePartition, serializer))
-      shuffled.mapPartitions { iter =>
-        val topK =
-          org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
-        if (projectList != child.output) {
-          val proj = UnsafeProjection.create(projectList, child.output)
-          topK.map(r => proj(r))
-        } else {
-          topK
-        }
-      }
-    } else {
-      child.execute().mapPartitions { iter =>
-        new Iterator[InternalRow] {
-          var index = 0L
-          override def hasNext: Boolean = {
-            if (index < limit && iter.hasNext) {
-              true
-            } else {
-              false
-            }
-          }
-          override def next(): InternalRow = {
-            val row = iter.next()
-            if (projectList != child.output) {
-              val proj = UnsafeProjection.create(projectList, child.output)
-              proj(row)
-            } else {
-              row
-            }
-          }
-        }
+    }
+    val shuffled = new ShuffledRowRDD(
+      ShuffleExchangeExec.prepareShuffleDependency(
+        localTopK, child.output, SinglePartition, serializer))
+    shuffled.mapPartitions { iter =>
+      val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+      if (projectList != child.output) {
+        val proj = UnsafeProjection.create(projectList, child.output)
+        topK.map(r => proj(r))
+      } else {
+        topK
       }
     }
   }

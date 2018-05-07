@@ -1246,7 +1246,6 @@ object SQLConf {
       .intConf
       .createWithDefault(2000)
 
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
