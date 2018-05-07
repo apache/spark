@@ -3414,6 +3414,13 @@ object functions {
    */
   def map_values(e: Column): Column = withExpr { MapValues(e.expr) }
 
+  /**
+   * Returns a map created from the given array of entries.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def map_from_entries(e: Column): Column = withExpr { MapFromEntries(e.expr) }
+
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number
 

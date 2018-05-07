@@ -405,6 +405,58 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("map_from_entries function") {
+    def dummy_filter(c: Column): Column = c.isNull || c.isNotNull
+
+    def arrayType(keyType: DataType, valueType: DataType) : StructType = {
+      StructType(Seq(StructField(
+        "a",
+        ArrayType(
+          StructType(Seq(
+            StructField("k", keyType, false),
+            StructField("v", valueType, true))),
+          false))))
+    }
+
+    // Test cases with primitive-type keys and values
+    val irdd = spark.sparkContext.parallelize(Seq(
+      Row(Seq(Row(1, 10), Row(2, 20), Row(3, 10))),
+      Row(Seq(Row(1, null), Row(2, null))),
+      Row(Seq.empty),
+      Row(null)))
+    val idf = spark.createDataFrame(irdd, arrayType(IntegerType, IntegerType))
+    val iExpected = Seq(
+      Row(Map(1 -> 10, 2 -> 20, 3 -> 10)),
+      Row(Map(1 -> null, 2 -> null)),
+      Row(Map.empty),
+      Row(null))
+
+    checkAnswer(idf.select(map_from_entries('a)), iExpected)
+    checkAnswer(idf.selectExpr("map_from_entries(a)"), iExpected)
+    checkAnswer(idf.filter(dummy_filter('a)).select(map_from_entries('a)), iExpected)
+
+    // Test cases with non-primitive-type keys and values
+    val srdd = spark.sparkContext.parallelize(Seq(
+      Row(Seq(Row("a", "aa"), Row("b", "bb"), Row("c", "aa"))),
+      Row(Seq(Row("a", null), Row("b", null))),
+      Row(Seq.empty),
+      Row(null)))
+    val sdf = spark.createDataFrame(srdd, arrayType(StringType, StringType))
+    val sExpected = Seq(
+      Row(Map("a" -> "aa", "b" -> "bb", "c" -> "aa")),
+      Row(Map("a" -> null, "b" -> null)),
+      Row(Map.empty),
+      Row(null))
+
+    checkAnswer(sdf.select(map_from_entries('a)), sExpected)
+    checkAnswer(sdf.selectExpr("map_from_entries(a)"), sExpected)
+    checkAnswer(sdf.filter(dummy_filter('a)).select(map_from_entries('a)), sExpected)
+
+    // Error test cases
+    intercept[AnalysisException](idf.selectExpr("map_from_entries(array(struct(null, 1)))"))
+    intercept[AnalysisException](idf.selectExpr("map_from_entries(array(struct(1, 10), null))"))
+  }
+
   test("array contains function") {
     val df = Seq(
       (Seq[Int](1, 2), "x"),

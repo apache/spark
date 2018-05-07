@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -54,6 +55,63 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapValues(m1), Seq())
     checkEvaluation(MapKeys(m2), null)
     checkEvaluation(MapValues(m2), null)
+  }
+
+  test("MapFromEntries") {
+    def arrayType(keyType: DataType, valueType: DataType) : DataType = {
+      ArrayType(StructType(Seq(
+        StructField("a", keyType, false),
+        StructField("b", valueType))),
+      false)
+    }
+    def r(values: Any*): InternalRow = create_row(values: _*)
+
+    // Primitive-type keys and values
+    val aiType = arrayType(IntegerType, IntegerType)
+    val ai0 = Literal.create(Seq(r(1, 10), r(2, 20), r(3, 20)), aiType)
+    val ai1 = Literal.create(Seq(r(1, null), r(2, 20), r(3, null)), aiType)
+    val ai2 = Literal.create(Seq.empty, aiType)
+    val ai3 = Literal.create(null, aiType)
+    val ai4 = Literal.create(Seq(r(1, 10), r(1, 20)), aiType)
+    val ai5 = Literal.create(Seq(r(1, 10), r(null, 20)), aiType)
+    val aby = Literal.create(Seq(r(1.toByte, 10.toByte)), arrayType(ByteType, ByteType))
+    val ash = Literal.create(Seq(r(1.toShort, 10.toShort)), arrayType(ShortType, ShortType))
+    val alo = Literal.create(Seq(r(1L, 10L)), arrayType(LongType, LongType))
+
+    checkEvaluation(MapFromEntries(ai0), Map(1 -> 10, 2 -> 20, 3 -> 20))
+    checkEvaluation(MapFromEntries(ai1), Map(1 -> null, 2 -> 20, 3 -> null))
+    checkEvaluation(MapFromEntries(ai2), Map.empty)
+    checkEvaluation(MapFromEntries(ai3), null)
+    checkExceptionInExpression[RuntimeException](
+      MapFromEntries(ai4),
+      "The first field from a struct (key) can't produce duplicates.")
+    checkExceptionInExpression[RuntimeException](
+      MapFromEntries(ai5),
+      "The first field from a struct (key) can't be null.")
+    checkEvaluation(MapFromEntries(aby), Map(1.toByte -> 10.toByte))
+    checkEvaluation(MapFromEntries(ash), Map(1.toShort -> 10.toShort))
+    checkEvaluation(MapFromEntries(alo), Map(1L -> 10L))
+
+    // Non-primitive-type keys and values
+    val asType = arrayType(StringType, StringType)
+    val as0 = Literal.create(Seq(r("a", "aa"), r("b", "bb"), r("c", "bb")), asType)
+    val as1 = Literal.create(Seq(r("a", null), r("b", "bb"), r("c", null)), asType)
+    val as2 = Literal.create(Seq.empty, asType)
+    val as3 = Literal.create(null, asType)
+    val as4 = Literal.create(Seq(r("a", "aa"), r("a", "bb")), asType)
+    val as5 = Literal.create(Seq(r("a", "aa"), r(null, "bb")), asType)
+
+    checkEvaluation(MapFromEntries(as0), Map("a" -> "aa", "b" -> "bb", "c" -> "bb"))
+    checkEvaluation(MapFromEntries(as1), Map("a" -> null, "b" -> "bb", "c" -> null))
+    checkEvaluation(MapFromEntries(as2), Map.empty)
+    checkEvaluation(MapFromEntries(as3), null)
+    checkExceptionInExpression[RuntimeException](
+      MapFromEntries(as4),
+      "The first field from a struct (key) can't produce duplicates.")
+    checkExceptionInExpression[RuntimeException](
+      MapFromEntries(as5),
+      "The first field from a struct (key) can't be null.")
+
   }
 
   test("Sort Array") {

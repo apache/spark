@@ -2304,6 +2304,26 @@ def map_values(col):
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
+@since(2.4)
+def map_from_entries(col):
+    """
+    Collection function: Returns a map created from the given array of entries.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_from_entries
+    >>> df = spark.sql("SELECT array(struct(1, 'a'), struct(2, 'b')) as data")
+    >>> df.select(map_from_entries("data").alias("map")).show()
+    +----------------+
+    |             map|
+    +----------------+
+    |[1 -> a, 2 -> b]|
+    +----------------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 class PandasUDFType(object):
