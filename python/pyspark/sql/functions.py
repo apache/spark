@@ -1828,7 +1828,7 @@ def create_map_fromarray(col1, col2):
     :param col2: name of column containing a set of values
 
     >>> df = spark.createDataFrame([([2, 5], ["Alice", "Bob"])], ['k', 'v'])
-    >>> df.select(create_map(df.k, df.v).alias("map")).collect()
+    >>> df.select(create_map_fromarray(df.k, df.v).alias("map")).collect()
     [Row(map={2: u'Alice', 5: u'Bob'})]
     """
     sc = SparkContext._active_spark_context
