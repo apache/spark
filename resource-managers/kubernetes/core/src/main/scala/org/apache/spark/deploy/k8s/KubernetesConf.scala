@@ -67,14 +67,13 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     .map(str => str.split(",").toSeq)
     .getOrElse(Seq.empty[String])
 
+  def getRoleConf: T = roleSpecificConf
+
   def pyFiles(): Option[String] = sparkConf
     .get(KUBERNETES_PYSPARK_PY_FILES)
 
   def pySparkMainResource(): Option[String] = sparkConf
     .get(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE)
-
-  def pySparkAppArgs(): Option[String] = sparkConf
-    .get(KUBERNETES_PYSPARK_APP_ARGS)
 
   def pySparkPythonVersion(): String = sparkConf
       .get(PYSPARK_PYTHON_VERSION)
@@ -132,7 +131,6 @@ private[spark] object KubernetesConf {
               maybePyFiles.foreach{maybePyFiles =>
                 additionalFiles.appendAll(maybePyFiles.split(","))}
               sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
-              sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_APP_ARGS, appArgs.mkString(" "))
           }
           sparkConfWithMainAppJar.setIfMissing(MEMORY_OVERHEAD_FACTOR, 0.4)
     }
