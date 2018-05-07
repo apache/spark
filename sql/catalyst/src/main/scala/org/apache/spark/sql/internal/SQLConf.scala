@@ -1238,13 +1238,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val SORT_IN_MEM_FOR_LIMIT_THRESHOLD =
-    buildConf("spark.sql.limit.sortInMemThreshold")
+  val COMBINE_LIMIT_AFTER_SORT_THRESHOLD =
+    buildConf("spark.sql.execution.combineLimitAfterSortThreshold")
       .internal()
       .doc("In sql like 'select x from t order by y limit m', if m is under this threshold, " +
-          "sort in memory, otherwise do a global sort with disk.")
+          "sort in memory, otherwise do a global sort which spills to disk if necessary.")
       .intConf
-      .createWithDefault(2000)
+      .createWithDefault(Int.MaxValue)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1414,7 +1414,7 @@ class SQLConf extends Serializable with Logging {
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
-  def sortInMemForLimitThreshold: Int = getConf(SORT_IN_MEM_FOR_LIMIT_THRESHOLD)
+  def combineLimitAfterSortThreshold: Int = getConf(COMBINE_LIMIT_AFTER_SORT_THRESHOLD)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

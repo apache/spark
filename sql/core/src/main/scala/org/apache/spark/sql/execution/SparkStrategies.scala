@@ -67,10 +67,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
         case Limit(IntegerLiteral(limit), Sort(order, true, child))
-            if limit < conf.sortInMemForLimitThreshold =>
+            if limit < conf.combineLimitAfterSortThreshold =>
           TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-            if limit < conf.sortInMemForLimitThreshold =>
+            if limit < conf.combineLimitAfterSortThreshold =>
           TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), child) =>
           // With whole stage codegen, Spark releases resources only when all the output data of the
@@ -82,10 +82,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case other => planLater(other) :: Nil
       }
       case Limit(IntegerLiteral(limit), Sort(order, true, child))
-          if limit < conf.sortInMemForLimitThreshold =>
+          if limit < conf.combineLimitAfterSortThreshold =>
         TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
       case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-          if limit < conf.sortInMemForLimitThreshold =>
+          if limit < conf.combineLimitAfterSortThreshold =>
         TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
       case _ => Nil
     }
