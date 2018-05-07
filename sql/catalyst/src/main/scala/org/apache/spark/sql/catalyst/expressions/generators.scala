@@ -239,8 +239,10 @@ examples = """
        2  val1  val2
   """)
 case class ReplicateRows(children: Seq[Expression]) extends Generator with CodegenFallback {
+  private lazy val numColumns = children.length
+
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.length < 2) {
+    if (numColumns < 2) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least 2 arguments.")
     } else if (children.head.dataType != LongType) {
       TypeCheckResult.TypeCheckFailure("The number of rows must be a positive long value.")
@@ -256,11 +258,12 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     val numRows = children.head.eval(input).asInstanceOf[Long]
-    val values = children.map(_.eval(input)).toArray
+    val values = children.tail.map(_.eval(input)).toArray
     Range.Long(0, numRows, 1).map { i =>
-      val fields = new Array[Any](children.length)
-      for (col <- 0 until children.length) {
-        fields.update(col, values(col))
+      val fields = new Array[Any](numColumns)
+      fields.update(0, numRows)
+      for (col <- 1 until numColumns) {
+        fields.update(col, values(col - 1))
       }
       InternalRow(fields: _*)
     }
