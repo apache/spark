@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructF
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 
-import org.apache.spark.sql.{catalyst, types, AnalysisException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.data.{ArrayData, InternalRow, MapData}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
@@ -54,7 +54,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *  Complex Types =>
  *    Map: `MapData`
  *    List: `ArrayData`
- *    Struct: [[catalyst.data.InternalRow]]
+ *    Struct: [[org.apache.spark.sql.catalyst.data.InternalRow]]
  *    Union: NOT SUPPORTED YET
  *  The Complex types plays as a container, which can hold arbitrary data types.
  *
@@ -157,7 +157,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Map Object Inspector:
  *     StandardConstantMapObjectInspector
  * List Object Inspector:
- *     StandardConstantListObjectInspector]]
+ *     StandardConstantListObjectInspector
  * Struct Object Inspector: Hive doesn't provide the built-in constant object inspector for Struct
  * Union Object Inspector: Hive doesn't provide the built-in constant object inspector for Union
  *
@@ -857,8 +857,7 @@ private[hive] trait HiveInspectors {
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
     case s: StructObjectInspector =>
       StructType(s.getAllStructFieldRefs.asScala.map(f =>
-        types.StructField(
-          f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
+        StructField(f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
       ))
     case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
     case m: MapObjectInspector =>
