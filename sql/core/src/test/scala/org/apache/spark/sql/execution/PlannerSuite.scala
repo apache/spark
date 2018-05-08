@@ -194,7 +194,7 @@ class PlannerSuite extends SharedSQLContext {
   test("CollectLimit can appear in the middle of a plan when caching is used") {
     val query = testData.select('key, 'value).limit(2).cache()
     val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
-    assert(planned.child.isInstanceOf[CollectLimitExec])
+    assert(planned.cachedPlan.isInstanceOf[CollectLimitExec])
   }
 
   test("SPARK-23375: Cached sorted data doesn't need to be re-sorted") {

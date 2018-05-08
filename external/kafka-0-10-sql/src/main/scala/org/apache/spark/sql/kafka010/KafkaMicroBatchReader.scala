@@ -169,7 +169,7 @@ private[kafka010] class KafkaMicroBatchReader(
     kafkaOffsetReader.close()
   }
 
-  override def toString(): String = s"Kafka[$kafkaOffsetReader]"
+  override def toString(): String = s"KafkaV2[$kafkaOffsetReader]"
 
   /**
    * Read initial partition offsets from the checkpoint, or decide the offsets and write them to

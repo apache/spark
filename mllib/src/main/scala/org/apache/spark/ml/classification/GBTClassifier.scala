@@ -405,14 +405,14 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
         case (treeMetadata, root) =>
           val tree = new DecisionTreeRegressionModel(treeMetadata.uid,
             root.asInstanceOf[RegressionNode], numFeatures)
-          DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+          treeMetadata.getAndSetParams(tree)
           tree
       }
       require(numTrees == trees.length, s"GBTClassificationModel.load expected $numTrees" +
         s" trees based on metadata but found ${trees.length} trees.")
       val model = new GBTClassificationModel(metadata.uid,
         trees, treeWeights, numFeatures)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
