@@ -49,6 +49,8 @@ import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
+import static org.apache.spark.network.util.JavaUtils.isSymlink;
+
 /**
  * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
  * of Executors. Each Executor must register its own configuration about where it stores its files
@@ -212,6 +214,26 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
+   * Removes all the non-shuffle files in any local directories associated with the finished
+   * executor.
+   */
+  public void executorRemoved(String executorId, String appId) {
+    logger.info("Clean up non-shuffle files associated with the finished executor {}", executorId);
+    AppExecId fullId = new AppExecId(appId, executorId);
+    final ExecutorShuffleInfo executor = executors.get(fullId);
+    if (executor == null) {
+      // Executor not registered, skip clean up of the local directories.
+      logger.info("Executor is not registered (appId={}, execId={})", appId, executorId);
+    } else {
+      logger.info("Cleaning up non-shuffle files in executor {}'s {} local dirs", fullId,
+              executor.localDirs.length);
+
+      // Execute the actual deletion in a different thread, as it may take some time.
+      directoryCleaner.execute(() -> deleteNonShuffleFiles(executor.localDirs));
+    }
+  }
+
+  /**
    * Synchronously deletes each directory one at a time.
    * Should be executed in its own thread, as this may take a long time.
    */
@@ -223,6 +245,65 @@ public class ExternalShuffleBlockResolver {
       } catch (Exception e) {
         logger.error("Failed to delete directory: " + localDir, e);
       }
+    }
+  }
+
+  /**
+   * Synchronously deletes non-shuffle files in each directory recursively.
+   * Should be executed in its own thread, as this may take a long time.
+   */
+  private void deleteNonShuffleFiles(String[] dirs) {
+    FilenameFilter filter = new FilenameFilter() {
+      @Override
+      public boolean accept(File dir, String name) {
+        // Don't delete shuffle data or shuffle index files.
+        return !name.endsWith(".index") && !name.endsWith(".data");
+      }
+    };
+    for (String localDir : dirs) {
+      try {
+        deleteRecursively(new File(localDir), filter);
+        logger.debug("Successfully cleaned up non-shuffle files in directory: {}", localDir);
+      } catch (Exception e) {
+        logger.error("Failed to delete non-shuffle files in directory: " + localDir, e);
+      }
+    }
+  }
+
+  private void deleteRecursively(File file, FilenameFilter filter) throws IOException {
+    if (file == null) { return; }
+
+    if (file.isDirectory() && !isSymlink(file)) {
+      IOException savedIOException = null;
+      for (File child : listFilesSafely(file, filter)) {
+        try {
+          deleteRecursively(child, filter);
+        } catch (IOException e) {
+          // In case of multiple exceptions, only last one will be thrown
+          savedIOException = e;
+        }
+      }
+      if (savedIOException != null) {
+        throw savedIOException;
+      }
+    }
+
+    // Delete file only when it's a normal file or an empty directory.
+    if (file.isFile() || (file.isDirectory() && listFilesSafely(file, null).length == 0)) {
+      boolean deleted = file.delete();
+      // Delete can also fail if the file simply did not exist.
+      if (!deleted && file.exists()) {
+        throw new IOException("Failed to delete: " + file.getAbsolutePath());
+      }
+    }
+  }
+
+  private File[] listFilesSafely(File file, FilenameFilter filter) {
+    if (file.exists()) {
+      File[] files = file.listFiles(filter);
+      return files;
+    } else {
+      return new File[0];
     }
   }
 

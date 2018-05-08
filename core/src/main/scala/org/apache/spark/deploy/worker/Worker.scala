@@ -97,6 +97,10 @@ private[deploy] class Worker(
   private val APP_DATA_RETENTION_SECONDS =
     conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
+  // Whether or not cleanup the non-shuffle files on executor finishes.
+  private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
+    conf.getBoolean("spark.worker.cleanup.nonShuffleFiles.enabled", true)
+
   private val testing: Boolean = sys.props.contains("spark.testing")
   private var master: Option[RpcEndpointRef] = None
 
@@ -732,6 +736,9 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
+          if (CLEANUP_NON_SHUFFLE_FILES_ENABLED) {
+            shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
+          }
         case None =>
           logInfo("Unknown Executor " + fullId + " finished with state " + state +
             message.map(" message " + _).getOrElse("") +

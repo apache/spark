@@ -169,7 +169,7 @@ public class JavaUtils {
     }
   }
 
-  private static boolean isSymlink(File file) throws IOException {
+  public static boolean isSymlink(File file) throws IOException {
     Preconditions.checkNotNull(file);
     File fileInCanonicalDir = null;
     if (file.getParent() == null) {
