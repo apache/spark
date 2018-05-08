@@ -62,24 +62,31 @@ def _get_argspec(f):
     return argspec
 
 
-def majorMinorVersion(version):
+class VersionUtils(object):
     """
-    Get major and minor version numbers for given Spark version string.
-
-    >>> version = "2.4.0"
-    >>> majorMinorVersion(version)
-    (2, 4)
-
-    >>> version = "abc"
-    >>> majorMinorVersion(version) is None
-    True
-
+    Provides utility method to determine Spark versions with given input string.
     """
-    m = re.search('^(\d+)\.(\d+)(\..*)?$', version)
-    if m is None:
-        return None
-    else:
-        return (int(m.group(1)), int(m.group(2)))
+    @staticmethod
+    def majorMinorVersion(sparkVersion):
+        """
+        Given a Spark version string, return the (major version number, minor version number).
+        E.g., for 2.0.1-SNAPSHOT, return (2, 0).
+
+        >>> sparkVersion = "2.4.0"
+        >>> VersionUtils.majorMinorVersion(sparkVersion)
+        (2, 4)
+        >>> sparkVersion = "2.3.0-SNAPSHOT"
+        >>> VersionUtils.majorMinorVersion(sparkVersion)
+        (2, 3)
+
+        """
+        m = re.search('^(\d+)\.(\d+)(\..*)?$', sparkVersion)
+        if m is not None:
+            return (int(m.group(1)), int(m.group(2)))
+        else:
+            raise ValueError("Spark tried to parse '%s' as a Spark" % sparkVersion +
+                             " version string, but it could not find the major and minor" +
+                             " version numbers.")
 
 
 if __name__ == "__main__":
