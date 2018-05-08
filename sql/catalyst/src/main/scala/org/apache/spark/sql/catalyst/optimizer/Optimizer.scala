@@ -1122,12 +1122,14 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _)
         if isCartesianProduct(j) =>
           throw new AnalysisException(
-            s"""Detected cartesian product for ${j.joinType.sql} join between logical plans
+            s"""Detected implicit cartesian product for ${j.joinType.sql} join between logical plans
                |${left.treeString(false).trim}
                |and
                |${right.treeString(false).trim}
                |Join condition is missing or trivial.
-               |Use the CROSS JOIN syntax to allow cartesian products between these relations."""
+               |Either: use the CROSS JOIN syntax to allow cartesian products between these
+               |relations, or: enable implicit cartesian products by setting the configuration
+               |variable spark.sql.crossJoin.enabled=true"""
             .stripMargin)
     }
 }
