@@ -211,9 +211,23 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
-                    self._python_includes.append(filename)
-                    sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+                try:
+                    filepath = os.path.join(SparkFiles.getRootDirectory(), filename)
+                    if not os.path.exists(filepath):
+                        # In case of YARN with shell mode, 'spark.submit.pyFiles' files are
+                        # not added via SparkContext.addFile. Here we check if the file exists,
+                        # try to copy and then add it to the path. See SPARK-21945.
+                        shutil.copyfile(path, filepath)
+                    if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
+                        self._python_includes.append(filename)
+                        sys.path.insert(1, filepath)
+                except Exception as e:
+                    from pyspark import util
+                    warnings.warn(
+                        "Python file [%s] specified in 'spark.submit.pyFiles' failed "
+                        "to be added in the Python path, excluding this in the Python path."
+                        "\n  :%s" % (path, util._exception_message(e)),
+                        RuntimeWarning)
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
