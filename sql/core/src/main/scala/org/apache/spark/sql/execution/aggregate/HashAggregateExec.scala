@@ -194,7 +194,10 @@ case class HashAggregateExec(
          | $isNull = ${ev.isNull};
          | $value = ${ev.value};
        """.stripMargin
-      ExprCode(ev.code + initVars, isNull, value)
+      ExprCode(
+        ev.code + initVars,
+        JavaCode.isNullGlobal(isNull),
+        JavaCode.global(value, e.dataType))
     }
     val initBufVar = evaluateVariables(bufVars)
 
@@ -752,7 +755,10 @@ case class HashAggregateExec(
     }
 
     // generate hash code for key
-    val hashExpr = Murmur3Hash(groupingExpressions, 42)
+    // SPARK-24076: HashAggregate uses the same hash algorithm on the same expressions
+    // as ShuffleExchange, it may lead to bad hash conflict when shuffle.partitions=8192*n,
+    // pick a different seed to avoid this conflict
+    val hashExpr = Murmur3Hash(groupingExpressions, 48)
     val hashEval = BindReferences.bindReference(hashExpr, child.output).genCode(ctx)
 
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,

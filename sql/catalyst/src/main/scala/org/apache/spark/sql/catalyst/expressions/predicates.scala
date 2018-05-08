@@ -21,7 +21,7 @@ import scala.collection.immutable.TreeSet
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -36,6 +36,14 @@ object InterpretedPredicate {
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+
+  override def initialize(partitionIndex: Int): Unit = {
+    super.initialize(partitionIndex)
+    expression.foreach {
+      case n: Nondeterministic => n.initialize(partitionIndex)
+      case _ =>
+    }
+  }
 }
 
 /**
@@ -405,7 +413,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
         if (${eval1.value}) {
           ${eval2.code}
           ${ev.value} = ${eval2.value};
-        }""", isNull = "false")
+        }""", isNull = FalseLiteral)
     } else {
       ev.copy(code = s"""
         ${eval1.code}
@@ -461,7 +469,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {
-      ev.isNull = "false"
+      ev.isNull = FalseLiteral
       ev.copy(code = s"""
         ${eval1.code}
         boolean ${ev.value} = true;
@@ -469,7 +477,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
         if (!${eval1.value}) {
           ${eval2.code}
           ${ev.value} = ${eval2.value};
-        }""", isNull = "false")
+        }""", isNull = FalseLiteral)
     } else {
       ev.copy(code = s"""
         ${eval1.code}
@@ -615,7 +623,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)
     ev.copy(code = eval1.code + eval2.code + s"""
         boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
-           (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = "false")
+           (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = FalseLiteral)
   }
 }
 

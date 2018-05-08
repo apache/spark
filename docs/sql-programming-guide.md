@@ -165,7 +165,7 @@ In addition to simple column references and expressions, Datasets also have a ri
 </div>
 
 <div data-lang="python"  markdown="1">
-In Python it's possible to access a DataFrame's columns either by attribute
+In Python, it's possible to access a DataFrame's columns either by attribute
 (`df.age`) or by indexing (`df['age']`). While the former is convenient for
 interactive data exploration, users are highly encouraged to use the
 latter form, which is future proof and won't break with column names that
@@ -278,7 +278,7 @@ the bytes back into an object.
 
 Spark SQL supports two different methods for converting existing RDDs into Datasets. The first
 method uses reflection to infer the schema of an RDD that contains specific types of objects. This
-reflection based approach leads to more concise code and works well when you already know the schema
+reflection-based approach leads to more concise code and works well when you already know the schema
 while writing your Spark application.
 
 The second method for creating Datasets is through a programmatic interface that allows you to
@@ -1243,7 +1243,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>com.mysql.jdbc,<br/>org.postgresql,<br/>com.microsoft.sqlserver,<br/>oracle.jdbc</code></td>
     <td>
       <p>
-        A comma separated list of class prefixes that should be loaded using the classloader that is
+        A comma-separated list of class prefixes that should be loaded using the classloader that is
         shared between Spark SQL and a specific version of Hive. An example of classes that should
         be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
         to be shared are those that interact with classes that are already shared. For example,
@@ -1441,7 +1441,7 @@ SELECT * FROM resultTable
 
 # Performance Tuning
 
-For some workloads it is possible to improve performance by either caching data in memory, or by
+For some workloads, it is possible to improve performance by either caching data in memory, or by
 turning on some experimental options.
 
 ## Caching Data In Memory
@@ -1703,7 +1703,7 @@ Using the above optimizations with Arrow will produce the same results as when A
 enabled. Note that even with Arrow, `toPandas()` results in the collection of all records in the
 DataFrame to the driver program and should be done on a small subset of the data. Not all Spark
 data types are currently supported and an error can be raised if a column has an unsupported type,
-see [Supported SQL Types](#supported-sql-arrow-types). If an error occurs during `createDataFrame()`,
+see [Supported SQL Types](#supported-sql-types). If an error occurs during `createDataFrame()`,
 Spark will fall back to create the DataFrame without Arrow.
 
 ## Pandas UDFs (a.k.a. Vectorized UDFs)
@@ -1804,12 +1804,14 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 ## Upgrading From Spark SQL 2.3 to 2.4
 
   - Since Spark 2.4, Spark maximizes the usage of a vectorized ORC reader for ORC files by default. To do that, `spark.sql.orc.impl` and `spark.sql.orc.filterPushdown` change their default values to `native` and `true` respectively.
-  - In PySpark, when Arrow optimization is enabled, previously `toPandas` just failed when Arrow optimization is unabled to be used whereas `createDataFrame` from Pandas DataFrame allowed the fallback to non-optimization. Now, both `toPandas` and `createDataFrame` from Pandas DataFrame allow the fallback by default, which can be switched off by `spark.sql.execution.arrow.fallback.enabled`.
- - Since Spark 2.4, writing an empty dataframe to a directory launches at least one write task, even if physically the dataframe has no partition. This introduces a small behavior change that for self-describing file formats like Parquet and Orc, Spark creates a metadata-only file in the target directory when writing a 0-partition dataframe, so that schema inference can still work if users read that directory later. The new behavior is more reasonable and more consistent regarding writing empty dataframe.
- - Since Spark 2.4, expression IDs in UDF arguments do not appear in column names. For example, an column name in Spark 2.4 is not `UDF:f(col0 AS colA#28)` but ``UDF:f(col0 AS `colA`)``.
- - Since Spark 2.4, writing a dataframe with an empty or nested empty schema using any file formats (parquet, orc, json, text, csv etc.) is not allowed. An exception is thrown when attempting to write dataframes with empty schema. 
- - Since Spark 2.4, Spark compares a DATE type with a TIMESTAMP type after promotes both sides to TIMESTAMP. To set `false` to `spark.sql.hive.compareDateTimestampInTimestamp` restores the previous behavior. This option will be removed in Spark 3.0.
-
+  - In PySpark, when Arrow optimization is enabled, previously `toPandas` just failed when Arrow optimization is unable to be used whereas `createDataFrame` from Pandas DataFrame allowed the fallback to non-optimization. Now, both `toPandas` and `createDataFrame` from Pandas DataFrame allow the fallback by default, which can be switched off by `spark.sql.execution.arrow.fallback.enabled`.
+  - Since Spark 2.4, writing an empty dataframe to a directory launches at least one write task, even if physically the dataframe has no partition. This introduces a small behavior change that for self-describing file formats like Parquet and Orc, Spark creates a metadata-only file in the target directory when writing a 0-partition dataframe, so that schema inference can still work if users read that directory later. The new behavior is more reasonable and more consistent regarding writing empty dataframe.
+  - Since Spark 2.4, expression IDs in UDF arguments do not appear in column names. For example, an column name in Spark 2.4 is not `UDF:f(col0 AS colA#28)` but ``UDF:f(col0 AS `colA`)``.
+  - Since Spark 2.4, writing a dataframe with an empty or nested empty schema using any file formats (parquet, orc, json, text, csv etc.) is not allowed. An exception is thrown when attempting to write dataframes with empty schema.
+  - Since Spark 2.4, Spark compares a DATE type with a TIMESTAMP type after promotes both sides to TIMESTAMP. To set `false` to `spark.sql.hive.compareDateTimestampInTimestamp` restores the previous behavior. This option will be removed in Spark 3.0.
+  - Since Spark 2.4, creating a managed table with nonempty location is not allowed. An exception is thrown when attempting to create a managed table with nonempty location. To set `true` to `spark.sql.allowCreatingManagedTableUsingNonemptyLocation` restores the previous behavior. This option will be removed in Spark 3.0.
+  - Since Spark 2.4, the type coercion rules can automatically promote the argument types of the variadic SQL functions (e.g., IN/COALESCE) to the widest common type, no matter how the input arguments order. In prior Spark versions, the promotion could fail in some specific orders (e.g., TimestampType, IntegerType and StringType) and throw an exception.
+  - In version 2.3 and earlier, `to_utc_timestamp` and `from_utc_timestamp` respect the timezone in the input timestamp string, which breaks the assumption that the input timestamp is in a specific timezone. Therefore, these 2 functions can return unexpected results. In version 2.4 and later, this problem has been fixed. `to_utc_timestamp` and `from_utc_timestamp` will return null if the input timestamp string contains timezone. As an example, `from_utc_timestamp('2000-10-10 00:00:00', 'GMT+1')` will return `2000-10-10 01:00:00` in both Spark 2.3 and 2.4. However, `from_utc_timestamp('2000-10-10 00:00:00+00:00', 'GMT+1')`, assuming a local timezone of GMT+8, will return `2000-10-10 09:00:00` in Spark 2.3 but `null` in 2.4. For people who don't care about this problem and want to retain the previous behaivor to keep their query unchanged, you can set `spark.sql.function.rejectTimezoneInString` to false. This option will be removed in Spark 3.0 and should only be used as a temporary workaround.
 ## Upgrading From Spark SQL 2.2 to 2.3
 
   - Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the referenced columns only include the internal corrupt record column (named `_corrupt_record` by default). For example, `spark.read.schema(schema).json(file).filter($"_corrupt_record".isNotNull).count()` and `spark.read.schema(schema).json(file).select("_corrupt_record").show()`. Instead, you can cache or save the parsed results and then send the same query. For example, `val df = spark.read.schema(schema).json(file).cache()` and then `df.filter($"_corrupt_record".isNotNull).count()`.
@@ -1965,11 +1967,11 @@ working with timestamps in `pandas_udf`s to get the best performance, see
     - The rules to determine the result type of an arithmetic operation have been updated. In particular, if the precision / scale needed are out of the range of available values, the scale is reduced up to 6, in order to prevent the truncation of the integer part of the decimals. All the arithmetic operations are affected by the change, ie. addition (`+`), subtraction (`-`), multiplication (`*`), division (`/`), remainder (`%`) and positive module (`pmod`).
     - Literal values used in SQL operations are converted to DECIMAL with the exact precision and scale needed by them.
     - The configuration `spark.sql.decimalOperations.allowPrecisionLoss` has been introduced. It defaults to `true`, which means the new behavior described here; if set to `false`, Spark uses previous rules, ie. it doesn't adjust the needed scale to represent the values and it returns NULL if an exact representation of the value is not possible.
-  - In PySpark, `df.replace` does not allow to omit `value` when `to_replace` is not a dictionary. Previously, `value` could be omitted in the other cases and had `None` by default, which is counterintuitive and error prone.
+  - In PySpark, `df.replace` does not allow to omit `value` when `to_replace` is not a dictionary. Previously, `value` could be omitted in the other cases and had `None` by default, which is counterintuitive and error-prone.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 
-  - Spark 2.1.1 introduced a new configuration key: `spark.sql.hive.caseSensitiveInferenceMode`. It had a default setting of `NEVER_INFER`, which kept behavior identical to 2.1.0. However, Spark 2.2.0 changes this setting's default value to `INFER_AND_SAVE` to restore compatibility with reading Hive metastore tables whose underlying file schema have mixed-case column names. With the `INFER_AND_SAVE` configuration value, on first access Spark will perform schema inference on any Hive metastore table for which it has not already saved an inferred schema. Note that schema inference can be a very time consuming operation for tables with thousands of partitions. If compatibility with mixed-case column names is not a concern, you can safely set `spark.sql.hive.caseSensitiveInferenceMode` to `NEVER_INFER` to avoid the initial overhead of schema inference. Note that with the new default `INFER_AND_SAVE` setting, the results of the schema inference are saved as a metastore key for future use. Therefore, the initial schema inference occurs only at a table's first access.
+  - Spark 2.1.1 introduced a new configuration key: `spark.sql.hive.caseSensitiveInferenceMode`. It had a default setting of `NEVER_INFER`, which kept behavior identical to 2.1.0. However, Spark 2.2.0 changes this setting's default value to `INFER_AND_SAVE` to restore compatibility with reading Hive metastore tables whose underlying file schema have mixed-case column names. With the `INFER_AND_SAVE` configuration value, on first access Spark will perform schema inference on any Hive metastore table for which it has not already saved an inferred schema. Note that schema inference can be a very time-consuming operation for tables with thousands of partitions. If compatibility with mixed-case column names is not a concern, you can safely set `spark.sql.hive.caseSensitiveInferenceMode` to `NEVER_INFER` to avoid the initial overhead of schema inference. Note that with the new default `INFER_AND_SAVE` setting, the results of the schema inference are saved as a metastore key for future use. Therefore, the initial schema inference occurs only at a table's first access.
   
   - Since Spark 2.2.1 and 2.3.0, the schema is always inferred at runtime when the data source tables have the columns that exist in both partition schema and data schema. The inferred schema does not have the partitioned columns. When reading the table, Spark respects the partition values of these overlapping columns instead of the values stored in the data source files. In 2.2.0 and 2.1.x release, the inferred schema is partitioned but the data of the table is invisible to users (i.e., the result set is empty).
 
@@ -2012,7 +2014,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 
 ## Upgrading From Spark SQL 1.5 to 1.6
 
- - From Spark 1.6, by default the Thrift server runs in multi-session mode. Which means each JDBC/ODBC
+ - From Spark 1.6, by default, the Thrift server runs in multi-session mode. Which means each JDBC/ODBC
    connection owns a copy of their own SQL configuration and temporary function registry. Cached
    tables are still shared though. If you prefer to run the Thrift server in the old single-session
    mode, please set option `spark.sql.hive.thriftServer.singleSession` to `true`. You may either add
@@ -2160,7 +2162,7 @@ been renamed to `DataFrame`. This is primarily because DataFrames no longer inhe
 directly, but instead provide most of the functionality that RDDs provide though their own
 implementation. DataFrames can still be converted to RDDs by calling the `.rdd` method.
 
-In Scala there is a type alias from `SchemaRDD` to `DataFrame` to provide source compatibility for
+In Scala, there is a type alias from `SchemaRDD` to `DataFrame` to provide source compatibility for
 some use cases. It is still recommended that users update their code to use `DataFrame` instead.
 Java and Python users will need to update their code.
 
@@ -2169,11 +2171,11 @@ Java and Python users will need to update their code.
 Prior to Spark 1.3 there were separate Java compatible classes (`JavaSQLContext` and `JavaSchemaRDD`)
 that mirrored the Scala API. In Spark 1.3 the Java API and Scala API have been unified. Users
 of either language should use `SQLContext` and `DataFrame`. In general these classes try to
-use types that are usable from both languages (i.e. `Array` instead of language specific collections).
+use types that are usable from both languages (i.e. `Array` instead of language-specific collections).
 In some cases where no common type exists (e.g., for passing in closures or Maps) function overloading
 is used instead.
 
-Additionally the Java specific types API has been removed. Users of both Scala and Java should
+Additionally, the Java specific types API has been removed. Users of both Scala and Java should
 use the classes present in `org.apache.spark.sql.types` to describe schema programmatically.
 
 
@@ -2230,7 +2232,7 @@ referencing a singleton.
 ## Compatibility with Apache Hive
 
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
-Currently Hive SerDes and UDFs are based on Hive 1.2.1,
+Currently, Hive SerDes and UDFs are based on Hive 1.2.1,
 and Spark SQL can be connected to different versions of Hive Metastore
 (from 0.12.0 to 2.3.2. Also see [Interacting with Different Versions of Hive Metastore](#interacting-with-different-versions-of-hive-metastore)).
 
@@ -2322,10 +2324,10 @@ A handful of Hive optimizations are not yet included in Spark. Some of these (su
 less important due to Spark SQL's in-memory computational model. Others are slotted for future
 releases of Spark SQL.
 
-* Block level bitmap indexes and virtual columns (used to build indexes)
-* Automatically determine the number of reducers for joins and groupbys: Currently in Spark SQL, you
+* Block-level bitmap indexes and virtual columns (used to build indexes)
+* Automatically determine the number of reducers for joins and groupbys: Currently, in Spark SQL, you
   need to control the degree of parallelism post-shuffle using "`SET spark.sql.shuffle.partitions=[num_tasks];`".
-* Meta-data only query: For queries that can be answered by using only meta data, Spark SQL still
+* Meta-data only query: For queries that can be answered by using only metadata, Spark SQL still
   launches tasks to compute the result.
 * Skew data flag: Spark SQL does not follow the skew data flags in Hive.
 * `STREAMTABLE` hint in join: Spark SQL does not follow the `STREAMTABLE` hint.
@@ -2982,6 +2984,6 @@ does not exactly match standard floating point semantics.
 Specifically:
 
  - NaN = NaN returns true.
- - In aggregations all NaN values are grouped together.
+ - In aggregations, all NaN values are grouped together.
  - NaN is treated as a normal value in join keys.
  - NaN values go last when in ascending order, larger than any other numeric value.

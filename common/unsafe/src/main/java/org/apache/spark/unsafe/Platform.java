@@ -187,7 +187,7 @@ public final class Platform {
   }
 
   public static void copyMemory(
-    Object src, long srcOffset, Object dst, long dstOffset, long length) {
+      Object src, long srcOffset, Object dst, long dstOffset, long length) {
     // Check if dstOffset is before or after srcOffset to determine if we should copy
     // forward or backwards. This is necessary in case src and dst overlap.
     if (dstOffset < srcOffset) {

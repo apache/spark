@@ -61,6 +61,8 @@ class MicroBatchExecution(
     case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
   }
 
+  private val watermarkTracker = new WatermarkTracker()
+
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
       "logicalPlan must be initialized in QueryExecutionThread " +
@@ -128,40 +130,55 @@ class MicroBatchExecution(
    * Repeatedly attempts to run batches as data arrives.
    */
   protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
-    triggerExecutor.execute(() => {
-      startTrigger()
 
+    val noDataBatchesEnabled =
+      sparkSessionForStream.sessionState.conf.streamingNoDataMicroBatchesEnabled
+
+    triggerExecutor.execute(() => {
       if (isActive) {
+        var currentBatchIsRunnable = false // Whether the current batch is runnable / has been run
+        var currentBatchHasNewData = false // Whether the current batch had new data
+
+        startTrigger()
+
         reportTimeTaken("triggerExecution") {
+          // We'll do this initialization only once every start / restart
           if (currentBatchId < 0) {
-            // We'll do this initialization only once
             populateStartOffsets(sparkSessionForStream)
-            sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
-            logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-          } else {
-            constructNextBatch()
+            logInfo(s"Stream started from $committedOffsets")
           }
-          if (dataAvailable) {
-            currentStatus = currentStatus.copy(isDataAvailable = true)
-            updateStatusMessage("Processing new data")
-            runBatch(sparkSessionForStream)
-          }
-        }
-        // Report trigger as finished and construct progress object.
-        finishTrigger(dataAvailable)
-        if (dataAvailable) {
-          // Update committed offsets.
-          commitLog.add(currentBatchId)
-          committedOffsets ++= availableOffsets
-          logDebug(s"batch ${currentBatchId} committed")
-          // We'll increase currentBatchId after we complete processing current batch's data
-          currentBatchId += 1
+
+          // Set this before calling constructNextBatch() so any Spark jobs executed by sources
+          // while getting new data have the correct description
           sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
-        } else {
-          currentStatus = currentStatus.copy(isDataAvailable = false)
-          updateStatusMessage("Waiting for data to arrive")
-          Thread.sleep(pollingDelayMs)
+
+          // Try to construct the next batch. This will return true only if the next batch is
+          // ready and runnable. Note that the current batch may be runnable even without
+          // new data to process as `constructNextBatch` may decide to run a batch for
+          // state cleanup, etc. `isNewDataAvailable` will be updated to reflect whether new data
+          // is available or not.
+          currentBatchIsRunnable = constructNextBatch(noDataBatchesEnabled)
+
+          // Remember whether the current batch has data or not. This will be required later
+          // for bookkeeping after running the batch, when `isNewDataAvailable` will have changed
+          // to false as the batch would have already processed the available data.
+          currentBatchHasNewData = isNewDataAvailable
+
+          currentStatus = currentStatus.copy(isDataAvailable = isNewDataAvailable)
+          if (currentBatchIsRunnable) {
+            if (currentBatchHasNewData) updateStatusMessage("Processing new data")
+            else updateStatusMessage("No new data but cleaning up state")
+            runBatch(sparkSessionForStream)
+          } else {
+            updateStatusMessage("Waiting for data to arrive")
+          }
         }
+
+        finishTrigger(currentBatchHasNewData)  // Must be outside reportTimeTaken so it is recorded
+
+        // If the current batch has been executed, then increment the batch id, else there was
+        // no data to execute the batch
+        if (currentBatchIsRunnable) currentBatchId += 1 else Thread.sleep(pollingDelayMs)
       }
       updateStatusMessage("Waiting for next trigger")
       isActive
@@ -211,6 +228,7 @@ class MicroBatchExecution(
           OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.conf)
           offsetSeqMetadata = OffsetSeqMetadata(
             metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
+          watermarkTracker.setWatermark(metadata.batchWatermarkMs)
         }
 
         /* identify the current batch id: if commit log indicates we successfully processed the
@@ -235,7 +253,6 @@ class MicroBatchExecution(
               currentBatchId = latestCommittedBatchId + 1
               committedOffsets ++= availableOffsets
               // Construct a new batch be recomputing availableOffsets
-              constructNextBatch()
             } else if (latestCommittedBatchId < latestBatchId - 1) {
               logWarning(s"Batch completion log latest batch id is " +
                 s"${latestCommittedBatchId}, which is not trailing " +
@@ -243,19 +260,18 @@ class MicroBatchExecution(
             }
           case None => logInfo("no commit log present")
         }
-        logDebug(s"Resuming at batch $currentBatchId with committed offsets " +
+        logInfo(s"Resuming at batch $currentBatchId with committed offsets " +
           s"$committedOffsets and available offsets $availableOffsets")
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
-        constructNextBatch()
     }
   }
 
   /**
    * Returns true if there is any new data available to be processed.
    */
-  private def dataAvailable: Boolean = {
+  private def isNewDataAvailable: Boolean = {
     availableOffsets.exists {
       case (source, available) =>
         committedOffsets
@@ -266,93 +282,63 @@ class MicroBatchExecution(
   }
 
   /**
-   * Queries all of the sources to see if any new data is available. When there is new data the
-   * batchId counter is incremented and a new log entry is written with the newest offsets.
+   * Attempts to construct a batch according to:
+   *  - Availability of new data
+   *  - Need for timeouts and state cleanups in stateful operators
+   *
+   * Returns true only if the next batch should be executed.
+   *
+   * Here is the high-level logic on how this constructs the next batch.
+   * - Check each source whether new data is available
+   * - Updated the query's metadata and check using the last execution whether there is any need
+   *   to run another batch (for state clean up, etc.)
+   * - If either of the above is true, then construct the next batch by committing to the offset
+   *   log that range of offsets that the next batch will process.
    */
-  private def constructNextBatch(): Unit = {
-    // Check to see what new data is available.
-    val hasNewData = {
-      awaitProgressLock.lock()
-      try {
-        // Generate a map from each unique source to the next available offset.
-        val latestOffsets: Map[BaseStreamingSource, Option[Offset]] = uniqueSources.map {
-          case s: Source =>
-            updateStatusMessage(s"Getting offsets from $s")
-            reportTimeTaken("getOffset") {
-              (s, s.getOffset)
-            }
-          case s: MicroBatchReader =>
-            updateStatusMessage(s"Getting offsets from $s")
-            reportTimeTaken("setOffsetRange") {
-              // Once v1 streaming source execution is gone, we can refactor this away.
-              // For now, we set the range here to get the source to infer the available end offset,
-              // get that offset, and then set the range again when we later execute.
-              s.setOffsetRange(
-                toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
-                Optional.empty())
-            }
+  private def constructNextBatch(noDataBatchesEnables: Boolean): Boolean = withProgressLocked {
+    // If new data is already available that means this method has already been called before
+    // and it must have already committed the offset range of next batch to the offset log.
+    // Hence do nothing, just return true.
+    if (isNewDataAvailable) return true
 
-            val currentOffset = reportTimeTaken("getEndOffset") { s.getEndOffset() }
-            (s, Option(currentOffset))
-        }.toMap
-        availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)
-
-        if (dataAvailable) {
-          true
-        } else {
-          noNewData = true
-          false
+    // Generate a map from each unique source to the next available offset.
+    val latestOffsets: Map[BaseStreamingSource, Option[Offset]] = uniqueSources.map {
+      case s: Source =>
+        updateStatusMessage(s"Getting offsets from $s")
+        reportTimeTaken("getOffset") {
+          (s, s.getOffset)
         }
-      } finally {
-        awaitProgressLock.unlock()
-      }
-    }
-    if (hasNewData) {
-      var batchWatermarkMs = offsetSeqMetadata.batchWatermarkMs
-      // Update the eventTime watermarks if we find any in the plan.
-      if (lastExecution != null) {
-        lastExecution.executedPlan.collect {
-          case e: EventTimeWatermarkExec => e
-        }.zipWithIndex.foreach {
-          case (e, index) if e.eventTimeStats.value.count > 0 =>
-            logDebug(s"Observed event time stats $index: ${e.eventTimeStats.value}")
-            val newWatermarkMs = e.eventTimeStats.value.max - e.delayMs
-            val prevWatermarkMs = watermarkMsMap.get(index)
-            if (prevWatermarkMs.isEmpty || newWatermarkMs > prevWatermarkMs.get) {
-              watermarkMsMap.put(index, newWatermarkMs)
-            }
-
-          // Populate 0 if we haven't seen any data yet for this watermark node.
-          case (_, index) =>
-            if (!watermarkMsMap.isDefinedAt(index)) {
-              watermarkMsMap.put(index, 0)
-            }
+      case s: MicroBatchReader =>
+        updateStatusMessage(s"Getting offsets from $s")
+        reportTimeTaken("setOffsetRange") {
+          // Once v1 streaming source execution is gone, we can refactor this away.
+          // For now, we set the range here to get the source to infer the available end offset,
+          // get that offset, and then set the range again when we later execute.
+          s.setOffsetRange(
+            toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
+            Optional.empty())
         }
 
-        // Update the global watermark to the minimum of all watermark nodes.
-        // This is the safest option, because only the global watermark is fault-tolerant. Making
-        // it the minimum of all individual watermarks guarantees it will never advance past where
-        // any individual watermark operator would be if it were in a plan by itself.
-        if(!watermarkMsMap.isEmpty) {
-          val newWatermarkMs = watermarkMsMap.minBy(_._2)._2
-          if (newWatermarkMs > batchWatermarkMs) {
-            logInfo(s"Updating eventTime watermark to: $newWatermarkMs ms")
-            batchWatermarkMs = newWatermarkMs
-          } else {
-            logDebug(
-              s"Event time didn't move: $newWatermarkMs < " +
-                s"$batchWatermarkMs")
-          }
-        }
-      }
-      offsetSeqMetadata = offsetSeqMetadata.copy(
-        batchWatermarkMs = batchWatermarkMs,
-        batchTimestampMs = triggerClock.getTimeMillis()) // Current batch timestamp in milliseconds
+        val currentOffset = reportTimeTaken("getEndOffset") { s.getEndOffset() }
+        (s, Option(currentOffset))
+    }.toMap
+    availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)
 
+    // Update the query metadata
+    offsetSeqMetadata = offsetSeqMetadata.copy(
+      batchWatermarkMs = watermarkTracker.currentWatermark,
+      batchTimestampMs = triggerClock.getTimeMillis())
+
+    // Check whether next batch should be constructed
+    val lastExecutionRequiresAnotherBatch = noDataBatchesEnables &&
+      Option(lastExecution).exists(_.shouldRunAnotherBatch(offsetSeqMetadata))
+    val shouldConstructNextBatch = isNewDataAvailable || lastExecutionRequiresAnotherBatch
+
+    if (shouldConstructNextBatch) {
+      // Commit the next batch offset range to the offset log
       updateStatusMessage("Writing offsets to log")
       reportTimeTaken("walCommit") {
-        assert(offsetLog.add(
-          currentBatchId,
+        assert(offsetLog.add(currentBatchId,
           availableOffsets.toOffsetSeq(sources, offsetSeqMetadata)),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
         logInfo(s"Committed offsets for batch $currentBatchId. " +
@@ -373,7 +359,7 @@ class MicroBatchExecution(
                 reader.commit(reader.deserializeOffset(off.json))
             }
           } else {
-            throw new IllegalStateException(s"batch $currentBatchId doesn't exist")
+            throw new IllegalStateException(s"batch ${currentBatchId - 1} doesn't exist")
           }
         }
 
@@ -384,15 +370,12 @@ class MicroBatchExecution(
           commitLog.purge(currentBatchId - minLogEntriesToMaintain)
         }
       }
+      noNewData = false
     } else {
-      awaitProgressLock.lock()
-      try {
-        // Wake up any threads that are waiting for the stream to progress.
-        awaitProgressLockCondition.signalAll()
-      } finally {
-        awaitProgressLock.unlock()
-      }
+      noNewData = true
+      awaitProgressLockCondition.signalAll()
     }
+    shouldConstructNextBatch
   }
 
   /**
@@ -400,6 +383,8 @@ class MicroBatchExecution(
    * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
   private def runBatch(sparkSessionToRunBatch: SparkSession): Unit = {
+    logDebug(s"Running batch $currentBatchId")
+
     // Request unprocessed data from all sources.
     newData = reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
@@ -513,17 +498,17 @@ class MicroBatchExecution(
       }
     }
 
-    awaitProgressLock.lock()
-    try {
-      // Wake up any threads that are waiting for the stream to progress.
+    withProgressLocked {
+      commitLog.add(currentBatchId)
+      committedOffsets ++= availableOffsets
       awaitProgressLockCondition.signalAll()
-    } finally {
-      awaitProgressLock.unlock()
     }
+    watermarkTracker.updateWatermark(lastExecution.executedPlan)
+    logDebug(s"Completed batch ${currentBatchId}")
   }
 
   /** Execute a function while locking the stream from making an progress */
-  private[sql] def withProgressLocked(f: => Unit): Unit = {
+  private[sql] def withProgressLocked[T](f: => T): T = {
     awaitProgressLock.lock()
     try {
       f

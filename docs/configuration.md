@@ -328,6 +328,11 @@ Apart from these, the following properties are also available, and may be useful
     Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
     option. Spark properties should be set using a SparkConf object or the spark-defaults.conf file
     used with the spark-submit script. Maximum heap size settings can be set with spark.executor.memory.
+
+    The following symbols, if present will be interpolated: {{APP_ID}} will be replaced by
+    application ID and {{EXECUTOR_ID}} will be replaced by executor ID. For example, to enable
+    verbose gc logging to a file named for the executor ID of the app in /tmp, pass a 'value' of:
+    <code>-verbose:gc -Xloggc:/tmp/{{APP_ID}}-{{EXECUTOR_ID}}.gc</code>
   </td>
 </tr>
 <tr>
@@ -558,7 +563,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     This configuration limits the number of remote requests to fetch blocks at any given point.
     When the number of hosts in the cluster increase, it might lead to very large number
-    of in-bound connections to one or more nodes, causing the workers to fail under load.
+    of inbound connections to one or more nodes, causing the workers to fail under load.
     By allowing it to limit the number of fetch requests, this scenario can be mitigated.
   </td>
 </tr>
@@ -1288,7 +1293,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>4194304 (4 MB)</td>
   <td>
     The estimated cost to open a file, measured by the number of bytes could be scanned at the same
-    time. This is used when putting multiple files into a partition. It is better to over estimate,
+    time. This is used when putting multiple files into a partition. It is better to overestimate,
     then the partitions with small files will be faster than partitions with bigger files.
   </td>
 </tr>
@@ -1513,7 +1518,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.8 for KUBERNETES mode; 0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode and Kubernetes mode, CPU cores in standalone mode and Mesos coarsed-grained
+    (resources are executors in yarn mode and Kubernetes mode, CPU cores in standalone mode and Mesos coarse-grained
      mode ['spark.cores.max' value is total expected resources for Mesos coarse-grained mode] )
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
@@ -1634,7 +1639,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch
-    failure happenes. If external shuffle service is enabled, then the whole node will be
+    failure happens. If external shuffle service is enabled, then the whole node will be
     blacklisted.
   </td>
 </tr>
@@ -1722,7 +1727,7 @@ Apart from these, the following properties are also available, and may be useful
     When <code>spark.task.reaper.enabled = true</code>, this setting specifies a timeout after
     which the executor JVM will kill itself if a killed task has not stopped running. The default
     value, -1, disables this mechanism and prevents the executor from self-destructing. The purpose
-    of this setting is to act as a safety-net to prevent runaway uncancellable tasks from rendering
+    of this setting is to act as a safety-net to prevent runaway noncancellable tasks from rendering
     an executor unusable.
   </td>
 </tr>
@@ -1753,6 +1758,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
     <code>spark.dynamicAllocation.initialExecutors</code>
+    <code>spark.dynamicAllocation.executorAllocationRatio</code>
   </td>
 </tr>
 <tr>
@@ -1795,6 +1801,23 @@ Apart from these, the following properties are also available, and may be useful
   <td>0</td>
   <td>
     Lower bound for the number of executors if dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.executorAllocationRatio</code></td>
+  <td>1</td>
+  <td>
+    By default, the dynamic allocation will request enough executors to maximize the
+    parallelism according to the number of tasks to process. While this minimizes the
+    latency of the job, with small tasks this setting can waste a lot of resources due to
+    executor allocation overhead, as some executor might not even do any work.
+    This setting allows to set a ratio that will be used to reduce the number of
+    executors w.r.t. full parallelism.
+    Defaults to 1.0 to give maximum parallelism.
+    0.5 will divide the target number of executors by 2
+    The target number of executors computed by the dynamicAllocation can still be overriden
+    by the <code>spark.dynamicAllocation.minExecutors</code> and
+    <code>spark.dynamicAllocation.maxExecutors</code> settings
   </td>
 </tr>
 <tr>
@@ -1915,8 +1938,8 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td><code>spark.streaming.receiver.writeAheadLog.enable</code></td>
   <td>false</td>
   <td>
-    Enable write ahead logs for receivers. All the input data received through receivers
-    will be saved to write ahead logs that will allow it to be recovered after driver failures.
+    Enable write-ahead logs for receivers. All the input data received through receivers
+    will be saved to write-ahead logs that will allow it to be recovered after driver failures.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
     in the Spark Streaming programing guide for more details.
   </td>
@@ -1971,7 +1994,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td><code>spark.streaming.driver.writeAheadLog.closeFileAfterWrite</code></td>
   <td>false</td>
   <td>
-    Whether to close the file after writing a write ahead log record on the driver. Set this to 'true'
+    Whether to close the file after writing a write-ahead log record on the driver. Set this to 'true'
     when you want to use S3 (or any file system that does not support flushing) for the metadata WAL
     on the driver.
   </td>
@@ -1980,7 +2003,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td><code>spark.streaming.receiver.writeAheadLog.closeFileAfterWrite</code></td>
   <td>false</td>
   <td>
-    Whether to close the file after writing a write ahead log record on the receivers. Set this to 'true'
+    Whether to close the file after writing a write-ahead log record on the receivers. Set this to 'true'
     when you want to use S3 (or any file system that does not support flushing) for the data WAL
     on the receivers.
   </td>
@@ -2178,7 +2201,7 @@ Spark's classpath for each application. In a Spark cluster running on YARN, thes
 files are set cluster-wide, and cannot safely be changed by the application.
 
 The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
-They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defalut.conf`
+They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-default.conf`
 
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.

@@ -407,7 +407,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
         .head()
       val model = new NaiveBayesModel(metadata.uid, pi, theta)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

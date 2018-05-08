@@ -25,7 +25,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
-import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.OnHeapMemoryBlock;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -51,8 +52,8 @@ public class UTF8StringSuite {
 
     assertTrue(s1.contains(s2));
     assertTrue(s2.contains(s1));
-    assertTrue(s1.startsWith(s1));
-    assertTrue(s1.endsWith(s1));
+    assertTrue(s1.startsWith(s2));
+    assertTrue(s1.endsWith(s2));
   }
 
   @Test
@@ -513,28 +514,13 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void writeToOutputStreamUnderflow() throws IOException {
-    // offset underflow is apparently supported?
-    final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
-
-    for (int i = 1; i <= Platform.BYTE_ARRAY_OFFSET; ++i) {
-      UTF8String.fromAddress(test, Platform.BYTE_ARRAY_OFFSET - i, test.length + i)
-          .writeTo(outputStream);
-      final ByteBuffer buffer = ByteBuffer.wrap(outputStream.toByteArray(), i, test.length);
-      assertEquals("01234567", StandardCharsets.UTF_8.decode(buffer).toString());
-      outputStream.reset();
-    }
-  }
-
-  @Test
   public void writeToOutputStreamSlice() throws IOException {
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
 
     for (int i = 0; i < test.length; ++i) {
       for (int j = 0; j < test.length - i; ++j) {
-        UTF8String.fromAddress(test, Platform.BYTE_ARRAY_OFFSET + i, j)
+        new UTF8String(ByteArrayMemoryBlock.fromArray(test).subBlock(i, j))
             .writeTo(outputStream);
 
         assertArrayEquals(Arrays.copyOfRange(test, i, i + j), outputStream.toByteArray());
@@ -565,7 +551,7 @@ public class UTF8StringSuite {
 
     for (final long offset : offsets) {
       try {
-        fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length)
+        new UTF8String(ByteArrayMemoryBlock.fromArray(test).subBlock(offset, test.length))
             .writeTo(outputStream);
 
         throw new IllegalStateException(Long.toString(offset));
@@ -592,26 +578,25 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void writeToOutputStreamIntArray() throws IOException {
+  public void writeToOutputStreamLongArray() throws IOException {
     // verify that writes work on objects that are not byte arrays
-    final ByteBuffer buffer = StandardCharsets.UTF_8.encode("大千世界");
+    final ByteBuffer buffer = StandardCharsets.UTF_8.encode("3千大千世界");
     buffer.position(0);
     buffer.order(ByteOrder.nativeOrder());
 
     final int length = buffer.limit();
-    assertEquals(12, length);
+    assertEquals(16, length);
 
-    final int ints = length / 4;
-    final int[] array = new int[ints];
+    final int longs = length / 8;
+    final long[] array = new long[longs];
 
-    for (int i = 0; i < ints; ++i) {
-      array[i] = buffer.getInt();
+    for (int i = 0; i < longs; ++i) {
+      array[i] = buffer.getLong();
     }
 
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    fromAddress(array, Platform.INT_ARRAY_OFFSET, length)
-        .writeTo(outputStream);
-    assertEquals("大千世界", outputStream.toString("UTF-8"));
+    new UTF8String(OnHeapMemoryBlock.fromArray(array)).writeTo(outputStream);
+    assertEquals("3千大千世界", outputStream.toString("UTF-8"));
   }
 
   @Test

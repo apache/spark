@@ -55,7 +55,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
   protected def checkEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
-    val expr = prepareEvaluation(expression)
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
@@ -69,7 +70,9 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
    * Check the equality between result of expression and expected value, it will handle
    * Array[Byte], Spread[Double], MapData and Row.
    */
-  protected def checkResult(result: Any, expected: Any, dataType: DataType): Boolean = {
+  protected def checkResult(result: Any, expected: Any, exprDataType: DataType): Boolean = {
+    val dataType = UserDefinedType.sqlType(exprDataType)
+
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
@@ -103,6 +106,12 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
   protected def checkExceptionInExpression[T <: Throwable : ClassTag](
       expression: => Expression,
+      expectedErrMsg: String): Unit = {
+    checkExceptionInExpression[T](expression, InternalRow.empty, expectedErrMsg)
+  }
+
+  protected def checkExceptionInExpression[T <: Throwable : ClassTag](
+      expression: => Expression,
       inputRow: InternalRow,
       expectedErrMsg: String): Unit = {
 
@@ -111,12 +120,14 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
         val errMsg = intercept[T] {
           eval
         }.getMessage
-        if (errMsg != expectedErrMsg) {
+        if (!errMsg.contains(expectedErrMsg)) {
           fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
         }
       }
     }
-    val expr = prepareEvaluation(expression)
+
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
     checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
     checkException(evaluateWithGeneratedMutableProjection(expr, inputRow), "codegen mode")
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {

@@ -122,7 +122,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       allSupportedHiveVersions)
 
     val externalCatalog = sparkSession.sharedState.externalCatalog
-    val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
+    val hiveVersion = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.version
     val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 

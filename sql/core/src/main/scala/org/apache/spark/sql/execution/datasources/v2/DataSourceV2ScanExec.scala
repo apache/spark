@@ -41,6 +41,7 @@ case class DataSourceV2ScanExec(
     output: Seq[AttributeReference],
     @transient source: DataSourceV2,
     @transient options: Map[String, String],
+    @transient pushedFilters: Seq[Expression],
     @transient reader: DataSourceReader)
   extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 
@@ -95,7 +96,11 @@ case class DataSourceV2ScanExec(
           sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
           sparkContext.env)
         .askSync[Unit](SetReaderPartitions(readerFactories.size))
-      new ContinuousDataSourceRDD(sparkContext, sqlContext, readerFactories)
+      new ContinuousDataSourceRDD(
+        sparkContext,
+        sqlContext.conf.continuousStreamingExecutorQueueSize,
+        sqlContext.conf.continuousStreamingExecutorPollIntervalMs,
+        readerFactories)
         .asInstanceOf[RDD[InternalRow]]
 
     case r: SupportsScanColumnarBatch if r.enableBatchRead() =>

@@ -800,6 +800,43 @@ class FeatureTests(SparkSessionTestCase):
         expected2 = [Row(id=0, indexed=0.0), Row(id=1, indexed=1.0)]
         self.assertEqual(actual2, expected2)
 
+    def test_string_indexer_from_labels(self):
+        model = StringIndexerModel.from_labels(["a", "b", "c"], inputCol="label",
+                                               outputCol="indexed", handleInvalid="keep")
+        self.assertEqual(model.labels, ["a", "b", "c"])
+
+        df1 = self.spark.createDataFrame([
+            (0, "a"),
+            (1, "c"),
+            (2, None),
+            (3, "b"),
+            (4, "b")], ["id", "label"])
+
+        result1 = model.transform(df1)
+        actual1 = result1.select("id", "indexed").collect()
+        expected1 = [Row(id=0, indexed=0.0), Row(id=1, indexed=2.0), Row(id=2, indexed=3.0),
+                     Row(id=3, indexed=1.0), Row(id=4, indexed=1.0)]
+        self.assertEqual(actual1, expected1)
+
+        model_empty_labels = StringIndexerModel.from_labels(
+            [], inputCol="label", outputCol="indexed", handleInvalid="keep")
+        actual2 = model_empty_labels.transform(df1).select("id", "indexed").collect()
+        expected2 = [Row(id=0, indexed=0.0), Row(id=1, indexed=0.0), Row(id=2, indexed=0.0),
+                     Row(id=3, indexed=0.0), Row(id=4, indexed=0.0)]
+        self.assertEqual(actual2, expected2)
+
+        # Test model with default settings can transform
+        model_default = StringIndexerModel.from_labels(["a", "b", "c"], inputCol="label")
+        df2 = self.spark.createDataFrame([
+            (0, "a"),
+            (1, "c"),
+            (2, "b"),
+            (3, "b"),
+            (4, "b")], ["id", "label"])
+        transformed_list = model_default.transform(df2)\
+            .select(model_default.getOrDefault(model_default.outputCol)).collect()
+        self.assertEqual(len(transformed_list), 5)
+
 
 class HasInducedError(Params):
 
@@ -981,6 +1018,50 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvParallelModel = cv.fit(dataset)
         self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
 
+    def test_expose_sub_models(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        numFolds = 3
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+                            numFolds=numFolds, collectSubModels=True)
+
+        def checkSubModels(subModels):
+            self.assertEqual(len(subModels), numFolds)
+            for i in range(numFolds):
+                self.assertEqual(len(subModels[i]), len(grid))
+
+        cvModel = cv.fit(dataset)
+        checkSubModels(cvModel.subModels)
+
+        # Test the default value for option "persistSubModel" to be "true"
+        testSubPath = temp_path + "/testCrossValidatorSubModels"
+        savingPathWithSubModels = testSubPath + "cvModel3"
+        cvModel.save(savingPathWithSubModels)
+        cvModel3 = CrossValidatorModel.load(savingPathWithSubModels)
+        checkSubModels(cvModel3.subModels)
+        cvModel4 = cvModel3.copy()
+        checkSubModels(cvModel4.subModels)
+
+        savingPathWithoutSubModels = testSubPath + "cvModel2"
+        cvModel.write().option("persistSubModels", "false").save(savingPathWithoutSubModels)
+        cvModel2 = CrossValidatorModel.load(savingPathWithoutSubModels)
+        self.assertEqual(cvModel2.subModels, None)
+
+        for i in range(numFolds):
+            for j in range(len(grid)):
+                self.assertEqual(cvModel.subModels[i][j].uid, cvModel3.subModels[i][j].uid)
+
     def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
@@ -1148,6 +1229,40 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvs.setParallelism(2)
         tvsParallelModel = tvs.fit(dataset)
         self.assertEqual(tvsSerialModel.validationMetrics, tvsParallelModel.validationMetrics)
+
+    def test_expose_sub_models(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+                                   collectSubModels=True)
+        tvsModel = tvs.fit(dataset)
+        self.assertEqual(len(tvsModel.subModels), len(grid))
+
+        # Test the default value for option "persistSubModel" to be "true"
+        testSubPath = temp_path + "/testTrainValidationSplitSubModels"
+        savingPathWithSubModels = testSubPath + "cvModel3"
+        tvsModel.save(savingPathWithSubModels)
+        tvsModel3 = TrainValidationSplitModel.load(savingPathWithSubModels)
+        self.assertEqual(len(tvsModel3.subModels), len(grid))
+        tvsModel4 = tvsModel3.copy()
+        self.assertEqual(len(tvsModel4.subModels), len(grid))
+
+        savingPathWithoutSubModels = testSubPath + "cvModel2"
+        tvsModel.write().option("persistSubModels", "false").save(savingPathWithoutSubModels)
+        tvsModel2 = TrainValidationSplitModel.load(savingPathWithoutSubModels)
+        self.assertEqual(tvsModel2.subModels, None)
+
+        for i in range(len(grid)):
+            self.assertEqual(tvsModel.subModels[i].uid, tvsModel3.subModels[i].uid)
 
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.
@@ -2021,17 +2136,23 @@ class ImageReaderTest2(PySparkTestCase):
     @classmethod
     def setUpClass(cls):
         super(ImageReaderTest2, cls).setUpClass()
+        cls.hive_available = True
         # Note that here we enable Hive's support.
         cls.spark = None
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
             cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         except TypeError:
             cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
-        cls.spark = HiveContext._createForTesting(cls.sc)
+            cls.hive_available = False
+        if cls.hive_available:
+            cls.spark = HiveContext._createForTesting(cls.sc)
+
+    def setUp(self):
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     @classmethod
     def tearDownClass(cls):
@@ -2095,6 +2216,13 @@ class DefaultValuesTests(PySparkTestCase):
                         and issubclass(cls, JavaParams) and not inspect.isabstract(cls):
                     # NOTE: disable check_params_exist until there is parity with Scala API
                     ParamTests.check_params(self, cls(), check_params_exist=False)
+
+        # Additional classes that need explicit construction
+        from pyspark.ml.feature import CountVectorizerModel, StringIndexerModel
+        ParamTests.check_params(self, CountVectorizerModel.from_vocabulary(['a'], 'input'),
+                                check_params_exist=False)
+        ParamTests.check_params(self, StringIndexerModel.from_labels(['a', 'b'], 'input'),
+                                check_params_exist=False)
 
 
 def _squared_distance(a, b):
@@ -2540,6 +2668,6 @@ class EstimatorTest(unittest.TestCase):
 if __name__ == "__main__":
     from pyspark.ml.tests import *
     if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
     else:
-        unittest.main()
+        unittest.main(verbosity=2)

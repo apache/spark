@@ -302,16 +302,16 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
     override def load(path: String): GBTRegressionModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName, false)
 
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
       val trees: Array[DecisionTreeRegressionModel] = treesData.map {
         case (treeMetadata, root) =>
-          val tree =
-            new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
-          DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+          val tree = new DecisionTreeRegressionModel(treeMetadata.uid,
+            root.asInstanceOf[RegressionNode], numFeatures)
+          treeMetadata.getAndSetParams(tree)
           tree
       }
 
@@ -319,7 +319,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
         s" trees based on metadata but found ${trees.length} trees.")
 
       val model = new GBTRegressionModel(metadata.uid, trees, treeWeights, numFeatures)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

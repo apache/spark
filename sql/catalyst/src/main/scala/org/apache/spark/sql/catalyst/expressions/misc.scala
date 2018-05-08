@@ -91,7 +91,8 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
     ExprCode(code = s"""${eval.code}
        |if (${eval.isNull} || !${eval.value}) {
        |  throw new RuntimeException($errMsgField);
-       |}""".stripMargin, isNull = "true", value = "null")
+       |}""".stripMargin, isNull = TrueLiteral,
+      value = JavaCode.defaultLiteral(dataType))
   }
 
   override def sql: String = s"assert_true(${child.sql})"
@@ -150,7 +151,7 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
       "new org.apache.spark.sql.catalyst.util.RandomUUIDGenerator(" +
       s"${randomSeed.get}L + partitionIndex);")
     ev.copy(code = s"final UTF8String ${ev.value} = $randomGen.getNextUUIDUTF8String();",
-      isNull = "false")
+      isNull = FalseLiteral)
   }
 
   override def freshCopy(): Uuid = Uuid(randomSeed)
