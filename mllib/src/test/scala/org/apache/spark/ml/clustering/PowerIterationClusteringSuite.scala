@@ -84,7 +84,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     result.select("id", "prediction").collect().foreach {
       case Row(id: Long, cluster: Integer) => predictions(cluster) += id
     }
-    assert(predictions.toSet == Set((1 until n1).toSet, (n1 until n).toSet))
+    assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
 
     val result2 = new PowerIterationClustering()
       .setK(2)
@@ -95,7 +95,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     result2.select("id", "prediction").collect().foreach {
       case Row(id: Long, cluster: Integer) => predictions2(cluster) += id
     }
-    assert(predictions2.toSet == Set((1 until n1).toSet, (n1 until n).toSet))
+    assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
   }
 
   test("supported input types") {
@@ -183,23 +183,28 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(msg.contains(s"Row for ID ${model.getIdCol}=1"))
   }
 
-  test("invalid input:r and similarity arrays") {
+  test("valid input : When ID is IntType") {
 
     val data = spark.createDataFrame(Seq(
-      (0, Array(1L), Array(0.9)),
-      (1, Array(2L), Array(0.9)),
-      (2, Array(3L), Array(0.9)),
-      (3, Array(4L), Array(0.1)),
-      (4, Array(5L), Array(0.9))
+      (0, Array(1), Array(0.9)),
+      (1, Array(2), Array(0.9)),
+      (2, Array(3), Array(0.9)),
+      (3, Array(4), Array(0.1)),
+      (4, Array(5), Array(0.9))
     )).toDF("id", "neighbors", "similarities")
-    val result2 = new PowerIterationClustering()
+
+    val result = new PowerIterationClustering()
       .setK(2)
       .setMaxIter(10)
       .setInitMode("random")
       .transform(data)
-  val pred = result2.collect()
 
-    assert(true, true)
+    val predictions = Array.fill(2)(mutable.Set.empty[Long])
+    result.select("id", "prediction").collect().foreach {
+      case Row(id: Long, cluster: Integer) => predictions(cluster) += id
+    }
+    assert(predictions.toSet == Set((0 until 4).toSet, Set(4, 5)))
+    assert(result.columns(1).equals("prediction"))
   }
 
   test("read/write") {
