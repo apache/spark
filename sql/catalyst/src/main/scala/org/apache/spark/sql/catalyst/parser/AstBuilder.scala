@@ -503,7 +503,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       val join = right.optionalMap(left)(Join(_, _, Inner, None))
       withJoinRelations(join, relation)
     }
-    ctx.lateralView.asScala.foldLeft(from)(withGenerate)
+    if (ctx.pivotClause() != null) {
+      withPivot(ctx.pivotClause, from)
+    } else {
+      ctx.lateralView.asScala.foldLeft(from)(withGenerate)
+    }
   }
 
   /**
@@ -612,6 +616,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       plan = UnresolvedHint(stmt.hintName.getText, stmt.parameters.asScala.map(expression), plan)
     }
     plan
+  }
+
+  /**
+   * Add a [[Pivot]] to a logical plan.
+   */
+  private def withPivot(
+      ctx: PivotClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val aggregates = Option(ctx.aggregates).toSeq
+      .flatMap(_.namedExpression.asScala)
+      .map(typedVisit[Expression])
+    val pivotColumn = UnresolvedAttribute.quoted(ctx.pivotColumn.getText)
+    val pivotValues = ctx.pivotValues.asScala.map(typedVisit[Expression]).map(Literal.apply)
+    Pivot(None, pivotColumn, pivotValues, aggregates, query)
   }
 
   /**

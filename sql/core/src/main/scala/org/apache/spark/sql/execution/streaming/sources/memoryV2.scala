@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Complete, Update}
-import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.sql.execution.streaming.{MemorySinkBase, Sink}
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
+class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkBase with Logging {
   override def createStreamWriter(
       queryId: String,
       schema: StructType,
@@ -66,6 +66,10 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
 
   def latestBatchData: Seq[Row] = synchronized {
     batches.lastOption.toSeq.flatten(_.data)
+  }
+
+  def dataSinceBatch(sinceBatchId: Long): Seq[Row] = synchronized {
+    batches.filter(_.batchId > sinceBatchId).flatMap(_.data)
   }
 
   def toDebugString: String = synchronized {

@@ -208,6 +208,7 @@ NULL
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21)))
+#' head(select(tmp, flatten(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
@@ -3032,6 +3033,19 @@ setMethod("array_position",
           signature(x = "Column", value = "ANY"),
           function(x, value) {
             jc <- callJStatic("org.apache.spark.sql.functions", "array_position", x@jc, value)
+            column(jc)
+          })
+
+#' @details
+#' \code{flatten}: Transforms an array of arrays into a single array.
+#'
+#' @rdname column_collection_functions
+#' @aliases flatten flatten,Column-method
+#' @note flatten since 2.4.0
+setMethod("flatten",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "flatten", x@jc)
             column(jc)
           })
 

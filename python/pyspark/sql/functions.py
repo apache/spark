@@ -1834,6 +1834,19 @@ def array_contains(col, value):
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
+@since(2.4)
+def slice(x, start, length):
+    """
+    Collection function: returns an array containing  all the elements in `x` from index `start`
+    (or starting from the end if `start` is negative) with the specified `length`.
+    >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
+    >>> df.select(slice(df.x, 2, 2).alias("sliced")).collect()
+    [Row(sliced=[2, 3]), Row(sliced=[5])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.slice(_to_java_column(x), start, length))
+
+
 @ignore_unicode_prefix
 @since(2.4)
 def array_join(col, delimiter, null_replacement=None):
@@ -2183,18 +2196,36 @@ def array_max(col):
 def sort_array(col, asc=True):
     """
     Collection function: sorts the input array in ascending or descending order according
-    to the natural ordering of the array elements.
+    to the natural ordering of the array elements. Null elements will be placed at the beginning
+    of the returned array in ascending order or at the end of the returned array in descending
+    order.
 
     :param col: name of column or expression
 
-    >>> df = spark.createDataFrame([([2, 1, 3],),([1],),([],)], ['data'])
+    >>> df = spark.createDataFrame([([2, 1, None, 3],),([1],),([],)], ['data'])
     >>> df.select(sort_array(df.data).alias('r')).collect()
-    [Row(r=[1, 2, 3]), Row(r=[1]), Row(r=[])]
+    [Row(r=[None, 1, 2, 3]), Row(r=[1]), Row(r=[])]
     >>> df.select(sort_array(df.data, asc=False).alias('r')).collect()
-    [Row(r=[3, 2, 1]), Row(r=[1]), Row(r=[])]
+    [Row(r=[3, 2, 1, None]), Row(r=[1]), Row(r=[])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
+
+
+@since(2.4)
+def array_sort(col):
+    """
+    Collection function: sorts the input array in ascending order. The elements of the input array
+    must be orderable. Null elements will be placed at the end of the returned array.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([2, 1, None, 3],),([1],),([],)], ['data'])
+    >>> df.select(array_sort(df.data).alias('r')).collect()
+    [Row(r=[1, 2, 3, None]), Row(r=[1]), Row(r=[])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
 
 
 @since(1.5)
