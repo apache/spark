@@ -110,11 +110,12 @@ private[sql] class JSONOptions(
       val blacklist = Seq(Charset.forName("UTF-16"), Charset.forName("UTF-32"))
       val isBlacklisted = blacklist.contains(Charset.forName(enc))
       require(multiLine || !isBlacklisted,
-        s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
-           | ${blacklist.mkString(", ")}""".stripMargin)
+        s"""The $enc encoding in the blacklist is not allowed when multiLine is disabled.
+          |Blacklist: ${blacklist.mkString(", ")}""".stripMargin)
 
-      val isLineSepRequired = !(multiLine == false &&
-        Charset.forName(enc) != StandardCharsets.UTF_8 && lineSeparator.isEmpty)
+      val isLineSepRequired =
+        multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
+
       require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
 
       enc
