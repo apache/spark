@@ -454,10 +454,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(arrays_overlap(df("a"), df("b"))), answer)
     checkAnswer(df.selectExpr("arrays_overlap(a, b)"), answer)
 
-    checkAnswer(sql("select arrays_overlap(array(1, 2, 3), array('a', 'b', 'c'))"), Row(false))
+    checkAnswer(
+      Seq((Seq(1, 2, 3), Seq(2.0, 2.5))).toDF("a", "b").selectExpr("arrays_overlap(a, b)"),
+      Row(true))
 
     intercept[AnalysisException] {
-      sql("select arrays_overlap(array(array(1)), array('a'))")
+      sql("select arrays_overlap(array(1, 2, 3), array('a', 'b', 'c'))")
     }
 
     intercept[AnalysisException] {
