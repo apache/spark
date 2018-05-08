@@ -219,6 +219,8 @@ NULL
 #' head(select(tmp3, map_keys(tmp3$v3)))
 #' head(select(tmp3, map_values(tmp3$v3)))
 #' head(select(tmp3, element_at(tmp3$v3, "Valiant")))}
+#' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$hp))
+#' head(select(tmp4, concat(tmp4$v4, tmp4$v5)))
 NULL
 
 #' Window functions for Column operations

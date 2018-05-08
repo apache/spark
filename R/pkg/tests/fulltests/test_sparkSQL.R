@@ -1748,6 +1748,14 @@ test_that("string operators", {
     collect(select(df5, repeat_string(df5$a, -1)))[1, 1],
     ""
   )
+
+  l6 <- list(list(a = "abc"))
+  df6 <- createDataFrame(l6)
+  df7 <- select(df6, reverse(df6$a))
+  expect_equal(
+    collect(select(df6, reverse(df6$a)))[1, 1],
+    "cba"
+  )
 })
 
 test_that("date functions on a DataFrame", {
