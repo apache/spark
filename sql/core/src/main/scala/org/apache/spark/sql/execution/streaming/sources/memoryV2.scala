@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Complete, Update}
 import org.apache.spark.sql.execution.streaming.{MemorySinkBase, Sink}
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamWriteSupport}
@@ -182,7 +183,7 @@ class MemoryDataWriter(partition: Int, outputMode: OutputMode)
  * Used to query the data that has been written into a [[MemorySinkV2]].
  */
 case class MemoryPlanV2(sink: MemorySinkV2, override val output: Seq[Attribute]) extends LeafNode {
-  private val sizePerRow = output.map(_.dataType.defaultSize).sum
+  private val sizePerRow = EstimationUtils.getSizePerRow(output)
 
   override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
 }
