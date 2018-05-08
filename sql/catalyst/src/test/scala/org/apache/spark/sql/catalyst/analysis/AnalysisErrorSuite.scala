@@ -67,10 +67,10 @@ private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
   override def deserialize(datum: Any): UngroupableData = {
     datum match {
       case data: MapData =>
-        val keyArray = data.keyArray().array
-        val valueArray = data.valueArray().array
+        val keyArray = data.keyArray().toIntArray()
+        val valueArray = data.valueArray().toIntArray()
         assert(keyArray.length == valueArray.length)
-        val mapData = keyArray.zip(valueArray).toMap.asInstanceOf[Map[Int, Int]]
+        val mapData = keyArray.zip(valueArray).toMap
         UngroupableData(mapData)
     }
   }
