@@ -232,7 +232,7 @@ class PowerIterationClustering private[clustering] (
         case _: LongType =>
           uncastPredictions
         case otherType =>
-          uncastPredictions.select(col($(idCol)).cast(otherType).alias($(idCol)))
+          uncastPredictions.withColumn($(idCol), col($(idCol)).cast(otherType))
       }
     }
 
