@@ -20,6 +20,7 @@ import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.HasMetadata
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.Constants.SPARK_CONF_PATH
 import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 import org.apache.spark.launcher.SparkLauncher
@@ -29,6 +30,9 @@ private[spark] class JavaDriverFeatureStep(
   extends KubernetesFeatureConfigStep {
   override def configurePod(pod: SparkPod): SparkPod = {
     val withDriverArgs = new ContainerBuilder(pod.container)
+      .addToArgs("driver")
+      .addToArgs("--properties-file", SPARK_CONF_PATH)
+      .addToArgs("--class", kubernetesConf.roleSpecificConf.mainClass)
       // The user application jar is merged into the spark.jars list and managed through that
       // property, so there is no need to reference it explicitly here.
       .addToArgs(SparkLauncher.NO_RESOURCE)

@@ -46,18 +46,18 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
         "test-app",
         "python-runner",
         Seq("5 7")),
-      "",
-      "",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Seq.empty[String])
+      appResourceNamePrefix = "",
+      appId = "",
+      roleLabels = Map.empty,
+      roleAnnotations = Map.empty,
+      roleSecretNamesToMountPaths = Map.empty,
+      roleEnvs = Map.empty,
+      sparkFiles = Seq.empty[String])
 
     val step = new PythonDriverFeatureStep(kubernetesConf)
     val driverPod = step.configurePod(baseDriverPod).pod
     val driverContainerwithPySpark = step.configurePod(baseDriverPod).container
-//    assert(driverContainerwithPySpark.getEnv.size === 4)
+    assert(driverContainerwithPySpark.getEnv.size === 4)
     val envs = driverContainerwithPySpark
       .getEnv
       .asScala
@@ -78,20 +78,25 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
       sparkConf,
       KubernetesDriverSpecificConf(
         Some(PythonMainAppResource("local:///main.py")),
-        "test-app",
+        "test-class-py",
         "python-runner",
         Seq.empty[String]),
-      "",
-      "",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Seq.empty[String])
+      appResourceNamePrefix = "",
+      appId = "",
+      roleLabels = Map.empty,
+      roleAnnotations = Map.empty,
+      roleSecretNamesToMountPaths = Map.empty,
+      roleEnvs = Map.empty,
+      sparkFiles = Seq.empty[String])
     val step = new PythonDriverFeatureStep(kubernetesConf)
-    val driverPod = step.configurePod(baseDriverPod).pod
     val driverContainerwithPySpark = step.configurePod(baseDriverPod).container
-    assert(driverContainerwithPySpark.getEnv.size === 2)
+    val args = driverContainerwithPySpark
+      .getArgs.asScala
+    assert(driverContainerwithPySpark.getArgs.size === 5)
+    assert(args === List(
+      "driver-py",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", "test-class-py"))
     val envs = driverContainerwithPySpark
       .getEnv
       .asScala

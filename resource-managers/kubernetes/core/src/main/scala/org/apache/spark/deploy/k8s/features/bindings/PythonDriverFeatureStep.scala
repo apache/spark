@@ -19,7 +19,6 @@ package org.apache.spark.deploy.k8s.features.bindings
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.ContainerBuilder
-import io.fabric8.kubernetes.api.model.EnvVar
 import io.fabric8.kubernetes.api.model.EnvVarBuilder
 import io.fabric8.kubernetes.api.model.HasMetadata
 
@@ -35,20 +34,20 @@ private[spark] class PythonDriverFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     val roleConf = kubernetesConf.roleSpecificConf
     require(roleConf.mainAppResource.isDefined, "PySpark Main Resource must be defined")
-    val maybePythonArgs: Option[EnvVar] = Option(roleConf.appArgs).filter(_.nonEmpty).map(
+    val maybePythonArgs = Option(roleConf.appArgs).filter(_.nonEmpty).map(
       s =>
         new EnvVarBuilder()
           .withName(ENV_PYSPARK_ARGS)
           .withValue(s.mkString(","))
           .build())
-    val maybePythonFiles: Option[EnvVar] = kubernetesConf.pyFiles().map(
+    val maybePythonFiles = kubernetesConf.pyFiles().map(
       pyFiles =>
         new EnvVarBuilder()
           .withName(ENV_PYSPARK_FILES)
           .withValue(KubernetesUtils.resolveFileUrisAndPath(pyFiles.split(","))
             .mkString(":"))
           .build())
-    val envSeq : Seq[EnvVar] =
+    val envSeq =
       Seq(new EnvVarBuilder()
           .withName(ENV_PYSPARK_PRIMARY)
           .withValue(KubernetesUtils.resolveFileUri(kubernetesConf.pySparkMainResource().get))
@@ -62,7 +61,11 @@ private[spark] class PythonDriverFeatureStep(
       maybePythonFiles.toSeq
 
     val withPythonPrimaryContainer = new ContainerBuilder(pod.container)
-        .addAllToEnv(pythonEnvs.asJava).build()
+        .addAllToEnv(pythonEnvs.asJava)
+        .addToArgs("driver-py")
+        .addToArgs("--properties-file", SPARK_CONF_PATH)
+        .addToArgs("--class", roleConf.mainClass)
+      .build()
 
     SparkPod(pod.pod, withPythonPrimaryContainer)
   }
