@@ -148,7 +148,7 @@ class GBTClassifier @Since("1.4.0") (
 
   /** @group setParam */
   @Since("2.4.0")
-  override def setValidationIndicatorCol(value: String): this.type = {
+  def setValidationIndicatorCol(value: String): this.type = {
     set(validationIndicatorCol, value)
   }
 
@@ -156,11 +156,11 @@ class GBTClassifier @Since("1.4.0") (
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
 
-    val withValidation = isDefined(validationIndicatorCol)
+    val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
 
     // We copy and modify this from Classifier.extractLabeledPoints since GBT only supports
     // 2 classes now.  This lets us provide a more precise error message.
-    val convert2LabelPoint = (dataset: Dataset[_]) => {
+    val convert2LabeledPoint = (dataset: Dataset[_]) => {
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
           require(label == 0 || label == 1, s"GBTClassifier was given" +
@@ -172,11 +172,11 @@ class GBTClassifier @Since("1.4.0") (
 
     val (trainDataset, validationDataset) = if (withValidation) {
       (
-        convert2LabelPoint(dataset.filter(not(col($(validationIndicatorCol))))),
-        convert2LabelPoint(dataset.filter(col($(validationIndicatorCol))))
+        convert2LabeledPoint(dataset.filter(not(col($(validationIndicatorCol))))),
+        convert2LabeledPoint(dataset.filter(col($(validationIndicatorCol))))
       )
     } else {
-      (convert2LabelPoint(dataset), null)
+      (convert2LabeledPoint(dataset), null)
     }
 
     val numFeatures = trainDataset.first().features.size

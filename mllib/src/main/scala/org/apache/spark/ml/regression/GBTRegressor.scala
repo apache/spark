@@ -147,7 +147,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("2.4.0")
-  override def setValidationIndicatorCol(value: String): this.type = {
+  def setValidationIndicatorCol(value: String): this.type = {
     set(validationIndicatorCol, value)
   }
 
@@ -155,7 +155,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
 
-    val withValidation = isDefined(validationIndicatorCol)
+    val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
 
     val (trainDataset, validationDataset) = if (withValidation) {
       (

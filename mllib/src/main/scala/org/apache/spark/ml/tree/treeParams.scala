@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.util.Try
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -463,16 +464,26 @@ private[ml] trait RandomForestRegressorParams
 private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize
   with HasValidationIndicatorCol {
 
-  /* TODO: Add this doc when we add this param.  SPARK-7132
-   * Threshold for stopping early when runWithValidation is used.
+  /**
+   * Threshold for stopping early when fit with validation is used.
    * If the error rate on the validation input changes by less than the validationTol,
-   * then learning will stop early (before [[numIterations]]).
-   * This parameter is ignored when run is used.
+   * then learning will stop early (before [[maxIter]]).
+   * This parameter is ignored when fit without validation is used.
    * (default = 1e-5)
    * @group param
    */
-  // final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
-  // validationTol -> 1e-5
+  @Since("2.4.0")
+  final val validationTol: DoubleParam = new DoubleParam(this, "validationTol",
+    "Threshold for stopping early when fit with validation is used." +
+    "If the error rate on the validation input changes by less than the validationTol," +
+    "then learning will stop early (before `maxIter`)." +
+    "This parameter is ignored when fit without validation is used.",
+    ParamValidators.gtEq(0.0)
+  )
+
+  /** @group getParam */
+  @Since("2.4.0")
+  final def getValidationTol: Double = $(validationTol)
 
   /**
    * @deprecated This method is deprecated and will be removed in 3.0.0.
@@ -498,10 +509,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
   @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
-  /** @group setParam */
-  def setValidationIndicatorCol(value: String): this.type = set(validationIndicatorCol, value)
-
-  setDefault(maxIter -> 20, stepSize -> 0.1)
+  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 1e-5)
 
   setDefault(featureSubsetStrategy -> "all")
 
@@ -511,7 +519,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
       oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2, oldAlgo, OldVariance)
     // NOTE: The old API does not support "seed" so we ignore it.
-    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize)
+    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize, getValidationTol)
   }
 
   /** Get old Gradient Boosting Loss type */

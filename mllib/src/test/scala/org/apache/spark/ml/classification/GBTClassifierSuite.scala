@@ -383,6 +383,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       gbt.setValidationIndicatorCol(validationIndicatorCol)
       val modelWithValidation = gbt.fit(trainDF.union(validationDF))
 
+      assert(modelWithoutValidation.numTrees === numIter)
       // early stop
       assert(modelWithValidation.numTrees < numIter)
 
@@ -393,7 +394,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
           GradientBoostedTrees.computeError(remappedRdd, modelWithValidation.trees,
             modelWithValidation.treeWeights, modelWithValidation.getOldLossType))
       }
-      assert(errorWithValidation <= errorWithoutValidation)
+      assert(errorWithValidation < errorWithoutValidation)
 
       val evaluationArray = GradientBoostedTrees
         .evaluateEachIteration(validationData, modelWithoutValidation.trees,
