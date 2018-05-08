@@ -151,10 +151,8 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   private lazy val calcPrefix: Any => Long = child.child.dataType match {
     case BooleanType => (raw) =>
       if (raw.asInstanceOf[Boolean]) 1 else 0
-    case _: IntegralType => (raw) =>
+    case DateType | TimestampType | _: IntegralType => (raw) =>
       raw.asInstanceOf[java.lang.Number].longValue()
-    case DateType | TimestampType =>
-      _.asInstanceOf[java.lang.Number].longValue()
     case FloatType | DoubleType => (raw) => {
       val dVal = raw.asInstanceOf[java.lang.Number].doubleValue()
       DoublePrefixComparator.computePrefix(dVal)
