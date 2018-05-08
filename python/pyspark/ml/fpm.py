@@ -16,8 +16,9 @@
 #
 
 from pyspark import keyword_only, since
+from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, _jvm
 from pyspark.ml.param.shared import *
 
 __all__ = ["FPGrowth", "FPGrowthModel"]
@@ -243,3 +244,75 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
 
     def _create_model(self, java_model):
         return FPGrowthModel(java_model)
+
+
+class PrefixSpan(object):
+    """
+    .. note:: Experimental
+
+    A parallel PrefixSpan algorithm to mine frequent sequential patterns.
+    The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
+    Efficiently by Prefix-Projected Pattern Growth
+    (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
+
+    .. versionadded:: 2.4.0
+
+    """
+    @staticmethod
+    @since("2.4.0")
+    def findFrequentSequentialPatterns(dataset,
+                                       sequenceCol,
+                                       minSupport,
+                                       maxPatternLength,
+                                       maxLocalProjDBSize):
+        """
+        .. note:: Experimental
+        Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
+
+        :param dataset: A dataset or a dataframe containing a sequence column which is
+                        `Seq[Seq[_]]` type.
+        :param sequenceCol: The name of the sequence column in dataset, rows with nulls in this
+                            column are ignored.
+        :param minSupport: The minimal support level of the sequential pattern, any pattern that
+                           appears more than (minSupport * size-of-the-dataset) times will be
+                           output (recommended value: `0.1`).
+        :param maxPatternLength: The maximal length of the sequential pattern
+                                 (recommended value: `10`).
+        :param maxLocalProjDBSize: The maximum number of items (including delimiters used in the
+                                   internal storage format) allowed in a projected database before
+                                   local processing. If a projected database exceeds this size,
+                                   another iteration of distributed prefix growth is run
+                                   (recommended value: `32000000`).
+        :return: A `DataFrame` that contains columns of sequence and corresponding frequency.
+                 The schema of it will be:
+                  - `sequence: Seq[Seq[T]]` (T is the item type)
+                  - `freq: Long`
+
+        >>> from pyspark.ml.fpm import PrefixSpan
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([Row(sequence=[[1, 2], [3]]),
+        ...                      Row(sequence=[[1], [3, 2], [1, 2]]),
+        ...                      Row(sequence=[[1, 2], [5]]),
+        ...                      Row(sequence=[[6]])]).toDF()
+        >>> PrefixSpan.findFrequentSequentialPatterns(df, "sequence", minSupport = 0.5,
+        ...                                           maxPatternLength = 5,
+        ...                                           maxLocalProjDBSize = 32000000)
+        ...                                           .sort("sequence").show(truncate=False)
+        +----------+----+
+        |sequence  |freq|
+        +----------+----+
+        |[[1]]     |3   |
+        |[[1], [3]]|2   |
+        |[[1, 2]]  |3   |
+        |[[2]]     |3   |
+        |[[3]]     |2   |
+        +----------+----+
+
+        """
+        javaPrefixSpanObj = _jvm().org.apache.spark.ml.fpm.PrefixSpan
+        sc = SparkContext._active_spark_context
+        dataset = _py2java(sc, dataset)
+        res = javaPrefixSpanObj\
+            .findFrequentSequentialPatterns(dataset, sequenceCol, minSupport, maxPatternLength,
+                                            maxLocalProjDBSize)
+        return _java2py(sc, res)
