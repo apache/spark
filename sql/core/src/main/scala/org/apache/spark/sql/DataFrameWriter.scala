@@ -236,7 +236,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         "write files of Hive data source directly.")
     }
 
-    assertNotBucketedOrSorted("save")
+    assertNotBucketed("save")
 
     val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
@@ -309,7 +309,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    assertNotBucketedOrSorted("insertInto")
+    assertNotBucketed("insertInto")
 
     if (partitioningColumns.isDefined) {
       throw new AnalysisException(
@@ -330,8 +330,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
-    if (sortColumnNames.isDefined) {
-      require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
+    if (sortColumnNames.isDefined && numBuckets.isEmpty) {
+      throw new AnalysisException("sortBy must be used together with bucketBy")
     }
 
     numBuckets.map { n =>
@@ -339,16 +339,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def assertNotBucketedOrSorted(operation: String): Unit = {
-    (numBuckets.isDefined, sortColumnNames.isDefined) match {
-      case (true, true) =>
-        throw new AnalysisException(
-          s"'$operation' does not support bucketing and sorting right now")
-      case (true, false) =>
-        throw new AnalysisException(s"'$operation' does not support bucketing right now")
-      case (false, true) =>
-        throw new AnalysisException(s"'$operation' does not support sorting right now")
-      case _ =>
+  private def assertNotBucketed(operation: String): Unit = {
+    if (getBucketSpec.isDefined) {
+      if (sortColumnNames.isEmpty) {
+        throw new AnalysisException(s"'$operation' does not support bucketBy right now")
+      } else {
+        throw new AnalysisException(s"'$operation' does not support bucketBy and sortBy right now")
+      }
     }
   }
 
@@ -498,7 +495,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
-    assertNotBucketedOrSorted("jdbc")
+    assertNotBucketed("jdbc")
     // connectionProperties should override settings in extraOptions.
     this.extraOptions ++= connectionProperties.asScala
     // explicit url and dbtable should override all
