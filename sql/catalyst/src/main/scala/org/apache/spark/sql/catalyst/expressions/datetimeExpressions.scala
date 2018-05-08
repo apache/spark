@@ -1194,9 +1194,9 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
 }
 
 /**
- * Returns number of months between dates `date1` and `date2`.
- * If `date1` is later than `date2`, then the result is positive.
- * If `date1` and `date2` are on the same day of month, or both
+ * Returns number of months between times `timestamp1` and `timestamp2`.
+ * If `timestamp1` is later than `timestamp2`, then the result is positive.
+ * If `timestamp1` and `timestamp2` are on the same day of month, or both
  * are the last day of month, time of day will be ignored. Otherwise, the
  * difference is calculated based on 31 days per month, and rounded to
  * 8 digits unless roundOff=false.
@@ -1204,8 +1204,8 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(date1, date2[, roundOff]) - If `date1` is later than `date2`, then the result
-      is positive. If `date1` and `date2` are on the same day of month, or both
+    _FUNC_(timestamp1, timestamp2[, roundOff]) - If `timestamp1` is later than `timestamp2`, then the result
+      is positive. If `timestamp1` and `timestamp2` are on the same day of month, or both
       are the last day of month, time of day will be ignored. Otherwise, the difference is
       calculated based on 31 days per month, and rounded to 8 digits unless roundOff=false.
   """,
