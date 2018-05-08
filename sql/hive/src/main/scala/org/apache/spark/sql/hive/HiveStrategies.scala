@@ -189,10 +189,12 @@ case class RelationConversions(
   // Return true for Apache ORC and Hive ORC-related configuration names.
   // Note that Spark doesn't support configurations like `hive.merge.orcfile.stripe.level`.
   private def isOrcProperty(key: String) =
-    key.startsWith("orc.") || key.contains(".orc.")
+    conf.getConf(HiveUtils.CONVERT_METASTORE_TABLE_PROPERTY) &&
+      (key.startsWith("orc.") || key.contains(".orc."))
 
   private def isParquetProperty(key: String) =
-    key.startsWith("parquet.") || key.contains(".parquet.")
+    conf.getConf(HiveUtils.CONVERT_METASTORE_TABLE_PROPERTY) &&
+      (key.startsWith("parquet.") || key.contains(".parquet."))
 
   private def convert(relation: HiveTableRelation): LogicalRelation = {
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
