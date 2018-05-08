@@ -1505,6 +1505,10 @@ test_that("column functions", {
   result <- collect(select(df, reverse(df[[1]])))[[1]]
   expect_equal(result, list(list(3L, 2L, 1L), list(4L, 5L, 6L)))
 
+  df2 <- createDataFrame(list(list("abc")))
+  result <- collect(select(df2, reverse(df2[[1]])))[[1]]
+  expect_equal(result, "cba")
+
   # Test flattern()
   df <- createDataFrame(list(list(list(list(1L, 2L), list(3L, 4L))),
                         list(list(list(5L, 6L), list(7L, 8L)))))
@@ -1747,13 +1751,6 @@ test_that("string operators", {
   expect_equal(
     collect(select(df5, repeat_string(df5$a, -1)))[1, 1],
     ""
-  )
-
-  l6 <- list(list(a = "abc"))
-  df6 <- createDataFrame(l6)
-  expect_equal(
-    collect(select(df6, reverse(df6$a)))[1, 1],
-    "cba"
   )
 })
 
