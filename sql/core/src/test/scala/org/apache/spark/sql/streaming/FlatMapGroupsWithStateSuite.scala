@@ -615,20 +615,20 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
 
     testStream(result, Update)(
       AddData(inputData, "a"),
-      CheckLastBatch(("a", "1")),
+      CheckNewAnswer(("a", "1")),
       assertNumStateRows(total = 1, updated = 1),
       AddData(inputData, "a", "b"),
-      CheckLastBatch(("a", "2"), ("b", "1")),
+      CheckNewAnswer(("a", "2"), ("b", "1")),
       assertNumStateRows(total = 2, updated = 2),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
-      CheckLastBatch(("b", "2")),
+      CheckNewAnswer(("b", "2")),
       assertNumStateRows(total = 1, updated = 2),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
-      CheckLastBatch(("a", "1"), ("c", "1")),
+      CheckNewAnswer(("a", "1"), ("c", "1")),
       assertNumStateRows(total = 3, updated = 2)
     )
   }
@@ -657,15 +657,15 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
         .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
     testStream(result, Update)(
       AddData(inputData, "a", "a", "b"),
-      CheckLastBatch(("a", "1"), ("a", "2"), ("b", "1")),
+      CheckNewAnswer(("a", "1"), ("a", "2"), ("b", "1")),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
-      CheckLastBatch(("b", "2")),
+      CheckNewAnswer(("b", "2")),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
-      CheckLastBatch(("a", "1"), ("c", "1"))
+      CheckNewAnswer(("a", "1"), ("c", "1"))
     )
   }
 
@@ -694,22 +694,22 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
 
     testStream(result, Complete)(
       AddData(inputData, "a"),
-      CheckLastBatch(("a", 1)),
+      CheckNewAnswer(("a", 1)),
       AddData(inputData, "a", "b"),
       // mapGroups generates ("a", "2"), ("b", "1"); so increases counts of a and b by 1
-      CheckLastBatch(("a", 2), ("b", 1)),
+      CheckNewAnswer(("a", 2), ("b", 1)),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "b"),
       // mapGroups should remove state for "a" and generate ("a", "-1"), ("b", "2") ;
       // so increment a and b by 1
-      CheckLastBatch(("a", 3), ("b", 2)),
+      CheckNewAnswer(("a", 3), ("b", 2)),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "c"),
       // mapGroups should recreate state for "a" and generate ("a", "1"), ("c", "1") ;
       // so increment a and c by 1
-      CheckLastBatch(("a", 4), ("b", 2), ("c", 1))
+      CheckNewAnswer(("a", 4), ("b", 2), ("c", 1))
     )
   }
 
@@ -757,17 +757,17 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
       AddData(inputData, "a"),
       AdvanceManualClock(1 * 1000),
-      CheckLastBatch(("a", "1")),
+      CheckNewAnswer(("a", "1")),
       assertNumStateRows(total = 1, updated = 1),
 
       AddData(inputData, "b"),
       AdvanceManualClock(1 * 1000),
-      CheckLastBatch(("b", "1")),
+      CheckNewAnswer(("b", "1")),
       assertNumStateRows(total = 2, updated = 1),
 
       AddData(inputData, "b"),
       AdvanceManualClock(10 * 1000),
-      CheckLastBatch(("a", "-1"), ("b", "2")),
+      CheckNewAnswer(("a", "-1"), ("b", "2")),
       assertNumStateRows(total = 1, updated = 2),
 
       StopStream,
@@ -775,12 +775,12 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
 
       AddData(inputData, "c"),
       AdvanceManualClock(11 * 1000),
-      CheckLastBatch(("b", "-1"), ("c", "1")),
+      CheckNewAnswer(("b", "-1"), ("c", "1")),
       assertNumStateRows(total = 1, updated = 2),
 
       AddData(inputData, "c"),
       AdvanceManualClock(20 * 1000),
-      CheckLastBatch(("c", "2")),
+      CheckNewAnswer(("c", "2")),
       assertNumStateRows(total = 1, updated = 1)
     )
   }
@@ -821,13 +821,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     testStream(result, Update)(
       StartStream(Trigger.ProcessingTime("1 second")),
       AddData(inputData, ("a", 11), ("a", 13), ("a", 15)), // Set timeout timestamp of ...
-      CheckLastBatch(("a", 15)),                           // "a" to 15 + 5 = 20s, watermark to 5s
+      CheckNewAnswer(("a", 15)),                           // "a" to 15 + 5 = 20s, watermark to 5s
       AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
-      CheckLastBatch(),                   // No output as data should get filtered by watermark
+      CheckNewAnswer(),                   // No output as data should get filtered by watermark
       AddData(inputData, ("dummy", 35)),  // Set watermark = 35 - 10 = 25s
-      CheckLastBatch(),                   // No output as no data for "a"
-      AddData(inputData, ("a", 24)),      // Add data older than watermark, should be ignored
-      CheckLastBatch(("a", -1))           // State for "a" should timeout and emit -1
+      CheckNewAnswer(("a", -1))           // State for "a" should timeout and emit -1
     )
   }
 
@@ -856,20 +854,20 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
 
     testStream(result, Update)(
       AddData(inputData, "a"),
-      CheckLastBatch(("a", "1")),
+      CheckNewAnswer(("a", "1")),
       assertNumStateRows(total = 1, updated = 1),
       AddData(inputData, "a", "b"),
-      CheckLastBatch(("a", "2"), ("b", "1")),
+      CheckNewAnswer(("a", "2"), ("b", "1")),
       assertNumStateRows(total = 2, updated = 2),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "b"), // should remove state for "a" and return count as -1
-      CheckLastBatch(("a", "-1"), ("b", "2")),
+      CheckNewAnswer(("a", "-1"), ("b", "2")),
       assertNumStateRows(total = 1, updated = 2),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1
-      CheckLastBatch(("a", "1"), ("c", "1")),
+      CheckNewAnswer(("a", "1"), ("c", "1")),
       assertNumStateRows(total = 3, updated = 2)
     )
   }
@@ -920,15 +918,15 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     testStream(result, Update)(
       setFailInTask(false),
       AddData(inputData, "a"),
-      CheckLastBatch(("a", 1L)),
+      CheckNewAnswer(("a", 1L)),
       AddData(inputData, "a"),
-      CheckLastBatch(("a", 2L)),
+      CheckNewAnswer(("a", 2L)),
       setFailInTask(true),
       AddData(inputData, "a"),
       ExpectFailure[SparkException](),   // task should fail but should not increment count
       setFailInTask(false),
       StartStream(),
-      CheckLastBatch(("a", 3L))     // task should not fail, and should show correct count
+      CheckNewAnswer(("a", 3L))     // task should not fail, and should show correct count
     )
   }
 
@@ -938,7 +936,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     val result = inputData.toDS.groupByKey(x => x).mapGroupsWithState(stateFunc)
     testStream(result, Update)(
       AddData(inputData, "a"),
-      CheckLastBatch("a"),
+      CheckNewAnswer("a"),
       AssertOnQuery(_.lastExecution.executedPlan.outputPartitioning === UnknownPartitioning(0))
     )
   }
@@ -1000,7 +998,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
         StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, ("a", 1L)),
         AdvanceManualClock(1 * 1000),
-        CheckLastBatch(("a", "1"))
+        CheckNewAnswer(("a", "1"))
       )
     }
   }

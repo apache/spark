@@ -97,6 +97,18 @@ case class FlatMapGroupsWithStateExec(
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
+  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    timeoutConf match {
+      case ProcessingTimeTimeout =>
+        true // always run batches to process timeouts
+      case _ =>
+        // Irrespective of whether EventTimeTimeout is defined or not, the user-defined function
+        // may perform its own watermark-based state management and any changes in the watermark
+        // should trigger processing
+        eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+    }
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
