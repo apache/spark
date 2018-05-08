@@ -31,6 +31,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.AccumulatorParam.StringAccumulatorParam
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
 
 
@@ -235,6 +236,65 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     acc.merge("kindness")
     assert(acc.value === "kindness")
   }
+
+  test("updating garbage collected accumulators") {
+    // Simulate FetchFailedException in the first attempt to force a retry.
+    // Then complete remaining task from the first attempt after the second
+    // attempt started, but before it completes. Completion event for the first
+    // attempt will try to update garbage collected accumulators.
+    val numPartitions = 2
+    sc = new SparkContext("local[2]", "test")
+
+    val attempt0Latch = new TestLatch("attempt0")
+    val attempt1Latch = new TestLatch("attempt1")
+
+    val x = sc.parallelize(1 to 100, numPartitions).groupBy(identity)
+    val sid = x.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle.shuffleId
+    val rdd = x.mapPartitionsWithIndex { case (i, iter) =>
+      val taskContext = TaskContext.get()
+      if (taskContext.stageAttemptNumber() == 0) {
+        if (i == 0) {
+          // Fail the first task in the first stage attempt to force retry.
+          throw new FetchFailedException(
+            SparkEnv.get.blockManager.blockManagerId,
+            sid,
+            taskContext.partitionId(),
+            taskContext.partitionId(),
+            "simulated fetch failure")
+        } else {
+          // Wait till the second attempt starts.
+          attempt0Latch.await()
+          iter
+        }
+      } else {
+        if (i == 0) {
+          // Wait till the first attempt completes.
+          attempt1Latch.await()
+        }
+        iter
+      }
+    }
+
+    sc.addSparkListener(new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        if (taskStart.stageId == 1 && taskStart.stageAttemptId == 1) {
+          // Second attempt started, force GC to collect accumulators and
+          // resume the first attempt.
+          System.gc()
+          attempt0Latch.signal()
+        }
+      }
+
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        if (taskEnd.stageId == 1 && taskEnd.stageAttemptId == 0 && taskEnd.taskInfo.index == 1) {
+          // First attempt completed, resume the job.
+          attempt1Latch.signal()
+        }
+      }
+    })
+
+    rdd.count()
+  }
 }
 
 private[spark] object AccumulatorSuite {
@@ -347,5 +407,30 @@ private class SaveInfoListener extends SparkListener {
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
     completedTaskInfos.getOrElseUpdate(
       (taskEnd.stageId, taskEnd.stageAttemptId), new ArrayBuffer[TaskInfo]) += taskEnd.taskInfo
+  }
+}
+
+/**
+ * A simple latch to synchronize driver and executors in local mode.
+ * After deserialization on executor it will still use the same
+ * internalized string object for synchronization.
+ */
+private class TestLatch(name: String) extends Serializable {
+
+  sys.props.remove(name)
+
+  def await(): Unit = {
+    name.intern().synchronized {
+      if (!sys.props.contains(name)) {
+        name.intern().wait()
+      }
+    }
+  }
+
+  def signal(): Unit = {
+    name.intern().synchronized {
+      sys.props.put(name, "")
+      name.intern().notifyAll()
+    }
   }
 }
