@@ -20,7 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -203,16 +203,32 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("model evaluateEachIteration") {
-    val gbt = new GBTRegressor()
-      .setMaxDepth(2)
-      .setMaxIter(2)
-      .setLossType("squared")
-    val model = gbt.fit(trainData.toDF)
-    val eval1 = model.evaluateEachIteration(validationData.toDF, "squared")
-    assert(Vectors.dense(eval1) ~== Vectors.dense(0.3736, 0.3745) relTol 1E-3)
+    for (lossType <- GBTRegressor.supportedLossTypes) {
+      val gbt = new GBTRegressor()
+        .setSeed(1L)
+        .setMaxDepth(2)
+        .setMaxIter(3)
+        .setLossType(lossType)
+      val model3 = gbt.fit(trainData.toDF)
+      val model1 = new GBTRegressionModel("gbt-reg-model-test1",
+        model3.trees.take(1), model3.treeWeights.take(1), model3.numFeatures)
+      val model2 = new GBTRegressionModel("gbt-reg-model-test2",
+        model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures)
 
-    val eval2 = model.evaluateEachIteration(validationData.toDF, "absolute")
-    assert(Vectors.dense(eval2) ~== Vectors.dense(0.3908, 0.3931) relTol 1E-3)
+      for (evalLossType <- GBTRegressor.supportedLossTypes) {
+        val evalArr = model3.evaluateEachIteration(validationData.toDF, evalLossType)
+        val lossErr1 = GradientBoostedTrees.computeError(validationData,
+          model1.trees, model1.treeWeights, model1.convertToOldLossType(evalLossType))
+        val lossErr2 = GradientBoostedTrees.computeError(validationData,
+          model2.trees, model2.treeWeights, model2.convertToOldLossType(evalLossType))
+        val lossErr3 = GradientBoostedTrees.computeError(validationData,
+          model3.trees, model3.treeWeights, model3.convertToOldLossType(evalLossType))
+
+        assert(evalArr(0) ~== lossErr1 relTol 1E-3)
+        assert(evalArr(1) ~== lossErr2 relTol 1E-3)
+        assert(evalArr(2) ~== lossErr3 relTol 1E-3)
+      }
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

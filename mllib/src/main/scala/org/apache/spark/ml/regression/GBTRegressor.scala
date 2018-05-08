@@ -273,6 +273,7 @@ class GBTRegressionModel private[ml](
    * Method to compute error or loss for every iteration of gradient boosting.
    *
    * @param dataset Dataset for validation.
+   * @param loss The loss function used to compute error. Supported options: squared, absolute
    */
   @Since("2.4.0")
   def evaluateEachIteration(dataset: Dataset[_], loss: String): Array[Double] = {
