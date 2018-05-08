@@ -28,7 +28,6 @@ import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
 class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SortPrefix") {
-
     val b1 = Literal.create(false, BooleanType)
     val b2 = Literal.create(true, BooleanType)
     val i1 = Literal.create(20132983, IntegerType)
