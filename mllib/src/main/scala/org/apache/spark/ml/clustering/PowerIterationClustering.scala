@@ -226,17 +226,10 @@ class PowerIterationClustering private[clustering] (
     val predictionsSchema = StructType(Seq(
       StructField($(idCol), LongType, nullable = false),
       StructField($(predictionCol), IntegerType, nullable = false)))
-    val predictions = {
-      val uncastPredictions = sparkSession.createDataFrame(predictionsRDD, predictionsSchema)
-      dataset.schema($(idCol)).dataType match {
-        case _: LongType =>
-          uncastPredictions
-        case otherType =>
-          uncastPredictions.select(col($(idCol)).cast(otherType).alias($(idCol)))
-      }
-    }
 
-    dataset.join(predictions, $(idCol))
+    val predictions = sparkSession.createDataFrame(predictionsRDD, predictionsSchema)
+
+    predictions
   }
 
   @Since("2.4.0")

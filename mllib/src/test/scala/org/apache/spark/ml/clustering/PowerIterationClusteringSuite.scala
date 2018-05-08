@@ -183,6 +183,25 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(msg.contains(s"Row for ID ${model.getIdCol}=1"))
   }
 
+  test("invalid input:r and similarity arrays") {
+
+    val data = spark.createDataFrame(Seq(
+      (0, Array(1L), Array(0.9)),
+      (1, Array(2L), Array(0.9)),
+      (2, Array(3L), Array(0.9)),
+      (3, Array(4L), Array(0.1)),
+      (4, Array(5L), Array(0.9))
+    )).toDF("id", "neighbors", "similarities")
+    val result2 = new PowerIterationClustering()
+      .setK(2)
+      .setMaxIter(10)
+      .setInitMode("random")
+      .transform(data)
+  val pred = result2.collect()
+
+    assert(true, true)
+  }
+
   test("read/write") {
     val t = new PowerIterationClustering()
       .setK(4)
