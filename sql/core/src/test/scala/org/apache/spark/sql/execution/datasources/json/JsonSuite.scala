@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.json.JsonInferSchema.compatibleType
+import org.apache.spark.sql.execution.datasources.json.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -2493,5 +2494,54 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       }
       assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
     }
+  }
+
+  test("SPARK-24204 error handling for unsupported data types") {
+    withTempDir { dir =>
+      val jsonDir = new File(dir, "json").getCanonicalPath
+
+      // write path
+      var msg = intercept[AnalysisException] {
+        sql("select interval 1 days").write.mode("overwrite").json(jsonDir)
+      }.getMessage
+      assert(msg.contains("Cannot save interval data type into external storage."))
+
+      msg = intercept[UnsupportedOperationException] {
+        spark.udf.register("testType", () => new IntervalData())
+        sql("select testType()").write.mode("overwrite").json(jsonDir)
+      }.getMessage
+      assert(msg.contains("JSON data source does not support calendarinterval data type."))
+
+      // read path
+      msg = intercept[UnsupportedOperationException] {
+        val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+        spark.range(1).write.mode("overwrite").json(jsonDir)
+        spark.read.schema(schema).json(jsonDir).collect()
+      }.getMessage
+      assert(msg.contains("JSON data source does not support calendarinterval data type."))
+
+      msg = intercept[UnsupportedOperationException] {
+        val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
+        spark.range(1).write.mode("overwrite").json(jsonDir)
+        spark.read.schema(schema).json(jsonDir).collect()
+      }.getMessage
+      assert(msg.contains("JSON data source does not support calendarinterval data type."))
+    }
+  }
+}
+
+object TestingUDT {
+
+  @SQLUserDefinedType(udt = classOf[IntervalUDT])
+  private[sql] class IntervalData extends Serializable
+
+  private[sql] class IntervalUDT extends UserDefinedType[IntervalData] {
+
+    override def sqlType: DataType = CalendarIntervalType
+    override def serialize(obj: IntervalData): Any =
+      throw new NotImplementedError("Not implemented")
+    override def deserialize(datum: Any): IntervalData =
+      throw new NotImplementedError("Not implemented")
+    override def userClass: Class[IntervalData] = classOf[IntervalData]
   }
 }

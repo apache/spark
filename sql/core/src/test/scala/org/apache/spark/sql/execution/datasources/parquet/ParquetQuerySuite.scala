@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
-import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
+import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, NullData, NullUDT, SingleElement}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -891,6 +891,51 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+
+  test("SPARK-24204 error handling for unsupported data types") {
+    withTempDir { dir =>
+      val parquetDir = new File(dir, "parquet").getCanonicalPath
+
+      // write path
+      var msg = intercept[AnalysisException] {
+        sql("select interval 1 days").write.mode("overwrite").parquet(parquetDir)
+      }.getMessage
+      assert(msg.contains("Cannot save interval data type into external storage."))
+
+      msg = intercept[UnsupportedOperationException] {
+        sql("select null").write.mode("overwrite").parquet(parquetDir)
+      }.getMessage
+      assert(msg.contains("Parquet data source does not support null data type."))
+
+      msg = intercept[UnsupportedOperationException] {
+        spark.udf.register("testType", () => new NullData())
+        sql("select testType()").write.mode("overwrite").parquet(parquetDir)
+      }.getMessage
+      assert(msg.contains("Parquet data source does not support null data type."))
+
+      // read path
+      msg = intercept[UnsupportedOperationException] {
+        val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+        spark.range(1).write.mode("overwrite").parquet(parquetDir)
+        spark.read.schema(schema).parquet(parquetDir).collect()
+      }.getMessage
+      assert(msg.contains("Parquet data source does not support calendarinterval data type."))
+
+      msg = intercept[UnsupportedOperationException] {
+        val schema = StructType(StructField("a", NullType, true) :: Nil)
+        spark.range(1).write.mode("overwrite").parquet(parquetDir)
+        spark.read.schema(schema).parquet(parquetDir).collect()
+      }.getMessage
+      assert(msg.contains("Parquet data source does not support null data type."))
+
+      msg = intercept[UnsupportedOperationException] {
+        val schema = StructType(StructField("a", new NullUDT(), true) :: Nil)
+        spark.range(1).write.mode("overwrite").parquet(parquetDir)
+        spark.read.schema(schema).parquet(parquetDir).collect()
+      }.getMessage
+      assert(msg.contains("Parquet data source does not support null data type."))
+    }
+  }
 }
 
 object TestingUDT {
@@ -921,5 +966,17 @@ object TestingUDT {
           NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
       }
     }
+  }
+
+  @SQLUserDefinedType(udt = classOf[NullUDT])
+  private[sql] class NullData extends Serializable
+
+  private[sql] class NullUDT extends UserDefinedType[NullData] {
+
+    override def sqlType: DataType = NullType
+    override def serialize(obj: NullData): Any = throw new NotImplementedError("Not implemented")
+    override def deserialize(datum: Any): NullData =
+      throw new NotImplementedError("Not implemented")
+    override def userClass: Class[NullData] = classOf[NullData]
   }
 }

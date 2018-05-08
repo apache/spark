@@ -15,43 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.json
+package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.input.PortableDataStream
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.types._
 
-object JsonUtils {
-  /**
-   * Sample JSON dataset as configured by `samplingRatio`.
-   */
-  def sample(json: Dataset[String], options: JSONOptions): Dataset[String] = {
-    require(options.samplingRatio > 0,
-      s"samplingRatio (${options.samplingRatio}) should be greater than 0")
-    if (options.samplingRatio > 0.99) {
-      json
-    } else {
-      json.sample(withReplacement = false, options.samplingRatio, 1)
-    }
-  }
+
+object ParquetUtils {
 
   /**
-   * Sample JSON RDD as configured by `samplingRatio`.
-   */
-  def sample(json: RDD[PortableDataStream], options: JSONOptions): RDD[PortableDataStream] = {
-    require(options.samplingRatio > 0,
-      s"samplingRatio (${options.samplingRatio}) should be greater than 0")
-    if (options.samplingRatio > 0.99) {
-      json
-    } else {
-      json.sample(withReplacement = false, options.samplingRatio, 1)
-    }
-  }
-
-  /**
-   * Verify if the schema is supported in JSON datasource.
+   * Verify if the schema is supported in Parquet datasource.
    */
   def verifySchema(schema: StructType): Unit = {
     def verifyType(dataType: DataType): Unit = dataType match {
@@ -68,12 +40,9 @@ object JsonUtils {
 
       case udt: UserDefinedType[_] => verifyType(udt.sqlType)
 
-      // For backward-compatibility
-      case NullType =>
-
       case _ =>
         throw new UnsupportedOperationException(
-          s"JSON data source does not support ${dataType.simpleString} data type.")
+          s"Parquet data source does not support ${dataType.simpleString} data type.")
     }
 
     schema.foreach(field => verifyType(field.dataType))
