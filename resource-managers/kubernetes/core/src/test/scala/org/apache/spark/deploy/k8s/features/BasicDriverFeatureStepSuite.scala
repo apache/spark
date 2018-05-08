@@ -158,8 +158,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val basePod = SparkPod.initialPod()
     val configuredJavaPod = javaFeatureStep.configurePod(basePod)
     val configuredPythonPod = pythonFeatureStep.configurePod(basePod)
-    assert(configuredJavaPod.container.getArgs.get(0) === "driver")
-    assert(configuredPythonPod.container.getArgs.get(0) === "driver-py")
   }
 
   test("Additional system properties resolve jars and set cluster-mode confs.") {

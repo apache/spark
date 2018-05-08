@@ -44,10 +44,6 @@ private[spark] class BasicDriverFeatureStep(
   private val driverCpuCores = conf.get("spark.driver.cores", "1")
   private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
-  private val driverDockerContainer = conf.roleSpecificConf.mainAppResource.map {
-    case JavaMainAppResource(_) => "driver"
-    case PythonMainAppResource(_) => "driver-py"
-  }.getOrElse(throw new SparkException("Must specify a JVM or Python Resource"))
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
   private val memoryOverheadMiB = conf
@@ -93,9 +89,6 @@ private[spark] class BasicDriverFeatureStep(
         .addToRequests("memory", driverMemoryQuantity)
         .addToLimits("memory", driverMemoryQuantity)
         .endResources()
-      .addToArgs(driverDockerContainer)
-      .addToArgs("--properties-file", SPARK_CONF_PATH)
-      .addToArgs("--class", conf.roleSpecificConf.mainClass)
       .build()
 
     val driverPod = new PodBuilder(pod.pod)

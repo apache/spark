@@ -20,35 +20,40 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.PythonMainAppResource
 
 class JavaDriverFeatureStepSuite extends SparkFunSuite {
 
-
-  test("Python Step modifies container correctly") {
+  test("Java Step modifies container correctly") {
     val baseDriverPod = SparkPod.initialPod()
     val sparkConf = new SparkConf(false)
     val kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
         Some(PythonMainAppResource("local:///main.jar")),
-        "test-app",
+        "test-class",
         "java-runner",
         Seq("5 7")),
-      "",
-      "",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Seq.empty[String])
+      appResourceNamePrefix = "",
+      appId = "",
+      roleLabels = Map.empty,
+      roleAnnotations = Map.empty,
+      roleSecretNamesToMountPaths = Map.empty,
+      roleEnvs = Map.empty,
+      sparkFiles = Seq.empty[String])
 
     val step = new JavaDriverFeatureStep(kubernetesConf)
     val driverPod = step.configurePod(baseDriverPod).pod
     val driverContainerwithJavaStep = step.configurePod(baseDriverPod).container
-    assert(driverContainerwithJavaStep.getArgs.size === 2)
+    assert(driverContainerwithJavaStep.getArgs.size === 7)
     val args = driverContainerwithJavaStep
       .getArgs.asScala
-    assert(args === List("spark-internal", "5 7"))
+    assert(args === List(
+      "driver",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", "test-class",
+      "spark-internal", "5 7"))
+
   }
 }

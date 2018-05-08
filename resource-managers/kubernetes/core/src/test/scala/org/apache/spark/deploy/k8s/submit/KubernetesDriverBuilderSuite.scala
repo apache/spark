@@ -76,8 +76,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      JAVA_STEP_TYPE)
+      JAVA_STEP_TYPE,
+      SERVICE_STEP_TYPE)
   }
 
   test("Apply secrets step if secrets are present.") {
@@ -100,8 +100,31 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
-      SECRETS_STEP_TYPE,
-      JAVA_STEP_TYPE)
+      JAVA_STEP_TYPE,
+      SECRETS_STEP_TYPE)
+  }
+
+  test("Apply Java step if main resource is none.") {
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        None,
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      JAVA_STEP_TYPE,
+      SERVICE_STEP_TYPE)
   }
 
   test("Apply Python step if main resource is python.") {
@@ -123,8 +146,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      PYSPARK_STEP_TYPE)
+      PYSPARK_STEP_TYPE,
+      SERVICE_STEP_TYPE)
   }
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)

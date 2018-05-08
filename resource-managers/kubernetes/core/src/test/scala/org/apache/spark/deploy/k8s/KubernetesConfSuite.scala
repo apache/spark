@@ -53,10 +53,10 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      None,
+      mainAppResource = None,
       MAIN_CLASS,
       APP_ARGS,
-      None)
+      maybePyFiles = None)
     assert(conf.appId === APP_ID)
     assert(conf.sparkConf.getAll.toMap === sparkConf.getAll.toMap)
     assert(conf.appResourceNamePrefix === RESOURCE_NAME_PREFIX)
@@ -78,7 +78,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       mainAppJar,
       MAIN_CLASS,
       APP_ARGS,
-      None)
+      maybePyFiles = None)
     assert(kubernetesConfWithMainJar.sparkConf.get("spark.jars")
       .split(",")
       === Array("local:///opt/spark/jar1.jar", "local:///opt/spark/main.jar"))
@@ -87,10 +87,10 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      None,
+      mainAppResource = None,
       MAIN_CLASS,
       APP_ARGS,
-      None)
+      maybePyFiles = None)
     assert(kubernetesConfWithoutMainJar.sparkConf.get("spark.jars").split(",")
       === Array("local:///opt/spark/jar1.jar"))
     assert(kubernetesConfWithoutMainJar.sparkConf.get(MEMORY_OVERHEAD_FACTOR).isEmpty)
@@ -141,10 +141,10 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      None,
+      mainAppResource = None,
       MAIN_CLASS,
       APP_ARGS,
-      None)
+      maybePyFiles = None)
     assert(conf.roleLabels === Map(
       SPARK_APP_ID_LABEL -> APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++
