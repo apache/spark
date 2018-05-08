@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.BooleanType
 
