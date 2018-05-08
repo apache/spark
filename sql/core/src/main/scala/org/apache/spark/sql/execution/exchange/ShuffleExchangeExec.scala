@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -39,13 +40,11 @@ import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordCo
 /**
  * Performs a shuffle that will result in the desired `newPartitioning`.
  */
-case class ShuffleExchangeExec(
-    var newPartitioning: Partitioning,
-    child: SparkPlan,
-    @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
+trait BaseShuffleExchangeExec extends Exchange {
 
-  // NOTE: coordinator can be null after serialization/deserialization,
-  //       e.g. it can be null on the Executor side
+  var newPartitioning: Partitioning
+  val child: SparkPlan
+  val coordinator: Option[ExchangeCoordinator]
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"))
@@ -82,23 +81,23 @@ case class ShuffleExchangeExec(
   }
 
   /**
-   * Returns a [[ShuffleDependency]] that will partition rows of its child based on
-   * the partitioning scheme defined in `newPartitioning`. Those partitions of
-   * the returned ShuffleDependency will be the input of shuffle.
-   */
+    * Returns a [[ShuffleDependency]] that will partition rows of its child based on
+    * the partitioning scheme defined in `newPartitioning`. Those partitions of
+    * the returned ShuffleDependency will be the input of shuffle.
+    */
   private[exchange] def prepareShuffleDependency()
-    : ShuffleDependency[Int, InternalRow, InternalRow] = {
+  : ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchangeExec.prepareShuffleDependency(
       child.execute(), child.output, newPartitioning, serializer)
   }
 
   /**
-   * Returns a [[ShuffledRowRDD]] that represents the post-shuffle dataset.
-   * This [[ShuffledRowRDD]] is created based on a given [[ShuffleDependency]] and an optional
-   * partition start indices array. If this optional array is defined, the returned
-   * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
-   */
-  private[exchange] def preparePostShuffleRDD(
+    * Returns a [[ShuffledRowRDD]] that represents the post-shuffle dataset.
+    * This [[ShuffledRowRDD]] is created based on a given [[ShuffleDependency]] and an optional
+    * partition start indices array. If this optional array is defined, the returned
+    * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
+    */
+  def preparePostShuffleRDD(
       shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
       specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
     // If an array of partition start indices is provided, we need to use this array
@@ -112,8 +111,8 @@ case class ShuffleExchangeExec(
   }
 
   /**
-   * Caches the created ShuffleRowRDD so we can reuse that.
-   */
+    * Caches the created ShuffleRowRDD so we can reuse that.
+    */
   private var cachedShuffleRDD: ShuffledRowRDD = null
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
@@ -130,6 +129,34 @@ case class ShuffleExchangeExec(
       }
     }
     cachedShuffleRDD
+  }
+}
+
+/**
+ * Performs a shuffle that will result in the desired `newPartitioning`.
+ */
+case class ShuffleExchangeExec(
+    var newPartitioning: Partitioning,
+    child: SparkPlan,
+    @transient coordinator: Option[ExchangeCoordinator]) extends BaseShuffleExchangeExec {
+
+  /**
+   * Returns a [[ShuffledRowRDD]] that represents the post-shuffle dataset.
+   * This [[ShuffledRowRDD]] is created based on a given [[ShuffleDependency]] and an optional
+   * partition start indices array. If this optional array is defined, the returned
+   * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
+   */
+  override def preparePostShuffleRDD(
+      shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
+      specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
+    // If an array of partition start indices is provided, we need to use this array
+    // to create the ShuffledRowRDD. Also, we need to update newPartitioning to
+    // update the number of post-shuffle partitions.
+    specifiedPartitionStartIndices.foreach { indices =>
+      assert(newPartitioning.isInstanceOf[HashPartitioning])
+      newPartitioning = UnknownPartitioning(indices.length)
+    }
+    new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
   }
 }
 
@@ -321,5 +348,51 @@ object ShuffleExchangeExec {
         serializer)
 
     dependency
+  }
+}
+
+case class ContinuousShuffleExchangeExec(
+    var newPartitioning: Partitioning,
+    child: SparkPlan,
+    @transient val coordinator: Option[ExchangeCoordinator],
+    totalShuffleNum: Int) extends BaseShuffleExchangeExec {
+
+  /**
+   * Returns a [[ContinuousShuffledRowRDD]] that represents the post-shuffle dataset.
+   * Here we use [[ShuffleDependency]] to create the [[ContinuousShuffledRowRDD]],
+   * it will changed to [[ContinuousShuffleDependency]] in the rdd during actually used.
+   */
+  override def preparePostShuffleRDD(
+      shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
+      specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
+    // If an array of partition start indices is provided, we need to use this array
+    // to create the ShuffledRowRDD. Also, we need to update newPartitioning to
+    // update the number of post-shuffle partitions.
+    specifiedPartitionStartIndices.foreach { indices =>
+      assert(newPartitioning.isInstanceOf[HashPartitioning])
+      newPartitioning = UnknownPartitioning(indices.length)
+    }
+    new ContinuousShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices,
+      totalShuffleNum)
+  }
+}
+
+/**
+ * Get the total shuffle number of spark plan, then change all [[ShuffleExchangeExec]]
+ * to [[ContinuousShuffleExchangeExec]]
+ */
+case class ReplaceShuffleExchange(conf: SparkConf) extends Rule[SparkPlan] {
+  def apply(plan: SparkPlan): SparkPlan = {
+    if (!conf.getBoolean("spark.streaming.continuousMode", false)) {
+      return plan
+    }
+    // Get the total shuffle number for current plan
+    val totalShuffleNum = plan.collect { case s: ShuffleExchangeExec => true}.length
+    // Change all ShuffleExchangeExec to ContinuousShuffleExchangeExec
+    plan transformDown {
+      case s: ShuffleExchangeExec =>
+        new ContinuousShuffleExchangeExec(s.newPartitioning, s.child,
+          s.coordinator, totalShuffleNum)
+    }
   }
 }
