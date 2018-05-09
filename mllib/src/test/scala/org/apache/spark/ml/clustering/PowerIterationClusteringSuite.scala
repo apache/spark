@@ -119,7 +119,6 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       case Row(id: Long, cluster: Integer) => predictions(cluster) += id
     }
     assert(predictions.toSet == Set((0 until 4).toSet, Set(4, 5)))
-    assert(result.columns(1).equals("prediction"))
   }
 
   test("supported input types") {
