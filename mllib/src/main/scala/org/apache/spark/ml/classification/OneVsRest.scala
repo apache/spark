@@ -366,7 +366,7 @@ final class OneVsRest @Since("1.4.0") (
     transformSchema(dataset.schema)
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, predictionCol, parallelism)
+    instr.logParams(labelCol, featuresCol, predictionCol, parallelism, rawPredictionCol)
     instr.logNamedValue("classifier", $(classifier).getClass.getCanonicalName)
 
     // determine number of classes either from metadata if provided, or via computation.
@@ -383,7 +383,7 @@ final class OneVsRest @Since("1.4.0") (
       getClassifier match {
         case _: HasWeightCol => true
         case c =>
-          logWarning(s"weightCol is ignored, as it is not supported by $c now.")
+          instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
           false
       }
     }
