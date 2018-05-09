@@ -37,6 +37,7 @@ import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.rdd.RDD
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
@@ -52,6 +53,17 @@ private[spark] class PythonRDD(
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
   val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
 
+  val memoryMb = {
+    val allocation = conf.get(PYSPARK_EXECUTOR_MEMORY)
+    if (reuseWorker) {
+      // the shared python worker gets the entire allocation
+      allocation
+    } else {
+      // each python worker gets an equal part of the allocation
+      allocation.map(_ / conf.getInt("spark.executor.cores", 1))
+    }
+  }
+
   override def getPartitions: Array[Partition] = firstParent.partitions
 
   override val partitioner: Option[Partitioner] = {
@@ -61,7 +73,7 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = PythonRunner(func, bufferSize, reuseWorker)
+    val runner = PythonRunner(func, bufferSize, reuseWorker, memoryMb)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
 

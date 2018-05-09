@@ -41,13 +41,14 @@ class ArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     bufferSize: Int,
     reuseWorker: Boolean,
+    pyMemoryMb: Option[Long],
     evalType: Int,
     argOffsets: Array[Array[Int]],
     schema: StructType,
     timeZoneId: String,
     conf: Map[String, String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs, bufferSize, reuseWorker, evalType, argOffsets) {
+    funcs, bufferSize, reuseWorker, evalType, argOffsets, pyMemoryMb) {
 
   protected override def newWriterThread(
       env: SparkEnv,

@@ -65,7 +65,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     bufferSize: Int,
     reuseWorker: Boolean,
     evalType: Int,
-    argOffsets: Array[Array[Int]])
+    argOffsets: Array[Array[Int]],
+    pythonMemoryMb: Option[Long])
   extends Logging {
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
@@ -94,6 +95,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
+    }
+    if (pythonMemoryMb.isDefined) {
+      envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", pythonMemoryMb.get.toString)
     }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool
@@ -485,8 +489,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
 private[spark] object PythonRunner {
 
-  def apply(func: PythonFunction, bufferSize: Int, reuseWorker: Boolean): PythonRunner = {
-    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuseWorker)
+  def apply(
+      func: PythonFunction,
+      bufferSize: Int,
+      reuseWorker: Boolean,
+      pyMemoryMb: Option[Long]): PythonRunner = {
+    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuseWorker, pyMemoryMb)
   }
 }
 
@@ -496,9 +504,10 @@ private[spark] object PythonRunner {
 private[spark] class PythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     bufferSize: Int,
-    reuseWorker: Boolean)
+    reuseWorker: Boolean,
+    pyMemoryMb: Option[Long])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, bufferSize, reuseWorker, PythonEvalType.NON_UDF, Array(Array(0))) {
+    funcs, bufferSize, reuseWorker, PythonEvalType.NON_UDF, Array(Array(0)), pyMemoryMb) {
 
   protected override def newWriterThread(
       env: SparkEnv,

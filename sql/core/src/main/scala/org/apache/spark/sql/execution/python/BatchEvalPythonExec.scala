@@ -23,6 +23,7 @@ import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.internal.config.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
@@ -38,6 +39,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       funcs: Seq[ChainedPythonFunctions],
       bufferSize: Int,
       reuseWorker: Boolean,
+      pyMemoryMb: Option[Long],
       argOffsets: Array[Array[Int]],
       iter: Iterator[InternalRow],
       schema: StructType,
@@ -69,7 +71,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
     // Output iterator for results from Python.
     val outputIterator = new PythonUDFRunner(
-        funcs, bufferSize, reuseWorker, PythonEvalType.SQL_BATCHED_UDF, argOffsets)
+        funcs, bufferSize, reuseWorker, PythonEvalType.SQL_BATCHED_UDF, argOffsets, pyMemoryMb)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler

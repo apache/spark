@@ -91,6 +91,13 @@ private[spark] class Client(
   private val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
 
+  private val isPython = sparkConf.get(IS_PYTHON_APP)
+  private val pysparkWorkerMemory: Int = if (isPython) {
+    sparkConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
+  } else {
+    0
+  }
+
   private val distCacheMgr = new ClientDistributedCacheManager()
 
   private val principal = sparkConf.get(PRINCIPAL).orNull
@@ -333,7 +340,7 @@ private[spark] class Client(
     val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
     logInfo("Verifying our application has not requested more than the maximum " +
       s"memory capability of the cluster ($maxMem MB per container)")
-    val executorMem = executorMemory + executorMemoryOverhead
+    val executorMem = executorMemory + executorMemoryOverhead + pysparkWorkerMemory
     if (executorMem > maxMem) {
       throw new IllegalArgumentException(s"Required executor memory ($executorMemory" +
         s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster! " +

@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.internal.config.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -80,6 +81,7 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chil
       funcs: Seq[ChainedPythonFunctions],
       bufferSize: Int,
       reuseWorker: Boolean,
+      pyMemoryMb: Option[Long],
       argOffsets: Array[Array[Int]],
       iter: Iterator[InternalRow],
       schema: StructType,
@@ -89,6 +91,16 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chil
     val inputRDD = child.execute().map(_.copy())
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
+    val memoryMb = {
+      val allocation = inputRDD.conf.get(PYSPARK_EXECUTOR_MEMORY)
+      if (reuseWorker) {
+        // the shared python worker gets the entire allocation
+        allocation
+      } else {
+        // each python worker gets an equal part of the allocation
+        allocation.map(_ / inputRDD.conf.getInt("spark.executor.cores", 1))
+      }
+    }
 
     inputRDD.mapPartitions { iter =>
       val context = TaskContext.get()
@@ -129,7 +141,7 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chil
       }
 
       val outputRowIterator = evaluate(
-        pyFuncs, bufferSize, reuseWorker, argOffsets, projectedRowIter, schema, context)
+        pyFuncs, bufferSize, reuseWorker, memoryMb, argOffsets, projectedRowIter, schema, context)
 
       val joined = new JoinedRow
       val resultProj = UnsafeProjection.create(output, output)

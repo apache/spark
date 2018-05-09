@@ -32,9 +32,10 @@ class PythonUDFRunner(
     bufferSize: Int,
     reuseWorker: Boolean,
     evalType: Int,
-    argOffsets: Array[Array[Int]])
+    argOffsets: Array[Array[Int]],
+    pyMemoryMb: Option[Long])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, bufferSize, reuseWorker, evalType, argOffsets) {
+    funcs, bufferSize, reuseWorker, evalType, argOffsets, pyMemoryMb) {
 
   protected override def newWriterThread(
       env: SparkEnv,
