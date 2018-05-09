@@ -641,26 +641,26 @@ object DataSourceReadBenchmark {
         Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.13.1
         Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
 
-        Single Column Scan from 100 columns:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-        ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 1050 / 1053          1.0        1001.1       1.0X
-        Native ORC Vectorized                           95 /  101         11.0          90.9      11.0X
-        Native ORC Vectorized with copy                 95 /  102         11.0          90.9      11.0X
-        Hive built-in ORC                              348 /  358          3.0         331.8       3.0X
+        Single Column Scan from 100 columns: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        --------------------------------------------------------------------------------------------
+        Native ORC MR                             1050 / 1053          1.0        1001.1       1.0X
+        Native ORC Vectorized                       95 /  101         11.0          90.9      11.0X
+        Native ORC Vectorized with copy             95 /  102         11.0          90.9      11.0X
+        Hive built-in ORC                          348 /  358          3.0         331.8       3.0X
 
-        Single Column Scan from 200 columns:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-        ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 2099 / 2108          0.5        2002.1       1.0X
-        Native ORC Vectorized                          179 /  187          5.8         171.1      11.7X
-        Native ORC Vectorized with copy                176 /  188          6.0         167.6      11.9X
-        Hive built-in ORC                              562 /  581          1.9         535.9       3.7X
+        Single Column Scan from 200 columns: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        --------------------------------------------------------------------------------------------
+        Native ORC MR                             2099 / 2108          0.5        2002.1       1.0X
+        Native ORC Vectorized                      179 /  187          5.8         171.1      11.7X
+        Native ORC Vectorized with copy            176 /  188          6.0         167.6      11.9X
+        Hive built-in ORC                          562 /  581          1.9         535.9       3.7X
 
-        Single Column Scan from 300 columns:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-        ------------------------------------------------------------------------------------------------
-        Native ORC MR                                 3221 / 3246          0.3        3071.4       1.0X
-        Native ORC Vectorized                          312 /  322          3.4         298.0      10.3X
-        Native ORC Vectorized with copy                306 /  320          3.4         291.6      10.5X
-        Hive built-in ORC                              815 /  824          1.3         777.3       4.0X
+        Single Column Scan from 300 columns: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        --------------------------------------------------------------------------------------------
+        Native ORC MR                             3221 / 3246          0.3        3071.4       1.0X
+        Native ORC Vectorized                      312 /  322          3.4         298.0      10.3X
+        Native ORC Vectorized with copy            306 /  320          3.4         291.6      10.5X
+        Hive built-in ORC                          815 /  824          1.3         777.3       4.0X
         */
         benchmark.run()
       }
