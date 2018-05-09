@@ -65,26 +65,11 @@ trait BaseShuffleExchangeExec extends Exchange {
   private val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
-  override protected def doPrepare(): Unit = {
-    // If an ExchangeCoordinator is needed, we register this Exchange operator
-    // to the coordinator when we do prepare. It is important to make sure
-    // we register this operator right before the execution instead of register it
-    // in the constructor because it is possible that we create new instances of
-    // Exchange operators when we transform the physical plan
-    // (then the ExchangeCoordinator will hold references of unneeded Exchanges).
-    // So, we should only call registerExchange just before we start to execute
-    // the plan.
-    coordinator match {
-      case Some(exchangeCoordinator) => exchangeCoordinator.registerExchange(this)
-      case _ =>
-    }
-  }
-
   /**
-    * Returns a [[ShuffleDependency]] that will partition rows of its child based on
-    * the partitioning scheme defined in `newPartitioning`. Those partitions of
-    * the returned ShuffleDependency will be the input of shuffle.
-    */
+   * Returns a [[ShuffleDependency]] that will partition rows of its child based on
+   * the partitioning scheme defined in `newPartitioning`. Those partitions of
+   * the returned ShuffleDependency will be the input of shuffle.
+   */
   private[exchange] def prepareShuffleDependency()
   : ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchangeExec.prepareShuffleDependency(
@@ -92,44 +77,14 @@ trait BaseShuffleExchangeExec extends Exchange {
   }
 
   /**
-    * Returns a [[ShuffledRowRDD]] that represents the post-shuffle dataset.
-    * This [[ShuffledRowRDD]] is created based on a given [[ShuffleDependency]] and an optional
-    * partition start indices array. If this optional array is defined, the returned
-    * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
-    */
+   * Returns a [[ShuffledRowRDD]] that represents the post-shuffle dataset.
+   * This [[ShuffledRowRDD]] is created based on a given [[ShuffleDependency]] and an optional
+   * partition start indices array. If this optional array is defined, the returned
+   * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
+   */
   def preparePostShuffleRDD(
       shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
-      specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
-    // If an array of partition start indices is provided, we need to use this array
-    // to create the ShuffledRowRDD. Also, we need to update newPartitioning to
-    // update the number of post-shuffle partitions.
-    specifiedPartitionStartIndices.foreach { indices =>
-      assert(newPartitioning.isInstanceOf[HashPartitioning])
-      newPartitioning = UnknownPartitioning(indices.length)
-    }
-    new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
-  }
-
-  /**
-    * Caches the created ShuffleRowRDD so we can reuse that.
-    */
-  private var cachedShuffleRDD: ShuffledRowRDD = null
-
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
-    if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = coordinator match {
-        case Some(exchangeCoordinator) =>
-          val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
-          assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
-          shuffleRDD
-        case _ =>
-          val shuffleDependency = prepareShuffleDependency()
-          preparePostShuffleRDD(shuffleDependency)
-      }
-    }
-    cachedShuffleRDD
-  }
+      specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD
 }
 
 /**
@@ -157,6 +112,42 @@ case class ShuffleExchangeExec(
       newPartitioning = UnknownPartitioning(indices.length)
     }
     new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
+  }
+
+  protected override def doPrepare(): Unit = {
+    // If an ExchangeCoordinator is needed, we register this Exchange operator
+    // to the coordinator when we do prepare. It is important to make sure
+    // we register this operator right before the execution instead of register it
+    // in the constructor because it is possible that we create new instances of
+    // Exchange operators when we transform the physical plan
+    // (then the ExchangeCoordinator will hold references of unneeded Exchanges).
+    // So, we should only call registerExchange just before we start to execute
+    // the plan.
+    coordinator match {
+      case Some(exchangeCoordinator) => exchangeCoordinator.registerExchange(this)
+      case _ =>
+    }
+  }
+
+  /**
+   * Caches the created ShuffleRowRDD so we can reuse that.
+   */
+  private var cachedShuffleRDD: ShuffledRowRDD = null
+
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
+    if (cachedShuffleRDD == null) {
+      cachedShuffleRDD = coordinator match {
+        case Some(exchangeCoordinator) =>
+          val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
+          assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
+          shuffleRDD
+        case _ =>
+          val shuffleDependency = prepareShuffleDependency()
+          preparePostShuffleRDD(shuffleDependency)
+      }
+    }
+    cachedShuffleRDD
   }
 }
 
@@ -364,7 +355,7 @@ case class ContinuousShuffleExchangeExec(
    */
   override def preparePostShuffleRDD(
       shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
-      specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
+      specifiedPartitionStartIndices: Option[Array[Int]] = None): ContinuousShuffledRowRDD = {
     // If an array of partition start indices is provided, we need to use this array
     // to create the ShuffledRowRDD. Also, we need to update newPartitioning to
     // update the number of post-shuffle partitions.
@@ -374,6 +365,26 @@ case class ContinuousShuffleExchangeExec(
     }
     new ContinuousShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices,
       totalShuffleNum)
+  }
+
+  /**
+   * ContinuousShuffleExchangeExec will changed from ShuffleExchangeExec at last by rule
+   * [[ReplaceShuffleExchange]], so the doPrepare should't be called.
+   */
+  protected override def doPrepare(): Unit = throw new RuntimeException("should not be reached")
+
+  /**
+   * Caches the created ShuffleRowRDD so we can reuse that.
+   */
+  private var cachedShuffleRDD: ContinuousShuffledRowRDD = null
+
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
+    if (cachedShuffleRDD == null) {
+        val shuffleDependency = prepareShuffleDependency()
+        cachedShuffleRDD = preparePostShuffleRDD(shuffleDependency)
+    }
+    cachedShuffleRDD
   }
 }
 

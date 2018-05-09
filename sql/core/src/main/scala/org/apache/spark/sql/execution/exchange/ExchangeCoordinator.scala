@@ -89,11 +89,11 @@ class ExchangeCoordinator(
   extends Logging {
 
   // The registered Exchange operators.
-  private[this] val exchanges = ArrayBuffer[BaseShuffleExchangeExec]()
+  private[this] val exchanges = ArrayBuffer[ShuffleExchangeExec]()
 
   // This map is used to lookup the post-shuffle ShuffledRowRDD for an Exchange operator.
-  private[this] val postShuffleRDDs: JMap[BaseShuffleExchangeExec, ShuffledRowRDD] =
-    new JHashMap[BaseShuffleExchangeExec, ShuffledRowRDD](numExchanges)
+  private[this] val postShuffleRDDs: JMap[ShuffleExchangeExec, ShuffledRowRDD] =
+    new JHashMap[ShuffleExchangeExec, ShuffledRowRDD](numExchanges)
 
   // A boolean that indicates if this coordinator has made decision on how to shuffle data.
   // This variable will only be updated by doEstimationIfNecessary, which is protected by
@@ -105,7 +105,7 @@ class ExchangeCoordinator(
    * to be called in the `doPrepare` method of a [[ShuffleExchangeExec]] operator.
    */
   @GuardedBy("this")
-  def registerExchange(exchange: BaseShuffleExchangeExec): Unit = synchronized {
+  def registerExchange(exchange: ShuffleExchangeExec): Unit = synchronized {
     exchanges += exchange
   }
 
@@ -200,7 +200,7 @@ class ExchangeCoordinator(
       // Make sure we have the expected number of registered Exchange operators.
       assert(exchanges.length == numExchanges)
 
-      val newPostShuffleRDDs = new JHashMap[BaseShuffleExchangeExec, ShuffledRowRDD](numExchanges)
+      val newPostShuffleRDDs = new JHashMap[ShuffleExchangeExec, ShuffledRowRDD](numExchanges)
 
       // Submit all map stages
       val shuffleDependencies = ArrayBuffer[ShuffleDependency[Int, InternalRow, InternalRow]]()
@@ -255,7 +255,7 @@ class ExchangeCoordinator(
     }
   }
 
-  def postShuffleRDD(exchange: BaseShuffleExchangeExec): ShuffledRowRDD = {
+  def postShuffleRDD(exchange: ShuffleExchangeExec): ShuffledRowRDD = {
     doEstimationIfNecessary()
 
     if (!postShuffleRDDs.containsKey(exchange)) {
