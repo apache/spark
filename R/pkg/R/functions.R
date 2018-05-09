@@ -219,7 +219,8 @@ NULL
 #' head(select(tmp3, map_values(tmp3$v3)))
 #' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
 #' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$hp))
-#' head(select(tmp4, concat(tmp4$v4, tmp4$v5)))}
+#' head(select(tmp4, concat(tmp4$v4, tmp4$v5)))
+#' concat(df$mpg, df$cyl, df$hp)}
 NULL
 
 #' Window functions for Column operations
@@ -2051,14 +2052,6 @@ setMethod("countDistinct",
 #'
 #' @rdname column_collection_functions
 #' @aliases concat concat,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' # concatenate strings
-#' tmp <- mutate(df, s1 = concat(df$Class, df$Sex),
-#'                   s2 = concat(df$Class, df$Sex, df$Age),
-#'                   s3 = concat(df$Class, df$Sex, df$Age, df$Class))
-#' head(tmp)}
 #' @note concat since 1.5.0
 setMethod("concat",
           signature(x = "Column"),
