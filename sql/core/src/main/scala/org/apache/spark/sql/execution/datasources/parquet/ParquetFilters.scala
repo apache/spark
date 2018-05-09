@@ -270,6 +270,14 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       case sources.Not(pred) =>
         createFilter(schema, pred).map(FilterApi.not)
 
+      case sources.In(name, values) if canMakeFilterOn(name) =>
+        val conds = values.flatMap(v => makeEq.lift(nameToType(name)).map(_(name, v)))
+        var filter = conds(0)
+        conds.drop(1).foreach { v =>
+          filter = FilterApi.or(filter, v)
+        }
+        Some(filter)
+
       case _ => None
     }
   }
