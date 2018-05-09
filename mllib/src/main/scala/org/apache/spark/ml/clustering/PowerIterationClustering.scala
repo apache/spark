@@ -235,8 +235,8 @@ class PowerIterationClustering private[clustering] (
           uncastPredictions.withColumn($(idCol), col($(idCol)).cast(LongType))
         case otherType =>
           throw new IllegalArgumentException(s"PowerIterationClustering had an unexpected error: " +
-            s"ID col was found to be of type $otherType, despite initial schema checks.  Please " +
-            s"report this bug.")
+            s"ID col was found to be of type ${otherType.simpleString}, despite initial schema " +
+            s"checks.  Please report this bug.")
       }
     }
 
