@@ -163,12 +163,13 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       BinaryPrefixComparator.computePrefix(raw.asInstanceOf[Array[Byte]])
     case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
       _.asInstanceOf[Decimal].toUnscaledLong
-    case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS => (raw) => {
-      val value = raw.asInstanceOf[Decimal]
+    case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
       val p = Decimal.MAX_LONG_DIGITS
       val s = p - (dt.precision - dt.scale)
-      if (value.changePrecision(p, s)) value.toUnscaledLong else Long.MinValue
-    }
+      (raw) => {
+        val value = raw.asInstanceOf[Decimal]
+        if (value.changePrecision(p, s)) value.toUnscaledLong else Long.MinValue
+      }
     case dt: DecimalType => (raw) =>
       DoublePrefixComparator.computePrefix(raw.asInstanceOf[Decimal].toDouble)
     case _ => (Any) => 0L
