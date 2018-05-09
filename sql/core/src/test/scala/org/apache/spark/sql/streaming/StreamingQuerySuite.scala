@@ -687,6 +687,21 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       CheckLastBatch(("A", 1)))
   }
 
+  test("StreamingRelationV2/StreamingExecutionRelation/ContinuousExecutionRelation.toJSON " +
+    "should not fail") {
+    val df = spark.readStream.format("rate").load()
+    assert(df.logicalPlan.toJSON.contains("StreamingRelationV2"))
+
+    testStream(df)(
+      AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingExecutionRelation"))
+    )
+
+    testStream(df, useV2Sink = true)(
+      StartStream(trigger = Trigger.Continuous(100)),
+      AssertOnQuery(_.logicalPlan.toJSON.contains("ContinuousExecutionRelation"))
+    )
+  }
+
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */
   private def createSingleTriggerStreamingDF(triggerDF: DataFrame): DataFrame = {
     require(!triggerDF.isStreaming)
