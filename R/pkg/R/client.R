@@ -43,6 +43,15 @@ determineSparkSubmitBin <- function() {
   sparkSubmitBinName
 }
 
+determineJavaVersionBin <- function() {
+  if (.Platform$OS.type == "unix") {
+    javaVersionBinName <- "print-java-version"
+  } else {
+    javaVersionBinName <- "print-java-version.cmd"
+  }
+  javaVersionBinName
+}
+
 generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   jars <- paste0(jars, collapse = ",")
   if (jars != "") {
@@ -61,12 +70,24 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
 }
 
 launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
+  javaVersionBinName <- determineJavaVersionBin()
   sparkSubmitBinName <- determineSparkSubmitBin()
   if (sparkHome != "") {
     sparkSubmitBin <- file.path(sparkHome, "bin", sparkSubmitBinName)
+    javaVersionBin <- file.path(sparkHome, "bin", javaVersionBinName)
   } else {
     sparkSubmitBin <- sparkSubmitBinName
+    javaVersionBin <- javaVersionBinName
   }
+  javaVersion <- launchScript(javaVersionBin, "", wait = TRUE, stdout = TRUE)
+
+  if (substr(javaVersion, 1L, 2L) == "1.") {
+    javaVersionNum <- as.numeric(paste0(strsplit(javaVersion, "[.]")[[1L]][1:2], collapse = "."))
+    if(javaVersionNum < 1.8) {
+      stop(paste("Java 8, or greater, is required for this package; found version:", javaVersion))
+    }
+  }
+
   combinedArgs <- generateSparkSubmitArgs(args, sparkHome, jars, sparkSubmitOpts, packages)
   cat("Launching java with spark-submit command", sparkSubmitBin, combinedArgs, "\n")
   invisible(launchScript(sparkSubmitBin, combinedArgs))
