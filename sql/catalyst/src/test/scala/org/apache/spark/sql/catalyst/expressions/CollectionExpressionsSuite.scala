@@ -165,6 +165,28 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArraysOverlap(
       Literal.create(Seq(null), ArrayType(IntegerType)),
       Literal.create(Seq(null), ArrayType(IntegerType))), null)
+
+    // arrays of binaries
+    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)),
+      ArrayType(BinaryType))
+    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
+      ArrayType(BinaryType))
+    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
+      ArrayType(BinaryType))
+
+    checkEvaluation(ArraysOverlap(b0, b1), true)
+    checkEvaluation(ArraysOverlap(b0, b2), false)
+
+    // arrays of complex data types
+    val aa0 = Literal.create(Seq[Array[String]](Array[String]("a", "b"), Array[String]("c", "d")),
+      ArrayType(ArrayType(StringType)))
+    val aa1 = Literal.create(Seq[Array[String]](Array[String]("e", "f"), Array[String]("a", "b")),
+      ArrayType(ArrayType(StringType)))
+    val aa2 = Literal.create(Seq[Array[String]](Array[String]("b", "a"), Array[String]("f", "g")),
+      ArrayType(ArrayType(StringType)))
+
+    checkEvaluation(ArraysOverlap(aa0, aa1), true)
+    checkEvaluation(ArraysOverlap(aa0, aa2), false)
   }
 
   test("Slice") {

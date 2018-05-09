@@ -579,6 +579,31 @@ case class ArrayContains(left: Expression, right: Expression)
 case class ArraysOverlap(left: Expression, right: Expression)
   extends BinaryArrayExpressionWithImplicitCast {
 
+  override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
+    case TypeCheckResult.TypeCheckSuccess =>
+      if (RowOrdering.isOrderable(elementType)) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure(s"${elementType.simpleString} cannot be used in comparison.")
+      }
+    case failure => failure
+  }
+
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(elementType)
+
+  @transient private lazy val elementTypeSupportEquals = elementType match {
+    case BinaryType => false
+    case _: AtomicType => true
+    case _ => false
+  }
+
+  @transient private lazy val doEvaluation = if (elementTypeSupportEquals) {
+      fastEval _
+    } else {
+      bruteForceEval _
+    }
+
   override def dataType: DataType = BooleanType
 
   override def nullable: Boolean = {
@@ -587,9 +612,16 @@ case class ArraysOverlap(left: Expression, right: Expression)
   }
 
   override def nullSafeEval(a1: Any, a2: Any): Any = {
+    doEvaluation(a1.asInstanceOf[ArrayData], a2.asInstanceOf[ArrayData])
+  }
+
+  /**
+   * A fast implementation which puts all the elements from the smaller array in a set
+   * and then performs a lookup on it for each element of the bigger one.
+   * This eval mode works only for data types which implements properly the equals method.
+   */
+  private def fastEval(arr1: ArrayData, arr2: ArrayData): Any = {
     var hasNull = false
-    val arr1 = a1.asInstanceOf[ArrayData]
-    val arr2 = a2.asInstanceOf[ArrayData]
     val (bigger, smaller, biggerDt) = if (arr1.numElements() > arr2.numElements()) {
       (arr1, arr2, left.dataType.asInstanceOf[ArrayType])
     } else {
@@ -620,6 +652,34 @@ case class ArraysOverlap(left: Expression, right: Expression)
     }
   }
 
+  /**
+   * A slower evaluation which performs a nested loop and supports all the data types.
+   */
+  private def bruteForceEval(arr1: ArrayData, arr2: ArrayData): Any = {
+    var hasNull = false
+    if (arr1.numElements() > 0) {
+      arr1.foreach(elementType, (_, v1) =>
+        if (v1 == null) {
+          hasNull = true
+        } else {
+          arr2.foreach(elementType, (_, v2) =>
+            if (v1 == null) {
+              hasNull = true
+            } else if (ordering.equiv(v1, v2)) {
+              return true
+            }
+          )
+        })
+    } else if (containsNull(arr2, right.dataType.asInstanceOf[ArrayType])) {
+      hasNull = true
+    }
+    if (hasNull) {
+      null
+    } else {
+      false
+    }
+  }
+
   def containsNull(arr: ArrayData, dt: ArrayType): Boolean = {
     if (dt.containsNull) {
       var i = 0
@@ -639,8 +699,6 @@ case class ArraysOverlap(left: Expression, right: Expression)
       val i = ctx.freshName("i")
       val smaller = ctx.freshName("smallerArray")
       val bigger = ctx.freshName("biggerArray")
-      val getFromSmaller = CodeGenerator.getValue(smaller, elementType, i)
-      val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
       val smallerEmptyCode = if (inputTypes.exists(_.asInstanceOf[ArrayType].containsNull)) {
         s"""
            |else {
@@ -655,22 +713,11 @@ case class ArraysOverlap(left: Expression, right: Expression)
       } else {
         ""
       }
-      val javaElementClass = CodeGenerator.boxedType(elementType)
-      val javaSet = classOf[java.util.HashSet[_]].getName
-      val set2 = ctx.freshName("set")
-      val addToSetFromSmallerCode = nullSafeElementCodegen(
-        smaller, i, s"$set2.add($getFromSmaller);", s"${ev.isNull} = true;")
-      val elementIsInSetCode = nullSafeElementCodegen(
-        bigger,
-        i,
-        s"""
-           |if ($set2.contains($getFromBigger)) {
-           |  ${ev.isNull} = false;
-           |  ${ev.value} = true;
-           |  break;
-           |}
-           |""".stripMargin,
-        s"${ev.isNull} = true;")
+      val comparisonCode = if (elementTypeSupportEquals) {
+        fastCodegen(ctx, ev, smaller, bigger)
+      } else {
+        bruteForceCodegen(ctx, ev, smaller, bigger)
+      }
       s"""
          |ArrayData $smaller;
          |ArrayData $bigger;
@@ -682,16 +729,84 @@ case class ArraysOverlap(left: Expression, right: Expression)
          |  $bigger = $a2;
          |}
          |if ($smaller.numElements() > 0) {
-         |  $javaSet<$javaElementClass> $set2 = new $javaSet<$javaElementClass>();
-         |  for (int $i = 0; $i < $smaller.numElements(); $i ++) {
-         |    $addToSetFromSmallerCode
-         |  }
-         |  for (int $i = 0; $i < $bigger.numElements(); $i ++) {
-         |    $elementIsInSetCode
-         |  }
+         |  $comparisonCode
          |} $smallerEmptyCode
          |""".stripMargin
     })
+  }
+
+  /**
+   * Code generation for a fast implementation which puts all the elements from the smaller array
+   * in a set and then performs a lookup on it for each element of the bigger one.
+   * It works only for data types which implements properly the equals method.
+   */
+  private def fastCodegen(ctx: CodegenContext, ev: ExprCode, smaller: String, bigger: String): String = {
+    val i = ctx.freshName("i")
+    val getFromSmaller = CodeGenerator.getValue(smaller, elementType, i)
+    val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
+    val javaElementClass = CodeGenerator.boxedType(elementType)
+    val javaSet = classOf[java.util.HashSet[_]].getName
+    val set2 = ctx.freshName("set")
+    val addToSetFromSmallerCode = nullSafeElementCodegen(
+      smaller, i, s"$set2.add($getFromSmaller);", s"${ev.isNull} = true;")
+    val elementIsInSetCode = nullSafeElementCodegen(
+      bigger,
+      i,
+      s"""
+         |if ($set2.contains($getFromBigger)) {
+         |  ${ev.isNull} = false;
+         |  ${ev.value} = true;
+         |  break;
+         |}
+         |""".stripMargin,
+      s"${ev.isNull} = true;")
+    s"""
+       |$javaSet<$javaElementClass> $set2 = new $javaSet<$javaElementClass>();
+       |for (int $i = 0; $i < $smaller.numElements(); $i ++) {
+       |  $addToSetFromSmallerCode
+       |}
+       |for (int $i = 0; $i < $bigger.numElements(); $i ++) {
+       |  $elementIsInSetCode
+       |}
+     """.stripMargin
+  }
+
+  /**
+   * Code generation for a slower evaluation which performs a nested loop and supports all the data types.
+   */
+  private def bruteForceCodegen(ctx: CodegenContext, ev: ExprCode, smaller: String, bigger: String): String = {
+    val i = ctx.freshName("i")
+    val j = ctx.freshName("j")
+    val getFromSmaller = CodeGenerator.getValue(smaller, elementType, j)
+    val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
+    val compareValues = nullSafeElementCodegen(
+      smaller,
+      j,
+      s"""
+         |if (${ctx.genEqual(elementType, getFromSmaller, getFromBigger)}) {
+         |  ${ev.isNull} = false;
+         |  ${ev.value} = true;
+         |  break;
+         |}
+       """.stripMargin,
+      s"${ev.isNull} = true;")
+    val isInSmaller = nullSafeElementCodegen(
+      bigger,
+      i,
+      s"""
+         |for (int $j = 0; $j < $smaller.numElements(); $j ++) {
+         |  $compareValues
+         |  if (${ev.value}) {
+         |    break;
+         |  }
+         |}
+       """.stripMargin,
+      s"${ev.isNull} = true;")
+    s"""
+       |for (int $i = 0; $i < $bigger.numElements(); $i ++) {
+       |$isInSmaller
+       |}
+     """.stripMargin
   }
 
   def nullSafeElementCodegen(
