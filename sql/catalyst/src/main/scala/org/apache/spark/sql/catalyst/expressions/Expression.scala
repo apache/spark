@@ -101,7 +101,7 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
-      ExprCode(code"${ctx.registerComment(this.toString)}", subExprState.isNull,
+      ExprCode(ctx.registerComment(this.toString), subExprState.isNull,
         subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
@@ -112,7 +112,7 @@ abstract class Expression extends TreeNode[Expression] {
       reduceCodeSize(ctx, eval)
       if (eval.code.toString.nonEmpty) {
         // Add `this` in the comment.
-        eval.copy(code = code"${ctx.registerComment(this.toString)}\n" + eval.code)
+        eval.copy(code = ctx.registerComment(this.toString) + eval.code)
       } else {
         eval
       }
@@ -121,7 +121,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
-    if (eval.code.toString.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+    if (eval.code.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull

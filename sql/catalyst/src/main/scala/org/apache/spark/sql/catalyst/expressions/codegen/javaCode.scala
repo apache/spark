@@ -128,6 +128,8 @@ trait Block extends JavaCode {
     case _ => code.trim
   }
 
+  def length: Int = toString.length
+
   // The leading prefix that should be stripped from each line.
   // By default we strip blanks or control characters followed by '|' from the line.
   var _marginChar: Option[Char] = Some('|')

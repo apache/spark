@@ -625,11 +625,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val eval = child.genCode(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
 
-    // Below the code comment including `eval.value` and `eval.isNull` is a trick. It makes the two
-    // expr values are referred by this code block.
-    ev.copy(code = eval.code +
+    ev.copy(code =
       code"""
-        // Cast from ${eval.value}, ${eval.isNull}
+        ${eval.code}
+        // This comment is added for manually tracking reference of ${eval.value}, ${eval.isNull}
         ${castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast)}
       """)
   }

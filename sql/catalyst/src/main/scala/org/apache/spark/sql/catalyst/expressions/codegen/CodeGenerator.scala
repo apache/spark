@@ -61,15 +61,15 @@ case class ExprCode(var code: Block, var isNull: ExprValue, var value: ExprValue
 
 object ExprCode {
   def apply(isNull: ExprValue, value: ExprValue): ExprCode = {
-    ExprCode(code = code"", isNull, value)
+    ExprCode(code = EmptyBlock, isNull, value)
   }
 
   def forNullValue(dataType: DataType): ExprCode = {
-    ExprCode(code = code"", isNull = TrueLiteral, JavaCode.defaultLiteral(dataType))
+    ExprCode(code = EmptyBlock, isNull = TrueLiteral, JavaCode.defaultLiteral(dataType))
   }
 
   def forNonNullValue(value: ExprValue): ExprCode = {
-    ExprCode(code = code"", isNull = FalseLiteral, value = value)
+    ExprCode(code = EmptyBlock, isNull = FalseLiteral, value = value)
   }
 }
 
@@ -1074,7 +1074,7 @@ class CodegenContext {
    def registerComment(
        text: => String,
        placeholderId: String = "",
-       force: Boolean = false): String = {
+       force: Boolean = false): Block = {
     // By default, disable comments in generated code because computing the comments themselves can
     // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
     // inputs with wide schemas. For more details on the performance issues that motivated this
@@ -1093,9 +1093,9 @@ class CodegenContext {
         s"// $text"
       }
       placeHolderToComments += (name -> comment)
-      s"/*$name*/"
+      code"/*$name*/"
     } else {
-      ""
+      EmptyBlock
     }
   }
 }
