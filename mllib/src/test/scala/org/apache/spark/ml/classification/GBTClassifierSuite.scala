@@ -377,21 +377,19 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model2 = new GBTClassificationModel("gbt-cls-model-test2",
       model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures, model3.numClasses)
 
-    for (evalLossType <- GBTClassifier.supportedLossTypes) {
-      val evalArr = model3.evaluateEachIteration(validationData.toDF)
-      val remappedValidationData = validationData.map(
-        x => new LabeledPoint((x.label * 2) - 1, x.features))
-      val lossErr1 = GradientBoostedTrees.computeError(remappedValidationData,
-        model1.trees, model1.treeWeights, model1.getOldLossType)
-      val lossErr2 = GradientBoostedTrees.computeError(remappedValidationData,
-        model2.trees, model2.treeWeights, model2.getOldLossType)
-      val lossErr3 = GradientBoostedTrees.computeError(remappedValidationData,
-        model3.trees, model3.treeWeights, model3.getOldLossType)
+    val evalArr = model3.evaluateEachIteration(validationData.toDF)
+    val remappedValidationData = validationData.map(
+      x => new LabeledPoint((x.label * 2) - 1, x.features))
+    val lossErr1 = GradientBoostedTrees.computeError(remappedValidationData,
+      model1.trees, model1.treeWeights, model1.getOldLossType)
+    val lossErr2 = GradientBoostedTrees.computeError(remappedValidationData,
+      model2.trees, model2.treeWeights, model2.getOldLossType)
+    val lossErr3 = GradientBoostedTrees.computeError(remappedValidationData,
+      model3.trees, model3.treeWeights, model3.getOldLossType)
 
-      assert(evalArr(0) ~== lossErr1 relTol 1E-3)
-      assert(evalArr(1) ~== lossErr2 relTol 1E-3)
-      assert(evalArr(2) ~== lossErr3 relTol 1E-3)
-    }
+    assert(evalArr(0) ~== lossErr1 relTol 1E-3)
+    assert(evalArr(1) ~== lossErr2 relTol 1E-3)
+    assert(evalArr(2) ~== lossErr3 relTol 1E-3)
   }
 
   /////////////////////////////////////////////////////////////////////////////
