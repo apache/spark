@@ -19,6 +19,7 @@ FROM openjdk:8-alpine
 
 ARG spark_jars=jars
 ARG img_path=kubernetes/dockerfiles
+ARG spark_examples=examples
 
 # Before building the docker image, first build and make a Spark distribution following
 # the instructions in http://spark.apache.org/docs/latest/building-spark.html.
@@ -41,7 +42,7 @@ COPY ${spark_jars} /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY ${img_path}/spark/entrypoint.sh /opt/
-COPY examples /opt/spark/examples
+COPY ${spark_examples} /opt/spark/examples
 COPY data /opt/spark/data
 
 ENV SPARK_HOME /opt/spark

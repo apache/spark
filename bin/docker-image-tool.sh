@@ -44,15 +44,37 @@ function image_ref {
 function build {
   local BUILD_ARGS
   local IMG_PATH
+  local TMPFOLDER
 
   if [ ! -f "$SPARK_HOME/RELEASE" ]; then
     # Set image build arguments accordingly if this is a source repo and not a distribution archive.
+    local JARS="${SPARK_HOME}/assembly/target/scala-${SPARK_SCALA_VERSION}/jars"
+    TMPFOLDER=`mktemp -q -d examples.XXXXXX`
+    if [ $? -ne 0 ]; then
+      ehco "Cannot create temp folder, exiting..."
+      exit 1
+    fi
+
+    mkdir -p "${TMPFOLDER}/jars"
+    cp "${SPARK_HOME}"/examples/target/scala*/jars/* "${TMPFOLDER}/jars"
+    for f in "${TMPFOLDER}"/jars/*; do
+      name=$(basename "$f")
+      if [ -f "${JARS}/${name}" ]; then
+        rm "${TMPFOLDER}/jars/${name}"
+      fi
+    done
+
+    mkdir -p "${TMPFOLDER}/src/main"
+    cp -r "${SPARK_HOME}/examples/src/main" "${TMPFOLDER}/src"
+
     IMG_PATH=resource-managers/kubernetes/docker/src/main/dockerfiles
     BUILD_ARGS=(
       --build-arg
       img_path=$IMG_PATH
       --build-arg
       spark_jars=assembly/target/scala-$SPARK_SCALA_VERSION/jars
+      --build-arg
+      spark_examples=$TMPFOLDER
     )
   else
     # Not passed as an argument to docker, but used to validate the Spark directory.
@@ -69,6 +91,10 @@ function build {
   docker build "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
     -f "$DOCKERFILE" .
+
+  if [ -d "${TMPFOLDER}" ]; then
+    rm -fr "${TMPFOLDER}"
+  fi
 }
 
 function push {
