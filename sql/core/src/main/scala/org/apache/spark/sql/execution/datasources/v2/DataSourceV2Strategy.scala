@@ -25,10 +25,10 @@ import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDat
 object DataSourceV2Strategy extends Strategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case r: DataSourceV2Relation =>
-      DataSourceV2ScanExec(r.output, r.source, r.options, r.reader) :: Nil
+      DataSourceV2ScanExec(r.output, r.source, r.options, r.pushedFilters, r.reader) :: Nil
 
     case r: StreamingDataSourceV2Relation =>
-      DataSourceV2ScanExec(r.output, r.source, r.options, r.reader) :: Nil
+      DataSourceV2ScanExec(r.output, r.source, r.options, r.pushedFilters, r.reader) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil

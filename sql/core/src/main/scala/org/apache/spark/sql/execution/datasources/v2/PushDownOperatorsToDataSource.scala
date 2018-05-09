@@ -57,9 +57,9 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] {
         projection = projection.asInstanceOf[Seq[AttributeReference]],
         filters = Some(filters))
 
-      // Add a Filter for any filters that could not be pushed
-      val unpushedFilter = newRelation.unsupportedFilters.reduceLeftOption(And)
-      val filtered = unpushedFilter.map(Filter(_, newRelation)).getOrElse(newRelation)
+      // Add a Filter for any filters that need to be evaluated after scan.
+      val postScanFilterCond = newRelation.postScanFilters.reduceLeftOption(And)
+      val filtered = postScanFilterCond.map(Filter(_, newRelation)).getOrElse(newRelation)
 
       // Add a Project to ensure the output matches the required projection
       if (newRelation.output != projectAttrs) {

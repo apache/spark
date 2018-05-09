@@ -206,7 +206,9 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
+#' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21)))
+#' head(select(tmp, flatten(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
@@ -2993,6 +2995,32 @@ setMethod("array_contains",
           })
 
 #' @details
+#' \code{array_max}: Returns the maximum value of the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_max array_max,Column-method
+#' @note array_max since 2.4.0
+setMethod("array_max",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_max", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_min}: Returns the minimum value of the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_min array_min,Column-method
+#' @note array_min since 2.4.0
+setMethod("array_min",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_min", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{array_position}: Locates the position of the first occurrence of the given value
 #' in the given array. Returns NA if either of the arguments are NA.
 #' Note: The position is not zero based, but 1 based index. Returns 0 if the given
@@ -3005,6 +3033,19 @@ setMethod("array_position",
           signature(x = "Column", value = "ANY"),
           function(x, value) {
             jc <- callJStatic("org.apache.spark.sql.functions", "array_position", x@jc, value)
+            column(jc)
+          })
+
+#' @details
+#' \code{flatten}: Transforms an array of arrays into a single array.
+#'
+#' @rdname column_collection_functions
+#' @aliases flatten flatten,Column-method
+#' @note flatten since 2.4.0
+setMethod("flatten",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "flatten", x@jc)
             column(jc)
           })
 
