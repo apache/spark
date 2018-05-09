@@ -71,11 +71,11 @@ public class JavaPowerIterationClusteringExample {
                 .setK(2)
                 .setMaxIter(10);
 
-        Dataset<Row> result = pic.transform(df).select("id", "prediction");
+        Dataset<Row> result = pic.transform(df);
 
         // printing results
         System.out.println("Clustering results [id , cluster]");
-        for (Row row : result.collectAsList()) {
+        for (Row row : result.select("id","prediction").collectAsList()) {
             System.out.println("[" + row.get(0) + " , " + row.get(1) + "]");
         }
 
