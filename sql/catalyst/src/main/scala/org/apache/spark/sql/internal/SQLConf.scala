@@ -345,7 +345,7 @@ object SQLConf {
       "snappy, gzip, lzo.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo"))
+    .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo", "lz4", "brotli", "zstd"))
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
@@ -437,7 +437,8 @@ object SQLConf {
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
-         "when reading data stored in HDFS.")
+         "when reading data stored in HDFS. This configuration will be deprecated in the future " +
+         "releases and replaced by spark.files.ignoreMissingFiles.")
     .booleanConf
     .createWithDefault(false)
 
@@ -918,6 +919,14 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10000L)
 
+  val STREAMING_NO_DATA_MICRO_BATCHES_ENABLED =
+    buildConf("spark.sql.streaming.noDataMicroBatchesEnabled")
+      .doc(
+        "Whether streaming micro-batch engine will execute batches without data " +
+          "for eager state management for stateful streaming queries.")
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_METRICS_ENABLED =
     buildConf("spark.sql.streaming.metricsEnabled")
       .doc("Whether Dropwizard/Codahale metrics will be reported for active streaming queries.")
@@ -929,6 +938,13 @@ object SQLConf {
       .doc("The number of progress updates to retain for a streaming query")
       .intConf
       .createWithDefault(100)
+
+  val STREAMING_CHECKPOINT_FILE_MANAGER_CLASS =
+    buildConf("spark.sql.streaming.checkpointFileManagerClass")
+      .doc("The class used to write checkpoint files atomically. This class must be a subclass " +
+        "of the interface CheckpointFileManager.")
+      .internal()
+      .stringConf
 
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
@@ -1200,6 +1216,13 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val REJECT_TIMEZONE_IN_STRING = buildConf("spark.sql.function.rejectTimezoneInString")
+    .internal()
+    .doc("If true, `to_utc_timestamp` and `from_utc_timestamp` return null if the input string " +
+      "contains a timezone part, e.g. `2000-10-10 00:00:00+00:00`.")
+    .booleanConf
+    .createWithDefault(true)
+
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
@@ -1297,6 +1320,9 @@ class SQLConf extends Serializable with Logging {
 
   def streamingNoDataProgressEventInterval: Long =
     getConf(STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL)
+
+  def streamingNoDataMicroBatchesEnabled: Boolean =
+    getConf(STREAMING_NO_DATA_MICRO_BATCHES_ENABLED)
 
   def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
 

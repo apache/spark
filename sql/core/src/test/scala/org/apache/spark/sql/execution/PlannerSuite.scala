@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition, Sort}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
@@ -194,7 +194,20 @@ class PlannerSuite extends SharedSQLContext {
   test("CollectLimit can appear in the middle of a plan when caching is used") {
     val query = testData.select('key, 'value).limit(2).cache()
     val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
-    assert(planned.child.isInstanceOf[CollectLimitExec])
+    assert(planned.cachedPlan.isInstanceOf[CollectLimitExec])
+  }
+
+  test("SPARK-23375: Cached sorted data doesn't need to be re-sorted") {
+    val query = testData.select('key, 'value).sort('key.desc).cache()
+    assert(query.queryExecution.optimizedPlan.isInstanceOf[InMemoryRelation])
+    val resorted = query.sort('key.desc)
+    assert(resorted.queryExecution.optimizedPlan.collect { case s: Sort => s}.isEmpty)
+    assert(resorted.select('key).collect().map(_.getInt(0)).toSeq ==
+      (1 to 100).reverse)
+    // with a different order, the sort is needed
+    val sortedAsc = query.sort('key)
+    assert(sortedAsc.queryExecution.optimizedPlan.collect { case s: Sort => s}.size == 1)
+    assert(sortedAsc.select('key).collect().map(_.getInt(0)).toSeq == (1 to 100))
   }
 
   test("PartitioningCollection") {

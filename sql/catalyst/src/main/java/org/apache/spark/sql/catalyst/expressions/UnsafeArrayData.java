@@ -56,7 +56,17 @@ import org.apache.spark.unsafe.types.UTF8String;
 public final class UnsafeArrayData extends ArrayData {
 
   public static int calculateHeaderPortionInBytes(int numFields) {
+    return (int)calculateHeaderPortionInBytes((long)numFields);
+  }
+
+  public static long calculateHeaderPortionInBytes(long numFields) {
     return 8 + ((numFields + 63)/ 64) * 8;
+  }
+
+  public static long calculateSizeOfUnderlyingByteArray(long numFields, int elementSize) {
+    long size = UnsafeArrayData.calculateHeaderPortionInBytes(numFields) +
+      ByteArrayMethods.roundNumberOfBytesToNearestWord(numFields * elementSize);
+    return size;
   }
 
   private Object baseObject;

@@ -50,7 +50,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
 
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
-      assert(sizes.head === BigInt(96),
+      assert(sizes.head === BigInt(128),
         s"expected exact size 96 for table 'test', got: ${sizes.head}")
     }
   }
@@ -379,6 +379,34 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             }
           }
         }
+      }
+    }
+  }
+
+  test("Simple queries must be working, if CBO is turned on") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("TBL1", "TBL") {
+        import org.apache.spark.sql.functions._
+        val df = spark.range(1000L).select('id,
+          'id * 2 as "FLD1",
+          'id * 12 as "FLD2",
+          lit("aaa") + 'id as "fld3")
+        df.write
+          .mode(SaveMode.Overwrite)
+          .bucketBy(10, "id", "FLD1", "FLD2")
+          .sortBy("id", "FLD1", "FLD2")
+          .saveAsTable("TBL")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS ")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
+        val df2 = spark.sql(
+          """
+             |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
+             |FROM tbl t1
+             |JOIN tbl t2 on t1.id=t2.id
+             |WHERE  t1.fld3 IN (-123.23,321.23)
+          """.stripMargin)
+        df2.createTempView("TBL2")
+        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
       }
     }
   }

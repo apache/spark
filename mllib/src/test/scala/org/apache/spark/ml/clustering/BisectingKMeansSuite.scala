@@ -17,13 +17,16 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.language.existentials
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.DistanceMeasure
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 class BisectingKMeansSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -181,6 +184,22 @@ class BisectingKMeansSuite
       predictionsMap(Vectors.dense(-100.0, 90.0)))
 
     model.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+  }
+
+  test("BisectingKMeans with Array input") {
+    def trainAndComputeCost(dataset: Dataset[_]): Double = {
+      val model = new BisectingKMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
+      model.computeCost(dataset)
+    }
+
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val trueCost = trainAndComputeCost(newDataset)
+    val doubleArrayCost = trainAndComputeCost(newDatasetD)
+    val floatArrayCost = trainAndComputeCost(newDatasetF)
+
+    // checking the cost is fine enough as a sanity check
+    assert(trueCost ~== doubleArrayCost absTol 1e-6)
+    assert(trueCost ~== floatArrayCost absTol 1e-6)
   }
 }
 

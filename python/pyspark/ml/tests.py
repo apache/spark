@@ -1018,6 +1018,50 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvParallelModel = cv.fit(dataset)
         self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
 
+    def test_expose_sub_models(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        numFolds = 3
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+                            numFolds=numFolds, collectSubModels=True)
+
+        def checkSubModels(subModels):
+            self.assertEqual(len(subModels), numFolds)
+            for i in range(numFolds):
+                self.assertEqual(len(subModels[i]), len(grid))
+
+        cvModel = cv.fit(dataset)
+        checkSubModels(cvModel.subModels)
+
+        # Test the default value for option "persistSubModel" to be "true"
+        testSubPath = temp_path + "/testCrossValidatorSubModels"
+        savingPathWithSubModels = testSubPath + "cvModel3"
+        cvModel.save(savingPathWithSubModels)
+        cvModel3 = CrossValidatorModel.load(savingPathWithSubModels)
+        checkSubModels(cvModel3.subModels)
+        cvModel4 = cvModel3.copy()
+        checkSubModels(cvModel4.subModels)
+
+        savingPathWithoutSubModels = testSubPath + "cvModel2"
+        cvModel.write().option("persistSubModels", "false").save(savingPathWithoutSubModels)
+        cvModel2 = CrossValidatorModel.load(savingPathWithoutSubModels)
+        self.assertEqual(cvModel2.subModels, None)
+
+        for i in range(numFolds):
+            for j in range(len(grid)):
+                self.assertEqual(cvModel.subModels[i][j].uid, cvModel3.subModels[i][j].uid)
+
     def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
@@ -1185,6 +1229,40 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvs.setParallelism(2)
         tvsParallelModel = tvs.fit(dataset)
         self.assertEqual(tvsSerialModel.validationMetrics, tvsParallelModel.validationMetrics)
+
+    def test_expose_sub_models(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+                                   collectSubModels=True)
+        tvsModel = tvs.fit(dataset)
+        self.assertEqual(len(tvsModel.subModels), len(grid))
+
+        # Test the default value for option "persistSubModel" to be "true"
+        testSubPath = temp_path + "/testTrainValidationSplitSubModels"
+        savingPathWithSubModels = testSubPath + "cvModel3"
+        tvsModel.save(savingPathWithSubModels)
+        tvsModel3 = TrainValidationSplitModel.load(savingPathWithSubModels)
+        self.assertEqual(len(tvsModel3.subModels), len(grid))
+        tvsModel4 = tvsModel3.copy()
+        self.assertEqual(len(tvsModel4.subModels), len(grid))
+
+        savingPathWithoutSubModels = testSubPath + "cvModel2"
+        tvsModel.write().option("persistSubModels", "false").save(savingPathWithoutSubModels)
+        tvsModel2 = TrainValidationSplitModel.load(savingPathWithoutSubModels)
+        self.assertEqual(tvsModel2.subModels, None)
+
+        for i in range(len(grid)):
+            self.assertEqual(tvsModel.subModels[i].uid, tvsModel3.subModels[i].uid)
 
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.
@@ -2058,17 +2136,23 @@ class ImageReaderTest2(PySparkTestCase):
     @classmethod
     def setUpClass(cls):
         super(ImageReaderTest2, cls).setUpClass()
+        cls.hive_available = True
         # Note that here we enable Hive's support.
         cls.spark = None
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
             cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         except TypeError:
             cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
-        cls.spark = HiveContext._createForTesting(cls.sc)
+            cls.hive_available = False
+        if cls.hive_available:
+            cls.spark = HiveContext._createForTesting(cls.sc)
+
+    def setUp(self):
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     @classmethod
     def tearDownClass(cls):
@@ -2584,6 +2668,6 @@ class EstimatorTest(unittest.TestCase):
 if __name__ == "__main__":
     from pyspark.ml.tests import *
     if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
     else:
-        unittest.main()
+        unittest.main(verbosity=2)
