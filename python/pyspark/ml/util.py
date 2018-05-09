@@ -30,7 +30,7 @@ if sys.version > '3':
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
-from pyspark.util import majorMinorVersion
+from pyspark.util import VersionUtils
 
 
 def _jvm():
@@ -534,19 +534,17 @@ class DefaultParamsReader(MLReader):
         """
         Extract Params from metadata, and set them in the instance.
         """
-        # User-supplied param values
+        # Set user-supplied param values
         for paramName in metadata['paramMap']:
             param = instance.getParam(paramName)
             paramValue = metadata['paramMap'][paramName]
             instance.set(param, paramValue)
 
-        # Default param values
-        majorAndMinorVersions = majorMinorVersion(metadata['sparkVersion'])
-        assert majorAndMinorVersions is not None, "Error loading metadata: Expected " + \
-            "Spark version string but found {}".format(metadata['sparkVersion'])
-
+        # Set default param values
+        majorAndMinorVersions = VersionUtils.majorMinorVersion(metadata['sparkVersion'])
         major = majorAndMinorVersions[0]
         minor = majorAndMinorVersions[1]
+
         # For metadata file prior to Spark 2.4, there is no default section.
         if major > 2 or (major == 2 and minor >= 4):
             assert 'defaultParamMap' in metadata, "Error loading metadata: Expected " + \
