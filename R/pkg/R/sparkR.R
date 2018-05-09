@@ -163,10 +163,7 @@ sparkR.sparkContext <- function(
     submitOps <- getClientModeSparkSubmitOpts(
         Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
         sparkEnvirMap)
-    tryCatch(checkJavaVersion(),
-             error = function(e) {
-               stop("Java version check failed")
-             })
+    checkJavaVersion()
     launchBackend(
         args = path,
         sparkHome = sparkHome,

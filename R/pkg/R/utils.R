@@ -756,7 +756,7 @@ launchScript <- function(script, combinedArgs, wait = FALSE, stdout = "", stderr
     # stdout = F means discard output
     # stdout = "" means to its console (default)
     # Note that the console of this child process might not be the same as the running R process.
-    system2(script, combinedArgs, stdout = stdout, wait = wait, stder = stderr)
+    system2(script, combinedArgs, stdout = stdout, wait = wait, stderr = stderr)
   }
 }
 
