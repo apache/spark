@@ -599,13 +599,14 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
         topicsMatrix: Matrix,
         docConcentration: Vector,
         topicConcentration: Double,
-        gammaShape: Double)
+        gammaShape: Double,
+        seed: Long)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val oldModel = instance.oldLocalModel
       val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
-        oldModel.topicConcentration, oldModel.gammaShape)
+        oldModel.topicConcentration, oldModel.gammaShape, oldModel.getSeed)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -622,11 +623,11 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
       val matrixConverted = MLUtils.convertMatrixColumnsToML(vectorConverted, "topicsMatrix")
       val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
-          topicConcentration: Double, gammaShape: Double) =
+          topicConcentration: Double, gammaShape: Double, seed: Long) =
         matrixConverted.select("vocabSize", "topicsMatrix", "docConcentration",
-          "topicConcentration", "gammaShape").head()
+          "topicConcentration", "gammaShape", "seed").head()
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
-        gammaShape)
+        gammaShape).setSeed(seed)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
       LDAParams.getAndSetParams(model, metadata)
       model
