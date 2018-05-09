@@ -267,9 +267,8 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
         ivySettings,
         isTest = true)
       val r = """.*org.apache.spark-spark-submit-parent-.*""".r
-      assert(ivySettings.getDefaultCache.listFiles.map(_.getName)
-        .forall { case n @ r() => false case _ => true },
-        "resolution files should be cleaned")
+      assert(!ivySettings.getDefaultCache.listFiles.map(_.getName)
+        .exists(r.findFirstIn(_).isDefined), "resolution files should be cleaned")
     }
   }
 }

@@ -1212,7 +1212,7 @@ private[spark] object SparkSubmitUtils {
       "1.0"))
 
   /**
-   * clear ivy resolution from current launch. The resolution file is usually at
+   * Clear ivy resolution from current launch. The resolution file is usually at
    * ~/.ivy2/org.apache.spark-spark-submit-parent-$UUID-default.xml,
    * ~/.ivy2/resolved-org.apache.spark-spark-submit-parent-$UUID-1.0.xml, and
    * ~/.ivy2/resolved-org.apache.spark-spark-submit-parent-$UUID-1.0.properties.
@@ -1223,16 +1223,13 @@ private[spark] object SparkSubmitUtils {
       mdId: ModuleRevisionId,
       ivySettings: IvySettings,
       ivyConfName: String): Unit = {
-    val currentResolutionFiles = Seq[File](
-      new File(ivySettings.getDefaultCache,
-        s"${mdId.getOrganisation}-${mdId.getName}-$ivyConfName.xml"),
-      new File(ivySettings.getDefaultCache,
-        s"resolved-${mdId.getOrganisation}-${mdId.getName}-${mdId.getRevision}.xml"),
-      new File(ivySettings.getDefaultCache,
-        s"resolved-${mdId.getOrganisation}-${mdId.getName}-${mdId.getRevision}.properties")
+    val currentResolutionFiles = Seq(
+      s"${mdId.getOrganisation}-${mdId.getName}-$ivyConfName.xml",
+      s"resolved-${mdId.getOrganisation}-${mdId.getName}-${mdId.getRevision}.xml",
+      s"resolved-${mdId.getOrganisation}-${mdId.getName}-${mdId.getRevision}.properties"
     )
-    currentResolutionFiles.foreach { file =>
-      file.delete()
+    currentResolutionFiles.foreach { filename =>
+      new File(ivySettings.getDefaultCache, filename).delete()
     }
   }
 
