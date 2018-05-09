@@ -1241,8 +1241,9 @@ object SQLConf {
   val COMBINE_LIMIT_AFTER_SORT_THRESHOLD =
     buildConf("spark.sql.execution.combineLimitAfterSortThreshold")
       .internal()
-      .doc("In sql like 'select x from t order by y limit m', if m is under this threshold, " +
-          "sort in memory, otherwise do a global sort which spills to disk if necessary.")
+      .doc("In SQL queries with a SORT followed by a LIMIT like " +
+          "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, sort in memory, " +
+          "otherwise do a global sort which spills to disk if necessary.")
       .intConf
       .createWithDefault(Int.MaxValue)
 
