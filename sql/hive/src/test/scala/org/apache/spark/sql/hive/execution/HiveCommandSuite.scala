@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
@@ -170,6 +171,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     // 16|john
     // 17|robert
     val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalFile()
+    val testData2 = new File(testData.getCanonicalPath, "data/files/??ployee.dat")
 
     /**
      * Run a function with a copy of the input data file when running with non-local input. The
@@ -226,6 +228,11 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         intercept[AnalysisException] {
           sql(s"""LOAD DATA LOCAL INPATH "$incorrectUri" INTO TABLE non_part_table""")
         }
+      } else {
+        intercept[AnalysisException] {
+          sql(s"""LOAD DATA INPATH "${testData2.toURI}" INTO TABLE non_part_table""")
+        }
+        Utils.deleteRecursively(testData2)
       }
 
       // Use URI as inpath:
