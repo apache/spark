@@ -20,9 +20,9 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
-import org.apache.spark.deploy.k8s.submit.PythonMainAppResource
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.PythonMainAppResource
 
 class PythonDriverFeatureStepSuite extends SparkFunSuite {
 
