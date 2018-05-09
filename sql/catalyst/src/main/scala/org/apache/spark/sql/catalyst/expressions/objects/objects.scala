@@ -282,6 +282,38 @@ case class StaticInvoke(
 }
 
 /**
+ * Retrieves the value of a static field against the given class.
+ *
+ * @param objectClass The class from which to retrieve the static field
+ * @param dataType    The expected type of the static field
+ * @param fieldName   The name of the field to retrieve
+ */
+case class StaticField(
+    objectClass: Class[_],
+    dataType: DataType,
+    fieldName: String) extends Expression with NonSQLExpression {
+
+  val objectName = objectClass.getName.stripSuffix("$")
+
+  override def nullable: Boolean = false
+
+  override def children: Seq[Expression] = Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = CodeGenerator.javaType(dataType)
+
+    val code =
+      s"""
+        final $javaType ${ev.value} = $objectName.$fieldName;
+      """
+    ev.copy(code = code, isNull = FalseLiteral)
+  }
+}
+
+/**
  * Calls the specified function on an object, optionally passing arguments.  If the `targetObject`
  * expression evaluates to null then null will be returned.
  *
@@ -1797,5 +1829,67 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
     """
     ev.copy(code = code, isNull = input.isNull)
+  }
+}
+
+/**
+ * Determines if the given value is an instanceof a given class.
+ *
+ * @param value the value to check
+ * @param checkedType the class to check the value against
+ */
+case class InstanceOf(
+    value: Expression,
+    checkedType: Class[_]) extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = false
+  override def children: Seq[Expression] = value :: Nil
+  override def dataType: DataType = BooleanType
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+
+    val obj = value.genCode(ctx)
+
+    val code =
+      s"""
+        ${obj.code}
+        final boolean ${ev.value} = ${obj.value} instanceof ${checkedType.getName};
+      """
+
+    ev.copy(code = code, isNull = FalseLiteral)
+  }
+}
+
+/**
+ * Casts the result of an expression to another type.
+ *
+ * @param value The value to cast
+ * @param resultType The type to which the value should be cast
+ */
+case class ObjectCast(value: Expression, resultType: DataType)
+  extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = value.nullable
+  override def dataType: DataType = resultType
+  override def children: Seq[Expression] = value :: Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+
+    val javaType = CodeGenerator.javaType(resultType)
+    val obj = value.genCode(ctx)
+
+    val code =
+      s"""
+        ${obj.code}
+        final $javaType ${ev.value} = ($javaType) ${obj.value};
+      """
+
+    ev.copy(code = code, isNull = obj.isNull)
   }
 }
