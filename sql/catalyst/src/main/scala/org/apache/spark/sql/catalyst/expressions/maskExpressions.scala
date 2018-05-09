@@ -21,17 +21,13 @@ import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.MaskExpressionsUtils._
+import org.apache.spark.sql.catalyst.expressions.MaskLike._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
 trait MaskLike {
-  val defaultMaskedUppercase: Int = 'X'
-  val defaultMaskedLowercase: Int = 'x'
-  val defaultMaskedDigit: Int = 'n'
-  val defaultMaskedOther: Int = MaskExpressionsUtils.UNMASKED_VAL
-
   def upper: String
   def lower: String
   def digit: String
@@ -83,6 +79,10 @@ trait MaskLikeWithN extends MaskLike {
  */
 object MaskLike {
   val defaultCharCount = 4
+  val defaultMaskedUppercase: Int = 'X'
+  val defaultMaskedLowercase: Int = 'x'
+  val defaultMaskedDigit: Int = 'n'
+  val defaultMaskedOther: Int = MaskExpressionsUtils.UNMASKED_VAL
 
   def extractCharCount(e: Expression): Int = e match {
     case Literal(i, IntegerType|NullType) =>
@@ -119,16 +119,13 @@ case class Mask(child: Expression, upper: String, lower: String, digit: String)
   def this(child: Expression) = this(child, null.asInstanceOf[String], null, null)
 
   def this(child: Expression, upper: Expression) =
-    this(child, MaskLike.extractReplacement(upper), null, null)
+    this(child, extractReplacement(upper), null, null)
 
   def this(child: Expression, upper: Expression, lower: Expression) =
-    this(child, MaskLike.extractReplacement(upper), MaskLike.extractReplacement(lower), null)
+    this(child, extractReplacement(upper), extractReplacement(lower), null)
 
   def this(child: Expression, upper: Expression, lower: Expression, digit: Expression) =
-    this(child,
-      MaskLike.extractReplacement(upper),
-      MaskLike.extractReplacement(lower),
-      MaskLike.extractReplacement(digit))
+    this(child, extractReplacement(upper), extractReplacement(lower), extractReplacement(digit))
 
   override def nullSafeEval(input: Any): Any = {
     val res = input.asInstanceOf[UTF8String].toString.map(transformChar(
@@ -176,24 +173,16 @@ case class MaskFirstN(
   extends UnaryExpression with ExpectsInputTypes with MaskLikeWithN {
 
   def this(child: Expression) =
-    this(child, MaskLike.defaultCharCount, null, null, null)
+    this(child, defaultCharCount, null, null, null)
 
   def this(child: Expression, n: Expression) =
-    this(child, MaskLike.extractCharCount(n), null, null, null)
+    this(child, extractCharCount(n), null, null, null)
 
   def this(child: Expression, n: Expression, upper: Expression) =
-    this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      null,
-      null)
+    this(child, extractCharCount(n), extractReplacement(upper), null, null)
 
   def this(child: Expression, n: Expression, upper: Expression, lower: Expression) =
-    this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      MaskLike.extractReplacement(lower),
-      null)
+    this(child, extractCharCount(n), extractReplacement(upper), extractReplacement(lower), null)
 
   def this(
       child: Expression,
@@ -202,10 +191,10 @@ case class MaskFirstN(
       lower: Expression,
       digit: Expression) =
     this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      MaskLike.extractReplacement(lower),
-      MaskLike.extractReplacement(digit))
+      extractCharCount(n),
+      extractReplacement(upper),
+      extractReplacement(lower),
+      extractReplacement(digit))
 
   override def nullSafeEval(input: Any): Any = {
     val inputString = input.asInstanceOf[UTF8String].toString
@@ -262,24 +251,16 @@ case class MaskLastN(
   extends UnaryExpression with ExpectsInputTypes with MaskLikeWithN {
 
   def this(child: Expression) =
-    this(child, MaskLike.defaultCharCount, null, null, null)
+    this(child, defaultCharCount, null, null, null)
 
   def this(child: Expression, n: Expression) =
-    this(child, MaskLike.extractCharCount(n), null, null, null)
+    this(child, extractCharCount(n), null, null, null)
 
   def this(child: Expression, n: Expression, upper: Expression) =
-    this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      null,
-      null)
+    this(child, extractCharCount(n), extractReplacement(upper), null, null)
 
   def this(child: Expression, n: Expression, upper: Expression, lower: Expression) =
-    this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      MaskLike.extractReplacement(lower),
-      null)
+    this(child, extractCharCount(n), extractReplacement(upper), extractReplacement(lower), null)
 
   def this(
       child: Expression,
@@ -288,10 +269,10 @@ case class MaskLastN(
       lower: Expression,
       digit: Expression) =
     this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      MaskLike.extractReplacement(lower),
-      MaskLike.extractReplacement(digit))
+      extractCharCount(n),
+      extractReplacement(upper),
+      extractReplacement(lower),
+      extractReplacement(digit))
 
   override def nullSafeEval(input: Any): Any = {
     val inputString = input.asInstanceOf[UTF8String].toString
@@ -348,24 +329,16 @@ case class MaskShowFirstN(
   extends UnaryExpression with ExpectsInputTypes with MaskLikeWithN {
 
   def this(child: Expression) =
-    this(child, MaskLike.defaultCharCount, null, null, null)
+    this(child, defaultCharCount, null, null, null)
 
   def this(child: Expression, n: Expression) =
-    this(child, MaskLike.extractCharCount(n), null, null, null)
+    this(child, extractCharCount(n), null, null, null)
 
   def this(child: Expression, n: Expression, upper: Expression) =
-    this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      null,
-      null)
+    this(child, extractCharCount(n), extractReplacement(upper), null, null)
 
   def this(child: Expression, n: Expression, upper: Expression, lower: Expression) =
-    this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      MaskLike.extractReplacement(lower),
-      null)
+    this(child, extractCharCount(n), extractReplacement(upper), extractReplacement(lower), null)
 
   def this(
       child: Expression,
@@ -374,10 +347,10 @@ case class MaskShowFirstN(
       lower: Expression,
       digit: Expression) =
     this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      MaskLike.extractReplacement(lower),
-      MaskLike.extractReplacement(digit))
+      extractCharCount(n),
+      extractReplacement(upper),
+      extractReplacement(lower),
+      extractReplacement(digit))
 
   override def nullSafeEval(input: Any): Any = {
     val inputString = input.asInstanceOf[UTF8String].toString
@@ -434,24 +407,16 @@ case class MaskShowLastN(
   extends UnaryExpression with ExpectsInputTypes with MaskLikeWithN {
 
   def this(child: Expression) =
-    this(child, MaskLike.defaultCharCount, null, null, null)
+    this(child, defaultCharCount, null, null, null)
 
   def this(child: Expression, n: Expression) =
-    this(child, MaskLike.extractCharCount(n), null, null, null)
+    this(child, extractCharCount(n), null, null, null)
 
   def this(child: Expression, n: Expression, upper: Expression) =
-    this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      null,
-      null)
+    this(child, extractCharCount(n), extractReplacement(upper), null, null)
 
   def this(child: Expression, n: Expression, upper: Expression, lower: Expression) =
-    this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      MaskLike.extractReplacement(lower),
-      null)
+    this(child, extractCharCount(n), extractReplacement(upper), extractReplacement(lower), null)
 
   def this(
       child: Expression,
@@ -460,10 +425,10 @@ case class MaskShowLastN(
       lower: Expression,
       digit: Expression) =
     this(child,
-      MaskLike.extractCharCount(n),
-      MaskLike.extractReplacement(upper),
-      MaskLike.extractReplacement(lower),
-      MaskLike.extractReplacement(digit))
+      extractCharCount(n),
+      extractReplacement(upper),
+      extractReplacement(lower),
+      extractReplacement(digit))
 
   override def nullSafeEval(input: Any): Any = {
     val inputString = input.asInstanceOf[UTF8String].toString
