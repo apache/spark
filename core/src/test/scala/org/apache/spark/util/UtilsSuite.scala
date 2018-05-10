@@ -1169,8 +1169,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
   }
 
-  object A {
-    class B
+  object MalformedClassObject {
+    class MalformedClass
   }
 
   test("Safe getSimpleName") {
@@ -1189,10 +1189,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val fullname5 = "$iwC$iwC$$iwC$$iwC$TestClass$MyClass$"
     assert(Utils.getSimpleName(fullname5) === "MyClass")
 
+    // getSimpleName on class MalformedClass will result in error: Malformed class name
+    // Utils.getSimpleName works
     intercept[java.lang.InternalError] {
-      classOf[A.B].getSimpleName
+      classOf[MalformedClassObject.MalformedClass].getSimpleName
     }
-    assert(Utils.getSimpleName(classOf[A.B].getName) === "UtilsSuite$A$B")
+    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass].getName) ===
+      "UtilsSuite$MalformedClassObject$MalformedClass")
   }
 }
 
