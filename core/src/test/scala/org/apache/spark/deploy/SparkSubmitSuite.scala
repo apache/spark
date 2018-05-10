@@ -180,6 +180,25 @@ class SparkSubmitSuite
     appArgs.toString should include ("thequeue")
   }
 
+  test("SPARK-24241: not fail fast when executor num is 0 and dynamic allocation enabled") {
+    val clArgs1 = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=true",
+      "thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs1)
+    appArgs.dynamicAllocationEnabled should be ("true")
+
+    val clArgs2 = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=false",
+      "thejar.jar")
+    intercept[SparkException](new SparkSubmitArguments(clArgs2))
+  }
+
   test("specify deploy mode through configuration") {
     val clArgs = Seq(
       "--master", "yarn",
@@ -301,23 +320,6 @@ class SparkSubmitSuite
       regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
     conf.get("spark.ui.enabled") should be ("false")
     sys.props("SPARK_SUBMIT") should be ("true")
-  }
-
-  test("SPARK-24241: not fail fast when executor num is 0 and dynamic allocation enabled") {
-    val clArgs1 = Seq(
-      "--name", "myApp",
-      "--num-executors", "0",
-      "--conf", "spark.dynamicAllocation.enabled=true",
-      "thejar.jar")
-    val appArgs = new SparkSubmitArguments(clArgs1)
-    appArgs.dynamicAllocationEnabled should be ("true")
-
-    val clArgs2 = Seq(
-      "--name", "myApp",
-      "--num-executors", "0",
-      "--conf", "spark.dynamicAllocation.enabled=false",
-      "thejar.jar")
-    intercept[SparkException](new SparkSubmitArguments(clArgs2))
   }
 
   test("handles standalone cluster mode") {

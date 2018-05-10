@@ -277,7 +277,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (totalExecutorCores != null && Try(totalExecutorCores.toInt).getOrElse(-1) <= 0) {
       error("Total executor cores must be a positive number")
     }
-    if (dynamicAllocationEnabled.toLowerCase != "true" &&
+    if (!"true".equalsIgnoreCase(dynamicAllocationEnabled) &&
       numExecutors != null && Try(numExecutors.toInt).getOrElse(-1) <= 0) {
       error("Number of executors must be a positive number")
     }
