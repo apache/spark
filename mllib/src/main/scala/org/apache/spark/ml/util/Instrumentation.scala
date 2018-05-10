@@ -30,6 +30,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.Param
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
+import org.apache.spark.util.Utils
 
 /**
  * A small wrapper that defines a training session for an estimator, and some methods to log
@@ -47,7 +48,9 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
 
   private val id = UUID.randomUUID()
   private val prefix = {
-    val className = estimator.getClass.getSimpleName
+    // estimator.getClass.getSimpleName can cause Malformed class name error,
+    // call safer `Utils.getSimpleName` instead
+    val className = Utils.getSimpleName(estimator.getClass.getName)
     s"$className-${estimator.uid}-${dataset.hashCode()}-$id: "
   }
 

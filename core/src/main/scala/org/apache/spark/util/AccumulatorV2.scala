@@ -199,10 +199,12 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   }
 
   override def toString: String = {
+    // getClass.getSimpleName can cause Malformed class name error,
+    // call safer `Utils.getSimpleName` instead
     if (metadata == null) {
-      "Un-registered Accumulator: " + getClass.getSimpleName
+      "Un-registered Accumulator: " + Utils.getSimpleName(getClass.getName)
     } else {
-      getClass.getSimpleName + s"(id: $id, name: $name, value: $value)"
+      Utils.getSimpleName(getClass.getName) + s"(id: $id, name: $name, value: $value)"
     }
   }
 }
