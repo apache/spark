@@ -1238,6 +1238,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val UPDATE_CACHE_WHEN_REFRESH_MEMORY_FILE_INDEX =
+    buildConf("spark.sql.updateCacheWhenRefreshMemoryFileIndex")
+      .internal()
+      .doc("When true, InMemoryFileIndex will update cache when refresh," +
+        " otherwise only mark the cache as outdated.")
+      .booleanConf
+      .createWithDefault(true)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1405,6 +1413,9 @@ class SQLConf extends Serializable with Logging {
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
+
+  def updateCacheWhenRefreshMemoryFileIndex: Boolean =
+    getConf(UPDATE_CACHE_WHEN_REFRESH_MEMORY_FILE_INDEX)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

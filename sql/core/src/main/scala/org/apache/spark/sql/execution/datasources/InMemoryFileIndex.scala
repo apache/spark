@@ -60,6 +60,7 @@ class InMemoryFileIndex(
   override val rootPaths =
     rootPathsSpecified.filterNot(FileStreamSink.ancestorIsMetadataDirectory(_, hadoopConf))
 
+  @volatile private var cacheOutDated: Boolean = true
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
@@ -67,6 +68,7 @@ class InMemoryFileIndex(
   refresh0()
 
   override def partitionSpec(): PartitionSpec = {
+    refreshIfCacheOutdated()
     if (cachedPartitionSpec == null) {
       cachedPartitionSpec = inferPartitioning()
     }
@@ -75,16 +77,31 @@ class InMemoryFileIndex(
   }
 
   override protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus] = {
+    refreshIfCacheOutdated()
     cachedLeafFiles
   }
 
   override protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]] = {
+    refreshIfCacheOutdated()
     cachedLeafDirToChildrenFiles
   }
 
   override def refresh(): Unit = {
     fileStatusCache.invalidateAll()
-    refresh0()
+    invalidateCache()
+    if (sparkSession.sessionState.conf.updateCacheWhenRefreshMemoryFileIndex) {
+      refresh0()
+    }
+  }
+
+  private def invalidateCache(): Unit = {
+    cacheOutDated = true
+  }
+
+  private def refreshIfCacheOutdated(): Unit = {
+    if (cacheOutDated) {
+      refresh0()
+    }
   }
 
   private def refresh0(): Unit = {
@@ -93,6 +110,7 @@ class InMemoryFileIndex(
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
     cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
     cachedPartitionSpec = null
+    cacheOutDated = false
   }
 
   override def equals(other: Any): Boolean = other match {
