@@ -1169,7 +1169,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
   }
 
-  test("Test that Utils.getSimpleName works as expected") {
+  object A {
+    class B
+  }
+
+  test("Safe getSimpleName") {
     val fullname1 = "org.apache.spark.TestClass$MyClass"
     assert(Utils.getSimpleName(fullname1) === "TestClass$MyClass")
 
@@ -1184,6 +1188,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     val fullname5 = "$iwC$iwC$$iwC$$iwC$TestClass$MyClass$"
     assert(Utils.getSimpleName(fullname5) === "MyClass")
+
+    intercept[java.lang.InternalError] {
+      classOf[A.B].getSimpleName
+    }
+    assert(Utils.getSimpleName(classOf[A.B].getName) === "UtilsSuite$A$B")
   }
 }
 

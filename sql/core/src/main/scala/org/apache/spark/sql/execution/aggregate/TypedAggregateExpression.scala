@@ -110,7 +110,8 @@ trait TypedAggregateExpression extends AggregateFunction {
     s"$nodeName($input)"
   }
 
-  // Utils.getSimpleName is safer than aggregator.getClass.getSimpleName in scala.
+  // aggregator.getClass.getSimpleName can cause Malformed class name error,
+  // call safer `Utils.getSimpleName` instead
   override def nodeName: String = Utils.getSimpleName(aggregator.getClass.getName);
 }
 
