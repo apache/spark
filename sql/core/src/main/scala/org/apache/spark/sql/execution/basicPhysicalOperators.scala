@@ -345,6 +345,8 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   override val output: Seq[Attribute] = range.output
 
+  override def outputOrdering: Seq[SortOrder] = range.outputOrdering
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 

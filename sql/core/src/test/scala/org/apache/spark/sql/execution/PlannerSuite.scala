@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, Repartition, Sort}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
@@ -620,6 +620,17 @@ class PlannerSuite extends SharedSQLContext {
       childPlan = DummySparkPlan(outputOrdering = Seq(orderingA)),
       requiredOrdering = Seq(orderingA, orderingB),
       shouldHaveSort = true)
+  }
+
+  test("RangeExec should have correct output ordering") {
+    val df = spark.range(10).orderBy("id")
+    val rangeExec = df.queryExecution.executedPlan.collect {
+      case r: RangeExec => r
+    }
+    val range = df.queryExecution.optimizedPlan.collect {
+      case r: Range => r
+    }
+    assert(rangeExec.head.outputOrdering == range.head.outputOrdering)
   }
 }
 
