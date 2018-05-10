@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util._
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
 private[sql] class JSONOptions(
-    @transient private val parameters: CaseInsensitiveMap[String],
+    @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable  {
@@ -149,10 +149,10 @@ private[sql] class JSONOptionsInRead(
     val isBlacklisted = blacklist.contains(Charset.forName(enc))
     require(multiLine || !isBlacklisted,
       s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
-         | ${blacklist.mkString(", ")}""".stripMargin)
+         |Blacklist: ${blacklist.mkString(", ")}""".stripMargin)
 
-    val isLineSepRequired = !(multiLine == false &&
-      Charset.forName(enc) != StandardCharsets.UTF_8 && lineSeparator.isEmpty)
+    val isLineSepRequired =
+        multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
     require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
 
     enc

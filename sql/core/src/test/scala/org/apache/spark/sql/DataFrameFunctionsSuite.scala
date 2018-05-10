@@ -276,7 +276,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("sort_array function") {
+  test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
       (Array.empty[Int], Array.empty[String]),
@@ -286,28 +286,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(sort_array($"a"), sort_array($"b")),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.select(sort_array($"a", false), sort_array($"b", false)),
       Seq(
         Row(Seq(3, 2, 1), Seq("c", "b", "a")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.selectExpr("sort_array(a)", "sort_array(b)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.selectExpr("sort_array(a, true)", "sort_array(b, false)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("c", "b", "a")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
 
@@ -323,6 +323,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df3 = Seq(("xxx", "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {
       df3.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("only supports array input"))
+
+    checkAnswer(
+      df.select(array_sort($"a"), array_sort($"b")),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("array_sort(a)", "array_sort(b)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+
+    checkAnswer(
+      df2.selectExpr("array_sort(a)"),
+      Seq(Row(Seq[Seq[Int]](Seq(1), Seq(2), Seq(2, 4), null)))
+    )
+
+    assert(intercept[AnalysisException] {
+      df3.selectExpr("array_sort(a)").collect()
     }.getMessage().contains("only supports array input"))
   }
 
@@ -416,6 +440,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+  }
+
+  test("slice function") {
+    val df = Seq(
+      Seq(1, 2, 3),
+      Seq(4, 5)
+    ).toDF("x")
+
+    val answer = Seq(Row(Seq(2, 3)), Row(Seq(5)))
+
+    checkAnswer(df.select(slice(df("x"), 2, 2)), answer)
+    checkAnswer(df.selectExpr("slice(x, 2, 2)"), answer)
+
+    val answerNegative = Seq(Row(Seq(3)), Row(Seq(5)))
+    checkAnswer(df.select(slice(df("x"), -1, 1)), answerNegative)
+    checkAnswer(df.selectExpr("slice(x, -1, 1)"), answerNegative)
   }
 
   test("array_join function") {

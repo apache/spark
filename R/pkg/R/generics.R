@@ -918,6 +918,10 @@ setGeneric("explode_outer", function(x) { standardGeneric("explode_outer") })
 #' @name NULL
 setGeneric("expr", function(x) { standardGeneric("expr") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("flatten", function(x) { standardGeneric("flatten") })
+
 #' @rdname column_datetime_diff_functions
 #' @name NULL
 setGeneric("from_utc_timestamp", function(y, x) { standardGeneric("from_utc_timestamp") })
