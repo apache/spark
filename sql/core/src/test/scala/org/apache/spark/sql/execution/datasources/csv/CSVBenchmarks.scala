@@ -45,38 +45,6 @@ object CSVBenchmarks {
     try f(path) finally Utils.deleteRecursively(path)
   }
 
-
-  def perlineBenchmark(rowsNum: Int): Unit = {
-    val benchmark = new Benchmark("CSV parsing in the per-line mode", rowsNum)
-
-    withTempPath { path =>
-      // scalastyle:off
-      benchmark.out.println("Preparing data for benchmarking ...")
-      // scalastyle:on
-
-      spark.sparkContext.range(0, rowsNum, 1)
-        .map(_ => "a")
-        .toDF("colA")
-        .write.csv(path.getAbsolutePath)
-
-      val schema = new StructType().add("colA", StringType)
-      val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
-
-      benchmark.addCase("Read CSV file with one column", 3) { _ =>
-        ds.count()
-      }
-
-      /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
-
-      CSV parsing in the per-line mode:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      ------------------------------------------------------------------------------------------
-      Read CSV file with one column      23352 / 23495          4.3         233.5       1.0X
-      */
-      benchmark.run()
-    }
-  }
-
   def multiColumnsBenchmark(rowsNum: Int): Unit = {
     val colsNum = 1000
     val benchmark = new Benchmark(s"Wide rows with $colsNum columns", rowsNum)
@@ -119,7 +87,6 @@ object CSVBenchmarks {
   }
 
   def main(args: Array[String]): Unit = {
-    perlineBenchmark(100 * 1000 * 1000)
     multiColumnsBenchmark(rowsNum = 1000 * 1000)
   }
 }
