@@ -1497,15 +1497,15 @@ test_that("column functions", {
   expect_equal(result, c(1, 6))
 
   # Test array_sort() and sort_array()
-  df <- createDataFrame(list(list(list(2L, 1L, 3L, NULL)), list(list(NULL, 6L, 5L, NULL, 4L))))
+  df <- createDataFrame(list(list(list(2L, 1L, 3L, NA)), list(list(NA, 6L, 5L, NA, 4L))))
 
   result <- collect(select(df, array_sort(df[[1]])))[[1]]
-  expect_equal(result, list(list(1L, 2L, 3L, NULL), list(4L, 5L, 6L, NULL, NULL)))
+  expect_equal(result, list(list(1L, 2L, 3L, NA), list(4L, 5L, 6L, NA, NA)))
 
   result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
-  expect_equal(result, list(list(3L, 2L, 1L, NULL), list(6L, 5L, 4L, NULL, NULL)))
+  expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
-  expect_equal(result, list(list(NULL, 1L, 2L, 3L), list(NULL, NULL, 4L, 5L, 6L)))
+  expect_equal(result, list(list(NA, 1L, 2L, 3L), list(NA, NA, 4L, 5L, 6L)))
 
   # Test flattern
   df <- createDataFrame(list(list(list(list(1L, 2L), list(3L, 4L))),

@@ -3039,7 +3039,7 @@ setMethod("array_position",
 
 #' @details
 #' \code{array_sort}: Sorts the input array in ascending order. The elements of the input array
-#' must be orderable. Null elements will be placed at the end of the returned array.
+#' must be orderable. NA elements will be placed at the end of the returned array.
 #'
 #' @rdname column_collection_functions
 #' @aliases array_sort array_sort,Column-method
@@ -3134,7 +3134,7 @@ setMethod("size",
 
 #' @details
 #' \code{sort_array}: Sorts the input array in ascending or descending order according to
-#' the natural ordering of the array elements. Null elements will be placed at the beginning of
+#' the natural ordering of the array elements. NA elements will be placed at the beginning of
 #' the returned array in ascending order or at the end of the returned array in descending order.
 #'
 #' @rdname column_collection_functions
