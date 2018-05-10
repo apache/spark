@@ -126,6 +126,10 @@ package object config {
   private[spark] val DYN_ALLOCATION_MAX_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.maxExecutors").intConf.createWithDefault(Int.MaxValue)
 
+  private[spark] val DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO =
+    ConfigBuilder("spark.dynamicAllocation.executorAllocationRatio")
+      .doubleConf.createWithDefault(1.0)
+
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("3s")
@@ -384,6 +388,11 @@ package object config {
         "dummy value. This is currently used to redact the output of SQL explain commands.")
       .regexConf
       .createOptional
+
+  private[spark] val AUTH_SECRET_BIT_LENGTH =
+    ConfigBuilder("spark.authenticate.secretBitLength")
+      .intConf
+      .createWithDefault(256)
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")

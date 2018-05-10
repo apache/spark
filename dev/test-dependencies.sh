@@ -32,7 +32,16 @@ export LC_ALL=C
 HADOOP2_MODULE_PROFILES="-Phadoop-cloud -Pkubernetes -Pkinesis-asl -Pyarn"
 MVN="build/mvn"
 HADOOP_PROFILES=(
+<<<<<<< HEAD
     hadoop-palantir
+||||||| merged common ancestors
+    hadoop-2.6
+    hadoop-2.7
+=======
+    hadoop-2.6
+    hadoop-2.7
+    hadoop-3.1
+>>>>>>> apache/master
 )
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to

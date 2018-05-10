@@ -34,8 +34,8 @@ import org.apache.spark.sql.{Encoder, Row, SQLContext}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream.GetRecord
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions}
-import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.InputPartition
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.RpcUtils
 
@@ -99,7 +99,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     )
   }
 
-  override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = {
+  override def planInputPartitions(): ju.List[InputPartition[Row]] = {
     synchronized {
       val endpointName = s"ContinuousMemoryStreamRecordEndpoint-${java.util.UUID.randomUUID()}-$id"
       endpointRef =
@@ -108,7 +108,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       startOffset.partitionNums.map {
         case (part, index) =>
           new ContinuousMemoryStreamDataReaderFactory(
-            endpointName, part, index): DataReaderFactory[Row]
+            endpointName, part, index): InputPartition[Row]
       }.toList.asJava
     }
   }
@@ -160,9 +160,9 @@ object ContinuousMemoryStream {
 class ContinuousMemoryStreamDataReaderFactory(
     driverEndpointName: String,
     partition: Int,
-    startOffset: Int) extends DataReaderFactory[Row] {
-  override def createDataReader: ContinuousMemoryStreamDataReader =
-    new ContinuousMemoryStreamDataReader(driverEndpointName, partition, startOffset)
+    startOffset: Int) extends InputPartition[Row] {
+  override def createPartitionReader: ContinuousMemoryStreamInputPartitionReader =
+    new ContinuousMemoryStreamInputPartitionReader(driverEndpointName, partition, startOffset)
 }
 
 /**
@@ -170,10 +170,10 @@ class ContinuousMemoryStreamDataReaderFactory(
  *
  * Polls the driver endpoint for new records.
  */
-class ContinuousMemoryStreamDataReader(
+class ContinuousMemoryStreamInputPartitionReader(
     driverEndpointName: String,
     partition: Int,
-    startOffset: Int) extends ContinuousDataReader[Row] {
+    startOffset: Int) extends ContinuousInputPartitionReader[Row] {
   private val endpoint = RpcUtils.makeDriverRef(
     driverEndpointName,
     SparkEnv.get.conf,
@@ -183,11 +183,10 @@ class ContinuousMemoryStreamDataReader(
   private var current: Option[Row] = None
 
   override def next(): Boolean = {
-    current = None
+    current = getRecord
     while (current.isEmpty) {
       Thread.sleep(10)
-      current = endpoint.askSync[Option[Row]](
-          GetRecord(ContinuousMemoryStreamPartitionOffset(partition, currentOffset)))
+      current = getRecord
     }
     currentOffset += 1
     true
@@ -199,6 +198,10 @@ class ContinuousMemoryStreamDataReader(
 
   override def getOffset: ContinuousMemoryStreamPartitionOffset =
     ContinuousMemoryStreamPartitionOffset(partition, currentOffset)
+
+  private def getRecord: Option[Row] =
+    endpoint.askSync[Option[Row]](
+      GetRecord(ContinuousMemoryStreamPartitionOffset(partition, currentOffset)))
 }
 
 case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])

@@ -2134,17 +2134,23 @@ class ImageReaderTest2(PySparkTestCase):
     @classmethod
     def setUpClass(cls):
         super(ImageReaderTest2, cls).setUpClass()
+        cls.hive_available = True
         # Note that here we enable Hive's support.
         cls.spark = None
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
             cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         except TypeError:
             cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
-        cls.spark = HiveContext._createForTesting(cls.sc)
+            cls.hive_available = False
+        if cls.hive_available:
+            cls.spark = HiveContext._createForTesting(cls.sc)
+
+    def setUp(self):
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     @classmethod
     def tearDownClass(cls):
@@ -2659,8 +2665,20 @@ class EstimatorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     from pyspark.ml.tests import *
+<<<<<<< HEAD
 
     runner = unishark.BufferedTestRunner(
         reporters=[unishark.XUnitReporter('target/test-reports/pyspark.ml/{}'.format(
             os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
     unittest.main(testRunner=runner)
+||||||| merged common ancestors
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()
+=======
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
+    else:
+        unittest.main(verbosity=2)
+>>>>>>> apache/master

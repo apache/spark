@@ -59,7 +59,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         class_name = cls.__name__
         conf = SparkConf().set("spark.default.parallelism", 1)
         cls.sc = SparkContext(appName=class_name, conf=conf)
-        cls.sc.setCheckpointDir("/tmp")
+        cls.sc.setCheckpointDir(tempfile.mkdtemp())
 
     @classmethod
     def tearDownClass(cls):
@@ -1545,7 +1545,9 @@ if __name__ == "__main__":
         kinesis_jar_present = True
         jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
-    os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
+    existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
+    jars_args = "--jars %s" % jars
+    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
                  StreamingListenerTests]
 
@@ -1585,6 +1587,7 @@ if __name__ == "__main__":
     for testcase in testcases:
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
+<<<<<<< HEAD
         runner = unishark.BufferedTestRunner(
             verbosity=3,
             reporters=[unishark.XUnitReporter('target/test-reports/pyspark.streaming/{}'.format(
@@ -1593,4 +1596,23 @@ if __name__ == "__main__":
         result = runner.run(tests)
         if not result.wasSuccessful():
             failed = True
+||||||| merged common ancestors
+        if xmlrunner:
+            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=3).run(tests)
+            if not result.wasSuccessful():
+                failed = True
+        else:
+            result = unittest.TextTestRunner(verbosity=3).run(tests)
+            if not result.wasSuccessful():
+                failed = True
+=======
+        if xmlrunner:
+            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2).run(tests)
+            if not result.wasSuccessful():
+                failed = True
+        else:
+            result = unittest.TextTestRunner(verbosity=2).run(tests)
+            if not result.wasSuccessful():
+                failed = True
+>>>>>>> apache/master
     sys.exit(failed)

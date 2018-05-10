@@ -25,13 +25,20 @@ import org.apache.parquet.hadoop.metadata.ColumnPath
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+<<<<<<< HEAD
+||||||| merged common ancestors
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
+import org.apache.spark.sql.internal.SQLConf
+=======
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
+>>>>>>> apache/master
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] object ParquetFilters {
+private[parquet] class ParquetFilters(pushDownDate: Boolean) {
 
   import ParquetColumns._
 
@@ -103,10 +110,16 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+<<<<<<< HEAD
     case TimestampType =>
       (n: String, v: Any) => FilterApi.eq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
     case DateType =>
+||||||| merged common ancestors
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+=======
+    case DateType if pushDownDate =>
+>>>>>>> apache/master
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -131,7 +144,13 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+<<<<<<< HEAD
     case TimestampType =>
+||||||| merged common ancestors
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+=======
+    case DateType if pushDownDate =>
+>>>>>>> apache/master
       (n: String, v: Any) => FilterApi.notEq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
     case DateType =>
@@ -156,10 +175,16 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
+<<<<<<< HEAD
     case TimestampType =>
       (n: String, v: Any) => FilterApi.lt(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
     case DateType =>
+||||||| merged common ancestors
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+=======
+    case DateType if pushDownDate =>
+>>>>>>> apache/master
       (n: String, v: Any) => FilterApi.lt(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -180,7 +205,13 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
+<<<<<<< HEAD
     case TimestampType =>
+||||||| merged common ancestors
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+=======
+    case DateType if pushDownDate =>
+>>>>>>> apache/master
       (n: String, v: Any) => FilterApi.ltEq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
     case DateType =>
@@ -204,10 +235,16 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
+<<<<<<< HEAD
     case TimestampType =>
       (n: String, v: Any) => FilterApi.gt(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
     case DateType =>
+||||||| merged common ancestors
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+=======
+    case DateType if pushDownDate =>
+>>>>>>> apache/master
       (n: String, v: Any) => FilterApi.gt(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -228,10 +265,16 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
+<<<<<<< HEAD
     case TimestampType =>
       (n: String, v: Any) => FilterApi.gtEq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
     case DateType =>
+||||||| merged common ancestors
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
+=======
+    case DateType if pushDownDate =>
+>>>>>>> apache/master
       (n: String, v: Any) => FilterApi.gtEq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }

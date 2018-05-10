@@ -23,14 +23,21 @@ import com.google.common.io.Files
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
+<<<<<<< HEAD
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, MountLocalFilesFeatureStep, MountSecretsFeatureStep}
 import org.apache.spark.util.Utils
+||||||| merged common ancestors
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, MountSecretsFeatureStep}
+=======
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
+>>>>>>> apache/master
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
   private val BASIC_STEP_TYPE = "basic"
   private val CREDENTIALS_STEP_TYPE = "credentials"
   private val SERVICE_STEP_TYPE = "service"
+  private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
   private val SECRETS_STEP_TYPE = "mount-secrets"
   private val MOUNT_LOCAL_FILES_STEP_TYPE = "mount-local-files"
 
@@ -43,6 +50,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val serviceStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SERVICE_STEP_TYPE, classOf[DriverServiceFeatureStep])
 
+  private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
+
   private val secretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
 
@@ -54,8 +64,15 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => basicFeatureStep,
       _ => credentialsStep,
       _ => serviceStep,
+<<<<<<< HEAD
       _ => secretsStep,
       _ => mountLocalFilesStep)
+||||||| merged common ancestors
+      _ => secretsStep)
+=======
+      _ => secretsStep,
+      _ => localDirsStep)
+>>>>>>> apache/master
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
@@ -77,7 +94,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE)
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE)
   }
 
   test("Apply secrets step if secrets are present.") {
@@ -101,6 +119,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
       SECRETS_STEP_TYPE)
   }
 

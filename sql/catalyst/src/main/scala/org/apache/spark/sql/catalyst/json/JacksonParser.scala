@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayOutputStream, CharConversionException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -361,6 +361,14 @@ class JacksonParser(
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
         throw BadRecordException(() => recordLiteral(record), () => None, e)
+      case e: CharConversionException if options.encoding.isEmpty =>
+        val msg =
+          """JSON parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        throw BadRecordException(() => recordLiteral(record), () => None, wrappedCharException)
     }
   }
 }

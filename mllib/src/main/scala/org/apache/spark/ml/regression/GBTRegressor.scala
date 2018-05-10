@@ -34,7 +34,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 
 /**
@@ -269,6 +269,21 @@ class GBTRegressionModel private[ml](
     new OldGBTModel(OldAlgo.Regression, _trees.map(_.toOld), _treeWeights)
   }
 
+  /**
+   * Method to compute error or loss for every iteration of gradient boosting.
+   *
+   * @param dataset Dataset for validation.
+   * @param loss The loss function used to compute error. Supported options: squared, absolute
+   */
+  @Since("2.4.0")
+  def evaluateEachIteration(dataset: Dataset[_], loss: String): Array[Double] = {
+    val data = dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
+      case Row(label: Double, features: Vector) => LabeledPoint(label, features)
+    }
+    GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights,
+      convertToOldLossType(loss), OldAlgo.Regression)
+  }
+
   @Since("2.0.0")
   override def write: MLWriter = new GBTRegressionModel.GBTRegressionModelWriter(this)
 }
@@ -311,7 +326,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
         case (treeMetadata, root) =>
           val tree = new DecisionTreeRegressionModel(treeMetadata.uid,
             root.asInstanceOf[RegressionNode], numFeatures)
-          DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+          treeMetadata.getAndSetParams(tree)
           tree
       }
 
@@ -319,7 +334,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
         s" trees based on metadata but found ${trees.length} trees.")
 
       val model = new GBTRegressionModel(metadata.uid, trees, treeWeights, numFeatures)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

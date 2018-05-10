@@ -282,7 +282,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       val root = loadTreeNodes(path, metadata, sparkSession, isClassification = false)
       val model = new DecisionTreeRegressionModel(metadata.uid,
         root.asInstanceOf[RegressionNode], numFeatures)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

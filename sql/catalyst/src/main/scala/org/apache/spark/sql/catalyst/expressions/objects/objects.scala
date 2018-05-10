@@ -1255,53 +1255,61 @@ case class ExternalMapToCatalyst private(
   override def dataType: MapType = MapType(
     keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
-  private lazy val mapCatalystConverter: Any => (Array[Any], Array[Any]) = child.dataType match {
-    case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
-      (input: Any) => {
-        val data = input.asInstanceOf[java.util.Map[Any, Any]]
-        val keys = new Array[Any](data.size)
-        val values = new Array[Any](data.size)
-        val iter = data.entrySet().iterator()
-        var i = 0
-        while (iter.hasNext) {
-          val entry = iter.next()
-          val (key, value) = (entry.getKey, entry.getValue)
-          keys(i) = if (key != null) {
-            keyConverter.eval(InternalRow.fromSeq(key :: Nil))
-          } else {
-            throw new RuntimeException("Cannot use null as map key!")
-          }
-          values(i) = if (value != null) {
-            valueConverter.eval(InternalRow.fromSeq(value :: Nil))
-          } else {
-            null
-          }
-          i += 1
-        }
-        (keys, values)
-      }
+  private lazy val mapCatalystConverter: Any => (Array[Any], Array[Any]) = {
+    val rowBuffer = InternalRow.fromSeq(Array[Any](1))
+    def rowWrapper(data: Any): InternalRow = {
+      rowBuffer.update(0, data)
+      rowBuffer
+    }
 
-    case ObjectType(cls) if classOf[scala.collection.Map[_, _]].isAssignableFrom(cls) =>
-      (input: Any) => {
-        val data = input.asInstanceOf[scala.collection.Map[Any, Any]]
-        val keys = new Array[Any](data.size)
-        val values = new Array[Any](data.size)
-        var i = 0
-        for ((key, value) <- data) {
-          keys(i) = if (key != null) {
-            keyConverter.eval(InternalRow.fromSeq(key :: Nil))
-          } else {
-            throw new RuntimeException("Cannot use null as map key!")
+    child.dataType match {
+      case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
+        (input: Any) => {
+          val data = input.asInstanceOf[java.util.Map[Any, Any]]
+          val keys = new Array[Any](data.size)
+          val values = new Array[Any](data.size)
+          val iter = data.entrySet().iterator()
+          var i = 0
+          while (iter.hasNext) {
+            val entry = iter.next()
+            val (key, value) = (entry.getKey, entry.getValue)
+            keys(i) = if (key != null) {
+              keyConverter.eval(rowWrapper(key))
+            } else {
+              throw new RuntimeException("Cannot use null as map key!")
+            }
+            values(i) = if (value != null) {
+              valueConverter.eval(rowWrapper(value))
+            } else {
+              null
+            }
+            i += 1
           }
-          values(i) = if (value != null) {
-            valueConverter.eval(InternalRow.fromSeq(value :: Nil))
-          } else {
-            null
-          }
-          i += 1
+          (keys, values)
         }
-        (keys, values)
-      }
+
+      case ObjectType(cls) if classOf[scala.collection.Map[_, _]].isAssignableFrom(cls) =>
+        (input: Any) => {
+          val data = input.asInstanceOf[scala.collection.Map[Any, Any]]
+          val keys = new Array[Any](data.size)
+          val values = new Array[Any](data.size)
+          var i = 0
+          for ((key, value) <- data) {
+            keys(i) = if (key != null) {
+              keyConverter.eval(rowWrapper(key))
+            } else {
+              throw new RuntimeException("Cannot use null as map key!")
+            }
+            values(i) = if (value != null) {
+              valueConverter.eval(rowWrapper(value))
+            } else {
+              null
+            }
+            i += 1
+          }
+          (keys, values)
+        }
+    }
   }
 
   override def eval(input: InternalRow): Any = {

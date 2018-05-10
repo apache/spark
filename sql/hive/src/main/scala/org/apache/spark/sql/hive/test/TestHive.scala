@@ -35,6 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, ExternalCatalogWithListener}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
@@ -83,11 +84,11 @@ private[hive] class TestHiveSharedState(
     hiveClient: Option[HiveClient] = None)
   extends SharedState(sc) {
 
-  override lazy val externalCatalog: TestHiveExternalCatalog = {
-    new TestHiveExternalCatalog(
+  override lazy val externalCatalog: ExternalCatalogWithListener = {
+    new ExternalCatalogWithListener(new TestHiveExternalCatalog(
       sc.conf,
       sc.hadoopConfiguration,
-      hiveClient)
+      hiveClient))
   }
 }
 
@@ -208,7 +209,9 @@ private[hive] class TestHiveSparkSession(
     new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
-  lazy val metadataHive: HiveClient = sharedState.externalCatalog.client.newSession()
+  lazy val metadataHive: HiveClient = {
+    sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.newSession()
+  }
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
