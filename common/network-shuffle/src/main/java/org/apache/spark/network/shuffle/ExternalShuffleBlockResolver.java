@@ -49,8 +49,6 @@ import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
-import static org.apache.spark.network.util.JavaUtils.isSymlink;
-
 /**
  * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
  * of Executors. Each Executor must register its own configuration about where it stores its files
@@ -262,48 +260,11 @@ public class ExternalShuffleBlockResolver {
     };
     for (String localDir : dirs) {
       try {
-        deleteRecursively(new File(localDir), filter);
+        JavaUtils.deleteRecursively(new File(localDir), filter);
         logger.debug("Successfully cleaned up non-shuffle files in directory: {}", localDir);
       } catch (Exception e) {
         logger.error("Failed to delete non-shuffle files in directory: " + localDir, e);
       }
-    }
-  }
-
-  private void deleteRecursively(File file, FilenameFilter filter) throws IOException {
-    if (file == null) { return; }
-
-    if (file.isDirectory() && !isSymlink(file)) {
-      IOException savedIOException = null;
-      for (File child : listFilesSafely(file, filter)) {
-        try {
-          deleteRecursively(child, filter);
-        } catch (IOException e) {
-          // In case of multiple exceptions, only last one will be thrown
-          savedIOException = e;
-        }
-      }
-      if (savedIOException != null) {
-        throw savedIOException;
-      }
-    }
-
-    // Delete file only when it's a normal file or an empty directory.
-    if (file.isFile() || (file.isDirectory() && listFilesSafely(file, null).length == 0)) {
-      boolean deleted = file.delete();
-      // Delete can also fail if the file simply did not exist.
-      if (!deleted && file.exists()) {
-        throw new IOException("Failed to delete: " + file.getAbsolutePath());
-      }
-    }
-  }
-
-  private File[] listFilesSafely(File file, FilenameFilter filter) {
-    if (file.exists()) {
-      File[] files = file.listFiles(filter);
-      return files;
-    } else {
-      return new File[0];
     }
   }
 
