@@ -631,6 +631,14 @@ class PlannerSuite extends SharedSQLContext {
       case r: Range => r
     }
     assert(rangeExec.head.outputOrdering == range.head.outputOrdering)
+    assert(rangeExec.head.outputPartitioning ==
+      RangePartitioning(rangeExec.head.outputOrdering, df.rdd.getNumPartitions))
+
+    val rangeInOnePartition = spark.range(1, 10, 1, 1).orderBy("id")
+    val rangeExecInOnePartition = rangeInOnePartition.queryExecution.executedPlan.collect {
+      case r: RangeExec => r
+    }
+    assert(rangeExecInOnePartition.head.outputPartitioning == SinglePartition)
   }
 }
 

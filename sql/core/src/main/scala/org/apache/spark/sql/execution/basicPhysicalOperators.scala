@@ -347,6 +347,14 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   override def outputOrdering: Seq[SortOrder] = range.outputOrdering
 
+  override def outputPartitioning: Partitioning = {
+    if (numSlices == 1) {
+      SinglePartition
+    } else {
+      RangePartitioning(outputOrdering, numSlices)
+    }
+  }
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
