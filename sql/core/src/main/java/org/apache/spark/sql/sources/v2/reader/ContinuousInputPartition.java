@@ -21,15 +21,15 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
 
 /**
- * A mix-in interface for {@link DataReaderFactory}. Continuous data reader factories can
- * implement this interface to provide creating {@link DataReader} with particular offset.
+ * A mix-in interface for {@link InputPartition}. Continuous input partitions can
+ * implement this interface to provide creating {@link InputPartitionReader} with particular offset.
  */
 @InterfaceStability.Evolving
-public interface ContinuousDataReaderFactory<T> extends DataReaderFactory<T> {
+public interface ContinuousInputPartition<T> extends InputPartition<T> {
   /**
    * Create a DataReader with particular offset as its startOffset.
    *
    * @param offset offset want to set as the DataReader's startOffset.
    */
-  DataReader<T> createDataReaderWithOffset(PartitionOffset offset);
+  InputPartitionReader<T> createContinuousReader(PartitionOffset offset);
 }
