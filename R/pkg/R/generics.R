@@ -1192,6 +1192,10 @@ setGeneric("skewness", function(x) { standardGeneric("skewness") })
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("slice", function(x, start, length) { standardGeneric("slice") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array") })
 
 #' @rdname column_string_functions
