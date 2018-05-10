@@ -21,6 +21,7 @@ import java.io.{File, OutputStream, PrintStream}
 import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.io.Path._
 
 import com.google.common.io.Files
 import org.apache.ivy.core.module.descriptor.MDArtifact
@@ -254,6 +255,22 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
       assert(jarPath.indexOf(tempIvyPath) >= 0, "should be in new ivy path")
       assert(jarPath.indexOf("mydep") >= 0, "should find dependency")
+    }
+  }
+
+  test("test resolution files cleaned after resolving artifact") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
+
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val ivySettings = SparkSubmitUtils.buildIvySettings(Some(repo), Some(tempIvyPath))
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString,
+        ivySettings,
+        isTest = true)
+      val r = """.*org.apache.spark-spark-submit-parent-.*""".r
+      assert(ivySettings.getDefaultCache.toDirectory.files.map(_.name)
+        .forall{ case n @ r() => false case _ => true },
+        "resolution files should be cleaned")
     }
   }
 }
