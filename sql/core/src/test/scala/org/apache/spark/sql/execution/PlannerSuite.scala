@@ -622,7 +622,7 @@ class PlannerSuite extends SharedSQLContext {
       shouldHaveSort = true)
   }
 
-  test("RangeExec should have correct output ordering") {
+  test("SPARK-24242: RangeExec should have correct output ordering") {
     val df = spark.range(10).orderBy("id")
     val rangeExec = df.queryExecution.executedPlan.collect {
       case r: RangeExec => r
