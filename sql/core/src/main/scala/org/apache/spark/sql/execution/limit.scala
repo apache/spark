@@ -126,7 +126,9 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
     }
 
     // Try to keep child plan's original data parallelism or not. It is enabled by default.
-    val respectChildParallelism = sqlContext.conf.enableParallelGlobalLimit
+    // If child output has certain ordering, we can't evenly pick up rows from each parititon.
+    val respectChildParallelism = sqlContext.conf.enableParallelGlobalLimit &&
+      child.outputOrdering != Nil
 
     val shuffled = new ShuffledRowRDD(shuffleDependency)
 
