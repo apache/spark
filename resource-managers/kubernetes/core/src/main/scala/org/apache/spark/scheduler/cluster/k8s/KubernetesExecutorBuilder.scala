@@ -17,45 +17,26 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesRoleSpecificConf, SparkPod}
-<<<<<<< HEAD
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, MountLocalFilesFeatureStep, MountSecretsFeatureStep}
-||||||| merged common ancestors
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, MountSecretsFeatureStep}
-=======
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
->>>>>>> apache/master
+import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, LocalDirsFeatureStep, MountLocalFilesFeatureStep, MountSecretsFeatureStep}
 
 private[spark] class KubernetesExecutorBuilder(
     provideBasicStep: (KubernetesConf[KubernetesExecutorSpecificConf]) => BasicExecutorFeatureStep =
       new BasicExecutorFeatureStep(_),
     provideSecretsStep:
       (KubernetesConf[_ <: KubernetesRoleSpecificConf]) => MountSecretsFeatureStep =
-<<<<<<< HEAD
       new MountSecretsFeatureStep(_),
     provideMountLocalFilesStep:
       (KubernetesConf[_ <: KubernetesRoleSpecificConf]) => MountLocalFilesFeatureStep =
-      new MountLocalFilesFeatureStep(_)) {
-||||||| merged common ancestors
-      new MountSecretsFeatureStep(_)) {
-=======
-      new MountSecretsFeatureStep(_),
+      new MountLocalFilesFeatureStep(_),
     provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
       => LocalDirsFeatureStep =
       new LocalDirsFeatureStep(_)) {
->>>>>>> apache/master
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
-<<<<<<< HEAD
-    val baseFeatures = Seq(provideBasicStep(kubernetesConf))
+    val baseFeatures = Seq(
+      provideBasicStep(kubernetesConf), provideLocalDirsStep(kubernetesConf))
     val withProvideSecretsStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
-||||||| merged common ancestors
-    val baseFeatures = Seq(provideBasicStep(kubernetesConf))
-    val allFeatures = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
-=======
-    val baseFeatures = Seq(provideBasicStep(kubernetesConf), provideLocalDirsStep(kubernetesConf))
-    val allFeatures = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
->>>>>>> apache/master
       baseFeatures ++ Seq(provideSecretsStep(kubernetesConf))
     } else baseFeatures
     val allFeatures = if (kubernetesConf.mountLocalFilesSecretName.isDefined) {

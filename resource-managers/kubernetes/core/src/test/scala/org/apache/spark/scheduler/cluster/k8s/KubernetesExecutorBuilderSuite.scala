@@ -20,48 +20,28 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
-<<<<<<< HEAD
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, KubernetesFeaturesTestUtils, MountLocalFilesFeatureStep, MountSecretsFeatureStep}
-||||||| merged common ancestors
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, KubernetesFeaturesTestUtils, MountSecretsFeatureStep}
-=======
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
->>>>>>> apache/master
+import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountLocalFilesFeatureStep, MountSecretsFeatureStep}
 
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
   private val SECRETS_STEP_TYPE = "mount-secrets"
-<<<<<<< HEAD
   private val MOUNT_LOCAL_FILES_STEP_TYPE = "mount-local-files"
-||||||| merged common ancestors
-=======
   private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
->>>>>>> apache/master
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
   private val mountSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
-<<<<<<< HEAD
   private val mountLocalFilesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_LOCAL_FILES_STEP_TYPE, classOf[MountLocalFilesFeatureStep])
-||||||| merged common ancestors
-=======
   private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
->>>>>>> apache/master
 
   private val builderUnderTest = new KubernetesExecutorBuilder(
     _ => basicFeatureStep,
-<<<<<<< HEAD
     _ => mountSecretsStep,
-    _ => mountLocalFilesStep)
-||||||| merged common ancestors
-    _ => mountSecretsStep)
-=======
-    _ => mountSecretsStep,
+    _ => mountLocalFilesStep,
     _ => localDirsStep)
->>>>>>> apache/master
 
   test("Basic steps are consistently applied.") {
     val conf = KubernetesConf(
@@ -113,6 +93,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
       MOUNT_LOCAL_FILES_STEP_TYPE)
   }
 
