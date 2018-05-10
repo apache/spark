@@ -1509,7 +1509,7 @@ test_that("column functions", {
   result <- collect(select(df2, reverse(df2[[1]])))[[1]]
   expect_equal(result, "cba")
 
-  # Test flattern()
+  # Test flatten()
   df <- createDataFrame(list(list(list(list(1L, 2L), list(3L, 4L))),
                         list(list(list(5L, 6L), list(7L, 8L)))))
   result <- collect(select(df, flatten(df[[1]])))[[1]]
