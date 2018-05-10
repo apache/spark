@@ -41,22 +41,20 @@ private[spark] class LocalDirsFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     val localDirVolumes = resolvedLocalDirs
       .zipWithIndex
-      .map {
-        case (localDir, index) =>
-          new VolumeBuilder()
-            .withName(s"spark-local-dir-${index + 1}-${Paths.get(localDir).getFileName.toString}")
-            .withNewEmptyDir()
-            .endEmptyDir()
-            .build()
+      .map { case (localDir, index) =>
+        new VolumeBuilder()
+          .withName(s"spark-local-dir-${index + 1}")
+          .withNewEmptyDir()
+          .endEmptyDir()
+          .build()
       }
     val localDirVolumeMounts = localDirVolumes
       .zip(resolvedLocalDirs)
-      .map {
-        case (localDirVolume, localDirPath) =>
-          new VolumeMountBuilder()
-            .withName(localDirVolume.getName)
-            .withMountPath(localDirPath)
-            .build()
+      .map { case (localDirVolume, localDirPath) =>
+        new VolumeMountBuilder()
+        .withName(localDirVolume.getName)
+        .withMountPath(localDirPath)
+        .build()
       }
     val podWithLocalDirVolumes = new PodBuilder(pod.pod)
       .editSpec()
