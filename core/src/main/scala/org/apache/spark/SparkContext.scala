@@ -816,14 +816,25 @@ class SparkContext(config: SparkConf) extends Logging {
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    * @param path path to the text file on a supported file system
    * @param minPartitions suggested minimum number of partitions for the resulting RDD
+   * @param charsetName name of the charset to be used to decode the bytes from the text file
    * @return RDD of lines of the text file
    */
   def textFile(
       path: String,
-      minPartitions: Int = defaultMinPartitions): RDD[String] = withScope {
+      minPartitions: Int = defaultMinPartitions,
+      charsetName: String = null): RDD[String] = withScope {
     assertNotStopped()
-    hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
-      minPartitions).map(pair => pair._2.toString).setName(path)
+    val textRdd = hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
+      minPartitions).map(pair => pair._2)
+    val stringRdd = if (charsetName == null) {
+      textRdd.map(text => text.toString)
+    } else {
+      // Text.getBytes returns the internal memory buffer which size usually larger than the actual
+      // bytes count of the string content for performance reasons. We should be careful to limit
+      // the index range correctly within [0, Text.getLength)
+      textRdd.map(text => new String(text.getBytes, 0, text.getLength, charsetName))
+    }
+    stringRdd.setName(path)
   }
 
   /**
