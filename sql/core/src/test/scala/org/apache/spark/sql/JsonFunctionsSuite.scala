@@ -383,4 +383,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(out, Row(null))
   }
+
+  test("SPARK-24027: from_json of a map with unsupported key type") {
+    val schema = MapType(StructType(StructField("f", IntegerType) :: Nil), StringType)
+
+    checkAnswer(Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema)),
+      Row(null))
+    checkAnswer(Seq("""{"{"f": 1}": "a"}""").toDS().select(from_json($"value", schema)),
+      Row(null))
+  }
 }
