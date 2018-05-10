@@ -103,24 +103,21 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setK(2)
       .setMaxIter(1)
 
-    def runTest(idType: DataType, neighborType: DataType, similarityType: DataType): Unit = {
+    def runTest(idType: DataType, similarityType: DataType): Unit = {
       val typedData = data.select(
         col("id").cast(idType).alias("id"),
-        col("neighbors").cast(ArrayType(neighborType, containsNull = false)).alias("neighbors"),
+        col("neighbors").cast(ArrayType(idType, containsNull = false)).alias("neighbors"),
         col("similarities").cast(ArrayType(similarityType, containsNull = false))
           .alias("similarities")
       )
-      model.transform(typedData).collect()
+      model.transform(typedData).select("id", "prediction").collect()
     }
 
     for (idType <- Seq(IntegerType, LongType)) {
-      runTest(idType, LongType, DoubleType)
-    }
-    for (neighborType <- Seq(IntegerType, LongType)) {
-      runTest(LongType, neighborType, DoubleType)
+      runTest(idType, DoubleType)
     }
     for (similarityType <- Seq(FloatType, DoubleType)) {
-      runTest(LongType, LongType, similarityType)
+      runTest(LongType, similarityType)
     }
   }
 
