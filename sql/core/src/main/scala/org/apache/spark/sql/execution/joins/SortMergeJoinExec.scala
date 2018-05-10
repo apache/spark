@@ -125,13 +125,8 @@ case class SortMergeJoinExec(
     // For inner join, orders of both sides keys should be kept.
 
     case _: InnerLike =>
-
-      logDebug(s"Left range ordering: ${leftKeys ++ lrKeys}")
-      logDebug(s"Right range ordering: ${rightKeys ++ rrKeys}")
-
       val leftKeyOrdering = getKeyOrdering(leftKeys ++ lrKeys, left.outputOrdering)
       val rightKeyOrdering = getKeyOrdering(rightKeys ++ rrKeys, right.outputOrdering)
-      logDebug(s"outputOrdering results: $leftKeyOrdering  and  $rightKeyOrdering")
       leftKeyOrdering.zip(rightKeyOrdering).map { case (lKey, rKey) =>
         // Also add the right key and its `sameOrderExpressions`
         SortOrder(lKey.child, Ascending, lKey.sameOrderExpressions + rKey.child ++ rKey
@@ -228,7 +223,7 @@ case class SortMergeJoinExec(
             private[this] var currentRightMatches: ExternalAppendOnlyUnsafeRowArray = _
             private[this] var rightMatchesIterator: Iterator[UnsafeRow] = null
             private[this] val smjScanner =
-              if (false) { // useInnerRange) {
+              if (useInnerRange) {
                 new SortMergeJoinInnerRangeScanner(
                   createLeftKeyGenerator(),
                   createRightKeyGenerator(),
@@ -283,7 +278,9 @@ case class SortMergeJoinExec(
               false
             }
 
-            override def getRow: InternalRow = resultProj(joinRow)
+            override def getRow: InternalRow = {
+              resultProj(joinRow)
+            }
           }.toScala
 
         case LeftOuter =>
@@ -590,8 +587,8 @@ case class SortMergeJoinExec(
     // Add secondary range dequeue method
     if (!useInnerRange || lowerSecondaryRangeExpression.isEmpty ||
         rightLowerKeys.size == 0 || rightUpperKeys.size == 0) {
-      ctx.addNewFunction("dequeueUntilLowerConditionHolds",
-        "private void dequeueUntilLowerConditionHolds() { }",
+      ctx.addNewFunction("dequeueUntilUpperConditionHolds",
+        "private void dequeueUntilUpperConditionHolds() { }",
         inlineToOuterClass = true)
     }
     else {
@@ -609,9 +606,9 @@ case class SortMergeJoinExec(
            |}
          """.stripMargin)
 
-      ctx.addNewFunction("dequeueUntilLowerConditionHolds",
+      ctx.addNewFunction("dequeueUntilUpperConditionHolds",
         s"""
-           |private void dequeueUntilLowerConditionHolds() {
+           |private void dequeueUntilUpperConditionHolds() {
            |  if($matches.isEmpty())
            |    return;
            |  $rightTmpRow = $matches.get(0);
@@ -671,7 +668,7 @@ case class SortMergeJoinExec(
          |    if (!$matches.isEmpty()) {
          |      ${genComparison(ctx, leftKeyVars, matchedKeyVars)}
          |      if (comp == 0) {
-         |        dequeueUntilLowerConditionHolds();
+         |        dequeueUntilUpperConditionHolds();
          |      }
          |      else {
          |        $matches.clear();
@@ -1103,9 +1100,17 @@ private[joins] class SortMergeJoinInnerRangeScanner(
   private[this] val bufferedMatches =
     new InMemoryUnsafeRowQueue(inMemoryThreshold, spillThreshold)
 
-  private[this] val joinRow = new JoinedRow
-  // Initialization (note: do _not_ want to advance streamed here).
-  advanceBufferedToRowWithNullFreeJoinKey()
+  private[this] val testJoinRow = new JoinedRow
+  private[this] val joinedRow = new JoinedRow
+  private[this] var lowerConditionOk: Boolean = false
+  private[this] var upperConditionOk: Boolean = false
+
+  // Already done in the superclass:
+  //advancedBufferedToRowWithNullFreeJoinKey()
+  bufferedRow = bufferedIter.getRow
+  if (bufferedRow != null) {
+    bufferedRowKey = bufferedKeyGenerator(bufferedRow)
+  }
 
   // --- Public methods ---------------------------------------------------------------------------
 
@@ -1136,11 +1141,15 @@ private[joins] class SortMergeJoinInnerRangeScanner(
       //   First dequeue all rows from the queue until the lower range condition holds.
       //   Then try to enqueue new rows with the same join key and for which the upper
       //   range condition holds.
-      bufferedRowKey = matchJoinKey
-      dequeueUntilLowerConditionHolds()
-      bufferMatchingRows()
-      if (bufferedMatches.isEmpty) matchJoinKey = null
-      ! bufferedMatches.isEmpty
+      dequeueUntilUpperConditionHolds()
+      if (bufferedRow != null) {
+        bufferMatchingRows()
+      }
+      if (bufferedMatches.isEmpty) {
+        matchJoinKey = null
+        findNextInnerJoinRows()
+      }
+      else true
     } else if (bufferedRow == null) {
       // The streamed row's join key does not match the current batch of buffered rows and there are
       // no more rows to read from the buffered iterator, so there can be no more matches.
@@ -1149,31 +1158,33 @@ private[joins] class SortMergeJoinInnerRangeScanner(
       false
     } else {
       // Advance both the streamed and buffered iterators to find the next pair of matching rows.
-      var comp = -1 // keyOrdering.compare(streamedRowKey, bufferedRowKey)
+      var comp = -1
       do {
         if (streamedRowKey.anyNull) {
           advanceStreamed()
         } else {
           assert(!bufferedRowKey.anyNull)
           comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
-          if (comp > 0) advanceBufferedToRowWithNullFreeJoinKey()
-          else if (comp < 0) advanceStreamed()
-          else comp = checkLowerBoundAndAdvanceBuffered()
+          if (comp > 0) advancedBufferedToRowWithNullFreeJoinKey()
+          else if (comp < 0 || !lowerConditionOk) advanceStreamed()
+          else comp = checkBoundsAndAdvanceBuffered()
         }
-      } while (streamedRow != null && bufferedRow != null && comp != 0)
+      } while (streamedRow != null && bufferedRow != null && (comp != 0 || !lowerConditionOk))
+      bufferedMatches.clear()
       if (streamedRow == null || bufferedRow == null) {
         // We have hit the end of one of the iterators, so there can be no more matches.
         matchJoinKey = null
-        bufferedMatches.clear()
         false
       } else {
         // The streamed row's join key matches the current buffered row's join, so walk through the
         // buffered iterator to buffer the rest of the matching rows.
         assert(comp == 0)
-        bufferedMatches.clear()
         bufferMatchingRows()
-        if (bufferedMatches.isEmpty) matchJoinKey = null
-        ! bufferedMatches.isEmpty
+        if (bufferedMatches.isEmpty) {
+          matchJoinKey = null
+          findNextInnerJoinRows()
+        }
+        else true
       }
     }
   }
@@ -1188,6 +1199,7 @@ private[joins] class SortMergeJoinInnerRangeScanner(
     if (streamedIter.advanceNext()) {
       streamedRow = streamedIter.getRow
       streamedRowKey = streamedKeyGenerator(streamedRow)
+      updateJoinedRow()
       true
     } else {
       streamedRow = null
@@ -1200,7 +1212,7 @@ private[joins] class SortMergeJoinInnerRangeScanner(
    * Advance the buffered iterator until we find a row with join key that does not contain nulls.
    * @return true if the buffered iterator returned a row and false otherwise.
    */
-  private def advanceBufferedToRowWithNullFreeJoinKey(): Boolean = {
+  private def advancedBufferedToRowWithNullFreeJoinKey(): Boolean = {
     var foundRow: Boolean = false
     while (!foundRow && bufferedIter.advanceNext()) {
       bufferedRow = bufferedIter.getRow
@@ -1211,26 +1223,34 @@ private[joins] class SortMergeJoinInnerRangeScanner(
       bufferedRow = null
       bufferedRowKey = null
     }
+    else {
+      updateJoinedRow()
+    }
     foundRow
+  }
+
+  private def updateJoinedRow() = {
+    if (streamedRow != null && bufferedRow != null) {
+      joinedRow(streamedRow, bufferedRow)
+      lowerConditionOk = lowerRangeCondition(joinedRow)
+      upperConditionOk = upperRangeCondition(joinedRow)
+    }
   }
 
   /**
    * Advance the buffered iterator as long as the join key is the same and
-   * the lower range condition is not satisfied.
+   * the upper range condition is not satisfied.
    * Skip rows with nulls.
    * @return Result of the join key comparison.
    */
-  private def checkLowerBoundAndAdvanceBuffered(): Int = {
+  private def checkBoundsAndAdvanceBuffered(): Int = {
     assert(bufferedRow != null)
     assert(streamedRow != null)
     var comp = 0
-    var lowCheck = lowerRangeCondition(joinRow(streamedRow, bufferedRow))
-    if (!lowCheck) {
-      while (!lowCheck && comp == 0 && advanceBufferedToRowWithNullFreeJoinKey()) {
+    if (lowerConditionOk && !upperConditionOk) {
+      while (!upperConditionOk && lowerConditionOk && comp == 0 &&
+          advancedBufferedToRowWithNullFreeJoinKey()) {
         comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
-        if (comp == 0) {
-          lowCheck = lowerRangeCondition(joinRow(streamedRow, bufferedRow))
-        }
       }
     }
     comp
@@ -1244,26 +1264,23 @@ private[joins] class SortMergeJoinInnerRangeScanner(
     assert(!streamedRowKey.anyNull)
     assert(bufferedRowKey != null)
     assert(!bufferedRowKey.anyNull)
-    assert(keyOrdering.compare(streamedRowKey, bufferedRowKey) == 0)
+    if (keyOrdering.compare(streamedRowKey, bufferedRowKey) != 0) {
+      return
+    }
     // This join key may have been produced by a mutable projection, so we need to make a copy:
     matchJoinKey = streamedRowKey.copy()
-    var upperRangeOk = false
-    var lowerRangeOk = false
     do {
-      val jr = joinRow(streamedRow, bufferedRow)
-      lowerRangeOk = lowerRangeCondition(jr)
-      upperRangeOk = upperRangeCondition(jr)
-      if (lowerRangeOk && upperRangeOk) {
+      if (lowerConditionOk && upperConditionOk) {
         bufferedMatches.add(bufferedRow.asInstanceOf[UnsafeRow])
       }
-      advanceBufferedToRowWithNullFreeJoinKey()
-    } while (bufferedRow != null && keyOrdering.compare(streamedRowKey, bufferedRowKey) == 0
-      && upperRangeOk)
+    } while (lowerConditionOk && advancedBufferedToRowWithNullFreeJoinKey() &&
+      keyOrdering.compare(streamedRowKey, bufferedRowKey) == 0)
   }
 
-  private def dequeueUntilLowerConditionHolds(): Unit = {
-    if (streamedRow != null && bufferedRow != null) {
-      while (!bufferedMatches.isEmpty && !lowerRangeCondition(joinRow(streamedRow, bufferedRow))) {
+  private def dequeueUntilUpperConditionHolds(): Unit = {
+    if (streamedRow != null) {
+      while (!bufferedMatches.isEmpty &&
+          !upperRangeCondition(testJoinRow(streamedRow, bufferedMatches.get(0)))) {
         bufferedMatches.dequeue()
       }
     }

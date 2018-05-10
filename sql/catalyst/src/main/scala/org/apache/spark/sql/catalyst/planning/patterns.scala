@@ -109,7 +109,6 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case join @ Join(left, right, joinType, condition) =>
-      logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
@@ -145,7 +144,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         // and which can be used for secondary sort optimizations.
         val rangePreds: mutable.Set[Expression] = mutable.Set.empty
         var rangeConditions: Seq[BinaryComparison] =
-          if (SQLConf.get.useSmjInnerRangeOptimization && SQLConf.get.wholeStageEnabled) {
+          if (SQLConf.get.useSmjInnerRangeOptimization) { // && SQLConf.get.wholeStageEnabled) {
             otherPredicates.flatMap {
               case p@LessThan(l, r) => isValidRangeCondition(l, r, left, right, joinKeys) match {
                 case "asis" => rangePreds.add(p); Some(LessThan(l, r))

@@ -83,6 +83,8 @@ private[sql] class InMemoryUnsafeRowQueue(
 //  private var spillableArray: UnsafeExternalSorter = _
   private var numRows = 0
 
+  override def length: Int = numRows
+
   override def isEmpty: Boolean = numRows == 0
 
   // A counter to keep track of total modifications done to this array since its creation.
@@ -90,10 +92,6 @@ private[sql] class InMemoryUnsafeRowQueue(
   private var modificationsCount: Long = 0
 
   private var numFieldsPerRow = 0
-
-//  def length: Int = numRows
-//
-//  def isEmpty: Boolean = numRows == 0
 
   /**
    * Clears up resources (eg. memory) held by the backing storage
@@ -148,6 +146,8 @@ private[sql] class InMemoryUnsafeRowQueue(
 
     new InMemoryBufferIterator(startIndex)
   }
+
+  override def generateIterator(): Iterator[UnsafeRow] = generateIterator(startIndex = 0)
 
   private[this]
   abstract class ExternalAppendOnlyUnsafeRowArrayIterator extends Iterator[UnsafeRow] {
