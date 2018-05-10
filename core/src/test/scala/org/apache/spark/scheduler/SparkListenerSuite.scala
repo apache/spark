@@ -297,7 +297,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     sc.addSparkListener(new StatsReportListener)
     // just to make sure some of the tasks and their deserialization take a noticeable
     // amount of time
-    val slowDeserializable = new SlowDeserializable(readDuration = 1)
+    val slowDeserializable = new SlowDeserializable
     val w = { i: Int =>
       if (i == 0) {
         Thread.sleep(100)
@@ -588,22 +588,11 @@ private class FirehoseListenerThatAcceptsSparkConf(conf: SparkConf) extends Spar
   }
 }
 
-private class SlowDeserializable(var readDuration: Int)
-  extends Externalizable {
+private class SlowDeserializable extends Externalizable {
 
-  def this() = this(0)
+  override def writeExternal(out: ObjectOutput): Unit = { }
 
-  @throws[IOException]
-  override def writeExternal(out: ObjectOutput): Unit = {
-    out.writeInt(readDuration)
-  }
-
-  @throws[IOException]
-  @throws[ClassNotFoundException]
-  override def readExternal(in: ObjectInput): Unit = {
-    readDuration = in.readInt()
-    Thread.sleep(readDuration)
-  }
+  override def readExternal(in: ObjectInput): Unit = Thread.sleep(1)
 
   def use(): Unit = { }
 }
