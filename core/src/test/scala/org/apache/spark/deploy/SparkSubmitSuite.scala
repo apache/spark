@@ -303,6 +303,23 @@ class SparkSubmitSuite
     sys.props("SPARK_SUBMIT") should be ("true")
   }
 
+  test("SPARK-24241: not fail fast when executor num is 0 and dynamic allocation enabled") {
+    val clArgs1 = Seq(
+      "--name", "myApp",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=true",
+      "thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs1)
+    appArgs.dynamicAllocationEnabled should be ("true")
+
+    val clArgs2 = Seq(
+      "--name", "myApp",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=false",
+      "thejar.jar")
+    intercept[SparkException](new SparkSubmitArguments(clArgs2))
+  }
+
   test("handles standalone cluster mode") {
     testStandaloneCluster(useRest = true)
   }
