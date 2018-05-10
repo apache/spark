@@ -52,9 +52,9 @@ private[spark] class LocalDirsFeatureStep(
       .zip(resolvedLocalDirs)
       .map { case (localDirVolume, localDirPath) =>
         new VolumeMountBuilder()
-        .withName(localDirVolume.getName)
-        .withMountPath(localDirPath)
-        .build()
+          .withName(localDirVolume.getName)
+          .withMountPath(localDirPath)
+          .build()
       }
     val podWithLocalDirVolumes = new PodBuilder(pod.pod)
       .editSpec()
