@@ -406,55 +406,53 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("map_from_entries function") {
-    def dummy_filter(c: Column): Column = c.isNull || c.isNotNull
-
-    def arrayType(keyType: DataType, valueType: DataType) : StructType = {
-      StructType(Seq(StructField(
-        "a",
-        ArrayType(
-          StructType(Seq(
-            StructField("k", keyType, false),
-            StructField("v", valueType, true))),
-          false))))
-    }
+    def dummyFilter(c: Column): Column = c.isNull || c.isNotNull
+    val oneRowDF = Seq(3215).toDF("i")
 
     // Test cases with primitive-type keys and values
-    val irdd = spark.sparkContext.parallelize(Seq(
-      Row(Seq(Row(1, 10), Row(2, 20), Row(3, 10))),
-      Row(Seq(Row(1, null), Row(2, null))),
-      Row(Seq.empty),
-      Row(null)))
-    val idf = spark.createDataFrame(irdd, arrayType(IntegerType, IntegerType))
+    val idf = Seq(
+      Seq((1, 10), (2, 20), (3, 10)),
+      Seq((1, 10), null, (2, 20)),
+      Seq.empty,
+      null
+    ).toDF("a")
     val iExpected = Seq(
       Row(Map(1 -> 10, 2 -> 20, 3 -> 10)),
-      Row(Map(1 -> null, 2 -> null)),
+      Row(Map(1 -> 10, 2 -> 20)),
       Row(Map.empty),
       Row(null))
 
     checkAnswer(idf.select(map_from_entries('a)), iExpected)
     checkAnswer(idf.selectExpr("map_from_entries(a)"), iExpected)
-    checkAnswer(idf.filter(dummy_filter('a)).select(map_from_entries('a)), iExpected)
+    checkAnswer(idf.filter(dummyFilter('a)).select(map_from_entries('a)), iExpected)
+    checkAnswer(
+      oneRowDF.selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
+      Seq(Row(Map(1 -> null, 2 -> null)))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('i))
+        .selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
+      Seq(Row(Map(1 -> null, 2 -> null)))
+    )
 
     // Test cases with non-primitive-type keys and values
-    val srdd = spark.sparkContext.parallelize(Seq(
-      Row(Seq(Row("a", "aa"), Row("b", "bb"), Row("c", "aa"))),
-      Row(Seq(Row("a", null), Row("b", null))),
-      Row(Seq.empty),
-      Row(null)))
-    val sdf = spark.createDataFrame(srdd, arrayType(StringType, StringType))
+    val sdf = Seq(
+      Seq(("a", "aa"), ("b", "bb"), ("c", "aa")),
+      Seq(("a", "aa"), null, ("b", "bb")),
+      Seq(("a", null), ("b", null)),
+      Seq.empty,
+      null
+    ).toDF("a")
     val sExpected = Seq(
       Row(Map("a" -> "aa", "b" -> "bb", "c" -> "aa")),
+      Row(Map("a" -> "aa", "b" -> "bb")),
       Row(Map("a" -> null, "b" -> null)),
       Row(Map.empty),
       Row(null))
 
     checkAnswer(sdf.select(map_from_entries('a)), sExpected)
     checkAnswer(sdf.selectExpr("map_from_entries(a)"), sExpected)
-    checkAnswer(sdf.filter(dummy_filter('a)).select(map_from_entries('a)), sExpected)
-
-    // Error test cases
-    intercept[AnalysisException](idf.selectExpr("map_from_entries(array(struct(null, 1)))"))
-    intercept[AnalysisException](idf.selectExpr("map_from_entries(array(struct(1, 10), null))"))
+    checkAnswer(sdf.filter(dummyFilter('a)).select(map_from_entries('a)), sExpected)
   }
 
   test("array contains function") {

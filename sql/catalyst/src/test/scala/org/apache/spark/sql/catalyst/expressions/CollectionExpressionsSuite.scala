@@ -59,10 +59,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("MapFromEntries") {
     def arrayType(keyType: DataType, valueType: DataType) : DataType = {
-      ArrayType(StructType(Seq(
-        StructField("a", keyType, false),
-        StructField("b", valueType))),
-      false)
+      ArrayType(
+        StructType(Seq(
+          StructField("a", keyType),
+          StructField("b", valueType))),
+        true)
     }
     def r(values: Any*): InternalRow = create_row(values: _*)
 
@@ -74,6 +75,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val ai3 = Literal.create(null, aiType)
     val ai4 = Literal.create(Seq(r(1, 10), r(1, 20)), aiType)
     val ai5 = Literal.create(Seq(r(1, 10), r(null, 20)), aiType)
+    val ai6 = Literal.create(Seq(null, r(2, 20), null), aiType)
     val aby = Literal.create(Seq(r(1.toByte, 10.toByte)), arrayType(ByteType, ByteType))
     val ash = Literal.create(Seq(r(1.toShort, 10.toShort)), arrayType(ShortType, ShortType))
     val alo = Literal.create(Seq(r(1L, 10L)), arrayType(LongType, LongType))
@@ -88,6 +90,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(ai5),
       "The first field from a struct (key) can't be null.")
+    checkEvaluation(MapFromEntries(ai6), Map(2 -> 20))
     checkEvaluation(MapFromEntries(aby), Map(1.toByte -> 10.toByte))
     checkEvaluation(MapFromEntries(ash), Map(1.toShort -> 10.toShort))
     checkEvaluation(MapFromEntries(alo), Map(1L -> 10L))
@@ -100,6 +103,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val as3 = Literal.create(null, asType)
     val as4 = Literal.create(Seq(r("a", "aa"), r("a", "bb")), asType)
     val as5 = Literal.create(Seq(r("a", "aa"), r(null, "bb")), asType)
+    val as6 = Literal.create(Seq(null, r("b", "bb"), null), asType)
 
     checkEvaluation(MapFromEntries(as0), Map("a" -> "aa", "b" -> "bb", "c" -> "bb"))
     checkEvaluation(MapFromEntries(as1), Map("a" -> null, "b" -> "bb", "c" -> null))
@@ -111,7 +115,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(as5),
       "The first field from a struct (key) can't be null.")
-
+    checkEvaluation(MapFromEntries(as6), Map("b" -> "bb"))
   }
 
   test("Sort Array") {
