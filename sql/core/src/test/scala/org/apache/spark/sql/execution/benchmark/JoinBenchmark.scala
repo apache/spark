@@ -22,12 +22,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 
 /**
-  * Benchmark to measure performance for aggregate primitives.
-  * To run this:
-  *  build/sbt "sql/test-only *benchmark.JoinBenchmark"
-  *
-  * Benchmarks in this file are skipped in normal builds.
-  */
+ * Benchmark to measure performance for aggregate primitives.
+ * To run this:
+ *  build/sbt "sql/test-only *benchmark.JoinBenchmark"
+ *
+ * Benchmarks in this file are skipped in normal builds.
+ */
 class JoinBenchmark extends BenchmarkBase {
 
   ignore("broadcast hash join, long key") {
