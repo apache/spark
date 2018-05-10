@@ -123,7 +123,7 @@ private[sql] class JSONOptions(
 }
 
 private[sql] class JSONOptionsInRead(
-    @transient private val parameters: CaseInsensitiveMap[String],
+    @transient override val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
   extends JSONOptions(parameters, defaultTimeZoneId, defaultColumnNameOfCorruptRecord) {
