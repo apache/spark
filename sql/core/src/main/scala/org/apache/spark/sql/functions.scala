@@ -283,6 +283,9 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -290,6 +293,9 @@ object functions {
 
   /**
    * Aggregate function: returns a list of objects with duplicates.
+   *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -299,6 +305,9 @@ object functions {
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -306,6 +315,9 @@ object functions {
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
+   *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -422,6 +434,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -434,6 +449,9 @@ object functions {
    *
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -448,6 +466,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -458,6 +479,9 @@ object functions {
    *
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -535,6 +559,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -547,6 +574,9 @@ object functions {
    *
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -561,6 +591,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -571,6 +604,9 @@ object functions {
    *
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -1344,7 +1380,7 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
-   * @note This is indeterministic when data partitions are not fixed.
+   * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1355,6 +1391,8 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
+   * @note The function is non-deterministic in general case.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1364,7 +1402,7 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
-   * @note This is indeterministic when data partitions are not fixed.
+   * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1375,6 +1413,8 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
+   * @note The function is non-deterministic in general case.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1383,7 +1423,7 @@ object functions {
   /**
    * Partition ID.
    *
-   * @note This is indeterministic because it depends on data partitioning and task scheduling.
+   * @note This is non-deterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    * @since 1.6.0
