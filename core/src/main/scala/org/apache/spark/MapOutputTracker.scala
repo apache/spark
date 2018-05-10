@@ -242,7 +242,9 @@ private[spark] class MapOutputTrackerMasterEndpoint(
 
     case CheckNoMissingPartitions(shuffleId: Int) =>
       logInfo(s"Checking missing partitions for $shuffleId")
-      if (tracker.findMissingPartitions(shuffleId).isEmpty) {
+      // If get None from findMissingPartitions, just return a non-empty Seq
+      val missing = tracker.findMissingPartitions(shuffleId).getOrElse(Seq(0))
+      if (missing.isEmpty) {
         context.reply(true)
       } else {
         context.reply(false)
@@ -795,17 +797,15 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
 }
 
 /**
- * MapOutputTrackerWorker for continuous processing, its mainly difference with MapOutputTracker
+ * MapOutputTrackerWorker for continuous processing, the main difference with MapOutputTracker
  * is waiting for a time when the upstream's map output status not ready.
  */
 private[spark] class ContinuousMapOutputTrackerWorker(conf: SparkConf)
   extends MapOutputTrackerWorker(conf) {
   /**
-    * Get or fetch the array of MapStatuses for a given shuffle ID. NOTE: clients MUST synchronize
-    * on this array when reading it, because on the driver, we may be changing it in place.
-    *
-    * (It would be nice to remove this restriction in the future.)
-    */
+   * Get or fetch the array of MapStatuses for a given shuffle ID, hold while there's missing
+   * partition for this shuffleId
+   */
   override def getStatuses(shuffleId: Int): Array[MapStatus] = {
     while (!askTracker[Boolean](CheckNoMissingPartitions(shuffleId))) {
       synchronized {
@@ -815,15 +815,21 @@ private[spark] class ContinuousMapOutputTrackerWorker(conf: SparkConf)
     super.getStatuses(shuffleId)
   }
 
+  /**
+   * Check and register the shuffleId from worker side, try to check it on local cache first.
+   */
   def checkAndRegisterShuffle(shuffleId: Int, numMaps: Int): Unit = {
     // check local cache first to avoid frequency connect to master
     if (!mapStatuses.contains(shuffleId)) {
-      askTracker(CheckAndRegisterShuffle(shuffleId, numMaps))
+      askTracker[Boolean](CheckAndRegisterShuffle(shuffleId, numMaps))
     }
   }
 
+  /**
+   * Register current map output from worker side.
+   */
   def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus): Unit = {
-    askTracker(RegisterMapOutput(shuffleId: Int, mapId: Int, status: MapStatus))
+    askTracker[Boolean](RegisterMapOutput(shuffleId: Int, mapId: Int, status: MapStatus))
   }
 }
 

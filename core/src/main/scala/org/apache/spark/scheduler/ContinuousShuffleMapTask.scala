@@ -68,8 +68,9 @@ private[spark] class ContinuousShuffleMapTask(
     with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
-  def this(partitionId: Int) {
-    this(0, 0, null, new Partition { override def index: Int = 0 }, null, new Properties, null)
+  def this(partitionId: Int, totalShuffleNum: Int) {
+    this(0, 0, null, new Partition { override def index: Int = 0 }, null, new Properties,
+      null, totalShuffleNum)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
@@ -103,8 +104,11 @@ private[spark] class ContinuousShuffleMapTask(
 
     while (!context.isCompleted() || !context.isInterrupted()) {
       try {
-        // Create a ContinuousShuffleDependency which has new shuffleId based on continuous epoch
-        val continuousDep = new ContinuousShuffleDependency(dep, currentEpoch, totalShuffleNum)
+        // Create a ContinuousShuffleDependency which has new shuffleId based on continuous epoch.
+        // Since rdd in the dependency will not be used, set null to avoid compile issues.
+        val continuousDep = new ContinuousShuffleDependency(
+          null, dep, currentEpoch, totalShuffleNum,
+          rdd.partitions.length)
         // Re-register the shuffle TO mapOutputTrackerMaster
         mapOutputTracker.checkAndRegisterShuffle(continuousDep.shuffleId, rdd.partitions.length)
         writer = manager.getWriter[Any, Any](continuousDep.shuffleHandle, partitionId, context)
