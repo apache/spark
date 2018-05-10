@@ -22,12 +22,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * Benchmark to measure performance for aggregate primitives.
- * To run this:
- *  build/sbt "sql/test-only *benchmark.JoinBenchmark"
- *
- * Benchmarks in this file are skipped in normal builds.
- */
+  * Benchmark to measure performance for aggregate primitives.
+  * To run this:
+  *  build/sbt "sql/test-only *benchmark.JoinBenchmark"
+  *
+  * Benchmarks in this file are skipped in normal builds.
+  */
 class JoinBenchmark extends BenchmarkBase {
 
   ignore("broadcast hash join, long key") {
@@ -247,8 +247,8 @@ class JoinBenchmark extends BenchmarkBase {
      *AMD EPYC 7401 24-Core Processor
      *sort merge join:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
      *---------------------------------------------------------------------------------------------
-     *sort merge join wholestage off            30956 / 31374          0.0       75575.5       1.0X
-     *sort merge join wholestage on             10864 / 11043          0.0       26523.6       2.8X
+     *sort merge join wholestage off            25226 / 25244          0.0       61585.9       1.0X
+     *sort merge join wholestage on              8581 / 8983          0.0       20948.6       2.9X
      */
   }
 
@@ -264,8 +264,8 @@ class JoinBenchmark extends BenchmarkBase {
      *AMD EPYC 7401 24-Core Processor
      *sort merge join:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
      *---------------------------------------------------------------------------------------------
-     *sort merge join wholestage off            30734 / 31135          0.0       75035.2       1.0X
-     *sort merge join wholestage on                959 / 1040          0.4        2341.3      32.0X
+     *sort merge join wholestage off              1194 / 1212          0.3        2915.2       1.0X
+     *sort merge join wholestage on                814 /  867          0.5        1988.4       1.5X
      */
   }
 

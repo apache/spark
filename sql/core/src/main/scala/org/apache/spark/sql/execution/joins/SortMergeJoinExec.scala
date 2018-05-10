@@ -1106,7 +1106,7 @@ private[joins] class SortMergeJoinInnerRangeScanner(
   private[this] var upperConditionOk: Boolean = false
 
   // Already done in the superclass:
-  //advancedBufferedToRowWithNullFreeJoinKey()
+  // advancedBufferedToRowWithNullFreeJoinKey()
   bufferedRow = bufferedIter.getRow
   if (bufferedRow != null) {
     bufferedRowKey = bufferedKeyGenerator(bufferedRow)
