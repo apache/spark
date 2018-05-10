@@ -227,6 +227,7 @@ object SparkEnv extends Logging {
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
+    val isContinuous = conf.getBoolean("spark.streaming.continuousMode", false)
 
     // Listener bus is only used on the driver
     if (isDriver) {
@@ -303,6 +304,8 @@ object SparkEnv extends Logging {
 
     val mapOutputTracker = if (isDriver) {
       new MapOutputTrackerMaster(conf, broadcastManager, isLocal)
+    } else if (isContinuous) {
+      new ContinuousProcessingMapOutputTrackerWorker(conf)
     } else {
       new MapOutputTrackerWorker(conf)
     }

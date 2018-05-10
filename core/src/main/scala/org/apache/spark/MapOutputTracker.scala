@@ -213,6 +213,8 @@ private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
+private[spark] case class CheckNoMissingPartitions(shuffleId: Int)
+  extends MapOutputTrackerMessage
 
 private[spark] case class GetMapOutputMessage(shuffleId: Int, context: RpcCallContext)
 
@@ -233,6 +235,14 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
       context.reply(true)
       stop()
+
+    case CheckNoMissingPartitions(shuffleId: Int) =>
+      logInfo("")
+      if (tracker.findMissingPartitions(shuffleId).isEmpty) {
+        context.reply(true)
+      } else {
+        context.reply(false)
+      }
   }
 }
 
@@ -691,7 +701,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    *
    * (It would be nice to remove this restriction in the future.)
    */
-  private def getStatuses(shuffleId: Int): Array[MapStatus] = {
+  def getStatuses(shuffleId: Int): Array[MapStatus] = {
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
@@ -747,7 +757,6 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     }
   }
 
-
   /** Unregister shuffle data. */
   def unregisterShuffle(shuffleId: Int): Unit = {
     mapStatuses.remove(shuffleId)
@@ -766,6 +775,28 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         mapStatuses.clear()
       }
     }
+  }
+}
+
+/**
+ * MapOutputTrackerWorker for continuous processing, its mainly difference with MapOutputTracker
+ * is waiting for a time when the upstream's map output status not ready.
+ */
+private[spark] class ContinuousProcessingMapOutputTrackerWorker(conf: SparkConf)
+  extends MapOutputTrackerWorker(conf) {
+  /**
+    * Get or fetch the array of MapStatuses for a given shuffle ID. NOTE: clients MUST synchronize
+    * on this array when reading it, because on the driver, we may be changing it in place.
+    *
+    * (It would be nice to remove this restriction in the future.)
+    */
+  override def getStatuses(shuffleId: Int): Array[MapStatus] = {
+    while (!askTracker[Boolean](CheckNoMissingPartitions(shuffleId))) {
+      synchronized {
+        this.wait(conf.getTimeAsMs("spark.cp.status.retryWait", "1s"))
+      }
+    }
+    super.getStatuses(shuffleId)
   }
 }
 
