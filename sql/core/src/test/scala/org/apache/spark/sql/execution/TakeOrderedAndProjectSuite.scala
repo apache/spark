@@ -56,36 +56,32 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
   val sortOrder = 'a.desc :: 'b.desc :: Nil
 
   test("TakeOrderedAndProject.doExecute without project") {
-    withSQLConf(SQLConf.ENABLE_PARALLEL_GLOBAL_LIMIT.key -> "false") {
-      withClue(s"seed = $seed") {
-        checkThatPlansAgree(
-          generateRandomInputData(),
-          input =>
-            noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
-          input =>
-            GlobalLimitExec(limit,
-              LocalLimitExec(limit,
-                SortExec(sortOrder, true, input))),
-          sortAnswers = false)
-      }
+    withClue(s"seed = $seed") {
+      checkThatPlansAgree(
+        generateRandomInputData(),
+        input =>
+          noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
+        input =>
+          GlobalLimitExec(limit,
+            LocalLimitExec(limit,
+              SortExec(sortOrder, true, input))),
+        sortAnswers = false)
     }
   }
 
   test("TakeOrderedAndProject.doExecute with project") {
-    withSQLConf(SQLConf.ENABLE_PARALLEL_GLOBAL_LIMIT.key -> "false") {
-      withClue(s"seed = $seed") {
-        checkThatPlansAgree(
-          generateRandomInputData(),
-          input =>
-            noOpFilter(
-              TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last), input)),
-          input =>
-            GlobalLimitExec(limit,
-              LocalLimitExec(limit,
-                ProjectExec(Seq(input.output.last),
-                  SortExec(sortOrder, true, input)))),
-          sortAnswers = false)
-      }
+    withClue(s"seed = $seed") {
+      checkThatPlansAgree(
+        generateRandomInputData(),
+        input =>
+          noOpFilter(
+            TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last), input)),
+        input =>
+          GlobalLimitExec(limit,
+            LocalLimitExec(limit,
+              ProjectExec(Seq(input.output.last),
+                SortExec(sortOrder, true, input)))),
+        sortAnswers = false)
     }
   }
 }

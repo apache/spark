@@ -125,22 +125,18 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
       Nil
     }
 
-    // Try to keep child plan's original data parallelism or not. It is enabled by default.
-    // If child output has certain ordering, we can't evenly pick up rows from each parititon.
-    val respectChildParallelism = sqlContext.conf.enableParallelGlobalLimit &&
-      child.outputOrdering != Nil
+    // During global limit, try to evenly distribute limited rows across data
+    // partitions. If disabled, scanning data partitions sequentially until reaching limit number.
+    // Besides, if child output has certain ordering, we can't evenly pick up rows from
+    // each parititon.
+    val flatGlobalLimit = sqlContext.conf.limitFlatGlobalLimit && child.outputOrdering == Nil
 
     val shuffled = new ShuffledRowRDD(shuffleDependency)
 
     val sumOfOutput = numberOfOutput.sum
     if (sumOfOutput <= limit) {
       shuffled
-    } else if (!respectChildParallelism) {
-      // This is mainly for tests.
-      // Some tests like hive compatibility tests assume that the rows are returned by a specified
-      // order that the partitions are scaned sequentially until we reach the required number of
-      // rows. However, logically a Limit operator should not care the row scan order.
-      // Thus we take the rows of each partition until we reach the required limit number.
+    } else if (!flatGlobalLimit) {
       var numTakenRow = 0
       val takeAmounts = new mutable.HashMap[Int, Int]()
       numberOfOutput.zipWithIndex.foreach { case (num, index) =>

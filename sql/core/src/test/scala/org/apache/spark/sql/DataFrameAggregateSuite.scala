@@ -556,7 +556,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-18004 limit + aggregates") {
-    withSQLConf(SQLConf.ENABLE_PARALLEL_GLOBAL_LIMIT.key -> "false") {
+    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "true") {
       val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
       val limit2Df = df.limit(2)
       checkAnswer(

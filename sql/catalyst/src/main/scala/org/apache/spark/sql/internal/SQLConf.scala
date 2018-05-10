@@ -186,12 +186,10 @@ object SQLConf {
     .intConf
     .createWithDefault(4)
 
-  val ENABLE_PARALLEL_GLOBAL_LIMIT = buildConf("spark.sql.limit.globalparallel")
+  val LIMIT_FLAT_GLOBAL_LIMIT = buildConf("spark.sql.limit.flatGlobalLimit")
     .internal()
-    .doc("Not to shuffle the results of local limit to one single partition in global limit " +
-      "so that the limit operation doesn't downgrade parallelism. The config is mainly used " +
-      "in tests especially Hive compatibility test cases which assume there is an order in " +
-      "the returned rows of limit operation.")
+    .doc("During global limit, try to evenly distribute limited rows across data " +
+      "partitions. If disabled, scanning data partitions sequentially until reaching limit number.")
     .booleanConf
     .createWithDefault(true)
 
@@ -1452,7 +1450,7 @@ class SQLConf extends Serializable with Logging {
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
-  def enableParallelGlobalLimit: Boolean = getConf(ENABLE_PARALLEL_GLOBAL_LIMIT)
+  def limitFlatGlobalLimit: Boolean = getConf(LIMIT_FLAT_GLOBAL_LIMIT)
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
