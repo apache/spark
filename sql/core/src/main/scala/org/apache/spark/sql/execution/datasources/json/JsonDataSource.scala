@@ -93,13 +93,21 @@ object TextInputJsonDataSource extends JsonDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
     val json: Dataset[String] = createBaseDataset(sparkSession, inputPaths, parsedOptions)
-
     inferFromDataset(json, parsedOptions)
   }
 
   def inferFromDataset(json: Dataset[String], parsedOptions: JSONOptions): StructType = {
     val sampled: Dataset[String] = JsonUtils.sample(json, parsedOptions)
-    JsonInferSchema.infer(sampled, parsedOptions, CreateJacksonParser.string)
+    if (parsedOptions.encoding.isDefined) {
+      // TODO: We should be able to parse the input string directly. Remove this hack when we
+      // support setting encoding when reading text files.
+      val encoding = parsedOptions.encoding.get
+      val textDS = sampled.map(new Text(_))(Encoders.javaSerialization)
+      val parser = CreateJacksonParser.text(encoding, _: JsonFactory, _: Text)
+      JsonInferSchema.infer(textDS, parsedOptions, parser)
+    } else {
+      JsonInferSchema.infer(sampled, parsedOptions, CreateJacksonParser.string)
+    }
   }
 
   private def createBaseDataset(
@@ -107,10 +115,6 @@ object TextInputJsonDataSource extends JsonDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Dataset[String] = {
     val paths = inputPaths.map(_.getPath.toString)
-    val textOptions = Map.empty[String, String] ++
-      parsedOptions.encoding.map("encoding" -> _) ++
-      parsedOptions.lineSeparator.map("lineSep" -> _)
-
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
