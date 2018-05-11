@@ -1838,7 +1838,8 @@ def array_contains(col, value):
 def arrays_overlap(a1, a2):
     """
     Collection function: returns true if the arrays contain any common non-null element; if not,
-    returns null if any of the arrays contains a null element and false otherwise.
+    returns null if both the arrays are non-empty and any of them contains a null element; returns
+    false otherwise.
 
     >>> df = spark.createDataFrame([(["a", "b"], ["b", "c"]), (["a"], ["b", "c"])], ['x', 'y'])
     >>> df.select(arrays_overlap(df.x, df.y).alias("overlap")).collect()

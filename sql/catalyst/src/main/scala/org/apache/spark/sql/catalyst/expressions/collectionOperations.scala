@@ -569,7 +569,7 @@ case class ArrayContains(left: Expression, right: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a1, a2) - Returns true if a1 contains at least an element present also in a2. If the arrays have no common element and either of them contains a null element null is returned, false otherwise.",
+  usage = "_FUNC_(a1, a2) - Returns true if a1 contains at least a non-null element present also in a2. If the arrays have no common element and they are both non-empty and either of them contains a null element null is returned, false otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(3, 4, 5));
@@ -599,10 +599,10 @@ case class ArraysOverlap(left: Expression, right: Expression)
   }
 
   @transient private lazy val doEvaluation = if (elementTypeSupportEquals) {
-      fastEval _
-    } else {
-      bruteForceEval _
-    }
+    fastEval _
+  } else {
+    bruteForceEval _
+  }
 
   override def dataType: DataType = BooleanType
 
@@ -642,8 +642,6 @@ case class ArraysOverlap(left: Expression, right: Expression)
           return true
         }
       )
-    } else if (containsNull(bigger, biggerDt)) {
-      hasNull = true
     }
     if (hasNull) {
       null
@@ -670,8 +668,6 @@ case class ArraysOverlap(left: Expression, right: Expression)
             }
           )
         })
-    } else if (containsNull(arr2, right.dataType.asInstanceOf[ArrayType])) {
-      hasNull = true
     }
     if (hasNull) {
       null
@@ -680,39 +676,10 @@ case class ArraysOverlap(left: Expression, right: Expression)
     }
   }
 
-  def containsNull(arr: ArrayData, dt: ArrayType): Boolean = {
-    if (dt.containsNull) {
-      var i = 0
-      var hasNull = false
-      while (i < arr.numElements && !hasNull) {
-        hasNull = arr.isNullAt(i)
-        i += 1
-      }
-      hasNull
-    } else {
-      false
-    }
-  }
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (a1, a2) => {
-      val i = ctx.freshName("i")
       val smaller = ctx.freshName("smallerArray")
       val bigger = ctx.freshName("biggerArray")
-      val smallerEmptyCode = if (inputTypes.exists(_.asInstanceOf[ArrayType].containsNull)) {
-        s"""
-           |else {
-           |  for (int $i = 0; $i < $bigger.numElements(); $i ++) {
-           |    if ($bigger.isNullAt($i)) {
-           |      ${ev.isNull} = true;
-           |      break;
-           |    }
-           |  }
-           |}
-         """.stripMargin
-      } else {
-        ""
-      }
       val comparisonCode = if (elementTypeSupportEquals) {
         fastCodegen(ctx, ev, smaller, bigger)
       } else {
@@ -730,8 +697,8 @@ case class ArraysOverlap(left: Expression, right: Expression)
          |}
          |if ($smaller.numElements() > 0) {
          |  $comparisonCode
-         |} $smallerEmptyCode
-         |""".stripMargin
+         |}
+       """.stripMargin
     })
   }
 
@@ -746,22 +713,22 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
     val javaElementClass = CodeGenerator.boxedType(elementType)
     val javaSet = classOf[java.util.HashSet[_]].getName
-    val set2 = ctx.freshName("set")
+    val set = ctx.freshName("set")
     val addToSetFromSmallerCode = nullSafeElementCodegen(
-      smaller, i, s"$set2.add($getFromSmaller);", s"${ev.isNull} = true;")
+      smaller, i, s"$set.add($getFromSmaller);", s"${ev.isNull} = true;")
     val elementIsInSetCode = nullSafeElementCodegen(
       bigger,
       i,
       s"""
-         |if ($set2.contains($getFromBigger)) {
+         |if ($set.contains($getFromBigger)) {
          |  ${ev.isNull} = false;
          |  ${ev.value} = true;
          |  break;
          |}
-         |""".stripMargin,
+       """.stripMargin,
       s"${ev.isNull} = true;")
     s"""
-       |$javaSet<$javaElementClass> $set2 = new $javaSet<$javaElementClass>();
+       |$javaSet<$javaElementClass> $set = new $javaSet<$javaElementClass>();
        |for (int $i = 0; $i < $smaller.numElements(); $i ++) {
        |  $addToSetFromSmallerCode
        |}
@@ -821,7 +788,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
          |} else {
          |  $code
          |}
-         |""".stripMargin
+       """.stripMargin
     } else {
       code
     }

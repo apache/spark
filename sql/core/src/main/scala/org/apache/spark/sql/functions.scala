@@ -3040,8 +3040,9 @@ object functions {
   }
 
   /**
-   * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and
-   * any of the arrays contains a `null`, it returns `null`. It returns `false` otherwise.
+   * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and both
+   * the arrays are non-empty and any of them contains a `null`, it returns `null`. It returns
+   * `false` otherwise.
    * @group collection_funcs
    * @since 2.4.0
    */

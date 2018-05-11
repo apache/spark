@@ -445,7 +445,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("arrays_overlap function") {
     val df = Seq(
       (Seq[Option[Int]](Some(1), Some(2)), Seq[Option[Int]](Some(-1), Some(10))),
-      (Seq.empty[Option[Int]], Seq[Option[Int]](Some(-1), None)),
+      (Seq[Option[Int]](Some(1), Some(2)), Seq[Option[Int]](Some(-1), None)),
       (Seq[Option[Int]](Some(3), Some(2)), Seq[Option[Int]](Some(1), Some(2)))
     ).toDF("a", "b")
 
