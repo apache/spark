@@ -360,7 +360,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 private[streaming]
 object FileInputDStream {
 
-  def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
+  def defaultFilter(path: Path): Boolean = (!path.getName().startsWith(".")) && (path.getName().indexOf(".tmp") == -1)
 
   /**
    * Calculate the number of last batches to remember, such that all the files selected in
