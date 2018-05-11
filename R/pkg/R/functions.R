@@ -207,7 +207,7 @@ NULL
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
-#' head(select(tmp, array_position(tmp$v1, 21)))
+#' head(select(tmp, array_position(tmp$v1, 21), array_sort(tmp$v1)))
 #' head(select(tmp, flatten(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
@@ -3044,6 +3044,20 @@ setMethod("array_position",
           })
 
 #' @details
+#' \code{array_sort}: Sorts the input array in ascending order. The elements of the input array
+#' must be orderable. NA elements will be placed at the end of the returned array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_sort array_sort,Column-method
+#' @note array_sort since 2.4.0
+setMethod("array_sort",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{flatten}: Transforms an array of arrays into a single array.
 #'
 #' @rdname column_collection_functions
@@ -3125,8 +3139,9 @@ setMethod("size",
           })
 
 #' @details
-#' \code{sort_array}: Sorts the input array in ascending or descending order according
-#' to the natural ordering of the array elements.
+#' \code{sort_array}: Sorts the input array in ascending or descending order according to
+#' the natural ordering of the array elements. NA elements will be placed at the beginning of
+#' the returned array in ascending order or at the end of the returned array in descending order.
 #'
 #' @rdname column_collection_functions
 #' @param asc a logical flag indicating the sorting order.
