@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -36,13 +37,15 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
   with ImplicitCastInputTypes {
 
+  private val caseSensitive = SQLConf.get.caseSensitiveAnalysis
+
   @transient protected lazy val elementType: DataType =
     inputTypes.head.asInstanceOf[ArrayType].elementType
 
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, hasNull1), ArrayType(e2, hasNull2)) =>
-        TypeCoercion.findTightestCommonType(e1, e2) match {
+        TypeCoercion.findTightestCommonType(e1, e2, caseSensitive) match {
           case Some(dt) => Seq(ArrayType(dt, hasNull1), ArrayType(dt, hasNull2))
           case _ => Seq.empty
         }
