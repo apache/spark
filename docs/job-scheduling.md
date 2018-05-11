@@ -215,6 +215,9 @@ pool), but inside each pool, jobs run in FIFO order. For example, if you create 
 means that each user will get an equal share of the cluster, and that each user's queries will run in
 order instead of later queries taking resources from that user's earlier ones.
 
+If jobs are not explicitly set to use a given pool, they end up in the default pool. This means that even if
+`spark.scheduler.mode` is set to `FAIR` those jobs will be run in `FIFO` order (within the default pool).
+
 ## Configuring Pool Properties
 
 Specific pools' properties can also be modified through a configuration file. Each pool supports three
