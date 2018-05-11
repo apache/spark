@@ -78,6 +78,12 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val isContinuous: Boolean = false)
   extends Dependency[Product2[K, V]] {
 
+  def this(rdd: RDD[_ <: Product2[K, V]], partitioner: Partitioner,
+    serializer: Serializer, keyOrdering: Option[Ordering[K]],
+    aggregator: Option[Aggregator[K, V, C]], mapSideCombine: Boolean) = {
+    this(rdd, partitioner, serializer, keyOrdering, aggregator, mapSideCombine, false)
+  }
+
   if (mapSideCombine) {
     require(aggregator.isDefined, "Map-side combine without Aggregator specified!")
   }
