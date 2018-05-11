@@ -1396,9 +1396,11 @@ def _create_row_inbound_converter(dataType):
     return lambda *a: dataType.fromInternal(a)
 
 
-def _create_row(fields, values):
+def _create_row(fields, values, from_dict=False):
     row = Row(*values)
     row.__fields__ = fields
+    if from_dict:
+        row.__from_dict__ = True
     return row
 
 
@@ -1449,15 +1451,15 @@ class Row(tuple):
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
         if kwargs:
-            # create row objects
+            # create row object from named arguments, order not guaranteed so will be sorted
             names = sorted(kwargs.keys())
             row = tuple.__new__(self, [kwargs[n] for n in names])
             row.__fields__ = names
-            row.__from_dict__ = True
+            row.__from_dict__ = True  # Row elements will be accessed by field name, not position
             return row
 
         else:
-            # create row class or objects
+            # create a row class for generating objects or a tuple-like object
             return tuple.__new__(self, args)
 
     def asDict(self, recursive=False):
@@ -1536,7 +1538,10 @@ class Row(tuple):
     def __reduce__(self):
         """Returns a tuple so Python knows how to pickle Row."""
         if hasattr(self, "__fields__"):
-            return (_create_row, (self.__fields__, tuple(self)))
+            if hasattr(self, "__from_dict__"):
+                return (_create_row, (self.__fields__, tuple(self), True))
+            else:
+                return (_create_row, (self.__fields__, tuple(self)))
         else:
             return tuple.__reduce__(self)
 
