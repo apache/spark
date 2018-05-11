@@ -426,8 +426,10 @@ To use a custom metrics.properties for the application master and executors, upd
 Standard Kerberos support in Spark is covered in the [Security](security.html#kerberos) page.
 
 In YARN mode, when accessing Hadoop file systems, aside from the service hosting the user's home
-directory, Spark will also automatically obtain delegation tokens for the service hosting the
-staging directory of the Spark application.
+directory, Spark will also automatically obtain delegation tokens for:
+
+- the filesystem hosting the staging directory of the Spark application;
+- if Hadoop federation is enabled, all the federated filesystems in the configuration.
 
 If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
 explicitly provided to Spark at launch time. This is done by listing them in the

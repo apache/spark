@@ -181,7 +181,27 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
       new Path("hdfs://localhost:8020").getFileSystem(noFederationConf))
     val noFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, noFederationConf)
     noFederationResult should be (noFederationExpected)
+
+    // federation and HA enabled
+    val federationAndHAConf = new Configuration()
+    federationAndHAConf.set("fs.defaultFS", "hdfs://clusterXHA")
+    federationAndHAConf.set("dfs.nameservices", "clusterXHA,clusterYHA")
+    federationAndHAConf.set("dfs.ha.namenodes.clusterXHA", "x-nn1,x-nn2")
+    federationAndHAConf.set("dfs.ha.namenodes.clusterYHA", "y-nn1,y-nn2")
+    federationAndHAConf.set("dfs.namenode.rpc-address.clusterXHA.x-nn1", "localhost:8020")
+    federationAndHAConf.set("dfs.namenode.rpc-address.clusterXHA.x-nn2", "localhost:8021")
+    federationAndHAConf.set("dfs.namenode.rpc-address.clusterYHA.y-nn1", "localhost:8022")
+    federationAndHAConf.set("dfs.namenode.rpc-address.clusterYHA.y-nn2", "localhost:8023")
+    federationAndHAConf.set("dfs.client.failover.proxy.provider.clusterXHA",
+      "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider")
+    federationAndHAConf.set("dfs.client.failover.proxy.provider.clusterYHA",
+      "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider")
+
+    val federationAndHAExpected = Set(
+      new Path("hdfs://clusterXHA").getFileSystem(federationAndHAConf),
+      new Path("hdfs://clusterYHA").getFileSystem(federationAndHAConf))
+    val federationAndHAResult = YarnSparkHadoopUtil.hadoopFSsToAccess(
+      sparkConf, federationAndHAConf)
+    federationAndHAResult should be (federationAndHAExpected)
   }
-
-
 }
