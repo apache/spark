@@ -1370,7 +1370,7 @@ class PersistenceTest(SparkSessionTestCase):
         pmml_text_list = self.sc.textFile(lr_path).collect()
         pmml_text = "\n".join(pmml_text_list)
         self.assertIn("Apache Spark", pmml_text)
-        self.assertIn("xs:element", pmml_text)
+        self.assertIn("PMML", pmml_text)
 
     def test_logistic_regression(self):
         lr = LogisticRegression(maxIter=1)
