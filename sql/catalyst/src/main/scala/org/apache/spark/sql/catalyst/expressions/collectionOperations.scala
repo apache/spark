@@ -151,19 +151,30 @@ case class ZipLists(left: Expression, right: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (arr1, arr2) => {
+      val genericArrayData = classOf[GenericArrayData].getName
+      val genericInternalRow = classOf[GenericInternalRow].getName
+
       val i = ctx.freshName("i")
-      val len = ctx.freshName("len1")
-      val javaType = CodeGenerator.javaType(dataType)
-      val getValue1 = CodeGenerator.getValue(arr1, left.dataType, i)
-      val getValue2 = CodeGenerator.getValue(arr2, right.dataType, i)
+      val values = ctx.freshName("values")
+      val len1 = ctx.freshName("len1")
+      val pair = ctx.freshName("pair")
+      val getValue1 = CodeGenerator.getValue(
+        arr1, left.dataType.asInstanceOf[ArrayType].elementType, i)
+      val getValue2 = CodeGenerator.getValue(
+        arr2, right.dataType.asInstanceOf[ArrayType].elementType, i)
+
       s"""
-      int $len = $arr1.numElements();
-      for (int $i = 0; $i < $len; $i ++) {
-        final Object[] mytuple = new Object[2];
-        mytuple[0] = $getValue1;
-        mytuple[1] = $getValue2;
-        ${ev.value}.update($i, mytuple);
+      int $len1 = $arr1.numElements();
+      Object[] $values;
+      $values = new Object[$len1];
+      for (int $i = 0; $i < $len1; $i ++) {
+        Object[] $pair;
+        $pair = new Object[2];
+        $pair[0] = $getValue1;
+        $pair[1] = $getValue2;
+        $values[$i] = new $genericInternalRow($pair);
       }
+      ${ev.value} = new $genericArrayData($values);
       """
     })
   }
