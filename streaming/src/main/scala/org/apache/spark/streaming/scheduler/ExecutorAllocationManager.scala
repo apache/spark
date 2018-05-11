@@ -202,12 +202,7 @@ private[streaming] object ExecutorAllocationManager extends Logging {
   val MAX_EXECUTORS_KEY = "spark.streaming.dynamicAllocation.maxExecutors"
 
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
-    val numExecutor = conf.getInt("spark.executor.instances", 0)
     val streamingDynamicAllocationEnabled = conf.getBoolean(ENABLED_KEY, false)
-    if (numExecutor != 0 && streamingDynamicAllocationEnabled) {
-      throw new IllegalArgumentException(
-        "Dynamic Allocation for streaming cannot be enabled while spark.executor.instances is set.")
-    }
     if (Utils.isDynamicAllocationEnabled(conf) && streamingDynamicAllocationEnabled) {
       throw new IllegalArgumentException(
         """
@@ -217,7 +212,7 @@ private[streaming] object ExecutorAllocationManager extends Logging {
         """.stripMargin)
     }
     val testing = conf.getBoolean("spark.streaming.dynamicAllocation.testing", false)
-    numExecutor == 0 && streamingDynamicAllocationEnabled && (!Utils.isLocalMaster(conf) || testing)
+    streamingDynamicAllocationEnabled && (!Utils.isLocalMaster(conf) || testing)
   }
 
   def createIfEnabled(
