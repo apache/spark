@@ -360,6 +360,21 @@ class GBTClassificationModel private[ml](
   // hard coded loss, which is not meant to be changed in the model
   private val loss = getOldLossType
 
+  /**
+   * Method to compute error or loss for every iteration of gradient boosting.
+   *
+   * @param dataset Dataset for validation.
+   */
+  @Since("2.4.0")
+  def evaluateEachIteration(dataset: Dataset[_]): Array[Double] = {
+    val data = dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
+      case Row(label: Double, features: Vector) => LabeledPoint(label, features)
+    }
+    GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights, loss,
+      OldAlgo.Classification
+    )
+  }
+
   @Since("2.0.0")
   override def write: MLWriter = new GBTClassificationModel.GBTClassificationModelWriter(this)
 }

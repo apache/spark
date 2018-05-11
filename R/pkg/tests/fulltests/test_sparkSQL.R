@@ -1479,8 +1479,7 @@ test_that("column functions", {
   df5 <- createDataFrame(list(list(a = "010101")))
   expect_equal(collect(select(df5, conv(df5$a, 2, 16)))[1, 1], "15")
 
-  # Test array_contains(), array_max(), array_min(), array_position(), element_at()
-  # and sort_array()
+  # Test array_contains(), array_max(), array_min(), array_position() and element_at()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
   result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
   expect_equal(result, c(TRUE, FALSE))
@@ -1497,10 +1496,16 @@ test_that("column functions", {
   result <- collect(select(df, element_at(df[[1]], 1L)))[[1]]
   expect_equal(result, c(1, 6))
 
+  # Test array_sort() and sort_array()
+  df <- createDataFrame(list(list(list(2L, 1L, 3L, NA)), list(list(NA, 6L, 5L, NA, 4L))))
+
+  result <- collect(select(df, array_sort(df[[1]])))[[1]]
+  expect_equal(result, list(list(1L, 2L, 3L, NA), list(4L, 5L, 6L, NA, NA)))
+
   result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
-  expect_equal(result, list(list(3L, 2L, 1L), list(6L, 5L, 4L)))
+  expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
-  expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
+  expect_equal(result, list(list(NA, 1L, 2L, 3L), list(NA, NA, 4L, 5L, 6L)))
 
   # Test flattern
   df <- createDataFrame(list(list(list(list(1L, 2L), list(3L, 4L))),
@@ -2210,8 +2215,8 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(count(where(join(df, df2), df$name == df2$name)), 3)
   # cartesian join
   expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
-               paste0(".*(org.apache.spark.sql.AnalysisException: Detected cartesian product for",
-                      " INNER join between logical plans).*"))
+               paste0(".*(org.apache.spark.sql.AnalysisException: Detected implicit cartesian",
+                      " product for INNER join between logical plans).*"))
 
   joined <- crossJoin(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))

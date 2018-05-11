@@ -469,8 +469,16 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
    * If the error rate on the validation input changes by less than the validationTol,
    * then learning will stop early (before [[maxIter]]).
    * This parameter is ignored when fit without validation is used.
-   * (default = 1e-5)
+   * The end of iteration is decided based on below logic:
+   * If the current loss on the validation set is greater than 0.01, the diff
+   * of validation error is compared to relative tolerance which is
+   * validationTol * (current loss on the validation set).
+   * If the current loss on the validation set is less than or equal to 0.01,
+   * the diff of validation error is compared to absolute tolerance which is
+   * validationTol * 0.01.
+   * (default = 0.01)
    * @group param
+   * @see validationIndicatorCol
    */
   @Since("2.4.0")
   final val validationTol: DoubleParam = new DoubleParam(this, "validationTol",
@@ -509,7 +517,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
   @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
-  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 1e-5)
+  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 0.01)
 
   setDefault(featureSubsetStrategy -> "all")
 
@@ -591,7 +599,11 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
-    getLossType match {
+    convertToOldLossType(getLossType)
+  }
+
+  private[ml] def convertToOldLossType(loss: String): OldLoss = {
+    loss match {
       case "squared" => OldSquaredError
       case "absolute" => OldAbsoluteError
       case _ =>
