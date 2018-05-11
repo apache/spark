@@ -2722,7 +2722,7 @@ private[spark] object Utils extends Logging {
    */
   def getSimpleName(cls: Class[_]): String = {
     try {
-      return cls.getSimpleName.stripSuffix("$")
+      return cls.getSimpleName
     } catch {
       case err: InternalError => return stripDollars(stripPackages(cls.getName))
     }
