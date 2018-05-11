@@ -390,7 +390,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           try {
             while (!out.checkError() && driver.getResults(res)) {
               res.asScala.foreach { l =>
-                counter += 1
+                if (!l.startsWith("#")) {
+                  counter += 1
+                }
                 out.println(l)
               }
               res.clear()
