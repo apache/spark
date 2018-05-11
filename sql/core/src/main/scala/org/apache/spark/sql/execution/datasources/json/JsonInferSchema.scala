@@ -22,7 +22,7 @@ import java.util.Comparator
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.SparkException
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.json.JSONOptions
@@ -39,14 +39,14 @@ private[sql] object JsonInferSchema {
    *   3. Replace any remaining null fields with string, the top type
    */
   def infer[T](
-      json: RDD[T],
+      json: Dataset[T],
       configOptions: JSONOptions,
       createParser: (JsonFactory, T) => JsonParser): StructType = {
     val parseMode = configOptions.parseMode
     val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
 
     // perform schema inference on each row and merge afterwards
-    val rootType = json.mapPartitions { iter =>
+    val inferredTypes = json.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
       iter.flatMap { row =>
@@ -67,8 +67,15 @@ private[sql] object JsonInferSchema {
           }
         }
       }
-    }.fold(StructType(Nil))(
-      compatibleRootType(columnNameOfCorruptRecord, parseMode))
+    }(Encoders.javaSerialization)
+
+    // TODO: use `Dataset.fold` once we have it.
+    val rootType = try {
+      inferredTypes.reduce(compatibleRootType(columnNameOfCorruptRecord, parseMode))
+    } catch {
+      case e: UnsupportedOperationException if e.getMessage == "empty collection" =>
+        StructType(Nil)
+    }
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st

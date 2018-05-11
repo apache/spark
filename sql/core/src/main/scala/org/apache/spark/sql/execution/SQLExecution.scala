@@ -68,16 +68,27 @@ object SQLExecution {
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
       // streaming queries would give us call site like "run at <unknown>:0"
-      val callSite = sparkSession.sparkContext.getCallSite()
+      val callSite = sc.getCallSite()
 
-      sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
+      // Set all the specified SQL configs to local properties, so that they can be available at
+      // the executor side.
+      val allConfigs = sparkSession.sessionState.conf.getAllConfs
+      allConfigs.foreach {
+        // Excludes external configs defined by users.
+        case (key, value) if key.startsWith("spark") => sc.setLocalProperty(key, value)
+      }
+
+      sc.listenerBus.post(SparkListenerSQLExecutionStart(
         executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
         SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
       try {
         body
       } finally {
-        sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionEnd(
+        sc.listenerBus.post(SparkListenerSQLExecutionEnd(
           executionId, System.currentTimeMillis()))
+        allConfigs.foreach {
+          case (key, _) => sc.setLocalProperty(key, null)
+        }
       }
     } finally {
       executionIdToQueryExecution.remove(executionId)
@@ -90,12 +101,23 @@ object SQLExecution {
    * thread from the original one, this method can be used to connect the Spark jobs in this action
    * with the known executionId, e.g., `BroadcastExchangeExec.relationFuture`.
    */
-  def withExecutionId[T](sc: SparkContext, executionId: String)(body: => T): T = {
+  def withExecutionId[T](sparkSession: SparkSession, executionId: String)(body: => T): T = {
+    val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    // Set all the specified SQL configs to local properties, so that they can be available at
+    // the executor side.
+    val allConfigs = sparkSession.sessionState.conf.getAllConfs
+    allConfigs.foreach {
+      // Excludes external configs defined by users.
+      case (key, value) if key.startsWith("spark") => sc.setLocalProperty(key, value)
+    }
     try {
       sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, executionId)
       body
     } finally {
+      allConfigs.foreach {
+        case (key, _) => sc.setLocalProperty(key, null)
+      }
       sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, oldExecutionId)
     }
   }

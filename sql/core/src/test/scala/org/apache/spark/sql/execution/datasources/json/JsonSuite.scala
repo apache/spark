@@ -1374,7 +1374,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("SPARK-6245 JsonInferSchema.infer on empty RDD") {
     // This is really a test that it doesn't throw an exception
     val emptySchema = JsonInferSchema.infer(
-      empty.rdd,
+      empty,
       new JSONOptions(Map.empty[String, String], "GMT"),
       CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
@@ -1401,7 +1401,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-8093 Erase empty structs") {
     val emptySchema = JsonInferSchema.infer(
-      emptyRecords.rdd,
+      emptyRecords,
       new JSONOptions(Map.empty[String, String], "GMT"),
       CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)

@@ -99,12 +99,7 @@ object TextInputJsonDataSource extends JsonDataSource {
 
   def inferFromDataset(json: Dataset[String], parsedOptions: JSONOptions): StructType = {
     val sampled: Dataset[String] = JsonUtils.sample(json, parsedOptions)
-    val rdd: RDD[InternalRow] = sampled.queryExecution.toRdd
-    val rowParser = parsedOptions.encoding.map { enc =>
-      CreateJacksonParser.internalRow(enc, _: JsonFactory, _: InternalRow)
-    }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
-
-    JsonInferSchema.infer(rdd, parsedOptions, rowParser)
+    JsonInferSchema.infer(sampled, parsedOptions, CreateJacksonParser.string)
   }
 
   private def createBaseDataset(
@@ -165,7 +160,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .map(enc => createParser(enc, _: JsonFactory, _: PortableDataStream))
       .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
-    JsonInferSchema.infer[PortableDataStream](sampled, parsedOptions, parser)
+    JsonInferSchema.infer[PortableDataStream](
+      sparkSession.createDataset(sampled)(Encoders.javaSerialization), parsedOptions, parser)
   }
 
   private def createBaseRdd(
