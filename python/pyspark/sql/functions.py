@@ -2395,7 +2395,7 @@ def array_repeat(col, count):
 
 
 @since(2.4)
-def zip_lists(col1, col2):
+def zip(col1, col2):
     """
     Merge two columns into one, such that the M-th element of the N-th argument will be
     the N-th field of the M-th output element.
@@ -2403,13 +2403,13 @@ def zip_lists(col1, col2):
     :param col1: name of the first column
     :param col2: name of the second column
 
-    >>> from pyspark.sql.functions import zip_lists
+    >>> from pyspark.sql.functions import zip
     >>> df = spark.createDataFrame([(([1, 2, 3], [2, 3, 4]))], ['vals1', 'vals2'])
-    >>> df.select(zip_lists(df.vals1, df.vals2).alias('zipped')).collect()
+    >>> df.select(zip(df.vals1, df.vals2).alias('zipped')).collect()
     [Row(zipped=[1, 2]), Row(zipped=[2, 3]), Row(zipped=[3, 4])]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.zip_lists(_to_java_column(col1), _to_java_column(col2)))
+    return Column(sc._jvm.functions.zip(_to_java_column(col1), _to_java_column(col2)))
 
 
 # ---------------------------- User Defined Function ----------------------------------

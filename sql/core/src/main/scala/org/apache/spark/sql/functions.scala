@@ -3514,7 +3514,7 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def zip_lists(e1: Column, e2: Column): Column = withExpr { ZipLists(e1.expr, e2.expr) }
+  def zip(e1: Column, e2: Column): Column = withExpr { Zip(e1.expr, e2.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Mask functions

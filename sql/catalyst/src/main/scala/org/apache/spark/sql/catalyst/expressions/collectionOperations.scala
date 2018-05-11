@@ -137,7 +137,7 @@ case class MapKeys(child: Expression)
         [[1, 2], [2, 3], [3, 4]]
   """,
   since = "2.4.0")
-case class ZipLists(left: Expression, right: Expression)
+case class Zip(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
@@ -147,7 +147,7 @@ case class ZipLists(left: Expression, right: Expression)
     StructField("_2", right.dataType.asInstanceOf[ArrayType].elementType, true) ::
   Nil))
 
-  override def prettyName: String = "zip_lists"
+  override def prettyName: String = "zip"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (arr1, arr2) => {
