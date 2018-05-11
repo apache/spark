@@ -208,7 +208,7 @@ NULL
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_sort(tmp$v1)))
-#' head(select(tmp, flatten(tmp$v1)))
+#' head(select(tmp, flatten(tmp$v1), reverse(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
@@ -218,7 +218,10 @@ NULL
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
 #' head(select(tmp3, map_keys(tmp3$v3)))
 #' head(select(tmp3, map_values(tmp3$v3)))
-#' head(select(tmp3, element_at(tmp3$v3, "Valiant")))}
+#' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
+#' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$hp))
+#' head(select(tmp4, concat(tmp4$v4, tmp4$v5)))
+#' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))}
 NULL
 
 #' Window functions for Column operations
@@ -1260,9 +1263,9 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{reverse}: Reverses the string column and returns it as a new string column.
+#' \code{reverse}: Returns a reversed string or an array with reverse order of elements.
 #'
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @aliases reverse reverse,Column-method
 #' @note reverse since 1.5.0
 setMethod("reverse",
@@ -2055,20 +2058,10 @@ setMethod("countDistinct",
 
 #' @details
 #' \code{concat}: Concatenates multiple input columns together into a single column.
-#' If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
+#' The function works with strings, binary and compatible array columns.
 #'
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @aliases concat concat,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' # concatenate strings
-#' tmp <- mutate(df, s1 = concat(df$Class, df$Sex),
-#'                   s2 = concat(df$Class, df$Sex, df$Age),
-#'                   s3 = concat(df$Class, df$Sex, df$Age, df$Class),
-#'                   s4 = concat_ws("_", df$Class, df$Sex),
-#'                   s5 = concat_ws("+", df$Class, df$Sex, df$Age, df$Survived))
-#' head(tmp)}
 #' @note concat since 1.5.0
 setMethod("concat",
           signature(x = "Column"),
@@ -2409,6 +2402,13 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
 #' @param sep separator to use.
 #' @rdname column_string_functions
 #' @aliases concat_ws concat_ws,character,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' # concatenate strings
+#' tmp <- mutate(df, s1 = concat_ws("_", df$Class, df$Sex),
+#'                   s2 = concat_ws("+", df$Class, df$Sex, df$Age, df$Survived))
+#' head(tmp)}
 #' @note concat_ws since 1.5.0
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
@@ -3063,7 +3063,8 @@ setMethod("array_sort",
           })
 
 #' @details
-#' \code{flatten}: Transforms an array of arrays into a single array.
+#' \code{flatten}: Creates a single array from an array of arrays.
+#' If a structure of nested arrays is deeper than two levels, only one level of nesting is removed.
 #'
 #' @rdname column_collection_functions
 #' @aliases flatten flatten,Column-method
