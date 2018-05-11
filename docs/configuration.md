@@ -2008,6 +2008,13 @@ showDF(properties, numRows = 200, truncate = FALSE)
     on the receivers.
   </td>
 </tr>
+<tr>
+  <td><code>spark.streaming.concurrentJobs</code></td>
+  <td>1</td>
+  <td>
+    The number of concurrent jobs.This parameter directly affects the number of threads in the jobExecutor thread pool.
+  </td>
+</tr>
 </table>
 
 ### SparkR
