@@ -51,6 +51,14 @@ class ReadOnlySQLConf(context: TaskContext) extends SQLConf {
   override def clear(): Unit = {
     throw new UnsupportedOperationException("Cannot mutate ReadOnlySQLConf.")
   }
+
+  override def clone(): SQLConf = {
+    throw new UnsupportedOperationException("Cannot clone/copy ReadOnlySQLConf.")
+  }
+
+  override def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
+    throw new UnsupportedOperationException("Cannot clone/copy ReadOnlySQLConf.")
+  }
 }
 
 class TaskContextConfigProvider(context: TaskContext) extends ConfigProvider {
