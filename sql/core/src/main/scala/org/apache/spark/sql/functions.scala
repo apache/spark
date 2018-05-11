@@ -2410,6 +2410,8 @@ object functions {
   /**
    * Calculates the hash code of given columns, and returns the result as an int column.
    *
+   * This is the same hash function as used internally by Spark for shuffle and bucketing.
+   *
    * @group misc_funcs
    * @since 2.0.0
    */
