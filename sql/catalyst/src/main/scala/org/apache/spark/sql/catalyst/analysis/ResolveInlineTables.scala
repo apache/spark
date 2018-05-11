@@ -83,7 +83,9 @@ case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with Cas
     // For each column, traverse all the values and find a common data type and nullability.
     val fields = table.rows.transpose.zip(table.names).map { case (column, name) =>
       val inputTypes = column.map(_.dataType)
-      val tpe = TypeCoercion.findWiderTypeWithoutStringPromotion(inputTypes).getOrElse {
+      val wideType = TypeCoercion.findWiderTypeWithoutStringPromotion(
+        inputTypes, conf.caseSensitiveAnalysis)
+      val tpe = wideType.getOrElse {
         table.failAnalysis(s"incompatible types found in column $name for inline table")
       }
       StructField(name, tpe, nullable = column.exists(_.nullable))
