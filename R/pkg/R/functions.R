@@ -1257,7 +1257,7 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{reverse}: Reverses the string column and returns it as a new string column.
+#' \code{reverse}: returns a reversed string or an array with reverse order of elements.
 #'
 #' @rdname column_collection_functions
 #' @aliases reverse reverse,Column-method
@@ -2048,7 +2048,7 @@ setMethod("countDistinct",
 
 #' @details
 #' \code{concat}: Concatenates multiple input columns together into a single column.
-#' If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
+#' The function works with strings, binary and compatible array columns.
 #'
 #' @rdname column_collection_functions
 #' @aliases concat concat,Column-method
