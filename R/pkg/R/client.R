@@ -19,7 +19,7 @@
 
 # Creates a SparkR client connection object
 # if one doesn't already exist
-connectBackend <- function(hostname, port, timeout) {
+connectBackend <- function(hostname, port, timeout, authSecret) {
   if (exists(".sparkRcon", envir = .sparkREnv)) {
     if (isOpen(.sparkREnv[[".sparkRCon"]])) {
       cat("SparkRBackend client connection already exists\n")
@@ -29,7 +29,7 @@ connectBackend <- function(hostname, port, timeout) {
 
   con <- socketConnection(host = hostname, port = port, server = FALSE,
                           blocking = TRUE, open = "wb", timeout = timeout)
-
+  doServerAuth(con, authSecret)
   assign(".sparkRCon", con, envir = .sparkREnv)
   con
 }

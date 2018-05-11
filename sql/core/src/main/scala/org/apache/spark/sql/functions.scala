@@ -283,6 +283,9 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -290,6 +293,9 @@ object functions {
 
   /**
    * Aggregate function: returns a list of objects with duplicates.
+   *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -299,6 +305,9 @@ object functions {
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -306,6 +315,9 @@ object functions {
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
+   *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -422,6 +434,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -434,6 +449,9 @@ object functions {
    *
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -448,6 +466,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -458,6 +479,9 @@ object functions {
    *
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -535,6 +559,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -547,6 +574,9 @@ object functions {
    *
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -561,6 +591,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -571,6 +604,9 @@ object functions {
    *
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -774,6 +810,178 @@ object functions {
    * @since 1.6.0
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
+
+  /**
+   * Aggregate function: returns the number of non-null pairs.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_count(y: Column, x: Column): Column = withAggregateFunction {
+    RegrCount(y.expr, x.expr)
+  }
+
+  /**
+   * Aggregate function: returns the number of non-null pairs.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_count(y: String, x: String): Column = regr_count(Column(y), Column(x))
+
+  /**
+   * Aggregate function: returns SUM(x*x)-SUM(x)*SUM(x)/N. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_sxx(y: Column, x: Column): Column = withAggregateFunction {
+    RegrSXX(y.expr, x.expr)
+  }
+
+  /**
+   * Aggregate function: returns SUM(x*x)-SUM(x)*SUM(x)/N. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_sxx(y: String, x: String): Column = regr_sxx(Column(y), Column(x))
+
+  /**
+   * Aggregate function: returns SUM(y*y)-SUM(y)*SUM(y)/N. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_syy(y: Column, x: Column): Column = withAggregateFunction {
+    RegrSYY(y.expr, x.expr)
+  }
+
+  /**
+   * Aggregate function: returns SUM(y*y)-SUM(y)*SUM(y)/N. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_syy(y: String, x: String): Column = regr_syy(Column(y), Column(x))
+
+  /**
+   * Aggregate function: returns the average of y. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_avgy(y: Column, x: Column): Column = withAggregateFunction {
+    RegrAvgY(y.expr, x.expr)
+  }
+
+  /**
+   * Aggregate function: returns the average of y. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_avgy(y: String, x: String): Column = regr_avgy(Column(y), Column(x))
+
+  /**
+   * Aggregate function: returns the average of x. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_avgx(y: Column, x: Column): Column = withAggregateFunction {
+    RegrAvgX(y.expr, x.expr)
+  }
+
+  /**
+   * Aggregate function: returns the average of x. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_avgx(y: String, x: String): Column = regr_avgx(Column(y), Column(x))
+
+  /**
+   * Aggregate function: returns the covariance of y and x multiplied for the number of items in
+   * the dataset. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_sxy(y: Column, x: Column): Column = withAggregateFunction {
+    RegrSXY(y.expr, x.expr)
+  }
+
+  /**
+   * Aggregate function: returns the covariance of y and x multiplied for the number of items in
+   * the dataset. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_sxy(y: String, x: String): Column = regr_sxy(Column(y), Column(x))
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line. Any pair with a NULL is
+   * ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_slope(y: Column, x: Column): Column = withAggregateFunction {
+    RegrSlope(y.expr, x.expr)
+  }
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line. Any pair with a NULL is
+   * ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_slope(y: String, x: String): Column = regr_slope(Column(y), Column(x))
+
+  /**
+   * Aggregate function: returns the coefficient of determination (also called R-squared or
+   * goodness of fit) for the regression line. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_r2(y: Column, x: Column): Column = withAggregateFunction {
+    RegrR2(y.expr, x.expr)
+  }
+
+  /**
+   * Aggregate function: returns the coefficient of determination (also called R-squared or
+   * goodness of fit) for the regression line. Any pair with a NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_r2(y: String, x: String): Column = regr_r2(Column(y), Column(x))
+
+  /**
+   * Aggregate function: returns the y-intercept of the linear regression line. Any pair with a
+   * NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_intercept(y: Column, x: Column): Column = withAggregateFunction {
+    RegrIntercept(y.expr, x.expr)
+  }
+
+  /**
+   * Aggregate function: returns the y-intercept of the linear regression line. Any pair with a
+   * NULL is ignored.
+   *
+   * @group agg_funcs
+   * @since 2.4.0
+   */
+  def regr_intercept(y: String, x: String): Column = regr_intercept(Column(y), Column(x))
+
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -1172,7 +1380,7 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
-   * @note This is indeterministic when data partitions are not fixed.
+   * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1183,6 +1391,8 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
+   * @note The function is non-deterministic in general case.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1192,7 +1402,7 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
-   * @note This is indeterministic when data partitions are not fixed.
+   * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1203,6 +1413,8 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
+   * @note The function is non-deterministic in general case.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1211,7 +1423,7 @@ object functions {
   /**
    * Partition ID.
    *
-   * @note This is indeterministic because it depends on data partitioning and task scheduling.
+   * @note This is non-deterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    * @since 1.6.0

@@ -296,6 +296,11 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     all (siteRelativeLinks) should startWith (uiRoot)
   }
 
+  test("/version api endpoint") {
+    val response = getUrl("version")
+    assert(response.contains(SPARK_VERSION))
+  }
+
   test("ajax rendered relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val uiRoot = "/testwebproxybase"
     System.setProperty("spark.ui.proxyBase", uiRoot)
