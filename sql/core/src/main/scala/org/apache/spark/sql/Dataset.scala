@@ -2767,7 +2767,12 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
-    plan.executeCollect().head.getLong(0)
+    val collected = plan.executeCollect()
+    if (collected.isEmpty) {
+      0
+    } else {
+      collected.head.getLong(0)
+    }
   }
 
   /**

@@ -55,7 +55,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.collect {
+          case h: HashAggregateExec => h
+        }.nonEmpty).isDefined)
     assert(df.collect() === Array(Row(0, 1), Row(1, 1), Row(2, 1)))
   }
 
