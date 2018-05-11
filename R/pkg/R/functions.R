@@ -3150,11 +3150,11 @@ setMethod("size",
 #' @aliases slice slice,Column-method
 #' @note slice since 2.4.0
 setMethod("slice",
-signature(x = "Column"),
-function(x, start, length) {
-    jc <- callJStatic("org.apache.spark.sql.functions", "slice", x@jc, start, length)
-    column(jc)
-})
+          signature(x = "Column"),
+          function(x, start, length) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "slice", x@jc, start, length)
+            column(jc)
+          })
 
 #' @details
 #' \code{sort_array}: Sorts the input array in ascending or descending order according to
