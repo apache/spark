@@ -568,9 +568,13 @@ abstract class LDAModel private[ml] (
 class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
-    @Since("1.6.0") override private[clustering] val oldLocalModel: OldLocalLDAModel,
+    private[clustering] val oldLocalModel_ : OldLocalLDAModel,
     sparkSession: SparkSession)
   extends LDAModel(uid, vocabSize, sparkSession) {
+
+  override private[clustering] def oldLocalModel: OldLocalLDAModel = {
+    oldLocalModel_.setSeed(getSeed)
+  }
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): LocalLDAModel = {
@@ -599,14 +603,13 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
         topicsMatrix: Matrix,
         docConcentration: Vector,
         topicConcentration: Double,
-        gammaShape: Double,
-        seed: Long)
+        gammaShape: Double)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val oldModel = instance.oldLocalModel
       val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
-        oldModel.topicConcentration, oldModel.gammaShape, oldModel.getSeed)
+        oldModel.topicConcentration, oldModel.gammaShape)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -623,11 +626,11 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
       val matrixConverted = MLUtils.convertMatrixColumnsToML(vectorConverted, "topicsMatrix")
       val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
-          topicConcentration: Double, gammaShape: Double, seed: Long) =
+          topicConcentration: Double, gammaShape: Double) =
         matrixConverted.select("vocabSize", "topicsMatrix", "docConcentration",
-          "topicConcentration", "gammaShape", "seed").head()
+          "topicConcentration", "gammaShape").head()
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
-        gammaShape).setSeed(seed)
+        gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
       LDAParams.getAndSetParams(model, metadata)
       model
