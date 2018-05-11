@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.rules.Rule
 
 object PushDownOperatorsToDataSource extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.mapChildren {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // PhysicalOperation guarantees that filters are deterministic; no need to check
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
       assert(relation.filters.isEmpty, "data source v2 should do push down only once.")
