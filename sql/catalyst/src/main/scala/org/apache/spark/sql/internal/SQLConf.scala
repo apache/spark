@@ -687,7 +687,7 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
-  val CODEGEN_OBJECT_FALLBACK = buildConf("spark.sql.test.codegenObject.fallback")
+  val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
     .doc("Determines the behavior of any factories extending `CodegenObjectFactory`" +
       " during tests. `AUTO` means trying codegen first and then fallbacking to" +
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`." +

@@ -44,7 +44,7 @@ object CodegenObjectFactoryMode extends Enumeration {
   def currentMode: CodegenObjectFactoryMode.Value = {
     // If we weren't on task execution, accesses that config.
     if (TaskContext.get == null) {
-      val config = SQLConf.get.getConf(SQLConf.CODEGEN_OBJECT_FALLBACK)
+      val config = SQLConf.get.getConf(SQLConf.CODEGEN_FACTORY_MODE)
       CodegenObjectFactoryMode.withName(config)
     } else {
       CodegenObjectFactoryMode.AUTO

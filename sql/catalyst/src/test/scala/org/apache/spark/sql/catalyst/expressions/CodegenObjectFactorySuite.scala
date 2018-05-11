@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType}
 
 class CodegenObjectFactorySuite extends SparkFunSuite with PlanTestBase {
 
-  // Given a factory object and corresponding input, checking if `SQLConf.CODEGEN_OBJECT_FALLBACK`
+  // Given a factory object and corresponding input, checking if `SQLConf.CODEGEN_FACTORY_MODE`
   // can switch between codegen/interpreted implementation.
   private def testCodegenFactory[IN, OUT](factory: CodegenObjectFactory[IN, OUT],
       input: IN, checkerForCodegen: OUT => Unit, checkerForInterpreted: OUT => Unit) = {
@@ -33,7 +33,7 @@ class CodegenObjectFactorySuite extends SparkFunSuite with PlanTestBase {
       .zip(Seq(checkerForCodegen, checkerForInterpreted))
 
     for ((fallbackMode, checker) <- modes) {
-      withSQLConf(SQLConf.CODEGEN_OBJECT_FALLBACK.key -> fallbackMode) {
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode) {
         val obj = factory.createObject(input)
         checker(obj)
       }

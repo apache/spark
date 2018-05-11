@@ -41,7 +41,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val factory = UnsafeProjection
     test(name) {
       for (fallbackMode <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
-        withSQLConf(SQLConf.CODEGEN_OBJECT_FALLBACK.key -> fallbackMode) {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode) {
           f(factory)
         }
       }
