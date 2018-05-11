@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -521,6 +522,8 @@ object PartitioningUtils {
   private val findWiderTypeForPartitionColumn: (DataType, DataType) => DataType = {
     case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) => StringType
     case (DoubleType, LongType) | (LongType, DoubleType) => StringType
-    case (t1, t2) => TypeCoercion.findWiderTypeForTwo(t1, t2).getOrElse(StringType)
+    case (t1, t2) =>
+      TypeCoercion.findWiderTypeForTwo(
+        t1, t2, SQLConf.get.caseSensitiveAnalysis).getOrElse(StringType)
   }
 }

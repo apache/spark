@@ -769,6 +769,10 @@ setGeneric("array_min", function(x) { standardGeneric("array_min") })
 #' @name NULL
 setGeneric("array_position", function(x, value) { standardGeneric("array_position") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
+
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })

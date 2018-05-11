@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
@@ -294,10 +295,13 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
-    // just to make sure some of the tasks take a noticeable amount of time
+    // just to make sure some of the tasks and their deserialization take a noticeable
+    // amount of time
+    val slowDeserializable = new SlowDeserializable
     val w = { i: Int =>
       if (i == 0) {
         Thread.sleep(100)
+        slowDeserializable.use()
       }
       i
     }
@@ -582,4 +586,13 @@ private class FirehoseListenerThatAcceptsSparkConf(conf: SparkConf) extends Spar
     case job: SparkListenerJobEnd => count += 1
     case _ =>
   }
+}
+
+private class SlowDeserializable extends Externalizable {
+
+  override def writeExternal(out: ObjectOutput): Unit = { }
+
+  override def readExternal(in: ObjectInput): Unit = Thread.sleep(1)
+
+  def use(): Unit = { }
 }
