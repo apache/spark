@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
  * Deprecated logical plan for writing data into data source v2. This is being replaced by more
  * specific logical plans, like [[org.apache.spark.sql.catalyst.plans.logical.AppendData]].
  */
-@deprecated
+@deprecated("Use specific logical plans like AppendData instead", "2.4.0")
 case class WriteToDataSourceV2(writer: DataSourceWriter, query: LogicalPlan) extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
