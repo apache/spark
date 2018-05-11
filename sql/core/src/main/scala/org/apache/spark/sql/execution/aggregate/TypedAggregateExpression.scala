@@ -112,7 +112,7 @@ trait TypedAggregateExpression extends AggregateFunction {
 
   // aggregator.getClass.getSimpleName can cause Malformed class name error,
   // call safer `Utils.getSimpleName` instead
-  override def nodeName: String = Utils.getSimpleName(aggregator.getClass.getName);
+  override def nodeName: String = Utils.getSimpleName(aggregator.getClass);
 }
 
 // TODO: merge these 2 implementations once we refactor the `AggregateFunction` interface.

@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
+import java.lang.InternalError
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
@@ -1820,7 +1821,7 @@ private[spark] object Utils extends Logging {
 
   /** Return the class name of the given object, removing all dollar signs */
   def getFormattedClassName(obj: AnyRef): String = {
-    obj.getClass.getSimpleName.replace("$", "")
+    getSimpleName(obj.getClass).replace("$", "")
   }
 
   /**
@@ -2716,26 +2717,22 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * A safer version than scala obj's getClass.getSimpleName and Utils.getFormattedClassName
-   * which may throw Malformed class name error.
+   * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
    * This method mimicks scalatest's getSimpleNameOfAnObjectsClass.
    */
-  def getSimpleName(fullyQualifiedName: String): String = {
-    stripDollars(parseSimpleName(fullyQualifiedName))
+  def getSimpleName(cls: Class[_]): String = {
+    try {
+      return cls.getSimpleName
+    } catch {
+      case err: InternalError => return stripDollars(stripPackages(cls.getName))
+    }
   }
 
   /**
    * Remove the packages from full qualified class name
    */
-  private def parseSimpleName(fullyQualifiedName: String): String = {
-    // Find last dot position
-    val dotPos = fullyQualifiedName.lastIndexOf('.')
-    // Need to check the dotPos != fullyQualifiedName.length
-    if (dotPos != -1 && dotPos != fullyQualifiedName.length) {
-      fullyQualifiedName.substring(dotPos + 1)
-    } else {
-      fullyQualifiedName
-    }
+  private def stripPackages(fullyQualifiedName: String): String = {
+    fullyQualifiedName.split("\\.").takeRight(1)(0)
   }
 
   /**

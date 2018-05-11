@@ -202,9 +202,9 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
     // getClass.getSimpleName can cause Malformed class name error,
     // call safer `Utils.getSimpleName` instead
     if (metadata == null) {
-      "Un-registered Accumulator: " + Utils.getSimpleName(getClass.getName)
+      "Un-registered Accumulator: " + Utils.getSimpleName(getClass)
     } else {
-      Utils.getSimpleName(getClass.getName) + s"(id: $id, name: $name, value: $value)"
+      Utils.getSimpleName(getClass) + s"(id: $id, name: $name, value: $value)"
     }
   }
 }

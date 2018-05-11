@@ -55,7 +55,7 @@ trait DataSourceV2StringFormat {
     case registered: DataSourceRegister => registered.shortName()
     // source.getClass.getSimpleName can cause Malformed class name error,
     // call safer `Utils.getSimpleName` instead
-    case _ => Utils.getSimpleName(source.getClass.getName)
+    case _ => Utils.getSimpleName(source.getClass)
   }
 
   def metadataString: String = {

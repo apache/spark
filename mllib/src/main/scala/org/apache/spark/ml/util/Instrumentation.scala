@@ -50,7 +50,7 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   private val prefix = {
     // estimator.getClass.getSimpleName can cause Malformed class name error,
     // call safer `Utils.getSimpleName` instead
-    val className = Utils.getSimpleName(estimator.getClass.getName)
+    val className = Utils.getSimpleName(estimator.getClass)
     s"$className-${estimator.uid}-${dataset.hashCode()}-$id: "
   }
 

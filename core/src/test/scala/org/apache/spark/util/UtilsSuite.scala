@@ -1174,27 +1174,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("Safe getSimpleName") {
-    val fullname1 = "org.apache.spark.TestClass$MyClass"
-    assert(Utils.getSimpleName(fullname1) === "TestClass$MyClass")
-
-    val fullname2 = "org.apache.spark.TestClass$MyClass$"
-    assert(Utils.getSimpleName(fullname2) === "TestClass$MyClass")
-
-    val fullname3 = "org.apache.spark.TestClass$MyClass$1$"
-    assert(Utils.getSimpleName(fullname3) === "TestClass$MyClass$1")
-
-    val fullname4 = "TestClass$MyClass$1$"
-    assert(Utils.getSimpleName(fullname4) === "TestClass$MyClass$1")
-
-    val fullname5 = "$iwC$iwC$$iwC$$iwC$TestClass$MyClass$"
-    assert(Utils.getSimpleName(fullname5) === "MyClass")
-
-    // getSimpleName on class MalformedClass will result in error: Malformed class name
+    // getSimpleName on class of MalformedClass will result in error: Malformed class name
     // Utils.getSimpleName works
-    intercept[java.lang.InternalError] {
+    val err = intercept[java.lang.InternalError] {
       classOf[MalformedClassObject.MalformedClass].getSimpleName
     }
-    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass].getName) ===
+    assert(err.getMessage === "Malformed class name")
+
+    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
       "UtilsSuite$MalformedClassObject$MalformedClass")
   }
 }
