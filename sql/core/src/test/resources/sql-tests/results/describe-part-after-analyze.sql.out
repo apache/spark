@@ -89,7 +89,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=10	                    
-Partition Statistics	1067 bytes, 3 rows  	                    
+Partition Statistics	1121 bytes, 3 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -122,7 +122,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=10	                    
-Partition Statistics	1067 bytes, 3 rows  	                    
+Partition Statistics	1121 bytes, 3 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -147,7 +147,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=11]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=11	                    
-Partition Statistics	1080 bytes, 4 rows  	                    
+Partition Statistics	1098 bytes, 4 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -180,7 +180,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=10	                    
-Partition Statistics	1067 bytes, 3 rows  	                    
+Partition Statistics	1121 bytes, 3 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -205,7 +205,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=11]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=11	                    
-Partition Statistics	1080 bytes, 4 rows  	                    
+Partition Statistics	1098 bytes, 4 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -230,7 +230,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-09-01, hr=5]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-09-01/hr=5	                    
-Partition Statistics	1054 bytes, 2 rows  	                    
+Partition Statistics	1144 bytes, 2 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t

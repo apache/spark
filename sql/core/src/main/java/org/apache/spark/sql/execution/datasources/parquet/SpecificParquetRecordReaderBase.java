@@ -293,7 +293,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       return new RLEIntIterator(
           new RunLengthBitPackingHybridDecoder(
               BytesUtils.getWidthFromMaxInt(maxLevel),
-              new ByteArrayInputStream(bytes.toByteArray())));
+              bytes.toInputStream()));
     } catch (IOException e) {
       throw new IOException("could not read levels in page for col " + descriptor, e);
     }
