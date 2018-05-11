@@ -157,12 +157,8 @@ case class ZipLists(left: Expression, right: Expression)
       val i = ctx.freshName("i")
       val values = ctx.freshName("values")
       val len1 = ctx.freshName("len1")
-      val schema = ctx.freshName("schema")
       val len2 = ctx.freshName("len2")
       val pair = ctx.freshName("pair")
-      val higher = ctx.freshName("higher")
-      val leftType = left.dataType.asInstanceOf[ArrayType].elementType
-      val rightType = right.dataType.asInstanceOf[ArrayType].elementType
       val getValue1 = CodeGenerator.getValue(
         arr1, left.dataType.asInstanceOf[ArrayType].elementType, i)
       val getValue2 = CodeGenerator.getValue(
@@ -171,7 +167,6 @@ case class ZipLists(left: Expression, right: Expression)
       s"""
       int $len1 = $arr1.numElements();
       int $len2 = $arr2.numElements();
-      int $higher = $len2;
 
       Object[] $values;
       if ($len1 > $len2) {
