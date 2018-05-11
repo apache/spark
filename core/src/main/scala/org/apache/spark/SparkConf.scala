@@ -454,8 +454,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    */
   private[spark] def validateSettings() {
     if (contains("spark.local.dir")) {
-      val msg = "In Spark 1.0 and later spark.local.dir will be overridden by the value set by " +
-        "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone and LOCAL_DIRS in YARN)."
+      val msg = "Note that spark.local.dir will be overridden by the value set by " +
+        "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone/kubernetes and LOCAL_DIRS" +
+        " in YARN)."
       logWarning(msg)
     }
 
