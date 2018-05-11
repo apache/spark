@@ -487,7 +487,11 @@ class VectorIndexerModel private[ml] (
             featAttr
           }
         case (origAttr: Attribute, featAttr: NumericAttribute) =>
-          origAttr.withIndex(featAttr.index.get)
+          if (origAttr.name.nonEmpty) {
+            featAttr.withName(origAttr.name.get)
+          } else {
+            featAttr
+          }
         case (origAttr: Attribute, _) =>
           origAttr
       }
