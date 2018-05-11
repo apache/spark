@@ -73,7 +73,7 @@ public class MaskExpressionsUtils {
    */
   public static int getReplacementChar(String rep, int def) {
     if (rep != null && rep.length() > 0) {
-      return rep.charAt(0);
+      return rep.codePointAt(0);
     }
     return def;
   }

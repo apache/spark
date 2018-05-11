@@ -46,6 +46,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Mask(Literal("abcd-EFGH-8765-4321"), "", "", ""), "xxxx-XXXX-nnnn-nnnn")
     // scalastyle:off nonascii
     checkEvaluation(Mask(Literal("Ul9U"), "\u2200", null, null), "\u2200xn\u2200")
+    checkEvaluation(new Mask(Literal("Hello World, こんにちは, 𠀋"), Literal("あ"), Literal("𡈽")),
+      "あ𡈽𡈽𡈽𡈽 あ𡈽𡈽𡈽𡈽, こんにちは, 𠀋")
     // scalastyle:on nonascii
     intercept[AnalysisException] {
       checkEvaluation(new Mask(Literal(""), Literal(1)), "")
@@ -89,6 +91,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "abcd-EFGH-8765-4321")
     // scalastyle:off nonascii
     checkEvaluation(MaskFirstN(Literal("Ul9U"), 2, "\u2200", null, null), "\u2200x9U")
+    checkEvaluation(new MaskFirstN(Literal("あ, 𠀋, Hello World"), Literal(10)),
+      "あ, 𠀋, Xxxxo World")
     // scalastyle:on nonascii
   }
 
@@ -131,6 +135,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "abcd-EFGH-8765-4321")
     // scalastyle:off nonascii
     checkEvaluation(MaskLastN(Literal("Ul9U"), 2, "\u2200", null, null), "Uln\u2200")
+    checkEvaluation(new MaskLastN(Literal("あ, 𠀋, Hello World"), Literal(10)),
+      "あ, 𠀋, Hxxxx Xxxxx")
     // scalastyle:on nonascii
   }
 
@@ -172,6 +178,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "xxxx-XXXX-nnnn-nnnn")
     // scalastyle:off nonascii
     checkEvaluation(MaskShowFirstN(Literal("Ul9U"), 2, "\u2200", null, null), "Uln\u2200")
+    checkEvaluation(new MaskShowFirstN(Literal("あ, 𠀋, Hello World"), Literal(10)),
+      "あ, 𠀋, Hellx Xxxxx")
     // scalastyle:on nonascii
   }
 
@@ -212,6 +220,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "xxxx-XXXX-nnnn-nnnn")
     // scalastyle:off nonascii
     checkEvaluation(MaskShowLastN(Literal("Ul9U"), 2, "\u2200", null, null), "\u2200x9U")
+    checkEvaluation(new MaskShowLastN(Literal("あ, 𠀋, Hello World"), Literal(10)),
+      "あ, 𠀋, Xello World")
     // scalastyle:on nonascii
   }
 
