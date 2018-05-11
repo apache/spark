@@ -348,10 +348,14 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   override def outputOrdering: Seq[SortOrder] = range.outputOrdering
 
   override def outputPartitioning: Partitioning = {
-    if (numSlices == 1) {
-      SinglePartition
+    if (numElements > 0) {
+      if (numSlices == 1) {
+        SinglePartition
+      } else {
+        RangePartitioning(outputOrdering, numSlices)
+      }
     } else {
-      RangePartitioning(outputOrdering, numSlices)
+      UnknownPartitioning(0)
     }
   }
 
