@@ -142,9 +142,9 @@ class RateSourceSuite extends StreamTest {
     val startOffset = LongOffset(0L)
     val endOffset = LongOffset(1L)
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
-    val tasks = reader.createDataReaderFactories()
+    val tasks = reader.planInputPartitions()
     assert(tasks.size == 1)
-    val dataReader = tasks.get(0).createDataReader()
+    val dataReader = tasks.get(0).createPartitionReader()
     val data = ArrayBuffer[Row]()
     while (dataReader.next()) {
       data.append(dataReader.get())
@@ -159,11 +159,11 @@ class RateSourceSuite extends StreamTest {
     val startOffset = LongOffset(0L)
     val endOffset = LongOffset(1L)
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
-    val tasks = reader.createDataReaderFactories()
+    val tasks = reader.planInputPartitions()
     assert(tasks.size == 11)
 
     val readData = tasks.asScala
-      .map(_.createDataReader())
+      .map(_.createPartitionReader())
       .flatMap { reader =>
         val buf = scala.collection.mutable.ListBuffer[Row]()
         while (reader.next()) buf.append(reader.get())
@@ -304,7 +304,7 @@ class RateSourceSuite extends StreamTest {
     val reader = new RateStreamContinuousReader(
       new DataSourceOptions(Map("numPartitions" -> "2", "rowsPerSecond" -> "20").asJava))
     reader.setStartOffset(Optional.empty())
-    val tasks = reader.createDataReaderFactories()
+    val tasks = reader.planInputPartitions()
     assert(tasks.size == 2)
 
     val data = scala.collection.mutable.ListBuffer[Row]()
@@ -314,7 +314,7 @@ class RateSourceSuite extends StreamTest {
           .asInstanceOf[RateStreamOffset]
           .partitionToValueAndRunTimeMs(t.partitionIndex)
           .runTimeMs
-        val r = t.createDataReader().asInstanceOf[RateStreamContinuousDataReader]
+        val r = t.createPartitionReader().asInstanceOf[RateStreamContinuousInputPartitionReader]
         for (rowIndex <- 0 to 9) {
           r.next()
           data.append(r.get())

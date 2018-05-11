@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
@@ -727,6 +728,39 @@ class CodegenContext {
        |  ${partialResult.isNull} = false;
        |  ${partialResult.value} = ${item.value};
        |}
+      """.stripMargin
+  }
+
+  /**
+   * Generates code creating a [[UnsafeArrayData]].
+   *
+   * @param arrayName name of the array to create
+   * @param numElements code representing the number of elements the array should contain
+   * @param elementType data type of the elements in the array
+   * @param additionalErrorMessage string to include in the error message
+   */
+  def createUnsafeArray(
+      arrayName: String,
+      numElements: String,
+      elementType: DataType,
+      additionalErrorMessage: String): String = {
+    val arraySize = freshName("size")
+    val arrayBytes = freshName("arrayBytes")
+
+    s"""
+       |long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
+       |  $numElements,
+       |  ${elementType.defaultSize});
+       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+       |  throw new RuntimeException("Unsuccessful try create array with " + $arraySize +
+       |    " bytes of data due to exceeding the limit " +
+       |    "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} bytes for UnsafeArrayData." +
+       |    "$additionalErrorMessage");
+       |}
+       |byte[] $arrayBytes = new byte[(int)$arraySize];
+       |UnsafeArrayData $arrayName = new UnsafeArrayData();
+       |Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
+       |$arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
       """.stripMargin
   }
 

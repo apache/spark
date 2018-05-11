@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, SupportsScanUnsafeRow}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader, SupportsScanUnsafeRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.UninterruptibleThread
@@ -101,7 +101,7 @@ private[kafka010] class KafkaMicroBatchReader(
         }
   }
 
-  override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+  override def planUnsafeInputPartitions(): ju.List[InputPartition[UnsafeRow]] = {
     // Find the new partitions, and get their earliest offsets
     val newPartitions = endPartitionOffsets.keySet.diff(startPartitionOffsets.keySet)
     val newPartitionInitialOffsets = kafkaOffsetReader.fetchEarliestOffsets(newPartitions.toSeq)
@@ -146,7 +146,7 @@ private[kafka010] class KafkaMicroBatchReader(
       new KafkaMicroBatchDataReaderFactory(
         range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
     }
-    factories.map(_.asInstanceOf[DataReaderFactory[UnsafeRow]]).asJava
+    factories.map(_.asInstanceOf[InputPartition[UnsafeRow]]).asJava
   }
 
   override def getStartOffset: Offset = {
@@ -169,7 +169,7 @@ private[kafka010] class KafkaMicroBatchReader(
     kafkaOffsetReader.close()
   }
 
-  override def toString(): String = s"Kafka[$kafkaOffsetReader]"
+  override def toString(): String = s"KafkaV2[$kafkaOffsetReader]"
 
   /**
    * Read initial partition offsets from the checkpoint, or decide the offsets and write them to
@@ -299,27 +299,28 @@ private[kafka010] class KafkaMicroBatchReader(
   }
 }
 
-/** A [[DataReaderFactory]] for reading Kafka data in a micro-batch streaming query. */
+/** A [[InputPartition]] for reading Kafka data in a micro-batch streaming query. */
 private[kafka010] case class KafkaMicroBatchDataReaderFactory(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends DataReaderFactory[UnsafeRow] {
+    reuseKafkaConsumer: Boolean) extends InputPartition[UnsafeRow] {
 
   override def preferredLocations(): Array[String] = offsetRange.preferredLoc.toArray
 
-  override def createDataReader(): DataReader[UnsafeRow] = new KafkaMicroBatchDataReader(
-    offsetRange, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
+  override def createPartitionReader(): InputPartitionReader[UnsafeRow] =
+    new KafkaMicroBatchInputPartitionReader(offsetRange, executorKafkaParams, pollTimeoutMs,
+      failOnDataLoss, reuseKafkaConsumer)
 }
 
-/** A [[DataReader]] for reading Kafka data in a micro-batch streaming query. */
-private[kafka010] case class KafkaMicroBatchDataReader(
+/** A [[InputPartitionReader]] for reading Kafka data in a micro-batch streaming query. */
+private[kafka010] case class KafkaMicroBatchInputPartitionReader(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends DataReader[UnsafeRow] with Logging {
+    reuseKafkaConsumer: Boolean) extends InputPartitionReader[UnsafeRow] with Logging {
 
   private val consumer = KafkaDataConsumer.acquire(
     offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)

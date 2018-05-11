@@ -126,6 +126,12 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
         name -> SQLMetrics.createTimingMetric(sparkContext, desc)
     }.toMap
   }
+
+  /**
+   * Should the MicroBatchExecution run another batch based on this stateful operator and the
+   * current updated metadata.
+   */
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = false
 }
 
 /** An operator that supports watermark. */
@@ -388,6 +394,12 @@ case class StateStoreSaveExec(
       ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
+
+  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    (outputMode.contains(Append) || outputMode.contains(Update)) &&
+      eventTimeWatermark.isDefined &&
+      newMetadata.batchWatermarkMs > eventTimeWatermark.get
+  }
 }
 
 /** Physical operator for executing streaming Deduplicate. */
@@ -454,6 +466,10 @@ case class StreamingDeduplicateExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+  }
 }
 
 object StreamingDeduplicateExec {

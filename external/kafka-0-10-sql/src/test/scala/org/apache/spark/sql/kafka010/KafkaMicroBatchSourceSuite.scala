@@ -563,7 +563,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
-  test("ensure stream-stream self-join generates only one offset in offset log") {
+  test("ensure stream-stream self-join generates only one offset in log and correct metrics") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 2)
     require(testUtils.getLatestOffsets(Set(topic)).size === 2)
@@ -587,7 +587,12 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       AddKafkaData(Set(topic), 1, 2),
       CheckAnswer((1, 1, 1), (2, 2, 2)),
       AddKafkaData(Set(topic), 6, 3),
-      CheckAnswer((1, 1, 1), (2, 2, 2), (3, 3, 3), (1, 6, 1), (1, 1, 6), (1, 6, 6))
+      CheckAnswer((1, 1, 1), (2, 2, 2), (3, 3, 3), (1, 6, 1), (1, 1, 6), (1, 6, 6)),
+      AssertOnQuery { q =>
+        assert(q.availableOffsets.iterator.size == 1)
+        assert(q.recentProgress.map(_.numInputRows).sum == 4)
+        true
+      }
     )
   }
 }
@@ -673,7 +678,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 0L))),
           Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 100L)))
         )
-        val factories = reader.createUnsafeRowReaderFactories().asScala
+        val factories = reader.planUnsafeInputPartitions().asScala
           .map(_.asInstanceOf[KafkaMicroBatchDataReaderFactory])
         withClue(s"minPartitions = $minPartitions generated factories $factories\n\t") {
           assert(factories.size == numPartitionsGenerated)
