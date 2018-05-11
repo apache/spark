@@ -378,7 +378,8 @@ class KMeans @Since("1.5.0") (
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
 
     model.setSummary(Some(summary))
-    instr.logNamedValue("clusterSizes", summary.clusterSizes.mkString(", "))
+    // TODO: need to extend logNamedValue to support Array
+    instr.logNamedValue("clusterSizes", summary.clusterSizes.mkString("[", ",", "]"))
     instr.logSuccess(model)
     if (handlePersistence) {
       instances.unpersist()
