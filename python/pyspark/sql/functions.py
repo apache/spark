@@ -1108,8 +1108,11 @@ def add_months(start, months):
 @since(1.5)
 def months_between(date1, date2, roundOff=True):
     """
-    Returns the number of months between date1 and date2.
-    Unless `roundOff` is set to `False`, the result is rounded off to 8 digits.
+    Returns number of months between dates date1 and date2.
+    If date1 is later than date2, then the result is positive.
+    If date1 and date2 are on the same day of month, or both are the last day of month,
+    returns an integer (time of day will be ignored).
+    The result is rounded off to 8 digits unless `roundOff` is set to `False`.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['date1', 'date2'])
     >>> df.select(months_between(df.date1, df.date2).alias('months')).collect()
