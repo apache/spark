@@ -165,39 +165,37 @@ case class Zip(left: Expression, right: Expression)
         arr2, right.dataType.asInstanceOf[ArrayType].elementType, i)
 
       s"""
-      int $len1 = $arr1.numElements();
-      int $len2 = $arr2.numElements();
-
-      Object[] $values;
-      if ($len1 > $len2) {
-        $values = new Object[$len1];
-        for (int $i = 0; $i < $len1; $i ++) {
-          Object[] $pair;
-          $pair = new Object[2];
-          $pair[0] = $getValue1;
-          if ($i >= $len2) {
-            $pair[1] = null;
-          } else {
-            $pair[1] = $getValue2;
-          }
-          $values[$i] = new $genericInternalRow($pair);
-        }
-      } else {
-        $values = new Object[$len2];
-        for (int $i = 0; $i < $len2; $i ++) {
-          Object[] $pair;
-          $pair = new Object[2];
-          $pair[1] = $getValue2;
-          if ($i >= $len1) {
-            $pair[0] = null;
-          } else {
-            $pair[0] = $getValue1;
-          }
-          $values[$i] = new $genericInternalRow($pair);
-        }
-      }
-      ${ev.value} = new $genericArrayData($values);
-      """
+         |int $len1 = $arr1.numElements();
+         |int $len2 = $arr2.numElements();
+         |Object[] $values;
+         |Object[] $pair;
+         |if ($len1 > $len2) {
+         |  $values = new Object[$len1];
+         |  for (int $i = 0; $i < $len1; $i ++) {
+         |    $pair = new Object[2];
+         |    $pair[0] = $getValue1;
+         |    if ($i >= $len2) {
+         |      $pair[1] = null;
+         |    } else {
+         |      $pair[1] = $getValue2;
+         |    }
+         |    $values[$i] = new $genericInternalRow($pair);
+         |  }
+         |} else {
+         |  $values = new Object[$len2];
+         |  for (int $i = 0; $i < $len2; $i ++) {
+         |    $pair = new Object[2];
+         |    $pair[1] = $getValue2;
+         |    if ($i >= $len1) {
+         |      $pair[0] = null;
+         |    } else {
+         |      $pair[0] = $getValue1;
+         |    }
+         |    $values[$i] = new $genericInternalRow($pair);
+         |  }
+         |}
+         |${ev.value} = new $genericArrayData($values);
+      """.stripMargin
     })
   }
 

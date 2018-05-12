@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -313,6 +314,20 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq[String](null), ArrayType(StringType)),
       Literal(","),
       Some(Literal.create(null, StringType))), null)
+  }
+
+  test("Zip") {
+    val lit1 = (Literal.create(Seq(9001, 9002, 9003)), Literal.create(Seq(4, 5, 6)))
+    val lit2 = (Literal.create(Seq(9001, 9002)), Literal.create(Seq(4, 5, 6)))
+    val lit3 = (Literal.create(Seq("a", "b", null)), Literal.create(Seq(4)))
+
+    val val1 = List(Row(9001, 4), Row(9002, 5), Row(9003, 6))
+    val val2 = List(Row(9001, 4), Row(9002, 5), Row(null, 6))
+    val val3 = List(Row("a", 4), Row("b", null), Row(null, null))
+
+    checkEvaluation(Zip(lit1._1, lit1._2), val1)
+    checkEvaluation(Zip(lit2._1, lit2._2), val2)
+    checkEvaluation(Zip(lit3._1, lit3._2), val3)
   }
 
   test("Array Min") {
