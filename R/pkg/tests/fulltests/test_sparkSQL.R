@@ -1507,6 +1507,11 @@ test_that("column functions", {
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
   expect_equal(result, list(list(NA, 1L, 2L, 3L), list(NA, NA, 4L, 5L, 6L)))
 
+  # Test slice()
+  df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(4L, 5L))))
+  result <- collect(select(df, slice(df[[1]], 2L, 2L)))[[1]]
+  expect_equal(result, list(list(2L, 3L), list(5L)))
+
   # Test flattern
   df <- createDataFrame(list(list(list(list(1L, 2L), list(3L, 4L))),
                         list(list(list(5L, 6L), list(7L, 8L)))))
