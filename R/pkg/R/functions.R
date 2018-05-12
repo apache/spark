@@ -3146,7 +3146,6 @@ setMethod("size",
 #' @rdname column_collection_functions
 #' @param start an index indicating the first element occuring in the result.
 #' @param length a number of consecutive elements choosen to the result.
-#'
 #' @aliases slice slice,Column-method
 #' @note slice since 2.4.0
 setMethod("slice",
