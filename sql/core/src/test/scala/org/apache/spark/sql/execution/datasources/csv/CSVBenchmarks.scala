@@ -68,7 +68,7 @@ object CSVBenchmarks {
 
       Parsing quoted values:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       --------------------------------------------------------------------------------------------
-      One quoted string                       38884 / 39065          0.0      777683.0       1.0X
+      One quoted string                       30273 / 30549          0.0      605451.2       1.0X
       */
       benchmark.run()
     }
