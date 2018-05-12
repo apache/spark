@@ -568,13 +568,16 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     }
 
     // There is 8 bytes for the pointer to next value
-    if (cursor + 8 + row.getSizeInBytes > page.length * 8L + Platform.LONG_ARRAY_OFFSET) {
+    val needSize = cursor + 8 + row.getSizeInBytes
+    val nowSize = page.length * 8L + Platform.LONG_ARRAY_OFFSET
+    if (needSize > nowSize) {
       val used = page.length
       if (used >= (1 << 30)) {
         sys.error("Can not build a HashedRelation that is larger than 8G")
       }
-      ensureAcquireMemory(used * 8L * 2)
-      val newPage = new Array[Long](used * 2)
+      val multiples = math.max(math.ceil(needSize.toDouble / (used * 8L)).toInt, 2)
+      ensureAcquireMemory(used * 8L * multiples)
+      val newPage = new Array[Long](used * multiples)
       Platform.copyMemory(page, Platform.LONG_ARRAY_OFFSET, newPage, Platform.LONG_ARRAY_OFFSET,
         cursor - Platform.LONG_ARRAY_OFFSET)
       page = newPage

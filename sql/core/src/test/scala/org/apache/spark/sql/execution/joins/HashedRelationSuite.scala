@@ -254,6 +254,30 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     map.free()
   }
 
+  test("LongToUnsafeRowMap with big values") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new StaticMemoryManager(
+        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, StringType, false)))
+    val keys = Seq(0L)
+    val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
+    val bigStr = UTF8String.fromString("x" * 1024 * 1024 * 2)
+    keys.foreach { k =>
+      map.append(k, unsafeProj(InternalRow(bigStr)))
+    }
+    map.optimize()
+    val row = unsafeProj(InternalRow(bigStr)).copy()
+    keys.foreach { k =>
+      assert(map.getValue(k, row) eq row)
+      assert(row.getUTF8String(0) === bigStr)
+    }
+    map.free()
+  }
+
   test("Spark-14521") {
     val ser = new KryoSerializer(
       (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
