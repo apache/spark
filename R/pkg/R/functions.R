@@ -212,6 +212,7 @@ NULL
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
+#' head(select(tmp, slice(tmp$v1, 2L, 2L)))
 #' head(select(tmp, sort_array(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
@@ -3139,6 +3140,22 @@ setMethod("size",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "size", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{slice}: Returns an array containing all the elements in x from the index start
+#' (or starting from the end if start is negative) with the specified length.
+#'
+#' @rdname column_collection_functions
+#' @param start an index indicating the first element occuring in the result.
+#' @param length a number of consecutive elements choosen to the result.
+#' @aliases slice slice,Column-method
+#' @note slice since 2.4.0
+setMethod("slice",
+          signature(x = "Column"),
+          function(x, start, length) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "slice", x@jc, start, length)
             column(jc)
           })
 
