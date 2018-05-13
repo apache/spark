@@ -67,35 +67,7 @@ abstract class CentralMomentAgg(child: Expression)
 
   override val initialValues: Seq[Expression] = Array.fill(momentOrder + 1)(Literal(0.0))
 
-  override val updateExpressions: Seq[Expression] = {
-    val newN = n + Literal(1.0)
-    val delta = child - avg
-    val deltaN = delta / newN
-    val newAvg = avg + deltaN
-    val newM2 = m2 + delta * (delta - deltaN)
-
-    val delta2 = delta * delta
-    val deltaN2 = deltaN * deltaN
-    val newM3 = if (momentOrder >= 3) {
-      m3 - Literal(3.0) * deltaN * newM2 + delta * (delta2 - deltaN2)
-    } else {
-      Literal(0.0)
-    }
-    val newM4 = if (momentOrder >= 4) {
-      m4 - Literal(4.0) * deltaN * newM3 - Literal(6.0) * deltaN2 * newM2 +
-        delta * (delta * delta2 - deltaN * deltaN2)
-    } else {
-      Literal(0.0)
-    }
-
-    trimHigherOrder(Seq(
-      If(IsNull(child), n, newN),
-      If(IsNull(child), avg, newAvg),
-      If(IsNull(child), m2, newM2),
-      If(IsNull(child), m3, newM3),
-      If(IsNull(child), m4, newM4)
-    ))
-  }
+  override lazy val updateExpressions: Seq[Expression] = updateExpressionsDef
 
   override val mergeExpressions: Seq[Expression] = {
 
@@ -127,6 +99,36 @@ abstract class CentralMomentAgg(child: Expression)
     }
 
     trimHigherOrder(Seq(newN, newAvg, newM2, newM3, newM4))
+  }
+
+  protected def updateExpressionsDef: Seq[Expression] = {
+    val newN = n + Literal(1.0)
+    val delta = child - avg
+    val deltaN = delta / newN
+    val newAvg = avg + deltaN
+    val newM2 = m2 + delta * (delta - deltaN)
+
+    val delta2 = delta * delta
+    val deltaN2 = deltaN * deltaN
+    val newM3 = if (momentOrder >= 3) {
+      m3 - Literal(3.0) * deltaN * newM2 + delta * (delta2 - deltaN2)
+    } else {
+      Literal(0.0)
+    }
+    val newM4 = if (momentOrder >= 4) {
+      m4 - Literal(4.0) * deltaN * newM3 - Literal(6.0) * deltaN2 * newM2 +
+        delta * (delta * delta2 - deltaN * deltaN2)
+    } else {
+      Literal(0.0)
+    }
+
+    trimHigherOrder(Seq(
+      If(IsNull(child), n, newN),
+      If(IsNull(child), avg, newAvg),
+      If(IsNull(child), m2, newM2),
+      If(IsNull(child), m3, newM3),
+      If(IsNull(child), m4, newM4)
+    ))
   }
 }
 

@@ -22,20 +22,20 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A reader factory returned by {@link DataSourceReader#createDataReaderFactories()} and is
+ * An input partition returned by {@link DataSourceReader#planInputPartitions()} and is
  * responsible for creating the actual data reader. The relationship between
- * {@link DataReaderFactory} and {@link DataReader}
+ * {@link InputPartition} and {@link InputPartitionReader}
  * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.
  *
- * Note that, the reader factory will be serialized and sent to executors, then the data reader
- * will be created on executors and do the actual reading. So {@link DataReaderFactory} must be
- * serializable and {@link DataReader} doesn't need to be.
+ * Note that input partitions will be serialized and sent to executors, then the partition reader
+ * will be created on executors and do the actual reading. So {@link InputPartition} must be
+ * serializable and {@link InputPartitionReader} doesn't need to be.
  */
 @InterfaceStability.Evolving
-public interface DataReaderFactory<T> extends Serializable {
+public interface InputPartition<T> extends Serializable {
 
   /**
-   * The preferred locations where the data reader returned by this reader factory can run faster,
+   * The preferred locations where the data reader returned by this partition can run faster,
    * but Spark does not guarantee to run the data reader on these locations.
    * The implementations should make sure that it can be run on any location.
    * The location is a string representing the host name.
@@ -57,5 +57,5 @@ public interface DataReaderFactory<T> extends Serializable {
    * If this method fails (by throwing an exception), the corresponding Spark task would fail and
    * get retried until hitting the maximum retry times.
    */
-  DataReader<T> createDataReader();
+  InputPartitionReader<T> createPartitionReader();
 }

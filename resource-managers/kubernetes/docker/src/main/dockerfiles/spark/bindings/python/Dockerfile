@@ -20,6 +20,7 @@ FROM $base_img
 WORKDIR /
 RUN mkdir ${SPARK_HOME}/python
 COPY python/lib ${SPARK_HOME}/python/lib
+# TODO: Investigate running both pip and pip3 via virtualenvs
 RUN apk add --no-cache python && \
     apk add --no-cache python3 && \
     python -m ensurepip && \

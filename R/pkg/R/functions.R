@@ -207,10 +207,12 @@ NULL
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
-#' head(select(tmp, array_position(tmp$v1, 21)))
+#' head(select(tmp, array_position(tmp$v1, 21), array_sort(tmp$v1)))
+#' head(select(tmp, flatten(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
+#' head(select(tmp, slice(tmp$v1, 2L, 2L)))
 #' head(select(tmp, sort_array(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
@@ -804,6 +806,8 @@ setMethod("factorial",
 #'
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#' Note: the function is non-deterministic because its results depends on order of rows which
+#' may be non-deterministic after a shuffle.
 #'
 #' @param na.rm a logical value indicating whether NA values should be stripped
 #'        before the computation proceeds.
@@ -947,6 +951,8 @@ setMethod("kurtosis",
 #'
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#' Note: the function is non-deterministic because its results depends on order of rows which
+#' may be non-deterministic after a shuffle.
 #'
 #' @param x column to compute on.
 #' @param na.rm a logical value indicating whether NA values should be stripped
@@ -1200,6 +1206,7 @@ setMethod("minute",
 #' 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
 #' This is equivalent to the MONOTONICALLY_INCREASING_ID function in SQL.
 #' The method should be used with no argument.
+#' Note: the function is non-deterministic because its result depends on partition IDs.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases monotonically_increasing_id monotonically_increasing_id,missing-method
@@ -1906,6 +1913,7 @@ setMethod("atan2", signature(y = "Column"),
 
 #' @details
 #' \code{datediff}: Returns the number of days from \code{y} to \code{x}.
+#' If \code{y} is later than \code{x} then the result is positive.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases datediff datediff,Column-method
@@ -1965,7 +1973,10 @@ setMethod("levenshtein", signature(y = "Column"),
           })
 
 #' @details
-#' \code{months_between}: Returns number of months between dates \code{y} and \code{x}.
+#' \code{months_between}: Returns number of months between dates \code{y} and \code{x}. 
+#' If \code{y} is later than \code{x}, then the result is positive. If \code{y} and \code{x}
+#' are on the same day of month, or both are the last day of month, time of day will be ignored.
+#' Otherwise, the difference is calculated based on 31 days per month, and rounded to 8 digits.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases months_between months_between,Column-method
@@ -2583,6 +2594,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' @details
 #' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
 #' samples from U[0.0, 1.0].
+#' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
 #' @param seed a random seed. Can be missing.
@@ -2611,6 +2623,7 @@ setMethod("rand", signature(seed = "numeric"),
 #' @details
 #' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples
 #' from the standard normal distribution.
+#' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases randn randn,missing-method
@@ -3036,6 +3049,33 @@ setMethod("array_position",
           })
 
 #' @details
+#' \code{array_sort}: Sorts the input array in ascending order. The elements of the input array
+#' must be orderable. NA elements will be placed at the end of the returned array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_sort array_sort,Column-method
+#' @note array_sort since 2.4.0
+setMethod("array_sort",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{flatten}: Transforms an array of arrays into a single array.
+#'
+#' @rdname column_collection_functions
+#' @aliases flatten flatten,Column-method
+#' @note flatten since 2.4.0
+setMethod("flatten",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "flatten", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{map_keys}: Returns an unordered array containing the keys of the map.
 #'
 #' @rdname column_collection_functions
@@ -3104,8 +3144,25 @@ setMethod("size",
           })
 
 #' @details
-#' \code{sort_array}: Sorts the input array in ascending or descending order according
-#' to the natural ordering of the array elements.
+#' \code{slice}: Returns an array containing all the elements in x from the index start
+#' (or starting from the end if start is negative) with the specified length.
+#'
+#' @rdname column_collection_functions
+#' @param start an index indicating the first element occuring in the result.
+#' @param length a number of consecutive elements choosen to the result.
+#' @aliases slice slice,Column-method
+#' @note slice since 2.4.0
+setMethod("slice",
+          signature(x = "Column"),
+          function(x, start, length) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "slice", x@jc, start, length)
+            column(jc)
+          })
+
+#' @details
+#' \code{sort_array}: Sorts the input array in ascending or descending order according to
+#' the natural ordering of the array elements. NA elements will be placed at the beginning of
+#' the returned array in ascending order or at the end of the returned array in descending order.
 #'
 #' @rdname column_collection_functions
 #' @param asc a logical flag indicating the sorting order.
@@ -3174,6 +3231,8 @@ setMethod("create_map",
 
 #' @details
 #' \code{collect_list}: Creates a list of objects with duplicates.
+#' Note: the function is non-deterministic because the order of collected results depends
+#' on order of rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_list collect_list,Column-method
@@ -3193,6 +3252,8 @@ setMethod("collect_list",
 
 #' @details
 #' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
+#' Note: the function is non-deterministic because the order of collected results depends
+#' on order of rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_set collect_set,Column-method

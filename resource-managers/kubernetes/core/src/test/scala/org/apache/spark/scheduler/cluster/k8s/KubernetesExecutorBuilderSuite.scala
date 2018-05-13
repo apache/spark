@@ -20,20 +20,24 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, KubernetesFeaturesTestUtils, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
 
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
   private val SECRETS_STEP_TYPE = "mount-secrets"
+  private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
   private val mountSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
+  private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
 
   private val builderUnderTest = new KubernetesExecutorBuilder(
     _ => basicFeatureStep,
-    _ => mountSecretsStep)
+    _ => mountSecretsStep,
+    _ => localDirsStep)
 
   test("Basic steps are consistently applied.") {
     val conf = KubernetesConf(
@@ -47,7 +51,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Seq.empty[String])
-    validateStepTypesApplied(builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE)
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
   }
 
   test("Apply secrets step if secrets are present.") {
@@ -65,6 +70,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
       SECRETS_STEP_TYPE)
   }
 

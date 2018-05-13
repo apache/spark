@@ -18,14 +18,10 @@ package org.apache.spark.deploy.k8s.features.bindings
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.ContainerBuilder
-import io.fabric8.kubernetes.api.model.EnvVarBuilder
-import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, HasMetadata}
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
-import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 
 private[spark] class PythonDriverFeatureStep(
@@ -41,6 +37,8 @@ private[spark] class PythonDriverFeatureStep(
           .withValue(s.mkString(","))
           .build())
     val maybePythonFiles = kubernetesConf.pyFiles().map(
+      // Dilineation by ":" is to append the PySpark Files to the PYTHONPATH
+      // of the respective PySpark pod
       pyFiles =>
         new EnvVarBuilder()
           .withName(ENV_PYSPARK_FILES)

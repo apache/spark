@@ -36,6 +36,8 @@ case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Doub
 class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  val absTol = 1e-8
+
   test("groupBy") {
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
@@ -416,7 +418,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("moments") {
-    val absTol = 1e-8
 
     val sparkVariance = testData2.agg(variance('a))
     checkAggregatesWithTol(sparkVariance, Row(4.0 / 5.0), absTol)

@@ -124,6 +124,8 @@ private[spark] object KubernetesConf {
           if (!previousJars.contains(res)) {
             sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
           }
+        // The function of this outer match is to account for multiple nonJVM
+        // bindings that will all have increased MEMORY_OVERHEAD
         case nonJVM: NonJVMResource =>
           nonJVM match {
             case PythonMainAppResource(res) =>

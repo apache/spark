@@ -143,4 +143,14 @@ class IncrementalExecution(
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
+
+  /**
+   * Should the MicroBatchExecution run another batch based on this execution and the current
+   * updated metadata.
+   */
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    executedPlan.collect {
+      case p: StateStoreWriter => p.shouldRunAnotherBatch(newMetadata)
+    }.exists(_ == true)
+  }
 }

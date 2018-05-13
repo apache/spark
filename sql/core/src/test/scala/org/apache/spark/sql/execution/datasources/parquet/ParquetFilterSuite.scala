@@ -55,6 +55,8 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
+  private lazy val parquetFilters = new ParquetFilters(conf.parquetFilterPushDownDate)
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     // Note that there are many tests here that require record-level filtering set to be true.
@@ -99,7 +101,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
         selectedFilters.foreach { pred =>
-          val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
+          val maybeFilter = parquetFilters.createFilter(df.schema, pred)
           assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
           // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
           maybeFilter.exists(_.getClass === filterClass)
@@ -517,7 +519,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       lt(intColumn("a"), 10: Integer),
       gt(doubleColumn("c"), 1.5: java.lang.Double)))
     ) {
-      ParquetFilters.createFilter(
+      parquetFilters.createFilter(
         schema,
         sources.And(
           sources.LessThan("a", 10),
@@ -525,7 +527,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
 
     assertResult(None) {
-      ParquetFilters.createFilter(
+      parquetFilters.createFilter(
         schema,
         sources.And(
           sources.LessThan("a", 10),
@@ -533,7 +535,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
 
     assertResult(None) {
-      ParquetFilters.createFilter(
+      parquetFilters.createFilter(
         schema,
         sources.Not(
           sources.And(
@@ -645,6 +647,16 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         assert(actual > 1 && actual < data.length)
       }
     }
+  }
+
+  test("SPARK-23852: Broken Parquet push-down for partially-written stats") {
+    // parquet-1217.parquet contains a single column with values -1, 0, 1, 2 and null.
+    // The row-group statistics include null counts, but not min and max values, which
+    // triggers PARQUET-1217.
+    val df = readResourceParquetFile("test-data/parquet-1217.parquet")
+
+    // Will return 0 rows if PARQUET-1217 is not fixed.
+    assert(df.where("col > 0").count() === 2)
   }
 }
 
