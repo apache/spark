@@ -311,6 +311,7 @@ private[arrow] class ArrayWriter(
   override def reset(): Unit = {
     super.reset()
     elementWriter.reset()
+    valueVector.clear()
   }
 }
 
