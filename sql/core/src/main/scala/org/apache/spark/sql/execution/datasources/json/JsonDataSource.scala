@@ -34,6 +34,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
@@ -93,20 +94,19 @@ object TextInputJsonDataSource extends JsonDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
     val json: Dataset[String] = createBaseDataset(sparkSession, inputPaths, parsedOptions)
+
     inferFromDataset(json, parsedOptions)
   }
 
   def inferFromDataset(json: Dataset[String], parsedOptions: JSONOptions): StructType = {
     val sampled: Dataset[String] = JsonUtils.sample(json, parsedOptions)
-    if (parsedOptions.encoding.isDefined) {
-      // TODO: We should be able to parse the input string directly. Remove this hack when we
-      // support setting encoding when reading text files.
-      val encoding = parsedOptions.encoding.get
-      val textDS = sampled.map(new Text(_))(Encoders.javaSerialization)
-      val parser = CreateJacksonParser.text(encoding, _: JsonFactory, _: Text)
-      JsonInferSchema.infer(textDS, parsedOptions, parser)
-    } else {
-      JsonInferSchema.infer(sampled, parsedOptions, CreateJacksonParser.string)
+    val rdd: RDD[InternalRow] = sampled.queryExecution.toRdd
+    val rowParser = parsedOptions.encoding.map { enc =>
+      CreateJacksonParser.internalRow(enc, _: JsonFactory, _: InternalRow)
+    }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
+
+    SQLExecution.withSQLConfPropagated(json.sparkSession) {
+      JsonInferSchema.infer(rdd, parsedOptions, rowParser)
     }
   }
 
@@ -114,11 +114,10 @@ object TextInputJsonDataSource extends JsonDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Dataset[String] = {
-    val paths = inputPaths.map(_.getPath.toString)
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
-        paths = paths,
+        paths = inputPaths.map(_.getPath.toString),
         className = classOf[TextFileFormat].getName,
         options = parsedOptions.parameters
       ).resolveRelation(checkFilesExist = false))
@@ -164,8 +163,9 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .map(enc => createParser(enc, _: JsonFactory, _: PortableDataStream))
       .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
-    JsonInferSchema.infer[PortableDataStream](
-      sparkSession.createDataset(sampled)(Encoders.javaSerialization), parsedOptions, parser)
+    SQLExecution.withSQLConfPropagated(sparkSession) {
+      JsonInferSchema.infer[PortableDataStream](sampled, parsedOptions, parser)
+    }
   }
 
   private def createBaseRdd(

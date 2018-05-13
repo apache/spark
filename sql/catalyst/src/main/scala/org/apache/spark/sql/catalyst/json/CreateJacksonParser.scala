@@ -78,4 +78,17 @@ private[sql] object CreateJacksonParser extends Serializable {
   def inputStream(enc: String, jsonFactory: JsonFactory, is: InputStream): JsonParser = {
     jsonFactory.createParser(new InputStreamReader(is, enc))
   }
+
+  def internalRow(jsonFactory: JsonFactory, row: InternalRow): JsonParser = {
+    val ba = row.getBinary(0)
+
+    jsonFactory.createParser(ba, 0, ba.length)
+  }
+
+  def internalRow(enc: String, jsonFactory: JsonFactory, row: InternalRow): JsonParser = {
+    val binary = row.getBinary(0)
+    val sd = getStreamDecoder(enc, binary, binary.length)
+
+    jsonFactory.createParser(sd)
+  }
 }
