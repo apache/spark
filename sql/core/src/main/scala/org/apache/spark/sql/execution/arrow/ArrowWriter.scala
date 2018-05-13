@@ -133,6 +133,7 @@ private[arrow] abstract class ArrowFieldWriter {
     valueVector match {
       case fixedWidthVector: BaseFixedWidthVector => fixedWidthVector.reset()
       case variableWidthVector: BaseVariableWidthVector => variableWidthVector.reset()
+      case repeatedValueVector: BaseRepeatedValueVector => repeatedValueVector.clear()
       case _ =>
     }
     count = 0
@@ -309,9 +310,8 @@ private[arrow] class ArrayWriter(
   }
 
   override def reset(): Unit = {
-    super.reset()
     elementWriter.reset()
-    valueVector.clear()
+    super.reset()
   }
 }
 
