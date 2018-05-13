@@ -30,12 +30,11 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.functions.{col, regexp_replace}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -1278,5 +1277,49 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       df.select(columnNameOfCorruptRecord),
       Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
     )
+  }
+
+  test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
+    // Set default values for the DataSource parameters to make sure
+    // that whole test file is mapped to only one partition. This will guarantee
+    // reliable sampling of the input file.
+    withSQLConf(
+      "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
+      "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
+    )(withTempPath { path =>
+      val ds = sampledTestData.coalesce(1)
+      ds.write.text(path.getAbsolutePath)
+
+      val readback = spark.read
+        .option("inferSchema", true).option("samplingRatio", 0.1)
+        .csv(path.getCanonicalPath)
+      assert(readback.schema == new StructType().add("_c0", IntegerType))
+    })
+  }
+
+  test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
+    val ds = sampledTestData.coalesce(1)
+    val readback = spark.read
+      .option("inferSchema", true).option("samplingRatio", 0.1)
+      .csv(ds)
+
+    assert(readback.schema == new StructType().add("_c0", IntegerType))
+  }
+
+  test("SPARK-23846: samplingRatio is out of the range (0, 1.0]") {
+    val ds = spark.range(0, 100, 1, 1).map(_.toString)
+
+    val errorMsg0 = intercept[IllegalArgumentException] {
+      spark.read.option("inferSchema", true).option("samplingRatio", -1).csv(ds)
+    }.getMessage
+    assert(errorMsg0.contains("samplingRatio (-1.0) should be greater than 0"))
+
+    val errorMsg1 = intercept[IllegalArgumentException] {
+      spark.read.option("inferSchema", true).option("samplingRatio", 0).csv(ds)
+    }.getMessage
+    assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
+
+    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 1.0).csv(ds)
+    assert(sampled.count() == ds.count())
   }
 }

@@ -134,7 +134,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     LongOffset(json.toLong)
   }
 
-  override def createDataReaderFactories(): java.util.List[DataReaderFactory[Row]] = {
+  override def planInputPartitions(): java.util.List[InputPartition[Row]] = {
     val startSeconds = LongOffset.convert(start).map(_.offset).getOrElse(0L)
     val endSeconds = LongOffset.convert(end).map(_.offset).getOrElse(0L)
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
@@ -169,7 +169,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     (0 until numPartitions).map { p =>
       new RateStreamMicroBatchDataReaderFactory(
         p, numPartitions, rangeStart, rangeEnd, localStartTimeMs, relativeMsPerValue)
-        : DataReaderFactory[Row]
+        : InputPartition[Row]
     }.toList.asJava
   }
 
@@ -177,7 +177,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
 
   override def stop(): Unit = {}
 
-  override def toString: String = s"MicroBatchRateSource[rowsPerSecond=$rowsPerSecond, " +
+  override def toString: String = s"RateStreamV2[rowsPerSecond=$rowsPerSecond, " +
     s"rampUpTimeSeconds=$rampUpTimeSeconds, " +
     s"numPartitions=${options.get(NUM_PARTITIONS).orElse("default")}"
 }
@@ -188,19 +188,20 @@ class RateStreamMicroBatchDataReaderFactory(
     rangeStart: Long,
     rangeEnd: Long,
     localStartTimeMs: Long,
-    relativeMsPerValue: Double) extends DataReaderFactory[Row] {
+    relativeMsPerValue: Double) extends InputPartition[Row] {
 
-  override def createDataReader(): DataReader[Row] = new RateStreamMicroBatchDataReader(
-    partitionId, numPartitions, rangeStart, rangeEnd, localStartTimeMs, relativeMsPerValue)
+  override def createPartitionReader(): InputPartitionReader[Row] =
+    new RateStreamMicroBatchInputPartitionReader(partitionId, numPartitions, rangeStart, rangeEnd,
+      localStartTimeMs, relativeMsPerValue)
 }
 
-class RateStreamMicroBatchDataReader(
+class RateStreamMicroBatchInputPartitionReader(
     partitionId: Int,
     numPartitions: Int,
     rangeStart: Long,
     rangeEnd: Long,
     localStartTimeMs: Long,
-    relativeMsPerValue: Double) extends DataReader[Row] {
+    relativeMsPerValue: Double) extends InputPartitionReader[Row] {
   private var count = 0
 
   override def next(): Boolean = {

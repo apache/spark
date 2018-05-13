@@ -30,14 +30,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, SupportsScanUnsafeRow}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader, SupportsScanUnsafeRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
-
 
 object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
@@ -48,15 +48,42 @@ object MemoryStream {
 }
 
 /**
+ * A base class for memory stream implementations. Supports adding data and resetting.
+ */
+abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends BaseStreamingSource {
+  protected val encoder = encoderFor[A]
+  protected val attributes = encoder.schema.toAttributes
+
+  def toDS(): Dataset[A] = {
+    Dataset[A](sqlContext.sparkSession, logicalPlan)
+  }
+
+  def toDF(): DataFrame = {
+    Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
+  }
+
+  def addData(data: A*): Offset = {
+    addData(data.toTraversable)
+  }
+
+  def readSchema(): StructType = encoder.schema
+
+  protected def logicalPlan: LogicalPlan
+
+  def addData(data: TraversableOnce[A]): Offset
+}
+
+/**
  * A [[Source]] that produces value stored in memory as they are added by the user.  This [[Source]]
  * is intended for use in unit tests as it can only replay data when the object is still
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MicroBatchReader with SupportsScanUnsafeRow with Logging {
-  protected val encoder = encoderFor[A]
-  private val attributes = encoder.schema.toAttributes
-  protected val logicalPlan = StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
+    extends MemoryStreamBase[A](sqlContext)
+      with MicroBatchReader with SupportsScanUnsafeRow with Logging {
+
+  protected val logicalPlan: LogicalPlan =
+    StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
   protected val output = logicalPlan.output
 
   /**
@@ -70,7 +97,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
   @GuardedBy("this")
-  private var startOffset = new LongOffset(-1)
+  protected var startOffset = new LongOffset(-1)
 
   @GuardedBy("this")
   private var endOffset = new LongOffset(-1)
@@ -81,18 +108,6 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
    */
   @GuardedBy("this")
   protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
-
-  def toDS(): Dataset[A] = {
-    Dataset(sqlContext.sparkSession, logicalPlan)
-  }
-
-  def toDF(): DataFrame = {
-    Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
-  }
-
-  def addData(data: A*): Offset = {
-    addData(data.toTraversable)
-  }
 
   def addData(data: TraversableOnce[A]): Offset = {
     val objects = data.toSeq
@@ -114,8 +129,6 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  override def readSchema(): StructType = encoder.schema
-
   override def deserializeOffset(json: String): OffsetV2 = LongOffset(json.toLong)
 
   override def getStartOffset: OffsetV2 = synchronized {
@@ -126,7 +139,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     if (endOffset.offset == -1) null else endOffset
   }
 
-  override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+  override def planUnsafeInputPartitions(): ju.List[InputPartition[UnsafeRow]] = {
     synchronized {
       // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
       val startOrdinal = startOffset.offset.toInt + 1
@@ -143,7 +156,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       logDebug(generateDebugString(newBlocks.flatten, startOrdinal, endOrdinal))
 
       newBlocks.map { block =>
-        new MemoryStreamDataReaderFactory(block).asInstanceOf[DataReaderFactory[UnsafeRow]]
+        new MemoryStreamDataReaderFactory(block).asInstanceOf[InputPartition[UnsafeRow]]
       }.asJava
     }
   }
@@ -189,9 +202,9 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
 
 class MemoryStreamDataReaderFactory(records: Array[UnsafeRow])
-  extends DataReaderFactory[UnsafeRow] {
-  override def createDataReader(): DataReader[UnsafeRow] = {
-    new DataReader[UnsafeRow] {
+  extends InputPartition[UnsafeRow] {
+  override def createPartitionReader(): InputPartitionReader[UnsafeRow] = {
+    new InputPartitionReader[UnsafeRow] {
       private var currentIndex = -1
 
       override def next(): Boolean = {
@@ -207,11 +220,20 @@ class MemoryStreamDataReaderFactory(records: Array[UnsafeRow])
   }
 }
 
+/** A common trait for MemorySinks with methods used for testing */
+trait MemorySinkBase extends BaseStreamingSink {
+  def allData: Seq[Row]
+  def latestBatchData: Seq[Row]
+  def dataSinceBatch(sinceBatchId: Long): Seq[Row]
+  def latestBatchId: Option[Long]
+}
+
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink with Logging {
+class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink
+  with MemorySinkBase with Logging {
 
   private case class AddedData(batchId: Long, data: Array[Row])
 
@@ -221,7 +243,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
-    batches.map(_.data).flatten
+    batches.flatMap(_.data)
   }
 
   def latestBatchId: Option[Long] = synchronized {
@@ -229,6 +251,10 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
   }
 
   def latestBatchData: Seq[Row] = synchronized { batches.lastOption.toSeq.flatten(_.data) }
+
+  def dataSinceBatch(sinceBatchId: Long): Seq[Row] = synchronized {
+    batches.filter(_.batchId > sinceBatchId).flatMap(_.data)
+  }
 
   def toDebugString: String = synchronized {
     batches.map { case AddedData(batchId, data) =>
@@ -279,7 +305,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
 case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode {
   def this(sink: MemorySink) = this(sink, sink.schema.toAttributes)
 
-  private val sizePerRow = sink.schema.toAttributes.map(_.dataType.defaultSize).sum
+  private val sizePerRow = EstimationUtils.getSizePerRow(sink.schema.toAttributes)
 
   override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
 }

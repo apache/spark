@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
@@ -26,6 +26,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
   private val CREDENTIALS_STEP_TYPE = "credentials"
   private val SERVICE_STEP_TYPE = "service"
+  private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
   private val SECRETS_STEP_TYPE = "mount-secrets"
   private val JAVA_STEP_TYPE = "java-bindings"
   private val PYSPARK_STEP_TYPE = "pyspark-bindings"
@@ -38,6 +39,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
   private val serviceStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SERVICE_STEP_TYPE, classOf[DriverServiceFeatureStep])
+
+  private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
 
   private val secretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
@@ -54,6 +58,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => credentialsStep,
       _ => serviceStep,
       _ => secretsStep,
+      _ => localDirsStep,
       _ => javaStep,
       _ => pythonStep)
 
@@ -76,8 +81,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
-      JAVA_STEP_TYPE,
-      SERVICE_STEP_TYPE)
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      JAVA_STEP_TYPE)
   }
 
   test("Apply secrets step if secrets are present.") {
@@ -100,8 +106,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
-      JAVA_STEP_TYPE,
-      SECRETS_STEP_TYPE)
+      LOCAL_DIRS_STEP_TYPE,
+      SECRETS_STEP_TYPE,
+      JAVA_STEP_TYPE)
   }
 
   test("Apply Java step if main resource is none.") {
@@ -123,8 +130,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
-      JAVA_STEP_TYPE,
-      SERVICE_STEP_TYPE)
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      JAVA_STEP_TYPE)
   }
 
   test("Apply Python step if main resource is python.") {
@@ -146,8 +154,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
-      PYSPARK_STEP_TYPE,
-      SERVICE_STEP_TYPE)
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      PYSPARK_STEP_TYPE)
   }
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)

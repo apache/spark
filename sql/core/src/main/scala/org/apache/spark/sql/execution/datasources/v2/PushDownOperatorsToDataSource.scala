@@ -23,17 +23,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.rules.Rule
 
 object PushDownOperatorsToDataSource extends Rule[LogicalPlan] {
-  override def apply(
-      plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // PhysicalOperation guarantees that filters are deterministic; no need to check
-    case PhysicalOperation(project, newFilters, relation : DataSourceV2Relation) =>
-      // merge the filters
-      val filters = relation.filters match {
-        case Some(existing) =>
-          existing ++ newFilters
-        case _ =>
-          newFilters
-      }
+    case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
+      assert(relation.filters.isEmpty, "data source v2 should do push down only once.")
 
       val projectAttrs = project.map(_.toAttribute)
       val projectSet = AttributeSet(project.flatMap(_.references))
@@ -57,9 +50,9 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] {
         projection = projection.asInstanceOf[Seq[AttributeReference]],
         filters = Some(filters))
 
-      // Add a Filter for any filters that could not be pushed
-      val unpushedFilter = newRelation.unsupportedFilters.reduceLeftOption(And)
-      val filtered = unpushedFilter.map(Filter(_, newRelation)).getOrElse(newRelation)
+      // Add a Filter for any filters that need to be evaluated after scan.
+      val postScanFilterCond = newRelation.postScanFilters.reduceLeftOption(And)
+      val filtered = postScanFilterCond.map(Filter(_, newRelation)).getOrElse(newRelation)
 
       // Add a Project to ensure the output matches the required projection
       if (newRelation.output != projectAttrs) {
@@ -67,5 +60,7 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] {
       } else {
         filtered
       }
+
+    case other => other.mapChildren(apply)
   }
 }

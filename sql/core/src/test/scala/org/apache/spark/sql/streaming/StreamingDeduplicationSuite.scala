@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 
-class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
+class StreamingDeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
   import testImplicits._
 
@@ -97,28 +98,20 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
     testStream(result, Append)(
       AddData(inputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
-      CheckLastBatch(10 to 15: _*),
+      CheckAnswer(10 to 15: _*),
       assertNumStateRows(total = 6, updated = 6),
 
-      AddData(inputData, 25), // Advance watermark to 15 seconds
-      CheckLastBatch(25),
-      assertNumStateRows(total = 7, updated = 1),
-
-      AddData(inputData, 25), // Drop states less than watermark
-      CheckLastBatch(),
-      assertNumStateRows(total = 1, updated = 0),
+      AddData(inputData, 25), // Advance watermark to 15 secs, no-data-batch drops rows <= 15
+      CheckNewAnswer(25),
+      assertNumStateRows(total = 1, updated = 1),
 
       AddData(inputData, 10), // Should not emit anything as data less than watermark
-      CheckLastBatch(),
+      CheckNewAnswer(),
       assertNumStateRows(total = 1, updated = 0),
 
-      AddData(inputData, 45), // Advance watermark to 35 seconds
-      CheckLastBatch(45),
-      assertNumStateRows(total = 2, updated = 1),
-
-      AddData(inputData, 45), // Drop states less than watermark
-      CheckLastBatch(),
-      assertNumStateRows(total = 1, updated = 0)
+      AddData(inputData, 45), // Advance watermark to 35 seconds, no-data-batch drops row 25
+      CheckNewAnswer(45),
+      assertNumStateRows(total = 1, updated = 1)
     )
   }
 
@@ -141,33 +134,20 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       assertNumStateRows(total = Seq(2L, 6L), updated = Seq(2L, 6L)),
 
       AddData(inputData, 25), // Advance watermark to 15 seconds
-      CheckLastBatch(),
-      // states in aggregate in [10, 14), [15, 20) and [25, 30) (3 windows)
-      // states in deduplicate is 10 to 15 and 25
-      assertNumStateRows(total = Seq(3L, 7L), updated = Seq(1L, 1L)),
-
-      AddData(inputData, 25), // Emit items less than watermark and drop their state
-      CheckLastBatch((10 -> 5)), // 5 items (10 to 14) after deduplicate
-      // states in aggregate in [15, 20) and [25, 30) (2 windows, note aggregate uses the end of
-      // window to evict items, so [15, 20) is still in the state store)
-      // states in deduplicate is 25
-      assertNumStateRows(total = Seq(2L, 1L), updated = Seq(0L, 0L)),
+      CheckLastBatch((10 -> 5)), // 5 items (10 to 14) after deduplicate, emitted with no-data-batch
+      // states in aggregate in [15, 20) and [25, 30); no-data-batch removed [10, 14)
+      // states in deduplicate is 25, no-data-batch removed 10 to 14
+      assertNumStateRows(total = Seq(2L, 1L), updated = Seq(1L, 1L)),
 
       AddData(inputData, 10), // Should not emit anything as data less than watermark
       CheckLastBatch(),
       assertNumStateRows(total = Seq(2L, 1L), updated = Seq(0L, 0L)),
 
       AddData(inputData, 40), // Advance watermark to 30 seconds
-      CheckLastBatch(),
-      // states in aggregate in [15, 20), [25, 30) and [40, 45)
-      // states in deduplicate is 25 and 40,
-      assertNumStateRows(total = Seq(3L, 2L), updated = Seq(1L, 1L)),
-
-      AddData(inputData, 40), // Emit items less than watermark and drop their state
       CheckLastBatch((15 -> 1), (25 -> 1)),
-      // states in aggregate in [40, 45)
-      // states in deduplicate is 40,
-      assertNumStateRows(total = Seq(1L, 1L), updated = Seq(0L, 0L))
+      // states in aggregate is [40, 45); no-data-batch removed [15, 20) and [25, 30)
+      // states in deduplicate is 40; no-data-batch removed 25
+      assertNumStateRows(total = Seq(1L, 1L), updated = Seq(1L, 1L))
     )
   }
 
@@ -260,13 +240,13 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       .select($"id")
     testStream(df)(
       AddData(input, 1 -> 1, 1 -> 1, 1 -> 2),
-      CheckLastBatch(1, 2),
+      CheckAnswer(1, 2),
       AddData(input, 1 -> 1, 2 -> 3, 2 -> 4),
-      CheckLastBatch(3, 4),
+      CheckNewAnswer(3, 4),
       AddData(input, 1 -> 0, 1 -> 1, 3 -> 5, 3 -> 6), // Drop (1 -> 0, 1 -> 1) due to watermark
-      CheckLastBatch(5, 6),
+      CheckNewAnswer(5, 6),
       AddData(input, 1 -> 0, 4 -> 7), // Drop (1 -> 0) due to watermark
-      CheckLastBatch(7)
+      CheckNewAnswer(7)
     )
   }
 
@@ -279,7 +259,37 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       .select($"id", $"time".cast("long"))
     testStream(df)(
       AddData(input, 1 -> 1, 1 -> 2, 2 -> 2),
-      CheckLastBatch(1 -> 1, 2 -> 2)
+      CheckAnswer(1 -> 1, 2 -> 2)
     )
+  }
+
+  test("test no-data flag") {
+    val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
+
+    def testWithFlag(flag: Boolean): Unit = withClue(s"with $flagKey = $flag") {
+      val inputData = MemoryStream[Int]
+      val result = inputData.toDS()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .dropDuplicates()
+        .select($"eventTime".cast("long").as[Long])
+
+      testStream(result, Append)(
+        StartStream(additionalConfs = Map(flagKey -> flag.toString)),
+        AddData(inputData, 10, 11, 12, 13, 14, 15),
+        CheckAnswer(10, 11, 12, 13, 14, 15),
+        assertNumStateRows(total = 6, updated = 6),
+
+        AddData(inputData, 25), // Advance watermark to 15 seconds
+        CheckNewAnswer(25),
+        { // State should have been cleaned if flag is set, otherwise should not have been cleaned
+          if (flag) assertNumStateRows(total = 1, updated = 1)
+          else assertNumStateRows(total = 7, updated = 1)
+        }
+      )
+    }
+
+    testWithFlag(true)
+    testWithFlag(false)
   }
 }

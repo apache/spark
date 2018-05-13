@@ -15,22 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader.streaming;
+package org.apache.spark.sql.execution.datasources.csv
 
-import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.DataReader;
+import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 
-/**
- * A variation on {@link DataReader} for use with streaming in continuous processing mode.
- */
-@InterfaceStability.Evolving
-public interface ContinuousDataReader<T> extends DataReader<T> {
-    /**
-     * Get the offset of the current record, or the start offset if no records have been read.
-     *
-     * The execution engine will call this method along with get() to keep track of the current
-     * offset. When an epoch ends, the offset of the previous record in each partition will be saved
-     * as a restart checkpoint.
-     */
-    PartitionOffset getOffset();
+private[csv] trait TestCsvData {
+  protected def spark: SparkSession
+
+  def sampledTestData: Dataset[String] = {
+    spark.range(0, 100, 1).map { index =>
+      val predefinedSample = Set[Long](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
+        57, 62, 68, 72)
+      if (predefinedSample.contains(index)) {
+        index.toString
+      } else {
+        (index.toDouble + 0.1).toString
+      }
+    }(Encoders.STRING)
+  }
 }

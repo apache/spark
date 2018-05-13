@@ -70,7 +70,9 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
    * Check the equality between result of expression and expected value, it will handle
    * Array[Byte], Spread[Double], MapData and Row.
    */
-  protected def checkResult(result: Any, expected: Any, dataType: DataType): Boolean = {
+  protected def checkResult(result: Any, expected: Any, exprDataType: DataType): Boolean = {
+    val dataType = UserDefinedType.sqlType(exprDataType)
+
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
@@ -100,6 +102,12 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       case _ =>
         result == expected
     }
+  }
+
+  protected def checkExceptionInExpression[T <: Throwable : ClassTag](
+      expression: => Expression,
+      expectedErrMsg: String): Unit = {
+    checkExceptionInExpression[T](expression, InternalRow.empty, expectedErrMsg)
   }
 
   protected def checkExceptionInExpression[T <: Throwable : ClassTag](
