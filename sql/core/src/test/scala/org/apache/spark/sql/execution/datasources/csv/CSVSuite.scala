@@ -1323,7 +1323,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(sampled.count() == ds.count())
   }
 
-  test("SPARK-24244: Select a little of many columns") {
+  test("SPARK-24244: Select a subset of all columns") {
     withTempPath { path =>
       import collection.JavaConverters._
       val schema = new StructType()
