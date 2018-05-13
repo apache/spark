@@ -63,6 +63,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   var containerNum = 0
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+  }
+
   override def beforeEach() {
     super.beforeEach()
     rmClient = AMRMClient.createAMRMClient()
@@ -87,6 +91,20 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   def createAllocator(
       maxExecutors: Int = 5,
       rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
+    createAllocatorInternal(maxExecutors, rmClient, Map())
+  }
+
+  def createAllocatorWithAdditionalConfigs(
+      maxExecutors: Int = 5,
+      additionalConfigs: Map[String, String],
+      rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
+    createAllocatorInternal(maxExecutors, rmClient, additionalConfigs)
+  }
+
+  private def createAllocatorInternal(
+      maxExecutors: Int,
+      rmClient: AMRMClient[ContainerRequest],
+      additionalConfigs: Map[String, String]) = {
     val args = Array(
       "--jar", "somejar.jar",
       "--class", "SomeClass")
@@ -95,6 +113,12 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       .set("spark.executor.instances", maxExecutors.toString)
       .set("spark.executor.cores", "5")
       .set("spark.executor.memory", "2048")
+
+    // add additional configs from map
+    for ((name, value) <- additionalConfigs) {
+      sparkConfClone.set(name, value)
+    }
+
     new YarnAllocator(
       "not used",
       mock(classOf[RpcEndpointRef]),
@@ -109,6 +133,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   def createContainer(host: String): Container = {
+    createContainerInternal(host, containerResource)
+  }
+
+  def createContainerWithResource(host: String, resource: Resource): Container = {
+    createContainerInternal(host, resource)
+  }
+
+  private def createContainerInternal(host: String, containerResource: Resource) = {
     // When YARN 2.6+ is required, avoid deprecation by using version with long second arg
     val containerId = ContainerId.newInstance(appAttemptId, containerNum)
     containerNum += 1
@@ -132,6 +164,42 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
+  }
+
+  test("custom resource type requested from yarn") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    TestYarnResourceRequestHelper.initializeResourceTypes(List("gpu"))
+
+    // request a single container and receive it
+    val handler = createAllocatorWithAdditionalConfigs(1, Map(
+      YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G",
+      YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "memory" -> "1G"
+    ))
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (1)
+
+    val resource = Resource.newInstance(3072, 6)
+    val resourceTypes = Map("gpu" -> "2G")
+    ResourceRequestHelper.setResourceRequests(resourceTypes, resource)
+
+    val container = createContainerWithResource("host1", resource)
+    handler.handleAllocatedContainers(Array(container))
+
+    // verify custom resource type is part of rmClient.ask set
+    val askField = rmClient.getClass.getDeclaredField("ask")
+    askField.setAccessible(true)
+    val asks: collection.mutable.Set[ResourceRequest] =
+      askField.get(rmClient).asInstanceOf[java.util.Set[ResourceRequest]].asScala
+
+    asks.size should be (1)
+    asks.head.getCapability shouldNot be (null)
+
+    val gpuResource = TestYarnResourceRequestHelper
+      .getResourceInformationByName(asks.head.getCapability, "gpu")
+    gpuResource shouldNot be (null)
+    gpuResource.value should be (2)
+    gpuResource.units should be ("G")
   }
 
   test("container should not be created if requested number if met") {
