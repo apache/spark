@@ -516,23 +516,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("CTAS with default fileformat") {
     val table = "ctas1"
     val ctas = s"CREATE TABLE IF NOT EXISTS $table SELECT key k, value FROM src"
-    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
-      withSQLConf("hive.default.fileformat" -> "textfile") {
+    Seq("orc", "parquet").foreach { dataSourceFormat =>
+      withSQLConf(
+        SQLConf.CONVERT_CTAS.key -> "true",
+        SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> dataSourceFormat,
+        "hive.default.fileformat" -> "textfile") {
         withTable(table) {
           sql(ctas)
-          // We should use parquet here as that is the default datasource fileformat. The default
-          // datasource file format is controlled by `spark.sql.sources.default` configuration.
+          // The default datasource file format is controlled by `spark.sql.sources.default`.
           // This testcase verifies that setting `hive.default.fileformat` has no impact on
           // the target table's fileformat in case of CTAS.
-          assert(sessionState.conf.defaultDataSourceName === "parquet")
-          checkRelation(tableName = table, isDataSourceTable = true, format = "parquet")
+          checkRelation(tableName = table, isDataSourceTable = true, format = dataSourceFormat)
         }
-      }
-      withSQLConf("spark.sql.sources.default" -> "orc") {
-        withTable(table) {
-          sql(ctas)
-          checkRelation(tableName = table, isDataSourceTable = true, format = "orc")
-         }
       }
     }
   }
@@ -1203,35 +1198,37 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("specifying database name for a temporary view is not allowed") {
     withTempPath { dir =>
-      val path = dir.toURI.toString
-      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
-      df
-        .write
-        .format("parquet")
-        .save(path)
+      withTempView("db.t") {
+        val path = dir.toURI.toString
+        val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+        df
+          .write
+          .format("parquet")
+          .save(path)
 
-      // We don't support creating a temporary table while specifying a database
-      intercept[AnalysisException] {
+        // We don't support creating a temporary table while specifying a database
+        intercept[AnalysisException] {
+          spark.sql(
+            s"""
+              |CREATE TEMPORARY VIEW db.t
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+             """.stripMargin)
+        }
+
+        // If you use backticks to quote the name then it's OK.
         spark.sql(
           s"""
-            |CREATE TEMPORARY VIEW db.t
+            |CREATE TEMPORARY VIEW `db.t`
             |USING parquet
             |OPTIONS (
             |  path '$path'
             |)
            """.stripMargin)
+        checkAnswer(spark.table("`db.t`"), df)
       }
-
-      // If you use backticks to quote the name then it's OK.
-      spark.sql(
-        s"""
-          |CREATE TEMPORARY VIEW `db.t`
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-         """.stripMargin)
-      checkAnswer(spark.table("`db.t`"), df)
     }
   }
 
@@ -2102,7 +2099,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   Seq("orc", "parquet").foreach { format =>
     test(s"SPARK-18355 Read data from a hive table with a new column - $format") {
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
 
       Seq("true", "false").foreach { value =>
         withSQLConf(
@@ -2160,11 +2158,34 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
-    test(s"Writing empty datasets should not fail - $format") {
-      withTempDir { dir =>
-        Seq("str").toDS.limit(0).write.format(format).save(dir.getCanonicalPath + "/tmp")
+  test("SPARK-24085 scalar subquery in partitioning expression") {
+    Seq("orc", "parquet").foreach { format =>
+      Seq(true, false).foreach { isConverted =>
+        withSQLConf(
+          HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted",
+          "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTable(format) {
+            withTempPath { tempDir =>
+              sql(
+                s"""
+                  |CREATE TABLE ${format} (id_value string)
+                  |PARTITIONED BY (id_type string)
+                  |LOCATION '${tempDir.toURI}'
+                  |STORED AS ${format}
+                """.stripMargin)
+              sql(s"insert into $format values ('1','a')")
+              sql(s"insert into $format values ('2','a')")
+              sql(s"insert into $format values ('3','b')")
+              sql(s"insert into $format values ('4','b')")
+              checkAnswer(
+                sql(s"SELECT * FROM $format WHERE id_type = (SELECT 'b')"),
+                Row("3", "b") :: Row("4", "b") :: Nil)
+            }
+          }
+        }
       }
     }
   }
+
 }

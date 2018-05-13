@@ -1239,6 +1239,13 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
+    def test_pipe_unicode(self):
+        # Regression test for SPARK-20947
+        data = [u'\u6d4b\u8bd5', '1']
+        rdd = self.sc.parallelize(data)
+        result = rdd.pipe('cat').collect()
+        self.assertEqual(data, result)
+
 
 class ProfilerTests(PySparkTestCase):
 
@@ -1944,7 +1951,12 @@ class SparkSubmitTests(unittest.TestCase):
 
     def setUp(self):
         self.programDir = tempfile.mkdtemp()
-        self.sparkSubmit = os.path.join(os.environ.get("SPARK_HOME"), "bin", "spark-submit")
+        tmp_dir = tempfile.gettempdir()
+        self.sparkSubmit = [
+            os.path.join(os.environ.get("SPARK_HOME"), "bin", "spark-submit"),
+            "--conf", "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+            "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        ]
 
     def tearDown(self):
         shutil.rmtree(self.programDir)
@@ -2010,7 +2022,7 @@ class SparkSubmitTests(unittest.TestCase):
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(lambda x: x * 2).collect())
             """)
-        proc = subprocess.Popen([self.sparkSubmit, script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 4, 6]", out.decode('utf-8'))
@@ -2026,7 +2038,7 @@ class SparkSubmitTests(unittest.TestCase):
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(foo).collect())
             """)
-        proc = subprocess.Popen([self.sparkSubmit, script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[3, 6, 9]", out.decode('utf-8'))
@@ -2044,7 +2056,7 @@ class SparkSubmitTests(unittest.TestCase):
             |def myfunc(x):
             |    return x + 1
             """)
-        proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, script],
+        proc = subprocess.Popen(self.sparkSubmit + ["--py-files", zip, script],
                                 stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -2063,7 +2075,7 @@ class SparkSubmitTests(unittest.TestCase):
             |def myfunc(x):
             |    return x + 1
             """)
-        proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, "--master",
+        proc = subprocess.Popen(self.sparkSubmit + ["--py-files", zip, "--master",
                                 "local-cluster[1,1,1024]", script],
                                 stdout=subprocess.PIPE)
         out, err = proc.communicate()
@@ -2080,8 +2092,10 @@ class SparkSubmitTests(unittest.TestCase):
             |print(sc.parallelize([1, 2, 3]).map(myfunc).collect())
             """)
         self.create_spark_package("a:mylib:0.1")
-        proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
-                                 "file:" + self.programDir, script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(
+            self.sparkSubmit + ["--packages", "a:mylib:0.1", "--repositories",
+                                "file:" + self.programDir, script],
+            stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out.decode('utf-8'))
@@ -2096,9 +2110,11 @@ class SparkSubmitTests(unittest.TestCase):
             |print(sc.parallelize([1, 2, 3]).map(myfunc).collect())
             """)
         self.create_spark_package("a:mylib:0.1")
-        proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
-                                 "file:" + self.programDir, "--master",
-                                 "local-cluster[1,1,1024]", script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(
+            self.sparkSubmit + ["--packages", "a:mylib:0.1", "--repositories",
+                                "file:" + self.programDir, "--master", "local-cluster[1,1,1024]",
+                                script],
+            stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out.decode('utf-8'))
@@ -2117,7 +2133,7 @@ class SparkSubmitTests(unittest.TestCase):
         # this will fail if you have different spark.executor.memory
         # in conf/spark-defaults.conf
         proc = subprocess.Popen(
-            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]", script],
+            self.sparkSubmit + ["--master", "local-cluster[1,1,1024]", script],
             stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -2137,7 +2153,7 @@ class SparkSubmitTests(unittest.TestCase):
             |    sc.stop()
             """)
         proc = subprocess.Popen(
-            [self.sparkSubmit, "--master", "local", script],
+            self.sparkSubmit + ["--master", "local", script],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
         out, err = proc.communicate()
@@ -2286,6 +2302,21 @@ class KeywordOnlyTests(unittest.TestCase):
         self.assertEqual(b._x, 2)
 
 
+class UtilTests(PySparkTestCase):
+    def test_py4j_exception_message(self):
+        from pyspark.util import _exception_message
+
+        with self.assertRaises(Py4JJavaError) as context:
+            # This attempts java.lang.String(null) which throws an NPE.
+            self.sc._jvm.java.lang.String(None)
+
+        self.assertTrue('NullPointerException' in _exception_message(context.exception))
+
+    def test_parsing_version_string(self):
+        from pyspark.util import VersionUtils
+        self.assertRaises(ValueError, lambda: VersionUtils.majorMinorVersion("abced"))
+
+
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
 
@@ -2335,15 +2366,7 @@ class NumPyTests(PySparkTestCase):
 
 if __name__ == "__main__":
     from pyspark.tests import *
-    if not _have_scipy:
-        print("NOTE: Skipping SciPy tests as it does not seem to be installed")
-    if not _have_numpy:
-        print("NOTE: Skipping NumPy tests as it does not seem to be installed")
     if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
     else:
-        unittest.main()
-    if not _have_scipy:
-        print("NOTE: SciPy tests were skipped as it does not seem to be installed")
-    if not _have_numpy:
-        print("NOTE: NumPy tests were skipped as it does not seem to be installed")
+        unittest.main(verbosity=2)

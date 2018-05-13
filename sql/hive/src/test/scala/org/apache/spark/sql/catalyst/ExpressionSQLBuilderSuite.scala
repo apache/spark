@@ -108,10 +108,7 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("window specification") {
-    val frame = SpecifiedWindowFrame.defaultWindowFrame(
-      hasOrderSpecification = true,
-      acceptWindowFrame = true
-    )
+    val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
 
     checkSQL(
       WindowSpecDefinition('a.int :: Nil, Nil, frame),

@@ -67,6 +67,7 @@ class HiveClientSuite(version: String)
   }
 
   override def beforeAll() {
+    super.beforeAll()
     client = init(true)
   }
 
@@ -199,6 +200,10 @@ class HiveClientSuite(version: String)
     testMetastorePartitionFiltering(
       "chunk in ('ab', 'ba') and ((ds=20170101 and h>=8) or (ds=20170102 and h<8))",
       day1 :: day2 :: Nil)
+  }
+
+  test("create client with sharesHadoopClasses = false") {
+    buildClient(new Configuration(), sharesHadoopClasses = false)
   }
 
   private def testMetastorePartitionFiltering(

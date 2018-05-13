@@ -48,7 +48,7 @@ import org.apache.spark.deploy.history.config._
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -156,6 +156,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "applications/local-1426533911241/1/stages/0/0/taskList",
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
+    "blacklisting for stage" -> "applications/app-20180109111548-0000/stages/0/0",
+    "blacklisting node for stage" -> "applications/application_1516285256255_0012/stages/0/0",
 
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
@@ -292,6 +294,11 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
     all (siteRelativeLinks) should startWith (uiRoot)
+  }
+
+  test("/version api endpoint") {
+    val response = getUrl("version")
+    assert(response.contains(SPARK_VERSION))
   }
 
   test("ajax rendered relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
@@ -564,7 +571,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     assert(jobcount === getNumJobs("/jobs"))
 
     // no need to retain the test dir now the tests complete
-    logDir.deleteOnExit()
+    ShutdownHookManager.registerShutdownDeleteDir(logDir)
   }
 
   test("ui and api authorization checks") {

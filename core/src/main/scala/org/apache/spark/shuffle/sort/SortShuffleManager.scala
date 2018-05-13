@@ -188,9 +188,9 @@ private[spark] object SortShuffleManager extends Logging {
       log.debug(s"Can't use serialized shuffle for shuffle $shufId because the serializer, " +
         s"${dependency.serializer.getClass.getName}, does not support object relocation")
       false
-    } else if (dependency.aggregator.isDefined) {
-      log.debug(
-        s"Can't use serialized shuffle for shuffle $shufId because an aggregator is defined")
+    } else if (dependency.mapSideCombine) {
+      log.debug(s"Can't use serialized shuffle for shuffle $shufId because we need to do " +
+        s"map-side aggregation")
       false
     } else if (numPartitions > MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE) {
       log.debug(s"Can't use serialized shuffle for shuffle $shufId because it has more than " +

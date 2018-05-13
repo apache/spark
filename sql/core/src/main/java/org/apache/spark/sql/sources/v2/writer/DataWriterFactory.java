@@ -22,7 +22,7 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A factory of {@link DataWriter} returned by {@link DataSourceV2Writer#createWriterFactory()},
+ * A factory of {@link DataWriter} returned by {@link DataSourceWriter#createWriterFactory()},
  * which is responsible for creating and initializing the actual data writer at executor side.
  *
  * Note that, the writer factory will be serialized and sent to executors, then the data writer
@@ -48,6 +48,9 @@ public interface DataWriterFactory<T> extends Serializable {
    *                      same task id but different attempt number, which means there are multiple
    *                      tasks with the same task id running at the same time. Implementations can
    *                      use this attempt number to distinguish writers of different task attempts.
+   * @param epochId A monotonically increasing id for streaming queries that are split in to
+   *                discrete periods of execution. For non-streaming queries,
+   *                this ID will always be 0.
    */
-  DataWriter<T> createDataWriter(int partitionId, int attemptNumber);
+  DataWriter<T> createDataWriter(int partitionId, int attemptNumber, long epochId);
 }

@@ -356,25 +356,7 @@ abstract class StreamExecution(
 
   private def isInterruptedByStop(e: Throwable): Boolean = {
     if (state.get == TERMINATED) {
-      e match {
-        // InterruptedIOException - thrown when an I/O operation is interrupted
-        // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
-        case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
-          true
-        // The cause of the following exceptions may be one of the above exceptions:
-        //
-        // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
-        //                        BiFunction.apply
-        // ExecutionException - thrown by codes running in a thread pool and these codes throw an
-        //                      exception
-        // UncheckedExecutionException - thrown by codes that cannot throw a checked
-        //                               ExecutionException, such as BiFunction.apply
-        case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
-          if e2.getCause != null =>
-          isInterruptedByStop(e2.getCause)
-        case _ =>
-          false
-      }
+      StreamExecution.isInterruptionException(e)
     } else {
       false
     }
@@ -418,11 +400,17 @@ abstract class StreamExecution(
    * Blocks the current thread until processing for data from the given `source` has reached at
    * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
-  private[sql] def awaitOffset(source: BaseStreamingSource, newOffset: Offset): Unit = {
+  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset): Unit = {
     assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
-      !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
+      if (sources == null) {
+        // sources might not be initialized yet
+        false
+      } else {
+        val source = sources(sourceIndex)
+        !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
+      }
     }
 
     while (notDone) {
@@ -436,7 +424,7 @@ abstract class StreamExecution(
         awaitProgressLock.unlock()
       }
     }
-    logDebug(s"Unblocked at $newOffset for $source")
+    logDebug(s"Unblocked at $newOffset for ${sources(sourceIndex)}")
   }
 
   /** A flag to indicate that a batch has completed with no new data available. */
@@ -559,6 +547,26 @@ abstract class StreamExecution(
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
+
+  def isInterruptionException(e: Throwable): Boolean = e match {
+    // InterruptedIOException - thrown when an I/O operation is interrupted
+    // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
+    case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
+      true
+    // The cause of the following exceptions may be one of the above exceptions:
+    //
+    // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
+    //                        BiFunction.apply
+    // ExecutionException - thrown by codes running in a thread pool and these codes throw an
+    //                      exception
+    // UncheckedExecutionException - thrown by codes that cannot throw a checked
+    //                               ExecutionException, such as BiFunction.apply
+    case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
+        if e2.getCause != null =>
+      isInterruptionException(e2.getCause)
+    case _ =>
+      false
+  }
 }
 
 /**

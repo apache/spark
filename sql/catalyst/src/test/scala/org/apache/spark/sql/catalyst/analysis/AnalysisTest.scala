@@ -54,8 +54,7 @@ trait AnalysisTest extends PlanTest {
       expectedPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
     val analyzer = getAnalyzer(caseSensitive)
-    val actualPlan = analyzer.execute(inputPlan)
-    analyzer.checkAnalysis(actualPlan)
+    val actualPlan = analyzer.executeAndCheck(inputPlan)
     comparePlans(actualPlan, expectedPlan)
   }
 

@@ -34,6 +34,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type
+from pyspark.util import _get_argspec
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -74,7 +75,7 @@ def wrap_udf(f, return_type):
         return lambda *a: f(*a)
 
 
-def wrap_pandas_scalar_udf(f, return_type):
+def wrap_scalar_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
     def verify_result_length(*a):
@@ -90,11 +91,17 @@ def wrap_pandas_scalar_udf(f, return_type):
     return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 
-def wrap_pandas_group_map_udf(f, return_type):
-    def wrapped(*series):
+def wrap_grouped_map_pandas_udf(f, return_type):
+    def wrapped(key_series, value_series):
         import pandas as pd
+        argspec = _get_argspec(f)
 
-        result = f(pd.concat(series, axis=1))
+        if len(argspec.args) == 1:
+            result = f(pd.concat(value_series, axis=1))
+        elif len(argspec.args) == 2:
+            key = tuple(s[0] for s in key_series)
+            result = f(key, pd.concat(value_series, axis=1))
+
         if not isinstance(result, pd.DataFrame):
             raise TypeError("Return type of the user-defined function should be "
                             "pandas.DataFrame, but is {}".format(type(result)))
@@ -110,6 +117,17 @@ def wrap_pandas_group_map_udf(f, return_type):
     return wrapped
 
 
+def wrap_grouped_agg_pandas_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
+    def wrapped(*series):
+        import pandas as pd
+        result = f(*series)
+        return pd.Series([result])
+
+    return lambda *a: (wrapped(*a), arrow_return_type)
+
+
 def read_single_udf(pickleSer, infile, eval_type):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
@@ -122,34 +140,57 @@ def read_single_udf(pickleSer, infile, eval_type):
             row_func = chain(row_func, f)
 
     # the last returnType will be the return type of UDF
-    if eval_type == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
-        return arg_offsets, wrap_pandas_scalar_udf(row_func, return_type)
-    elif eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
-        return arg_offsets, wrap_pandas_group_map_udf(row_func, return_type)
-    else:
+    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+        return arg_offsets, wrap_scalar_pandas_udf(row_func, return_type)
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+        return arg_offsets, wrap_grouped_map_pandas_udf(row_func, return_type)
+    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
+        return arg_offsets, wrap_grouped_agg_pandas_udf(row_func, return_type)
+    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return arg_offsets, wrap_udf(row_func, return_type)
+    else:
+        raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
 def read_udfs(pickleSer, infile, eval_type):
     num_udfs = read_int(infile)
     udfs = {}
     call_udf = []
-    for i in range(num_udfs):
-        arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type)
-        udfs['f%d' % i] = udf
-        args = ["a[%d]" % o for o in arg_offsets]
-        call_udf.append("f%d(%s)" % (i, ", ".join(args)))
-    # Create function like this:
-    #   lambda a: (f0(a0), f1(a1, a2), f2(a3))
-    # In the special case of a single UDF this will return a single result rather
-    # than a tuple of results; this is the format that the JVM side expects.
-    mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
-    mapper = eval(mapper_str, udfs)
+    mapper_str = ""
+    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+        # Create function like this:
+        #   lambda a: f([a[0]], [a[0], a[1]])
 
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        # See FlatMapGroupsInPandasExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
+        arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type)
+        udfs['f'] = udf
+        split_offset = arg_offsets[0] + 1
+        arg0 = ["a[%d]" % o for o in arg_offsets[1: split_offset]]
+        arg1 = ["a[%d]" % o for o in arg_offsets[split_offset:]]
+        mapper_str = "lambda a: f([%s], [%s])" % (", ".join(arg0), ", ".join(arg1))
+    else:
+        # Create function like this:
+        #   lambda a: (f0(a[0]), f1(a[1], a[2]), f2(a[3]))
+        # In the special case of a single UDF this will return a single result rather
+        # than a tuple of results; this is the format that the JVM side expects.
+        for i in range(num_udfs):
+            arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type)
+            udfs['f%d' % i] = udf
+            args = ["a[%d]" % o for o in arg_offsets]
+            call_udf.append("f%d(%s)" % (i, ", ".join(args)))
+        mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
+
+    mapper = eval(mapper_str, udfs)
     func = lambda _, it: map(mapper, it)
 
-    if eval_type == PythonEvalType.SQL_PANDAS_SCALAR_UDF \
-       or eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+    if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
         timezone = utf8_deserializer.loads(infile)
         ser = ArrowStreamPandasSerializer(timezone)
     else:
@@ -164,7 +205,7 @@ def main(infile, outfile):
         boot_time = time.time()
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
-            exit(-1)
+            sys.exit(-1)
 
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
@@ -238,7 +279,7 @@ def main(infile, outfile):
             # Write the error to stderr if it happened while serializing
             print("PySpark worker failed with exception:", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     write_long(shuffle.MemoryBytesSpilled, outfile)
@@ -256,7 +297,7 @@ def main(infile, outfile):
     else:
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == '__main__':

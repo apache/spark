@@ -17,32 +17,30 @@
 
 package org.apache.spark.sql.vectorized;
 
+import io.netty.buffer.ArrowBuf;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.arrow.ArrowUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.memory.OffHeapMemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A column vector backed by Apache Arrow.
+ * A column vector backed by Apache Arrow. Currently calendar interval type and map type are not
+ * supported.
  */
+@InterfaceStability.Evolving
 public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
   private ArrowColumnVector[] childColumns;
 
-  private void ensureAccessible(int index) {
-    ensureAccessible(index, 1);
-  }
-
-  private void ensureAccessible(int index, int count) {
-    int valueCount = accessor.getValueCount();
-    if (index < 0 || index + count > valueCount) {
-      throw new IndexOutOfBoundsException(
-        String.format("index range: [%d, %d), valueCount: %d", index, index + count, valueCount));
-    }
+  @Override
+  public boolean hasNull() {
+    return accessor.getNullCount() > 0;
   }
 
   @Override
@@ -55,164 +53,84 @@ public final class ArrowColumnVector extends ColumnVector {
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
         childColumns[i].close();
+        childColumns[i] = null;
       }
+      childColumns = null;
     }
     accessor.close();
   }
 
   @Override
   public boolean isNullAt(int rowId) {
-    ensureAccessible(rowId);
     return accessor.isNullAt(rowId);
   }
 
   @Override
   public boolean getBoolean(int rowId) {
-    ensureAccessible(rowId);
     return accessor.getBoolean(rowId);
   }
 
   @Override
-  public boolean[] getBooleans(int rowId, int count) {
-    ensureAccessible(rowId, count);
-    boolean[] array = new boolean[count];
-    for (int i = 0; i < count; ++i) {
-      array[i] = accessor.getBoolean(rowId + i);
-    }
-    return array;
-  }
-
-  @Override
   public byte getByte(int rowId) {
-    ensureAccessible(rowId);
     return accessor.getByte(rowId);
   }
 
   @Override
-  public byte[] getBytes(int rowId, int count) {
-    ensureAccessible(rowId, count);
-    byte[] array = new byte[count];
-    for (int i = 0; i < count; ++i) {
-      array[i] = accessor.getByte(rowId + i);
-    }
-    return array;
-  }
-
-  @Override
   public short getShort(int rowId) {
-    ensureAccessible(rowId);
     return accessor.getShort(rowId);
   }
 
   @Override
-  public short[] getShorts(int rowId, int count) {
-    ensureAccessible(rowId, count);
-    short[] array = new short[count];
-    for (int i = 0; i < count; ++i) {
-      array[i] = accessor.getShort(rowId + i);
-    }
-    return array;
-  }
-
-  @Override
   public int getInt(int rowId) {
-    ensureAccessible(rowId);
     return accessor.getInt(rowId);
   }
 
   @Override
-  public int[] getInts(int rowId, int count) {
-    ensureAccessible(rowId, count);
-    int[] array = new int[count];
-    for (int i = 0; i < count; ++i) {
-      array[i] = accessor.getInt(rowId + i);
-    }
-    return array;
-  }
-
-  @Override
   public long getLong(int rowId) {
-    ensureAccessible(rowId);
     return accessor.getLong(rowId);
   }
 
   @Override
-  public long[] getLongs(int rowId, int count) {
-    ensureAccessible(rowId, count);
-    long[] array = new long[count];
-    for (int i = 0; i < count; ++i) {
-      array[i] = accessor.getLong(rowId + i);
-    }
-    return array;
-  }
-
-  @Override
   public float getFloat(int rowId) {
-    ensureAccessible(rowId);
     return accessor.getFloat(rowId);
   }
 
   @Override
-  public float[] getFloats(int rowId, int count) {
-    ensureAccessible(rowId, count);
-    float[] array = new float[count];
-    for (int i = 0; i < count; ++i) {
-      array[i] = accessor.getFloat(rowId + i);
-    }
-    return array;
-  }
-
-  @Override
   public double getDouble(int rowId) {
-    ensureAccessible(rowId);
     return accessor.getDouble(rowId);
   }
 
   @Override
-  public double[] getDoubles(int rowId, int count) {
-    ensureAccessible(rowId, count);
-    double[] array = new double[count];
-    for (int i = 0; i < count; ++i) {
-      array[i] = accessor.getDouble(rowId + i);
-    }
-    return array;
-  }
-
-  @Override
-  public int getArrayLength(int rowId) {
-    ensureAccessible(rowId);
-    return accessor.getArrayLength(rowId);
-  }
-
-  @Override
-  public int getArrayOffset(int rowId) {
-    ensureAccessible(rowId);
-    return accessor.getArrayOffset(rowId);
-  }
-
-  @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
-    ensureAccessible(rowId);
+    if (isNullAt(rowId)) return null;
     return accessor.getDecimal(rowId, precision, scale);
   }
 
   @Override
   public UTF8String getUTF8String(int rowId) {
-    ensureAccessible(rowId);
+    if (isNullAt(rowId)) return null;
     return accessor.getUTF8String(rowId);
   }
 
   @Override
   public byte[] getBinary(int rowId) {
-    ensureAccessible(rowId);
+    if (isNullAt(rowId)) return null;
     return accessor.getBinary(rowId);
   }
 
   @Override
-  public ArrowColumnVector arrayData() { return childColumns[0]; }
+  public ColumnarArray getArray(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return accessor.getArray(rowId);
+  }
 
   @Override
-  public ArrowColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
+  public ColumnarMap getMap(int rowId) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public ArrowColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
 
   public ArrowColumnVector(ValueVector vector) {
     super(ArrowUtils.fromArrowField(vector.getField()));
@@ -244,11 +162,8 @@ public final class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof ListVector) {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
-
-      childColumns = new ArrowColumnVector[1];
-      childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
-    } else if (vector instanceof MapVector) {
-      MapVector mapVector = (MapVector) vector;
+    } else if (vector instanceof NullableMapVector) {
+      NullableMapVector mapVector = (NullableMapVector) vector;
       accessor = new StructAccessor(mapVector);
 
       childColumns = new ArrowColumnVector[mapVector.size()];
@@ -271,10 +186,6 @@ public final class ArrowColumnVector extends ColumnVector {
     // TODO: should be final after removing ArrayAccessor workaround
     boolean isNullAt(int rowId) {
       return vector.isNull(rowId);
-    }
-
-    final int getValueCount() {
-      return vector.getValueCount();
     }
 
     final int getNullCount() {
@@ -325,11 +236,7 @@ public final class ArrowColumnVector extends ColumnVector {
       throw new UnsupportedOperationException();
     }
 
-    int getArrayLength(int rowId) {
-      throw new UnsupportedOperationException();
-    }
-
-    int getArrayOffset(int rowId) {
+    ColumnarArray getArray(int rowId) {
       throw new UnsupportedOperationException();
     }
   }
@@ -471,9 +378,10 @@ public final class ArrowColumnVector extends ColumnVector {
       if (stringResult.isSet == 0) {
         return null;
       } else {
-        return UTF8String.fromAddress(null,
+        return new UTF8String(new OffHeapMemoryBlock(
           stringResult.buffer.memoryAddress() + stringResult.start,
-          stringResult.end - stringResult.start);
+          stringResult.end - stringResult.start
+        ));
       }
     }
   }
@@ -526,10 +434,12 @@ public final class ArrowColumnVector extends ColumnVector {
   private static class ArrayAccessor extends ArrowVectorAccessor {
 
     private final ListVector accessor;
+    private final ArrowColumnVector arrayData;
 
     ArrayAccessor(ListVector vector) {
       super(vector);
       this.accessor = vector;
+      this.arrayData = new ArrowColumnVector(vector.getDataVector());
     }
 
     @Override
@@ -543,19 +453,26 @@ public final class ArrowColumnVector extends ColumnVector {
     }
 
     @Override
-    final int getArrayLength(int rowId) {
-      return accessor.getInnerValueCountAt(rowId);
-    }
-
-    @Override
-    final int getArrayOffset(int rowId) {
-      return accessor.getOffsetBuffer().getInt(rowId * accessor.OFFSET_WIDTH);
+    final ColumnarArray getArray(int rowId) {
+      ArrowBuf offsets = accessor.getOffsetBuffer();
+      int index = rowId * accessor.OFFSET_WIDTH;
+      int start = offsets.getInt(index);
+      int end = offsets.getInt(index + accessor.OFFSET_WIDTH);
+      return new ColumnarArray(arrayData, start, end - start);
     }
   }
 
+  /**
+   * Any call to "get" method will throw UnsupportedOperationException.
+   *
+   * Access struct values in a ArrowColumnVector doesn't use this accessor. Instead, it uses
+   * getStruct() method defined in the parent class. Any call to "get" method in this class is a
+   * bug in the code.
+   *
+   */
   private static class StructAccessor extends ArrowVectorAccessor {
 
-    StructAccessor(MapVector vector) {
+    StructAccessor(NullableMapVector vector) {
       super(vector);
     }
   }

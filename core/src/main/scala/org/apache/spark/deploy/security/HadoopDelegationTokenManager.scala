@@ -64,15 +64,26 @@ private[spark] class HadoopDelegationTokenManager(
   }
 
   private def getDelegationTokenProviders: Map[String, HadoopDelegationTokenProvider] = {
-    val providers = List(new HadoopFSDelegationTokenProvider(fileSystems),
-      new HiveDelegationTokenProvider,
-      new HBaseDelegationTokenProvider)
+    val providers = Seq(new HadoopFSDelegationTokenProvider(fileSystems)) ++
+      safeCreateProvider(new HiveDelegationTokenProvider) ++
+      safeCreateProvider(new HBaseDelegationTokenProvider)
 
     // Filter out providers for which spark.security.credentials.{service}.enabled is false.
     providers
       .filter { p => isServiceEnabled(p.serviceName) }
       .map { p => (p.serviceName, p) }
       .toMap
+  }
+
+  private def safeCreateProvider(
+      createFn: => HadoopDelegationTokenProvider): Option[HadoopDelegationTokenProvider] = {
+    try {
+      Some(createFn)
+    } catch {
+      case t: Throwable =>
+        logDebug(s"Failed to load built in provider.", t)
+        None
+    }
   }
 
   def isServiceEnabled(serviceName: String): Boolean = {
