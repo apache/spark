@@ -16,12 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.features.bindings
 
-import io.fabric8.kubernetes.api.model.ContainerBuilder
-import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata}
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants.SPARK_CONF_PATH
-import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 import org.apache.spark.launcher.SparkLauncher
 
