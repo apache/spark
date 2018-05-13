@@ -27,7 +27,7 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
 
   test("time window is unevaluable") {
     intercept[UnsupportedOperationException] {
-      evaluate(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
+      evaluateWithoutCodegen(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
     }
   }
 

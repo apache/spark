@@ -950,4 +950,24 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     assert(join.duplicateResolved)
     assert(optimizedPlan.resolved)
   }
+
+  test("SPARK-23316: AnalysisException after max iteration reached for IN query") {
+    // before the fix this would throw AnalysisException
+    spark.range(10).where("(id,id) in (select id, null from range(3))").count
+  }
+
+  test("SPARK-24085 scalar subquery in partitioning expression") {
+    withTable("parquet_part") {
+      Seq("1" -> "a", "2" -> "a", "3" -> "b", "4" -> "b")
+        .toDF("id_value", "id_type")
+        .write
+        .mode(SaveMode.Overwrite)
+        .partitionBy("id_type")
+        .format("parquet")
+        .saveAsTable("parquet_part")
+      checkAnswer(
+        sql("SELECT * FROM parquet_part WHERE id_type = (SELECT 'b')"),
+        Row("3", "b") :: Row("4", "b") :: Nil)
+    }
+  }
 }

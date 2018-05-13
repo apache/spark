@@ -60,3 +60,12 @@ SELECT a, COUNT(1) FROM testData WHERE false GROUP BY a;
 -- Aggregate with empty input and empty GroupBy expressions.
 SELECT COUNT(1) FROM testData WHERE false;
 SELECT 1 FROM (SELECT COUNT(1) FROM testData WHERE false) t;
+
+-- Aggregate with empty GroupBy expressions and filter on top
+SELECT 1 from (
+  SELECT 1 AS z,
+  MIN(a.x)
+  FROM (select 1 as x) a
+  WHERE false
+) b
+where b.z != b.z

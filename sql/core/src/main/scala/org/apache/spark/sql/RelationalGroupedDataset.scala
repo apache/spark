@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.execution.python.PythonUDF
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -74,7 +73,7 @@ class RelationalGroupedDataset protected[sql](
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         Dataset.ofRows(
-          df.sparkSession, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
+          df.sparkSession, Pivot(Some(aliasedGrps), pivotCol, values, aggExprs, df.logicalPlan))
     }
   }
 
@@ -450,8 +449,8 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
-    require(expr.evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF,
-      "Must pass a group map udf")
+    require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      "Must pass a grouped map udf")
     require(expr.dataType.isInstanceOf[StructType],
       "The returnType of the udf must be a StructType")
 

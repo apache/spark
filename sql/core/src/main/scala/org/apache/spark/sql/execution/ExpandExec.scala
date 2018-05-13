@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -133,9 +133,6 @@ case class ExpandExec(
      * size explosion.
      */
 
-    // Set input variables
-    ctx.currentVars = input
-
     // Tracks whether a column has the same output for all rows.
     // Size of sameOutput array should equal N.
     // If sameOutput(i) is true, then the i-th column has the same value for all output rows given
@@ -157,9 +154,13 @@ case class ExpandExec(
         val value = ctx.freshName("value")
         val code = s"""
           |boolean $isNull = true;
-          |${ctx.javaType(firstExpr.dataType)} $value = ${ctx.defaultValue(firstExpr.dataType)};
+          |${CodeGenerator.javaType(firstExpr.dataType)} $value =
+          |  ${CodeGenerator.defaultValue(firstExpr.dataType)};
          """.stripMargin
-        ExprCode(code, isNull, value)
+        ExprCode(
+          code,
+          JavaCode.isNullVariable(isNull),
+          JavaCode.variable(value, firstExpr.dataType))
       }
     }
 

@@ -65,7 +65,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val m3 = intercept[AnalysisException] {
       df.selectExpr("stack(2, 1, '2.2')")
     }.getMessage
-    assert(m3.contains("data type mismatch: Argument 1 (IntegerType) != Argument 2 (StringType)"))
+    assert(m3.contains("data type mismatch: Argument 1 (int) != Argument 2 (string)"))
 
     // stack on column data
     val df2 = Seq((2, 1, 2, 3)).toDF("n", "a", "b", "c")
@@ -80,7 +80,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val m5 = intercept[AnalysisException] {
       df3.selectExpr("stack(2, a, b)")
     }.getMessage
-    assert(m5.contains("data type mismatch: Argument 1 (IntegerType) != Argument 2 (DoubleType)"))
+    assert(m5.contains("data type mismatch: Argument 1 (int) != Argument 2 (double)"))
 
   }
 

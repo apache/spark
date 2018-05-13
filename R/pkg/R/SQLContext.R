@@ -123,7 +123,6 @@ infer_type <- function(x) {
 #' @return a list of config values with keys as their names
 #' @rdname sparkR.conf
 #' @name sparkR.conf
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -163,7 +162,6 @@ sparkR.conf <- function(key, defaultValue) {
 #' @return a character string of the Spark version
 #' @rdname sparkR.version
 #' @name sparkR.version
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -191,7 +189,6 @@ getDefaultSqlSource <- function() {
 #'        limited by length of the list or number of rows of the data.frame
 #' @return A SparkDataFrame.
 #' @rdname createDataFrame
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -294,7 +291,6 @@ createDataFrame <- function(x, ...) {
 
 #' @rdname createDataFrame
 #' @aliases createDataFrame
-#' @export
 #' @method as.DataFrame default
 #' @note as.DataFrame since 1.6.0
 as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0, numPartitions = NULL) {
@@ -304,7 +300,6 @@ as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0, numPa
 #' @param ... additional argument(s).
 #' @rdname createDataFrame
 #' @aliases as.DataFrame
-#' @export
 as.DataFrame <- function(data, ...) {
   dispatchFunc("as.DataFrame(data, schema = NULL)", data, ...)
 }
@@ -342,7 +337,6 @@ setMethod("toDF", signature(x = "RDD"),
 #' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.json
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -371,7 +365,6 @@ read.json <- function(x, ...) {
 
 #' @rdname read.json
 #' @name jsonFile
-#' @export
 #' @method jsonFile default
 #' @note jsonFile since 1.4.0
 jsonFile.default <- function(path) {
@@ -423,7 +416,6 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 #' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.orc
-#' @export
 #' @name read.orc
 #' @note read.orc since 2.0.0
 read.orc <- function(path, ...) {
@@ -444,7 +436,6 @@ read.orc <- function(path, ...) {
 #' @param path path of file to read. A vector of multiple paths is allowed.
 #' @return SparkDataFrame
 #' @rdname read.parquet
-#' @export
 #' @name read.parquet
 #' @method read.parquet default
 #' @note read.parquet since 1.6.0
@@ -466,7 +457,6 @@ read.parquet <- function(x, ...) {
 #' @param ... argument(s) passed to the method.
 #' @rdname read.parquet
 #' @name parquetFile
-#' @export
 #' @method parquetFile default
 #' @note parquetFile since 1.4.0
 parquetFile.default <- function(...) {
@@ -490,7 +480,6 @@ parquetFile <- function(x, ...) {
 #' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.text
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -522,7 +511,6 @@ read.text <- function(x, ...) {
 #' @param sqlQuery A character vector containing the SQL query
 #' @return SparkDataFrame
 #' @rdname sql
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -556,7 +544,6 @@ sql <- function(x, ...) {
 #' @return SparkDataFrame
 #' @rdname tableToDF
 #' @name tableToDF
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -591,7 +578,6 @@ tableToDF <- function(tableName) {
 #' @rdname read.df
 #' @name read.df
 #' @seealso \link{read.json}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -681,7 +667,6 @@ loadDF <- function(x = NULL, ...) {
 #' @return SparkDataFrame
 #' @rdname read.jdbc
 #' @name read.jdbc
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -727,12 +712,13 @@ read.jdbc <- function(url, tableName,
 #' @param schema The data schema defined in structType or a DDL-formatted string, this is
 #'               required for file-based streaming data source
 #' @param ... additional external data source specific named options, for instance \code{path} for
-#'        file-based streaming data source
+#'        file-based streaming data source. \code{timeZone} to indicate a timezone to be used to
+#'        parse timestamps in the JSON/CSV data sources or partition values; If it isn't set, it
+#'        uses the default value, session local timezone.
 #' @return SparkDataFrame
 #' @rdname read.stream
 #' @name read.stream
 #' @seealso \link{write.stream}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()

@@ -22,7 +22,7 @@ import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 /**
  * AggregatedDialect can unify multiple dialects into one virtual Dialect.
  * Dialects are tried in order, and the first dialect that does not return a
- * neutral element will will.
+ * neutral element will win.
  *
  * @param dialects List of dialects.
  */
@@ -62,5 +62,9 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
       case _ if dialects.exists(_.isCascadingTruncateTable().isEmpty) => None
       case _ => Some(false)
     }
+  }
+
+  override def getTruncateQuery(table: String): String = {
+    dialects.head.getTruncateQuery(table)
   }
 }

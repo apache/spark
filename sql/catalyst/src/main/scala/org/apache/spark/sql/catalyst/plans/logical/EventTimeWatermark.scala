@@ -38,7 +38,7 @@ object EventTimeWatermark {
 case class EventTimeWatermark(
     eventTime: Attribute,
     delay: CalendarInterval,
-    child: LogicalPlan) extends LogicalPlan {
+    child: LogicalPlan) extends UnaryNode {
 
   // Update the metadata on the eventTime column to include the desired delay.
   override val output: Seq[Attribute] = child.output.map { a =>
@@ -60,6 +60,4 @@ case class EventTimeWatermark(
       a
     }
   }
-
-  override val children: Seq[LogicalPlan] = child :: Nil
 }

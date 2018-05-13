@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.arrow
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.execution.vectorized.ArrowColumnVector
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ArrowColumnVector
 import org.apache.spark.unsafe.types.UTF8String
 
 class ArrowWriterSuite extends SparkFunSuite {
@@ -49,6 +49,7 @@ class ArrowWriterSuite extends SparkFunSuite {
             case LongType => reader.getLong(rowId)
             case FloatType => reader.getFloat(rowId)
             case DoubleType => reader.getDouble(rowId)
+            case DecimalType.Fixed(precision, scale) => reader.getDecimal(rowId, precision, scale)
             case StringType => reader.getUTF8String(rowId)
             case BinaryType => reader.getBinary(rowId)
             case DateType => reader.getInt(rowId)
@@ -66,6 +67,7 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(LongType, Seq(1L, 2L, null, 4L))
     check(FloatType, Seq(1.0f, 2.0f, null, 4.0f))
     check(DoubleType, Seq(1.0d, 2.0d, null, 4.0d))
+    check(DecimalType.SYSTEM_DEFAULT, Seq(Decimal(1), Decimal(2), null, Decimal(4)))
     check(StringType, Seq("a", "b", null, "d").map(UTF8String.fromString))
     check(BinaryType, Seq("a".getBytes(), "b".getBytes(), null, "d".getBytes()))
     check(DateType, Seq(0, 1, 2, null, 4))
@@ -215,21 +217,21 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
 
-    val struct0 = reader.getStruct(0, 2)
+    val struct0 = reader.getStruct(0)
     assert(struct0.getInt(0) === 1)
     assert(struct0.getUTF8String(1) === UTF8String.fromString("str1"))
 
-    val struct1 = reader.getStruct(1, 2)
+    val struct1 = reader.getStruct(1)
     assert(struct1.isNullAt(0))
     assert(struct1.isNullAt(1))
 
     assert(reader.isNullAt(2))
 
-    val struct3 = reader.getStruct(3, 2)
+    val struct3 = reader.getStruct(3)
     assert(struct3.getInt(0) === 4)
     assert(struct3.isNullAt(1))
 
-    val struct4 = reader.getStruct(4, 2)
+    val struct4 = reader.getStruct(4)
     assert(struct4.isNullAt(0))
     assert(struct4.getUTF8String(1) === UTF8String.fromString("str5"))
 
@@ -250,15 +252,15 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
 
-    val struct00 = reader.getStruct(0, 1).getStruct(0, 2)
+    val struct00 = reader.getStruct(0).getStruct(0, 2)
     assert(struct00.getInt(0) === 1)
     assert(struct00.getUTF8String(1) === UTF8String.fromString("str1"))
 
-    val struct10 = reader.getStruct(1, 1).getStruct(0, 2)
+    val struct10 = reader.getStruct(1).getStruct(0, 2)
     assert(struct10.isNullAt(0))
     assert(struct10.isNullAt(1))
 
-    val struct2 = reader.getStruct(2, 1)
+    val struct2 = reader.getStruct(2)
     assert(struct2.isNullAt(0))
 
     assert(reader.isNullAt(3))

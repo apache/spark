@@ -54,7 +54,7 @@ object TallSkinnySVD {
     // Compute SVD.
     val svd = mat.computeSVD(mat.numCols().toInt)
 
-    println("Singular values are " + svd.s)
+    println(s"Singular values are ${svd.s}")
 
     sc.stop()
   }

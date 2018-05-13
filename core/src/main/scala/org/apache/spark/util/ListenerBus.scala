@@ -81,7 +81,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       try {
         doPostEvent(listener, event)
       } catch {
-        case NonFatal(e) =>
+        case NonFatal(e) if !isIgnorableException(e) =>
           logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
       } finally {
         if (maybeTimerContext != null) {
@@ -96,6 +96,9 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * thread for all listeners.
    */
   protected def doPostEvent(listener: L, event: E): Unit
+
+  /** Allows bus implementations to prevent error logging for certain exceptions. */
+  protected def isIgnorableException(e: Throwable): Boolean = false
 
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass

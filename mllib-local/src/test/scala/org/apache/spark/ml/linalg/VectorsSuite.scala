@@ -366,4 +366,18 @@ class VectorsSuite extends SparkMLFunSuite {
     assert(v.slice(Array(2, 0)) === new SparseVector(2, Array(0), Array(2.2)))
     assert(v.slice(Array(2, 0, 3, 4)) === new SparseVector(4, Array(0, 3), Array(2.2, 4.4)))
   }
+
+  test("sparse vector only support non-negative length") {
+    val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
+    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
+    assert(v1.size === 0)
+    assert(v2.size === 0)
+
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array(1), Array(2.0))
+    }
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array((1, 2.0)))
+    }
+  }
 }

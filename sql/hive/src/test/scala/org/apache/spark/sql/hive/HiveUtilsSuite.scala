@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URL
+
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SQLTestUtils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader}
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
@@ -41,5 +46,26 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
       assert(!hiveConf.contains("spark.hadoop.foo"))
       assert(hiveConf("foo") === "bar")
     }
+  }
+
+  test("ChildFirstURLClassLoader's parent is null, get spark classloader instead") {
+    val conf = new SparkConf
+    val contextClassLoader = Thread.currentThread().getContextClassLoader
+    val loader = new ChildFirstURLClassLoader(Array(), contextClassLoader)
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      HiveUtils.newClientForMetadata(
+        conf,
+        SparkHadoopUtil.newConfiguration(conf),
+        HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true))
+    } finally {
+      Thread.currentThread().setContextClassLoader(contextClassLoader)
+    }
+  }
+
+  test("toHiveString correctly handles UDTs") {
+    val point = new ExamplePoint(50.0, 50.0)
+    val tpe = new ExamplePointUDT()
+    assert(HiveUtils.toHiveString((point, tpe)) === "(50.0, 50.0)")
   }
 }

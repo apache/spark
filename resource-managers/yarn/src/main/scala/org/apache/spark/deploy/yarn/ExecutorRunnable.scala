@@ -141,7 +141,8 @@ private[yarn] class ExecutorRunnable(
 
     // Set extra Java options for the executor, if defined
     sparkConf.get(EXECUTOR_JAVA_OPTIONS).foreach { opts =>
-      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+      val subsOpt = Utils.substituteAppNExecIds(opts, appId, executorId)
+      javaOpts ++= Utils.splitCommandString(subsOpt).map(YarnSparkHadoopUtil.escapeForShell)
     }
     sparkConf.get(EXECUTOR_LIBRARY_PATH).foreach { p =>
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
@@ -220,18 +221,26 @@ private[yarn] class ExecutorRunnable(
     val env = new HashMap[String, String]()
     Client.populateClasspath(null, conf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
 
-    sparkConf.getExecutorEnv.foreach { case (key, value) =>
-      // This assumes each executor environment variable set here is a path
-      // This is kept for backward compatibility and consistency with hadoop
-      YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
-    }
-
     // lookup appropriate http scheme for container log urls
     val yarnHttpPolicy = conf.get(
       YarnConfiguration.YARN_HTTP_POLICY_KEY,
       YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
     )
     val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
+
+    System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
+      .foreach { case (k, v) => env(k) = v }
+
+    sparkConf.getExecutorEnv.foreach { case (key, value) =>
+      if (key == Environment.CLASSPATH.name()) {
+        // If the key of env variable is CLASSPATH, we assume it is a path and append it.
+        // This is kept for backward compatibility and consistency with hadoop
+        YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
+      } else {
+        // For other env variables, simply overwrite the value.
+        env(key) = value
+      }
+    }
 
     // Add log urls
     container.foreach { c =>
@@ -245,8 +254,6 @@ private[yarn] class ExecutorRunnable(
       }
     }
 
-    System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
-      .foreach { case (k, v) => env(k) = v }
     env
   }
 }

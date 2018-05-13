@@ -180,15 +180,18 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   override def afterAll(): Unit = {
-    dropTables("partitioned_parquet",
-      "partitioned_parquet_with_key",
-      "partitioned_parquet_with_complextypes",
-      "partitioned_parquet_with_key_and_complextypes",
-      "normal_parquet",
-      "jt",
-      "jt_array",
-      "test_parquet")
-    super.afterAll()
+    try {
+      dropTables("partitioned_parquet",
+        "partitioned_parquet_with_key",
+        "partitioned_parquet_with_complextypes",
+        "partitioned_parquet_with_key_and_complextypes",
+        "normal_parquet",
+        "jt",
+        "jt_array",
+        "test_parquet")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test(s"conversion is working") {
@@ -931,11 +934,15 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
   }
 
   override protected def afterAll(): Unit = {
-    partitionedTableDir.delete()
-    normalTableDir.delete()
-    partitionedTableDirWithKey.delete()
-    partitionedTableDirWithComplexTypes.delete()
-    partitionedTableDirWithKeyAndComplexTypes.delete()
+    try {
+      partitionedTableDir.delete()
+      normalTableDir.delete()
+      partitionedTableDirWithKey.delete()
+      partitionedTableDirWithComplexTypes.delete()
+      partitionedTableDirWithKeyAndComplexTypes.delete()
+    } finally {
+      super.afterAll()
+    }
   }
 
   /**

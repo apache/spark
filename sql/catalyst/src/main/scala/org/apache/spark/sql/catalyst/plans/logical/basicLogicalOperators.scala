@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
+  RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -42,11 +43,12 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
  * This node is inserted at the top of a subquery when it is optimized. This makes sure we can
  * recognize a subquery as such, and it allows us to write subquery aware transformations.
  */
-case class Subquery(child: LogicalPlan) extends UnaryNode {
+case class Subquery(child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
+case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
+    extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
@@ -72,8 +74,13 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * their output.
  *
  * @param generator the generator expression
- * @param join  when true, each output row is implicitly joined with the input tuple that produced
- *              it.
+ * @param unrequiredChildIndex this paramter starts as Nil and gets filled by the Optimizer.
+ *                             It's used as an optimization for omitting data generation that will
+ *                             be discarded next by a projection.
+ *                             A common use case is when we explode(array(..)) and are interested
+ *                             only in the exploded data and not in the original array. before this
+ *                             optimization the array got duplicated for each of its elements,
+ *                             causing O(n^^2) memory consumption. (see [SPARK-21657])
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty.
  * @param qualifier Qualifier for the attributes of generator(UDTF)
@@ -82,15 +89,17 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  */
 case class Generate(
     generator: Generator,
-    join: Boolean,
+    unrequiredChildIndex: Seq[Int],
     outer: Boolean,
     qualifier: Option[String],
     generatorOutput: Seq[Attribute],
     child: LogicalPlan)
   extends UnaryNode {
 
-  /** The set of all attributes produced by this node. */
-  def generatedSet: AttributeSet = AttributeSet(generatorOutput)
+  lazy val requiredChildOutput: Seq[Attribute] = {
+    val unrequiredSet = unrequiredChildIndex.toSet
+    child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
+  }
 
   override lazy val resolved: Boolean = {
     generator.resolved &&
@@ -113,13 +122,11 @@ case class Generate(
     nullableOutput
   }
 
-  def output: Seq[Attribute] = {
-    if (join) child.output ++ qualifiedGeneratorOutput else qualifiedGeneratorOutput
-  }
+  def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
-  extends UnaryNode with PredicateHelper {
+  extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
@@ -463,6 +470,7 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
+  override def outputOrdering: Seq[SortOrder] = order
 }
 
 /** Factory for constructing new `Range` nodes. */
@@ -515,6 +523,15 @@ case class Range(
 
   override def computeStats(): Statistics = {
     Statistics(sizeInBytes = LongType.defaultSize * numElements)
+  }
+
+  override def outputOrdering: Seq[SortOrder] = {
+    val order = if (step > 0) {
+      Ascending
+    } else {
+      Descending
+    }
+    output.map(a => SortOrder(a, order))
   }
 }
 
@@ -669,17 +686,34 @@ case class GroupingSets(
   override lazy val resolved: Boolean = false
 }
 
+/**
+ * A constructor for creating a pivot, which will later be converted to a [[Project]]
+ * or an [[Aggregate]] during the query analysis.
+ *
+ * @param groupByExprsOpt A sequence of group by expressions. This field should be None if coming
+ *                        from SQL, in which group by expressions are not explicitly specified.
+ * @param pivotColumn     The pivot column.
+ * @param pivotValues     A sequence of values for the pivot column.
+ * @param aggregates      The aggregation expressions, each with or without an alias.
+ * @param child           Child operator
+ */
 case class Pivot(
-    groupByExprs: Seq[NamedExpression],
+    groupByExprsOpt: Option[Seq[NamedExpression]],
     pivotColumn: Expression,
     pivotValues: Seq[Literal],
     aggregates: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
-    case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
-    case _ => pivotValues.flatMap{ value =>
-      aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+  override lazy val resolved = false // Pivot will be replaced after being resolved.
+  override def output: Seq[Attribute] = {
+    val pivotAgg = aggregates match {
+      case agg :: Nil =>
+        pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
+      case _ =>
+        pivotValues.flatMap { value =>
+          aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+        }
     }
+    groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
 }
 
@@ -722,7 +756,7 @@ object Limit {
  *
  * See [[Limit]] for more information.
  */
-case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
@@ -738,7 +772,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
  *
  * See [[Limit]] for more information.
  */
-case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override def maxRowsPerPartition: Option[Long] = {
@@ -758,7 +792,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan)
-  extends UnaryNode {
+  extends OrderPreservingUnaryNode {
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 
@@ -838,6 +872,27 @@ case class RepartitionByExpression(
 
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
+  val partitioning: Partitioning = {
+    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+
+    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+      s"""
+         |SortOrder: $sortOrder
+         |NonSortOrder: $nonSortOrder
+       """.stripMargin)
+
+    if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+    } else if (nonSortOrder.nonEmpty) {
+      HashPartitioning(nonSortOrder, numPartitions)
+    } else {
+      RoundRobinPartitioning(numPartitions)
+    }
+  }
+
   override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true
 }
@@ -860,4 +915,24 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * A logical plan for setting a barrier of analysis.
+ *
+ * The SQL Analyzer goes through a whole query plan even most part of it is analyzed. This
+ * increases the time spent on query analysis for long pipelines in ML, especially.
+ *
+ * This logical plan wraps an analyzed logical plan to prevent it from analysis again. The barrier
+ * is applied to the analyzed logical plan in Dataset. It won't change the output of wrapped
+ * logical plan and just acts as a wrapper to hide it from analyzer. New operations on the dataset
+ * will be put on the barrier, so only the new nodes created will be analyzed.
+ *
+ * This analysis barrier will be removed at the end of analysis stage.
+ */
+case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
+  override protected def innerChildren: Seq[LogicalPlan] = Seq(child)
+  override def output: Seq[Attribute] = child.output
+  override def isStreaming: Boolean = child.isStreaming
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
 }

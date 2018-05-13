@@ -39,10 +39,10 @@ For example, for Maven support, add the following to the <code>pom.xml</code> fi
 # Configuration Parameters
 
 Create <code>core-site.xml</code> and place it inside Spark's <code>conf</code> directory.
-The main category of parameters that should be configured are the authentication parameters
+The main category of parameters that should be configured is the authentication parameters
 required by Keystone.
 
-The following table  contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be
+The following table contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be
 any (alphanumeric) name.
 
 <table class="table">

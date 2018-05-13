@@ -73,18 +73,22 @@ statement
     | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
     | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
-        (OPTIONS options=tablePropertyList)?
-        (PARTITIONED BY partitionColumnNames=identifierList)?
-        bucketSpec? locationSpec?
-        (COMMENT comment=STRING)?
-        (TBLPROPERTIES tableProps=tablePropertyList)?
+        ((OPTIONS options=tablePropertyList) |
+        (PARTITIONED BY partitionColumnNames=identifierList) |
+        bucketSpec |
+        locationSpec |
+        (COMMENT comment=STRING) |
+        (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
-        (COMMENT comment=STRING)?
-        (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
-        bucketSpec? skewSpec?
-        rowFormat?  createFileFormat? locationSpec?
-        (TBLPROPERTIES tablePropertyList)?
+        ((COMMENT comment=STRING) |
+        (PARTITIONED BY '(' partitionColumns=colTypeList ')') |
+        bucketSpec |
+        skewSpec |
+        rowFormat |
+        createFileFormat |
+        locationSpec |
+        (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
@@ -137,7 +141,7 @@ statement
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) db=identifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
-    | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
+    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
@@ -394,7 +398,7 @@ hintStatement
     ;
 
 fromClause
-    : FROM relation (',' relation)* lateralView*
+    : FROM relation (',' relation)* (pivotClause | lateralView*)?
     ;
 
 aggregation
@@ -407,6 +411,10 @@ aggregation
 groupingSet
     : '(' (expression (',' expression)*)? ')'
     | expression
+    ;
+
+pivotClause
+    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn=identifier IN '(' pivotValues+=constant (',' pivotValues+=constant)* ')' ')'
     ;
 
 lateralView
@@ -721,7 +729,7 @@ nonReserved
     | ADD
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | LAST | FIRST | AFTER
     | MAP | ARRAY | STRUCT
-    | LATERAL | WINDOW | REDUCE | TRANSFORM | SERDE | SERDEPROPERTIES | RECORDREADER
+    | PIVOT | LATERAL | WINDOW | REDUCE | TRANSFORM | SERDE | SERDEPROPERTIES | RECORDREADER
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
     | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | GLOBAL | TEMPORARY | OPTIONS
     | GROUPING | CUBE | ROLLUP
@@ -741,7 +749,7 @@ nonReserved
     | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | RECOVER | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
     | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL | INPATH
     | ASC | DESC | LIMIT | RENAME | SETS
-    | AT | NULLS | OVERWRITE | ALL | ALTER | AS | BETWEEN | BY | CREATE | DELETE
+    | AT | NULLS | OVERWRITE | ALL | ANY | ALTER | AS | BETWEEN | BY | CREATE | DELETE
     | DESCRIBE | DROP | EXISTS | FALSE | FOR | GROUP | IN | INSERT | INTO | IS |LIKE
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
@@ -756,6 +764,7 @@ FROM: 'FROM';
 ADD: 'ADD';
 AS: 'AS';
 ALL: 'ALL';
+ANY: 'ANY';
 DISTINCT: 'DISTINCT';
 WHERE: 'WHERE';
 GROUP: 'GROUP';
@@ -801,6 +810,7 @@ RIGHT: 'RIGHT';
 FULL: 'FULL';
 NATURAL: 'NATURAL';
 ON: 'ON';
+PIVOT: 'PIVOT';
 LATERAL: 'LATERAL';
 WINDOW: 'WINDOW';
 OVER: 'OVER';

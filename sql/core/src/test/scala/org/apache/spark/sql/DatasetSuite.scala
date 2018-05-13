@@ -660,7 +660,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       df.as[KryoData]
     }.message
-    assert(e.contains("cannot cast IntegerType to BinaryType"))
+    assert(e.contains("cannot cast int to binary"))
   }
 
   test("Java encoder") {
@@ -958,12 +958,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ).toDS()
 
     val expected =
-      """+-------+
-        ||      f|
-        |+-------+
-        ||[foo,1]|
-        ||[bar,2]|
-        |+-------+
+      """+--------+
+        ||       f|
+        |+--------+
+        ||[foo, 1]|
+        ||[bar, 2]|
+        |+--------+
         |""".stripMargin
 
     checkShowString(ds, expected)
@@ -1156,67 +1156,82 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   Seq(true, false).foreach { eager =>
-    def testCheckpointing(testName: String)(f: => Unit): Unit = {
-      test(s"Dataset.checkpoint() - $testName (eager = $eager)") {
-        withTempDir { dir =>
-          val originalCheckpointDir = spark.sparkContext.checkpointDir
+    Seq(true, false).foreach { reliable =>
+      def testCheckpointing(testName: String)(f: => Unit): Unit = {
+        test(s"Dataset.checkpoint() - $testName (eager = $eager, reliable = $reliable)") {
+          if (reliable) {
+            withTempDir { dir =>
+              val originalCheckpointDir = spark.sparkContext.checkpointDir
 
-          try {
-            spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
+              try {
+                spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
+                f
+              } finally {
+                // Since the original checkpointDir can be None, we need
+                // to set the variable directly.
+                spark.sparkContext.checkpointDir = originalCheckpointDir
+              }
+            }
+          } else {
+            // Local checkpoints dont require checkpoint_dir
             f
-          } finally {
-            // Since the original checkpointDir can be None, we need
-            // to set the variable directly.
-            spark.sparkContext.checkpointDir = originalCheckpointDir
           }
         }
       }
-    }
 
-    testCheckpointing("basic") {
-      val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
-      val cp = ds.checkpoint(eager)
+      testCheckpointing("basic") {
+        val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
+        val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
 
-      val logicalRDD = cp.logicalPlan match {
-        case plan: LogicalRDD => plan
-        case _ =>
-          val treeString = cp.logicalPlan.treeString(verbose = true)
-          fail(s"Expecting a LogicalRDD, but got\n$treeString")
+        val logicalRDD = cp.logicalPlan match {
+          case plan: LogicalRDD => plan
+          case _ =>
+            val treeString = cp.logicalPlan.treeString(verbose = true)
+            fail(s"Expecting a LogicalRDD, but got\n$treeString")
+        }
+
+        val dsPhysicalPlan = ds.queryExecution.executedPlan
+        val cpPhysicalPlan = cp.queryExecution.executedPlan
+
+        assertResult(dsPhysicalPlan.outputPartitioning) {
+          logicalRDD.outputPartitioning
+        }
+        assertResult(dsPhysicalPlan.outputOrdering) {
+          logicalRDD.outputOrdering
+        }
+
+        assertResult(dsPhysicalPlan.outputPartitioning) {
+          cpPhysicalPlan.outputPartitioning
+        }
+        assertResult(dsPhysicalPlan.outputOrdering) {
+          cpPhysicalPlan.outputOrdering
+        }
+
+        // For a lazy checkpoint() call, the first check also materializes the checkpoint.
+        checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
+
+        // Reads back from checkpointed data and check again.
+        checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
       }
 
-      val dsPhysicalPlan = ds.queryExecution.executedPlan
-      val cpPhysicalPlan = cp.queryExecution.executedPlan
+      testCheckpointing("should preserve partitioning information") {
+        val ds = spark.range(10).repartition('id % 2)
+        val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
 
-      assertResult(dsPhysicalPlan.outputPartitioning) { logicalRDD.outputPartitioning }
-      assertResult(dsPhysicalPlan.outputOrdering) { logicalRDD.outputOrdering }
+        val agg = cp.groupBy('id % 2).agg(count('id))
 
-      assertResult(dsPhysicalPlan.outputPartitioning) { cpPhysicalPlan.outputPartitioning }
-      assertResult(dsPhysicalPlan.outputOrdering) { cpPhysicalPlan.outputOrdering }
+        agg.queryExecution.executedPlan.collectFirst {
+          case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
+          case BroadcastExchangeExec(_, _: RDDScanExec) =>
+        }.foreach { _ =>
+          fail(
+            "No Exchange should be inserted above RDDScanExec since the checkpointed Dataset " +
+              "preserves partitioning information:\n\n" + agg.queryExecution
+          )
+        }
 
-      // For a lazy checkpoint() call, the first check also materializes the checkpoint.
-      checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
-
-      // Reads back from checkpointed data and check again.
-      checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
-    }
-
-    testCheckpointing("should preserve partitioning information") {
-      val ds = spark.range(10).repartition('id % 2)
-      val cp = ds.checkpoint(eager)
-
-      val agg = cp.groupBy('id % 2).agg(count('id))
-
-      agg.queryExecution.executedPlan.collectFirst {
-        case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
-        case BroadcastExchangeExec(_, _: RDDScanExec) =>
-      }.foreach { _ =>
-        fail(
-          "No Exchange should be inserted above RDDScanExec since the checkpointed Dataset " +
-            "preserves partitioning information:\n\n" + agg.queryExecution
-        )
+        checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
       }
-
-      checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
     }
   }
 
@@ -1426,7 +1441,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       assert(e.getCause.isInstanceOf[NullPointerException])
     }
   }
+
+  test("SPARK-23025: Add support for null type in scala reflection") {
+    val data = Seq(("a", null))
+    checkDataset(data.toDS(), data: _*)
+  }
+
+  test("SPARK-23614: Union produces incorrect results when caching is used") {
+    val cached = spark.createDataset(Seq(TestDataUnion(1, 2, 3), TestDataUnion(4, 5, 6))).cache()
+    val group1 = cached.groupBy("x").agg(min(col("y")) as "value")
+    val group2 = cached.groupBy("x").agg(min(col("z")) as "value")
+    checkAnswer(group1.union(group2), Row(4, 5) :: Row(1, 2) :: Row(4, 6) :: Row(1, 3) :: Nil)
+  }
+
+  test("SPARK-23835: null primitive data type should throw NullPointerException") {
+    val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
+    intercept[NullPointerException](ds.as[(Int, Int)].collect())
+  }
 }
+
+case class TestDataUnion(x: Int, y: Int, z: Int)
 
 case class SingleData(id: Int)
 case class DoubleData(id: Int, val1: String)

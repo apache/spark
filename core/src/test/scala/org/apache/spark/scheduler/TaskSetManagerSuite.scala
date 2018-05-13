@@ -683,7 +683,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val conf = new SparkConf().set("spark.speculation", "true")
     sc = new SparkContext("local", "test", conf)
 
-    val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
+    sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
     sched.initialize(new FakeSchedulerBackend() {
       override def killTask(
         taskId: Long,
@@ -709,6 +709,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
         }
       }
     }
+    sched.dagScheduler.stop()
     sched.setDAGScheduler(dagScheduler)
 
     val singleTask = new ShuffleMapTask(0, 0, null, new Partition {
@@ -754,7 +755,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sc.conf.set("spark.speculation", "true")
 
     var killTaskCalled = false
-    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
       ("exec2", "host2"), ("exec3", "host3"))
     sched.initialize(new FakeSchedulerBackend() {
       override def killTask(
@@ -789,6 +790,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
         }
       }
     }
+    sched.dagScheduler.stop()
     sched.setDAGScheduler(dagScheduler)
 
     val taskSet = FakeTask.createShuffleMapTaskSet(4, 0, 0,
@@ -1183,6 +1185,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val mockDAGScheduler = mock(classOf[DAGScheduler])
+    sched.dagScheduler.stop()
     sched.dagScheduler = mockDAGScheduler
     val taskSet = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = new ManualClock(1))

@@ -140,7 +140,9 @@ case class Alias(child: Expression, name: String)(
 
   /** Just a simple passthrough for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    throw new IllegalStateException("Alias.doGenCode should not be called.")
+  }
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable

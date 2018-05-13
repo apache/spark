@@ -18,7 +18,11 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.TimeZone;
 
+import org.apache.parquet.bytes.ByteBufferInputStream;
+import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
@@ -30,7 +34,7 @@ import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
-import org.apache.spark.sql.execution.vectorized.ColumnVector;
+import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
@@ -93,13 +97,18 @@ public class VectorizedColumnReader {
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
   private final OriginalType originalType;
+  // The timezone conversion to apply to int96 timestamps. Null if no conversion.
+  private final TimeZone convertTz;
+  private static final TimeZone UTC = DateTimeUtils.TimeZoneUTC();
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       OriginalType originalType,
-      PageReader pageReader) throws IOException {
+      PageReader pageReader,
+      TimeZone convertTz) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
+    this.convertTz = convertTz;
     this.originalType = originalType;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
@@ -222,6 +231,22 @@ public class VectorizedColumnReader {
     }
   }
 
+  private boolean shouldConvertTimestamps() {
+    return convertTz != null && !convertTz.equals(UTC);
+  }
+
+  /**
+   * Helper function to construct exception for parquet schema mismatch.
+   */
+  private SchemaColumnConvertNotSupportedException constructConvertNotSupportedException(
+      ColumnDescriptor descriptor,
+      WritableColumnVector column) {
+    return new SchemaColumnConvertNotSupportedException(
+      Arrays.toString(descriptor.getPath()),
+      descriptor.getType().toString(),
+      column.dataType().toString());
+  }
+
   /**
    * Reads `num` values into column, decoding the values from `dictionaryIds` and `dictionary`.
    */
@@ -229,7 +254,7 @@ public class VectorizedColumnReader {
       int rowId,
       int num,
       WritableColumnVector column,
-      ColumnVector dictionaryIds) {
+      WritableColumnVector dictionaryIds) {
     switch (descriptor.getType()) {
       case INT32:
         if (column.dataType() == DataTypes.IntegerType ||
@@ -252,7 +277,7 @@ public class VectorizedColumnReader {
             }
           }
         } else {
-          throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
+          throw constructConvertNotSupportedException(descriptor, column);
         }
         break;
 
@@ -273,7 +298,7 @@ public class VectorizedColumnReader {
             }
           }
         } else {
-          throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
+          throw constructConvertNotSupportedException(descriptor, column);
         }
         break;
 
@@ -294,15 +319,25 @@ public class VectorizedColumnReader {
         break;
       case INT96:
         if (column.dataType() == DataTypes.TimestampType) {
-          for (int i = rowId; i < rowId + num; ++i) {
-            // TODO: Convert dictionary of Binaries to dictionary of Longs
-            if (!column.isNullAt(i)) {
-              Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
-              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
+          if (!shouldConvertTimestamps()) {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+                column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
+              }
+            }
+          } else {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+                long rawTime = ParquetRowConverter.binaryToSQLTimestamp(v);
+                long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+                column.putLong(i, adjTime);
+              }
             }
           }
         } else {
-          throw new UnsupportedOperationException();
+          throw constructConvertNotSupportedException(descriptor, column);
         }
         break;
       case BINARY:
@@ -341,7 +376,7 @@ public class VectorizedColumnReader {
             }
           }
         } else {
-          throw new UnsupportedOperationException();
+          throw constructConvertNotSupportedException(descriptor, column);
         }
         break;
 
@@ -355,13 +390,16 @@ public class VectorizedColumnReader {
    * is guaranteed that num is smaller than the number of values left in the current page.
    */
 
-  private void readBooleanBatch(int rowId, int num, WritableColumnVector column) {
-    assert(column.dataType() == DataTypes.BooleanType);
+  private void readBooleanBatch(int rowId, int num, WritableColumnVector column)
+      throws IOException {
+    if (column.dataType() != DataTypes.BooleanType) {
+      throw constructConvertNotSupportedException(descriptor, column);
+    }
     defColumn.readBooleans(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
   }
 
-  private void readIntBatch(int rowId, int num, WritableColumnVector column) {
+  private void readIntBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.IntegerType || column.dataType() == DataTypes.DateType ||
@@ -375,11 +413,11 @@ public class VectorizedColumnReader {
       defColumn.readShorts(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else {
-      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
+      throw constructConvertNotSupportedException(descriptor, column);
     }
   }
 
-  private void readLongBatch(int rowId, int num, WritableColumnVector column) {
+  private void readLongBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     if (column.dataType() == DataTypes.LongType ||
         DecimalType.is64BitDecimalType(column.dataType()) ||
@@ -395,50 +433,64 @@ public class VectorizedColumnReader {
         }
       }
     } else {
-      throw new UnsupportedOperationException("Unsupported conversion to: " + column.dataType());
+      throw constructConvertNotSupportedException(descriptor, column);
     }
   }
 
-  private void readFloatBatch(int rowId, int num, WritableColumnVector column) {
+  private void readFloatBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: support implicit cast to double?
     if (column.dataType() == DataTypes.FloatType) {
       defColumn.readFloats(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else {
-      throw new UnsupportedOperationException("Unsupported conversion to: " + column.dataType());
+      throw constructConvertNotSupportedException(descriptor, column);
     }
   }
 
-  private void readDoubleBatch(int rowId, int num, WritableColumnVector column) {
+  private void readDoubleBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.DoubleType) {
       defColumn.readDoubles(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else {
-      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
+      throw constructConvertNotSupportedException(descriptor, column);
     }
   }
 
-  private void readBinaryBatch(int rowId, int num, WritableColumnVector column) {
+  private void readBinaryBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
-    if (column.isArray()) {
+    if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType
+            || DecimalType.isByteArrayDecimalType(column.dataType())) {
       defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
     } else if (column.dataType() == DataTypes.TimestampType) {
-      for (int i = 0; i < num; i++) {
-        if (defColumn.readInteger() == maxDefLevel) {
-          column.putLong(rowId + i,
-              // Read 12 bytes for INT96
-              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
-        } else {
-          column.putNull(rowId + i);
+      if (!shouldConvertTimestamps()) {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            // Read 12 bytes for INT96
+            long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
+            column.putLong(rowId + i, rawTime);
+          } else {
+            column.putNull(rowId + i);
+          }
+        }
+      } else {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            // Read 12 bytes for INT96
+            long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
+            long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+            column.putLong(rowId + i, adjTime);
+          } else {
+            column.putNull(rowId + i);
+          }
         }
       }
     } else {
-      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
+      throw constructConvertNotSupportedException(descriptor, column);
     }
   }
 
@@ -477,7 +529,7 @@ public class VectorizedColumnReader {
         }
       }
     } else {
-      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
+      throw constructConvertNotSupportedException(descriptor, column);
     }
   }
 
@@ -507,7 +559,7 @@ public class VectorizedColumnReader {
     });
   }
 
-  private void initDataReader(Encoding dataEncoding, byte[] bytes, int offset) throws IOException {
+  private void initDataReader(Encoding dataEncoding, ByteBufferInputStream in) throws IOException {
     this.endOfPageValueCount = valuesRead + pageValueCount;
     if (dataEncoding.usesDictionary()) {
       this.dataColumn = null;
@@ -532,7 +584,7 @@ public class VectorizedColumnReader {
     }
 
     try {
-      dataColumn.initFromPage(pageValueCount, bytes, offset);
+      dataColumn.initFromPage(pageValueCount, in);
     } catch (IOException e) {
       throw new IOException("could not read page in col " + descriptor, e);
     }
@@ -553,12 +605,11 @@ public class VectorizedColumnReader {
     this.repetitionLevelColumn = new ValuesReaderIntIterator(rlReader);
     this.definitionLevelColumn = new ValuesReaderIntIterator(dlReader);
     try {
-      byte[] bytes = page.getBytes().toByteArray();
-      rlReader.initFromPage(pageValueCount, bytes, 0);
-      int next = rlReader.getNextOffset();
-      dlReader.initFromPage(pageValueCount, bytes, next);
-      next = dlReader.getNextOffset();
-      initDataReader(page.getValueEncoding(), bytes, next);
+      BytesInput bytes = page.getBytes();
+      ByteBufferInputStream in = bytes.toInputStream();
+      rlReader.initFromPage(pageValueCount, in);
+      dlReader.initFromPage(pageValueCount, in);
+      initDataReader(page.getValueEncoding(), in);
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
     }
@@ -570,12 +621,13 @@ public class VectorizedColumnReader {
         page.getRepetitionLevels(), descriptor);
 
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
-    this.defColumn = new VectorizedRleValuesReader(bitWidth);
+    // do not read the length from the stream. v2 pages handle dividing the page bytes.
+    this.defColumn = new VectorizedRleValuesReader(bitWidth, false);
     this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumn);
-    this.defColumn.initFromBuffer(
-        this.pageValueCount, page.getDefinitionLevels().toByteArray());
+    this.defColumn.initFromPage(
+        this.pageValueCount, page.getDefinitionLevels().toInputStream());
     try {
-      initDataReader(page.getDataEncoding(), page.getData().toByteArray(), 0);
+      initDataReader(page.getDataEncoding(), page.getData().toInputStream());
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
     }

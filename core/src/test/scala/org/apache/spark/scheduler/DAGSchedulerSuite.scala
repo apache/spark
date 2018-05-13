@@ -1832,6 +1832,26 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
+  test("accumulator not calculated for resubmitted task in result stage") {
+    val accum = AccumulatorSuite.createLongAccum("a")
+    val finalRdd = new MyRDD(sc, 2, Nil)
+    submit(finalRdd, Array(0, 1))
+    // finish the first task
+    completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
+    // verify stage exists
+    assert(scheduler.stageIdToStage.contains(0))
+
+    // finish the first task again (simulate a speculative task or a resubmitted task)
+    completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+
+    // The accumulator should only be updated once.
+    assert(accum.value === 1)
+
+    runEvent(makeCompletionEvent(taskSets(0).tasks(1), Success, 42))
+    assertDataStructuresEmpty()
+  }
+
   test("accumulators are updated on exception failures") {
     val acc1 = AccumulatorSuite.createLongAccum("ingenieur")
     val acc2 = AccumulatorSuite.createLongAccum("boulanger")
@@ -2126,6 +2146,58 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
+  test("Trigger mapstage's job listener in submitMissingTasks") {
+    val rdd1 = new MyRDD(sc, 2, Nil)
+    val dep1 = new ShuffleDependency(rdd1, new HashPartitioner(2))
+    val rdd2 = new MyRDD(sc, 2, List(dep1), tracker = mapOutputTracker)
+    val dep2 = new ShuffleDependency(rdd2, new HashPartitioner(2))
+
+    val listener1 = new SimpleListener
+    val listener2 = new SimpleListener
+
+    submitMapStage(dep1, listener1)
+    submitMapStage(dep2, listener2)
+
+    // Complete the stage0.
+    assert(taskSets(0).stageId === 0)
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", rdd1.partitions.length)),
+      (Success, makeMapStatus("hostB", rdd1.partitions.length))))
+    assert(mapOutputTracker.getMapSizesByExecutorId(dep1.shuffleId, 0).map(_._1).toSet ===
+        HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    assert(listener1.results.size === 1)
+
+    // When attempting stage1, trigger a fetch failure.
+    assert(taskSets(1).stageId === 1)
+    complete(taskSets(1), Seq(
+      (Success, makeMapStatus("hostC", rdd2.partitions.length)),
+      (FetchFailed(makeBlockManagerId("hostA"), dep1.shuffleId, 0, 0, "ignored"), null)))
+    scheduler.resubmitFailedStages()
+    // Stage1 listener should not have a result yet
+    assert(listener2.results.size === 0)
+
+    // Speculative task succeeded in stage1.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      Success,
+      makeMapStatus("hostD", rdd2.partitions.length)))
+    // stage1 listener still should not have a result, though there's no missing partitions
+    // in it. Because stage1 has been failed and is not inside `runningStages` at this moment.
+    assert(listener2.results.size === 0)
+
+    // Stage0 should now be running as task set 2; make its task succeed
+    assert(taskSets(2).stageId === 0)
+    complete(taskSets(2), Seq(
+      (Success, makeMapStatus("hostC", rdd2.partitions.length))))
+    assert(mapOutputTracker.getMapSizesByExecutorId(dep1.shuffleId, 0).map(_._1).toSet ===
+        Set(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
+
+    // After stage0 is finished, stage1 will be submitted and found there is no missing
+    // partitions in it. Then listener got triggered.
+    assert(listener2.results.size === 1)
+    assertDataStructuresEmpty()
+  }
+
   /**
    * In this test, we run a map stage where one of the executors fails but we still receive a
    * "zombie" complete message from that executor. We want to make sure the stage is not reported
@@ -2406,13 +2478,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   // OutputCommitCoordinator requires the task info itself to not be null.
   private def createFakeTaskInfo(): TaskInfo = {
     val info = new TaskInfo(0, 0, 0, 0L, "", "", TaskLocality.ANY, false)
-    info.finishTime = 1  // to prevent spurious errors in JobProgressListener
+    info.finishTime = 1
     info
   }
 
   private def createFakeTaskInfoWithId(taskId: Long): TaskInfo = {
     val info = new TaskInfo(taskId, 0, 0, 0L, "", "", TaskLocality.ANY, false)
-    info.finishTime = 1  // to prevent spurious errors in JobProgressListener
+    info.finishTime = 1
     info
   }
 

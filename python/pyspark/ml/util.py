@@ -169,6 +169,10 @@ class JavaMLWriter(MLWriter):
         self._jwrite.overwrite()
         return self
 
+    def option(self, key, value):
+        self._jwrite.option(key, value)
+        return self
+
     def context(self, sqlContext):
         """
         Sets the SQL context to use for saving.
