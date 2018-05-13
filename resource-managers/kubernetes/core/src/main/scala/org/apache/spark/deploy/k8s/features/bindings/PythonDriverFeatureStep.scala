@@ -41,6 +41,8 @@ private[spark] class PythonDriverFeatureStep(
           .withValue(s.mkString(","))
           .build())
     val maybePythonFiles = kubernetesConf.pyFiles().map(
+      // Dilineation by ":" is to append the PySpark Files to the PYTHONPATH
+      // of the respective PySpark pod
       pyFiles =>
         new EnvVarBuilder()
           .withName(ENV_PYSPARK_FILES)
