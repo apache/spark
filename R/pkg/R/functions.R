@@ -3011,22 +3011,22 @@ setMethod("array_contains",
 
 #' @details
 #' \code{array_join}: Concatenates the elements of column using the delimiter.
-#' Null values are replaced with null_replacement if set, otherwise they are ignored.
+#' Null values are replaced with nullReplacement if set, otherwise they are ignored.
 #'
 #' @param delimiter character(s) to use to concatenate the elements of column.
-#' @param null_replacement character(s) to use to replace the Null values.
+#' @param nullReplacement character(s) to use to replace the Null values.
 #' @rdname column_collection_functions
 #' @aliases array_join array_join,Column-method
 #' @note array_join since 2.4.0
 setMethod("array_join",
          signature(x = "Column"),
-         function(x, delimiter, null_replacement = NA) {
-           jc <- if (is.na(null_replacement)) {
+         function(x, delimiter, nullReplacement = NA) {
+           jc <- if (is.na(nullReplacement)) {
              callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter)
            }
            else {
              callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter,
-                         null_replacement)
+                         nullReplacement)
            }
            column(jc)
          })
