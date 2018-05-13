@@ -222,6 +222,9 @@ NULL
 #' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
 #' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
 #' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))}
+#' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
+#' tmp4 <- mutate(df, v4 = create_array(df$model, df$model))
+#' head(select(tmp4, array_join(tmp4$v4, "#"), array_join(tmp4$v4, "#", "NULL")))}
 NULL
 
 #' Window functions for Column operations
@@ -3005,6 +3008,28 @@ setMethod("array_contains",
             jc <- callJStatic("org.apache.spark.sql.functions", "array_contains", x@jc, value)
             column(jc)
           })
+
+#' @details
+#' \code{array_join}: Concatenates the elements of column using the delimiter.
+#' Null values are replaced with null_replacement if set, otherwise they are ignored.
+#'
+#' @param delimiter character(s) to use to concatenate the elements of column.
+#' @param null_replacement character(s) to use to replace the Null values.
+#' @rdname column_collection_functions
+#' @aliases array_join array_join,Column-method
+#' @note array_join since 2.4.0
+setMethod("array_join",
+         signature(x = "Column"),
+         function(x, delimiter, null_replacement = NA) {
+           jc <- if (is.na(null_replacement)) {
+             callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter)
+           }
+           else {
+             callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter,
+                         null_replacement)
+           }
+           column(jc)
+         })
 
 #' @details
 #' \code{array_max}: Returns the maximum value of the array.
