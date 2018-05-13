@@ -111,7 +111,8 @@ abstract class UnsafeProjection extends Projection {
 /**
  * The factory object for `UnsafeProjection`.
  */
-object UnsafeProjection extends CodegenObjectFactory[Seq[Expression], UnsafeProjection] {
+object UnsafeProjection
+    extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
 
   override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
     GenerateUnsafeProjection.generate(in)

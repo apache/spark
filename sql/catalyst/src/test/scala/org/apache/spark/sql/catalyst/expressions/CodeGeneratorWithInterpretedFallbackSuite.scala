@@ -22,11 +22,11 @@ import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType}
 
-class CodegenObjectFactorySuite extends SparkFunSuite with PlanTestBase {
+class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanTestBase {
 
   // Given a factory object and corresponding input, checking if `SQLConf.CODEGEN_FACTORY_MODE`
   // can switch between codegen/interpreted implementation.
-  private def testCodegenFactory[IN, OUT](factory: CodegenObjectFactory[IN, OUT],
+  private def testCodegenFactory[IN, OUT](factory: CodeGeneratorWithInterpretedFallback[IN, OUT],
       input: IN, checkerForCodegen: OUT => Unit, checkerForInterpreted: OUT => Unit) = {
 
     val modes = Seq("CODEGEN_ONLY", "NO_CODEGEN")

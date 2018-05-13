@@ -57,7 +57,7 @@ object CodegenObjectFactoryMode extends Enumeration {
  * implementations. This tries to create codegen object first, if any compile error happens,
  * it fallbacks to interpreted version.
  */
-abstract class CodegenObjectFactory[IN, OUT] {
+abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] {
 
   def createObject(in: IN): OUT = {
     // We are allowed to choose codegen-only or no-codegen modes if under tests.
