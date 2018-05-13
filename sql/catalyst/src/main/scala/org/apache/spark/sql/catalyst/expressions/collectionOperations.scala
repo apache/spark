@@ -206,6 +206,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
     val longSize = LongType.defaultSize
     val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + longSize * 2
+    val structSizeAsLong = structSize + "L"
     val keyTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
     val valueTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
 
@@ -234,8 +235,8 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
        |  $unsafeArrayData.pointTo($data, $baseOffset, (int)$byteArraySize);
        |  UnsafeRow $unsafeRow = new UnsafeRow(2);
        |  for (int z = 0; z < $numElements; z++) {
-       |    long offset = $structsOffset + z * $structSize;
-       |    $unsafeArrayData.setLong(z, (offset << 32) + $structSize);
+       |    long offset = $structsOffset + z * $structSizeAsLong;
+       |    $unsafeArrayData.setLong(z, (offset << 32) + $structSizeAsLong);
        |    $unsafeRow.pointTo($data, $baseOffset + offset, $structSize);
        |    $unsafeRow.set$keyTypeName(0, ${getKey(keys)});
        |    $valueAssignmentChecked
