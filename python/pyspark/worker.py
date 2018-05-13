@@ -81,7 +81,7 @@ def wrap_scalar_pandas_udf(f, return_type):
     def verify_result_length(*a):
         result = f(*a)
         if not hasattr(result, "__len__"):
-            raise TypeError("Return type of the user-defined functon should be "
+            raise TypeError("Return type of the user-defined function should be "
                             "Pandas.Series, but is {}".format(type(result)))
         if len(result) != len(a[0]):
             raise RuntimeError("Result vector from pandas_udf was not the required length: "
