@@ -622,8 +622,8 @@ class PlannerSuite extends SharedSQLContext {
       shouldHaveSort = true)
   }
 
-  test("SPARK-24242: RangeExec should have correct output ordering") {
-    val df = spark.range(10).orderBy("id")
+  test("SPARK-24242: RangeExec should have correct output ordering and partitioning") {
+    val df = spark.range(10)
     val rangeExec = df.queryExecution.executedPlan.collect {
       case r: RangeExec => r
     }
@@ -634,7 +634,7 @@ class PlannerSuite extends SharedSQLContext {
     assert(rangeExec.head.outputPartitioning ==
       RangePartitioning(rangeExec.head.outputOrdering, df.rdd.getNumPartitions))
 
-    val rangeInOnePartition = spark.range(1, 10, 1, 1).orderBy("id")
+    val rangeInOnePartition = spark.range(1, 10, 1, 1)
     val rangeExecInOnePartition = rangeInOnePartition.queryExecution.executedPlan.collect {
       case r: RangeExec => r
     }
