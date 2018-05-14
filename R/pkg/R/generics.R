@@ -817,7 +817,7 @@ setGeneric("collect_set", function(x) { standardGeneric("collect_set") })
 #' @rdname column
 setGeneric("column", function(x) { standardGeneric("column") })
 
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @name NULL
 setGeneric("concat", function(x, ...) { standardGeneric("concat") })
 
@@ -1134,7 +1134,7 @@ setGeneric("regexp_replace",
 #' @name NULL
 setGeneric("repeat_string", function(x, n) { standardGeneric("repeat_string") })
 
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @name NULL
 setGeneric("reverse", function(x) { standardGeneric("reverse") })
 
