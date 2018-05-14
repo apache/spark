@@ -122,10 +122,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("Get compatible type") {
     def checkDataType(t1: DataType, t2: DataType, expected: DataType) {
-      var actual = compatibleType(t1, t2)
+      var actual = compatibleType(t1, t2, conf.caseSensitiveAnalysis)
       assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
-      actual = compatibleType(t2, t1)
+      actual = compatibleType(t2, t1, conf.caseSensitiveAnalysis)
       assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
     }
@@ -2310,6 +2310,25 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .json(path.getCanonicalPath)
 
       checkAnswer(readBack.toDF(), ds.toDF())
+    }
+  }
+
+  test("SPARK-23723: write json in UTF-16/32 with multiline off") {
+    Seq("UTF-16", "UTF-32").foreach { encoding =>
+      withTempPath { path =>
+        val ds = spark.createDataset(Seq(
+          ("a", 1), ("b", 2), ("c", 3))
+        ).repartition(2)
+        val e = intercept[IllegalArgumentException] {
+          ds.write
+            .option("encoding", encoding)
+            .option("multiline", "false")
+            .format("json").mode("overwrite")
+            .save(path.getCanonicalPath)
+        }.getMessage
+        assert(e.contains(
+          s"$encoding encoding in the blacklist is not allowed when multiLine is disabled"))
+      }
     }
   }
 

@@ -223,7 +223,6 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.fromObject(new java.util.LinkedList[Int]),
       Map("nonexisting" -> Literal(1)))
     checkExceptionInExpression[Exception](initializeWithNonexistingMethod,
-      InternalRow.fromSeq(Seq()),
       """A method named "nonexisting" is not declared in any enclosing class """ +
         "nor any supertype")
 

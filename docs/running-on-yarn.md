@@ -133,9 +133,8 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.am.waitTime</code></td>
   <td><code>100s</code></td>
   <td>
-    In <code>cluster</code> mode, time for the YARN Application Master to wait for the
-    SparkContext to be initialized. In <code>client</code> mode, time for the YARN Application Master to wait
-    for the driver to connect to it.
+    Only used in <code>cluster</code> mode. Time for the YARN Application Master to wait for the
+    SparkContext to be initialized.
   </td>
 </tr>
 <tr>
