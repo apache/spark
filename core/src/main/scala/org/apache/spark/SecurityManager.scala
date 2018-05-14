@@ -17,15 +17,10 @@
 
 package org.apache.spark
 
-import java.lang.{Byte => JByte}
 import java.net.{Authenticator, PasswordAuthentication}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.security.{KeyStore, SecureRandom}
-import java.security.cert.X509Certificate
 import javax.net.ssl._
 
-import com.google.common.hash.HashCodes
-import com.google.common.io.Files
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
@@ -365,13 +360,8 @@ private[spark] class SecurityManager(
         return
     }
 
-    val rnd = new SecureRandom()
-    val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
-    val secretBytes = new Array[Byte](length)
-    rnd.nextBytes(secretBytes)
-
+    secretKey = Utils.createSecret(sparkConf)
     val creds = new Credentials()
-    secretKey = HashCodes.fromBytes(secretBytes).toString()
     creds.addSecretKey(SECRET_LOOKUP_KEY, secretKey.getBytes(UTF_8))
     UserGroupInformation.getCurrentUser().addCredentials(creds)
   }

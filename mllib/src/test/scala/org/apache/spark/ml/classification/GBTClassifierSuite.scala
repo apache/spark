@@ -25,7 +25,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.RegressionLeafNode
-import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -363,6 +363,33 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
     val mostIF = importanceFeatures.argmax
     assert(mostImportantFeature !== mostIF)
+  }
+
+  test("model evaluateEachIteration") {
+    val gbt = new GBTClassifier()
+      .setSeed(1L)
+      .setMaxDepth(2)
+      .setMaxIter(3)
+      .setLossType("logistic")
+    val model3 = gbt.fit(trainData.toDF)
+    val model1 = new GBTClassificationModel("gbt-cls-model-test1",
+      model3.trees.take(1), model3.treeWeights.take(1), model3.numFeatures, model3.numClasses)
+    val model2 = new GBTClassificationModel("gbt-cls-model-test2",
+      model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures, model3.numClasses)
+
+    val evalArr = model3.evaluateEachIteration(validationData.toDF)
+    val remappedValidationData = validationData.map(
+      x => new LabeledPoint((x.label * 2) - 1, x.features))
+    val lossErr1 = GradientBoostedTrees.computeError(remappedValidationData,
+      model1.trees, model1.treeWeights, model1.getOldLossType)
+    val lossErr2 = GradientBoostedTrees.computeError(remappedValidationData,
+      model2.trees, model2.treeWeights, model2.getOldLossType)
+    val lossErr3 = GradientBoostedTrees.computeError(remappedValidationData,
+      model3.trees, model3.treeWeights, model3.getOldLossType)
+
+    assert(evalArr(0) ~== lossErr1 relTol 1E-3)
+    assert(evalArr(1) ~== lossErr2 relTol 1E-3)
+    assert(evalArr(2) ~== lossErr3 relTol 1E-3)
   }
 
   /////////////////////////////////////////////////////////////////////////////
