@@ -44,7 +44,7 @@ object PythonRunner extends CondaRunner with Logging {
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
     val sparkConf = new SparkConf()
-<<<<<<< HEAD
+    val secret = Utils.createSecret(sparkConf)
     val presetPythonExec = Provenance.fromConf(sparkConf, PYSPARK_DRIVER_PYTHON)
       .orElse(Provenance.fromConf(sparkConf, PYSPARK_PYTHON))
       .orElse(Provenance.fromEnv("PYSPARK_DRIVER_PYTHON"))
@@ -60,20 +60,6 @@ object PythonRunner extends CondaRunner with Logging {
      .getOrElse("python")
 
     logInfo(s"Python binary that will be called: $pythonExec")
-||||||| merged common ancestors
-    val pythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
-      .orElse(sparkConf.get(PYSPARK_PYTHON))
-      .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
-      .orElse(sys.env.get("PYSPARK_PYTHON"))
-      .getOrElse("python")
-=======
-    val secret = Utils.createSecret(sparkConf)
-    val pythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
-      .orElse(sparkConf.get(PYSPARK_PYTHON))
-      .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
-      .orElse(sys.env.get("PYSPARK_PYTHON"))
-      .getOrElse("python")
->>>>>>> apache/master
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)

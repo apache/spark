@@ -3039,10 +3039,6 @@ class SQLTests(ReusedSQLTestCase):
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
-<<<<<<< HEAD
-    @unittest.skip("This distrbituion doesn't ship hive")
-||||||| merged common ancestors
-=======
     @classmethod
     def setUpClass(cls):
         # get a SparkContext to check for availability of Hive
@@ -3063,7 +3059,6 @@ class HiveSparkSubmitTests(SparkSubmitTests):
         if not self.hive_available:
             self.skipTest("Hive is not available.")
 
->>>>>>> apache/master
     def test_hivecontext(self):
         # This test checks that HiveContext is using Hive metastore (SPARK-16224).
         # It sets a metastore url and checks if there is a derby dir created by
@@ -5367,20 +5362,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
-<<<<<<< HEAD
 
     runner = unishark.BufferedTestRunner(
         reporters=[unishark.XUnitReporter('target/test-reports/pyspark.sql/{}'.format(
             os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
-    unittest.main(testRunner=runner)
-||||||| merged common ancestors
-    if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
-    else:
-        unittest.main()
-=======
-    if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
-    else:
-        unittest.main(verbosity=2)
->>>>>>> apache/master
+    unittest.main(testRunner=runner, verbosity=2)

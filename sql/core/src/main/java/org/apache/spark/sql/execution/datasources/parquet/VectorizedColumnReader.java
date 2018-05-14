@@ -24,14 +24,9 @@ import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquet
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.TimeZone;
-<<<<<<< HEAD
-||||||| merged common ancestors
-
-=======
 
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesInput;
->>>>>>> apache/master
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
@@ -178,7 +173,7 @@ public class VectorizedColumnReader {
       if (isCurrentPageDictionaryEncoded) {
         // Read and decode dictionary ids.
         defColumn.readIntegers(
-            num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+            num, dictionaryIds, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
 
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
@@ -632,16 +627,8 @@ public class VectorizedColumnReader {
     // do not read the length from the stream. v2 pages handle dividing the page bytes.
     this.defColumn = new VectorizedRleValuesReader(bitWidth, false);
     this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumn);
-<<<<<<< HEAD
-    this.defColumn.initFromBuffer(
-        this.pageValueCount, page.getDefinitionLevels().toByteBuffer());
-||||||| merged common ancestors
-    this.defColumn.initFromBuffer(
-        this.pageValueCount, page.getDefinitionLevels().toByteArray());
-=======
     this.defColumn.initFromPage(
         this.pageValueCount, page.getDefinitionLevels().toInputStream());
->>>>>>> apache/master
     try {
       initDataReader(page.getDataEncoding(), page.getData().toInputStream());
     } catch (IOException e) {

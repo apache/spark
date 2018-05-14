@@ -1776,22 +1776,10 @@ if __name__ == "__main__":
     from pyspark.mllib.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
-<<<<<<< HEAD
     runner = unishark.BufferedTestRunner(
         reporters=[unishark.XUnitReporter('target/test-reports/pyspark.mllib/{}'.format(
             os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
-    unittest.main(testRunner=runner)
-||||||| merged common ancestors
-    if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
-    else:
-        unittest.main()
-=======
-    if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
-    else:
-        unittest.main(verbosity=2)
->>>>>>> apache/master
+    unittest.main(testRunner=runner, verbosity=2)
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")
     sc.stop()

@@ -71,13 +71,7 @@ else:
     raise Exception("Cannot find assembly build directory, please build Spark first.")
 
 
-<<<<<<< HEAD
-def run_individual_python_test(test_name, pyspark_python, failed_tests_deque):
-||||||| merged common ancestors
-def run_individual_python_test(test_name, pyspark_python):
-=======
-def run_individual_python_test(target_dir, test_name, pyspark_python):
->>>>>>> apache/master
+def run_individual_python_test(target_dir, test_name, pyspark_python, failed_tests_deque):
     env = dict(os.environ)
     env.update({
         'SPARK_DIST_CLASSPATH': SPARK_DIST_CLASSPATH,
@@ -110,7 +104,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
     try:
         process = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
-<<<<<<< HEAD
             # bufsize must be 0 (unbuffered), 1 (line buffered) doesn't seem to work
             stderr=subprocess.STDOUT, stdout=subprocess.PIPE, env=env, bufsize=0,
             universal_newlines=True)
@@ -123,12 +116,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         worker = Thread(target=consume_log, args=(per_test_output,))
         worker.start()  # This is essential as we need to consume the stdout pipe
         retcode = process.wait()
-||||||| merged common ancestors
-            stderr=per_test_output, stdout=per_test_output, env=env).wait()
-=======
-            stderr=per_test_output, stdout=per_test_output, env=env).wait()
         shutil.rmtree(tmp_dir, ignore_errors=True)
->>>>>>> apache/master
     except:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
@@ -282,31 +270,19 @@ def main():
                         priority = 100
                     task_queue.put((priority, (python_exec, test_goal)))
 
-<<<<<<< HEAD
-    def process_queue(task_queue, failed_tests_deque):
-||||||| merged common ancestors
-    def process_queue(task_queue):
-=======
     # Create the target directory before starting tasks to avoid races.
     target_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'target'))
     if not os.path.isdir(target_dir):
         os.mkdir(target_dir)
 
-    def process_queue(task_queue):
->>>>>>> apache/master
+    def process_queue(task_queue, failed_tests_deque):
         while True:
             try:
                 (priority, (python_exec, test_goal)) = task_queue.get_nowait()
             except Queue.Empty:
                 break
             try:
-<<<<<<< HEAD
-                run_individual_python_test(test_goal, python_exec, failed_tests_deque)
-||||||| merged common ancestors
-                run_individual_python_test(test_goal, python_exec)
-=======
-                run_individual_python_test(target_dir, test_goal, python_exec)
->>>>>>> apache/master
+                run_individual_python_test(target_dir, test_goal, python_exec, failed_tests_deque)
             finally:
                 task_queue.task_done()
 

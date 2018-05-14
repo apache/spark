@@ -1587,32 +1587,12 @@ if __name__ == "__main__":
     for testcase in testcases:
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
-<<<<<<< HEAD
         runner = unishark.BufferedTestRunner(
-            verbosity=3,
+            verbosity=2,
             reporters=[unishark.XUnitReporter('target/test-reports/pyspark.streaming/{}'.format(
                 os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
 
         result = runner.run(tests)
         if not result.wasSuccessful():
             failed = True
-||||||| merged common ancestors
-        if xmlrunner:
-            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=3).run(tests)
-            if not result.wasSuccessful():
-                failed = True
-        else:
-            result = unittest.TextTestRunner(verbosity=3).run(tests)
-            if not result.wasSuccessful():
-                failed = True
-=======
-        if xmlrunner:
-            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2).run(tests)
-            if not result.wasSuccessful():
-                failed = True
-        else:
-            result = unittest.TextTestRunner(verbosity=2).run(tests)
-            if not result.wasSuccessful():
-                failed = True
->>>>>>> apache/master
     sys.exit(failed)

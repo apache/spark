@@ -28,15 +28,9 @@ import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
-<<<<<<< HEAD
-import java.nio.ByteBuffer;
-
-||||||| merged common ancestors
-=======
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
->>>>>>> apache/master
 /**
  * A values reader for Parquet's run-length encoded data. This is based off of the version in
  * parquet-mr with these changes:
@@ -59,17 +53,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   // Encoded data.
-<<<<<<< HEAD
-  private ByteBuffer in;
-  private int end;
-  private int offset;
-||||||| merged common ancestors
-  private byte[] in;
-  private int end;
-  private int offset;
-=======
   private ByteBufferInputStream in;
->>>>>>> apache/master
 
   // bit/byte width of decoded data and utility to batch unpack them.
   private int bitWidth;
@@ -108,18 +92,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-<<<<<<< HEAD
-  public void initFromPage(int valueCount, ByteBuffer page, int start) {
-    this.offset = start;
-    this.in = page;
-||||||| merged common ancestors
-  public void initFromPage(int valueCount, byte[] page, int start) {
-    this.offset = start;
-    this.in = page;
-=======
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     this.in = in;
->>>>>>> apache/master
     if (fixedWidth) {
       // initialize for repetition and definition levels
       if (readLength) {
@@ -127,55 +101,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
         this.in = in.sliceStream(length);
       }
     } else {
-<<<<<<< HEAD
-      this.end = page.limit();
-      if (this.end != this.offset) init(page.get(this.offset++) & 255);
-    }
-    if (bitWidth == 0) {
-      // 0 bit width, treat this as an RLE run of valueCount number of 0's.
-      this.mode = MODE.RLE;
-      this.currentCount = valueCount;
-      this.currentValue = 0;
-    } else {
-      this.currentCount = 0;
-||||||| merged common ancestors
-      this.end = page.length;
-      if (this.end != this.offset) init(page[this.offset++] & 255);
-    }
-    if (bitWidth == 0) {
-      // 0 bit width, treat this as an RLE run of valueCount number of 0's.
-      this.mode = MODE.RLE;
-      this.currentCount = valueCount;
-      this.currentValue = 0;
-    } else {
-      this.currentCount = 0;
-=======
       // initialize for values
       if (in.available() > 0) {
         init(in.read());
       }
->>>>>>> apache/master
     }
-<<<<<<< HEAD
-  }
-
-  // Initialize the reader from a buffer. This is used for the V2 page encoding where the
-  // definition are in its own buffer.
-  public void initFromBuffer(int valueCount, ByteBuffer data) {
-    this.offset = 0;
-    this.in = data;
-    this.end = data.limit();
-||||||| merged common ancestors
-  }
-
-  // Initialize the reader from a buffer. This is used for the V2 page encoding where the
-  // definition are in its own buffer.
-  public void initFromBuffer(int valueCount, byte[] data) {
-    this.offset = 0;
-    this.in = data;
-    this.end = data.length;
-=======
->>>>>>> apache/master
     if (bitWidth == 0) {
       // 0 bit width, treat this as an RLE run of valueCount number of 0's.
       this.mode = MODE.RLE;
@@ -626,13 +556,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int shift = 0;
     int b;
     do {
-<<<<<<< HEAD
-      b = in.get(offset++) & 255;
-||||||| merged common ancestors
-      b = in[offset++] & 255;
-=======
       b = in.read();
->>>>>>> apache/master
       value |= (b & 0x7F) << shift;
       shift += 7;
     } while ((b & 0x80) != 0);
@@ -642,27 +566,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
   /**
    * Reads the next 4 byte little endian int.
    */
-<<<<<<< HEAD
-  private int readIntLittleEndian() {
-    int ch4 = in.get(offset) & 255;
-    int ch3 = in.get(offset + 1) & 255;
-    int ch2 = in.get(offset + 2) & 255;
-    int ch1 = in.get(offset + 3) & 255;
-    offset += 4;
-||||||| merged common ancestors
-  private int readIntLittleEndian() {
-    int ch4 = in[offset] & 255;
-    int ch3 = in[offset + 1] & 255;
-    int ch2 = in[offset + 2] & 255;
-    int ch1 = in[offset + 3] & 255;
-    offset += 4;
-=======
   private int readIntLittleEndian() throws IOException {
     int ch4 = in.read();
     int ch3 = in.read();
     int ch2 = in.read();
     int ch1 = in.read();
->>>>>>> apache/master
     return ((ch1 << 24) + (ch2 << 16) + (ch3 << 8) + (ch4 << 0));
   }
 
@@ -674,44 +582,16 @@ public final class VectorizedRleValuesReader extends ValuesReader
       case 0:
         return 0;
       case 1:
-<<<<<<< HEAD
-        return in.get(offset++) & 255;
-||||||| merged common ancestors
-        return in[offset++] & 255;
-=======
         return in.read();
->>>>>>> apache/master
       case 2: {
-<<<<<<< HEAD
-        int ch2 = in.get(offset) & 255;
-        int ch1 = in.get(offset + 1) & 255;
-        offset += 2;
-||||||| merged common ancestors
-        int ch2 = in[offset] & 255;
-        int ch1 = in[offset + 1] & 255;
-        offset += 2;
-=======
         int ch2 = in.read();
         int ch1 = in.read();
->>>>>>> apache/master
         return (ch1 << 8) + ch2;
       }
       case 3: {
-<<<<<<< HEAD
-        int ch3 = in.get(offset) & 255;
-        int ch2 = in.get(offset + 1) & 255;
-        int ch1 = in.get(offset + 2) & 255;
-        offset += 3;
-||||||| merged common ancestors
-        int ch3 = in[offset] & 255;
-        int ch2 = in[offset + 1] & 255;
-        int ch1 = in[offset + 2] & 255;
-        offset += 3;
-=======
         int ch3 = in.read();
         int ch2 = in.read();
         int ch1 = in.read();
->>>>>>> apache/master
         return (ch1 << 16) + (ch2 << 8) + (ch3 << 0);
       }
       case 4: {

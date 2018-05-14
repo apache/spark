@@ -503,13 +503,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
             case plan: InMemoryRelation => plan
           }.head
           // InMemoryRelation's stats is file size before the underlying RDD is materialized
-<<<<<<< HEAD
-          assert(inMemoryRelation.computeStats().sizeInBytes === 700)
-||||||| merged common ancestors
-          assert(inMemoryRelation.computeStats().sizeInBytes === 740)
-=======
           assert(inMemoryRelation.computeStats().sizeInBytes === 800)
->>>>>>> apache/master
 
           // InMemoryRelation's stats is updated after materializing RDD
           dfFromFile.collect()
@@ -522,13 +516,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
           // Even CBO enabled, InMemoryRelation's stats keeps as the file size before table's stats
           // is calculated
-<<<<<<< HEAD
-          assert(inMemoryRelation2.computeStats().sizeInBytes === 700)
-||||||| merged common ancestors
-          assert(inMemoryRelation2.computeStats().sizeInBytes === 740)
-=======
           assert(inMemoryRelation2.computeStats().sizeInBytes === 800)
->>>>>>> apache/master
 
           // InMemoryRelation's stats should be updated after calculating stats of the table
           // clear cache to simulate a fresh environment

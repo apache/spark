@@ -41,29 +41,8 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
-<<<<<<< HEAD
-  public void initFromPage(int valueCount, ByteBuffer byteBuffer, int offset) throws IOException {
-    initFromPage(valueCount, byteBuffer.array(), offset);
-  }
-
-  @Override
-  public void initFromPage(int valueCount, byte[] bytes, int offset) throws IOException {
-    this.buffer = bytes;
-    this.offset = offset + Platform.BYTE_ARRAY_OFFSET;
-    if (bigEndianPlatform) {
-      byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-    }
-||||||| merged common ancestors
-  public void initFromPage(int valueCount, byte[] bytes, int offset) throws IOException {
-    this.buffer = bytes;
-    this.offset = offset + Platform.BYTE_ARRAY_OFFSET;
-    if (bigEndianPlatform) {
-      byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-    }
-=======
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     this.in = in;
->>>>>>> apache/master
   }
 
   @Override

@@ -54,13 +54,6 @@
   </build>
 
   <dependencies>
-<<<<<<< HEAD
-||||||| merged common ancestors
-    <!--
-      the AWS module pulls in jackson; its transitive dependencies can create
-      intra-jackson-module version problems.
-      -->
-=======
     <!--used during compilation but not exported as transitive dependencies-->
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -85,7 +78,6 @@
       the AWS module pulls in jackson; its transitive dependencies can create
       intra-jackson-module version problems.
       -->
->>>>>>> apache/master
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-aws</artifactId>
@@ -148,23 +140,6 @@
 
   <profiles>
     <profile>
-      <id>hadoop-2.7</id>
-<<<<<<< HEAD
-||||||| merged common ancestors
-      <!-- Hadoop Azure is a new Jar with -->
-=======
-      <!-- 2.7+ adds the azure Jar to the set of dependencies -->
->>>>>>> apache/master
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-azure</artifactId>
-          <scope>${hadoop.deps.scope}</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-<<<<<<< HEAD
-    <profile>
       <id>hadoop-palantir</id>
       <dependencies>
         <dependency>
@@ -179,9 +154,6 @@
         </dependency>
       </dependencies>
     </profile>
-||||||| merged common ancestors
-
-=======
 
     <!--
      Hadoop 3 simplifies the classpath, and adds a new committer base class which
@@ -239,7 +211,6 @@
       </dependencies>
     </profile>
 
->>>>>>> apache/master
   </profiles>
 
 </project>

@@ -17,30 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.sql.Date
+import java.sql.{Date, Timestamp}
 
 import org.apache.parquet.filter2.predicate._
-import org.apache.parquet.filter2.predicate.Operators.{Column, SupportsEqNotEq, SupportsLtGt}
-import org.apache.parquet.hadoop.metadata.ColumnPath
+import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-<<<<<<< HEAD
-||||||| merged common ancestors
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
-import org.apache.spark.sql.internal.SQLConf
-=======
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
->>>>>>> apache/master
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters(pushDownDate: Boolean) {
-
-  import ParquetColumns._
+private[parquet] class ParquetFilters(pushDownDate: Boolean, int96AsTimestamp: Boolean) {
 
   case class SetInFilter[T <: Comparable[T]](valueSet: Set[T])
     extends UserDefinedPredicate[T] with Serializable {
@@ -110,16 +100,10 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
-<<<<<<< HEAD
     case TimestampType =>
       (n: String, v: Any) => FilterApi.eq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
-||||||| merged common ancestors
-    case DateType if SQLConf.get.parquetFilterPushDownDate =>
-=======
     case DateType if pushDownDate =>
->>>>>>> apache/master
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -144,16 +128,10 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
-<<<<<<< HEAD
     case TimestampType =>
-||||||| merged common ancestors
-    case DateType if SQLConf.get.parquetFilterPushDownDate =>
-=======
-    case DateType if pushDownDate =>
->>>>>>> apache/master
       (n: String, v: Any) => FilterApi.notEq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
+    case DateType if pushDownDate =>
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -175,16 +153,10 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
-<<<<<<< HEAD
     case TimestampType =>
       (n: String, v: Any) => FilterApi.lt(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
-||||||| merged common ancestors
-    case DateType if SQLConf.get.parquetFilterPushDownDate =>
-=======
     case DateType if pushDownDate =>
->>>>>>> apache/master
       (n: String, v: Any) => FilterApi.lt(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -205,16 +177,10 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
-<<<<<<< HEAD
     case TimestampType =>
-||||||| merged common ancestors
-    case DateType if SQLConf.get.parquetFilterPushDownDate =>
-=======
-    case DateType if pushDownDate =>
->>>>>>> apache/master
       (n: String, v: Any) => FilterApi.ltEq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
+    case DateType if pushDownDate =>
       (n: String, v: Any) => FilterApi.ltEq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -235,16 +201,10 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
-<<<<<<< HEAD
     case TimestampType =>
       (n: String, v: Any) => FilterApi.gt(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
-||||||| merged common ancestors
-    case DateType if SQLConf.get.parquetFilterPushDownDate =>
-=======
     case DateType if pushDownDate =>
->>>>>>> apache/master
       (n: String, v: Any) => FilterApi.gt(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -265,29 +225,23 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
-<<<<<<< HEAD
     case TimestampType =>
       (n: String, v: Any) => FilterApi.gtEq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
-||||||| merged common ancestors
-    case DateType if SQLConf.get.parquetFilterPushDownDate =>
-=======
     case DateType if pushDownDate =>
->>>>>>> apache/master
       (n: String, v: Any) => FilterApi.gtEq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
 
-  private def convertDate(d: java.sql.Date): java.lang.Integer = {
+  private def convertDate(d: Date): Integer = {
     if (d != null) {
-      DateTimeUtils.fromJavaDate(d).asInstanceOf[java.lang.Integer]
+      DateTimeUtils.fromJavaDate(d).asInstanceOf[Integer]
     } else {
       null
     }
   }
 
-  private def convertTimestamp(t: java.sql.Timestamp): java.lang.Long = {
+  private def convertTimestamp(t: Timestamp): java.lang.Long = {
     if (t != null) {
       DateTimeUtils.fromJavaTimestamp(t).asInstanceOf[java.lang.Long]
     } else {
@@ -316,8 +270,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
    */
   def createFilter(
     schema: StructType,
-    predicate: sources.Filter,
-    int96AsTimestamp: Boolean): Option[FilterPredicate] = {
+    predicate: sources.Filter): Option[FilterPredicate] = {
     val nameToType = getFieldMap(schema, int96AsTimestamp)
 
     def canMakeFilterOn(name: String): Boolean = nameToType.contains(name)
@@ -363,18 +316,18 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
         // Pushing one side of AND down is only safe to do at the top level.
         // You can see ParquetRelation's initializeLocalJobFunc method as an example.
         for {
-          lhsFilter <- createFilter(schema, lhs, int96AsTimestamp)
-          rhsFilter <- createFilter(schema, rhs, int96AsTimestamp)
+          lhsFilter <- createFilter(schema, lhs)
+          rhsFilter <- createFilter(schema, rhs)
         } yield FilterApi.and(lhsFilter, rhsFilter)
 
       case sources.Or(lhs, rhs) =>
         for {
-          lhsFilter <- createFilter(schema, lhs, int96AsTimestamp)
-          rhsFilter <- createFilter(schema, rhs, int96AsTimestamp)
+          lhsFilter <- createFilter(schema, lhs)
+          rhsFilter <- createFilter(schema, rhs)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
-        createFilter(schema, pred, int96AsTimestamp)
+        createFilter(schema, pred)
           .map(FilterApi.not)
           .map(LogicalInverseRewriter.rewrite)
 
@@ -383,41 +336,5 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
 
       case _ => None
     }
-  }
-}
-
-/**
- * Note that, this is a hacky workaround to allow dots in column names. Currently, column APIs
- * in Parquet's `FilterApi` only allows dot-separated names so here we resemble those columns
- * but only allow single column path that allows dots in the names as we don't currently push
- * down filters with nested fields.
- */
-private[parquet] object ParquetColumns {
-  def intColumn(columnPath: String): Column[Integer] with SupportsLtGt = {
-    new Column[Integer] (ColumnPath.get(columnPath), classOf[Integer]) with SupportsLtGt
-  }
-
-  def longColumn(columnPath: String): Column[java.lang.Long] with SupportsLtGt = {
-    new Column[java.lang.Long] (
-      ColumnPath.get(columnPath), classOf[java.lang.Long]) with SupportsLtGt
-  }
-
-  def floatColumn(columnPath: String): Column[java.lang.Float] with SupportsLtGt = {
-    new Column[java.lang.Float] (
-      ColumnPath.get(columnPath), classOf[java.lang.Float]) with SupportsLtGt
-  }
-
-  def doubleColumn(columnPath: String): Column[java.lang.Double] with SupportsLtGt = {
-    new Column[java.lang.Double] (
-      ColumnPath.get(columnPath), classOf[java.lang.Double]) with SupportsLtGt
-  }
-
-  def booleanColumn(columnPath: String): Column[java.lang.Boolean] with SupportsEqNotEq = {
-    new Column[java.lang.Boolean] (
-      ColumnPath.get(columnPath), classOf[java.lang.Boolean]) with SupportsEqNotEq
-  }
-
-  def binaryColumn(columnPath: String): Column[Binary] with SupportsLtGt = {
-    new Column[Binary] (ColumnPath.get(columnPath), classOf[Binary]) with SupportsLtGt
   }
 }

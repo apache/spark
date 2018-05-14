@@ -118,16 +118,8 @@ class CacheManager extends Logging {
     val it = cachedData.iterator()
     while (it.hasNext) {
       val cd = it.next()
-<<<<<<< HEAD
       if (cd.plan.sameResult(plan)) {
-        cd.cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
-||||||| merged common ancestors
-      if (cd.plan.find(_.sameResult(plan)).isDefined) {
-        cd.cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
-=======
-      if (cd.plan.find(_.sameResult(plan)).isDefined) {
         cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
->>>>>>> apache/master
         it.remove()
       }
     }

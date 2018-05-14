@@ -426,17 +426,12 @@ class ParquetFileFormat
 
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
+        val parquetFilters = new ParquetFilters(pushDownDate, int96AsTimestamp)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.
-<<<<<<< HEAD
-          .flatMap(ParquetFilters.createFilter(requiredSchema, _, int96AsTimestamp))
-||||||| merged common ancestors
-          .flatMap(ParquetFilters.createFilter(requiredSchema, _))
-=======
-          .flatMap(new ParquetFilters(pushDownDate).createFilter(requiredSchema, _))
->>>>>>> apache/master
+          .flatMap(parquetFilters.createFilter(requiredSchema, _))
           .reduceOption(FilterApi.and)
       } else {
         None

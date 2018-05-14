@@ -401,21 +401,13 @@ private[r] object RRunner {
           // the socket used to send out the input of task
           serverSocket.setSoTimeout(10000)
           val sock = serverSocket.accept()
-<<<<<<< HEAD
-          env.setRDaemonChannel(
-            new DataOutputStream(new BufferedOutputStream(sock.getOutputStream)))
-          serverSocket.close()
-||||||| merged common ancestors
-          daemonChannel = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
-          serverSocket.close()
-=======
           try {
             authHelper.authClient(sock)
-            daemonChannel = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+            env.setRDaemonChannel(
+              new DataOutputStream(new BufferedOutputStream(sock.getOutputStream)))
           } finally {
             serverSocket.close()
           }
->>>>>>> apache/master
         }
         try {
           env.createRWorkerFromDaemon(port)
