@@ -34,10 +34,10 @@ object FilterPushdownBenchmark {
   val conf = new SparkConf()
     .setMaster("local[1]")
     .setAppName("FilterPushdownBenchmark")
-    .set("spark.driver.memory", "3g")
-    .set("spark.executor.memory", "3g")
-    .set("orc.compression", "snappy")
-    .set("spark.sql.parquet.compression.codec", "snappy")
+    .setIfMissing("spark.driver.memory", "3g")
+    .setIfMissing("spark.executor.memory", "3g")
+    .setIfMissing("orc.compression", "snappy")
+    .setIfMissing("spark.sql.parquet.compression.codec", "snappy")
 
   private val spark = SparkSession.builder().config(conf).getOrCreate()
 
