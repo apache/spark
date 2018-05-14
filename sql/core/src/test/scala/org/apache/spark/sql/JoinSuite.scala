@@ -36,6 +36,24 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
   setupTestData()
 
+  private lazy val upperCaseStruct: DataFrame = {
+    val df = sql("select named_struct(\"N\", N, \"L\", L) as S from uppercasedata")
+    df.createOrReplaceTempView("upperCaseStruct")
+    df
+  }
+
+  private lazy val lowerCaseStruct: DataFrame = {
+    val df = sql("select named_struct(\"n\", n, \"l\", l) as s from lowercasedata")
+    df.createOrReplaceTempView("lowerCaseStruct")
+    df
+  }
+
+  override def loadTestData(): Unit = {
+    super.loadTestData
+    upperCaseStruct
+    lowerCaseStruct
+  }
+
   def statisticSizeInByte(df: DataFrame): BigInt = {
     df.queryExecution.optimizedPlan.stats.sizeInBytes
   }
@@ -167,6 +185,19 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("inner join with struct where, one match per row") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        upperCaseStruct.join(lowerCaseStruct.select("s.n", "s.l")).where('n === $"S.N"),
+        Seq(
+          Row(Row(1, "A"), 1, "a"),
+          Row(Row(2, "B"), 2, "b"),
+          Row(Row(3, "C"), 3, "c"),
+          Row(Row(4, "D"), 4, "d")
+        ))
+    }
+  }
+
   test("inner join ON, one match per row") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
@@ -176,6 +207,19 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(2, "B", 2, "b"),
           Row(3, "C", 3, "c"),
           Row(4, "D", 4, "d")
+        ))
+    }
+  }
+
+  test("inner join with struct ON, one match per row") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        upperCaseStruct.join(lowerCaseStruct.select("s.n", "s.l"), $"n" === $"S.N"),
+        Seq(
+          Row(Row(1, "A"), 1, "a"),
+          Row(Row(2, "B"), 2, "b"),
+          Row(Row(3, "C"), 3, "c"),
+          Row(Row(4, "D"), 4, "d")
         ))
     }
   }
@@ -310,6 +354,72 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("left outer join with struct") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        upperCaseStruct.join(lowerCaseStruct.select("s.n", "s.l"), $"n" === $"S.N", "left"),
+        Row(Row(1, "A"), 1, "a") ::
+          Row(Row(2, "B"), 2, "b") ::
+          Row(Row(3, "C"), 3, "c") ::
+          Row(Row(4, "D"), 4, "d") ::
+          Row(Row(5, "E"), null, null) ::
+          Row(Row(6, "F"), null, null) :: Nil)
+
+      checkAnswer(
+        upperCaseStruct
+          .join(lowerCaseStruct.select("s.n", "s.l"), $"n" === $"S.N" && $"n" > 1, "left"),
+        Row(Row(1, "A"), null, null) ::
+          Row(Row(2, "B"), 2, "b") ::
+          Row(Row(3, "C"), 3, "c") ::
+          Row(Row(4, "D"), 4, "d") ::
+          Row(Row(5, "E"), null, null) ::
+          Row(Row(6, "F"), null, null) :: Nil)
+
+      checkAnswer(
+        upperCaseStruct
+          .join(lowerCaseStruct.select("s.n", "s.l"), $"n" === $"S.N" && $"S.N" > 1, "left"),
+        Row(Row(1, "A"), null, null) ::
+          Row(Row(2, "B"), 2, "b") ::
+          Row(Row(3, "C"), 3, "c") ::
+          Row(Row(4, "D"), 4, "d") ::
+          Row(Row(5, "E"), null, null) ::
+          Row(Row(6, "F"), null, null) :: Nil)
+
+      checkAnswer(
+        upperCaseStruct
+          .join(lowerCaseStruct.select("s.n", "s.l"), $"n" === $"S.N" && $"l" > $"S.L", "left"),
+        Row(Row(1, "A"), 1, "a") ::
+          Row(Row(2, "B"), 2, "b") ::
+          Row(Row(3, "C"), 3, "c") ::
+          Row(Row(4, "D"), 4, "d") ::
+          Row(Row(5, "E"), null, null) ::
+          Row(Row(6, "F"), null, null) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT l.S.N, count(*)
+            |FROM uppercasestruct l LEFT OUTER JOIN allnulls r ON (l.S.N = r.a)
+            |GROUP BY l.S.N
+          """.stripMargin),
+        Row(1, 1) ::
+          Row(2, 1) ::
+          Row(3, 1) ::
+          Row(4, 1) ::
+          Row(5, 1) ::
+          Row(6, 1) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT r.a, count(*)
+            |FROM uppercasestruct l LEFT OUTER JOIN allnulls r ON (l.S.N = r.a)
+            |GROUP BY r.a
+          """.stripMargin),
+        Row(null, 6) :: Nil)
+    }
+  }
+
   test("right outer join") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
@@ -366,6 +476,69 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           """.stripMargin),
         Row(1
           , 1) ::
+          Row(2, 1) ::
+          Row(3, 1) ::
+          Row(4, 1) ::
+          Row(5, 1) ::
+          Row(6, 1) :: Nil)
+    }
+  }
+
+  test("right outer join with struct") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        lowerCaseStruct.select("s.n", "s.l").join(upperCaseStruct, $"n" === $"S.N", "right"),
+        Row(1, "a", Row(1, "A")) ::
+          Row(2, "b", Row(2, "B")) ::
+          Row(3, "c", Row(3, "C")) ::
+          Row(4, "d", Row(4, "D")) ::
+          Row(null, null, Row(5, "E")) ::
+          Row(null, null, Row(6, "F")) :: Nil)
+      checkAnswer(
+        lowerCaseStruct
+          .select("s.n", "s.l").join(upperCaseStruct, $"n" === $"S.N" && $"n" > 1, "right"),
+        Row(null, null, Row(1, "A")) ::
+          Row(2, "b", Row(2, "B")) ::
+          Row(3, "c", Row(3, "C")) ::
+          Row(4, "d", Row(4, "D")) ::
+          Row(null, null, Row(5, "E")) ::
+          Row(null, null, Row(6, "F")) :: Nil)
+      checkAnswer(
+        lowerCaseStruct
+          .select("s.n", "s.l").join(upperCaseStruct, $"n" === $"S.N" && $"S.N" > 1, "right"),
+        Row(null, null, Row(1, "A")) ::
+          Row(2, "b", Row(2, "B")) ::
+          Row(3, "c", Row(3, "C")) ::
+          Row(4, "d", Row(4, "D")) ::
+          Row(null, null, Row(5, "E")) ::
+          Row(null, null, Row(6, "F")) :: Nil)
+      checkAnswer(
+        lowerCaseStruct
+          .select("s.n", "s.l").join(upperCaseStruct, $"n" === $"S.N" && $"l" > $"S.L", "right"),
+        Row(1, "a", Row(1, "A")) ::
+          Row(2, "b", Row(2, "B")) ::
+          Row(3, "c", Row(3, "C")) ::
+          Row(4, "d", Row(4, "D")) ::
+          Row(null, null, Row(5, "E")) ::
+          Row(null, null, Row(6, "F")) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT l.a, count(*)
+            |FROM allnulls l RIGHT OUTER JOIN uppercasestruct r ON (l.a = r.S.N)
+            |GROUP BY l.a
+          """.stripMargin),
+        Row(null, 6))
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT r.S.N, count(*)
+            |FROM allnulls l RIGHT OUTER JOIN uppercasestruct r ON (l.a = r.S.N)
+            |GROUP BY r.S.N
+          """.stripMargin),
+        Row(1, 1) ::
           Row(2, 1) ::
           Row(3, 1) ::
           Row(4, 1) ::
@@ -462,6 +635,91 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         |GROUP BY r.a
       """.
           stripMargin),
+      Row(null, 10))
+  }
+
+  test("full outer join with struct") {
+    upperCaseStruct.where($"S.N" <= 4).createOrReplaceTempView("`left`")
+    upperCaseStruct.where($"S.N" >= 3).createOrReplaceTempView("`right`")
+
+    val left = UnresolvedRelation(TableIdentifier("left"))
+    val right = UnresolvedRelation(TableIdentifier("right"))
+
+    checkAnswer(
+      left.join(right.select("S.N", "S.L"), $"left.S.N" === $"N", "full"),
+      Row(Row(1, "A"), null, null) ::
+        Row(Row(2, "B"), null, null) ::
+        Row(Row(3, "C"), 3, "C") ::
+        Row(Row(4, "D"), 4, "D") ::
+        Row(null, 5, "E") ::
+        Row(null, 6, "F") :: Nil)
+
+    checkAnswer(
+      left.join(right.select("S.N", "S.L"), ($"left.S.N" === $"N") && ($"left.S.N" =!= 3), "full"),
+      Row(Row(1, "A"), null, null) ::
+        Row(Row(2, "B"), null, null) ::
+        Row(Row(3, "C"), null, null) ::
+        Row(null, 3, "C") ::
+        Row(Row(4, "D"), 4, "D") ::
+        Row(null, 5, "E") ::
+        Row(null, 6, "F") :: Nil)
+
+    checkAnswer(
+      left.join(right.select("S.N", "S.L"), ($"left.S.N" === $"N") && ($"N" =!= 3), "full"),
+      Row(Row(1, "A"), null, null) ::
+        Row(Row(2, "B"), null, null) ::
+        Row(Row(3, "C"), null, null) ::
+        Row(null, 3, "C") ::
+        Row(Row(4, "D"), 4, "D") ::
+        Row(null, 5, "E") ::
+        Row(null, 6, "F") :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.a, count(*)
+          |FROM allNulls l FULL OUTER JOIN upperCaseStruct r ON (l.a = r.S.N)
+          |GROUP BY l.a
+        """.stripMargin),
+      Row(null, 10))
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.S.N, count(*)
+          |FROM allNulls l FULL OUTER JOIN upperCaseStruct r ON (l.a = r.S.N)
+          |GROUP BY r.S.N
+        """.stripMargin),
+      Row(1, 1) ::
+        Row(2, 1) ::
+        Row(3, 1) ::
+        Row(4, 1) ::
+        Row(5, 1) ::
+        Row(6, 1) ::
+        Row(null, 4) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.S.N, count(*)
+          |FROM upperCaseStruct l FULL OUTER JOIN allNulls r ON (l.S.N = r.a)
+          |GROUP BY l.S.N
+        """.stripMargin),
+      Row(1, 1) ::
+        Row(2, 1) ::
+        Row(3, 1) ::
+        Row(4, 1) ::
+        Row(5, 1) ::
+        Row(6, 1) ::
+        Row(null, 4) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.a, count(*)
+          |FROM upperCaseStruct l FULL OUTER JOIN allNulls r ON (l.S.N = r.a)
+          |GROUP BY r.a
+        """.stripMargin),
       Row(null, 10))
   }
 

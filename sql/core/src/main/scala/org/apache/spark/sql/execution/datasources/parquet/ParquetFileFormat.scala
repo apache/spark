@@ -55,6 +55,7 @@ import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 class ParquetFileFormat
   extends FileFormat
+  with ColumnarFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
@@ -71,6 +72,14 @@ class ParquetFileFormat
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other.isInstanceOf[ParquetFileFormat]
+
+  override def columnCountForSchema(sparkSession: SparkSession, readSchema: StructType): Int = {
+    val converter = new SparkToParquetSchemaConverter(
+          sparkSession.sessionState.conf.writeLegacyParquetFormat,
+          sparkSession.sessionState.conf.parquetOutputTimestampType)
+    val parquetSchema = converter.convert(readSchema)
+    parquetSchema.getPaths.size
+  }
 
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -415,11 +424,12 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns UnsafeRow
+        val readSupport = new ParquetReadSupport(convertTz, true)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz), parquetFilter)
+          new ParquetRecordReader[UnsafeRow](readSupport, parquetFilter)
         } else {
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz))
+          new ParquetRecordReader[UnsafeRow](readSupport)
         }
         val iter = new RecordReaderIterator(reader)
         // SPARK-23457 Register a task completion lister before `initialization`.
