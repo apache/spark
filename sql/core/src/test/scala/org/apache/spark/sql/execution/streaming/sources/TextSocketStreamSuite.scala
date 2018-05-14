@@ -317,7 +317,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
         "port" -> serverThread.port.toString).asJava))
     reader.setStartOffset(Optional.empty())
-    val tasks = reader.createDataReaderFactories()
+    val tasks = reader.planInputPartitions()
     assert(tasks.size == 2)
 
     val numRecords = 10
@@ -331,7 +331,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       }
       tasks.asScala.foreach {
         case t: TextSocketContinuousDataReaderFactory =>
-          val r = t.createDataReader().asInstanceOf[TextSocketContinuousDataReader]
+          val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousDataReader]
           for (i <- 0 until numRecords / 2) {
             r.next()
             offsets.append(r.getOffset().asInstanceOf[ContinuousRecordPartitionOffset].offset)
@@ -383,7 +383,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         "includeTimestamp" -> "true",
         "port" -> serverThread.port.toString).asJava))
     reader.setStartOffset(Optional.empty())
-    val tasks = reader.createDataReaderFactories()
+    val tasks = reader.planInputPartitions()
     assert(tasks.size == 2)
 
     val numRecords = 4
@@ -394,7 +394,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
     tasks.asScala.foreach {
       case t: TextSocketContinuousDataReaderFactory =>
-        val r = t.createDataReader().asInstanceOf[TextSocketContinuousDataReader]
+        val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousDataReader]
         for (i <- 0 until numRecords / 2) {
           r.next()
           assert(r.get().get(0).isInstanceOf[(String, Timestamp)])

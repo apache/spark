@@ -36,8 +36,8 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.{ContinuousRecordEndpoint, ContinuousRecordPartitionOffset, GetRecord}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.util.RpcUtils
 
@@ -118,7 +118,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
     }
   }
 
-  override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
+  override def planInputPartitions(): JList[InputPartition[Row]] = {
 
     val endpointName = s"TextSocketContinuousReaderEndpoint-${java.util.UUID.randomUUID()}"
     endpointRef = recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
@@ -140,7 +140,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
     startOffset.offsets.zipWithIndex.map {
       case (offset, i) =>
         TextSocketContinuousDataReaderFactory(
-          endpointName, i, offset, includeTimestamp): DataReaderFactory[Row]
+          endpointName, i, offset, includeTimestamp): InputPartition[Row]
     }.asJava
 
   }
@@ -224,9 +224,9 @@ case class TextSocketContinuousDataReaderFactory(
     partitionId: Int,
     startOffset: Int,
     includeTimestamp: Boolean)
-extends DataReaderFactory[Row] {
+extends InputPartition[Row] {
 
-  override def createDataReader(): DataReader[Row] =
+  override def createPartitionReader(): InputPartitionReader[Row] =
     new TextSocketContinuousDataReader(driverEndpointName, partitionId, startOffset,
       includeTimestamp)
 }
@@ -241,7 +241,7 @@ class TextSocketContinuousDataReader(
     partitionId: Int,
     startOffset: Int,
     includeTimestamp: Boolean)
-  extends ContinuousDataReader[Row] {
+  extends ContinuousInputPartitionReader[Row] {
 
   private val endpoint = RpcUtils.makeDriverRef(
     driverEndpointName,
