@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -44,6 +45,7 @@ private[sql] object JsonInferSchema {
       createParser: (JsonFactory, T) => JsonParser): StructType = {
     val parseMode = configOptions.parseMode
     val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
+    val caseSensitive = SQLConf.get.caseSensitiveAnalysis
 
     // perform schema inference on each row and merge afterwards
     val rootType = json.mapPartitions { iter =>
@@ -53,7 +55,7 @@ private[sql] object JsonInferSchema {
         try {
           Utils.tryWithResource(createParser(factory, row)) { parser =>
             parser.nextToken()
-            Some(inferField(parser, configOptions))
+            Some(inferField(parser, configOptions, caseSensitive))
           }
         } catch {
           case  e @ (_: RuntimeException | _: JsonProcessingException) => parseMode match {
@@ -68,7 +70,7 @@ private[sql] object JsonInferSchema {
         }
       }
     }.fold(StructType(Nil))(
-      compatibleRootType(columnNameOfCorruptRecord, parseMode))
+      compatibleRootType(columnNameOfCorruptRecord, parseMode, caseSensitive))
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -98,14 +100,15 @@ private[sql] object JsonInferSchema {
   /**
    * Infer the type of a json document from the parser's token stream
    */
-  private def inferField(parser: JsonParser, configOptions: JSONOptions): DataType = {
+  private def inferField(
+      parser: JsonParser, configOptions: JSONOptions, caseSensitive: Boolean): DataType = {
     import com.fasterxml.jackson.core.JsonToken._
     parser.getCurrentToken match {
       case null | VALUE_NULL => NullType
 
       case FIELD_NAME =>
         parser.nextToken()
-        inferField(parser, configOptions)
+        inferField(parser, configOptions, caseSensitive)
 
       case VALUE_STRING if parser.getTextLength < 1 =>
         // Zero length strings and nulls have special handling to deal
@@ -122,7 +125,7 @@ private[sql] object JsonInferSchema {
         while (nextUntil(parser, END_OBJECT)) {
           builder += StructField(
             parser.getCurrentName,
-            inferField(parser, configOptions),
+            inferField(parser, configOptions, caseSensitive),
             nullable = true)
         }
         val fields: Array[StructField] = builder.result()
@@ -137,7 +140,7 @@ private[sql] object JsonInferSchema {
         var elementType: DataType = NullType
         while (nextUntil(parser, END_ARRAY)) {
           elementType = compatibleType(
-            elementType, inferField(parser, configOptions))
+            elementType, inferField(parser, configOptions, caseSensitive), caseSensitive)
         }
 
         ArrayType(elementType)
@@ -243,13 +246,14 @@ private[sql] object JsonInferSchema {
    */
   private def compatibleRootType(
       columnNameOfCorruptRecords: String,
-      parseMode: ParseMode): (DataType, DataType) => DataType = {
+      parseMode: ParseMode,
+      caseSensitive: Boolean): (DataType, DataType) => DataType = {
     // Since we support array of json objects at the top level,
     // we need to check the element type and find the root level data type.
     case (ArrayType(ty1, _), ty2) =>
-      compatibleRootType(columnNameOfCorruptRecords, parseMode)(ty1, ty2)
+      compatibleRootType(columnNameOfCorruptRecords, parseMode, caseSensitive)(ty1, ty2)
     case (ty1, ArrayType(ty2, _)) =>
-      compatibleRootType(columnNameOfCorruptRecords, parseMode)(ty1, ty2)
+      compatibleRootType(columnNameOfCorruptRecords, parseMode, caseSensitive)(ty1, ty2)
     // Discard null/empty documents
     case (struct: StructType, NullType) => struct
     case (NullType, struct: StructType) => struct
@@ -259,7 +263,7 @@ private[sql] object JsonInferSchema {
       withCorruptField(struct, o, columnNameOfCorruptRecords, parseMode)
     // If we get anything else, we call compatibleType.
     // Usually, when we reach here, ty1 and ty2 are two StructTypes.
-    case (ty1, ty2) => compatibleType(ty1, ty2)
+    case (ty1, ty2) => compatibleType(ty1, ty2, caseSensitive)
   }
 
   private[this] val emptyStructFieldArray = Array.empty[StructField]
@@ -267,8 +271,8 @@ private[sql] object JsonInferSchema {
   /**
    * Returns the most general data type for two given data types.
    */
-  def compatibleType(t1: DataType, t2: DataType): DataType = {
-    TypeCoercion.findTightestCommonType(t1, t2).getOrElse {
+  def compatibleType(t1: DataType, t2: DataType, caseSensitive: Boolean): DataType = {
+    TypeCoercion.findTightestCommonType(t1, t2, caseSensitive).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
         // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
@@ -303,7 +307,8 @@ private[sql] object JsonInferSchema {
             val f2Name = fields2(f2Idx).name
             val comp = f1Name.compareTo(f2Name)
             if (comp == 0) {
-              val dataType = compatibleType(fields1(f1Idx).dataType, fields2(f2Idx).dataType)
+              val dataType = compatibleType(
+                fields1(f1Idx).dataType, fields2(f2Idx).dataType, caseSensitive)
               newFields.add(StructField(f1Name, dataType, nullable = true))
               f1Idx += 1
               f2Idx += 1
@@ -326,15 +331,17 @@ private[sql] object JsonInferSchema {
           StructType(newFields.toArray(emptyStructFieldArray))
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
-          ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
+          ArrayType(
+            compatibleType(elementType1, elementType2, caseSensitive),
+            containsNull1 || containsNull2)
 
         // The case that given `DecimalType` is capable of given `IntegralType` is handled in
         // `findTightestCommonTypeOfTwo`. Both cases below will be executed only when
         // the given `DecimalType` is not capable of the given `IntegralType`.
         case (t1: IntegralType, t2: DecimalType) =>
-          compatibleType(DecimalType.forType(t1), t2)
+          compatibleType(DecimalType.forType(t1), t2, caseSensitive)
         case (t1: DecimalType, t2: IntegralType) =>
-          compatibleType(t1, DecimalType.forType(t2))
+          compatibleType(t1, DecimalType.forType(t2), caseSensitive)
 
         // strings and every string is a Json object.
         case (_, _) => StringType

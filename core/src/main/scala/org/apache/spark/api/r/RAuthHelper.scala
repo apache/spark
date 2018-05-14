@@ -15,21 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.api.r
 
-import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
+import java.io.{DataInputStream, DataOutputStream}
+import java.net.Socket
 
-/**
- * A mix-in interface for {@link DataReaderFactory}. Continuous data reader factories can
- * implement this interface to provide creating {@link DataReader} with particular offset.
- */
-@InterfaceStability.Evolving
-public interface ContinuousDataReaderFactory<T> extends DataReaderFactory<T> {
-  /**
-   * Create a DataReader with particular offset as its startOffset.
-   *
-   * @param offset offset want to set as the DataReader's startOffset.
-   */
-  DataReader<T> createDataReaderWithOffset(PartitionOffset offset);
+import org.apache.spark.SparkConf
+import org.apache.spark.security.SocketAuthHelper
+
+private[spark] class RAuthHelper(conf: SparkConf) extends SocketAuthHelper(conf) {
+
+  override protected def readUtf8(s: Socket): String = {
+    SerDe.readString(new DataInputStream(s.getInputStream()))
+  }
+
+  override protected def writeUtf8(str: String, s: Socket): Unit = {
+    val out = s.getOutputStream()
+    SerDe.writeString(new DataOutputStream(out), str)
+    out.flush()
+  }
+
 }

@@ -49,8 +49,7 @@ import org.apache.spark.storage.StorageLevel
  *
  * @param minSupport the minimal support level of the sequential pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
- * @param maxPatternLength the maximal length of the sequential pattern, any pattern that appears
- *                         less than maxPatternLength will be output
+ * @param maxPatternLength the maximal length of the sequential pattern
  * @param maxLocalProjDBSize The maximum number of items (including delimiters used in the internal
  *                           storage format) allowed in a projected database before local
  *                           processing. If a projected database exceeds this size, another
