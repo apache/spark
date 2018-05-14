@@ -55,8 +55,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("mask_first_n") {
-    checkEvaluation(MaskFirstN(Literal("abcd-EFGH-8765-4321"), 6, "U", "l", "#"),
-      "llll-UFGH-8765-4321")
+    checkEvaluation(MaskFirstN(Literal("aB3d-EFGH-8765"), 6, "U", "l", "#"),
+      "lU#l-UFGH-8765")
     checkEvaluation(new MaskFirstN(
       Literal("abcd-EFGH-8765-4321"), Literal(6), Literal("U"), Literal("l"), Literal("#")),
       "llll-UFGH-8765-4321")
@@ -135,8 +135,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "abcd-EFGH-8765-4321")
     // scalastyle:off nonascii
     checkEvaluation(MaskLastN(Literal("Ul9U"), 2, "\u2200", null, null), "Uln\u2200")
-    checkEvaluation(new MaskLastN(Literal("あ, 𠀋, Hello World"), Literal(10)),
-      "あ, 𠀋, Hxxxx Xxxxx")
+    checkEvaluation(new MaskLastN(Literal("あ, 𠀋, Hello World あ 𠀋"), Literal(10)),
+      "あ, 𠀋, Hello Xxxxx あ 𠀋")
     // scalastyle:on nonascii
   }
 

@@ -79,7 +79,7 @@ trait MaskLike {
   }
 
   def appendMaskedToStringBuffer(
-      sb: StringBuffer,
+      sb: java.lang.StringBuilder,
       inputString: String,
       startOffset: Int,
       numChars: Int): Int = {
@@ -98,7 +98,7 @@ trait MaskLike {
   }
 
   def appendUnchangedToStringBuffer(
-      sb: StringBuffer,
+      sb: java.lang.StringBuilder,
       inputString: String,
       startOffset: Int,
       numChars: Int): Int = {
@@ -128,16 +128,16 @@ object MaskLike {
   val defaultMaskedOther: Int = MaskExpressionsUtils.UNMASKED_VAL
 
   def extractCharCount(e: Expression): Int = e match {
-    case Literal(i, IntegerType|NullType) =>
+    case Literal(i, IntegerType | NullType) =>
       if (i == null) defaultCharCount else i.asInstanceOf[Int]
-    case Literal(_, dt) => throw new AnalysisException(s"Expected literal expression of type " +
+    case Literal(_, dt) => throw new AnalysisException("Expected literal expression of type " +
       s"${IntegerType.simpleString}, but got literal of ${dt.simpleString}")
     case _ => defaultCharCount
   }
 
   def extractReplacement(e: Expression): String = e match {
-    case Literal(s, StringType|NullType) => if (s == null) null else s.toString
-    case Literal(_, dt) => throw new AnalysisException(s"Expected literal expression of type " +
+    case Literal(s, StringType | NullType) => if (s == null) null else s.toString
+    case Literal(_, dt) => throw new AnalysisException("Expected literal expression of type " +
       s"${StringType.simpleString}, but got literal of ${dt.simpleString}")
     case _ => null
   }
@@ -173,7 +173,7 @@ case class Mask(child: Expression, upper: String, lower: String, digit: String)
   override def nullSafeEval(input: Any): Any = {
     val str = input.asInstanceOf[UTF8String].toString
     val length = str.codePointCount(0, str.length())
-    val sb = new StringBuffer(length)
+    val sb = new java.lang.StringBuilder(length)
     appendMaskedToStringBuffer(sb, str, 0, length)
     UTF8String.fromString(sb.toString)
   }
@@ -249,7 +249,7 @@ case class MaskFirstN(
     val str = input.asInstanceOf[UTF8String].toString
     val length = str.codePointCount(0, str.length())
     val endOfMask = if (charCount > length) length else charCount
-    val sb = new StringBuffer(length)
+    val sb = new java.lang.StringBuilder(length)
     val offset = appendMaskedToStringBuffer(sb, str, 0, endOfMask)
     appendUnchangedToStringBuffer(sb, str, offset, length - endOfMask)
     UTF8String.fromString(sb.toString)
@@ -332,7 +332,7 @@ case class MaskLastN(
     val str = input.asInstanceOf[UTF8String].toString
     val length = str.codePointCount(0, str.length())
     val startOfMask = if (charCount >= length) 0 else length - charCount
-    val sb = new StringBuffer(length)
+    val sb = new java.lang.StringBuilder(length)
     val offset = appendUnchangedToStringBuffer(sb, str, 0, startOfMask)
     appendMaskedToStringBuffer(sb, str, offset, length - startOfMask)
     UTF8String.fromString(sb.toString)
@@ -416,7 +416,7 @@ case class MaskShowFirstN(
     val str = input.asInstanceOf[UTF8String].toString
     val length = str.codePointCount(0, str.length())
     val startOfMask = if (charCount > length) length else charCount
-    val sb = new StringBuffer(length)
+    val sb = new java.lang.StringBuilder(length)
     val offset = appendUnchangedToStringBuffer(sb, str, 0, startOfMask)
     appendMaskedToStringBuffer(sb, str, offset, length - startOfMask)
     UTF8String.fromString(sb.toString)
@@ -499,7 +499,7 @@ case class MaskShowLastN(
     val str = input.asInstanceOf[UTF8String].toString
     val length = str.codePointCount(0, str.length())
     val endOfMask = if (charCount >= length) 0 else length - charCount
-    val sb = new StringBuffer(length)
+    val sb = new java.lang.StringBuilder(length)
     val offset = appendMaskedToStringBuffer(sb, str, 0, endOfMask)
     appendUnchangedToStringBuffer(sb, str, offset, length - endOfMask)
     UTF8String.fromString(sb.toString)

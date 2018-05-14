@@ -24,7 +24,7 @@ public class MaskExpressionsUtils {
   final static int UNMASKED_VAL = -1;
 
   /**
-   *
+   * Returns the masking character for {@param c} or {@param c} is it should not be masked.
    * @param c the character to transform
    * @param maskedUpperChar the character to use instead of a uppercase letter
    * @param maskedLowerChar the character to use instead of a lowercase letter
