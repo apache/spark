@@ -180,15 +180,14 @@ class SparkSubmitSuite
     appArgs.toString should include ("thequeue")
   }
 
-  test("SPARK-24241: not fail fast when executor num is 0 and dynamic allocation enabled") {
+  test("SPARK-24241: do not fail fast if executor num is 0 when dynamic allocation is enabled") {
     val clArgs1 = Seq(
       "--name", "myApp",
       "--class", "Foo",
       "--num-executors", "0",
       "--conf", "spark.dynamicAllocation.enabled=true",
       "thejar.jar")
-    val appArgs = new SparkSubmitArguments(clArgs1)
-    appArgs.dynamicAllocationEnabled should be ("true")
+    new SparkSubmitArguments(clArgs1)
 
     val clArgs2 = Seq(
       "--name", "myApp",
@@ -196,7 +195,9 @@ class SparkSubmitSuite
       "--num-executors", "0",
       "--conf", "spark.dynamicAllocation.enabled=false",
       "thejar.jar")
-    intercept[SparkException](new SparkSubmitArguments(clArgs2))
+
+    val e = intercept[SparkException](new SparkSubmitArguments(clArgs2))
+    assert(e.getMessage.contains("Number of executors must be a positive number"))
   }
 
   test("specify deploy mode through configuration") {
