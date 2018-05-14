@@ -90,11 +90,6 @@ class SparkSession private(
 
   sparkContext.assertNotStopped()
 
-  // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
-  SQLConf.setSQLConfGetter(() => {
-    SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(SQLConf.getFallbackConf)
-  })
-
   /**
    * The version of Spark on which this application is running.
    *
@@ -987,6 +982,9 @@ object SparkSession extends Logging {
    * @since 2.0.0
    */
   def setActiveSession(session: SparkSession): Unit = {
+    SQLConf.setSQLConfGetter(() => {
+      session.sessionState.conf
+    })
     activeThreadSession.set(session)
   }
 
