@@ -109,15 +109,24 @@ object SQLExecution {
     // Set all the specified SQL configs to local properties, so that they can be available at
     // the executor side.
     val allConfigs = sparkSession.sessionState.conf.getAllConfs
+    val originalLocalProps = scala.collection.mutable.HashMap.empty[String, String]
     for ((key, value) <- allConfigs) {
       // Excludes external configs defined by users.
-      if (key.startsWith("spark")) sparkSession.sparkContext.setLocalProperty(key, value)
+      if (key.startsWith("spark")) {
+        Option(sparkSession.sparkContext.getLocalProperty(key)).foreach {
+          // If users already set a value in local properties, keep it and restore it at the end.
+          origin => originalLocalProps(key) = origin
+        }
+        sparkSession.sparkContext.setLocalProperty(key, value)
+      }
     }
     try {
       body
     } finally {
       allConfigs.foreach {
-        case (key, _) => sparkSession.sparkContext.setLocalProperty(key, null)
+        case (key, _) =>
+          val origin = originalLocalProps.getOrElse(key, null)
+          sparkSession.sparkContext.setLocalProperty(key, origin)
       }
     }
   }
