@@ -195,17 +195,14 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
       values: String,
       arrayData: String,
       numElements: String): String = {
-    val byteArraySize = ctx.freshName("byteArraySize")
-    val data = ctx.freshName("byteArray")
     val unsafeRow = ctx.freshName("unsafeRow")
     val unsafeArrayData = ctx.freshName("unsafeArrayData")
     val structsOffset = ctx.freshName("structsOffset")
-    val calculateArraySize = "UnsafeArrayData.calculateSizeOfUnderlyingByteArray"
     val calculateHeader = "UnsafeArrayData.calculateHeaderPortionInBytes"
 
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
-    val longSize = LongType.defaultSize
-    val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + longSize * 2
+    val wordSize = UnsafeRow.WORD_SIZE
+    val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + wordSize * 2
     val structSizeAsLong = structSize + "L"
     val keyTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
     val valueTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
@@ -223,27 +220,26 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
       valueAssignment
     }
 
-    s"""
-       |final long $byteArraySize = $calculateArraySize($numElements, ${longSize + structSize});
-       |if ($byteArraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  ${genCodeForAnyElements(ctx, keys, values, arrayData, numElements)}
-       |} else {
-       |  final int $structsOffset = $calculateHeader($numElements) + $numElements * $longSize;
-       |  final byte[] $data = new byte[(int)$byteArraySize];
-       |  UnsafeArrayData $unsafeArrayData = new UnsafeArrayData();
-       |  Platform.putLong($data, $baseOffset, $numElements);
-       |  $unsafeArrayData.pointTo($data, $baseOffset, (int)$byteArraySize);
-       |  UnsafeRow $unsafeRow = new UnsafeRow(2);
-       |  for (int z = 0; z < $numElements; z++) {
-       |    long offset = $structsOffset + z * $structSizeAsLong;
-       |    $unsafeArrayData.setLong(z, (offset << 32) + $structSizeAsLong);
-       |    $unsafeRow.pointTo($data, $baseOffset + offset, $structSize);
-       |    $unsafeRow.set$keyTypeName(0, ${getKey(keys)});
-       |    $valueAssignmentChecked
-       |  }
-       |  $arrayData = $unsafeArrayData;
-       |}
-     """.stripMargin
+    val assignmentLoop = (byteArray: String) =>
+      s"""
+         |final int $structsOffset = $calculateHeader($numElements) + $numElements * $wordSize;
+         |UnsafeRow $unsafeRow = new UnsafeRow(2);
+         |for (int z = 0; z < $numElements; z++) {
+         |  long offset = $structsOffset + z * $structSizeAsLong;
+         |  $unsafeArrayData.setLong(z, (offset << 32) + $structSizeAsLong);
+         |  $unsafeRow.pointTo($byteArray, $baseOffset + offset, $structSize);
+         |  $unsafeRow.set$keyTypeName(0, ${getKey(keys)});
+         |  $valueAssignmentChecked
+         |}
+         |$arrayData = $unsafeArrayData;
+       """.stripMargin
+
+    ctx.createUnsafeArrayWithFallback(
+      unsafeArrayData,
+      numElements,
+      structSize + wordSize,
+      assignmentLoop,
+      genCodeForAnyElements(ctx, keys, values, arrayData, numElements))
   }
 
   private def genCodeForAnyElements(
@@ -258,10 +254,10 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
 
     val isValuePrimitive = CodeGenerator.isPrimitiveType(childDataType.valueType)
     val getValueWithCheck = if (childDataType.valueContainsNull && isValuePrimitive) {
-        s"$values.isNullAt(z) ? null : (Object)${getValue(values)}"
-      } else {
-        getValue(values)
-      }
+      s"$values.isNullAt(z) ? null : (Object)${getValue(values)}"
+    } else {
+      getValue(values)
+    }
 
     s"""
        |final Object[] $data = new Object[$numElements];
