@@ -40,7 +40,8 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Seq.empty),
       "resource",
       "app-id",
-      Map.empty,
+      None,
+      Mkubap.empty,
       Map.empty,
       Map.empty,
       Map.empty)

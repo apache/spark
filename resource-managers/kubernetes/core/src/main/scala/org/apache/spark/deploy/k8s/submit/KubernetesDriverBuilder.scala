@@ -46,6 +46,7 @@ private[spark] class KubernetesDriverBuilder(
     val baseFeatures = Seq(
       provideBasicStep(kubernetesConf),
       provideCredentialsStep(kubernetesConf),
+      provideServiceStep(kubernetesConf),
       provideLocalDirsStep(kubernetesConf))
     val withProvideSecretsStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
       baseFeatures ++ Seq(provideSecretsStep(kubernetesConf))
