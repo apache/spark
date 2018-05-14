@@ -75,7 +75,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var proxyUser: String = null
   var principal: String = null
   var keytab: String = null
-  private var dynamicAllocationEnabled: String = null
+  private var dynamicAllocationEnabled: Boolean = false
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -198,9 +198,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
-    dynamicAllocationEnabled = Option(dynamicAllocationEnabled)
-      .orElse(sparkProperties.get("spark.dynamicAllocation.enabled"))
-      .orNull
+    dynamicAllocationEnabled =
+      sparkProperties.get("spark.dynamicAllocation.enabled").exists("true".equalsIgnoreCase)
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {
@@ -277,7 +276,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (totalExecutorCores != null && Try(totalExecutorCores.toInt).getOrElse(-1) <= 0) {
       error("Total executor cores must be a positive number")
     }
-    if (!"true".equalsIgnoreCase(dynamicAllocationEnabled) &&
+    if (!dynamicAllocationEnabled &&
       numExecutors != null && Try(numExecutors.toInt).getOrElse(-1) <= 0) {
       error("Number of executors must be a positive number")
     }
