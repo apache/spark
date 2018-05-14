@@ -1518,7 +1518,10 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
+    RelationalGroupedDataset(
+      toDF(),
+      cols.distinct.map(_.expr),
+      RelationalGroupedDataset.GroupByType)
   }
 
   /**
@@ -1593,7 +1596,9 @@ class Dataset[T] private[sql](
   def groupBy(col1: String, cols: String*): RelationalGroupedDataset = {
     val colNames: Seq[String] = col1 +: cols
     RelationalGroupedDataset(
-      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.GroupByType)
+      toDF(),
+      colNames.distinct.map(colName => resolve(colName)),
+      RelationalGroupedDataset.GroupByType)
   }
 
   /**
