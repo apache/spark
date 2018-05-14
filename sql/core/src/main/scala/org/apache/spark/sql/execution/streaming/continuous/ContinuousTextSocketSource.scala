@@ -32,9 +32,9 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousReader.GetRecord
+import org.apache.spark.sql.execution.streaming.{ContinuousRecordEndpoint, ContinuousRecordPartitionOffset, GetRecord}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
@@ -48,9 +48,6 @@ object TextSocketContinuousReader {
     StructField("value", StringType)
       :: StructField("timestamp", TimestampType) :: Nil)
   val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-
-  case class GetRecord(offset: TextSocketPartitionOffset)
-
 }
 
 /**
@@ -85,7 +82,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
 
   private var startOffset: TextSocketOffset = _
 
-  private val recordEndpoint = new RecordEndpoint()
+  private val recordEndpoint = new ContinuousRecordEndpoint(buckets, this)
   @volatile private var endpointRef: RpcEndpointRef = _
 
   initialize()
@@ -93,7 +90,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
   override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
     assert(offsets.length == numPartitions)
     val offs = offsets
-      .map(_.asInstanceOf[TextSocketPartitionOffset])
+      .map(_.asInstanceOf[ContinuousRecordPartitionOffset])
       .sortBy(_.partitionId)
       .map(_.offset)
       .toList
@@ -108,6 +105,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
     this.startOffset = offset
       .orElse(TextSocketOffset(List.fill(numPartitions)(0)))
       .asInstanceOf[TextSocketOffset]
+    recordEndpoint.setStartOffsets(startOffset.offsets)
   }
 
   override def getStartOffset: Offset = startOffset
@@ -142,7 +140,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
     startOffset.offsets.zipWithIndex.map {
       case (offset, i) =>
         TextSocketContinuousDataReaderFactory(
-          endpointName, i, offset): DataReaderFactory[Row]
+          endpointName, i, offset, includeTimestamp): DataReaderFactory[Row]
     }.asJava
 
   }
@@ -160,6 +158,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
         buckets(partition).trimStart(n)
     }
     startOffset = endOffset
+    recordEndpoint.setStartOffsets(startOffset.offsets)
   }
 
   /** Stop this source. */
@@ -211,30 +210,6 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
     readThread.start()
   }
 
-  /**
-   * Endpoint for executors to poll for records.
-   */
-  private class RecordEndpoint extends ThreadSafeRpcEndpoint {
-
-    override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
-
-    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case GetRecord(TextSocketPartitionOffset(partition, index)) =>
-        TextSocketContinuousReader.this.synchronized {
-          val bufIndex = index - startOffset.offsets(partition)
-          val record = if (buckets(partition).size <= bufIndex) {
-            None
-          } else {
-            Some(buckets(partition)(bufIndex))
-          }
-          context.reply(
-            record.map(r => if (includeTimestamp) Row(r) else Row(r._1)
-            )
-          )
-        }
-    }
-  }
-
   override def toString: String = s"TextSocketContinuousReader[host: $host, port: $port]"
 
   private def includeTimestamp: Boolean = options.getBoolean("includeTimestamp", false)
@@ -247,11 +222,13 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
 case class TextSocketContinuousDataReaderFactory(
     driverEndpointName: String,
     partitionId: Int,
-    startOffset: Int)
+    startOffset: Int,
+    includeTimestamp: Boolean)
 extends DataReaderFactory[Row] {
 
   override def createDataReader(): DataReader[Row] =
-    new TextSocketContinuousDataReader(driverEndpointName, partitionId, startOffset)
+    new TextSocketContinuousDataReader(driverEndpointName, partitionId, startOffset,
+      includeTimestamp)
 }
 
 /**
@@ -262,7 +239,8 @@ extends DataReaderFactory[Row] {
 class TextSocketContinuousDataReader(
     driverEndpointName: String,
     partitionId: Int,
-    startOffset: Int)
+    startOffset: Int,
+    includeTimestamp: Boolean)
   extends ContinuousDataReader[Row] {
 
   private val endpoint = RpcUtils.makeDriverRef(
@@ -295,14 +273,20 @@ class TextSocketContinuousDataReader(
 
   override def close(): Unit = {}
 
-  override def getOffset: PartitionOffset = TextSocketPartitionOffset(partitionId, currentOffset)
+  override def getOffset: PartitionOffset =
+    ContinuousRecordPartitionOffset(partitionId, currentOffset)
 
   private def getRecord: Option[Row] =
-    endpoint.askSync[Option[Row]](GetRecord(TextSocketPartitionOffset(partitionId, currentOffset)))
-
+    endpoint.askSync[Option[Row]](GetRecord(
+      ContinuousRecordPartitionOffset(partitionId, currentOffset)))
+      .map(rec => {
+        if (includeTimestamp) {
+          rec
+        } else {
+          Row(rec.get(0).asInstanceOf[(String, Timestamp)]._1)
+        }
+      })
 }
-
-case class TextSocketPartitionOffset(partitionId: Int, offset: Int) extends PartitionOffset
 
 case class TextSocketOffset(offsets: List[Int]) extends Offset {
   private implicit val formats = Serialization.formats(NoTypeHints)

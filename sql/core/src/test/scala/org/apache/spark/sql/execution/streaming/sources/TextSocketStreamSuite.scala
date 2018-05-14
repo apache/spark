@@ -24,6 +24,10 @@ import java.sql.Timestamp
 import java.util.Optional
 import java.util.concurrent.LinkedBlockingQueue
 
+import scala.collection.JavaConverters._
+
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -36,15 +40,13 @@ import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offse
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 =======
 import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.streaming.StreamTest
 >>>>>>> d17a83d6cbf... SPARK-24127: More unit tests
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
-import org.scalatest.BeforeAndAfterEach
 
-import scala.collection.JavaConverters._
 
 class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
 
@@ -332,7 +334,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
           val r = t.createDataReader().asInstanceOf[TextSocketContinuousDataReader]
           for (i <- 0 until numRecords / 2) {
             r.next()
-            offsets.append(r.getOffset().asInstanceOf[TextSocketPartitionOffset].offset)
+            offsets.append(r.getOffset().asInstanceOf[ContinuousRecordPartitionOffset].offset)
             data.append(r.get().getString(0).toInt)
             if (i == 2) {
               commitOffset(t.partitionId, i + 1)
