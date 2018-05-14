@@ -526,4 +526,84 @@ class MemoryStoreSuite
       }
     }
   }
+
+  test("[SPARK-24225]: remove should close AutoCloseable object") {
+
+    val (store, _) = makeMemoryStore(12000)
+
+    val id = BroadcastBlockId(0)
+    val tracker = new CloseTracker()
+    store.putIteratorAsValues(id, Iterator(tracker), ClassTag.Any)
+    assert(store.contains(id))
+    store.remove(id)
+    assert(tracker.getClosed())
+  }
+
+  test("[SPARK-24225]: remove should close AutoCloseable objects even if they throw exceptions") {
+
+    val (store, _) = makeMemoryStore(12000)
+
+    val id = BroadcastBlockId(0)
+    val tracker = new CloseTracker(true)
+    store.putIteratorAsValues(id, Iterator(tracker), ClassTag.Any)
+    assert(store.contains(id))
+    store.remove(id)
+    assert(tracker.getClosed())
+  }
+
+  test("[SPARK-24225]: clear should close AutoCloseable objects") {
+
+    val (store, _) = makeMemoryStore(12000)
+
+    val id = BroadcastBlockId(0)
+    val tracker = new CloseTracker
+    store.putIteratorAsValues(id, Iterator(tracker), ClassTag.Any)
+    assert(store.contains(id))
+    store.clear()
+    assert(tracker.getClosed())
+  }
+
+  test("[SPARK-24225]: clear should close all AutoCloseable objects put together in an iterator") {
+
+    val (store, _) = makeMemoryStore(12000)
+
+    val id1 = BroadcastBlockId(1)
+    val tracker2 = new CloseTracker
+    val tracker1 = new CloseTracker
+    store.putIteratorAsValues(id1, Iterator(tracker1, tracker2), ClassTag.Any)
+    assert(store.contains(id1))
+    store.clear()
+    assert(tracker1.getClosed())
+    assert(tracker2.getClosed())
+  }
+
+  test("[SPARK-24225]: clear should close AutoCloseable objects even if they throw exceptions") {
+
+    val (store, _) = makeMemoryStore(12000)
+
+    val id1 = BroadcastBlockId(1)
+    val id2 = BroadcastBlockId(2)
+    val tracker2 = new CloseTracker(true)
+    val tracker1 = new CloseTracker(true)
+    store.putIteratorAsValues(id1, Iterator(tracker1), ClassTag.Any)
+    store.putIteratorAsValues(id2, Iterator(tracker2), ClassTag.Any)
+    assert(store.contains(id1))
+    assert(store.contains(id2))
+    store.clear()
+    assert(tracker1.getClosed())
+    assert(tracker2.getClosed())
+  }
+}
+
+private class CloseTracker (val throwsOnClosed: Boolean = false) extends AutoCloseable {
+  var closed = false
+  override def close(): Unit = {
+    closed = true
+    if (throwsOnClosed) {
+      throw new RuntimeException("Throwing")
+    }
+  }
+  def getClosed(): Boolean = {
+    closed
+  }
 }

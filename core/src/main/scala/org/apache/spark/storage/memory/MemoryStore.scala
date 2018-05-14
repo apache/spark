@@ -21,6 +21,7 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.LinkedHashMap
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -384,15 +385,36 @@ private[spark] class MemoryStore(
     }
   }
 
+  private def maybeReleaseResources(entry: MemoryEntry[_]): Unit = {
+    entry match {
+      case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
+      case DeserializedMemoryEntry(objs: Array[Any], _, _) => maybeCloseValues(objs)
+      case _ =>
+    }
+  }
+
+  private def maybeCloseValues(objs: Array[Any]): Unit = {
+    objs.foreach {
+        case closable: AutoCloseable =>
+          safelyCloseValue(closable)
+        case _ =>
+      }
+  }
+
+  private def safelyCloseValue(closable: AutoCloseable) = {
+    try {
+      closable.close()
+    } catch {
+      case ex: Exception => logWarning(s"Failed to close AutoClosable $closable", ex)
+    }
+  }
+
   def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
       entries.remove(blockId)
     }
     if (entry != null) {
-      entry match {
-        case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
-        case _ =>
-      }
+      maybeReleaseResources(entry)
       memoryManager.releaseStorageMemory(entry.size, entry.memoryMode)
       logDebug(s"Block $blockId of size ${entry.size} dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")
@@ -404,6 +426,7 @@ private[spark] class MemoryStore(
 
   def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
+      entries.values().asScala.foreach(maybeReleaseResources)
       entries.clear()
     }
     onHeapUnrollMemoryMap.clear()
