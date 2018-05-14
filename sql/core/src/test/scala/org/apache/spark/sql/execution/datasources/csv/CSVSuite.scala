@@ -1368,7 +1368,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       checkAnswer(computed, expected)
     }
   }
- 
+
   def checkHeader(multiLine: Boolean): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTempPath { path =>
