@@ -91,7 +91,7 @@ object InterpretedUnsafeProjection {
   /**
    * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
    */
-  protected[sql] def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
+  def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
     // We need to make sure that we do not reuse stateful expressions.
     val cleanedExpressions = exprs.map(_.transform {
       case s: Stateful => s.freshCopy()
