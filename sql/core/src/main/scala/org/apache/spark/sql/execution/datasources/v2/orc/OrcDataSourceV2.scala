@@ -94,7 +94,8 @@ case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: 
 
   override def isSplitable(path: Path): Boolean = true
 
-  override def columnarBatchDataReader: (PartitionedFile) => DataReader[ColumnarBatch] = {
+  override def columnarBatchInputPartitionReader:
+    (PartitionedFile) => InputPartitionReader[ColumnarBatch] = {
     val capacity = sqlConf.orcVectorizedReaderBatchSize
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val copyToSpark = sqlConf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK)
@@ -117,7 +118,7 @@ case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: 
         isCaseSensitive, dataSchema, readSchema, reader, conf)
 
       if (requestedColIdsOrEmptyFile.isEmpty) {
-        new EmptyDataReader
+        new EmptyInputPartitionReader
       } else {
         val requestedColIds = requestedColIdsOrEmptyFile.get
         assert(requestedColIds.length == readSchema.length,
@@ -143,12 +144,12 @@ case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: 
           requestedColIds,
           partitionColIds,
           file.partitionValues)
-        new RecordDataReader(batchReader)
+        new PartitionRecordReader(batchReader)
       }
     }
   }
 
-  override def unsafeRowDataReader: (PartitionedFile) => DataReader[UnsafeRow] = {
+  override def unsafeInputPartitionReader: (PartitionedFile) => InputPartitionReader[UnsafeRow] = {
     val isCaseSensitive = this.isCaseSensitive
     val dataSchema = this.dataSchema
     val readSchema = this.readSchema()
@@ -168,7 +169,7 @@ case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: 
         isCaseSensitive, dataSchema, readSchema, reader, conf)
 
       if (requestedColIdsOrEmptyFile.isEmpty) {
-        new EmptyDataReader[UnsafeRow]
+        new EmptyInputPartitionReader[UnsafeRow]
       } else {
         val requestedColIds = requestedColIdsOrEmptyFile.get
         assert(requestedColIds.length == readSchema.length,
@@ -197,7 +198,7 @@ case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: 
           (value: OrcStruct) =>
             unsafeProjection(joinedRow(deserializer.deserialize(value), file.partitionValues))
         }
-        new RecordDataReadeWithProject(orcRecordReader, projection)
+        new PartitionRecordDReaderWithProject(orcRecordReader, projection)
       }
     }
   }

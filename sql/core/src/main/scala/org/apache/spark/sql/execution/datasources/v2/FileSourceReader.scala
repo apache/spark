@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeRow}
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
@@ -53,10 +52,10 @@ abstract class FileSourceReader(options: DataSourceOptions, userSpecifiedSchema:
   }
 
   /**
-   * Returns a function that can be used to read a single file in as an [[DataReader]] of
+   * Returns a function that can be used to read a single file in as an [[InputPartitionReader]] of
    * [[UnsafeRow]].
    */
-  def unsafeRowDataReader: PartitionedFile => DataReader[UnsafeRow]
+  def unsafeInputPartitionReader: PartitionedFile => InputPartitionReader[UnsafeRow]
 
   protected val sparkSession = SparkSession.getActiveSession
     .getOrElse(SparkSession.getDefaultSession.get)
@@ -130,11 +129,11 @@ abstract class FileSourceReader(options: DataSourceOptions, userSpecifiedSchema:
     pushedFiltersArray
   }
 
-  override def createUnsafeRowReaderFactories: JList[DataReaderFactory[UnsafeRow]] = {
+  override def planUnsafeInputPartitions: JList[InputPartition[UnsafeRow]] = {
     partitions.map { filePartition =>
-      new FileReaderFactory[UnsafeRow](filePartition, unsafeRowDataReader,
+      new FileInputPartition[UnsafeRow](filePartition, unsafeInputPartitionReader,
         ignoreCorruptFiles, ignoreMissingFiles)
-        .asInstanceOf[DataReaderFactory[UnsafeRow]]
+        .asInstanceOf[InputPartition[UnsafeRow]]
     }.asJava
   }
 }
@@ -145,16 +144,16 @@ abstract class ColumnarBatchFileSourceReader(
   extends FileSourceReader(options: DataSourceOptions, userSpecifiedSchema: Option[StructType])
   with SupportsScanColumnarBatch {
   /**
-   * Returns a function that can be used to read a single file in as an [[DataReader]] of
+   * Returns a function that can be used to read a single file in as an [[InputPartitionReader]] of
    * [[ColumnarBatch]].
    */
-  def columnarBatchDataReader: PartitionedFile => DataReader[ColumnarBatch]
+  def columnarBatchInputPartitionReader: PartitionedFile => InputPartitionReader[ColumnarBatch]
 
-  override def createBatchDataReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
+  override def planBatchInputPartitions(): JList[InputPartition[ColumnarBatch]] = {
     partitions.map { filePartition =>
-      new FileReaderFactory[ColumnarBatch](filePartition, columnarBatchDataReader,
+      new FileInputPartition[ColumnarBatch](filePartition, columnarBatchInputPartitionReader,
         ignoreCorruptFiles, ignoreMissingFiles)
-        .asInstanceOf[DataReaderFactory[ColumnarBatch]]
+        .asInstanceOf[InputPartition[ColumnarBatch]]
     }.asJava
   }
 }

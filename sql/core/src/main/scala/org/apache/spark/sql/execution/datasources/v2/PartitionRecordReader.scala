@@ -17,18 +17,25 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.io.IOException
+import org.apache.hadoop.mapreduce.RecordReader
 
-import org.apache.spark.sql.sources.v2.reader.DataReader
+import org.apache.spark.sql.sources.v2.reader.InputPartitionReader
 
-/**
- * A [[DataReader]] with empty output.
- */
-class EmptyDataReader[T] extends DataReader[T] {
-  override def next(): Boolean = false
+class PartitionRecordReader[T](
+    private[this] var rowReader: RecordReader[_, T]) extends InputPartitionReader[T] {
+  override def next(): Boolean = rowReader.nextKeyValue()
 
-  override def get(): T =
-    throw new IOException("No records should be returned from EmptyDataReader")
+  override def get(): T = rowReader.getCurrentValue
 
-  override def close(): Unit = {}
+  override def close(): Unit = rowReader.close()
+}
+
+class PartitionRecordDReaderWithProject[X, T](
+    private[this] var rowReader: RecordReader[_, X],
+    project: X => T) extends InputPartitionReader[T] {
+  override def next(): Boolean = rowReader.nextKeyValue()
+
+  override def get(): T = project(rowReader.getCurrentValue)
+
+  override def close(): Unit = rowReader.close()
 }

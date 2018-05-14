@@ -24,19 +24,19 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.execution.datasources.{FilePartition, FilePartitionUtil, PartitionedFile}
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-case class FileReaderFactory[T](
+case class FileInputPartition[T](
     file: FilePartition,
-    readFunction: (PartitionedFile) => DataReader[T],
+    readFunction: (PartitionedFile) => InputPartitionReader[T],
     ignoreCorruptFiles: Boolean = false,
     ignoreMissingFiles: Boolean = false)
-  extends DataReaderFactory[T] {
-  override def createDataReader(): DataReader[T] = {
+  extends InputPartition[T] {
+  override def createPartitionReader(): InputPartitionReader[T] = {
     val taskContext = TaskContext.get()
-    val iter = file.files.iterator.map(f => PartitionedFileDataReader(f, readFunction(f)))
-    FileDataReader(taskContext, iter, ignoreCorruptFiles, ignoreMissingFiles)
+    val iter = file.files.iterator.map(f => PartitionedFileReader(f, readFunction(f)))
+    FileInputPartitionReader(taskContext, iter, ignoreCorruptFiles, ignoreMissingFiles)
   }
 
   override def preferredLocations(): Array[String] = {
@@ -44,9 +44,9 @@ case class FileReaderFactory[T](
   }
 }
 
-case class PartitionedFileDataReader[T](
+case class PartitionedFileReader[T](
     file: PartitionedFile,
-    reader: DataReader[T]) extends DataReader[T] {
+    reader: InputPartitionReader[T]) extends InputPartitionReader[T] {
   override def next(): Boolean = reader.next()
 
   override def get(): T = reader.get()
@@ -54,11 +54,11 @@ case class PartitionedFileDataReader[T](
   override def close(): Unit = reader.close()
 }
 
-case class FileDataReader[T](
+case class FileInputPartitionReader[T](
     context: TaskContext,
-    readers: Iterator[PartitionedFileDataReader[T]],
+    readers: Iterator[PartitionedFileReader[T]],
     ignoreCorruptFiles: Boolean,
-    ignoreMissingFiles: Boolean) extends DataReader[T] with Logging {
+    ignoreMissingFiles: Boolean) extends InputPartitionReader[T] with Logging {
   private val inputMetrics = context.taskMetrics().inputMetrics
   private val existingBytesRead = inputMetrics.bytesRead
 
@@ -83,7 +83,7 @@ case class FileDataReader[T](
     }
   }
 
-  private[this] var currentFile: PartitionedFileDataReader[T] = null
+  private[this] var currentFile: PartitionedFileReader[T] = null
 
   private def hasNext(): Boolean = {
     if (currentFile == null) {
