@@ -161,6 +161,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     // null handling
     checkEvaluation(ArraysOverlap(emptyIntArray, a2), false)
+    checkEvaluation(ArraysOverlap(
+      emptyIntArray, Literal.create(Seq(null), ArrayType(IntegerType))), false)
     checkEvaluation(ArraysOverlap(Literal.create(null, ArrayType(IntegerType)), a0), null)
     checkEvaluation(ArraysOverlap(a0, Literal.create(null, ArrayType(IntegerType))), null)
     checkEvaluation(ArraysOverlap(

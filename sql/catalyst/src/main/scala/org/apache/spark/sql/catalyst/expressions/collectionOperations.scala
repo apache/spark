@@ -625,10 +625,10 @@ case class ArraysOverlap(left: Expression, right: Expression)
    */
   private def fastEval(arr1: ArrayData, arr2: ArrayData): Any = {
     var hasNull = false
-    val (bigger, smaller, biggerDt) = if (arr1.numElements() > arr2.numElements()) {
-      (arr1, arr2, left.dataType.asInstanceOf[ArrayType])
+    val (bigger, smaller) = if (arr1.numElements() > arr2.numElements()) {
+      (arr1, arr2)
     } else {
-      (arr2, arr1, right.dataType.asInstanceOf[ArrayType])
+      (arr2, arr1)
     }
     if (smaller.numElements() > 0) {
       val smallestSet = new mutable.HashSet[Any]
@@ -766,15 +766,15 @@ case class ArraysOverlap(left: Expression, right: Expression)
       s"""
          |for (int $j = 0; $j < $smaller.numElements(); $j ++) {
          |  $compareValues
-         |  if (${ev.value}) {
-         |    break;
-         |  }
          |}
        """.stripMargin,
       s"${ev.isNull} = true;")
     s"""
        |for (int $i = 0; $i < $bigger.numElements(); $i ++) {
-       |$isInSmaller
+       |  $isInSmaller
+       |  if (${ev.value}) {
+       |    break;
+       |  }
        |}
      """.stripMargin
   }
