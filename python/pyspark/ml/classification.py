@@ -1283,11 +1283,18 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self._set(lossType=value)
 
     @since("1.4.0")
-    def getLossType(self):
+    def getLossType(self,dataset):
         """
         Gets the value of lossType or its default value.
         """
         return self.getOrDefault(self.lossType)
+
+    @since("2.4.0")
+    def evaluateEachIteration(self, dataset):
+        """
+        Method to compute error or loss for every iteration of gradient boosting.
+        """
+        return self._call_java("evaluateEachIteration", dataset)
 
 
 class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
@@ -1964,6 +1971,7 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         # output label and label metadata as prediction
         return aggregatedDataset.withColumn(
             self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])).drop(accColName)
+
 
     @since("2.0.0")
     def copy(self, extra=None):
