@@ -19,19 +19,21 @@ package org.apache.spark.deploy.k8s.features
 import io.fabric8.kubernetes.api.model.PodBuilder
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SecretVolumeUtils, SparkPod}
+import org.apache.spark.deploy.k8s._
 
-class MountSecretsFeatureStepSuite extends SparkFunSuite {
+class EnvSecretsFeatureStepSuite extends SparkFunSuite{
+  private val KEY_REF_NAME_FOO = "foo"
+  private val KEY_REF_NAME_BAR = "bar"
+  private val KEY_REF_KEY_FOO = "key_foo"
+  private val KEY_REF_KEY_BAR = "key_bar"
+  private val ENV_NAME_FOO = "MY_FOO"
+  private val ENV_NAME_BAR = "MY_bar"
 
-  private val SECRET_FOO = "foo"
-  private val SECRET_BAR = "bar"
-  private val SECRET_MOUNT_PATH = "/etc/secrets/driver"
-
-  test("mounts all given secrets") {
+  test("sets up all keyRefs") {
     val baseDriverPod = SparkPod.initialPod()
-    val secretNamesToMountPaths = Map(
-      SECRET_FOO -> SECRET_MOUNT_PATH,
-      SECRET_BAR -> SECRET_MOUNT_PATH)
+    val envVarsToKeys = Map(
+      ENV_NAME_BAR -> s"${KEY_REF_NAME_BAR}:${KEY_REF_KEY_BAR}",
+      ENV_NAME_FOO -> s"${KEY_REF_NAME_FOO}:${KEY_REF_KEY_FOO}")
     val sparkConf = new SparkConf(false)
     val kubernetesConf = KubernetesConf(
       sparkConf,
@@ -40,20 +42,18 @@ class MountSecretsFeatureStepSuite extends SparkFunSuite {
       "app-id",
       Map.empty,
       Map.empty,
-      secretNamesToMountPaths,
       Map.empty,
+      envVarsToKeys,
       Map.empty)
 
-    val step = new MountSecretsFeatureStep(kubernetesConf)
-    val driverPodWithSecretsMounted = step.configurePod(baseDriverPod).pod
-    val driverContainerWithSecretsMounted = step.configurePod(baseDriverPod).container
+    val step = new EnvSecretsFeatureStep(kubernetesConf)
+    val driverContainerWithEnvSecrets = step.configurePod(baseDriverPod).container
 
-    Seq(s"$SECRET_FOO-volume", s"$SECRET_BAR-volume").foreach { volumeName =>
-      assert(SecretVolumeUtils.podHasVolume(driverPodWithSecretsMounted, volumeName))
-    }
-    Seq(s"$SECRET_FOO-volume", s"$SECRET_BAR-volume").foreach { volumeName =>
-      assert(SecretVolumeUtils.containerHasVolume(
-        driverContainerWithSecretsMounted, volumeName, SECRET_MOUNT_PATH))
+    val expectedVars =
+      Seq(s"${ENV_NAME_BAR}", s"${ENV_NAME_FOO}")
+
+    expectedVars.foreach { envName =>
+      assert(KubernetesFeaturesTestUtils.containerHasEnvVar(driverContainerWithEnvSecrets, envName))
     }
   }
 }
