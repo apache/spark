@@ -82,7 +82,7 @@ checkJavaVersion <- function() {
                    })
   javaVersionFilter <- Filter(
       function(x) {
-        grepl("java version", x)
+        grepl(" version", x)
       }, javaVersionOut)
 
   javaVersionStr <- strsplit(javaVersionFilter[[1]], "[\"]")[[1L]][2]
