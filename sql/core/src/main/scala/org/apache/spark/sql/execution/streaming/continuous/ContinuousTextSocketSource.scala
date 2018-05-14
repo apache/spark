@@ -151,7 +151,13 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
     val endOffset = end.asInstanceOf[TextSocketOffset]
     endOffset.offsets.zipWithIndex.foreach {
       case (offset, partition) =>
-        buckets(partition).trimStart(offset - startOffset.offsets(partition))
+        val max = startOffset.offsets(partition) + buckets(partition).size
+        if (offset > max) {
+          throw new IllegalStateException("Invalid offset " + offset + " to commit" +
+          " for partition " + partition + ". Max valid offset: " + max)
+        }
+        val n = offset - startOffset.offsets(partition)
+        buckets(partition).trimStart(n)
     }
     startOffset = endOffset
   }

@@ -24,21 +24,27 @@ import java.sql.Timestamp
 import java.util.Optional
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.JavaConverters._
-
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
+<<<<<<< HEAD
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
+=======
+import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
+import org.apache.spark.sql.streaming.StreamTest
+>>>>>>> d17a83d6cbf... SPARK-24127: More unit tests
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.scalatest.BeforeAndAfterEach
+
+import scala.collection.JavaConverters._
 
 class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
 
@@ -328,6 +334,9 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
             r.next()
             offsets.append(r.getOffset().asInstanceOf[TextSocketPartitionOffset].offset)
             data.append(r.get().getString(0).toInt)
+            if (i == 2) {
+              commitOffset(t.partitionId, i + 1)
+            }
           }
           assert(offsets.toSeq == Range.inclusive(1, 5))
           assert(data.toSeq == Range(t.partitionId, 10, 2))
@@ -335,9 +344,64 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
           data.clear()
         case _ => throw new IllegalStateException("Unexpected task type")
       }
+      assert(reader.getStartOffset.asInstanceOf[TextSocketOffset].offsets == List(3, 3))
+      reader.commit(TextSocketOffset(List(5, 5)))
+      assert(reader.getStartOffset.asInstanceOf[TextSocketOffset].offsets == List(5, 5))
+    }
+
+    def commitOffset(partition: Int, offset: Int): Unit = {
+      val offsetsToCommit = reader.getStartOffset.asInstanceOf[TextSocketOffset]
+        .offsets.updated(partition, offset)
+      reader.commit(TextSocketOffset(offsetsToCommit))
+      assert(reader.getStartOffset.asInstanceOf[TextSocketOffset].offsets == offsetsToCommit)
     }
   }
 
+  test("continuous data - invalid commit") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val reader = new TextSocketContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
+        "port" -> serverThread.port.toString).asJava))
+    reader.setStartOffset(Optional.of(TextSocketOffset(List(5, 5))))
+    // ok to commit same offset
+    reader.setStartOffset(Optional.of(TextSocketOffset(List(5, 5))))
+    assertThrows[IllegalStateException] {
+      reader.commit(TextSocketOffset(List(6, 6)))
+    }
+  }
+
+  test("continuous data with timestamp") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val reader = new TextSocketContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
+        "includeTimestamp" -> "true",
+        "port" -> serverThread.port.toString).asJava))
+    reader.setStartOffset(Optional.empty())
+    val tasks = reader.createDataReaderFactories()
+    assert(tasks.size == 2)
+
+    val numRecords = 4
+    import org.apache.spark.sql.Row
+    // inject rows, read and check the data and offsets
+    for (i <- 0 until numRecords) {
+      serverThread.enqueue(i.toString)
+    }
+    tasks.asScala.foreach {
+      case t: TextSocketContinuousDataReaderFactory =>
+        val r = t.createDataReader().asInstanceOf[TextSocketContinuousDataReader]
+        for (i <- 0 until numRecords / 2) {
+          r.next()
+          assert(r.get().get(0).isInstanceOf[(String, Timestamp)])
+        }
+      case _ => throw new IllegalStateException("Unexpected task type")
+    }
+  }
+
+<<<<<<< HEAD
           /**
    * This class tries to mimic the behavior of netcat, so that we can ensure
    * TextSocketStream supports netcat, which only accepts the first connection
@@ -346,6 +410,9 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
    * Please refer SPARK-24466 for more details.
    */
   private class ServerThread extends Thread with Logging {
+=======
+    private class ServerThread extends Thread with Logging {
+>>>>>>> d17a83d6cbf... SPARK-24127: More unit tests
     private val serverSocketChannel = ServerSocketChannel.open()
     serverSocketChannel.bind(new InetSocketAddress(0))
     private val messageQueue = new LinkedBlockingQueue[String]()
