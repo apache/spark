@@ -397,7 +397,7 @@ class DefaultParamsWriter(MLWriter):
         - sparkVersion
         - uid
         - paramMap
-        - defalutParamMap (since 2.4.0)
+        - defaultParamMap (since 2.4.0)
         - (optionally, extra metadata)
         :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
         :param paramMap:  If given, this is saved in the "paramMap" field.
