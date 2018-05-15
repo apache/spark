@@ -3509,12 +3509,12 @@ object functions {
   def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
 
   /**
-   * Merge two columns into a resulting one.
+   * Merge multiple columns into a resulting one.
    *
    * @group collection_funcs
    * @since 2.4.0
    */
-  def zip(e1: Column, e2: Column): Column = withExpr { Zip(e1.expr, e2.expr) }
+  def zip(e: Column*): Column = withExpr { Zip(e.map(_.expr)) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Mask functions

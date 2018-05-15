@@ -325,9 +325,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val val2 = List(Row(9001, 4), Row(9002, 5), Row(null, 6))
     val val3 = List(Row("a", 4), Row("b", null), Row(null, null))
 
-    checkEvaluation(Zip(lit1._1, lit1._2), val1)
-    checkEvaluation(Zip(lit2._1, lit2._2), val2)
-    checkEvaluation(Zip(lit3._1, lit3._2), val3)
+    checkEvaluation(Zip(Seq(Literal.create(Seq(1, 0)), Literal.create(Seq(1, 0)))),
+      List(Row(1, 0), Row(1, 0)))
+    checkEvaluation(Zip(Seq(lit1._1, lit1._2)), val1)
+    checkEvaluation(Zip(Seq(lit2._1, lit2._2)), val2)
+    checkEvaluation(Zip(Seq(lit3._1, lit3._2)), val3)
   }
 
   test("Array Min") {

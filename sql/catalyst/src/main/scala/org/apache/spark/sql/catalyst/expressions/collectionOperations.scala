@@ -129,106 +129,84 @@ case class MapKeys(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = """_FUNC_(a1, a2) - Returns a merged array matching N-th element of first
-  array with the N-th element of second.""",
+  usage = """_FUNC_(a1, a2, ...) - Returns a merged array containing in the N-th position the
+  N-th value of each array given.""",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(2, 3, 4));
         [[1, 2], [2, 3], [3, 4]]
+      > SELECT _FUNC_(array(1, 2), array(2, 3), array(3, 4));
+        [[1, 2, 3], [2, 3, 4]]
   """,
   since = "2.4.0")
-case class Zip(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
+  private[this] val childrenArray = children.toArray
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(childrenArray.length)(ArrayType)
 
-  override def dataType: DataType = ArrayType(StructType(
-    StructField("_1", left.dataType.asInstanceOf[ArrayType].elementType, true) ::
-    StructField("_2", right.dataType.asInstanceOf[ArrayType].elementType, true) ::
-  Nil))
+  def mountSchema(): StructType = {
+    val arrayAT = childrenArray.map(_.dataType.asInstanceOf[ArrayType])
+    val n = childrenArray.length
+    var i = n - 1
+    var myList = List[StructField]()
+    while (i >= 0) {
+      myList = StructField(s"_$i", arrayAT(i).elementType, arrayAT(i).containsNull) :: myList
+      i -= 1
+    }
+
+    StructType(myList)
+  }
+
+  override def dataType: DataType = ArrayType(mountSchema())
 
   override def prettyName: String = "zip"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (arr1, arr2) => {
-      val genericArrayData = classOf[GenericArrayData].getName
-      val genericInternalRow = classOf[GenericInternalRow].getName
+    val genericArrayData = classOf[GenericArrayData].getName
+    val genericInternalRow = classOf[GenericInternalRow].getName
 
-      val i = ctx.freshName("i")
-      val values = ctx.freshName("values")
-      val len1 = ctx.freshName("len1")
-      val len2 = ctx.freshName("len2")
-      val pair = ctx.freshName("pair")
-      val getValue1 = CodeGenerator.getValue(
-        arr1, left.dataType.asInstanceOf[ArrayType].elementType, i)
-      val getValue2 = CodeGenerator.getValue(
-        arr2, right.dataType.asInstanceOf[ArrayType].elementType, i)
+    val evals = children.map(_.genCode(ctx))
+    val numArrs = evals.length
 
-      s"""
-         |int $len1 = $arr1.numElements();
-         |int $len2 = $arr2.numElements();
-         |Object[] $values;
-         |Object[] $pair;
-         |if ($len1 > $len2) {
-         |  $values = new Object[$len1];
-         |  for (int $i = 0; $i < $len1; $i ++) {
-         |    $pair = new Object[2];
-         |    $pair[0] = $getValue1;
-         |    if ($i >= $len2) {
-         |      $pair[1] = null;
-         |    } else {
-         |      $pair[1] = $getValue2;
-         |    }
-         |    $values[$i] = new $genericInternalRow($pair);
-         |  }
-         |} else {
-         |  $values = new Object[$len2];
-         |  for (int $i = 0; $i < $len2; $i ++) {
-         |    $pair = new Object[2];
-         |    $pair[1] = $getValue2;
-         |    if ($i >= $len1) {
-         |      $pair[0] = null;
-         |    } else {
-         |      $pair[0] = $getValue1;
-         |    }
-         |    $values[$i] = new $genericInternalRow($pair);
-         |  }
-         |}
-         |${ev.value} = new $genericArrayData($values);
-      """.stripMargin
-    })
-  }
+    val values = children.zip(evals).map { case(child, eval) =>
 
-  def extendWithNull(a1: Array[AnyRef], a2: Array[AnyRef]):
-  (Array[AnyRef], Array[AnyRef]) = {
-    val lens = (a1.length, a2.length)
-
-    var arr1 = a1
-    var arr2 = a2
-
-    val diff = lens._1 - lens._2
-    if (lens._1 > lens._2) {
-      arr2 = a2 ++ Array.fill(diff)(null)
-    }
-    if (lens._1 < lens._2) {
-      arr1 = a1 ++ Array.fill(-diff)(null)
     }
 
-    (arr1, arr2)
+    ev.copy(code =
+    s"""
+    """.stripMargin)
   }
 
-  override def nullSafeEval(a1: Any, a2: Any): Any = {
-    val type1 = left.dataType.asInstanceOf[ArrayType].elementType
-    val type2 = right.dataType.asInstanceOf[ArrayType].elementType
+  override def nullable: Boolean = children.forall(_.nullable)
 
-    val arrays = (
-      a1.asInstanceOf[ArrayData].toArray[AnyRef](type1),
-      a2.asInstanceOf[ArrayData].toArray[AnyRef](type2)
-    )
+  override def eval(input: InternalRow): Any = {
+    val inputArrays = childrenArray.map(_.eval(input).asInstanceOf[ArrayData])
+    val arrayTypes = childrenArray.map(_.dataType.asInstanceOf[ArrayType].elementType)
+    val numberOfArrays = childrenArray.length
 
-    val extendedArrays = extendWithNull(arrays._1, arrays._2)
+    var biggestCardinality = 0
+    for (e <- inputArrays) {
+      biggestCardinality = biggestCardinality max e.numElements()
+    }
 
-    new GenericArrayData(extendedArrays.zipped.map((a, b) => InternalRow.apply(a, b)))
+    var i = 0
+    var j = 0
+    var result = Seq[InternalRow]()
+    while (i < biggestCardinality) {
+      var myList = List[Any]()
+      j = numberOfArrays - 1
+      while (j >= 0) {
+        if (inputArrays(j).numElements() > i) {
+          myList = inputArrays(j).get(i, arrayTypes(j)) :: myList
+        } else {
+          myList = null :: myList
+        }
+        j -= 1
+      }
+      result = result :+ InternalRow.apply(myList: _*)
+      i += 1
+    }
+    new GenericArrayData(result)
   }
 }
 
