@@ -799,9 +799,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("array_repeat function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
     val strDF = Seq(
-      ("hi", 1),
-      (null, 2)
+    ("hi", 1),
+    (null, 2)
     ).toDF("a", "b")
 
     checkAnswer(
@@ -827,6 +828,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       strDF.select(array_repeat(strDF("a"), strDF("b"))),
+      Seq(
+        Row(Seq("hi")),
+        Row(Seq(null, null))
+      ))
+
+    checkAnswer(
+      strDF.filter(dummyFilter($"a")).select(array_repeat(strDF("a"), strDF("b"))),
       Seq(
         Row(Seq("hi")),
         Row(Seq(null, null))

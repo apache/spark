@@ -1277,18 +1277,25 @@ case class ArrayRepeat(left: Expression, right: Expression)
             """
           }
 
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = true;
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $nullSafeEval
-      """)
+      ev.copy(code =
+        s"""
+           | boolean ${ev.isNull} = true;
+           | ${CodeGenerator.javaType(dataType)} ${ev.value} =
+           |   ${CodeGenerator.defaultValue(dataType)};
+           | $nullSafeEval
+         """.stripMargin
+      )
     } else {
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = false;
-        ${leftGen.code}
-        ${rightGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
+      ev.copy(code =
+        s"""
+           | boolean ${ev.isNull} = false;
+           | ${leftGen.code}
+           | ${rightGen.code}
+           | ${CodeGenerator.javaType(dataType)} ${ev.value} =
+           |   ${CodeGenerator.defaultValue(dataType)};
+           | $resultCode
+         """.stripMargin
+        , isNull = FalseLiteral)
     }
 
   }
@@ -1316,9 +1323,10 @@ case class ArrayRepeat(left: Expression, right: Expression)
         val baseOffset = Platform.BYTE_ARRAY_OFFSET
         s"""
            | int numBytes = ${et.defaultSize} * $numElements;
-           | int unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes($numElements)
-           |   + org.apache.spark.unsafe.array.ByteArrayMethods
-           |     .roundNumberOfBytesToNearestWord(numBytes);
+           | int unsafeArraySizeInBytes =
+           |   UnsafeArrayData.calculateHeaderPortionInBytes($numElements)
+           |     + org.apache.spark.unsafe.array.ByteArrayMethods
+           |       .roundNumberOfBytesToNearestWord(numBytes);
            | byte[] $arrayName = new byte[unsafeArraySizeInBytes];
            | UnsafeArrayData $arrayDataName = new UnsafeArrayData();
            | Platform.putLong($arrayName, $baseOffset, $numElements);
