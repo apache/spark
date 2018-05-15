@@ -169,13 +169,17 @@ case class WindowExec(
    * [[WindowExpression]]s and factory function for the WindowFrameFunction.
    */
   private[this] lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Expression, Expression)
+    type FrameKey = (String, FrameType, Expression, Expression, Boolean)
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
-    def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
-      val key = (tpe, fr.frameType, fr.lower, fr.upper)
+    def collect(tpe: String,
+        fr: SpecifiedWindowFrame,
+        e: Expression,
+        fn: Expression,
+        isDistinct: Boolean = false): Unit = {
+      val key = (tpe, fr.frameType, fr.lower, fr.upper, isDistinct)
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e
@@ -188,7 +192,8 @@ case class WindowExec(
         case e @ WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
-            case AggregateExpression(f, _, _, _) => collect("AGGREGATE", frame, e, f)
+            case AggregateExpression(f, _, isDistinct, _) =>
+              collect("AGGREGATE", frame, e, f, isDistinct)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
             case f => sys.error(s"Unsupported window function: $f")
@@ -213,10 +218,24 @@ case class WindowExec(
           (expressions, schema) =>
             newMutableProjection(expressions, schema, subexpressionEliminationEnabled))
 
+        def createOrdering(): Ordering[InternalRow] = {
+          val exprs = orderSpec.map(_.child)
+          val sortExprs = orderSpec.zipWithIndex.map { case (e, i) =>
+            SortOrder(BoundReference(i, e.dataType, e.nullable), e.direction)
+          }
+          val ordering = newOrdering(sortExprs, Nil)
+          new Ordering[InternalRow] {
+            override def compare(x: InternalRow, y: InternalRow): Int = {
+              ordering.compare(newMutableProjection(exprs, child.output)(x),
+                newMutableProjection(exprs, child.output)(y))
+            }
+          }
+        }
+
         // Create the factory
         val factory = key match {
           // Offset Frame
-          case ("OFFSET", _, IntegerLiteral(offset), _) =>
+          case ("OFFSET", _, IntegerLiteral(offset), _, _) =>
             target: InternalRow =>
               new OffsetWindowFunctionFrame(
                 target,
@@ -229,37 +248,44 @@ case class WindowExec(
                 offset)
 
           // Entire Partition Frame.
-          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing) =>
+          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, isDistinct) =>
             target: InternalRow => {
-              new UnboundedWindowFunctionFrame(target, processor)
+              new UnboundedWindowFunctionFrame(
+                target, processor, isDistinct, Some(createOrdering()))
             }
 
           // Growing Frame.
-          case ("AGGREGATE", frameType, UnboundedPreceding, upper) =>
+          case ("AGGREGATE", frameType, UnboundedPreceding, upper, isDistinct) =>
             target: InternalRow => {
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
                 processor,
-                createBoundOrdering(frameType, upper, timeZone))
+                createBoundOrdering(frameType, upper, timeZone),
+                isDistinct,
+                Some(createOrdering()))
             }
 
           // Shrinking Frame.
-          case ("AGGREGATE", frameType, lower, UnboundedFollowing) =>
+          case ("AGGREGATE", frameType, lower, UnboundedFollowing, isDistinct) =>
             target: InternalRow => {
               new UnboundedFollowingWindowFunctionFrame(
                 target,
                 processor,
-                createBoundOrdering(frameType, lower, timeZone))
+                createBoundOrdering(frameType, lower, timeZone),
+                isDistinct,
+                Some(createOrdering()))
             }
 
           // Moving Frame.
-          case ("AGGREGATE", frameType, lower, upper) =>
+          case ("AGGREGATE", frameType, lower, upper, isDistinct) =>
             target: InternalRow => {
               new SlidingWindowFunctionFrame(
                 target,
                 processor,
                 createBoundOrdering(frameType, lower, timeZone),
-                createBoundOrdering(frameType, upper, timeZone))
+                createBoundOrdering(frameType, upper, timeZone),
+                isDistinct,
+                Some(createOrdering()))
             }
         }
 

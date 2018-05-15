@@ -147,14 +147,21 @@ private[window] final class OffsetWindowFunctionFrame(
  * @param processor to calculate the row values with.
  * @param lbound comparator used to identify the lower bound of an output row.
  * @param ubound comparator used to identify the upper bound of an output row.
+ * @param isDistinct indicates if this frame processes distinct values.
+ * @param orderingOpt used to compare rows when `isDistinct` is true.
  */
 private[window] final class SlidingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering,
-    ubound: BoundOrdering)
+    ubound: BoundOrdering,
+    isDistinct: Boolean = false,
+    orderingOpt: Option[Ordering[InternalRow]] = None)
   extends WindowFunctionFrame {
 
+  if (isDistinct) {
+    assert(orderingOpt.nonEmpty, "Ordering must be provided when frame processes distinct values.")
+  }
   /** Rows of the partition currently being processed. */
   private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
 
@@ -181,6 +188,11 @@ private[window] final class SlidingWindowFunctionFrame(
    */
   private[this] var inputLowIndex = 0
 
+  /**
+   * The previousRow written into processor. This is only used when `isDistinct` is true.
+   */
+  private[this] var previousRow: InternalRow = null
+
   /** Prepare the frame for calculating a new partition. Reset all variables. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
@@ -189,6 +201,7 @@ private[window] final class SlidingWindowFunctionFrame(
     inputHighIndex = 0
     inputLowIndex = 0
     buffer.clear()
+    previousRow = null
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -221,7 +234,12 @@ private[window] final class SlidingWindowFunctionFrame(
       processor.initialize(input.length)
       val iter = buffer.iterator()
       while (iter.hasNext) {
-        processor.update(iter.next())
+        val row = iter.next()
+        if (previousRow == null || !(isDistinct && orderingOpt.get.compare(previousRow, row) == 0))
+        {
+          processor.update(row)
+        }
+        previousRow = row
       }
       processor.evaluate(target)
     }
@@ -238,11 +256,24 @@ private[window] final class SlidingWindowFunctionFrame(
  *
  * @param target to write results to.
  * @param processor to calculate the row values with.
+ * @param isDistinct indicates if this frame processes distinct values.
+ * @param orderingOpt used to compare rows when `isDistinct` is true.
  */
 private[window] final class UnboundedWindowFunctionFrame(
     target: InternalRow,
-    processor: AggregateProcessor)
+    processor: AggregateProcessor,
+    isDistinct: Boolean = false,
+    orderingOpt: Option[Ordering[InternalRow]] = None)
   extends WindowFunctionFrame {
+
+  if (isDistinct) {
+    assert(orderingOpt.nonEmpty, "Ordering must be provided when frame processes distinct values.")
+  }
+
+  /**
+   * The previousRow written into processor. This is only used when `isDistinct` is true.
+   */
+  private[this] var previousRow: InternalRow = null
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
@@ -250,7 +281,11 @@ private[window] final class UnboundedWindowFunctionFrame(
 
     val iterator = rows.generateIterator()
     while (iterator.hasNext) {
-      processor.update(iterator.next())
+      val row = iterator.next()
+      if (previousRow == null || !(isDistinct && orderingOpt.get.compare(previousRow, row) == 0)) {
+        processor.update(row)
+      }
+      previousRow = row
     }
   }
 
@@ -275,12 +310,20 @@ private[window] final class UnboundedWindowFunctionFrame(
  * @param target to write results to.
  * @param processor to calculate the row values with.
  * @param ubound comparator used to identify the upper bound of an output row.
+ * @param isDistinct indicates if this frame processes distinct values.
+ * @param orderingOpt used to compare rows when `isDistinct` is true.
  */
 private[window] final class UnboundedPrecedingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
-    ubound: BoundOrdering)
+    ubound: BoundOrdering,
+    isDistinct: Boolean = false,
+    orderingOpt: Option[Ordering[InternalRow]] = None)
   extends WindowFunctionFrame {
+
+  if (isDistinct) {
+    assert(orderingOpt.nonEmpty, "Ordering must be provided when frame processes distinct values.")
+  }
 
   /** Rows of the partition currently being processed. */
   private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
@@ -299,6 +342,11 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
    */
   private[this] var inputIndex = 0
 
+  /**
+   * The previousRow written into processor. This is only used when `isDistinct` is true.
+   */
+  private[this] var previousRow: InternalRow = null
+
   /** Prepare the frame for calculating a new partition. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
@@ -309,6 +357,7 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
     }
 
     processor.initialize(input.length)
+    previousRow = null
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -318,10 +367,14 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
     // Add all rows to the aggregates for which the input row value is equal to or less than
     // the output row upper bound.
     while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) <= 0) {
-      processor.update(nextRow)
+      if (previousRow == null ||
+          !(isDistinct && orderingOpt.get.compare(previousRow, nextRow) == 0)) {
+        processor.update(nextRow)
+        bufferUpdated = true
+      }
+      previousRow = nextRow
       nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
       inputIndex += 1
-      bufferUpdated = true
     }
 
     // Only recalculate and update when the buffer changes.
@@ -346,12 +399,20 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
  * @param target to write results to.
  * @param processor to calculate the row values with.
  * @param lbound comparator used to identify the lower bound of an output row.
+ * @param isDistinct indicates if this frame processes distinct values.
+ * @param orderingOpt used to compare rows when `isDistinct` is true.
  */
 private[window] final class UnboundedFollowingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
-    lbound: BoundOrdering)
+    lbound: BoundOrdering,
+    isDistinct: Boolean = false,
+    orderingOpt: Option[Ordering[InternalRow]] = None)
   extends WindowFunctionFrame {
+
+  if (isDistinct) {
+    assert(orderingOpt.nonEmpty, "Ordering must be provided when frame processes distinct values.")
+  }
 
   /** Rows of the partition currently being processed. */
   private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
@@ -362,10 +423,16 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
    */
   private[this] var inputIndex = 0
 
+  /**
+   * The previousRow written into processor. This is only used when `isDistinct` is true.
+   */
+  private[this] var previousRow: InternalRow = null
+
   /** Prepare the frame for calculating a new partition. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
     inputIndex = 0
+    previousRow = null
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -390,7 +457,12 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
         processor.update(nextRow)
       }
       while (iterator.hasNext) {
-        processor.update(iterator.next())
+        val row = iterator.next()
+        if (previousRow == null ||
+            !(isDistinct && orderingOpt.get.compare(previousRow, row) == 0)) {
+          processor.update(row)
+        }
+        previousRow = row
       }
       processor.evaluate(target)
     }

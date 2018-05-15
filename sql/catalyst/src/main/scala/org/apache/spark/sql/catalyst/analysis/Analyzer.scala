@@ -1883,7 +1883,19 @@ class Analyzer(
       // Second, we group extractedWindowExprBuffer based on their Partition and Order Specs.
       val groupedWindowExpressions = extractedWindowExprBuffer.groupBy { expr =>
         val distinctWindowSpec = expr.collect {
-          case window: WindowExpression => window.windowSpec
+          case window: WindowExpression =>
+            val winExpr = window.windowFunction
+            val distinctOpt = winExpr.find (expr => expr.isInstanceOf[AggregateExpression]
+                && expr.asInstanceOf[AggregateExpression].isDistinct)
+            if (distinctOpt.nonEmpty && window.windowSpec.orderSpec.nonEmpty) {
+              failAnalysis(s"ORDER BY cannot be used with DISTINCT: $window")
+            } else if (distinctOpt.nonEmpty) {
+              val orderSpec = distinctOpt.get.asInstanceOf[AggregateExpression]
+                  .aggregateFunction.children.map(SortOrder(_, Ascending))
+              window.windowSpec.copy(orderSpec = orderSpec)
+            } else {
+              window.windowSpec
+            }
         }.distinct
 
         // We do a final check and see if we only have a single Window Spec defined in an

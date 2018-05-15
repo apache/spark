@@ -152,25 +152,9 @@ class AnalysisErrorSuite extends AnalysisTest {
     "not supported within a window function" :: Nil)
 
   errorTest(
-    "distinct aggregate function in window",
-    testRelation2.select(
-      WindowExpression(
-        AggregateExpression(Count(UnresolvedAttribute("b")), Complete, isDistinct = true),
-        WindowSpecDefinition(
-          UnresolvedAttribute("a") :: Nil,
-          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          UnspecifiedFrame)).as('window)),
-    "Distinct window functions are not supported" :: Nil)
-
-  errorTest(
     "distinct function",
     CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
     "hex does not support the modifier DISTINCT" :: Nil)
-
-  errorTest(
-    "distinct window function",
-    CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) over () FROM TaBlE"),
-    "percent_rank does not support the modifier DISTINCT" :: Nil)
 
   errorTest(
     "nested aggregate functions",

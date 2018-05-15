@@ -109,3 +109,15 @@ last_value(false, false) OVER w AS last_value_contain_null
 FROM testData
 WINDOW w AS ()
 ORDER BY cate, val;
+
+-- sum(distinct)
+SELECT val, cate,
+sum(val) OVER (PARTITION BY cate) AS sum1,
+sum(DISTINCT val) OVER (PARTITION BY cate) AS sum2
+FROM testData;
+
+-- count(distinct)
+SELECT val, cate,
+count(val) OVER (PARTITION BY cate) AS cnt1,
+count(DISTINCT val) OVER (PARTITION BY cate) AS cnt2
+FROM testData;

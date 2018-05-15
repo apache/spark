@@ -104,8 +104,9 @@ trait CheckAnalysis extends PredicateHelper {
           case g: GroupingID =>
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
-          case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
-            failAnalysis(s"Distinct window functions are not supported: $w")
+          case w @ WindowExpression(AggregateExpression(_, _, true, _), windowSpec)
+              if windowSpec.orderSpec.nonEmpty =>
+            failAnalysis(s"ORDER BY cannot be used with DISTINCT: $w")
 
           case w @ WindowExpression(_: OffsetWindowFunction,
             WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
