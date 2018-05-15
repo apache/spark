@@ -846,118 +846,44 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("array_repeat function") {
     val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
     val strDF = Seq(
-    ("hi", 1),
+    ("hi", 2),
     (null, 2)
     ).toDF("a", "b")
 
-    checkAnswer(
-      strDF.select(array_repeat(strDF("a"), 0)),
-      Seq(
-        Row(Seq[String]()),
-        Row(Seq[String]())
-      ))
+    val strDFTwiceResult = Seq(
+      Row(Seq("hi", "hi")),
+      Row(Seq(null, null))
+    )
 
-    checkAnswer(
-      strDF.select(array_repeat(strDF("a"), 1)),
-      Seq(
-        Row(Seq("hi")),
-        Row(Seq(null))
-      ))
-
-    checkAnswer(
-      strDF.select(array_repeat(strDF("a"), 2)),
-      Seq(
-        Row(Seq("hi", "hi")),
-        Row(Seq(null, null))
-      ))
-
-    checkAnswer(
-      strDF.select(array_repeat(strDF("a"), strDF("b"))),
-      Seq(
-        Row(Seq("hi")),
-        Row(Seq(null, null))
-      ))
-
-    checkAnswer(
-      strDF.filter(dummyFilter($"a")).select(array_repeat(strDF("a"), strDF("b"))),
-      Seq(
-        Row(Seq("hi")),
-        Row(Seq(null, null))
-      ))
-
-    checkAnswer(
-      strDF.selectExpr("array_repeat(a, 2)"),
-      Seq(
-        Row(Seq("hi", "hi")),
-        Row(Seq(null, null))
-      ))
-
-    checkAnswer(
-      strDF.selectExpr("array_repeat(a, b)"),
-      Seq(
-        Row(Seq("hi")),
-        Row(Seq(null, null))
-      ))
+    checkAnswer(strDF.select(array_repeat($"a", 2)), strDFTwiceResult)
+    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), strDFTwiceResult)
+    checkAnswer(strDF.select(array_repeat($"a", $"b")), strDFTwiceResult)
+    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), strDFTwiceResult)
+    checkAnswer(strDF.selectExpr("array_repeat(a, 2)"), strDFTwiceResult)
+    checkAnswer(strDF.selectExpr("array_repeat(a, b)"), strDFTwiceResult)
 
     val intDF = {
       val schema = StructType(Seq(
         StructField("a", IntegerType),
         StructField("b", IntegerType)))
       val data = Seq(
-        Row(1, 1),
         Row(3, 2),
         Row(null, 2)
       )
       spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     }
 
-    checkAnswer(
-      intDF.select(array_repeat(intDF("a"), 0)),
-      Seq(
-        Row(Seq[Int]()),
-        Row(Seq[Int]()),
-        Row(Seq[Int]())
-      ))
+    val intDFTwiceResult = Seq(
+      Row(Seq(3, 3)),
+      Row(Seq(null, null))
+    )
 
-    checkAnswer(
-      intDF.select(array_repeat(intDF("a"), 1)),
-      Seq(
-        Row(Seq(1)),
-        Row(Seq(3)),
-        Row(Seq(null))
-      ))
-
-    checkAnswer(
-      intDF.select(array_repeat(intDF("a"), 2)),
-      Seq(
-        Row(Seq(1, 1)),
-        Row(Seq(3, 3)),
-        Row(Seq(null, null))
-      ))
-
-    checkAnswer(
-      intDF.select(array_repeat(intDF("a"), intDF("b"))),
-      Seq(
-        Row(Seq(1)),
-        Row(Seq(3, 3)),
-        Row(Seq(null, null))
-      ))
-
-    checkAnswer(
-      intDF.selectExpr("array_repeat(a, 2)"),
-      Seq(
-        Row(Seq(1, 1)),
-        Row(Seq(3, 3)),
-        Row(Seq(null, null))
-      ))
-
-    checkAnswer(
-      intDF.selectExpr("array_repeat(a, b)"),
-      Seq(
-        Row(Seq(1)),
-        Row(Seq(3, 3)),
-        Row(Seq(null, null))
-      ))
+    checkAnswer(intDF.select(array_repeat($"a", 2)), intDFTwiceResult)
+    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), intDFTwiceResult)
+    checkAnswer(intDF.select(array_repeat($"a", $"b")), intDFTwiceResult)
+    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), intDFTwiceResult)
+    checkAnswer(intDF.selectExpr("array_repeat(a, 2)"), intDFTwiceResult)
+    checkAnswer(intDF.selectExpr("array_repeat(a, b)"), intDFTwiceResult)
 
     val nullCountDF = {
       val schema = StructType(Seq(
@@ -971,7 +897,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     checkAnswer(
-      nullCountDF.select(array_repeat(nullCountDF("a"), nullCountDF("b"))),
+      nullCountDF.select(array_repeat($"a", $"b")),
       Seq(
         Row(null),
         Row(null)
@@ -982,10 +908,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val invalidTypeDF = Seq(("hi", "1")).toDF("a", "b")
 
     intercept[AnalysisException] {
-      invalidTypeDF.select(array_repeat(invalidTypeDF("a"), invalidTypeDF("b")))
+      invalidTypeDF.select(array_repeat($"a", $"b"))
     }
     intercept[AnalysisException] {
-      invalidTypeDF.select(array_repeat(invalidTypeDF("a"), lit("1")))
+      invalidTypeDF.select(array_repeat($"a", lit("1")))
     }
     intercept[AnalysisException] {
       invalidTypeDF.selectExpr("array_repeat(a, 1.0)")

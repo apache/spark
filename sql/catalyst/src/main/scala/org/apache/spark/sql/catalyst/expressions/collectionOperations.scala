@@ -1482,6 +1482,8 @@ case class Flatten(child: Expression) extends UnaryExpression {
 case class ArrayRepeat(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
+  private val MAX_ARRAY_LENGTH = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+
   override def dataType: ArrayType = ArrayType(left.dataType, left.nullable)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType)
@@ -1493,115 +1495,122 @@ case class ArrayRepeat(left: Expression, right: Expression)
     if (count == null) {
       null
     } else {
-      new GenericArrayData(List.fill(count.asInstanceOf[Int])(left.eval(input)))
+      if (count.asInstanceOf[Int] > MAX_ARRAY_LENGTH) {
+        throw new RuntimeException(s"Unsuccessful try to create array with $count elements" +
+          s"due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+      }
+      val element = left.eval(input)
+      new GenericArrayData(Array.fill(count.asInstanceOf[Int])(element))
     }
   }
 
   override def prettyName: String = "array_repeat"
 
-  override def nullSafeCodeGen(ctx: CodegenContext,
-                               ev: ExprCode,
-                               f: (String, String) => String): ExprCode = {
-    val leftGen = left.genCode(ctx)
-    val rightGen = right.genCode(ctx)
-    val resultCode = f(leftGen.value, rightGen.value)
-
-    if (nullable) {
-      val nullSafeEval =
-        leftGen.code +
-          rightGen.code + ctx.nullSafeExec(right.nullable, rightGen.isNull) {
-            s"""
-              ${ev.isNull} = false;
-              $resultCode
-            """
-          }
-
-      ev.copy(code =
-        s"""
-           | boolean ${ev.isNull} = true;
-           | ${CodeGenerator.javaType(dataType)} ${ev.value} =
-           |   ${CodeGenerator.defaultValue(dataType)};
-           | $nullSafeEval
-         """.stripMargin
-      )
-    } else {
-      ev.copy(code =
-        s"""
-           | boolean ${ev.isNull} = false;
-           | ${leftGen.code}
-           | ${rightGen.code}
-           | ${CodeGenerator.javaType(dataType)} ${ev.value} =
-           |   ${CodeGenerator.defaultValue(dataType)};
-           | $resultCode
-         """.stripMargin
-        , isNull = FalseLiteral)
-    }
-
-  }
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
 
-    nullSafeCodeGen(ctx, ev, (l, r) => {
-      val et = dataType.elementType
-      val isPrimitive = CodeGenerator.isPrimitiveType(et)
+    val leftGen = left.genCode(ctx)
+    val rightGen = right.genCode(ctx)
+    val element = leftGen.value
+    val count = rightGen.value
+    val et = dataType.elementType
 
-      val arrayDataName = ctx.freshName("arrayData")
-      val arrayName = ctx.freshName("arrayObject")
-      val numElements = ctx.freshName("numElements")
+    val coreLogic = if (CodeGenerator.isPrimitiveType(et)) {
+      genCodeForPrimitiveElement(ctx, et, element, count, leftGen.isNull, ev.value)
+    } else {
+      genCodeForNonPrimitiveElement(ctx, element, count, leftGen.isNull, ev.value)
+    }
+    val resultCode = nullElementsProtection(ev, rightGen.isNull, coreLogic)
 
-      val genNumElements =
-        s"""
-           | int $numElements = 0;
-           | if ($r > 0) {
-           |   $numElements = $r;
-           | }
-         """.stripMargin
-
-      val initialization = if (isPrimitive) {
-        val arrayName = ctx.freshName("array")
-        val baseOffset = Platform.BYTE_ARRAY_OFFSET
-        s"""
-           | int numBytes = ${et.defaultSize} * $numElements;
-           | int unsafeArraySizeInBytes =
-           |   UnsafeArrayData.calculateHeaderPortionInBytes($numElements)
-           |     + org.apache.spark.unsafe.array.ByteArrayMethods
-           |       .roundNumberOfBytesToNearestWord(numBytes);
-           | byte[] $arrayName = new byte[unsafeArraySizeInBytes];
-           | UnsafeArrayData $arrayDataName = new UnsafeArrayData();
-           | Platform.putLong($arrayName, $baseOffset, $numElements);
-           | $arrayDataName.pointTo($arrayName, $baseOffset, unsafeArraySizeInBytes);
-           | ${ev.value} = $arrayDataName;
-         """.stripMargin
-      } else {
-        s"${ev.value} = new ${classOf[GenericArrayData].getName()}(new Object[$numElements]);"
-      }
-
-      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(et)
-      val assignments = {
-        val updateArray = if (isPrimitive) {
-          val isNull = left.genCode(ctx).isNull
-          s"""
-             | if ($isNull) {
-             |   ${ev.value}.setNullAt(k);
-             | } else {
-             |   ${ev.value}.set$primitiveValueTypeName(k, $l);
-             | }
-           """.stripMargin
-        } else {
-          s"${ev.value}.update(k, $l);"
-        }
-        s"""
-           | for (int k = 0; k < $numElements; k++) {
-           |   ${updateArray};
-           | }
-         """.stripMargin
-      }
-
+    ev.copy(code =
       s"""
-         | ${genNumElements}
-         | ${initialization}
-         | ${assignments}
-       """.stripMargin
-    })
+      |boolean ${ev.isNull} = false;
+      |${leftGen.code}
+      |${rightGen.code}
+      |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      |$resultCode
+      """.stripMargin)
   }
+
+  private def nullElementsProtection(ev: ExprCode,
+                                     rightIsNull: String,
+                                     coreLogic: String): String = {
+    if (nullable) {
+      s"""
+      |if ($rightIsNull) {
+      |  ${ev.isNull} = true;
+      |} else {
+      |  ${coreLogic}
+      |}
+      """.stripMargin
+    } else {
+      coreLogic
+    }
+  }
+
+  private def genCodeForNumberOfElements(ctx: CodegenContext, count: String): (String, String) = {
+    val numElements = ctx.freshName("numElements")
+    val numElementsCode =
+      s"""
+      |int $numElements = 0;
+      |if ($count > 0) {
+      |  $numElements = $count;
+      |}
+      |if ($numElements > $MAX_ARRAY_LENGTH) {
+      |  throw new RuntimeException("Unsuccessful try to create array with " + $numElements +
+      |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+      |}
+      """.stripMargin
+
+    (numElements, numElementsCode)
+  }
+
+  private def genCodeForPrimitiveElement(ctx: CodegenContext,
+                                         elementType: DataType,
+                                         element: String,
+                                         count: String,
+                                         leftIsNull: String,
+                                         arrayDataName: String): String = {
+
+    val tempArrayDataName = ctx.freshName("tempArrayData")
+    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+    val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
+
+    s"""
+    |$numElemCode
+    |${ctx.createUnsafeArray(tempArrayDataName, numElemName, elementType, s" $prettyName failed.")}
+    |if (!$leftIsNull) {
+    |  for (int k = 0; k < $tempArrayDataName.numElements(); k++) {
+    |    $tempArrayDataName.set$primitiveValueTypeName(k, $element);
+    |  }
+    |} else {
+    |  for (int k = 0; k < $tempArrayDataName.numElements(); k++) {
+    |    $tempArrayDataName.setNullAt(k);
+    |  }
+    |}
+    |$arrayDataName = $tempArrayDataName;
+    """.stripMargin
+  }
+
+  private def genCodeForNonPrimitiveElement(ctx: CodegenContext,
+                                            element: String,
+                                            count: String,
+                                            leftIsNull: String,
+                                            arrayDataName: String): String = {
+
+    val genericArrayClass = classOf[GenericArrayData].getName
+    val arrayName = ctx.freshName("arrayObject")
+    val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
+
+    s"""
+    |$numElemCode
+    |Object[] $arrayName = new Object[(int)$numElemName];
+    |if (!$leftIsNull) {
+    |  for (int k = 0; k < $numElemName; k++) {
+    |    $arrayName[k] = $element;
+    |  }
+    |}
+    |$arrayDataName = new $genericArrayClass($arrayName);
+    """.stripMargin
+  }
+
 }
