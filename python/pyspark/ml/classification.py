@@ -1222,6 +1222,10 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     True
     >>> model.trees
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0),)],
+    ...              ["indexed", "features"])
+    >>> model.evaluateEachIteration(validation)
+    [0.253856022085945, 0.23205304779013333, 0.21358401299568353, 0.19775434042400714, 0.18404680861665945]
 
     .. versionadded:: 1.4.0
     """
@@ -1289,13 +1293,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         """
         return self.getOrDefault(self.lossType)
 
-    @since("2.4.0")
-    def evaluateEachIteration(self, dataset):
-        """
-        Method to compute error or loss for every iteration of gradient boosting.
-        """
-        return self._call_java("evaluateEachIteration", dataset)
-
 
 class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
                              JavaMLReadable):
@@ -1325,6 +1322,17 @@ class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWrita
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
+
+    @since("2.4.0")
+    def evaluateEachIteration(self, dataset):
+        """
+        Method to compute error or loss for every iteration of gradient boosting.
+        
+        :param dataset:
+        Test dataset to evaluate model on, where dataset is an
+        instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        return self._call_java("evaluateEachIteration", dataset)
 
 
 @inherit_doc

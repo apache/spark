@@ -1056,6 +1056,10 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     True
     >>> model.trees
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0))],
+                     ["label", "features"])
+    >>> model.evaluateEachIteration(validation, "squared")
+    [0.0, 0.0, 0.0, 0.0, 0.0]
 
     .. versionadded:: 1.4.0
     """
@@ -1155,6 +1159,20 @@ class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
+
+    @since("2.4.0")
+    def evaluateEachIteration(self, dataset, loss):
+        """
+        Method to compute error or loss for every iteration of gradient boosting.
+        
+        :param dataset:
+        Test dataset to evaluate model on, where dataset is an
+        instance of :py:class:`pyspark.sql.DataFrame`
+        :param loss:
+        The loss function used to compute error.
+        Supported options: squared, absolute
+        """
+        return self._call_java("evaluateEachIteration", dataset, loss)
 
 
 @inherit_doc
