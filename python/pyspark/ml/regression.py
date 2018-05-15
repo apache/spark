@@ -1057,7 +1057,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> model.trees
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
     >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0))],
-                     ["label", "features"])
+    ...              ["label", "features"])
     >>> model.evaluateEachIteration(validation, "squared")
     [0.0, 0.0, 0.0, 0.0, 0.0]
 
