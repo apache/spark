@@ -1225,7 +1225,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0),)],
     ...              ["indexed", "features"])
     >>> model.evaluateEachIteration(validation)
-    [0.253856022085945, 0.23205304779013333, 0.21358401299568353, 0.19775434042400714, 0.18404680861665945]
+    [0.25..., 0.23..., 0.21..., 0.19..., 0.18...]
 
     .. versionadded:: 1.4.0
     """
@@ -1327,7 +1327,7 @@ class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWrita
     def evaluateEachIteration(self, dataset):
         """
         Method to compute error or loss for every iteration of gradient boosting.
-        
+
         :param dataset:
         Test dataset to evaluate model on, where dataset is an
         instance of :py:class:`pyspark.sql.DataFrame`

@@ -1164,7 +1164,7 @@ class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
     def evaluateEachIteration(self, dataset, loss):
         """
         Method to compute error or loss for every iteration of gradient boosting.
-        
+
         :param dataset:
         Test dataset to evaluate model on, where dataset is an
         instance of :py:class:`pyspark.sql.DataFrame`
