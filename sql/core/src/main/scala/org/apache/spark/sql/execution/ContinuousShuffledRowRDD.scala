@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.util.NextIterator
 
 /**
  * This is a specialized version of [[org.apache.spark.sql.execution.ShuffledRowRDD]] which is used
@@ -38,49 +39,49 @@ class ContinuousShuffledRowRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val shuffledRowPartition = split.asInstanceOf[ShuffledRowRDDPartition]
-
-    new Iterator[InternalRow] {
-      private var currentIterator: Iterator[InternalRow] = null
-      private var currentRow: InternalRow = null
-
+    var currentEpoch: Int = shuffledRowPartition.lastEpoch
+    if (currentEpoch == Int.MinValue) {
+      // Init currentEpoch from localProperty for the first time calling compute method.
       // TODO: Get current epoch from epoch coordinator while task restart, also epoch is Long, we
-      //       should deal with it.
-      private var currentEpoch = context.getLocalProperty(SparkEnv.START_EPOCH_KEY).toInt
+      // should deal with it.
+      currentEpoch = context.getLocalProperty(SparkEnv.START_EPOCH_KEY).toInt
+    } else {
+      currentEpoch += 1
+    }
 
-      override def hasNext(): Boolean = {
-        if (currentIterator == null) {
-          // Create a ContinuousShuffleDependency which has new shuffleId based on continuous epoch
-          val continuousDep = new ContinuousShuffleDependency(dependency._rdd,
-            dependency, currentEpoch, totalShuffleNum, shuffleNumMaps)
-          // The range of pre-shuffle partitions that we are fetching at here is
-          // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].
-          val reader =
-            SparkEnv.get.shuffleManager.getReader(
-              continuousDep.shuffleHandle,
-              shuffledRowPartition.startPreShufflePartitionIndex,
-              shuffledRowPartition.endPreShufflePartitionIndex,
-              context)
-          // The read method will be blocked until the shuffle data for current epoch is ready.
-          currentIterator =
-            reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
-        }
+    // Update lastEpoch for the split.
+    shuffledRowPartition.lastEpoch = currentEpoch
 
-        val res = currentIterator.hasNext
-        if (res) {
-          currentRow = currentIterator.next()
+    // Create a ContinuousShuffleDependency which has new shuffleId based on continuous epoch
+    val continuousDep = new ContinuousShuffleDependency(dependency._rdd,
+      dependency, currentEpoch, totalShuffleNum, shuffleNumMaps)
+    // The range of pre-shuffle partitions that we are fetching at here is
+    // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].
+    val reader =
+    SparkEnv.get.shuffleManager.getReader(
+      continuousDep.shuffleHandle,
+      shuffledRowPartition.startPreShufflePartitionIndex,
+      shuffledRowPartition.endPreShufflePartitionIndex,
+      context)
+    // The read method will be blocked until the shuffle data for current epoch is ready.
+    val currentIterator =
+      reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
+
+    new NextIterator[InternalRow] {
+      override protected def getNext(): InternalRow = {
+        if (currentIterator.hasNext) {
+          currentIterator.next()
         } else {
-          currentIterator = null
-          currentEpoch += 1
+          finished = true
+          null
         }
-
-        res
       }
 
-      override def next(): InternalRow = {
-        if (currentRow == null) throw new NoSuchElementException("No current row was set")
-        val res = currentRow
-        currentRow = null
-        res
+      override def close(): Unit = {
+        // If there are jobs should be done after handling the shuffle data, clean/update
+        // status variables for example, they can be triggered in the close method.
+        logInfo(s"Finished handling shuffle data for epoch $currentEpoch with" +
+          s" partitionId ${split.index} in task ${context.taskAttemptId}")
       }
     }
   }

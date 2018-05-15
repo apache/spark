@@ -140,6 +140,7 @@ object SparkEnv extends Logging {
 
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
+  private[spark] val START_EPOCH_KEY = "__continuous_start_epoch"
 
   def set(e: SparkEnv) {
     env = e
