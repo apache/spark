@@ -145,18 +145,7 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
-    // Setup IDs
-    val jobId = SparkHadoopWriterUtils.createJobID(new Date, 0)
-    val taskId = new TaskID(jobId, TaskType.MAP, 0)
-    val taskAttemptId = new TaskAttemptID(taskId, 0)
-
-    // Set up the configuration object
-    jobContext.getConfiguration.set("mapreduce.job.id", jobId.toString)
-    jobContext.getConfiguration.set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
-    jobContext.getConfiguration.set("mapreduce.task.attempt.id", taskAttemptId.toString)
-    jobContext.getConfiguration.setBoolean("mapreduce.task.ismap", true)
-    jobContext.getConfiguration.setInt("mapreduce.task.partition", 0)
-
+    val taskAttemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
     committer.setupJob(jobContext)
