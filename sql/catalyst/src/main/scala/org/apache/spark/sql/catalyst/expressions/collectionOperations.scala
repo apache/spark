@@ -756,7 +756,6 @@ case class ArraysOverlap(left: Expression, right: Expression)
          |if (${ctx.genEqual(elementType, getFromSmaller, getFromBigger)}) {
          |  ${ev.isNull} = false;
          |  ${ev.value} = true;
-         |  break;
          |}
        """.stripMargin,
       s"${ev.isNull} = true;")
@@ -764,17 +763,14 @@ case class ArraysOverlap(left: Expression, right: Expression)
       bigger,
       i,
       s"""
-         |for (int $j = 0; $j < $smaller.numElements(); $j ++) {
+         |for (int $j = 0; $j < $smaller.numElements() && !${ev.value}; $j ++) {
          |  $compareValues
          |}
        """.stripMargin,
       s"${ev.isNull} = true;")
     s"""
-       |for (int $i = 0; $i < $bigger.numElements(); $i ++) {
+       |for (int $i = 0; $i < $bigger.numElements() && !${ev.value}; $i ++) {
        |  $isInSmaller
-       |  if (${ev.value}) {
-       |    break;
-       |  }
        |}
      """.stripMargin
   }
