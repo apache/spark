@@ -140,21 +140,17 @@ case class MapKeys(child: Expression)
   """,
   since = "2.4.0")
 case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
-  private[this] val childrenArray = children.toArray
-
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(childrenArray.length)(ArrayType)
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.length)(ArrayType)
 
   def mountSchema(): StructType = {
-    val arrayAT = childrenArray.map(_.dataType.asInstanceOf[ArrayType])
-    val n = childrenArray.length
-    var i = n - 1
-    var myList = List[StructField]()
-    while (i >= 0) {
-      myList = StructField(s"_$i", arrayAT(i).elementType, arrayAT(i).containsNull) :: myList
-      i -= 1
+    val arrayAT = children.map(_.dataType.asInstanceOf[ArrayType])
+    val fields = arrayAT.zipWithIndex.foldRight(List[StructField]()) {
+      (item, list) => {
+        val (arr, idx) = item
+        StructField(s"_$idx", arr.elementType, arr.containsNull) :: list
+      }
     }
-
-    StructType(myList)
+    StructType(fields)
   }
 
   override def dataType: DataType = ArrayType(mountSchema())
@@ -168,21 +164,54 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val evals = children.map(_.genCode(ctx))
     val numArrs = evals.length
 
-    val values = children.zip(evals).map { case(child, eval) =>
+    val arrCardinality = ctx.freshName("args")
+    val arrVals = ctx.freshName("arrVals")
+    val inputs = evals.zipWithIndex.map { case (eval, index) =>
+      s"""
+        |${eval.code}
+        |if (!${eval.isNull}) {
+        |  $arrVals[$index] = ${eval.value};
+        |}
+      """.stripMargin
+    }.mkString("\n")
 
-    }
+    val myobject = ctx.freshName("myobject")
+    val biggestCardinality = ctx.freshName("biggestCardinality")
+    val j = ctx.freshName("j")
+    val i = ctx.freshName("i")
+    val args = ctx.freshName("args")
 
-    ev.copy(code =
-    s"""
+    ev.copy(s"""
+      |ArrayData[] $arrVals = new ArrayData[$numArrs];
+      |int[] $arrCardinality = new int[$numArrs];
+      |$inputs
+      |int $biggestCardinality = 0;
+      |for (int $i = 0; $i < $numArrs; $i ++) {
+      |  $arrCardinality[$i] = $arrVals[$i].numElements();
+      |  $biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$i]);
+      |}
+      |Object[] $args = new Object[$biggestCardinality];
+      |for (int $i = 0; $i < $biggestCardinality; $i ++) {
+      |  Object[] $myobject = new Object[$numArrs];
+      |  for (int $j = 0; $j < $numArrs; $j ++) {
+      |    if ($arrCardinality[$j] > $i) {
+      |      $myobject[$j] = $arrVals[$j].getInt(0);
+      |    } else {
+      |      $myobject[$j] = null;
+      |    }
+      |  }
+      |  $args[$i] = new $genericInternalRow($myobject);
+      |}
+      |$genericArrayData ${ev.value} = new $genericArrayData($args);
     """.stripMargin)
   }
 
   override def nullable: Boolean = children.forall(_.nullable)
 
   override def eval(input: InternalRow): Any = {
-    val inputArrays = childrenArray.map(_.eval(input).asInstanceOf[ArrayData])
-    val arrayTypes = childrenArray.map(_.dataType.asInstanceOf[ArrayType].elementType)
-    val numberOfArrays = childrenArray.length
+    val inputArrays = children.map(_.eval(input).asInstanceOf[ArrayData])
+    val arrayTypes = children.map(_.dataType.asInstanceOf[ArrayType].elementType)
+    val numberOfArrays = children.length
 
     var biggestCardinality = 0
     for (e <- inputArrays) {
