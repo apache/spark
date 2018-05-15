@@ -104,7 +104,13 @@ class InMemoryFileIndex(
     }
   }
 
-  private def refresh0(): Unit = {
+  // Exposed for testing.
+  def ifCacheOutDated(): Boolean = {
+    cacheOutDated
+  }
+
+  // Exposed for testing.
+  protected def refresh0(): Unit = {
     val files = listLeafFiles(rootPaths)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)

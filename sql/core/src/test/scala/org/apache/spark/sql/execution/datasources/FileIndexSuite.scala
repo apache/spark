@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.File
 import java.net.URI
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 import scala.language.reflectiveCalls
@@ -246,6 +247,28 @@ class FileIndexSuite extends SharedSQLContext {
         .select(col("id").as(colToUnescape), col("id"))
         .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
       assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
+    }
+  }
+
+  test("Mark cache as outdated when spark.sql.updateCacheWhenRefreshMemoryFileIndex is false") {
+    withSQLConf("spark.sql.updateCacheWhenRefreshMemoryFileIndex" -> "false") {
+      withTempDir { dir =>
+        var refreshedTimes = 0
+        val catalog =
+          new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath())), Map.empty, None) {
+            override protected def refresh0(): Unit = {
+              super.refresh0()
+              refreshedTimes += 1
+            }
+          }
+        assert(refreshedTimes === 1)
+        catalog.refresh()
+        assert(refreshedTimes === 1)
+        assert(catalog.ifCacheOutDated())
+        catalog.allFiles()
+        assert(!catalog.ifCacheOutDated())
+        assert(refreshedTimes === 2)
+      }
     }
   }
 }
