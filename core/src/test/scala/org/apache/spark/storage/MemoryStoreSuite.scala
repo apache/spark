@@ -536,7 +536,7 @@ class MemoryStoreSuite
     store.putIteratorAsValues(id, Iterator(tracker), ClassTag.Any)
     assert(store.contains(id))
     store.remove(id)
-    assert(tracker.getClosed())
+    assert(tracker.getClosed)
   }
 
   test("[SPARK-24225]: remove should not close object if it's not a broadcast variable") {
@@ -548,7 +548,7 @@ class MemoryStoreSuite
     store.putIteratorAsValues(id, Iterator(tracker), ClassTag.Any)
     assert(store.contains(id))
     store.remove(id)
-    assert(!tracker.getClosed())
+    assert(!tracker.getClosed)
   }
 
   test("[SPARK-24225]: remove should close AutoCloseable objects even if they throw exceptions") {
@@ -560,7 +560,7 @@ class MemoryStoreSuite
     store.putIteratorAsValues(id, Iterator(tracker), ClassTag.Any)
     assert(store.contains(id))
     store.remove(id)
-    assert(tracker.getClosed())
+    assert(tracker.getClosed)
   }
 
   test("[SPARK-24225]: clear should close AutoCloseable objects") {
@@ -572,7 +572,7 @@ class MemoryStoreSuite
     store.putIteratorAsValues(id, Iterator(tracker), ClassTag.Any)
     assert(store.contains(id))
     store.clear()
-    assert(tracker.getClosed())
+    assert(tracker.getClosed)
   }
 
   test("[SPARK-24225]: clear should close all AutoCloseable objects put together in an iterator") {
@@ -585,8 +585,8 @@ class MemoryStoreSuite
     store.putIteratorAsValues(id1, Iterator(tracker1, tracker2), ClassTag.Any)
     assert(store.contains(id1))
     store.clear()
-    assert(tracker1.getClosed())
-    assert(tracker2.getClosed())
+    assert(tracker1.getClosed)
+    assert(tracker2.getClosed)
   }
 
   test("[SPARK-24225]: clear should close AutoCloseable objects even if they throw exceptions") {
@@ -602,20 +602,29 @@ class MemoryStoreSuite
     assert(store.contains(id1))
     assert(store.contains(id2))
     store.clear()
-    assert(tracker1.getClosed())
-    assert(tracker2.getClosed())
+    assert(tracker1.getClosed)
+    assert(tracker1.getExceptionThrown)
+    assert(tracker2.getClosed)
+    assert(tracker2.getExceptionThrown)
   }
 }
 
 private class CloseTracker (val throwsOnClosed: Boolean = false) extends AutoCloseable {
-  var closed = false
+  private var closed = false
+  private var exceptionThrown = false
+
   override def close(): Unit = {
     closed = true
     if (throwsOnClosed) {
+      exceptionThrown = true
       throw new RuntimeException("Throwing")
     }
   }
-  def getClosed(): Boolean = {
+  def getClosed: Boolean = {
     closed
+  }
+
+  def getExceptionThrown: Boolean = {
+    exceptionThrown
   }
 }

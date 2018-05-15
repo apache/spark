@@ -388,13 +388,13 @@ private[spark] class MemoryStore(
   private def maybeReleaseResources(entry: MemoryEntry[_]): Unit = {
     entry match {
       case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
-      case DeserializedMemoryEntry(objs: Array[Any], _, _) => maybeCloseValues(objs)
+      case DeserializedMemoryEntry(values: Array[Any], _, _) => maybeCloseValues(values)
       case _ =>
     }
   }
 
-  private def maybeCloseValues(objs: Array[Any]): Unit = {
-    objs.foreach {
+  private def maybeCloseValues(values: Array[Any]): Unit = {
+    values.foreach {
       case closable: AutoCloseable =>
         safelyCloseValue(closable)
       case _ =>
