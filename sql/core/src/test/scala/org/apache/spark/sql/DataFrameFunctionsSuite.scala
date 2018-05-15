@@ -846,8 +846,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("array_repeat function") {
     val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
     val strDF = Seq(
-    ("hi", 2),
-    (null, 2)
+      ("hi", 2),
+      (null, 2)
     ).toDF("a", "b")
 
     val strDFTwiceResult = Seq(
