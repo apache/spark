@@ -69,6 +69,11 @@ package object config {
     .bytesConf(ByteUnit.KiB)
     .createWithDefaultString("100k")
 
+  private[spark] val EVENT_LOG_EXECUTOR_METRICS_UPDATES =
+    ConfigBuilder("spark.eventLog.logExecutorMetricsUpdates.enabled")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 
