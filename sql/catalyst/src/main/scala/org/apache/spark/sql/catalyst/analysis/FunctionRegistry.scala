@@ -415,7 +415,7 @@ object FunctionRegistry {
     expression[ArrayPosition]("array_position"),
     expression[ArraySort]("array_sort"),
     expression[CreateMap]("map"),
-    expression[CreateMapFromArray]("map_fromarray"),
+    expression[CreateMapFromArrays]("map_from_arrays"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
     expression[MapKeys]("map_keys"),

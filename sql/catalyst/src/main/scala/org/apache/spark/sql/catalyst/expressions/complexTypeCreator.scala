@@ -248,7 +248,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
       > SELECT _FUNC_([1.0, 3.0], ['2', '4']);
        {1.0:"2",3.0:"4"}
   """, since = "2.4.0")
-case class CreateMapFromArray(left: Expression, right: Expression)
+case class CreateMapFromArrays(left: Expression, right: Expression)
     extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
@@ -296,7 +296,7 @@ case class CreateMapFromArray(left: Expression, right: Expression)
     })
   }
 
-  override def prettyName: String = "map"
+  override def prettyName: String = "create_map_from_arrays"
 }
 
 /**

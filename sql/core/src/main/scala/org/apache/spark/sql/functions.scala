@@ -1077,8 +1077,8 @@ object functions {
    * @group normal_funcs
    * @since 2.4
    */
-  def map_fromarray(keys: Column, values: Column): Column = withExpr {
-    CreateMapFromArray(keys.expr, values.expr)
+  def map_from_arrays(keys: Column, values: Column): Column = withExpr {
+    CreateMapFromArrays(keys.expr, values.expr)
   }
 
   /**

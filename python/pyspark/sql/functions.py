@@ -1821,18 +1821,19 @@ def create_map(*cols):
 
 @ignore_unicode_prefix
 @since(2.4)
-def create_map_fromarray(col1, col2):
+def create_map_from_arrays(col1, col2):
     """Creates a new map from two arrays.
 
     :param col1: name of column containing a set of keys. All elements should not be null
     :param col2: name of column containing a set of values
 
     >>> df = spark.createDataFrame([([2, 5], ["Alice", "Bob"])], ['k', 'v'])
-    >>> df.select(create_map_fromarray(df.k, df.v).alias("map")).collect()
+    >>> df.select(create_map_from_arrays(df.k, df.v).alias("map")).collect()
     [Row(map={2: u'Alice', 5: u'Bob'})]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.map(_to_java_column(col1), _to_java_column(col2)))
+    return Column(sc._jvm.functions.create_map_from_arrays(
+        _to_java_column(col1), _to_java_column(col2)))
 
 
 @since(1.4)
