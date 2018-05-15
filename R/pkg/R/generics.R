@@ -769,6 +769,10 @@ setGeneric("array_min", function(x) { standardGeneric("array_min") })
 #' @name NULL
 setGeneric("array_position", function(x, value) { standardGeneric("array_position") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
+
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
@@ -917,6 +921,10 @@ setGeneric("explode_outer", function(x) { standardGeneric("explode_outer") })
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("expr", function(x) { standardGeneric("expr") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("flatten", function(x) { standardGeneric("flatten") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
@@ -1185,6 +1193,10 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("skewness", function(x) { standardGeneric("skewness") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("slice", function(x, start, length) { standardGeneric("slice") })
 
 #' @rdname column_collection_functions
 #' @name NULL

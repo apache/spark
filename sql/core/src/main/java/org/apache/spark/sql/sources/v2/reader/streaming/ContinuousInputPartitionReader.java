@@ -18,13 +18,13 @@
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.DataReader;
+import org.apache.spark.sql.sources.v2.reader.InputPartitionReader;
 
 /**
- * A variation on {@link DataReader} for use with streaming in continuous processing mode.
+ * A variation on {@link InputPartitionReader} for use with streaming in continuous processing mode.
  */
 @InterfaceStability.Evolving
-public interface ContinuousDataReader<T> extends DataReader<T> {
+public interface ContinuousInputPartitionReader<T> extends InputPartitionReader<T> {
     /**
      * Get the offset of the current record, or the start offset if no records have been read.
      *
