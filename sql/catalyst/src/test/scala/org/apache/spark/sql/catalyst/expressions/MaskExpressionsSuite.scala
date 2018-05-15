@@ -97,8 +97,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("mask_last_n") {
-    checkEvaluation(MaskLastN(Literal("abcd-EFGH-8765"), 6, "U", "l", "#"),
-      "abcd-EFGU-####")
+    checkEvaluation(MaskLastN(Literal("abcd-EFGH-aB3d"), 6, "U", "l", "#"),
+      "abcd-EFGU-lU#l")
     checkEvaluation(new MaskLastN(
       Literal("abcd-EFGH-8765"), Literal(6), Literal("U"), Literal("l"), Literal("#")),
       "abcd-EFGU-####")
@@ -141,8 +141,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("mask_show_first_n") {
-    checkEvaluation(MaskShowFirstN(Literal("abcd-EFGH-8765-4321"), 6, "U", "l", "#"),
-      "abcd-EUUU-####-####")
+    checkEvaluation(MaskShowFirstN(Literal("abcd-EFGH-8765-aB3d"), 6, "U", "l", "#"),
+      "abcd-EUUU-####-lU#l")
     checkEvaluation(new MaskShowFirstN(
       Literal("abcd-EFGH-8765-4321"), Literal(6), Literal("U"), Literal("l"), Literal("#")),
       "abcd-EUUU-####-####")
@@ -184,8 +184,8 @@ class MaskExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("mask_show_last_n") {
-    checkEvaluation(MaskShowLastN(Literal("abcd-EFGH-8765"), 6, "U", "l", "#"),
-      "llll-UUUH-8765")
+    checkEvaluation(MaskShowLastN(Literal("aB3d-EFGH-8765"), 6, "U", "l", "#"),
+      "lU#l-UUUH-8765")
     checkEvaluation(new MaskShowLastN(
       Literal("abcd-EFGH-8765-4321"), Literal(6), Literal("U"), Literal("l"), Literal("#")),
       "llll-UUUU-###5-4321")

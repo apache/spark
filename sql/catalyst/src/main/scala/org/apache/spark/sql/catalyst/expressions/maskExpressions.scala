@@ -78,7 +78,7 @@ trait MaskLike {
      """.stripMargin
   }
 
-  def appendMaskedToStringBuffer(
+  def appendMaskedToStringBuilder(
       sb: java.lang.StringBuilder,
       inputString: String,
       startOffset: Int,
@@ -97,7 +97,7 @@ trait MaskLike {
     offset
   }
 
-  def appendUnchangedToStringBuffer(
+  def appendUnchangedToStringBuilder(
       sb: java.lang.StringBuilder,
       inputString: String,
       startOffset: Int,
@@ -174,7 +174,7 @@ case class Mask(child: Expression, upper: String, lower: String, digit: String)
     val str = input.asInstanceOf[UTF8String].toString
     val length = str.codePointCount(0, str.length())
     val sb = new java.lang.StringBuilder(length)
-    appendMaskedToStringBuffer(sb, str, 0, length)
+    appendMaskedToStringBuilder(sb, str, 0, length)
     UTF8String.fromString(sb.toString)
   }
 
@@ -250,8 +250,8 @@ case class MaskFirstN(
     val length = str.codePointCount(0, str.length())
     val endOfMask = if (charCount > length) length else charCount
     val sb = new java.lang.StringBuilder(length)
-    val offset = appendMaskedToStringBuffer(sb, str, 0, endOfMask)
-    appendUnchangedToStringBuffer(sb, str, offset, length - endOfMask)
+    val offset = appendMaskedToStringBuilder(sb, str, 0, endOfMask)
+    appendUnchangedToStringBuilder(sb, str, offset, length - endOfMask)
     UTF8String.fromString(sb.toString)
   }
 
@@ -333,8 +333,8 @@ case class MaskLastN(
     val length = str.codePointCount(0, str.length())
     val startOfMask = if (charCount >= length) 0 else length - charCount
     val sb = new java.lang.StringBuilder(length)
-    val offset = appendUnchangedToStringBuffer(sb, str, 0, startOfMask)
-    appendMaskedToStringBuffer(sb, str, offset, length - startOfMask)
+    val offset = appendUnchangedToStringBuilder(sb, str, 0, startOfMask)
+    appendMaskedToStringBuilder(sb, str, offset, length - startOfMask)
     UTF8String.fromString(sb.toString)
   }
 
@@ -417,8 +417,8 @@ case class MaskShowFirstN(
     val length = str.codePointCount(0, str.length())
     val startOfMask = if (charCount > length) length else charCount
     val sb = new java.lang.StringBuilder(length)
-    val offset = appendUnchangedToStringBuffer(sb, str, 0, startOfMask)
-    appendMaskedToStringBuffer(sb, str, offset, length - startOfMask)
+    val offset = appendUnchangedToStringBuilder(sb, str, 0, startOfMask)
+    appendMaskedToStringBuilder(sb, str, offset, length - startOfMask)
     UTF8String.fromString(sb.toString)
   }
 
@@ -500,8 +500,8 @@ case class MaskShowLastN(
     val length = str.codePointCount(0, str.length())
     val endOfMask = if (charCount >= length) 0 else length - charCount
     val sb = new java.lang.StringBuilder(length)
-    val offset = appendMaskedToStringBuffer(sb, str, 0, endOfMask)
-    appendUnchangedToStringBuffer(sb, str, offset, length - endOfMask)
+    val offset = appendMaskedToStringBuilder(sb, str, 0, endOfMask)
+    appendUnchangedToStringBuilder(sb, str, offset, length - endOfMask)
     UTF8String.fromString(sb.toString)
   }
 
