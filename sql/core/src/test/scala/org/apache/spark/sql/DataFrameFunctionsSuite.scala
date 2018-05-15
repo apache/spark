@@ -925,6 +925,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       )
     )
 
+    // Error test cases
+    val invalidTypeDF = Seq(("hi", "1")).toDF("a", "b")
+
+    intercept[AnalysisException] {
+      invalidTypeDF.select(array_repeat(invalidTypeDF("a"), invalidTypeDF("b")))
+    }
+    intercept[AnalysisException] {
+      invalidTypeDF.select(array_repeat(invalidTypeDF("a"), lit("1")))
+    }
+    intercept[AnalysisException] {
+      invalidTypeDF.selectExpr("array_repeat(a, 1.0)")
+    }
+
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
