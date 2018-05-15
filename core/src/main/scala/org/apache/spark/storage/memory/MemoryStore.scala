@@ -395,13 +395,13 @@ private[spark] class MemoryStore(
 
   private def maybeCloseValues(objs: Array[Any]): Unit = {
     objs.foreach {
-        case closable: AutoCloseable =>
-          safelyCloseValue(closable)
-        case _ =>
-      }
+      case closable: AutoCloseable =>
+        safelyCloseValue(closable)
+      case _ =>
+    }
   }
 
-  private def safelyCloseValue(closable: AutoCloseable) = {
+  private def safelyCloseValue(closable: AutoCloseable): Unit = {
     try {
       closable.close()
     } catch {
@@ -414,7 +414,9 @@ private[spark] class MemoryStore(
       entries.remove(blockId)
     }
     if (entry != null) {
-      maybeReleaseResources(entry)
+      if (blockId.isBroadcast) {
+        maybeReleaseResources(entry)
+      }
       memoryManager.releaseStorageMemory(entry.size, entry.memoryMode)
       logDebug(s"Block $blockId of size ${entry.size} dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")

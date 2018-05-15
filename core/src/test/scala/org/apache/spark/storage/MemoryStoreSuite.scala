@@ -539,6 +539,18 @@ class MemoryStoreSuite
     assert(tracker.getClosed())
   }
 
+  test("[SPARK-24225]: remove should not close object if it's not a broadcast variable") {
+
+    val (store, _) = makeMemoryStore(12000)
+
+    val id = "a1" // This will be a test variable
+    val tracker = new CloseTracker()
+    store.putIteratorAsValues(id, Iterator(tracker), ClassTag.Any)
+    assert(store.contains(id))
+    store.remove(id)
+    assert(!tracker.getClosed())
+  }
+
   test("[SPARK-24225]: remove should close AutoCloseable objects even if they throw exceptions") {
 
     val (store, _) = makeMemoryStore(12000)
