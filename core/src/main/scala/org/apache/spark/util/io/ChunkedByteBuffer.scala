@@ -63,15 +63,18 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    */
   def writeFully(channel: WritableByteChannel): Unit = {
     for (bytes <- getChunks()) {
-      val curChunkLimit = bytes.limit()
+      val originalLimit = bytes.limit()
       while (bytes.hasRemaining) {
-        try {
-          val ioSize = Math.min(bytes.remaining(), bufferWriteChunkSize)
-          bytes.limit(bytes.position() + ioSize)
-          channel.write(bytes)
-        } finally {
-          bytes.limit(curChunkLimit)
-        }
+        // If `bytes` is an on-heap ByteBuffer, the JDK will copy it to a temporary direct
+        // ByteBuffer when writing it out. The JDK caches one temporary buffer per thread, and we
+        // may have significant memory pressure if the cached temp buffer gets created and freed
+        // frequently. Here we write the `bytes` with fixed-size slices to reuse the cached temp
+        // buffer and overcome this issue.
+        // Please refer to http://www.evanjones.ca/java-bytebuffer-leak.html for more details.
+        val ioSize = Math.min(bytes.remaining(), bufferWriteChunkSize)
+        bytes.limit(bytes.position() + ioSize)
+        channel.write(bytes)
+        bytes.limit(originalLimit)
       }
     }
   }
