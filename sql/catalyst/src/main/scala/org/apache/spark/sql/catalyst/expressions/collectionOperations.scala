@@ -1321,6 +1321,6 @@ case class ArrayRepeat(left: Expression, right: Expression)
       ${leftGen.code}
       ${rightGen.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      $resultCode""", isNull = "false")
+      $resultCode""", isNull = FalseLiteral)
   }
 }
