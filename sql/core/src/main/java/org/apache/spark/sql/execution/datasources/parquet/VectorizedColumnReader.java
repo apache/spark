@@ -242,7 +242,7 @@ public class VectorizedColumnReader {
     return new SchemaColumnConvertNotSupportedException(
       Arrays.toString(descriptor.getPath()),
       descriptor.getType().toString(),
-      column.dataType().toString());
+      column.dataType().simpleString());
   }
 
   /**

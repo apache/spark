@@ -430,7 +430,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       val col = spark.read.parquet(file).schema.fields.filter(_.name.equals("a"))
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
-        assert(errMsg.contains("Column: [a], Expected: integer, Found: BINARY"))
+        assert(errMsg.contains("Column: [a], Expected: int, Found: BINARY"))
       } else {
         assert(errMsg.endsWith("Column: [a], Expected: string, Found: INT32"))
       }
