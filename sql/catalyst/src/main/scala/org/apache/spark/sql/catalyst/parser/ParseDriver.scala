@@ -192,8 +192,16 @@ case object ParseErrorListener extends BaseErrorListener {
       charPositionInLine: Int,
       msg: String,
       e: RecognitionException): Unit = {
-    val position = Origin(Some(line), Some(charPositionInLine))
-    throw new ParseException(None, msg, position, position)
+    val (start, stop) = offendingSymbol match {
+      case token: CommonToken =>
+        val start = Origin (Some (line), Some (token.getStartIndex) )
+        val stop = Origin (Some (line), Some (token.getStopIndex) )
+        (start, stop)
+      case _ =>
+        val start = Origin (Some (line), Some (charPositionInLine) )
+        (start, start)
+    }
+    throw new ParseException (None, msg, start, stop)
   }
 }
 
