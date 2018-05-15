@@ -475,21 +475,21 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
                                         None
                                       }
 
-    val stats: RDD[(BDM[Double], Option[BDV[Double]], Long)] = batch.mapPartitionsWithIndex
-    { (index, docs) =>
-      val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
+    val stats: RDD[(BDM[Double], Option[BDV[Double]], Long)] = batch.mapPartitionsWithIndex {
+      (index, docs) =>
+        val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
 
-      val stat = BDM.zeros[Double](k, vocabSize)
-      val logphatPartOption = logphatPartOptionBase()
-      var nonEmptyDocCount: Long = 0L
-      nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
-        nonEmptyDocCount += 1
-        val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, expElogbetaBc.value, alpha, gammaShape, k, seed + index)
-        stat(::, ids) := stat(::, ids) + sstats
-        logphatPartOption.foreach(_ += LDAUtils.dirichletExpectation(gammad))
-      }
-      Iterator((stat, logphatPartOption, nonEmptyDocCount))
+        val stat = BDM.zeros[Double](k, vocabSize)
+        val logphatPartOption = logphatPartOptionBase()
+        var nonEmptyDocCount: Long = 0L
+        nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
+          nonEmptyDocCount += 1
+          val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
+            termCounts, expElogbetaBc.value, alpha, gammaShape, k, seed + index)
+          stat(::, ids) := stat(::, ids) + sstats
+          logphatPartOption.foreach(_ += LDAUtils.dirichletExpectation(gammad))
+        }
+        Iterator((stat, logphatPartOption, nonEmptyDocCount))
     }
 
     val elementWiseSum = (
