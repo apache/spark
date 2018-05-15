@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.util.TypeUtils
+
 /**
  * Rewrites an expression using rules that are guaranteed preserve the result while attempting
  * to remove cosmetic variations. Deterministic expressions that are `equal` after canonicalization
@@ -84,6 +86,14 @@ object Canonicalize {
     case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
     case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
     case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+
+    // order the list in the In operator
+    // we can do this only if all the elements in the list are literals with the same datatype
+    case i @ In(value, list)
+        if i.inSetConvertible && list.map(_.dataType.asNullable).distinct.size == 1 =>
+      val literals = list.map(_.asInstanceOf[Literal])
+      val ordering = TypeUtils.getInterpretedOrdering(literals.head.dataType)
+      In(value, literals.sortBy(_.value)(ordering))
 
     case _ => e
   }

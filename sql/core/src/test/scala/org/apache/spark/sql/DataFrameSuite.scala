@@ -2265,4 +2265,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.range(1).select($"id", new Column(Uuid()))
     checkAnswer(df, df.collect())
   }
+
+  test("SPARK-24276: IN returns sameResult if the order of literals is different") {
+    val df = spark.range(1)
+    val p1 = df.where($"id".isin(1, 2))
+    val p2 = df.where($"id".isin(2, 1))
+    val p3 = df.where($"id".isin(1, 2, 3))
+
+    assert(p1.queryExecution.executedPlan.sameResult(p2.queryExecution.executedPlan))
+    assert(!p1.queryExecution.executedPlan.sameResult(p3.queryExecution.executedPlan))
+
+    val h1 = p1.queryExecution.logical.canonicalized.semanticHash()
+    val h2 = p2.queryExecution.logical.canonicalized.semanticHash()
+    val h3 = p3.queryExecution.logical.canonicalized.semanticHash()
+    assert(h1 == h2)
+    assert(h1 != h3)
+  }
 }
