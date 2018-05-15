@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType;
  * {@link ReadSupport#createReader(DataSourceOptions)} or
  * {@link ReadSupportWithSchema#createReader(StructType, DataSourceOptions)}.
  * It can mix in various query optimization interfaces to speed up the data scan. The actual scan
- * logic is delegated to {@link InputPartition}s that are returned by
+ * logic is delegated to {@link InputPartition}s, which are returned by
  * {@link #planInputPartitions()}.
  *
  * There are mainly 3 kinds of query optimizations:
@@ -65,9 +65,9 @@ public interface DataSourceReader {
   StructType readSchema();
 
   /**
-   * Returns a list of read tasks. Each task is responsible for creating a data reader to
-   * output data for one RDD partition. That means the number of tasks returned here is same as
-   * the number of RDD partitions this scan outputs.
+   * Returns a list of {@link InputPartition}s. Each {@link InputPartition} is responsible for
+   * creating a data reader to output data of one RDD partition. The number of input partitions
+   * returned here is the same as the number of RDD partitions this scan outputs.
    *
    * Note that, this may not be a full scan if the data source reader mixes in other optimization
    * interfaces like column pruning, filter push-down, etc. These optimizations are applied before
