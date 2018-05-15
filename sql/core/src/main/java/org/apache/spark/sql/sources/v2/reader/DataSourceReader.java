@@ -45,8 +45,8 @@ import org.apache.spark.sql.types.StructType;
  *      only one of them would be respected, according to the priority list from high to low:
  *      {@link SupportsScanColumnarBatch}, {@link SupportsScanUnsafeRow}.
  *
- * If an exception was throw when applying any of these query optimizations, the action would fail
- * and no Spark job was submitted.
+ * If an exception was throw when applying any of these query optimizations, the action will fail
+ * and no Spark job will be submitted.
  *
  * Spark first applies all operator push-down optimizations that this data source supports. Then
  * Spark collects information this data source reported for further optimizations. Finally Spark
@@ -59,7 +59,7 @@ public interface DataSourceReader {
    * Returns the actual schema of this data source reader, which may be different from the physical
    * schema of the underlying storage, as column pruning or other optimizations may happen.
    *
-   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */
   StructType readSchema();
@@ -73,7 +73,7 @@ public interface DataSourceReader {
    * interfaces like column pruning, filter push-down, etc. These optimizations are applied before
    * Spark issues the scan request.
    *
-   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */
   List<InputPartition<Row>> planInputPartitions();

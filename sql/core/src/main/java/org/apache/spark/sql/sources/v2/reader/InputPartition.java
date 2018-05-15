@@ -45,7 +45,7 @@ public interface InputPartition<T> extends Serializable {
    * the returned locations. By default this method returns empty string array, which means this
    * data reader has no location preference.
    *
-   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */
   default String[] preferredLocations() {
