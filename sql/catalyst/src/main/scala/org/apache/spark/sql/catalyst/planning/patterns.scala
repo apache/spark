@@ -109,6 +109,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case join @ Join(left, right, joinType, condition) =>
+      logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
@@ -136,42 +137,36 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 
       if (joinKeys.nonEmpty) {
         val (leftKeys, rightKeys) = joinKeys.unzip
-
         // Find any simple range expressions between two columns
-        // (and involving only those two columns)
-        // of the two tables being joined,
+        // (and involving only those two columns) of the two tables being joined,
         // which are not used in the equijoin expressions,
         // and which can be used for secondary sort optimizations.
+        // rangePreds will contain the original expressions to be filtered out later.
         val rangePreds: mutable.Set[Expression] = mutable.Set.empty
         var rangeConditions: Seq[BinaryComparison] =
-          if (SQLConf.get.useSmjInnerRangeOptimization) { // && SQLConf.get.wholeStageEnabled) {
+          if (SQLConf.get.useSmjInnerRangeOptimization) {
             otherPredicates.flatMap {
-              case p@LessThan(l, r) => isValidRangeCondition(l, r, left, right, joinKeys) match {
-                case "asis" => rangePreds.add(p); Some(LessThan(l, r))
-                case "vs" => rangePreds.add(p); Some(GreaterThan(r, l))
-                case _ => None
+              case p@LessThan(l, r) => checkRangeConditions(l, r, left, right, joinKeys).map {
+                case true => rangePreds.add(p); GreaterThan(r, l)
+                case false => rangePreds.add(p); p
               }
               case p@LessThanOrEqual(l, r) =>
-                isValidRangeCondition(l, r, left, right, joinKeys) match {
-                  case "asis" => rangePreds.add(p); Some(LessThanOrEqual(l, r))
-                  case "vs" => rangePreds.add(p); Some(GreaterThanOrEqual(r, l))
-                  case _ => None
+                checkRangeConditions(l, r, left, right, joinKeys).map {
+                  case true => rangePreds.add(p); GreaterThanOrEqual(r, l)
+                  case false => rangePreds.add(p); p
                 }
-              case p@GreaterThan(l, r) => isValidRangeCondition(l, r, left, right, joinKeys) match {
-                case "asis" => rangePreds.add(p); Some(GreaterThan(l, r))
-                case "vs" => rangePreds.add(p); Some(LessThan(r, l))
-                case _ => None
+              case p@GreaterThan(l, r) => checkRangeConditions(l, r, left, right, joinKeys).map {
+                case true => rangePreds.add(p); LessThan(r, l)
+                case false => rangePreds.add(p); p
               }
               case p@GreaterThanOrEqual(l, r) =>
-                isValidRangeCondition(l, r, left, right, joinKeys) match {
-                  case "asis" => rangePreds.add(p); Some(GreaterThanOrEqual(l, r))
-                  case "vs" => rangePreds.add(p); Some(LessThanOrEqual(r, l))
-                  case _ => None
+                checkRangeConditions(l, r, left, right, joinKeys).map {
+                  case true => rangePreds.add(p); LessThanOrEqual(r, l)
+                  case false => rangePreds.add(p); p
                 }
               case _ => None
             }
-          }
-          else {
+          } else {
             Nil
           }
 
@@ -199,38 +194,43 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     case _ => None
   }
 
-  private def isValidRangeCondition(l : Expression, r : Expression,
-                                    left : LogicalPlan, right : LogicalPlan,
-                                    joinKeys : Seq[(Expression, Expression)]) = {
+  /**
+   * Checks if l and r are valid range conditions:
+   *   - l and r expressions should both contain a single reference to one and the same column.
+   *   - the referenced column should not be part of joinKeys
+   * If these conditions are not met, the function returns None.
+   *
+   * Otherwise, the function checks if the left plan contains l expression and the right plan
+   * contains r expression. If the expressions need to be switched, the function returns Some(true)
+   * and Some(false) otherwise.
+   */
+  private def checkRangeConditions(l : Expression, r : Expression,
+      left : LogicalPlan, right : LogicalPlan,
+      joinKeys : Seq[(Expression, Expression)]) = {
     val (lattrs, rattrs) = (l.references.toSeq, r.references.toSeq)
     if(lattrs.size != 1 || rattrs.size != 1) {
-      "none"
+      None
     }
     else if (canEvaluate(l, left) && canEvaluate(r, right)) {
-      val equiset = joinKeys.filter{ case (ljk : Expression, rjk : Expression) =>
-        ljk.references.toSeq.contains(lattrs(0)) && rjk.references.toSeq.contains(rattrs(0)) }
-      if (equiset.isEmpty) {
-        "asis"
-      }
-      else {
-        "none"
+      if (joinKeys.exists { case (ljk : Expression, rjk : Expression) =>
+          ljk.references.toSeq.contains(lattrs(0)) && rjk.references.toSeq.contains(rattrs(0)) }) {
+        None
+      } else {
+        Some(false)
       }
     }
     else if (canEvaluate(l, right) && canEvaluate(r, left)) {
-      val equiset = joinKeys.filter{ case (ljk : Expression, rjk : Expression) =>
-        rjk.references.toSeq.contains(lattrs(0)) && ljk.references.toSeq.contains(rattrs(0)) }
-      if(equiset.isEmpty) {
-        "vs"
+      if (joinKeys.exists{ case (ljk : Expression, rjk : Expression) =>
+        rjk.references.toSeq.contains(lattrs(0)) && ljk.references.toSeq.contains(rattrs(0)) }) {
+        None
       }
       else {
-        "none"
+        Some(true)
       }
-    }
-    else {
-      "none"
+    } else {
+      None
     }
   }
-
 }
 
 /**
