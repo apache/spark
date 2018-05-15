@@ -1301,7 +1301,17 @@ case class ArrayRepeat(left: Expression, right: Expression)
 
       val arrayDataName = ctx.freshName("arrayData")
       val arrayName = ctx.freshName("arrayObject")
-      val initialization = (numElements: String) => if (isPrimitive) {
+      val numElements = ctx.freshName("numElements")
+
+      val genNumElements =
+        s"""
+           | int $numElements = 0;
+           | if ($r > 0) {
+           |   $numElements = $r;
+           | }
+         """.stripMargin
+
+      val initialization = if (isPrimitive) {
         val arrayName = ctx.freshName("array")
         val baseOffset = Platform.BYTE_ARRAY_OFFSET
         s"""
@@ -1334,18 +1344,15 @@ case class ArrayRepeat(left: Expression, right: Expression)
           s"${ev.value}.update(k, $l);"
         }
         s"""
-           | for (int k = 0; k < $r; k++) {
+           | for (int k = 0; k < $numElements; k++) {
            |   ${updateArray};
            | }
          """.stripMargin
       }
 
       s"""
-         | if ($r < 0) {
-         |   ${initialization("0")}
-         | } else {
-         |   ${initialization(r)}
-         | }
+         | ${genNumElements}
+         | ${initialization}
          | ${assignments}
        """.stripMargin
     })
