@@ -65,15 +65,17 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * @param keyOrdering key ordering for RDD's shuffles
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
+ * @param baseForCp the dependency is base for continuous processing or not
  */
 @DeveloperApi
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
-    @transient private val _rdd: RDD[_ <: Product2[K, V]],
+    @transient val _rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
     val serializer: Serializer = SparkEnv.get.serializer,
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
-    val mapSideCombine: Boolean = false)
+    val mapSideCombine: Boolean = false,
+    val isContinuous: Boolean = false)
   extends Dependency[Product2[K, V]] {
 
   if (mapSideCombine) {
@@ -88,14 +90,53 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   private[spark] val combinerClassName: Option[String] =
     Option(reflect.classTag[C]).map(_.runtimeClass.getName)
 
-  val shuffleId: Int = _rdd.context.newShuffleId()
+  val shuffleId: Int = if (isContinuous) {
+    // This will not be used in continuous processing, set an invalid value for now.
+    Int.MinValue
+  } else {
+    _rdd.context.newShuffleId()
+  }
 
-  val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
-    shuffleId, _rdd.partitions.length, this)
+  val shuffleHandle: ShuffleHandle = if (isContinuous) {
+    null
+  } else {
+    _rdd.context.env.shuffleManager.registerShuffle(
+      shuffleId, _rdd.partitions.length, this)
+  }
 
-  _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
+  if (!isContinuous) {
+    _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
+  }
 }
 
+/**
+ * :: DeveloperApi ::
+ * Represents a dependency on the output of a shuffle stage of continuous type.
+ * Different with ShuffleDependency, the continuous dependency only create on Executor side,
+ * so the rdd in param is deserialized from taskBinary.
+ */
+@DeveloperApi
+class ContinuousShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
+    rdd: RDD[_ <: Product2[K, V]],
+    dep: ShuffleDependency[K, V, C],
+    continuousEpoch: Int,
+    totalShuffleNum: Int,
+    shuffleNumMaps: Int)
+  extends ShuffleDependency[K, V, C](
+    rdd,
+    dep.partitioner,
+    dep.serializer,
+    dep.keyOrdering,
+    dep.aggregator,
+    dep.mapSideCombine, true) {
+
+  val baseShuffleId: Int = dep.shuffleId
+
+  override val shuffleId: Int = continuousEpoch * totalShuffleNum + baseShuffleId
+
+  override val shuffleHandle: ShuffleHandle = SparkEnv.get.shuffleManager.registerShuffle(
+    shuffleId, shuffleNumMaps, this)
+}
 
 /**
  * :: DeveloperApi ::
