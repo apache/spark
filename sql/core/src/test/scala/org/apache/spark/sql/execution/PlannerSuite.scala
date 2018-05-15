@@ -198,7 +198,7 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("TakeOrderedAndProjectExec appears only when number of limit is below the threshold.") {
-    withSQLConf(SQLConf.COMBINE_LIMIT_AFTER_SORT_THRESHOLD.key -> "1000") {
+    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
       val query0 = testData.select('value).orderBy('key).limit(100)
       val planned0 = query0.queryExecution.executedPlan
       assert(planned0.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
