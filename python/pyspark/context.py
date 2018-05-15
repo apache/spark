@@ -221,12 +221,11 @@ class SparkContext(object):
                     if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
                         self._python_includes.append(filename)
                         sys.path.insert(1, filepath)
-                except Exception as e:
+                except Exception:
                     from pyspark import util
                     warnings.warn(
-                        "Python file [%s] specified in 'spark.submit.pyFiles' failed "
-                        "to be added in the Python path, excluding this in the Python path."
-                        "\n  :%s" % (path, util._exception_message(e)),
+                        "Failed to add file [%s] speficied in 'spark.submit.pyFiles' to "
+                        "Python path:\n  %s" % (path, "\n  ".join(sys.path)),
                         RuntimeWarning)
 
         # Create a temporary directory inside spark.local.dir:
