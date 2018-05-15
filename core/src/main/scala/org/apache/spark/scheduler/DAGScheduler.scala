@@ -211,7 +211,7 @@ class DAGScheduler(
   taskScheduler.setDAGScheduler(this)
 
   /** driver heartbeat for collecting metrics */
-  private val heartbeater: Heartbeater = new Heartbeater(reportHeartBeat,
+  private val heartbeater: Heartbeater = new Heartbeater(reportHeartBeat, "driver-heartbeater",
     sc.conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
 
   /** BufferPoolMXBean for direct memory */

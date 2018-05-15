@@ -155,7 +155,7 @@ private[spark] class Executor(
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
   // Executor for the heartbeat task.
-  private val heartbeater = new Heartbeater(reportHeartBeat,
+  private val heartbeater = new Heartbeater(reportHeartBeat, "executor-heartbeater",
     conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
 
   // must be initialized before running startDriverHeartbeat()

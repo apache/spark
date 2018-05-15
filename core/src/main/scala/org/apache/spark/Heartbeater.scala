@@ -26,11 +26,12 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * intervals of intervalMs.
  *
  * @param reportHeartbeat the heartbeat reporting function to call.
+ * @param name the thread name for the heartbeater.
  * @param intervalMs the interval between heartbeats.
  */
-private[spark] class Heartbeater(reportHeartbeat: () => Unit, intervalMs: Long) {
+private[spark] class Heartbeater(reportHeartbeat: () => Unit, name: String, intervalMs: Long) {
   // Executor for the heartbeat task
-  private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
+  private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor(name)
 
   /** Schedules a task to report a heartbeat. */
   private[spark] def start(): Unit = {
