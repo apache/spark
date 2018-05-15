@@ -154,6 +154,13 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("SPARK-23778: empty RDD in union should not produce a UnionRDD") {
+    val rddWithPartitioner = sc.parallelize(Seq(1 -> true)).partitionBy(new HashPartitioner(1))
+    val emptyRDD = sc.emptyRDD[(Int, Boolean)]
+    val unionRdd = sc.union(emptyRDD, rddWithPartitioner)
+    assert(unionRdd.isInstanceOf[PartitionerAwareUnionRDD[_]])
+  }
+
   test("partitioner aware union") {
     def makeRDDWithPartitioner(seq: Seq[Int]): RDD[Int] = {
       sc.makeRDD(seq, 1)
@@ -1047,7 +1054,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   private class CyclicalDependencyRDD[T: ClassTag] extends RDD[T](sc, Nil) {
     private val mutableDependencies: ArrayBuffer[Dependency[_]] = ArrayBuffer.empty
     override def compute(p: Partition, c: TaskContext): Iterator[T] = Iterator.empty
-    override def getPartitions: Array[Partition] = Array.empty
+    override def getPartitions: Array[Partition] = Array(new Partition {
+      override def index: Int = 0
+    })
     override def getDependencies: Seq[Dependency[_]] = mutableDependencies
     def addDependency(dep: Dependency[_]) {
       mutableDependencies += dep
