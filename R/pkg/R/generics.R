@@ -762,7 +762,7 @@ setGeneric("summarize", function(x, ...) { standardGeneric("summarize") })
 #' @export
 setGeneric("summary", function(object, ...) { standardGeneric("summary") })
 
-setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
+setGeneric("toJSON", function(x, ...) { standardGeneric("toJSON") })
 
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
