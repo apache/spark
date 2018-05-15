@@ -846,14 +846,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Seq(null, null))
       ))
 
-    val intDF = Seq(
-      (1, 1),
-      (3, 2)
-    ).toDF("a", "b")
+    val intDF = {
+      val schema = StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType)))
+      val data = Seq(
+        Row(1, 1),
+        Row(3, 2),
+        Row(null, 2)
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
 
     checkAnswer(
       intDF.select(array_repeat(intDF("a"), 0)),
       Seq(
+        Row(Seq[Int]()),
         Row(Seq[Int]()),
         Row(Seq[Int]())
       ))
@@ -862,44 +870,60 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       intDF.select(array_repeat(intDF("a"), 1)),
       Seq(
         Row(Seq(1)),
-        Row(Seq(3))
+        Row(Seq(3)),
+        Row(Seq(null))
       ))
 
     checkAnswer(
       intDF.select(array_repeat(intDF("a"), 2)),
       Seq(
         Row(Seq(1, 1)),
-        Row(Seq(3, 3))
+        Row(Seq(3, 3)),
+        Row(Seq(null, null))
       ))
 
     checkAnswer(
       intDF.select(array_repeat(intDF("a"), intDF("b"))),
       Seq(
         Row(Seq(1)),
-        Row(Seq(3, 3))
+        Row(Seq(3, 3)),
+        Row(Seq(null, null))
       ))
 
     checkAnswer(
       intDF.selectExpr("array_repeat(a, 2)"),
       Seq(
         Row(Seq(1, 1)),
-        Row(Seq(3, 3))
+        Row(Seq(3, 3)),
+        Row(Seq(null, null))
       ))
 
     checkAnswer(
       intDF.selectExpr("array_repeat(a, b)"),
       Seq(
         Row(Seq(1)),
-        Row(Seq(3, 3))
+        Row(Seq(3, 3)),
+        Row(Seq(null, null))
       ))
 
-    val nullDF = Seq(
-      ("hi", null)
-    ).toDF("a", "b")
-
-    intercept[AnalysisException] {
-      nullDF.select(array_repeat(nullDF("a"), nullDF("b")))
+    val nullCountDF = {
+      val schema = StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType)))
+      val data = Seq(
+        Row("hi", null),
+        Row(null, null)
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     }
+
+    checkAnswer(
+      nullCountDF.select(array_repeat(nullCountDF("a"), nullCountDF("b"))),
+      Seq(
+        Row(null),
+        Row(null)
+      )
+    )
 
   }
 

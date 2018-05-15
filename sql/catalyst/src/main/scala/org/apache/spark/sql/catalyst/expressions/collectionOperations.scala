@@ -1256,71 +1256,107 @@ case class ArrayRepeat(left: Expression, right: Expression)
     }
   }
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = right.nullable
 
   override def eval(input: InternalRow): Any = {
-    new GenericArrayData(List.fill(right.eval(input).asInstanceOf[Integer])(left.eval(input)))
+    val count = right.eval(input)
+    if (count == null) {
+      null
+    } else {
+      new GenericArrayData(List.fill(count.asInstanceOf[Int])(left.eval(input)))
+    }
   }
 
   override def prettyName: String = "array_repeat"
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-
+  override def nullSafeCodeGen(ctx: CodegenContext,
+                               ev: ExprCode,
+                               f: (String, String) => String): ExprCode = {
     val leftGen = left.genCode(ctx)
     val rightGen = right.genCode(ctx)
-    val element = leftGen.value
-    val count = rightGen.value
-    val et = dataType.elementType
-    val isPrimitive = CodeGenerator.isPrimitiveType(et)
+    val resultCode = f(leftGen.value, rightGen.value)
 
-    val arrayDataName = ctx.freshName("arrayData")
-    val arrayName = ctx.freshName("arrayObject")
-    val initialization = (numElements: String) => if (isPrimitive) {
-      val arrayName = ctx.freshName("array")
-      val baseOffset = Platform.BYTE_ARRAY_OFFSET
-      s"""
-         | int numBytes = ${et.defaultSize} * $numElements;
-         | int unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes($numElements)
-         |   + org.apache.spark.unsafe.array.ByteArrayMethods
-         |     .roundNumberOfBytesToNearestWord(numBytes);
-         | byte[] $arrayName = new byte[unsafeArraySizeInBytes];
-         | UnsafeArrayData $arrayDataName = new UnsafeArrayData();
-         | Platform.putLong($arrayName, $baseOffset, $numElements);
-         | $arrayDataName.pointTo($arrayName, $baseOffset, unsafeArraySizeInBytes);
-         | ${ev.value} = $arrayDataName;
-       """.stripMargin
+    if (nullable) {
+      val nullSafeEval =
+        leftGen.code +
+          rightGen.code + ctx.nullSafeExec(right.nullable, rightGen.isNull) {
+            s"""
+              ${ev.isNull} = false;
+              $resultCode
+            """
+          }
+
+      ev.copy(code = s"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval
+      """)
     } else {
-      s"${ev.value} = new ${classOf[GenericArrayData].getName()}(new Object[$numElements]);"
+      ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
+        ${leftGen.code}
+        ${rightGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
     }
 
-    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(et)
-    val assignments = {
-      val updateArray = if (isPrimitive) {
-        s"${ev.value}.set$primitiveValueTypeName(k, $element);"
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+
+    nullSafeCodeGen(ctx, ev, (l, r) => {
+      val et = dataType.elementType
+      val isPrimitive = CodeGenerator.isPrimitiveType(et)
+
+      val arrayDataName = ctx.freshName("arrayData")
+      val arrayName = ctx.freshName("arrayObject")
+      val initialization = (numElements: String) => if (isPrimitive) {
+        val arrayName = ctx.freshName("array")
+        val baseOffset = Platform.BYTE_ARRAY_OFFSET
+        s"""
+           | int numBytes = ${et.defaultSize} * $numElements;
+           | int unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes($numElements)
+           |   + org.apache.spark.unsafe.array.ByteArrayMethods
+           |     .roundNumberOfBytesToNearestWord(numBytes);
+           | byte[] $arrayName = new byte[unsafeArraySizeInBytes];
+           | UnsafeArrayData $arrayDataName = new UnsafeArrayData();
+           | Platform.putLong($arrayName, $baseOffset, $numElements);
+           | $arrayDataName.pointTo($arrayName, $baseOffset, unsafeArraySizeInBytes);
+           | ${ev.value} = $arrayDataName;
+         """.stripMargin
       } else {
-        s"${ev.value}.update(k, $element);"
+        s"${ev.value} = new ${classOf[GenericArrayData].getName()}(new Object[$numElements]);"
       }
+
+      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(et)
+      val assignments = {
+        val updateArray = if (isPrimitive) {
+          val isNull = left.genCode(ctx).isNull
+          s"""
+             | if ($isNull) {
+             |   ${ev.value}.setNullAt(k);
+             | } else {
+             |   ${ev.value}.set$primitiveValueTypeName(k, $l);
+             | }
+           """.stripMargin
+        } else {
+          s"${ev.value}.update(k, $l);"
+        }
+        s"""
+           | for (int k = 0; k < $r; k++) {
+           |   ${updateArray};
+           | }
+         """.stripMargin
+      }
+
       s"""
-         | for (int k = 0; k < $count; k++) {
-         |   ${updateArray};
+         | if ($r < 0) {
+         |   ${initialization("0")}
+         | } else {
+         |   ${initialization(r)}
          | }
+         | ${assignments}
        """.stripMargin
-    }
-
-    val resultCode = s"""
-                        | if ($count < 0) {
-                        |   ${initialization("0")}
-                        | } else {
-                        |   ${initialization(count)}
-                        | }
-                        | ${assignments}
-                      """.stripMargin
-
-    ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
-      ${leftGen.code}
-      ${rightGen.code}
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      $resultCode""", isNull = FalseLiteral)
+    })
   }
 }
