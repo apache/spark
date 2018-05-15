@@ -1329,8 +1329,8 @@ class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWrita
         Method to compute error or loss for every iteration of gradient boosting.
 
         :param dataset:
-        Test dataset to evaluate model on, where dataset is an
-        instance of :py:class:`pyspark.sql.DataFrame`
+            Test dataset to evaluate model on, where dataset is an
+            instance of :py:class:`pyspark.sql.DataFrame`
         """
         return self._call_java("evaluateEachIteration", dataset)
 
