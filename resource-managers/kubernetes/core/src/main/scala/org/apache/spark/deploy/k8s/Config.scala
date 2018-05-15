@@ -167,5 +167,5 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
   val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
 
-  val KUBERNETES_DRIVER_ENV_KEY = "spark.kubernetes.driverEnv."
+  val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 }

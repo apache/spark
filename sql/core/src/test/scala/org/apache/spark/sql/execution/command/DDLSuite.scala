@@ -425,6 +425,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"CREATE TABLE tab1 (col1 int, col2 string) USING ${dataSource}")
         }.getMessage
         assert(ex.contains(exMsgWithDefaultDB))
+
+        // Always check location of managed table, with or without (IF NOT EXISTS)
+        withTable("tab2") {
+          sql(s"CREATE TABLE tab2 (col1 int, col2 string) USING ${dataSource}")
+          ex = intercept[AnalysisException] {
+            sql(s"CREATE TABLE IF NOT EXISTS tab1 LIKE tab2")
+          }.getMessage
+          assert(ex.contains(exMsgWithDefaultDB))
+        }
       } finally {
         waitForTasksToFinish()
         Utils.deleteRecursively(tableLoc)
@@ -1733,8 +1742,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("DESCRIBE FUNCTION 'concat'"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
-        Row("Usage: concat(str1, str2, ..., strN) - " +
-            "Returns the concatenation of str1, str2, ..., strN.") :: Nil
+        Row("Usage: concat(col1, col2, ..., colN) - " +
+            "Returns the concatenation of col1, col2, ..., colN.") :: Nil
     )
     // extended mode
     checkAnswer(
