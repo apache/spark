@@ -504,6 +504,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
+      if (!ctx.lateralView.isEmpty) {
+        throw new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
+      }
       withPivot(ctx.pivotClause, from)
     } else {
       ctx.lateralView.asScala.foldLeft(from)(withGenerate)
