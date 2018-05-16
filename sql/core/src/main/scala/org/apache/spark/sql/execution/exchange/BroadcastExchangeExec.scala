@@ -112,11 +112,10 @@ case class BroadcastExchangeExec(
           broadcasted
         } catch {
           case oe: OutOfMemoryError =>
-            throw new OutOfMemoryError(s"Not enough memory to build and broadcast the table to " +
+            throw new SparkException(s"Not enough memory to build and broadcast the table to " +
               s"all worker nodes. As a workaround, you can either disable broadcast by setting " +
               s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark driver " +
-              s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value")
-              .initCause(oe.getCause)
+              s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value", oe)
         }
       }
     }(BroadcastExchangeExec.executionContext)
