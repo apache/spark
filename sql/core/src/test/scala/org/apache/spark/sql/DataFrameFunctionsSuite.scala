@@ -955,7 +955,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       (null, null, null)
     ).toDF("a", "b", "c")
     checkAnswer(
-      df.select(array_remove(df("a"), 2), array_remove(df("b"), "a"), array_remove(df("c"), "")),
+      df.select(array_remove($"a", 2), array_remove($"b", "a"), array_remove($"c", "")),
       Seq(
         Row(Seq(1, 3), Seq("b", "c"), Seq.empty[String]),
         Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),

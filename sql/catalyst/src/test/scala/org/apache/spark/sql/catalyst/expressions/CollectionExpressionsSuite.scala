@@ -567,6 +567,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayRemove(a0, Literal(2)), Seq(1, 3, 5))
     checkEvaluation(ArrayRemove(a0, Literal(3)), Seq(1, 2, 2, 2, 5))
     checkEvaluation(ArrayRemove(a0, Literal(5)), Seq(1, 2, 3, 2, 2))
+    checkEvaluation(ArrayRemove(a0, Literal(null, IntegerType)), null)
 
     checkEvaluation(ArrayRemove(a1, Literal("")), Seq("b", "a", "a", "c", "b"))
     checkEvaluation(ArrayRemove(a1, Literal("a")), Seq("b", "c", "b"))
@@ -574,7 +575,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayRemove(a1, Literal("c")), Seq("b", "a", "a", "b"))
 
     checkEvaluation(ArrayRemove(a2, Literal("")), Seq(null, null))
-    checkEvaluation(ArrayRemove(a2, Literal.create(null, StringType)), null)
+    checkEvaluation(ArrayRemove(a2, Literal(null, StringType)), null)
 
     checkEvaluation(ArrayRemove(a3, Literal(1)), Seq.empty[Integer])
 

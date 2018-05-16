@@ -1894,12 +1894,14 @@ case class ArrayRepeat(left: Expression, right: Expression)
        [1,2,null]
   """, since = "2.4.0")
 case class ArrayRemove(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = left.dataType
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
+
+  lazy val elementType: DataType = left.dataType.asInstanceOf[ArrayType].elementType
 
   override def nullSafeEval(arr: Any, value: Any): Any = {
     val elementType = left.dataType.asInstanceOf[ArrayType].elementType
@@ -1908,43 +1910,75 @@ case class ArrayRemove(left: Expression, right: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val elementType = left.dataType.asInstanceOf[ArrayType].elementType
     nullSafeCodeGen(ctx, ev, (arr, value) => {
-      val arrayClass = classOf[GenericArrayData].getName
-      val values = ctx.freshName("values")
+      val numsToRemove = ctx.freshName("numsToRemove")
+      val newArraySize = ctx.freshName("newArraySize")
       val i = ctx.freshName("i")
-      val pos = ctx.freshName("arrayPosition")
-      val numsToRemove = ctx.freshName("newArrLen")
-      val getValue = CodeGenerator.getValue(arr, right.dataType, i)
+      val getValue = CodeGenerator.getValue(arr, elementType, i)
+      val isEqual = ctx.genEqual(elementType, value, getValue)
       s"""
-         |int $pos = 0;
          |int $numsToRemove = 0;
-         |Object[] $values;
-         |
          |for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |  if (!$arr.isNullAt($i) && ${ctx.genEqual(right.dataType, value, getValue)}) {
+         |  if (!$arr.isNullAt($i) && $isEqual) {
          |    $numsToRemove = $numsToRemove + 1;
          |  }
          |}
-         |$values = new Object[$arr.numElements() - $numsToRemove];
-         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |   if ($arr.isNullAt($i)) {
-         |     $values[$pos] = null;
-         |     $pos = $pos + 1;
-         |   }
-         |   else {
-         |     if (${ctx.genEqual(right.dataType, value, getValue)}) {
-         |       ;
-         |     }
-         |     else {
-         |      $values[$pos] = ${CodeGenerator.getValue(arr, elementType, s"$i")};
-         |      $pos = $pos + 1;
-         |     }
-         |   }
+         |int $newArraySize = $arr.numElements() - $numsToRemove;
+         |${genCodeForResult(ctx, ev, arr, value, newArraySize)}
+       """.stripMargin
+    })
+  }
+
+  def genCodeForResult(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      inputArray: String,
+      value: String,
+      newArraySize: String): String = {
+    val values = ctx.freshName("values")
+    val i = ctx.freshName("i")
+    val pos = ctx.freshName("pos")
+    val getValue = CodeGenerator.getValue(inputArray, elementType, i)
+    val isEqual = ctx.genEqual(elementType, value, getValue)
+    if (!CodeGenerator.isPrimitiveType(elementType)) {
+      val arrayClass = classOf[GenericArrayData].getName
+      s"""
+         |int $pos = 0;
+         |Object[] $values = new Object[$newArraySize];
+         |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
+         |  if ($isEqual) {
+         |    ;
+         |  }
+         |  else {
+         |    $values[$pos] = $getValue;
+         |    $pos = $pos + 1;
+         |  }
          |}
          |${ev.value} = new $arrayClass($values);
        """.stripMargin
-    })
+    } else {
+      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+      s"""
+         |${ctx.createUnsafeArray(values, newArraySize, elementType, s" $prettyName failed.")}
+         |int $pos = 0;
+         |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
+         |  if ($inputArray.isNullAt($i)) {
+         |      $values.setNullAt($pos);
+         |      $pos = $pos + 1;
+         |  }
+         |  else {
+         |    if ($isEqual) {
+         |      ;
+         |    }
+         |    else {
+         |      $values.set$primitiveValueTypeName($pos, $getValue);
+         |      $pos = $pos + 1;
+         |    }
+         |  }
+         |}
+         |${ev.value} = $values;
+       """.stripMargin
+    }
   }
 
   override def prettyName: String = "array_remove"
