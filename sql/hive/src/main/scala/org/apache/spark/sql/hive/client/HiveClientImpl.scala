@@ -38,6 +38,7 @@ import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_AS
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -180,7 +181,9 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
-    SessionState.start(state)
+    SparkHadoopUtil.get.runAsRealUser {
+      SessionState.start(state)
+    }
     state.out = new PrintStream(outputBuffer, true, "UTF-8")
     state.err = new PrintStream(outputBuffer, true, "UTF-8")
     state
