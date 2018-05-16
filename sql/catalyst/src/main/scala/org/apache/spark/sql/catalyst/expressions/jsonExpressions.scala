@@ -548,7 +548,7 @@ case class JsonToStructs(
       forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+    case _: StructType | ArrayType(_: StructType, _) | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input schema ${nullableSchema.simpleString} must be a struct or an array of structs.")
@@ -558,6 +558,7 @@ case class JsonToStructs(
   lazy val rowSchema = nullableSchema match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
   }
 
   // This converts parsed rows to the desired output by the given schema.
@@ -567,6 +568,8 @@ case class JsonToStructs(
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
     case ArrayType(_: StructType, _) =>
       (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+    case _: MapType =>
+      (rows: Seq[InternalRow]) => rows.head.getMap(0)
   }
 
   @transient
@@ -613,6 +616,11 @@ case class JsonToStructs(
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+
+  override def sql: String = schema match {
+    case _: MapType => "entries"
+    case _ => super.sql
+  }
 }
 
 /**
