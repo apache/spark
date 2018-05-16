@@ -166,6 +166,8 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
     val arrCardinality = ctx.freshName("args")
     val arrVals = ctx.freshName("arrVals")
+
+    val arrayTypes = children.map(_.dataType.asInstanceOf[ArrayType].elementType)
     val inputs = evals.zipWithIndex.map { case (eval, index) =>
       s"""
         |${eval.code}
@@ -181,24 +183,31 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val i = ctx.freshName("i")
     val args = ctx.freshName("args")
 
+    val retrieveValues = evals.zipWithIndex.map { case (eval, index) =>
+      s"""
+      |${eval.code}
+      |$myobject[$j] = ${eval.value}.get($i, ${arrayTypes(index)});
+      """.stripMargin
+    }.mkString("\n")
+
     ev.copy(s"""
       |ArrayData[] $arrVals = new ArrayData[$numArrs];
       |int[] $arrCardinality = new int[$numArrs];
       |$inputs
       |int $biggestCardinality = 0;
       |for (int $i = 0; $i < $numArrs; $i ++) {
-      |  $arrCardinality[$i] = $arrVals[$i].numElements();
+      |  if ($arrVals[$i] == null) {
+      |    $arrCardinality[$i] = 0;
+      |  } else {
+      |    $arrCardinality[$i] = $arrVals[$i].numElements();
+      |  }
       |  $biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$i]);
       |}
       |Object[] $args = new Object[$biggestCardinality];
       |for (int $i = 0; $i < $biggestCardinality; $i ++) {
       |  Object[] $myobject = new Object[$numArrs];
       |  for (int $j = 0; $j < $numArrs; $j ++) {
-      |    if ($arrCardinality[$j] > $i) {
-      |      $myobject[$j] = $arrVals[$j].getInt(0);
-      |    } else {
-      |      $myobject[$j] = null;
-      |    }
+      |    $retrieveValues
       |  }
       |  $args[$i] = new $genericInternalRow($myobject);
       |}
@@ -212,28 +221,28 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val inputArrays = children.map(_.eval(input).asInstanceOf[ArrayData])
     val arrayTypes = children.map(_.dataType.asInstanceOf[ArrayType].elementType)
     val numberOfArrays = children.length
-
-    var biggestCardinality = 0
-    for (e <- inputArrays) {
-      biggestCardinality = biggestCardinality max e.numElements()
-    }
-
-    var i = 0
-    var j = 0
-    var result = Seq[InternalRow]()
-    while (i < biggestCardinality) {
-      var myList = List[Any]()
-      j = numberOfArrays - 1
-      while (j >= 0) {
-        if (inputArrays(j).numElements() > i) {
-          myList = inputArrays(j).get(i, arrayTypes(j)) :: myList
-        } else {
-          myList = null :: myList
-        }
-        j -= 1
+    val biggestCardinality = inputArrays.map { arr =>
+      if (arr != null) {
+        arr.numElements())
+      } else {
+        0
       }
-      result = result :+ InternalRow.apply(myList: _*)
-      i += 1
+    }.reduceLeft(_.max(_))
+    val result = new Array[InternalRow](biggestCardinality)
+    val zippedArrs: Seq[(ArrayData, Int)] = inputArrays.zipWithIndex
+
+    for (i <- 0 until biggestCardinality) {
+      val row: List[Any] = zippedArrs
+        .map { case (arr, index) =>
+          if (arr.numElements() > i) {
+            arr.get(i, arrayTypes(index))
+          } else {
+            null
+          }
+        }
+        .foldLeft(List[Any]())((acc, item) => acc :+ item)
+
+      result(i) = InternalRow.apply(row: _*)
     }
     new GenericArrayData(result)
   }
