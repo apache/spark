@@ -1946,10 +1946,7 @@ case class ArrayRemove(left: Expression, right: Expression)
          |int $pos = 0;
          |Object[] $values = new Object[$newArraySize];
          |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-         |  if ($isEqual) {
-         |    ;
-         |  }
-         |  else {
+         |  if (!($isEqual)) {
          |    $values[$pos] = $getValue;
          |    $pos = $pos + 1;
          |  }
@@ -1967,10 +1964,7 @@ case class ArrayRemove(left: Expression, right: Expression)
          |      $pos = $pos + 1;
          |  }
          |  else {
-         |    if ($isEqual) {
-         |      ;
-         |    }
-         |    else {
+         |    if (!($isEqual)) {
          |      $values.set$primitiveValueTypeName($pos, $getValue);
          |      $pos = $pos + 1;
          |    }
