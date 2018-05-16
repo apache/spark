@@ -1832,8 +1832,7 @@ def create_map_from_arrays(col1, col2):
     [Row(map={2: u'Alice', 5: u'Bob'})]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.create_map_from_arrays(
-        _to_java_column(col1), _to_java_column(col2)))
+    return Column(sc._jvm.functions.map_from_arrays(_to_java_column(col1), _to_java_column(col2)))
 
 
 @since(1.4)
