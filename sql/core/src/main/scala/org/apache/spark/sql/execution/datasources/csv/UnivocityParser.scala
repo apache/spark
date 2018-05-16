@@ -303,7 +303,6 @@ private[csv] object UnivocityParser {
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
-
     filteredLines.flatMap(safeParser.parse)
   }
 }

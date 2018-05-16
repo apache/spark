@@ -23,6 +23,8 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -1372,7 +1374,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   def checkHeader(multiLine: Boolean): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTempPath { path =>
-        import collection.JavaConverters._
         val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
         val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
         odf.write.option("header", true).csv(path.getCanonicalPath)
@@ -1449,7 +1450,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   test("SPARK-23786: CSV header must not be checked if it doesn't exist") {
     withTempPath { path =>
-      import collection.JavaConverters._
       val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
       val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
       odf.write.option("header", false).csv(path.getCanonicalPath)
@@ -1467,7 +1467,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   test("SPARK-23786: Ignore column name case if spark.sql.caseSensitive is false") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       withTempPath { path =>
-        import collection.JavaConverters._
         val oschema = new StructType().add("A", StringType)
         val odf = spark.createDataFrame(List(Row("0")).asJava, oschema)
         odf.write.option("header", true).csv(path.getCanonicalPath)

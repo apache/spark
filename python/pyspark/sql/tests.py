@@ -3043,18 +3043,20 @@ class SQLTests(ReusedSQLTestCase):
     def test_checking_csv_header(self):
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
-        self.spark.createDataFrame([[1, 1000], [2000, 2]]).\
-            toDF('f1', 'f2').write.option("header", "true").csv(tmpPath)
-        schema = StructType([
-            StructField('f2', IntegerType(), nullable=True),
-            StructField('f1', IntegerType(), nullable=True)])
-        df = self.spark.read.option('header', 'true').schema(schema).\
-            csv(tmpPath, enforceSchema=False)
-        self.assertRaisesRegexp(
-            Exception,
-            "CSV file header does not contain the expected fields",
-            lambda: df.collect())
-        shutil.rmtree(tmpPath)
+        try:
+            self.spark.createDataFrame([[1, 1000], [2000, 2]])\
+                .toDF('f1', 'f2').write.option("header", "true").csv(tmpPath)
+            schema = StructType([
+                StructField('f2', IntegerType(), nullable=True),
+                StructField('f1', IntegerType(), nullable=True)])
+            df = self.spark.read.option('header', 'true').schema(schema)\
+                .csv(tmpPath, enforceSchema=False)
+            self.assertRaisesRegexp(
+                Exception,
+                "CSV file header does not contain the expected fields",
+                lambda: df.collect())
+        finally:
+            shutil.rmtree(tmpPath)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
