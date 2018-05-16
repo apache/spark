@@ -254,13 +254,11 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings,
       LDASuite.allParamSettings, checkModelData)
 
-    def checkModelDataWithDataset(model: LDAModel, model2: LDAModel, dataset: Dataset[_]): Unit = {
-      assert(model.logLikelihood(dataset) ~== model2.logLikelihood(dataset) absTol 1e-6)
-      assert(model.logPerplexity(dataset) ~== model2.logPerplexity(dataset) absTol 1e-6)
-    }
+    // Make sure the result is deterministic after saving and loading the model
     val model = lda.fit(dataset)
     val model2 = testDefaultReadWrite(model)
-    checkModelDataWithDataset(model, model2, dataset)
+    assert(model.logLikelihood(dataset) ~== model2.logLikelihood(dataset) absTol 1e-6)
+    assert(model.logPerplexity(dataset) ~== model2.logPerplexity(dataset) absTol 1e-6)
   }
 
   test("read/write DistributedLDAModel") {
