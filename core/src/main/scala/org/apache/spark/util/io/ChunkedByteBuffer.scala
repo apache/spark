@@ -65,11 +65,12 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
     for (bytes <- getChunks()) {
       val originalLimit = bytes.limit()
       while (bytes.hasRemaining) {
-        // If `bytes` is an on-heap ByteBuffer, the JDK will copy it to a temporary direct
-        // ByteBuffer when writing it out. The JDK caches one temporary buffer per thread, and we
-        // may have significant memory pressure if the cached temp buffer gets created and freed
-        // frequently. Here we write the `bytes` with fixed-size slices to reuse the cached temp
-        // buffer and overcome this issue.
+        // If `bytes` is an on-heap ByteBuffer, the Java NIO API will copy it to a temporary direct
+        // ByteBuffer when writing it out. This temporary direct ByteBuffer is cached per thread.
+        // Its size has no limit and can keep growing if it sees a larger input ByteBuffer. This may
+        // cause significant native memory leak, if a large direct ByteBuffer is allocated and
+        // cached, as it's never released until thread exits. Here we write the `bytes` with
+        // fixed-size slices to limit the size of the cached direct ByteBuffer.
         // Please refer to http://www.evanjones.ca/java-bytebuffer-leak.html for more details.
         val ioSize = Math.min(bytes.remaining(), bufferWriteChunkSize)
         bytes.limit(bytes.position() + ioSize)
