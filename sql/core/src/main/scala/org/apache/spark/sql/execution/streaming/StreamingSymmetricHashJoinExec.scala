@@ -188,9 +188,14 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
-    (stateWatermarkPredicates.left.nonEmpty || stateWatermarkPredicates.right.nonEmpty) &&
-      eventTimeWatermark.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermark.get
+    val watermarkUsedForStateCleanup =
+      stateWatermarkPredicates.left.nonEmpty || stateWatermarkPredicates.right.nonEmpty
+
+    // Latest watermark value is more than that used in this previous executed plan
+    val watermarkHasChanged =
+      eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+
+    watermarkUsedForStateCleanup && watermarkHasChanged
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

@@ -569,8 +569,6 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
       CheckNewAnswer((3, 10, 6, 9), (4, 10, 8, 12), (5, 10, 10, 15)),
 
-      // Old state doesn't get dropped until the batch *after* it gets introduced, so the
-      // nulls won't show up until the next batch after the watermark advances.
       MultiAddData(leftInput, 21)(rightInput, 22), // watermark = 11, no-data-batch computes nulls
       CheckNewAnswer(Row(1, 10, 2, null), Row(2, 10, 4, null)),
       assertNumStateRows(total = 2, updated = 12),
@@ -589,8 +587,6 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
       CheckNewAnswer((3, 10, 6, 9), (4, 10, 8, 12), (5, 10, 10, 15)),
 
-      // Old state doesn't get dropped until the batch *after* it gets introduced, so the
-      // nulls won't show up until the next batch after the watermark advances.
       MultiAddData(leftInput, 21)(rightInput, 22), // watermark = 11, no-data-batch computes nulls
       CheckNewAnswer(Row(6, 10, null, 18), Row(7, 10, null, 21)),
       assertNumStateRows(total = 2, updated = 12),
