@@ -162,6 +162,7 @@ class FPGrowth @Since("2.2.0") (
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
 
     val instr = Instrumentation.create(this, dataset)
+    instr.logParams(params: _*)
     val data = dataset.select($(itemsCol))
     val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[Any](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
