@@ -658,13 +658,13 @@ case class ArraysOverlap(left: Expression, right: Expression)
    */
   private def bruteForceEval(arr1: ArrayData, arr2: ArrayData): Any = {
     var hasNull = false
-    if (arr1.numElements() > 0) {
+    if (arr1.numElements() > 0 && arr2.numElements() > 0) {
       arr1.foreach(elementType, (_, v1) =>
         if (v1 == null) {
           hasNull = true
         } else {
           arr2.foreach(elementType, (_, v2) =>
-            if (v1 == null) {
+            if (v2 == null) {
               hasNull = true
             } else if (ordering.equiv(v1, v2)) {
               return true

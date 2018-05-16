@@ -190,6 +190,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(ArraysOverlap(aa0, aa1), true)
     checkEvaluation(ArraysOverlap(aa0, aa2), false)
+
+    // null handling with complex datatypes
+    val emptyBinaryArray = Literal.create(Seq.empty[Array[Byte]], ArrayType(BinaryType))
+    val arrayWithBinaryNull = Literal.create(Seq(null), ArrayType(BinaryType))
+    checkEvaluation(ArraysOverlap(emptyBinaryArray, b0), false)
+    checkEvaluation(ArraysOverlap(b0, emptyBinaryArray), false)
+    checkEvaluation(ArraysOverlap(emptyBinaryArray, arrayWithBinaryNull), false)
+    checkEvaluation(ArraysOverlap(arrayWithBinaryNull, emptyBinaryArray), false)
+    checkEvaluation(ArraysOverlap(arrayWithBinaryNull, b0), null)
+    checkEvaluation(ArraysOverlap(b0, arrayWithBinaryNull), null)
   }
 
   test("Slice") {
