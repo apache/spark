@@ -621,7 +621,7 @@ def _test():
     import doctest
     failure_count = doctest.testmod()[0]
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

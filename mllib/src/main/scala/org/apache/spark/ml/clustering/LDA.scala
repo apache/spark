@@ -43,7 +43,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, StructType}
 import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
@@ -345,7 +345,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
             s" must be >= 1.  Found value: $getTopicConcentration")
       }
     }
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
     SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }
 
@@ -366,7 +366,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
 private object LDAParams {
 
   /**
-   * Equivalent to [[DefaultParamsReader.getAndSetParams()]], but handles [[LDA]] and [[LDAModel]]
+   * Equivalent to [[Metadata.getAndSetParams()]], but handles [[LDA]] and [[LDAModel]]
    * formats saved with Spark 1.6, which differ from the formats in Spark 2.0+.
    *
    * @param model    [[LDA]] or [[LDAModel]] instance.  This instance will be modified with
@@ -391,7 +391,7 @@ private object LDAParams {
               s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
         }
       case _ => // 2.0+
-        DefaultParamsReader.getAndSetParams(model, metadata)
+        metadata.getAndSetParams(model)
     }
   }
 }
@@ -461,7 +461,8 @@ abstract class LDAModel private[ml] (
       val transformer = oldLocalModel.getTopicDistributionMethod
 
       val t = udf { (v: Vector) => transformer(OldVectors.fromML(v)).asML }
-      dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF()
+      dataset.withColumn($(topicDistributionCol),
+        t(DatasetUtils.columnToVector(dataset, getFeaturesCol))).toDF()
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +
         " such as topicDistributionCol to produce results.")
@@ -938,7 +939,7 @@ object LDA extends MLReadable[LDA] {
        featuresCol: String): RDD[(Long, OldVector)] = {
     dataset
       .withColumn("docId", monotonically_increasing_id())
-      .select("docId", featuresCol)
+      .select(col("docId"), DatasetUtils.columnToVector(dataset, featuresCol))
       .rdd
       .map { case Row(docId: Long, features: Vector) =>
         (docId, OldVectors.fromML(features))

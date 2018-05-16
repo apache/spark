@@ -819,7 +819,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val path = dir.getCanonicalPath
       spark.range(3).write.parquet(path)
 
-      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val fs = FileSystem.get(spark.sessionState.newHadoopConf())
       val files = fs.listFiles(new Path(path), true)
 
       while (files.hasNext) {

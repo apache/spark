@@ -500,7 +500,7 @@ class LogisticRegression @Since("1.2.0") (
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(regParam, elasticNetParam, standardization, threshold,
       maxIter, tol, fitIntercept)
 
@@ -517,6 +517,9 @@ class LogisticRegression @Since("1.2.0") (
         (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
+    instr.logNamedValue(Instrumentation.loggerTags.numExamples, summarizer.count)
+    instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
+    instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -560,15 +563,15 @@ class LogisticRegression @Since("1.2.0") (
       if (numInvalid != 0) {
         val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
           s"Found $numInvalid invalid labels."
-        logError(msg)
+        instr.logError(msg)
         throw new SparkException(msg)
       }
 
       val isConstantLabel = histogram.count(_ != 0.0) == 1
 
       if ($(fitIntercept) && isConstantLabel && !usingBoundConstrainedOptimization) {
-        logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
-          s"will be zeros. Training is not needed.")
+        instr.logWarning(s"All labels are the same value and fitIntercept=true, so the " +
+          s"coefficients will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
         val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
           new Array[Int](numCoefficientSets + 1), Array.empty[Int], Array.empty[Double],
@@ -581,7 +584,7 @@ class LogisticRegression @Since("1.2.0") (
         (coefMatrix, interceptVec, Array.empty[Double])
       } else {
         if (!$(fitIntercept) && isConstantLabel) {
-          logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
+          instr.logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
             s"dangerous ground, so the algorithm may not converge.")
         }
 
@@ -590,7 +593,7 @@ class LogisticRegression @Since("1.2.0") (
 
         if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
           featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
-          logWarning("Fitting LogisticRegressionModel without intercept on dataset with " +
+          instr.logWarning("Fitting LogisticRegressionModel without intercept on dataset with " +
             "constant nonzero column, Spark MLlib outputs zero coefficients for constant " +
             "nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.")
         }
@@ -708,7 +711,7 @@ class LogisticRegression @Since("1.2.0") (
               (_initialModel.interceptVector.size == numCoefficientSets) &&
               (_initialModel.getFitIntercept == $(fitIntercept))
             if (!modelIsValid) {
-              logWarning(s"Initial coefficients will be ignored! Its dimensions " +
+              instr.logWarning(s"Initial coefficients will be ignored! Its dimensions " +
                 s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the " +
                 s"expected size ($numCoefficientSets, $numFeatures)")
             }
@@ -813,7 +816,7 @@ class LogisticRegression @Since("1.2.0") (
 
         if (state == null) {
           val msg = s"${optimizer.getClass.getName} failed."
-          logError(msg)
+          instr.logError(msg)
           throw new SparkException(msg)
         }
 
@@ -1090,7 +1093,7 @@ class LogisticRegressionModel private[spark] (
    * Predict label for the given feature vector.
    * The behavior of this can be adjusted using `thresholds`.
    */
-  override protected def predict(features: Vector): Double = if (isMultinomial) {
+  override def predict(features: Vector): Double = if (isMultinomial) {
     super.predict(features)
   } else {
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
@@ -1267,7 +1270,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
           numClasses, isMultinomial)
       }
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

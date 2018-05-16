@@ -880,9 +880,7 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
 
 }
 
-private[client] class Shim_v1_0 extends Shim_v0_14 {
-
-}
+private[client] class Shim_v1_0 extends Shim_v0_14
 
 private[client] class Shim_v1_1 extends Shim_v1_0 {
 
@@ -1146,3 +1144,7 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
     alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContextInAlterTable)
   }
 }
+
+private[client] class Shim_v2_2 extends Shim_v2_1
+
+private[client] class Shim_v2_3 extends Shim_v2_1

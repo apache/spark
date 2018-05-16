@@ -454,8 +454,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    */
   private[spark] def validateSettings() {
     if (contains("spark.local.dir")) {
-      val msg = "In Spark 1.0 and later spark.local.dir will be overridden by the value set by " +
-        "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone and LOCAL_DIRS in YARN)."
+      val msg = "Note that spark.local.dir will be overridden by the value set by " +
+        "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone/kubernetes and LOCAL_DIRS" +
+        " in YARN)."
       logWarning(msg)
     }
 
@@ -603,13 +604,15 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
-      DeprecatedConfig("spark.rpc", "2.0", "Not used any more."),
+      DeprecatedConfig("spark.rpc", "2.0", "Not used anymore."),
       DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
         "Please use the new blacklisting options, spark.blacklist.*"),
-      DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used any more"),
-      DeprecatedConfig("spark.executor.port", "2.0.0", "Not used any more"),
+      DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used anymore"),
+      DeprecatedConfig("spark.executor.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
-        "Not used any more. Please use spark.shuffle.service.index.cache.size")
+        "Not used anymore. Please use spark.shuffle.service.index.cache.size"),
+      DeprecatedConfig("spark.yarn.credentials.file.retention.count", "2.4.0", "Not used anymore."),
+      DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore.")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -748,7 +751,7 @@ private[spark] object SparkConf extends Logging {
     }
     if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {
       logWarning(
-        s"The configuration key $key is not supported any more " +
+        s"The configuration key $key is not supported anymore " +
           s"because Spark doesn't use Akka since 2.0")
     }
   }

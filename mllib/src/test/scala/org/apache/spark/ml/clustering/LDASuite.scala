@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.language.existentials
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkFunSuite
@@ -25,7 +27,6 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql._
-
 
 object LDASuite {
   def generateLDAData(
@@ -322,5 +323,22 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       val model = lda.fit(dataset)
       assert(model.getOptimizer === optimizer)
     }
+  }
+
+  test("LDA with Array input") {
+    def trainAndLogLikelihoodAndPerplexity(dataset: Dataset[_]): (Double, Double) = {
+      val model = new LDA().setK(k).setOptimizer("online").setMaxIter(1).setSeed(1).fit(dataset)
+      (model.logLikelihood(dataset), model.logPerplexity(dataset))
+    }
+
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val (ll, lp) = trainAndLogLikelihoodAndPerplexity(newDataset)
+    val (llD, lpD) = trainAndLogLikelihoodAndPerplexity(newDatasetD)
+    val (llF, lpF) = trainAndLogLikelihoodAndPerplexity(newDatasetF)
+    // TODO: need to compare the results once we fix the seed issue for LDA (SPARK-22210)
+    assert(llD <= 0.0 && llD != Double.NegativeInfinity)
+    assert(llF <= 0.0 && llF != Double.NegativeInfinity)
+    assert(lpD >= 0.0 && lpD != Double.NegativeInfinity)
+    assert(lpF >= 0.0 && lpF != Double.NegativeInfinity)
   }
 }

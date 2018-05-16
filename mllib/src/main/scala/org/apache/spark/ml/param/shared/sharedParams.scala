@@ -504,4 +504,23 @@ trait HasLoss extends Params {
   /** @group getParam */
   final def getLoss: String = $(loss)
 }
+
+/**
+ * Trait for shared param distanceMeasure (default: org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN). This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasDistanceMeasure extends Params {
+
+  /**
+   * Param for The distance measure. Supported options: 'euclidean' and 'cosine'.
+   * @group param
+   */
+  final val distanceMeasure: Param[String] = new Param[String](this, "distanceMeasure", "The distance measure. Supported options: 'euclidean' and 'cosine'", (value: String) => org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value))
+
+  setDefault(distanceMeasure, org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN)
+
+  /** @group getParam */
+  final def getDistanceMeasure: String = $(distanceMeasure)
+}
 // scalastyle:on

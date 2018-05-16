@@ -290,7 +290,8 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private var _count = 0L
 
   /**
-   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
+   *
    * @since 2.0.0
    */
   override def isZero: Boolean = _sum == 0L && _count == 0
@@ -368,6 +369,9 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private var _sum = 0.0
   private var _count = 0L
 
+  /**
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
+   */
   override def isZero: Boolean = _sum == 0.0 && _count == 0
 
   override def copy(): DoubleAccumulator = {
@@ -441,6 +445,9 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
 class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   private val _list: java.util.List[T] = Collections.synchronizedList(new ArrayList[T]())
 
+  /**
+   * Returns false if this accumulator instance has any values in it.
+   */
   override def isZero: Boolean = _list.isEmpty
 
   override def copyAndReset(): CollectionAccumulator[T] = new CollectionAccumulator
@@ -479,7 +486,9 @@ class LegacyAccumulatorWrapper[R, T](
     param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
   private[spark] var _value = initialValue  // Current value on driver
 
-  override def isZero: Boolean = _value == param.zero(initialValue)
+  @transient private lazy val _zero = param.zero(initialValue)
+
+  override def isZero: Boolean = _value.asInstanceOf[AnyRef].eq(_zero.asInstanceOf[AnyRef])
 
   override def copy(): LegacyAccumulatorWrapper[R, T] = {
     val acc = new LegacyAccumulatorWrapper(initialValue, param)
@@ -488,7 +497,7 @@ class LegacyAccumulatorWrapper[R, T](
   }
 
   override def reset(): Unit = {
-    _value = param.zero(initialValue)
+    _value = _zero
   }
 
   override def add(v: T): Unit = _value = param.addAccumulator(_value, v)

@@ -27,7 +27,7 @@ else:
 
 import warnings
 
-from pyspark import copy_func, since
+from pyspark import copy_func, since, _NoValue
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import ArrowSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
@@ -463,8 +463,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+            sock_info = self._jdf.collectToPython()
+        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -477,8 +477,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.toPythonIterator()
-        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
+            sock_info = self._jdf.toPythonIterator()
+        return _load_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -588,6 +588,8 @@ class DataFrame(object):
         """
         Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
 
+        :param numPartitions: int, to specify the target number of partitions
+
         Similar to coalesce defined on an :class:`RDD`, this operation results in a
         narrow dependency, e.g. if you go from 1000 partitions to 100 partitions,
         there will not be a shuffle, instead each of the 100 new partitions will
@@ -612,9 +614,10 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is hash partitioned.
 
-        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
-        If it is a Column, it will be used as the first partitioning column. If not specified,
-        the default number of partitions is used.
+        :param numPartitions:
+            can be an int to specify the target number of partitions or a Column.
+            If it is a Column, it will be used as the first partitioning column. If not specified,
+            the default number of partitions is used.
 
         .. versionchanged:: 1.6
            Added optional arguments to specify the partitioning columns. Also made numPartitions
@@ -666,6 +669,52 @@ class DataFrame(object):
             return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sql_ctx)
         else:
             raise TypeError("numPartitions should be an int or Column")
+
+    @since("2.4.0")
+    def repartitionByRange(self, numPartitions, *cols):
+        """
+        Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
+        resulting DataFrame is range partitioned.
+
+        :param numPartitions:
+            can be an int to specify the target number of partitions or a Column.
+            If it is a Column, it will be used as the first partitioning column. If not specified,
+            the default number of partitions is used.
+
+        At least one partition-by expression must be specified.
+        When no explicit sort order is specified, "ascending nulls first" is assumed.
+
+        >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
+        2
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        >>> df.repartitionByRange(1, "age").rdd.getNumPartitions()
+        1
+        >>> data = df.repartitionByRange("age")
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        """
+        if isinstance(numPartitions, int):
+            if len(cols) == 0:
+                return ValueError("At least one partition-by expression must be specified.")
+            else:
+                return DataFrame(
+                    self._jdf.repartitionByRange(numPartitions, self._jcols(*cols)), self.sql_ctx)
+        elif isinstance(numPartitions, (basestring, Column)):
+            cols = (numPartitions,) + cols
+            return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sql_ctx)
+        else:
+            raise TypeError("numPartitions should be an int, string or Column")
 
     @since(1.3)
     def distinct(self):
@@ -846,6 +895,8 @@ class DataFrame(object):
     @since(1.3)
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
+
+        :param alias: string, an alias name to be set for the DataFrame.
 
         >>> from pyspark.sql.functions import *
         >>> df_as1 = df.alias("df_as1")
@@ -1532,7 +1583,7 @@ class DataFrame(object):
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
     @since(1.4)
-    def replace(self, to_replace, value=None, subset=None):
+    def replace(self, to_replace, value=_NoValue, subset=None):
         """Returns a new :class:`DataFrame` replacing a value with another value.
         :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
         aliases of each other.
@@ -1545,8 +1596,8 @@ class DataFrame(object):
 
         :param to_replace: bool, int, long, float, string, list or dict.
             Value to be replaced.
-            If the value is a dict, then `value` is ignored and `to_replace` must be a
-            mapping between a value and a replacement.
+            If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
+            must be a mapping between a value and a replacement.
         :param value: bool, int, long, float, string, list or None.
             The replacement value must be a bool, int, long, float, string or None. If `value` is a
             list, `value` should be of the same length and type as `to_replace`.
@@ -1577,6 +1628,16 @@ class DataFrame(object):
         |null|  null|null|
         +----+------+----+
 
+        >>> df4.na.replace({'Alice': None}).show()
+        +----+------+----+
+        | age|height|name|
+        +----+------+----+
+        |  10|    80|null|
+        |   5|  null| Bob|
+        |null|  null| Tom|
+        |null|  null|null|
+        +----+------+----+
+
         >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
@@ -1587,6 +1648,12 @@ class DataFrame(object):
         |null|  null|null|
         +----+------+----+
         """
+        if value is _NoValue:
+            if isinstance(to_replace, dict):
+                value = None
+            else:
+                raise TypeError("value argument is required when to_replace is not a dictionary.")
+
         # Helper functions
         def all_of(types):
             """Given a type or tuple of types and a sequence of xs
@@ -1839,7 +1906,7 @@ class DataFrame(object):
         This is a no-op if schema doesn't contain the given column name.
 
         :param existing: string, name of the existing column to rename.
-        :param col: string, new name of the column.
+        :param new: string, new name of the column.
 
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
@@ -1913,6 +1980,9 @@ class DataFrame(object):
         0    2  Alice
         1    5    Bob
         """
+        from pyspark.sql.utils import require_minimum_pandas_version
+        require_minimum_pandas_version()
+
         import pandas as pd
 
         if self.sql_ctx.getConf("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
@@ -1922,50 +1992,92 @@ class DataFrame(object):
             timezone = None
 
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
+            use_arrow = True
             try:
-                from pyspark.sql.types import _check_dataframe_localize_timestamps
+                from pyspark.sql.types import to_arrow_schema
                 from pyspark.sql.utils import require_minimum_pyarrow_version
-                import pyarrow
+
                 require_minimum_pyarrow_version()
-                tables = self._collectAsArrow()
-                if tables:
-                    table = pyarrow.concat_tables(tables)
-                    pdf = table.to_pandas()
-                    return _check_dataframe_localize_timestamps(pdf, timezone)
+                to_arrow_schema(self.schema)
+            except Exception as e:
+
+                if self.sql_ctx.getConf("spark.sql.execution.arrow.fallback.enabled", "true") \
+                        .lower() == "true":
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                        "failed by the reason below:\n  %s\n"
+                        "Attempting non-optimization as "
+                        "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                        "true." % _exception_message(e))
+                    warnings.warn(msg)
+                    use_arrow = False
                 else:
-                    return pd.DataFrame.from_records([], columns=self.columns)
-            except ImportError as e:
-                msg = "note: pyarrow must be installed and available on calling Python process " \
-                      "if using spark.sql.execution.arrow.enabled=true"
-                raise ImportError("%s\n%s" % (_exception_message(e), msg))
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and will not continue because automatic fallback "
+                        "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                        "false.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
+
+            # Try to use Arrow optimization when the schema is supported and the required version
+            # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
+            if use_arrow:
+                try:
+                    from pyspark.sql.types import _check_dataframe_convert_date, \
+                        _check_dataframe_localize_timestamps
+                    import pyarrow
+
+                    tables = self._collectAsArrow()
+                    if tables:
+                        table = pyarrow.concat_tables(tables)
+                        pdf = table.to_pandas()
+                        pdf = _check_dataframe_convert_date(pdf, self.schema)
+                        return _check_dataframe_localize_timestamps(pdf, timezone)
+                    else:
+                        return pd.DataFrame.from_records([], columns=self.columns)
+                except Exception as e:
+                    # We might have to allow fallback here as well but multiple Spark jobs can
+                    # be executed. So, simply fail in this case for now.
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and can not continue. Note that "
+                        "'spark.sql.execution.arrow.fallback.enabled' does not have an effect "
+                        "on failures in the middle of computation.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
+
+        # Below is toPandas without Arrow optimization.
+        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+        dtype = {}
+        for field in self.schema:
+            pandas_type = _to_corrected_pandas_type(field.dataType)
+            # SPARK-21766: if an integer field is nullable and has null values, it can be
+            # inferred by pandas as float column. Once we convert the column with NaN back
+            # to integer type e.g., np.int16, we will hit exception. So we use the inferred
+            # float type, not the corrected type from the schema in this case.
+            if pandas_type is not None and \
+                not(isinstance(field.dataType, IntegralType) and field.nullable and
+                    pdf[field.name].isnull().any()):
+                dtype[field.name] = pandas_type
+
+        for f, t in dtype.items():
+            pdf[f] = pdf[f].astype(t, copy=False)
+
+        if timezone is None:
+            return pdf
         else:
-            pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
-
-            dtype = {}
+            from pyspark.sql.types import _check_series_convert_timestamps_local_tz
             for field in self.schema:
-                pandas_type = _to_corrected_pandas_type(field.dataType)
-                # SPARK-21766: if an integer field is nullable and has null values, it can be
-                # inferred by pandas as float column. Once we convert the column with NaN back
-                # to integer type e.g., np.int16, we will hit exception. So we use the inferred
-                # float type, not the corrected type from the schema in this case.
-                if pandas_type is not None and \
-                    not(isinstance(field.dataType, IntegralType) and field.nullable and
-                        pdf[field.name].isnull().any()):
-                    dtype[field.name] = pandas_type
-
-            for f, t in dtype.items():
-                pdf[f] = pdf[f].astype(t, copy=False)
-
-            if timezone is None:
-                return pdf
-            else:
-                from pyspark.sql.types import _check_series_convert_timestamps_local_tz
-                for field in self.schema:
-                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                    if isinstance(field.dataType, TimestampType):
-                        pdf[field.name] = \
-                            _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
-                return pdf
+                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+                if isinstance(field.dataType, TimestampType):
+                    pdf[field.name] = \
+                        _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
+            return pdf
 
     def _collectAsArrow(self):
         """
@@ -1975,8 +2087,8 @@ class DataFrame(object):
         .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(port, ArrowSerializer()))
+            sock_info = self._jdf.collectAsArrowToPython()
+        return list(_load_from_socket(sock_info, ArrowSerializer()))
 
     ##########################################################################################
     # Pandas compatibility
@@ -2009,7 +2121,6 @@ def _to_corrected_pandas_type(dt):
     """
     When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
     This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
-    NOTE: DateType is inferred incorrectly as 'object', TimestampType is correct with datetime64[ns]
     """
     import numpy as np
     if type(dt) == ByteType:
@@ -2020,8 +2131,6 @@ def _to_corrected_pandas_type(dt):
         return np.int32
     elif type(dt) == FloatType:
         return np.float32
-    elif type(dt) == DateType:
-        return 'datetime64[ns]'
     else:
         return None
 
@@ -2045,7 +2154,7 @@ class DataFrameNaFunctions(object):
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
-    def replace(self, to_replace, value, subset=None):
+    def replace(self, to_replace, value=_NoValue, subset=None):
         return self.df.replace(to_replace, value, subset)
 
     replace.__doc__ = DataFrame.replace.__doc__
@@ -2123,7 +2232,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
