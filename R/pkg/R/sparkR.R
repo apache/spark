@@ -167,6 +167,7 @@ sparkR.sparkContext <- function(
     submitOps <- getClientModeSparkSubmitOpts(
         Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
         sparkEnvirMap)
+    checkJavaVersion()
     launchBackend(
         args = path,
         sparkHome = sparkHome,
@@ -193,7 +194,7 @@ sparkR.sparkContext <- function(
 
     # Don't use readString() so that we can provide a useful
     # error message if the R and Java versions are mismatched.
-    authSecretLen = readInt(f)
+    authSecretLen <- readInt(f)
     if (length(authSecretLen) == 0 || authSecretLen == 0) {
       stop("Unexpected EOF in JVM connection data. Mismatched versions?")
     }

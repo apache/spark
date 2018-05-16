@@ -107,7 +107,8 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
   }
 
-  static class JavaAdvancedInputPartition implements InputPartition<Row>, InputPartitionReader<Row> {
+  static class JavaAdvancedInputPartition implements InputPartition<Row>,
+      InputPartitionReader<Row> {
     private int start;
     private int end;
     private StructType requiredSchema;

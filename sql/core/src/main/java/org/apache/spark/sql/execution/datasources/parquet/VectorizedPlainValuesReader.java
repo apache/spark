@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
-import org.apache.spark.unsafe.Platform;
 
 /**
  * An implementation of the Parquet PLAIN decoder that supports the vectorized interface.

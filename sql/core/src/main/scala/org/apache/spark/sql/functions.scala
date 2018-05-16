@@ -811,177 +811,6 @@ object functions {
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
-  /**
-   * Aggregate function: returns the number of non-null pairs.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_count(y: Column, x: Column): Column = withAggregateFunction {
-    RegrCount(y.expr, x.expr)
-  }
-
-  /**
-   * Aggregate function: returns the number of non-null pairs.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_count(y: String, x: String): Column = regr_count(Column(y), Column(x))
-
-  /**
-   * Aggregate function: returns SUM(x*x)-SUM(x)*SUM(x)/N. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_sxx(y: Column, x: Column): Column = withAggregateFunction {
-    RegrSXX(y.expr, x.expr)
-  }
-
-  /**
-   * Aggregate function: returns SUM(x*x)-SUM(x)*SUM(x)/N. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_sxx(y: String, x: String): Column = regr_sxx(Column(y), Column(x))
-
-  /**
-   * Aggregate function: returns SUM(y*y)-SUM(y)*SUM(y)/N. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_syy(y: Column, x: Column): Column = withAggregateFunction {
-    RegrSYY(y.expr, x.expr)
-  }
-
-  /**
-   * Aggregate function: returns SUM(y*y)-SUM(y)*SUM(y)/N. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_syy(y: String, x: String): Column = regr_syy(Column(y), Column(x))
-
-  /**
-   * Aggregate function: returns the average of y. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_avgy(y: Column, x: Column): Column = withAggregateFunction {
-    RegrAvgY(y.expr, x.expr)
-  }
-
-  /**
-   * Aggregate function: returns the average of y. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_avgy(y: String, x: String): Column = regr_avgy(Column(y), Column(x))
-
-  /**
-   * Aggregate function: returns the average of x. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_avgx(y: Column, x: Column): Column = withAggregateFunction {
-    RegrAvgX(y.expr, x.expr)
-  }
-
-  /**
-   * Aggregate function: returns the average of x. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_avgx(y: String, x: String): Column = regr_avgx(Column(y), Column(x))
-
-  /**
-   * Aggregate function: returns the covariance of y and x multiplied for the number of items in
-   * the dataset. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_sxy(y: Column, x: Column): Column = withAggregateFunction {
-    RegrSXY(y.expr, x.expr)
-  }
-
-  /**
-   * Aggregate function: returns the covariance of y and x multiplied for the number of items in
-   * the dataset. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_sxy(y: String, x: String): Column = regr_sxy(Column(y), Column(x))
-
-  /**
-   * Aggregate function: returns the slope of the linear regression line. Any pair with a NULL is
-   * ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_slope(y: Column, x: Column): Column = withAggregateFunction {
-    RegrSlope(y.expr, x.expr)
-  }
-
-  /**
-   * Aggregate function: returns the slope of the linear regression line. Any pair with a NULL is
-   * ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_slope(y: String, x: String): Column = regr_slope(Column(y), Column(x))
-
-  /**
-   * Aggregate function: returns the coefficient of determination (also called R-squared or
-   * goodness of fit) for the regression line. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_r2(y: Column, x: Column): Column = withAggregateFunction {
-    RegrR2(y.expr, x.expr)
-  }
-
-  /**
-   * Aggregate function: returns the coefficient of determination (also called R-squared or
-   * goodness of fit) for the regression line. Any pair with a NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_r2(y: String, x: String): Column = regr_r2(Column(y), Column(x))
-
-  /**
-   * Aggregate function: returns the y-intercept of the linear regression line. Any pair with a
-   * NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_intercept(y: Column, x: Column): Column = withAggregateFunction {
-    RegrIntercept(y.expr, x.expr)
-  }
-
-  /**
-   * Aggregate function: returns the y-intercept of the linear regression line. Any pair with a
-   * NULL is ignored.
-   *
-   * @group agg_funcs
-   * @since 2.4.0
-   */
-  def regr_intercept(y: String, x: String): Column = regr_intercept(Column(y), Column(x))
-
-
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -2903,7 +2732,12 @@ object functions {
 
   /**
    * Returns number of months between dates `date1` and `date2`.
-   * The result is rounded off to 8 digits.
+   * If `date1` is later than `date2`, then the result is positive.
+   * If `date1` and `date2` are on the same day of month, or both are the last day of month,
+   * time of day will be ignored.
+   *
+   * Otherwise, the difference is calculated based on 31 days per month, and rounded to
+   * 8 digits.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -3397,9 +3231,9 @@ object functions {
     from_json(e, schema.asInstanceOf[DataType], options)
 
   /**
-   * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3429,9 +3263,9 @@ object functions {
     from_json(e, schema, options.asScala.toMap)
 
   /**
-   * (Java-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3458,8 +3292,9 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON string into a `StructType` or `ArrayType` of `StructType`s
-   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   * Parses a column containing a JSON string into a `MapType` with `StringType` as keys type,
+   * `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3471,9 +3306,9 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * (Java-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
@@ -3488,9 +3323,9 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string as a json string, it could be a
