@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -467,5 +468,58 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Flatten(asa2), null)
     checkEvaluation(Flatten(asa3), null)
     checkEvaluation(Flatten(asa4), null)
+  }
+
+  test("Zip With Index") {
+    def r(values: Any*): InternalRow = create_row(values: _*)
+    val t = Literal.TrueLiteral
+    val f = Literal.FalseLiteral
+
+    // Primitive-type elements
+    val ai0 = Literal.create(Seq(2, 8, 4, 7), ArrayType(IntegerType))
+    val ai1 = Literal.create(Seq(null, 4, null, 2), ArrayType(IntegerType))
+    val ai2 = Literal.create(Seq(null, null, null), ArrayType(IntegerType))
+    val ai3 = Literal.create(Seq(2), ArrayType(IntegerType))
+    val ai4 = Literal.create(Seq.empty, ArrayType(IntegerType))
+    val ai5 = Literal.create(null, ArrayType(IntegerType))
+
+    checkEvaluation(ZipWithIndex(ai0, f, f), Seq(r(2, 1), r(8, 2), r(4, 3), r(7, 4)))
+    checkEvaluation(ZipWithIndex(ai1, f, f), Seq(r(null, 1), r(4, 2), r(null, 3), r(2, 4)))
+    checkEvaluation(ZipWithIndex(ai2, f, f), Seq(r(null, 1), r(null, 2), r(null, 3)))
+    checkEvaluation(ZipWithIndex(ai3, f, f), Seq(r(2, 1)))
+    checkEvaluation(ZipWithIndex(ai4, f, f), Seq.empty)
+    checkEvaluation(ZipWithIndex(ai5, f, f), null)
+
+    checkEvaluation(ZipWithIndex(ai0, t, t), Seq(r(0, 2), r(1, 8), r(2, 4), r(3, 7)))
+    checkEvaluation(ZipWithIndex(ai1, t, t), Seq(r(0, null), r(1, 4), r(2, null), r(3, 2)))
+    checkEvaluation(ZipWithIndex(ai2, t, t), Seq(r(0, null), r(1, null), r(2, null)))
+    checkEvaluation(ZipWithIndex(ai3, t, t), Seq(r(0, 2)))
+    checkEvaluation(ZipWithIndex(ai4, t, t), Seq.empty)
+    checkEvaluation(ZipWithIndex(ai5, t, t), null)
+
+    // Non-primitive-type elements
+    val as0 = Literal.create(Seq("b", "a", "y", "z"), ArrayType(StringType))
+    val as1 = Literal.create(Seq(null, "x", null, "y"), ArrayType(StringType))
+    val as2 = Literal.create(Seq(null, null, null), ArrayType(StringType))
+    val as3 = Literal.create(Seq("a"), ArrayType(StringType))
+    val as4 = Literal.create(Seq.empty, ArrayType(StringType))
+    val as5 = Literal.create(null, ArrayType(StringType))
+    val aas = Literal.create(Seq(Seq("e"), Seq("c", "d")), ArrayType(ArrayType(StringType)))
+
+    checkEvaluation(ZipWithIndex(as0, f, f), Seq(r("b", 1), r("a", 2), r("y", 3), r("z", 4)))
+    checkEvaluation(ZipWithIndex(as1, f, f), Seq(r(null, 1), r("x", 2), r(null, 3), r("y", 4)))
+    checkEvaluation(ZipWithIndex(as2, f, f), Seq(r(null, 1), r(null, 2), r(null, 3)))
+    checkEvaluation(ZipWithIndex(as3, f, f), Seq(r("a", 1)))
+    checkEvaluation(ZipWithIndex(as4, f, f), Seq.empty)
+    checkEvaluation(ZipWithIndex(as5, f, f), null)
+    checkEvaluation(ZipWithIndex(aas, f, f), Seq(r(Seq("e"), 1), r(Seq("c", "d"), 2)))
+
+    checkEvaluation(ZipWithIndex(as0, t, t), Seq(r(0, "b"), r(1, "a"), r(2, "y"), r(3, "z")))
+    checkEvaluation(ZipWithIndex(as1, t, t), Seq(r(0, null), r(1, "x"), r(2, null), r(3, "y")))
+    checkEvaluation(ZipWithIndex(as2, t, t), Seq(r(0, null), r(1, null), r(2, null)))
+    checkEvaluation(ZipWithIndex(as3, t, t), Seq(r(0, "a")))
+    checkEvaluation(ZipWithIndex(as4, t, t), Seq.empty)
+    checkEvaluation(ZipWithIndex(as5, t, t), null)
+    checkEvaluation(ZipWithIndex(aas, t, t), Seq(r(0, Seq("e")), r(1, Seq("c", "d"))))
   }
 }

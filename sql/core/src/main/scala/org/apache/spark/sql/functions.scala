@@ -3448,6 +3448,30 @@ object functions {
   def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
 
   /**
+   * Transforms the input array by encapsulating elements into pairs
+   * with indexes indicating the order.
+   *
+   * Note: The array index is placed second and starts from one.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def zip_with_index(e: Column): Column = withExpr {
+    ZipWithIndex(e.expr, Literal.FalseLiteral, Literal.FalseLiteral)
+  }
+
+  /**
+   * Transforms the input array by encapsulating elements into pairs
+   * with indexes indicating the order.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def zip_with_index(e: Column, indexFirst: Boolean, startFromZero: Boolean): Column = withExpr {
+    ZipWithIndex(e.expr, Literal(indexFirst), Literal(startFromZero))
+  }
+
+  /**
    * Returns an unordered array containing the keys of the map.
    * @group collection_funcs
    * @since 2.3.0
