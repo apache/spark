@@ -100,12 +100,12 @@ case class FlatMapGroupsWithStateExec(
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     timeoutConf match {
       case ProcessingTimeTimeout =>
-        true // always run batches to process timeouts
-      case _ =>
-        // Irrespective of whether EventTimeTimeout is defined or not, the user-defined function
-        // may perform its own watermark-based state management and any changes in the watermark
-        // should trigger processing
+        true  // Always run batches to process timeouts
+      case EventTimeTimeout =>
+        // Process another non-data batch only if the watermark has changed in this executed plan
         eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+      case _ =>
+        false
     }
   }
 

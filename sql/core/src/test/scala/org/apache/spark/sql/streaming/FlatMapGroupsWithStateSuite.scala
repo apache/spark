@@ -729,8 +729,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
   }
 
   test("flatMapGroupsWithState - streaming with processing time timeout") {
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
+    // Function to maintain the count as state and set the proc. time timeout delay of 10 seconds.
+    // It returns the count if changed, or -1 if the state was removed by timeout.
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
       assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
       assertCannotGetWatermark { state.getCurrentWatermarkMs() }
@@ -793,9 +793,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
   }
 
   test("flatMapGroupsWithState - streaming with event time timeout + watermark") {
-    // Function to maintain the max event time, and set the timeout timestamp based on the current
-    // max event time seen. It returns the max event time in the state, or -1 if the state was
-    // removed by timeout.
+    // Function to maintain the max event time as state and set the timeout timestamp based on the
+    // current max event time seen. It returns the max event time in the state, or -1 if the state
+    // was removed by timeout.
     val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
       assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
       assertCanGetWatermark { state.getCurrentWatermarkMs() >= -1 }
