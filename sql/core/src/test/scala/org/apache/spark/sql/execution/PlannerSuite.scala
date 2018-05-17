@@ -209,6 +209,18 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("TakeOrderedAndProjectExec appears only when number of limit is below the threshold.") {
+    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
+      val query0 = testData.select('value).orderBy('key).limit(100)
+      val planned0 = query0.queryExecution.executedPlan
+      assert(planned0.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
+
+      val query1 = testData.select('value).orderBy('key).limit(2000)
+      val planned1 = query1.queryExecution.executedPlan
+      assert(planned1.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isEmpty)
+    }
+  }
+
   test("SPARK-23375: Cached sorted data doesn't need to be re-sorted") {
     val query = testData.select('key, 'value).sort('key.desc).cache()
     assert(query.queryExecution.optimizedPlan.isInstanceOf[InMemoryRelation])
