@@ -388,7 +388,8 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
 
   override def dataType: DataType = child.dataType
 
-  lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  @transient
+  private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
   override def nullSafeEval(input: Any): Any = input match {
     case a: ArrayData => new GenericArrayData(a.toObjectArray(elementType).reverse)
@@ -552,7 +553,8 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 
   override def children: Seq[Expression] = Seq(x, start, length)
 
-  lazy val elementType: DataType = x.dataType.asInstanceOf[ArrayType].elementType
+  @transient
+  private lazy val elementType: DataType = x.dataType.asInstanceOf[ArrayType].elementType
 
   override def nullSafeEval(xVal: Any, startVal: Any, lengthVal: Any): Any = {
     val startInt = startVal.asInstanceOf[Int]
@@ -837,8 +839,6 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
-
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
@@ -870,6 +870,7 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
 
   override protected def nullSafeEval(input: Any): Any = {
     var min: Any = null
+    val ordering = TypeUtils.getInterpretedOrdering(dataType)
     input.asInstanceOf[ArrayData].foreach(dataType, (_, item) =>
       if (item != null && (min == null || ordering.lt(item, min))) {
         min = item
@@ -902,8 +903,6 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
-
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
@@ -935,6 +934,7 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
   override protected def nullSafeEval(input: Any): Any = {
     var max: Any = null
+    val ordering = TypeUtils.getInterpretedOrdering(dataType)
     input.asInstanceOf[ArrayData].foreach(dataType, (_, item) =>
       if (item != null && (max == null || ordering.gt(item, max))) {
         max = item
@@ -1126,9 +1126,9 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
   """)
 case class Concat(children: Seq[Expression]) extends Expression {
 
-  private val MAX_ARRAY_LENGTH: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+  private def maxArrayLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
-  val allowedTypes = Seq(StringType, BinaryType, ArrayType)
+  private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
@@ -1147,6 +1147,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
 
   override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
 
+  @transient
   lazy val javaType: String = CodeGenerator.javaType(dataType)
 
   override def nullable: Boolean = children.exists(_.nullable)
@@ -1167,9 +1168,9 @@ case class Concat(children: Seq[Expression]) extends Expression {
       } else {
         val arrayData = inputs.map(_.asInstanceOf[ArrayData])
         val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
-        if (numberOfElements > MAX_ARRAY_LENGTH) {
+        if (numberOfElements > maxArrayLength) {
           throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
-            s" elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.")
+            s" elements due to exceeding the array size limit $maxArrayLength.")
         }
         val finalData = new Array[AnyRef](numberOfElements.toInt)
         var position = 0
@@ -1227,9 +1228,9 @@ case class Concat(children: Seq[Expression]) extends Expression {
         |for (int z = 0; z < ${children.length}; z++) {
         |  $numElements += args[z].numElements();
         |}
-        |if ($numElements > $MAX_ARRAY_LENGTH) {
+        |if ($numElements > $maxArrayLength) {
         |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $numElements +
-        |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+        |    " elements due to exceeding the array size limit $maxArrayLength.");
         |}
       """.stripMargin
 
@@ -1324,15 +1325,17 @@ case class Concat(children: Seq[Expression]) extends Expression {
   since = "2.4.0")
 case class Flatten(child: Expression) extends UnaryExpression {
 
-  private val MAX_ARRAY_LENGTH = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+  private def maxArrayLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
+  @transient
   private lazy val childDataType: ArrayType = child.dataType.asInstanceOf[ArrayType]
 
   override def nullable: Boolean = child.nullable || childDataType.containsNull
 
   override def dataType: DataType = childDataType.elementType
 
-  lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  @transient
+  private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(_: ArrayType, _) =>
@@ -1352,9 +1355,9 @@ case class Flatten(child: Expression) extends UnaryExpression {
     } else {
       val arrayData = elements.map(_.asInstanceOf[ArrayData])
       val numberOfElements = arrayData.foldLeft(0L)((sum, e) => sum + e.numElements())
-      if (numberOfElements > MAX_ARRAY_LENGTH) {
+      if (numberOfElements > maxArrayLength) {
         throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-          s"$numberOfElements elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.")
+          s"$numberOfElements elements due to exceeding the array size limit $maxArrayLength.")
       }
       val flattenedData = new Array(numberOfElements.toInt)
       var position = 0
@@ -1401,9 +1404,9 @@ case class Flatten(child: Expression) extends UnaryExpression {
       |for (int z = 0; z < $childVariableName.numElements(); z++) {
       |  $variableName += $childVariableName.getArray(z).numElements();
       |}
-      |if ($variableName > $MAX_ARRAY_LENGTH) {
+      |if ($variableName > $maxArrayLength) {
       |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-      |    $variableName + " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+      |    $variableName + " elements due to exceeding the array size limit $maxArrayLength.");
       |}
       """.stripMargin
     (code, variableName)
@@ -1483,7 +1486,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
 case class ArrayRepeat(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
-  private val MAX_ARRAY_LENGTH = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+  private def maxArrayLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
   override def dataType: ArrayType = ArrayType(left.dataType, left.nullable)
 
@@ -1496,9 +1499,9 @@ case class ArrayRepeat(left: Expression, right: Expression)
     if (count == null) {
       null
     } else {
-      if (count.asInstanceOf[Int] > MAX_ARRAY_LENGTH) {
+      if (count.asInstanceOf[Int] > maxArrayLength) {
         throw new RuntimeException(s"Unsuccessful try to create array with $count elements " +
-          s"due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+          s"due to exceeding the array size limit $maxArrayLength.");
       }
       val element = left.eval(input)
       new GenericArrayData(Array.fill(count.asInstanceOf[Int])(element))
@@ -1557,9 +1560,9 @@ case class ArrayRepeat(left: Expression, right: Expression)
          |if ($count > 0) {
          |  $numElements = $count;
          |}
-         |if ($numElements > $MAX_ARRAY_LENGTH) {
+         |if ($numElements > $maxArrayLength) {
          |  throw new RuntimeException("Unsuccessful try to create array with " + $numElements +
-         |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+         |    " elements due to exceeding the array size limit $maxArrayLength.");
          |}
        """.stripMargin
 
