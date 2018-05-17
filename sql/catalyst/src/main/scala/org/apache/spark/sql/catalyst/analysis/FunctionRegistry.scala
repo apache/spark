@@ -427,6 +427,7 @@ object FunctionRegistry {
     expression[Reverse]("reverse"),
     expression[Concat]("concat"),
     expression[Flatten]("flatten"),
+    expression[ArrayRepeat]("array_repeat"),
     CreateStruct.registryEntry,
 
     // misc functions
