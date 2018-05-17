@@ -769,6 +769,44 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   }
 }
 
+/**
+ * MapOutputTrackerWorker for continuous processing, the main difference with MapOutputTracker
+ * is waiting for a time when the upstream's map output status not ready.
+ */
+private[spark] class ContinuousMapOutputTrackerWorker(conf: SparkConf)
+  extends MapOutputTrackerWorker(conf) {
+
+  /**
+   * Get or fetch the array of MapStatuses for a given shuffle ID, hold while there's missing
+   * partition for this shuffleId
+   */
+  override def getStatuses(shuffleId: Int): Array[MapStatus] = {
+    while (!askTracker[Boolean](CheckNoMissingPartitions(shuffleId))) {
+      synchronized {
+        this.wait(conf.getTimeAsMs("spark.cp.status.retryWait", "1s"))
+      }
+    }
+    super.getStatuses(shuffleId)
+  }
+
+  /**
+   * Check and register the shuffleId from worker side, try to check it on local cache first.
+   */
+  def checkAndRegisterShuffle(shuffleId: Int, numMaps: Int): Unit = {
+    // check local cache first to avoid frequency connect to master
+    if (!mapStatuses.contains(shuffleId)) {
+      askTracker[Boolean](CheckAndRegisterShuffle(shuffleId, numMaps))
+    }
+  }
+
+  /**
+   * Register current map output from worker side.
+   */
+  def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus): Unit = {
+    askTracker[Boolean](RegisterMapOutput(shuffleId: Int, mapId: Int, status: MapStatus))
+  }
+}
+
 private[spark] object MapOutputTracker extends Logging {
 
   val ENDPOINT_NAME = "MapOutputTracker"

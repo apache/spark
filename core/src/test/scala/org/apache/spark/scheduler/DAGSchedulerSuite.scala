@@ -564,6 +564,87 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(scheduler.runningStages.head.isInstanceOf[ResultStage])
   }
 
+  test("getAllAncestorStages should return all ancestor stages") {
+    val rddA = new MyRDD(sc, 1, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
+
+    val rddB = new MyRDD(sc, 1, List(shuffleDepA), tracker = mapOutputTracker)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
+
+    val rddC = new MyRDD(sc, 1, List(shuffleDepB), tracker = mapOutputTracker)
+    val rddD = new MyRDD(sc, 1, List(new OneToOneDependency(rddC)))
+
+    val mapStageA = scheduler.createShuffleMapStage(shuffleDepA, 1)
+    assert(scheduler.getAllAncestorStages(mapStageA).size === 1)
+
+    val mapStageB = scheduler.createShuffleMapStage(shuffleDepB, 1)
+    assert(scheduler.getAllAncestorStages(mapStageB).size === 2)
+      
+    submit(rddD, Array(0)) 
+    assert(scheduler.activeJobs.size === 1) 
+
+    val finalStage = scheduler.activeJobs.head.finalStage
+    assert(scheduler.getAllAncestorStages(finalStage).size === 3)
+  }
+
+  /** 
+   * This test ensure in Continuous Processing model submitJob will submit all stages at-once
+   * It constructs the following chain of dependencies:
+   *
+   * [A] <--(s_A)-- [B] <--(s_B)-- [C] <--(s_C)-- [D] <-(one)--[E] <-(one)--[F]
+   *             \                /
+   *               <-------------
+   * Here, RDD B has a shuffle dependency on RDD A, RDD C has shuffle dependency on both
+   * B and A, RDD D has shuffle dependency on RDD C, RDD E has a one-to-one dependency on RDD D. 
+   * and RDD F has a one-to-one dependency on RDD E.
+   * 
+   * The shuffle dependency IDs are numbers in the DAGScheduler, but to make the example
+   * easier to understand, let's call the shuffled data from A shuffle dependency ID s_A,
+   * s_B, s_C is the same meaning 
+   *
+   * Note: [] means an RDD, (s_*) means a shuffle dependency, (one) means a one-to-one dependency.
+   */
+ 
+  test("submit All stages in continuous processing") {
+    // reset the test context
+    afterEach()
+    val conf = new SparkConf()
+    conf.set("spark.streaming.continuousMode", "true")
+    init(conf)
+    assert(sc.conf.getBoolean("spark.streaming.continuousMode", false))
+
+    val rddA = new MyRDD(sc, 1, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
+    val s_A = shuffleDepA.shuffleId
+
+    val rddB = new MyRDD(sc, 1, List(shuffleDepA), tracker = mapOutputTracker)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
+    val s_B = shuffleDepB.shuffleId
+
+    val rddC = new MyRDD(sc, 1, List(shuffleDepA, shuffleDepB), tracker = mapOutputTracker)
+    val shuffleDepC = new ShuffleDependency(rddC, new HashPartitioner(1))
+    val s_C = shuffleDepC.shuffleId
+
+    val rddD = new MyRDD(sc, 1, List(shuffleDepC), tracker = mapOutputTracker)
+
+    // cache the rddE
+    val rddE = new MyRDD(sc, 1, List(new OneToOneDependency(rddD))).cache()
+    val rddF = new MyRDD(sc, 1, List(new OneToOneDependency(rddE)))
+  
+    // set cacheLocations of rddE
+    cacheLocations(rddE.id -> 0) =
+      Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
+    val prop = new Properties();
+    prop.setProperty(SparkEnv.START_EPOCH_KEY, "0")
+    prop.setProperty("spark.streaming.totalShuffleNumber", "3")
+    submit(rddF, Array(0), properties = prop) 
+    assert(scheduler.shuffleIdToMapStage.size === 3)
+    assert(scheduler.activeJobs.size === 1)
+    assert(scheduler.runningStages.size === 4) 
+    assert(scheduler.waitingStages.size === 0)
+    assert(scheduler.failedStages.size === 0)
+  }
+
   test("avoid exponential blowup when getting preferred locs list") {
     // Build up a complex dependency graph with repeated zip operations, without preferred locations
     var rdd: RDD[_] = new MyRDD(sc, 1, Nil)

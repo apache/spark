@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{DataWritingSparkTask, InternalRowDataWriterFactory}
 import org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTask.{logError, logInfo}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
@@ -58,7 +59,13 @@ case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPla
     try {
       // Force the RDD to run so continuous processing starts; no data is actually being collected
       // to the driver, as ContinuousWriteRDD outputs nothing.
-      rdd.collect()
+      val totalShuffleNum = query.collect { case s: ShuffleExchangeExec => true }.length
+      sparkContext.setLocalProperty("spark.streaming.totalShuffleNumber", totalShuffleNum.toString)
+      sparkContext.runJob(
+        rdd,
+        (context: TaskContext, iter: Iterator[InternalRow]) =>
+          WriteToContinuousDataSourceExec.run(writerFactory, context, iter),
+        rdd.partitions.indices)
     } catch {
       case _: InterruptedException =>
         // Interruption is how continuous queries are ended, so accept and ignore the exception.

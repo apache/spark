@@ -209,6 +209,9 @@ class DAGScheduler(
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
+  private[scheduler] val isContinuous =
+    sc.conf.getBoolean("spark.streaming.continuousMode", false)
+
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -888,7 +891,18 @@ class DAGScheduler(
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
     listenerBus.post(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
-    submitStage(finalStage)
+
+    if (isContinuous) {
+      // TODO: make "spark.streaming.totalShuffleNumber" as a val string
+      val value = properties.getProperty("spark.streaming.totalShuffleNumber")
+      assert(value != null && value.nonEmpty, "totalShuffleNumber must be set!")
+      // For continuou processing submit, in this case, we submit all stages at once
+      // instead of the origin submission in which child stages must be submitted only
+      // after parent stages complete success
+      submitAllStagesOnce(finalStage)
+    } else {
+      submitStage(finalStage)
+    }
   }
 
   private[scheduler] def handleMapStageSubmitted(jobId: Int,
@@ -955,6 +969,47 @@ class DAGScheduler(
     } else {
       abortStage(stage, "No active job for stage " + stage.id, None)
     }
+  }
+
+  /**
+   * Get all stages and submit them at-once.
+   *
+   * @param finalStage  the result Stage
+   * @return the list of all stages of current job, Ascending by stage id
+   */
+  private def submitAllStagesOnce(finalStage: ResultStage) {
+    val stages = getAllAncestorStages(finalStage)
+    val jobId = activeJobForStage(finalStage)
+    logInfo(s"Start submitting ${stages.size} stages for continuous processing, jobId:${jobId}")
+    for (stage <- stages) {
+      logInfo("Submitting " + stage + " (" + stage.rdd + ")")
+      submitMissingTasks(stage, jobId.get)
+    }
+  }
+
+  private[scheduler] def getAllAncestorStages(stage: Stage): List[Stage] = {
+    val result = new HashSet[Stage]
+    result += stage
+    val visited = new HashSet[RDD[_]]
+    val waitingForVisit = new ArrayStack[RDD[_]]
+    waitingForVisit.push(stage.rdd)
+    while(waitingForVisit.nonEmpty) {
+      val rdd = waitingForVisit.pop()
+      if (!visited(rdd)) {
+        visited += rdd
+        for (dep <- rdd.dependencies) {
+          dep match {
+             case shufDep: ShuffleDependency[_, _, _] =>
+               val mapStage = getOrCreateShuffleMapStage(shufDep, stage.firstJobId)
+               result += mapStage
+               waitingForVisit.push(shufDep.rdd)
+             case narrowDep: NarrowDependency[_] =>
+               waitingForVisit.push(narrowDep.rdd)
+          }
+        }
+      }
+    } // end while
+    result.toList.sortBy(_.id)
   }
 
   /** Called when stage's parents are available and we can now do its task. */
@@ -1060,9 +1115,17 @@ class DAGScheduler(
             val locs = taskIdToLocations(id)
             val part = partitions(id)
             stage.pendingPartitions += id
-            new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
-              taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
-              Option(sc.applicationId), sc.applicationAttemptId)
+            if (isContinuous) {
+              val totalShuffleNum =
+                properties.getProperty("spark.streaming.totalShuffleNumber").toInt
+              new ContinuousShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
+                taskBinary, part, locs, properties, serializedTaskMetrics, totalShuffleNum,
+                Option(jobId), Option(sc.applicationId), sc.applicationAttemptId)
+            } else {
+              new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
+                taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
+                Option(sc.applicationId), sc.applicationAttemptId)
+            }
           }
 
         case stage: ResultStage =>
@@ -1087,7 +1150,7 @@ class DAGScheduler(
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties))
-    } else {
+    } else if (!isContinuous) {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run
       markStageAsFinished(stage, None)
@@ -1103,6 +1166,9 @@ class DAGScheduler(
           logDebug(s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})")
       }
       submitWaitingChildStages(stage)
+    } else {
+       logInfo(s"Submitting tasks's size:${tasks.size}, isContinuous:${isContinuous} " +
+         s"Neither need mark stage as finished nor need submit waiting child stages")
     }
   }
 
