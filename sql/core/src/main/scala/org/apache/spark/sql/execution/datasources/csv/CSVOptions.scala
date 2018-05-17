@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
 
 class CSVOptions(
-    @transient private val parameters: CaseInsensitiveMap[String],
+    @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable {
@@ -164,7 +164,7 @@ class CSVOptions(
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
-    writerSettings.setEmptyValue(nullValue)
+    writerSettings.setEmptyValue("\"\"")
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
@@ -185,6 +185,7 @@ class CSVOptions(
     settings.setInputBufferSize(inputBufferSize)
     settings.setMaxColumns(maxColumns)
     settings.setNullValue(nullValue)
+    settings.setEmptyValue("")
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
     settings

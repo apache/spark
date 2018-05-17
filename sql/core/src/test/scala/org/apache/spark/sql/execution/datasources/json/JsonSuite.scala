@@ -2313,6 +2313,25 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+  test("SPARK-23723: write json in UTF-16/32 with multiline off") {
+    Seq("UTF-16", "UTF-32").foreach { encoding =>
+      withTempPath { path =>
+        val ds = spark.createDataset(Seq(
+          ("a", 1), ("b", 2), ("c", 3))
+        ).repartition(2)
+        val e = intercept[IllegalArgumentException] {
+          ds.write
+            .option("encoding", encoding)
+            .option("multiline", "false")
+            .format("json").mode("overwrite")
+            .save(path.getCanonicalPath)
+        }.getMessage
+        assert(e.contains(
+          s"$encoding encoding in the blacklist is not allowed when multiLine is disabled"))
+      }
+    }
+  }
+
   def checkReadJson(lineSep: String, encoding: String, inferSchema: Boolean, id: Int): Unit = {
     test(s"SPARK-23724: checks reading json in ${encoding} #${id}") {
       val schema = new StructType().add("f1", StringType).add("f2", IntegerType)
