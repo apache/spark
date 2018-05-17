@@ -81,7 +81,7 @@ private[spark] class KubernetesDriverBuilder(
 }
 
 private object KubernetesDriverBuilder {
-  val MAX_SECRET_BUNDLE_SIZE_BYTES = 10240
+  val MAX_SECRET_BUNDLE_SIZE_BYTES = 20480
   val MAX_SECRET_BUNDLE_SIZE_BYTES_STRING =
     Utils.bytesToString(MAX_SECRET_BUNDLE_SIZE_BYTES)
 }
