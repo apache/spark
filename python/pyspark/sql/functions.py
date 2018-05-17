@@ -1108,8 +1108,11 @@ def add_months(start, months):
 @since(1.5)
 def months_between(date1, date2, roundOff=True):
     """
-    Returns the number of months between date1 and date2.
-    Unless `roundOff` is set to `False`, the result is rounded off to 8 digits.
+    Returns number of months between dates date1 and date2.
+    If date1 is later than date2, then the result is positive.
+    If date1 and date2 are on the same day of month, or both are the last day of month,
+    returns an integer (time of day will be ignored).
+    The result is rounded off to 8 digits unless `roundOff` is set to `False`.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['date1', 'date2'])
     >>> df.select(months_between(df.date1, df.date2).alias('months')).collect()
@@ -2107,12 +2110,13 @@ def json_tuple(col, *fields):
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(2.1)
 def from_json(col, schema, options={}):
     """
-    Parses a column containing a JSON string into a :class:`StructType` or :class:`ArrayType`
-    of :class:`StructType`\\s with the specified schema. Returns `null`, in the case of an
-    unparseable string.
+    Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
+    as keys type, :class:`StructType` or :class:`ArrayType` of :class:`StructType`\\s with
+    the specified schema. Returns `null`, in the case of an unparseable string.
 
     :param col: string column in json format
     :param schema: a StructType or ArrayType of StructType to use when parsing the json column.
@@ -2129,6 +2133,9 @@ def from_json(col, schema, options={}):
     [Row(json=Row(a=1))]
     >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
     [Row(json=Row(a=1))]
+    >>> schema = MapType(StringType(), IntegerType())
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json={u'a': 1})]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
     >>> df = spark.createDataFrame(data, ("key", "value"))
@@ -2335,6 +2342,20 @@ def map_values(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def array_repeat(col, count):
+    """
+    Collection function: creates an array containing a column repeated count times.
+
+    >>> df = spark.createDataFrame([('ab',)], ['data'])
+    >>> df.select(array_repeat(df.data, 3).alias('r')).collect()
+    [Row(r=[u'ab', u'ab', u'ab'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_repeat(_to_java_column(col), count))
 
 
 # ---------------------------- User Defined Function ----------------------------------
