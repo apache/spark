@@ -32,10 +32,16 @@ private[shuffle] case class ReceiverRow(row: UnsafeRow) extends UnsafeRowReceive
 private[shuffle] case class ReceiverEpochMarker() extends UnsafeRowReceiverMessage
 
 /**
- * RPC endpoint for receiving rows into a continuous processing shuffle task.
+ * RPC endpoint for receiving rows into a continuous processing shuffle task. Continuous shuffle
+ * writers will send rows here, with continuous shuffle readers polling for new rows as needed.
+ *
+ * TODO: Support multiple source tasks. We need to output a single epoch marker once all
+ * source tasks have sent one.
  */
 private[shuffle] class UnsafeRowReceiver(val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
+  // Note that this queue will be drained from the main task thread and populated in the RPC
+  // response thread.
   private val queue = new ArrayBlockingQueue[UnsafeRowReceiverMessage](1024)
   var stopped = new AtomicBoolean(false)
 

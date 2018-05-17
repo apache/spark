@@ -38,7 +38,9 @@ case class ContinuousShuffleReadPartition(index: Int) extends Partition {
 }
 
 /**
- * RDD at the bottom of each continuous processing shuffle task, reading from the
+ * RDD at the map side of each continuous processing shuffle task. Upstream tasks send their
+ * shuffle output to the wrapped receivers in partitions of this RDD; each of the RDD's tasks
+ * poll from their receiver until an epoch marker is sent.
  */
 class ContinuousShuffleReadRDD(sc: SparkContext, numPartitions: Int)
     extends RDD[UnsafeRow](sc, Nil) {
