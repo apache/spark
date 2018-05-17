@@ -112,7 +112,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     val model = kmeans.fit(dataset)
     assert(model.clusterCenters.length === k)
 
-    testTransformerByGlobalCheckFunc[Vector](dataset.toDF(), model,
+    testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataset.toDF(), model,
       "features", predictionColName) { rows =>
       val clusters = rows.map(_.getAs[Int](predictionColName)).toSet
       assert(clusters.size === k)

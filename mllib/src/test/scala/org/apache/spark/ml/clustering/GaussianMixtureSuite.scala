@@ -30,9 +30,8 @@ import org.apache.spark.sql.{Dataset, Row}
 
 class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
-  import testImplicits._
-  import Encoders._
   import GaussianMixtureSuite._
+  import testImplicits._
 
   final val k = 5
   private val seed = 538009335
@@ -120,7 +119,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(model.gaussians.length === k)
 
     // Check prediction matches the highest probability, and probabilities sum to one.
-    testTransformer[Vector](dataset.toDF(), model,
+    testTransformer[Tuple1[Vector]](dataset.toDF(), model,
       "features", predictionColName, probabilityColName) {
       case Row(_, pred: Int, prob: Vector) =>
         val probArray = prob.toArray

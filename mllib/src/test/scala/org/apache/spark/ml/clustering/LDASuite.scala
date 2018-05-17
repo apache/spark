@@ -28,6 +28,7 @@ import org.apache.spark.sql._
 
 
 object LDASuite {
+
   def generateLDAData(
       spark: SparkSession,
       rows: Int,
@@ -63,7 +64,6 @@ object LDASuite {
 class LDASuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
-  import Encoders._
 
   val k: Int = 5
   val vocabSize: Int = 30
@@ -186,7 +186,7 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
     assert(model.topicsMatrix.numCols === k)
     assert(!model.isDistributed)
 
-    testTransformer[Vector](dataset.toDF(), model,
+    testTransformer[Tuple1[Vector]](dataset.toDF(), model,
       "features", lda.getTopicDistributionCol) {
       case Row(_, topicDistribution: Vector) =>
         assert(topicDistribution.size === k)

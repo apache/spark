@@ -30,7 +30,7 @@ import org.apache.spark.sql.Dataset
 
 class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
 
-  import Encoders._
+  import testImplicits._
 
   final val k = 5
   @transient var dataset: Dataset[_] = _
@@ -70,10 +70,11 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     // Verify fit does not fail on very sparse data
     val model = bkm.fit(sparseDataset)
 
-    testTransformerByGlobalCheckFunc[Vector](sparseDataset.toDF(), model, "prediction") { rows =>
-      val numClusters = rows.distinct.length
-      // Verify we hit the edge case
-      assert(numClusters < k && numClusters > 1)
+    testTransformerByGlobalCheckFunc[Tuple1[Vector]](sparseDataset.toDF(), model, "prediction") {
+      rows =>
+        val numClusters = rows.distinct.length
+        // Verify we hit the edge case
+        assert(numClusters < k && numClusters > 1)
     }
   }
 
@@ -107,14 +108,14 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     val bkm = new BisectingKMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
     val model = bkm.fit(dataset)
     assert(model.clusterCenters.length === k)
+    assert(model.computeCost(dataset) < 0.1)
+    assert(model.hasParent)
 
-    testTransformerByGlobalCheckFunc[Vector](dataset.toDF(), model,
+    testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataset.toDF(), model,
       "features", predictionColName) { rows =>
       val clusters = rows.map(_.getAs[Int](predictionColName)).toSet
       assert(clusters.size === k)
       assert(clusters === Set(0, 1, 2, 3, 4))
-      assert(model.computeCost(dataset) < 0.1)
-      assert(model.hasParent)
     }
 
     // Check validity of model summary
