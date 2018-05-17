@@ -195,7 +195,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val intSeq = Seq(5, 10, 15, 20, 25)
     val longSeq = intSeq.map(_.toLong)
     val strSeq = intSeq.map(_.toString)
-    val intDupSeq = Seq(5, 10, 15, 15, 5)
+    val integerSeq = Seq[java.lang.Integer](5, 10, 15, 20, 25)
     val intWithNullSeq = Seq[java.lang.Integer](5, 10, null, 20, 25)
     val longWithNullSeq = intSeq.map(java.lang.Long.valueOf(_))
 
@@ -203,6 +203,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val longArray = Literal.create(longSeq, ArrayType(LongType, false))
     val strArray = Literal.create(strSeq, ArrayType(StringType, false))
 
+    val integerArray = Literal.create(integerSeq, ArrayType(IntegerType, true))
     val intwithNullArray = Literal.create(intWithNullSeq, ArrayType(IntegerType, true))
     val longwithNullArray = Literal.create(longWithNullSeq, ArrayType(LongType, true))
 
@@ -210,6 +211,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(CreateMapFromArrays(intArray, longArray), createMap(intSeq, longSeq))
     checkEvaluation(CreateMapFromArrays(intArray, strArray), createMap(intSeq, strSeq))
+    checkEvaluation(CreateMapFromArrays(integerArray, strArray), createMap(integerSeq, strSeq))
 
     checkEvaluation(
       CreateMapFromArrays(strArray, intwithNullArray), createMap(strSeq, intWithNullSeq))
@@ -219,6 +221,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       CreateMapFromArrays(strArray, longwithNullArray), createMap(strSeq, longWithNullSeq))
     checkEvaluation(CreateMapFromArrays(nullArray, nullArray), null)
 
+    intercept[RuntimeException] {
+      checkEvaluation(CreateMapFromArrays(intwithNullArray, strArray), null)
+    }
     intercept[RuntimeException] {
       checkEvaluation(
         CreateMapFromArrays(intArray, Literal.create(Seq(1), ArrayType(IntegerType))), null)

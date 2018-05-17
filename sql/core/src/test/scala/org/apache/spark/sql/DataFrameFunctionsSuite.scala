@@ -73,19 +73,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df2 = Seq((Seq(1, 2), Seq(null, "b"))).toDF("k", "v")
     checkAnswer(df2.select(map_from_arrays($"k", $"v")), Seq(Row(Map(1 -> null, 2 -> "b"))))
 
-    val df3 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
-    intercept[AnalysisException] {
-      df3.select(map_from_arrays($"k", $"v"))
-    }
+    val df3 = Seq((null, null)).toDF("k", "v")
+    checkAnswer(df3.select(map_from_arrays($"k", $"v")), Seq(Row(null)))
 
     val df4 = Seq((1, "a")).toDF("k", "v")
     intercept[AnalysisException] {
       df4.select(map_from_arrays($"k", $"v"))
     }
 
-    val df5 = Seq((null, null)).toDF("k", "v")
-    intercept[AnalysisException] {
-      df5.select(map_from_arrays($"k", $"v"))
+    val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
+    intercept[RuntimeException] {
+      df5.select(map_from_arrays($"k", $"v")).collect
     }
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")

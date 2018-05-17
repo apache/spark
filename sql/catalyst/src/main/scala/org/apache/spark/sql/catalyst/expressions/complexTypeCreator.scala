@@ -255,12 +255,8 @@ case class CreateMapFromArrays(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(_, cn), ArrayType(_, _)) =>
-        if (!cn) {
-          TypeCheckResult.TypeCheckSuccess
-        } else {
-          TypeCheckResult.TypeCheckFailure("All of the given keys should be non-null")
-        }
+      case (ArrayType(_, _), ArrayType(_, _)) =>
+        TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure("The given two arguments should be an array")
     }
@@ -281,18 +277,39 @@ case class CreateMapFromArrays(left: Expression, right: Expression)
     if (keyArrayData.numElements != valueArrayData.numElements) {
       throw new RuntimeException("The given two arrays should have the same length")
     }
+    val leftArrayType = left.dataType.asInstanceOf[ArrayType]
+    if (leftArrayType.containsNull) {
+      if (keyArrayData.toArray(leftArrayType.elementType).contains(null)) {
+        throw new RuntimeException("Cannot use null as map key!")
+      }
+    }
     new ArrayBasedMapData(keyArrayData.copy(), valueArrayData.copy())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (keyArrayData, valueArrayData) => {
       val arrayBasedMapData = classOf[ArrayBasedMapData].getName
+      val leftArrayType = left.dataType.asInstanceOf[ArrayType]
+      val keyArrayElemNullCheck = if (!leftArrayType.containsNull) "" else {
+        val leftArrayTypeTerm = ctx.addReferenceObj("leftArrayType", leftArrayType.elementType)
+        val array = ctx.freshName("array")
+        val i = ctx.freshName("i")
+        s"""
+           |Object[] $array = $keyArrayData.toObjectArray($leftArrayTypeTerm);
+           |for (int $i = 0; $i < $array.length; $i++) {
+           |  if ($array[$i] == null) {
+           |    throw new RuntimeException("Cannot use null as map key!");
+           |  }
+           |}
+         """.stripMargin
+      }
       s"""
          |if ($keyArrayData.numElements() != $valueArrayData.numElements()) {
          |  throw new RuntimeException("The given two arrays should have the same length");
          |}
+         |$keyArrayElemNullCheck
          |${ev.value} = new $arrayBasedMapData($keyArrayData.copy(), $valueArrayData.copy());
-       """
+       """.stripMargin
     })
   }
 
