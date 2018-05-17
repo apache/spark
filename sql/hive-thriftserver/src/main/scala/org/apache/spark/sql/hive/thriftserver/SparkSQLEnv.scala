@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.PrintStream
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
@@ -57,7 +59,7 @@ private[hive] object SparkSQLEnv extends Logging {
         val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
         val credentials = currentUser.getCredentials
         val tokenManager = new HadoopDelegationTokenManager(sparkConf, hadoopConf)
-        tokenManager.obtainDelegationTokens(hadoopConf, credentials)
+        tokenManager.obtainDelegationTobtainDelegationTokensokens(hadoopConf, credentials)
         currentUser.addCredentails(credentials)
       }
 
