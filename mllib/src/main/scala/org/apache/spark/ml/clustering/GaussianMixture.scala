@@ -352,7 +352,7 @@ class GaussianMixture @Since("2.0.0") (
       s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
       s" matrix is quadratic in the number of features.")
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
     instr.logNumFeatures(numFeatures)
 
@@ -425,6 +425,9 @@ class GaussianMixture @Since("2.0.0") (
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
     model.setSummary(Some(summary))
+    instr.logNamedValue("logLikelihood", logLikelihood)
+    // TODO: need to extend logNamedValue to support Array
+    instr.logNamedValue("clusterSizes", summary.clusterSizes.mkString("[", ",", "]"))
     instr.logSuccess(model)
     model
   }

@@ -1323,6 +1323,52 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(sampled.count() == ds.count())
   }
 
+  test("SPARK-17916: An empty string should not be coerced to null when nullValue is passed.") {
+    val litNull: String = null
+    val df = Seq(
+      (1, "John Doe"),
+      (2, ""),
+      (3, "-"),
+      (4, litNull)
+    ).toDF("id", "name")
+
+    // Checks for new behavior where an empty string is not coerced to null when `nullValue` is
+    // set to anything but an empty string literal.
+    withTempPath { path =>
+      df.write
+        .option("nullValue", "-")
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .option("nullValue", "-")
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, ""),
+        (3, litNull),
+        (4, litNull)
+      ).toDF("id", "name")
+
+      checkAnswer(computed, expected)
+    }
+    // Keeps the old behavior where empty string us coerced to nullValue is not passed.
+    withTempPath { path =>
+      df.write
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, litNull),
+        (3, "-"),
+        (4, litNull)
+      ).toDF("id", "name")
+
+      checkAnswer(computed, expected)
+    }
+  }
+
   test("SPARK-24244: Select a subset of all columns") {
     withTempPath { path =>
       import collection.JavaConverters._
