@@ -58,9 +58,8 @@ class CodeBlockSuite extends SparkFunSuite {
            |int $value = -1;
           """.stripMargin
     val exprValues = code.exprValues
-    assert(exprValues.length == 2)
-    assert(exprValues(0).isInstanceOf[VariableValue] && exprValues(0).code == "expr1_isNull")
-    assert(exprValues(1).isInstanceOf[VariableValue] && exprValues(1).code == "expr1")
+    assert(exprValues.size == 2)
+    assert(exprValues === Set(value, isNull))
   }
 
   test("concatenate blocks") {
@@ -88,12 +87,8 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(code.toString == expected)
 
     val exprValues = code.exprValues
-    assert(exprValues.length == 5)
-    assert(exprValues(0).isInstanceOf[VariableValue] && exprValues(0).code == "expr1_isNull")
-    assert(exprValues(1).isInstanceOf[VariableValue] && exprValues(1).code == "expr1")
-    assert(exprValues(2).isInstanceOf[VariableValue] && exprValues(2).code == "expr2_isNull")
-    assert(exprValues(3).isInstanceOf[VariableValue] && exprValues(3).code == "expr2")
-    assert(exprValues(4).isInstanceOf[LiteralValue] && exprValues(4).code == "100")
+    assert(exprValues.size == 5)
+    assert(exprValues === Set(isNull1, value1, isNull2, value2, literal))
   }
 
   test("Throws exception when interpolating unexcepted object in code block") {
