@@ -144,7 +144,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
-      logDebug(s"Train split $splitIndex with multiple sets of parameters.")
+      instr.logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       // Fit models in a Future for training in parallel
       val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
@@ -155,7 +155,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
           }
           // TODO: duplicate evaluator to take extra params from input
           val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-          logDebug(s"Got metric $metric for model trained with $paramMap.")
+          instr.logDebug(s"Got metric $metric for model trained with $paramMap.")
           metric
         } (executionContext)
       }
@@ -169,12 +169,12 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       foldMetrics
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
 
-    logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
+    instr.logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
-    logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
-    logInfo(s"Best cross-validation metric: $bestMetric.")
+    instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
+    instr.logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     instr.logSuccess(bestModel)
     copyValues(new CrossValidatorModel(uid, bestModel, metrics)

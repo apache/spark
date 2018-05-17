@@ -1856,6 +1856,21 @@ def array_contains(col, value):
 
 
 @since(2.4)
+def arrays_overlap(a1, a2):
+    """
+    Collection function: returns true if the arrays contain any common non-null element; if not,
+    returns null if both the arrays are non-empty and any of them contains a null element; returns
+    false otherwise.
+
+    >>> df = spark.createDataFrame([(["a", "b"], ["b", "c"]), (["a"], ["b", "c"])], ['x', 'y'])
+    >>> df.select(arrays_overlap(df.x, df.y).alias("overlap")).collect()
+    [Row(overlap=True), Row(overlap=False)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
+
+
+@since(2.4)
 def slice(x, start, length):
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
@@ -2327,6 +2342,20 @@ def map_values(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def array_repeat(col, count):
+    """
+    Collection function: creates an array containing a column repeated count times.
+
+    >>> df = spark.createDataFrame([('ab',)], ['data'])
+    >>> df.select(array_repeat(df.data, 3).alias('r')).collect()
+    [Row(r=[u'ab', u'ab', u'ab'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_repeat(_to_java_column(col), count))
 
 
 # ---------------------------- User Defined Function ----------------------------------

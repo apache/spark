@@ -27,7 +27,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
@@ -107,13 +107,7 @@ object SQLConf {
    * run tests in parallel. At the time this feature was implemented, this was a no-op since we
    * run unit tests (that does not involve SparkSession) in serial order.
    */
-  def get: SQLConf = {
-    if (Utils.isTesting && TaskContext.get != null) {
-      // we're accessing it during task execution, fail.
-      throw new IllegalStateException("SQLConf should only be created and accessed on the driver.")
-    }
-    confGetter.get()()
-  }
+  def get: SQLConf = confGetter.get()()
 
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()
@@ -1259,6 +1253,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val TOP_K_SORT_FALLBACK_THRESHOLD =
+    buildConf("spark.sql.execution.topKSortFallbackThreshold")
+      .internal()
+      .doc("In SQL queries with a SORT followed by a LIMIT like " +
+          "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
+          " in memory, otherwise do a global sort which spills to disk if necessary.")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1279,6 +1282,12 @@ object SQLConf {
  */
 class SQLConf extends Serializable with Logging {
   import SQLConf._
+
+  if (Utils.isTesting && SparkEnv.get != null) {
+    // assert that we're only accessing it on the driver.
+    assert(SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER,
+      "SQLConf should only be created and accessed on the driver.")
+  }
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
@@ -1423,6 +1432,8 @@ class SQLConf extends Serializable with Logging {
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
+
+  def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

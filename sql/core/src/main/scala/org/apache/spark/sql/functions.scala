@@ -3086,6 +3086,17 @@ object functions {
   }
 
   /**
+   * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and both
+   * the arrays are non-empty and any of them contains a `null`, it returns `null`. It returns
+   * `false` otherwise.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def arrays_overlap(a1: Column, a2: Column): Column = withExpr {
+    ArraysOverlap(a1.expr, a2.expr)
+  }
+
+  /**
    * Returns an array containing all the elements in `x` from index `start` (or starting from the
    * end if `start` is negative) with the specified `length`.
    * @group collection_funcs
@@ -3446,6 +3457,26 @@ object functions {
    * @since 2.4.0
    */
   def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
+
+  /**
+   * Creates an array containing the left argument repeated the number of times given by the
+   * right argument.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_repeat(left: Column, right: Column): Column = withExpr {
+    ArrayRepeat(left.expr, right.expr)
+  }
+
+  /**
+   * Creates an array containing the left argument repeated the number of times given by the
+   * right argument.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
 
   /**
    * Returns an unordered array containing the keys of the map.
