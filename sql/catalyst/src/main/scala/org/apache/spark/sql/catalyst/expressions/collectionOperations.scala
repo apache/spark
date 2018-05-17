@@ -1233,8 +1233,8 @@ case class Concat(children: Seq[Expression]) extends Expression {
         |}
         |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
         |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $numElements +
-        |    " elements due to exceeding the array size limit " +
-        |    ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
+        |    " elements due to exceeding the array size limit" +
+        |    " ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
         |}
       """.stripMargin
 
@@ -1409,8 +1409,8 @@ case class Flatten(child: Expression) extends UnaryExpression {
       |}
       |if ($variableName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
       |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-      |    $variableName + " elements due to exceeding the array size limit " +
-      |    ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
+      |    $variableName + " elements due to exceeding the array size limit" +
+      |    " ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
       |}
       """.stripMargin
     (code, variableName)
@@ -1564,8 +1564,8 @@ case class ArrayRepeat(left: Expression, right: Expression)
          |}
          |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
          |  throw new RuntimeException("Unsuccessful try to create array with " + $numElements +
-         |    " elements due to exceeding the array size limit " +
-         |    ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
+         |    " elements due to exceeding the array size limit" +
+         |    " ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
          |}
        """.stripMargin
 
