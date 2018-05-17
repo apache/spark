@@ -199,8 +199,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       inputRow: InternalRow = EmptyRow): Unit = {
     for (fallbackMode <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode) {
-        val factory = UnsafeProjection
-        val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow, factory)
+        val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow)
         val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
 
         if (expected == null) {
@@ -212,7 +211,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         } else {
           val lit = InternalRow(expected, expected)
           val expectedRow =
-            factory.create(Array(expression.dataType, expression.dataType)).apply(lit)
+            UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
           if (unsafeRow != expectedRow) {
             fail("Incorrect evaluation in unsafe mode: " +
               s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
@@ -224,8 +223,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
 
   protected def evaluateWithUnsafeProjection(
       expression: Expression,
-      inputRow: InternalRow = EmptyRow,
-      factory: UnsafeProjection.type = UnsafeProjection): InternalRow = {
+      inputRow: InternalRow = EmptyRow): InternalRow = {
     // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
     // some expression is reusing variable names across different instances.
     // This behavior is tested in ExpressionEvalHelperSuite.

@@ -35,20 +35,18 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
 
   private def roundedSize(size: Int) = ByteArrayMethods.roundNumberOfBytesToNearestWord(size)
 
-  private def testWithFactory(
-    name: String)(
-    f: UnsafeProjection.type => Unit): Unit = {
-    val factory = UnsafeProjection
-    test(name) {
-      for (fallbackMode <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+  private def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
+    for (fallbackMode <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+      test(name + " with " + fallbackMode) {
         withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode) {
-          f(factory)
+          f
         }
       }
     }
   }
 
-  testWithFactory("basic conversion with only primitive types") { factory =>
+  testBothCodegenAndInterpreted("basic conversion with only primitive types") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType)
     val converter = factory.create(fieldTypes)
     val row = new SpecificInternalRow(fieldTypes)
@@ -85,7 +83,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(unsafeRow2.getInt(2) === 2)
   }
 
-  testWithFactory("basic conversion with primitive, string and binary types") { factory =>
+  testBothCodegenAndInterpreted("basic conversion with primitive, string and binary types") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(LongType, StringType, BinaryType)
     val converter = factory.create(fieldTypes)
 
@@ -104,7 +103,9 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(unsafeRow.getBinary(2) === "World".getBytes(StandardCharsets.UTF_8))
   }
 
-  testWithFactory("basic conversion with primitive, string, date and timestamp types") { factory =>
+  testBothCodegenAndInterpreted(
+      "basic conversion with primitive, string, date and timestamp types") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType)
     val converter = factory.create(fieldTypes)
 
@@ -133,7 +134,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     (Timestamp.valueOf("2015-06-22 08:10:25"))
   }
 
-  testWithFactory("null handling") { factory =>
+  testBothCodegenAndInterpreted("null handling") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       NullType,
       BooleanType,
@@ -254,7 +256,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
-  testWithFactory("NaN canonicalization") { factory =>
+  testBothCodegenAndInterpreted("NaN canonicalization") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(FloatType, DoubleType)
 
     val row1 = new SpecificInternalRow(fieldTypes)
@@ -269,7 +272,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(converter.apply(row1).getBytes === converter.apply(row2).getBytes)
   }
 
-  testWithFactory("basic conversion with struct type") { factory =>
+  testBothCodegenAndInterpreted("basic conversion with struct type") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       new StructType().add("i", IntegerType),
       new StructType().add("nest", new StructType().add("l", LongType))
@@ -331,7 +335,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(map.getSizeInBytes == 8 + map.keyArray.getSizeInBytes + map.valueArray.getSizeInBytes)
   }
 
-  testWithFactory("basic conversion with array type") { factory =>
+  testBothCodegenAndInterpreted("basic conversion with array type") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       ArrayType(IntegerType),
       ArrayType(ArrayType(IntegerType))
@@ -361,7 +366,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(unsafeRow.getSizeInBytes == 8 + 8 * 2 + array1Size + array2Size)
   }
 
-  testWithFactory("basic conversion with map type") { factory =>
+  testBothCodegenAndInterpreted("basic conversion with map type") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       MapType(IntegerType, IntegerType),
       MapType(IntegerType, MapType(IntegerType, IntegerType))
@@ -407,7 +413,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(unsafeRow.getSizeInBytes == 8 + 8 * 2 + map1Size + map2Size)
   }
 
-  testWithFactory("basic conversion with struct and array") { factory =>
+  testBothCodegenAndInterpreted("basic conversion with struct and array") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       new StructType().add("arr", ArrayType(IntegerType)),
       ArrayType(new StructType().add("l", LongType))
@@ -446,7 +453,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
       8 + 8 * 2 + field1.getSizeInBytes + roundedSize(field2.getSizeInBytes))
   }
 
-  testWithFactory("basic conversion with struct and map") { factory =>
+  testBothCodegenAndInterpreted("basic conversion with struct and map") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       new StructType().add("map", MapType(IntegerType, IntegerType)),
       MapType(IntegerType, new StructType().add("l", LongType))
@@ -492,7 +500,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
       8 + 8 * 2 + field1.getSizeInBytes + roundedSize(field2.getSizeInBytes))
   }
 
-  testWithFactory("basic conversion with array and map") { factory =>
+  testBothCodegenAndInterpreted("basic conversion with array and map") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       ArrayType(MapType(IntegerType, IntegerType)),
       MapType(IntegerType, ArrayType(IntegerType))
