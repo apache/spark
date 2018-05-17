@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
@@ -211,45 +210,6 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Invoke(funcSubObj, "binOp", DoubleType, inputSum), 0.75, InternalRow.apply(1, 0.25))
   }
 
-  test("SPARK-23593: InitializeJavaBean should support interpreted execution") {
-    val list = new java.util.LinkedList[Int]()
-    list.add(1)
-
-    val initializeBean = InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
-      Map("add" -> Literal(1)))
-    checkEvaluation(initializeBean, list, InternalRow.fromSeq(Seq()))
-
-    val initializeWithNonexistingMethod = InitializeJavaBean(
-      Literal.fromObject(new java.util.LinkedList[Int]),
-      Map("nonexisting" -> Literal(1)))
-    checkExceptionInExpression[Exception](initializeWithNonexistingMethod,
-      """A method named "nonexisting" is not declared in any enclosing class """ +
-        "nor any supertype")
-
-    val initializeWithWrongParamType = InitializeJavaBean(
-      Literal.fromObject(new TestBean),
-      Map("setX" -> Literal("1")))
-    intercept[Exception] {
-      evaluateWithoutCodegen(initializeWithWrongParamType, InternalRow.fromSeq(Seq()))
-    }.getMessage.contains(
-      """A method named "setX" is not declared in any enclosing class """ +
-        "nor any supertype")
-  }
-
-  test("InitializeJavaBean doesn't call setters if input in null") {
-    val initializeBean = InitializeJavaBean(
-      Literal.fromObject(new TestBean),
-      Map("setNonPrimitive" -> Literal(null)))
-    evaluateWithoutCodegen(initializeBean, InternalRow.fromSeq(Seq()))
-    evaluateWithGeneratedMutableProjection(initializeBean, InternalRow.fromSeq(Seq()))
-
-    val initializeBean2 = InitializeJavaBean(
-      Literal.fromObject(new TestBean),
-      Map("setNonPrimitive" -> Literal("string")))
-    evaluateWithoutCodegen(initializeBean2, InternalRow.fromSeq(Seq()))
-    evaluateWithGeneratedMutableProjection(initializeBean2, InternalRow.fromSeq(Seq()))
-  }
-
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
     val cls = classOf[Option[Int]]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
@@ -406,19 +366,34 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       cls = classOf[GenericArrayData],
       arguments = Literal.fromObject(List(1, 2, 3)) :: Nil,
       propagateNull = false,
+      initializations = Nil,
       dataType = ArrayType(IntegerType),
       outerPointer = None)
     checkObjectExprEvaluation(newInst1, new GenericArrayData(List(1, 2, 3)))
 
+    // Initializations case test
+    val newInst2 = NewInstance(
+      cls = classOf[GenericArrayData],
+      arguments = Literal.fromObject(List(0, 0, 0)) :: Nil,
+      propagateNull = false,
+      initializations = ("update", Literal(0) :: Literal(1) :: Nil)
+        :: ("update", Literal(1) :: Literal(2) :: Nil)
+        :: ("update", Literal(2) :: Literal(3) :: Nil)
+        :: Nil,
+      dataType = ArrayType(IntegerType),
+      outerPointer = None)
+    checkObjectExprEvaluation(newInst2, new GenericArrayData(List(1, 2, 3)))
+
     // Inner class case test
     val outerObj = new Outer()
-    val newInst2 = NewInstance(
+    val newInst3 = NewInstance(
       cls = classOf[outerObj.Inner],
       arguments = Literal(1) :: Nil,
       propagateNull = false,
+      initializations = Nil,
       dataType = ObjectType(classOf[outerObj.Inner]),
       outerPointer = Some(() => outerObj))
-    checkObjectExprEvaluation(newInst2, new outerObj.Inner(1))
+    checkObjectExprEvaluation(newInst3, new outerObj.Inner(1))
   }
 
   test("LambdaVariable should support interpreted execution") {

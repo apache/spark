@@ -358,6 +358,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
             } else {
               tuple
             }
+          case (m: String, args: Seq[TreeNode[_]]) =>
+            val newArgs = args.map {
+              case arg: TreeNode[_] if containsChild(arg) =>
+                val newChild = f(arg.asInstanceOf[BaseType])
+                if (!(newChild fastEquals arg)) {
+                  changed = true
+                  newChild
+                } else {
+                  arg
+                }
+              case other => other
+            }
+            m -> newArgs
           case other => other
         }
         case nonChild: AnyRef => nonChild

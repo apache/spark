@@ -88,7 +88,8 @@ object RowEncoder {
       val obj = NewInstance(
         udtClass,
         Nil,
-        dataType = ObjectType(udtClass), false)
+        dataType = ObjectType(udtClass),
+        propagateNull = false)
       Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
     case TimestampType =>

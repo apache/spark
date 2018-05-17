@@ -327,11 +327,10 @@ object JavaTypeInference {
           } else {
             AssertNotNull(constructor, Seq("currently no type path record in java"))
           }
-          p.getWriteMethod.getName -> setter
-        }.toMap
+          (p.getWriteMethod.getName, setter :: Nil)
+        }
 
-        val newInstance = NewInstance(other, Nil, ObjectType(other), propagateNull = false)
-        val result = InitializeJavaBean(newInstance, setters)
+        val result = NewInstance(other, Nil, ObjectType(other), setters, propagateNull = false)
 
         if (path.nonEmpty) {
           expressions.If(

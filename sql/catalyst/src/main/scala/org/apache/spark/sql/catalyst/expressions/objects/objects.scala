@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -284,9 +283,9 @@ case class StaticInvoke(
 /**
  * Retrieves the value of a static field against the given class.
  *
- * @param objectClass The class from which to retrieve the static field
- * @param dataType    The expected type of the static field
- * @param fieldName   The name of the field to retrieve
+ * @param objectClass The class from which to retrieve the static field.
+ * @param dataType    The expected type of the static field.
+ * @param fieldName   The name of the field to retrieve.
  */
 case class StaticField(
     objectClass: Class[_],
@@ -337,7 +336,7 @@ case class Invoke(
     dataType: DataType,
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true,
-    returnNullable : Boolean = true) extends InvokeLike {
+    returnNullable: Boolean = true) extends InvokeLike {
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
@@ -440,16 +439,19 @@ object NewInstance {
       cls: Class[_],
       arguments: Seq[Expression],
       dataType: DataType,
+      initializations: Seq[(String, Seq[Expression])] = Nil,
       propagateNull: Boolean = true): NewInstance =
-    new NewInstance(cls, arguments, propagateNull, dataType, None)
+    new NewInstance(cls, arguments, initializations, propagateNull, dataType, None)
 }
 
 /**
  * Constructs a new instance of the given class, using the result of evaluating the specified
- * expressions as arguments.
+ * expressions as arguments and initializations as subsequent method calls.
  *
  * @param cls The class to construct.
  * @param arguments A list of expression to use as arguments to the constructor.
+ * @param initializations A list of method-name and argument expression tuples to invoke against
+ *                        the newly constructed instance object.
  * @param propagateNull When true, if any of the arguments is null, then null will be returned
  *                      instead of trying to construct the object.
  * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
@@ -463,6 +465,7 @@ object NewInstance {
 case class NewInstance(
     cls: Class[_],
     arguments: Seq[Expression],
+    initializations: Seq[(String, Seq[Expression])],
     propagateNull: Boolean,
     dataType: DataType,
     outerPointer: Option[() => AnyRef]) extends InvokeLike {
@@ -470,7 +473,7 @@ case class NewInstance(
 
   override def nullable: Boolean = needNullCheck
 
-  override def children: Seq[Expression] = arguments
+  override def children: Seq[Expression] = arguments ++ initializations.flatMap(_._2)
 
   override lazy val resolved: Boolean = {
     // If the class to construct is an inner class, we need to get its outer pointer, or this
@@ -504,9 +507,47 @@ case class NewInstance(
     }
   }
 
+  private lazy val resolvedInitializers = {
+    initializations.map {
+      case (methodName, expressions) =>
+        val parameterTypes = ScalaReflection.expressionJavaClasses(expressions)
+        // Find all possible signatures where a parameter can be generic
+        val expandedParameterTypes = parameterTypes +: parameterTypes.indices.toSet.subsets.map {
+          indices => indices.foldLeft(parameterTypes) { case (paramList, index) =>
+            paramList.updated(index, classOf[Object])
+          }
+        }.toSeq
+
+        val methods = expandedParameterTypes.flatMap { paramTypes =>
+          try {
+            Some(cls.getDeclaredMethod(methodName, paramTypes: _*))
+          } catch {
+            case e: NoSuchMethodException => None
+          }
+        }
+
+        if (methods.isEmpty) {
+          throw new NoSuchMethodException(s"""A method named "$methodName" is not declared """ +
+            s"in any enclosing class nor any supertype of ${cls.getName}")
+        }
+
+        methods.head -> expressions
+    }
+  }
+
   override def eval(input: InternalRow): Any = {
     val argValues = arguments.map(_.eval(input))
-    constructor(argValues.map(_.asInstanceOf[AnyRef]))
+    val instance = constructor(argValues.map(_.asInstanceOf[AnyRef]))
+
+    if (instance != null) {
+      val instanceObject = instance.asInstanceOf[Object]
+      resolvedInitializers.foreach {
+        case (method, methodArguments) =>
+          val args = methodArguments.map(expr => expr.eval(input).asInstanceOf[AnyRef])
+          method.invoke(instanceObject, args: _*)
+      }
+    }
+    instance
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -524,11 +565,27 @@ case class NewInstance(
       s"new $className($argString)"
     }
 
+    val initializationCodes = initializations.map {
+      case (method, methodArguments) =>
+        val fieldsGen = methodArguments.map(_.genCode(ctx))
+
+        s"""
+          ${fieldsGen.map(f => f.code).mkString("\n")}
+          ${ev.value}.$method(${fieldsGen.map(f => f.value).mkString(", ")});
+         """
+    }
+
+    val initializationCode = ctx.splitExpressionsWithCurrentInputs(
+      expressions = initializationCodes,
+      funcName = "initializeNewInstance",
+      extraArguments = javaType -> ev.value.toString :: Nil)
+
     val code = s"""
       $argCode
       ${outer.map(_.code).getOrElse("")}
       final $javaType ${ev.value} = ${ev.isNull} ?
         ${CodeGenerator.defaultValue(dataType)} : $constructorCall;
+      $initializationCode
     """
     ev.copy(code = code)
   }
@@ -1573,89 +1630,6 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
   }
 
   override def dataType: DataType = ObjectType(tag.runtimeClass)
-}
-
-/**
- * Initialize a Java Bean instance by setting its field values via setters.
- */
-case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Expression])
-  extends Expression with NonSQLExpression {
-
-  override def nullable: Boolean = beanInstance.nullable
-  override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
-  override def dataType: DataType = beanInstance.dataType
-
-  private lazy val resolvedSetters = {
-    assert(beanInstance.dataType.isInstanceOf[ObjectType])
-
-    val ObjectType(beanClass) = beanInstance.dataType
-    setters.map {
-      case (name, expr) =>
-        // Looking for known type mapping.
-        // But also looking for general `Object`-type parameter for generic methods.
-        val paramTypes = ScalaReflection.expressionJavaClasses(Seq(expr)) ++ Seq(classOf[Object])
-        val methods = paramTypes.flatMap { fieldClass =>
-          try {
-            Some(beanClass.getDeclaredMethod(name, fieldClass))
-          } catch {
-            case e: NoSuchMethodException => None
-          }
-        }
-        if (methods.isEmpty) {
-          throw new NoSuchMethodException(s"""A method named "$name" is not declared """ +
-            "in any enclosing class nor any supertype")
-        }
-        methods.head -> expr
-    }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val instance = beanInstance.eval(input)
-    if (instance != null) {
-      val bean = instance.asInstanceOf[Object]
-      resolvedSetters.foreach {
-        case (setter, expr) =>
-          val paramVal = expr.eval(input)
-          // We don't call setter if input value is null.
-          if (paramVal != null) {
-            setter.invoke(bean, paramVal.asInstanceOf[AnyRef])
-          }
-      }
-    }
-    instance
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val instanceGen = beanInstance.genCode(ctx)
-
-    val javaBeanInstance = ctx.freshName("javaBean")
-    val beanInstanceJavaType = CodeGenerator.javaType(beanInstance.dataType)
-
-    val initialize = setters.map {
-      case (setterMethod, fieldValue) =>
-        val fieldGen = fieldValue.genCode(ctx)
-        s"""
-           |${fieldGen.code}
-           |if (!${fieldGen.isNull}) {
-           |  $javaBeanInstance.$setterMethod(${fieldGen.value});
-           |}
-         """.stripMargin
-    }
-    val initializeCode = ctx.splitExpressionsWithCurrentInputs(
-      expressions = initialize.toSeq,
-      funcName = "initializeJavaBean",
-      extraArguments = beanInstanceJavaType -> javaBeanInstance :: Nil)
-
-    val code =
-      s"""
-         |${instanceGen.code}
-         |$beanInstanceJavaType $javaBeanInstance = ${instanceGen.value};
-         |if (!${instanceGen.isNull}) {
-         |  $initializeCode
-         |}
-       """.stripMargin
-    ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
-  }
 }
 
 /**
