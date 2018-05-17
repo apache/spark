@@ -213,6 +213,12 @@ private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
+private[spark] case class CheckNoMissingPartitions(shuffleId: Int)
+  extends MapOutputTrackerMessage
+private[spark] case class CheckAndRegisterShuffle(shuffleId: Int, numMaps: Int)
+  extends MapOutputTrackerMessage
+private[spark] case class RegisterMapOutput(shuffleId: Int, mapId: Int, status: MapStatus)
+  extends MapOutputTrackerMessage
 
 private[spark] case class GetMapOutputMessage(shuffleId: Int, context: RpcCallContext)
 
@@ -233,6 +239,28 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
       context.reply(true)
       stop()
+
+    case CheckNoMissingPartitions(shuffleId: Int) =>
+      logInfo(s"Checking missing partitions for $shuffleId")
+      // If get None from findMissingPartitions, just return a non-empty Seq
+      val missing = tracker.findMissingPartitions(shuffleId).getOrElse(Seq(0))
+      if (missing.isEmpty) {
+        context.reply(true)
+      } else {
+        context.reply(false)
+      }
+
+    case CheckAndRegisterShuffle(shuffleId: Int, numMaps: Int) =>
+      logInfo(s"Trying to register shuffle $shuffleId")
+      if (!tracker.shuffleStatuses.contains(shuffleId)) {
+        tracker.registerShuffle(shuffleId, numMaps)
+        logDebug(s"Shuffle $shuffleId doesn't exist, register it now")
+      }
+      context.reply(true)
+
+    case RegisterMapOutput(shuffleId: Int, mapId: Int, status: MapStatus) =>
+      tracker.registerMapOutput(shuffleId, mapId, status)
+      context.reply(true)
   }
 }
 
@@ -691,7 +719,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    *
    * (It would be nice to remove this restriction in the future.)
    */
-  private def getStatuses(shuffleId: Int): Array[MapStatus] = {
+  def getStatuses(shuffleId: Int): Array[MapStatus] = {
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
@@ -746,7 +774,6 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       statuses
     }
   }
-
 
   /** Unregister shuffle data. */
   def unregisterShuffle(shuffleId: Int): Unit = {

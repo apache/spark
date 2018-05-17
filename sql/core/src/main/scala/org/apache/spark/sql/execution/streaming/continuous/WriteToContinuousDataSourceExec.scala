@@ -61,11 +61,7 @@ case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPla
       // to the driver, as ContinuousWriteRDD outputs nothing.
       val totalShuffleNum = query.collect { case s: ShuffleExchangeExec => true }.length
       sparkContext.setLocalProperty("spark.streaming.totalShuffleNumber", totalShuffleNum.toString)
-      sparkContext.runJob(
-        rdd,
-        (context: TaskContext, iter: Iterator[InternalRow]) =>
-          WriteToContinuousDataSourceExec.run(writerFactory, context, iter),
-        rdd.partitions.indices)
+      rdd.collect()
     } catch {
       case _: InterruptedException =>
         // Interruption is how continuous queries are ended, so accept and ignore the exception.

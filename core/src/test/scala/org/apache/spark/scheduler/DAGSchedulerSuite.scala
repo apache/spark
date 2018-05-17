@@ -604,7 +604,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    *
    * Note: [] means an RDD, (s_*) means a shuffle dependency, (one) means a one-to-one dependency.
    */
- 
+
   test("submit All stages in continuous processing") {
     // reset the test context
     afterEach()
@@ -630,7 +630,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // cache the rddE
     val rddE = new MyRDD(sc, 1, List(new OneToOneDependency(rddD))).cache()
     val rddF = new MyRDD(sc, 1, List(new OneToOneDependency(rddE)))
-  
+
     // set cacheLocations of rddE
     cacheLocations(rddE.id -> 0) =
       Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
