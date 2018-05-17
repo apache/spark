@@ -37,15 +37,13 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
   with ImplicitCastInputTypes {
 
-  private val caseSensitive = SQLConf.get.caseSensitiveAnalysis
-
   @transient protected lazy val elementType: DataType =
     inputTypes.head.asInstanceOf[ArrayType].elementType
 
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, hasNull1), ArrayType(e2, hasNull2)) =>
-        TypeCoercion.findTightestCommonType(e1, e2, caseSensitive) match {
+        TypeCoercion.findTightestCommonType(e1, e2) match {
           case Some(dt) => Seq(ArrayType(dt, hasNull1), ArrayType(dt, hasNull2))
           case _ => Seq.empty
         }
