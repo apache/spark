@@ -145,6 +145,8 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
+    // Create a dummy [[TaskAttemptContextImpl]] with configuration to get [[OutputCommitter]]
+    // instance on Spark driver. Note that the job/task/attampt id doesn't matter here.
     val taskAttemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
