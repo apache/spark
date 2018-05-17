@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
@@ -392,9 +396,83 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
     val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
 
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       df2.filter($"a".isin($"b"))
     }
+    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
+      .foreach { s =>
+        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+      }
+  }
+
+  test("isinSet: Scala Set") {
+    val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    checkAnswer(df.filter($"a".isinSet(Set(1, 2))),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isinSet(Set(3, 2))),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isinSet(Set(3, 1))),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
+    // Auto casting should work with mixture of different types in Set
+    checkAnswer(df.filter($"a".isinSet(Set(1.toShort, "2"))),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isinSet(Set("3", 2.toLong))),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isinSet(Set(3, "1"))),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
+    checkAnswer(df.filter($"b".isinSet(Set("y", "x"))),
+      df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".isinSet(Set("z", "x"))),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".isinSet(Set("z", "y"))),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
+
+    val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
+
+    val e = intercept[AnalysisException] {
+      df2.filter($"a".isinSet(Set($"b")))
+    }
+    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
+      .foreach { s =>
+        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+      }
+  }
+
+  test("isinSet: Java Set") {
+    val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    checkAnswer(df.filter($"a".isinSet(Set(1, 2).asJava)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isinSet(Set(3, 2).asJava)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isinSet(Set(3, 1).asJava)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
+    // Auto casting should work with mixture of different types in Set
+    checkAnswer(df.filter($"a".isinSet(Set(1.toShort, "2").asJava)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isinSet(Set("3", 2.toLong).asJava)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isinSet(Set(3, "1").asJava)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
+    checkAnswer(df.filter($"b".isinSet(Set("y", "x").asJava)),
+      df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".isinSet(Set("z", "x").asJava)),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".isinSet(Set("z", "y").asJava)),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
+
+    val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
+
+    val e = intercept[AnalysisException] {
+      df2.filter($"a".isinSet(Set($"b").asJava))
+    }
+    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
+      .foreach { s =>
+        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+      }
   }
 
   test("&&") {

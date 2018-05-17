@@ -149,7 +149,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           newPlan = dedupJoin(
             Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And)))
           exists
-        case In(value, Seq(ListQuery(sub, conditions, _, _))) =>
+        case EqualTo(value, ListQuery(sub, conditions, _, _)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           val inConditions = getValueExpression(value).zip(sub.output).map(EqualTo.tupled)
           val newConditions = (inConditions ++ conditions).reduceLeftOption(And)

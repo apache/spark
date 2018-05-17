@@ -21,7 +21,6 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -219,7 +218,11 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if list.isEmpty && !v.nullable => FalseLiteral
+      case In(v, list) if list.isEmpty =>
+        // When v is not nullable, the following expression will be optimized
+        // to FalseLiteral which is tested in OptimizeInSuite.scala
+        If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
+      case In(v, list) if list.length == 1 => EqualTo(v, list.head)
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
         if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {

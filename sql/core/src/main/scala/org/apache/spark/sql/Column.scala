@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.InterfaceStability
@@ -785,6 +786,24 @@ class Column(val expr: Expression) extends Logging {
    */
   @scala.annotation.varargs
   def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided Set.
+   *
+   * @group expr_ops
+   * @since 2.4.0
+   */
+  def isinSet(values: scala.collection.Set[_]): Column = isin(values.toSeq: _*)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided Set.
+   *
+   * @group java_expr_ops
+   * @since 2.4.0
+   */
+  def isinSet(values: java.util.Set[_]): Column = isinSet(values.asScala)
 
   /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
