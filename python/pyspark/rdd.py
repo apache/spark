@@ -206,6 +206,7 @@ class RDD(object):
         self._jrdd = jrdd
         self.is_cached = False
         self.is_checkpointed = False
+        self._is_barrier = False
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
         self._id = jrdd.id()
@@ -330,6 +331,10 @@ class RDD(object):
         checkpointFile = self._jrdd.rdd().getCheckpointFile()
         if checkpointFile.isDefined():
             return checkpointFile.get()
+
+    def barrier(self):
+        self._is_barrier = True
+        return self
 
     def map(self, f, preservesPartitioning=False):
         """
@@ -2461,6 +2466,7 @@ class PipelinedRDD(RDD):
                 prev.preservesPartitioning and preservesPartitioning
             self._prev_jrdd = prev._prev_jrdd  # maintain the pipeline
             self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
+        self._is_barrier = prev._is_barrier
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = prev.ctx
@@ -2469,7 +2475,8 @@ class PipelinedRDD(RDD):
         self._id = None
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
-        self.partitioner = prev.partitioner if self.preservesPartitioning else None
+        self.partitioner = \
+            prev.partitioner if self.preservesPartitioning else None
 
     def getNumPartitions(self):
         return self._prev_jrdd.partitions().size()
@@ -2490,7 +2497,10 @@ class PipelinedRDD(RDD):
                                       self._jrdd_deserializer, profiler)
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(), wrapped_func,
                                              self.preservesPartitioning)
-        self._jrdd_val = python_rdd.asJavaRDD()
+        if (self._is_barrier):
+            self._jrdd_val = python_rdd.asJavaRDD().barrier()
+        else:
+            self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:
             self._id = self._jrdd_val.id()

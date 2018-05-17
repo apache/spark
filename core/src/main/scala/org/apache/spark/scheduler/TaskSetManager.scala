@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.barrier.BarrierCoordinator
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
@@ -122,6 +123,21 @@ private[spark] class TaskSetManager(
   // state in order to continue to track and account for the running tasks.
   // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
   private[scheduler] var isZombie = false
+
+  private[scheduler] lazy val barrierCoordinator = {
+    if (isBarrier) {
+      val timeout = conf.getInt("spark.barrier.sync.timeout", 900000)
+      val coordinator = new BarrierCoordinator(tasks.length, timeout, env.rpcEnv)
+      env.rpcEnv.setupEndpoint(s"barrier-${taskSet.stageId}-${taskSet.stageAttemptId}", coordinator)
+      logInfo("Registered BarrierCoordinator endpoint")
+      Some(coordinator)
+    } else {
+      None
+    }
+  }
+
+  // Whether the taskSet is from a barrier stage.
+  private[scheduler] def isBarrier = taskSet.tasks.nonEmpty && taskSet.tasks(0).isBarrier
 
   // Set of pending tasks for each executor. These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
@@ -512,6 +528,7 @@ private[spark] class TaskSetManager(
           execId,
           taskName,
           index,
+          task.partitionId,
           addedFiles,
           addedJars,
           task.localProperties,
@@ -525,6 +542,7 @@ private[spark] class TaskSetManager(
   private def maybeFinishTaskSet() {
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
+      barrierCoordinator.foreach(_.stop())
       if (tasksSuccessful == numTasks) {
         blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(
           taskSet.stageId,
@@ -976,8 +994,8 @@ private[spark] class TaskSetManager(
    */
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
-    // zombie.
-    if (isZombie || numTasks == 1) {
+    // zombie or is from a barrier stage.
+    if (isZombie || isBarrier || numTasks == 1) {
       return false
     }
     var foundTasks = false

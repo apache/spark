@@ -227,7 +227,7 @@ private[spark] class ClientApp extends SparkApplication {
     val driverArgs = new ClientArguments(args)
 
     if (!conf.contains("spark.rpc.askTimeout")) {
-      conf.set("spark.rpc.askTimeout", "10s")
+      conf.set("spark.rpc.askTimeout", "900s")
     }
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 

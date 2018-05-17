@@ -15,14 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.barrier
+
+import scala.reflect.ClassTag
+
+import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.rdd.RDD
+
 
 /**
- * Represents free resources available on an executor.
+ * An RDD that supports running MPI programme.
  */
-private[spark]
-case class WorkerOffer(
-    executorId: String,
-    host: String,
-    cores: Int,
-    address: Option[String] = None)
+class BarrierRDD[T: ClassTag](var prev: RDD[T]) extends RDD[T](prev) {
+
+  override def isBarrier(): Boolean = true
+
+  override def getPartitions: Array[Partition] = prev.partitions
+
+  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
+    prev.iterator(split, context)
+  }
+
+  override def clearDependencies() {
+    super.clearDependencies()
+    prev = null
+  }
+}

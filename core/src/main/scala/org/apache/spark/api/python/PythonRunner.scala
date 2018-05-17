@@ -24,7 +24,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
+import py4j.GatewayServer
+
 import org.apache.spark._
+import org.apache.spark.barrier.BarrierTaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.util._
 
@@ -179,6 +182,21 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         // Python version of driver
         PythonRDD.writeUTF(pythonVer, dataOut)
         // Write out the TaskContextInfo
+        val isBarrier = context.isInstanceOf[BarrierTaskContext]
+        dataOut.writeBoolean(isBarrier)
+        if (isBarrier) {
+          val port = GatewayServer.DEFAULT_PORT + 2 + context.partitionId() * 2
+          val gatewayServer = new GatewayServer(
+            context.asInstanceOf[BarrierTaskContext],
+            port,
+            port + 1,
+            GatewayServer.DEFAULT_CONNECT_TIMEOUT,
+            GatewayServer.DEFAULT_READ_TIMEOUT,
+            null)
+          // TODO: When to stop it?
+          gatewayServer.start()
+          context.addTaskCompletionListener(_ => gatewayServer.shutdown())
+        }
         dataOut.writeInt(context.stageId())
         dataOut.writeInt(context.partitionId())
         dataOut.writeInt(context.attemptNumber())

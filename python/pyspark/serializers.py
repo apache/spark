@@ -706,6 +706,13 @@ def write_int(value, stream):
     stream.write(struct.pack("!i", value))
 
 
+def read_bool(stream):
+    length = stream.read(1)
+    if not length:
+        raise EOFError
+    return struct.unpack("!?", length)[0]
+
+
 def write_with_length(obj, stream):
     write_int(len(obj), stream)
     stream.write(obj)

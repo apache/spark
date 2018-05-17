@@ -1062,7 +1062,7 @@ class DAGScheduler(
             stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
-              Option(sc.applicationId), sc.applicationAttemptId)
+              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier)
           }
 
         case stage: ResultStage =>
@@ -1072,7 +1072,8 @@ class DAGScheduler(
             val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, id, properties, serializedTaskMetrics,
-              Option(jobId), Option(sc.applicationId), sc.applicationAttemptId)
+              Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
+              stage.rdd.isBarrier())
           }
       }
     } catch {
@@ -1308,6 +1309,44 @@ class DAGScheduler(
                 submitWaitingChildStages(shuffleStage)
               }
             }
+        }
+
+      case failure: TaskFailedReason if task.isBarrier =>
+        // Always fail the current stage and retry all the tasks when a barrier task fail.
+        val failedStage = stageIdToStage(task.stageId)
+        logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
+          "due to a barrier task failed.")
+        val message = "Stage failed because a barrier task finished unsuccessfully. " +
+          s"${failure.toErrorString}"
+        try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
+          taskScheduler.cancelTasks(stageId, interruptThread = false)
+        } catch {
+          case e: UnsupportedOperationException =>
+            logInfo(s"Could not cancel tasks for stage $stageId", e)
+        }
+        markStageAsFinished(failedStage, Some(message))
+
+        failedStage.fetchFailedAttemptIds.add(task.stageAttemptId)
+        val shouldAbortStage =
+          failedStage.fetchFailedAttemptIds.size >= maxConsecutiveStageAttempts ||
+            disallowStageRetryForTest
+
+        if (shouldAbortStage) {
+          val abortMessage = if (disallowStageRetryForTest) {
+            "Barrier stage will not retry stage due to testing config"
+          } else {
+            s"""$failedStage (${failedStage.name})
+               |has failed the maximum allowable number of
+               |times: $maxConsecutiveStageAttempts.
+               |Most recent failure reason: $message""".stripMargin.replaceAll("\n", " ")
+          }
+          abortStage(failedStage, abortMessage, None)
+        } else { // update failedStages and make sure a ResubmitFailedStages event is enqueued
+          failedStages += failedStage
+          logInfo(s"Resubmitting $failedStage (${failedStage.name}) due to barrier stage failure.")
+          messageScheduler.schedule(new Runnable {
+            override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+          }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
         }
 
       case Resubmitted =>

@@ -29,6 +29,7 @@ class TaskContext(object):
     """
 
     _taskContext = None
+    _javaContext = None
 
     _attemptNumber = None
     _partitionId = None
@@ -95,3 +96,16 @@ class TaskContext(object):
         Get a local property set upstream in the driver, or None if it is missing.
         """
         return self._localProperties.get(key, None)
+
+    def barrier(self):
+        if self._javaContext is None:
+            raise Exception("not barrier")
+        else:
+            self._javaContext.barrier()
+
+    def hosts(self):
+        if self._javaContext is None:
+            raise Exception("not barrier")
+        else:
+            java_list = self._javaContext.hosts()
+            return [h for h in java_list]

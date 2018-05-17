@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 import java.util.Properties
 
 import org.apache.spark._
+import org.apache.spark.barrier.BarrierTaskContext
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
@@ -49,6 +50,7 @@ import org.apache.spark.util._
  * @param jobId id of the job this task belongs to
  * @param appId id of the app this task belongs to
  * @param appAttemptId attempt id of the app this task belongs to
+ * @param isBarrier whether this task belongs to a barrier sync stage.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
@@ -60,7 +62,8 @@ private[spark] abstract class Task[T](
       SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
-    val appAttemptId: Option[String] = None) extends Serializable {
+    val appAttemptId: Option[String] = None,
+    val isBarrier: Boolean = false) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
@@ -77,16 +80,30 @@ private[spark] abstract class Task[T](
       attemptNumber: Int,
       metricsSystem: MetricsSystem): T = {
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
-    context = new TaskContextImpl(
-      stageId,
-      stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
-      partitionId,
-      taskAttemptId,
-      attemptNumber,
-      taskMemoryManager,
-      localProperties,
-      metricsSystem,
-      metrics)
+    context = if (isBarrier) {
+      new BarrierTaskContext(
+        stageId,
+        stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
+        partitionId,
+        taskAttemptId,
+        attemptNumber,
+        taskMemoryManager,
+        localProperties,
+        metricsSystem,
+        metrics)
+    } else {
+      new TaskContextImpl(
+        stageId,
+        stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
+        partitionId,
+        taskAttemptId,
+        attemptNumber,
+        taskMemoryManager,
+        localProperties,
+        metricsSystem,
+        metrics)
+    }
+
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
