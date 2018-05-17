@@ -1130,8 +1130,6 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
   """)
 case class Concat(children: Seq[Expression]) extends Expression {
 
-  private def maxArrayLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -1172,9 +1170,10 @@ case class Concat(children: Seq[Expression]) extends Expression {
       } else {
         val arrayData = inputs.map(_.asInstanceOf[ArrayData])
         val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
-        if (numberOfElements > maxArrayLength) {
+        if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
-            s" elements due to exceeding the array size limit $maxArrayLength.")
+            " elements due to exceeding the array size limit " +
+            ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
         }
         val finalData = new Array[AnyRef](numberOfElements.toInt)
         var position = 0
@@ -1232,9 +1231,10 @@ case class Concat(children: Seq[Expression]) extends Expression {
         |for (int z = 0; z < ${children.length}; z++) {
         |  $numElements += args[z].numElements();
         |}
-        |if ($numElements > $maxArrayLength) {
+        |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
         |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $numElements +
-        |    " elements due to exceeding the array size limit $maxArrayLength.");
+        |    " elements due to exceeding the array size limit " +
+        |    ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
         |}
       """.stripMargin
 
@@ -1329,8 +1329,6 @@ case class Concat(children: Seq[Expression]) extends Expression {
   since = "2.4.0")
 case class Flatten(child: Expression) extends UnaryExpression {
 
-  private def maxArrayLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-
   @transient
   private lazy val childDataType: ArrayType = child.dataType.asInstanceOf[ArrayType]
 
@@ -1359,9 +1357,10 @@ case class Flatten(child: Expression) extends UnaryExpression {
     } else {
       val arrayData = elements.map(_.asInstanceOf[ArrayData])
       val numberOfElements = arrayData.foldLeft(0L)((sum, e) => sum + e.numElements())
-      if (numberOfElements > maxArrayLength) {
+      if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
         throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-          s"$numberOfElements elements due to exceeding the array size limit $maxArrayLength.")
+          s"$numberOfElements elements due to exceeding the array size limit " +
+          ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
       }
       val flattenedData = new Array(numberOfElements.toInt)
       var position = 0
@@ -1408,9 +1407,10 @@ case class Flatten(child: Expression) extends UnaryExpression {
       |for (int z = 0; z < $childVariableName.numElements(); z++) {
       |  $variableName += $childVariableName.getArray(z).numElements();
       |}
-      |if ($variableName > $maxArrayLength) {
+      |if ($variableName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
       |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-      |    $variableName + " elements due to exceeding the array size limit $maxArrayLength.");
+      |    $variableName + " elements due to exceeding the array size limit " +
+      |    ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
       |}
       """.stripMargin
     (code, variableName)
@@ -1490,8 +1490,6 @@ case class Flatten(child: Expression) extends UnaryExpression {
 case class ArrayRepeat(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
-  private def maxArrayLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-
   override def dataType: ArrayType = ArrayType(left.dataType, left.nullable)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType)
@@ -1503,9 +1501,9 @@ case class ArrayRepeat(left: Expression, right: Expression)
     if (count == null) {
       null
     } else {
-      if (count.asInstanceOf[Int] > maxArrayLength) {
+      if (count.asInstanceOf[Int] > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
         throw new RuntimeException(s"Unsuccessful try to create array with $count elements " +
-          s"due to exceeding the array size limit $maxArrayLength.");
+          s"due to exceeding the array size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
       }
       val element = left.eval(input)
       new GenericArrayData(Array.fill(count.asInstanceOf[Int])(element))
@@ -1564,9 +1562,10 @@ case class ArrayRepeat(left: Expression, right: Expression)
          |if ($count > 0) {
          |  $numElements = $count;
          |}
-         |if ($numElements > $maxArrayLength) {
+         |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
          |  throw new RuntimeException("Unsuccessful try to create array with " + $numElements +
-         |    " elements due to exceeding the array size limit $maxArrayLength.");
+         |    " elements due to exceeding the array size limit " +
+         |    ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
          |}
        """.stripMargin
 
