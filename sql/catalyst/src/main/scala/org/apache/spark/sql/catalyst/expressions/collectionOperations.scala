@@ -1523,7 +1523,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
     val resultCode = nullElementsProtection(ev, rightGen.isNull, coreLogic)
 
     ev.copy(code =
-      s"""
+      code"""
          |boolean ${ev.isNull} = false;
          |${leftGen.code}
          |${rightGen.code}
