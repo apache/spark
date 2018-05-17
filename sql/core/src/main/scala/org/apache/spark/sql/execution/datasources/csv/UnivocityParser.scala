@@ -235,9 +235,8 @@ private[csv] object UnivocityParser {
   def tokenizeStream(
       inputStream: InputStream,
       dropFirstRecord: Boolean,
-      checkFirstRecord: Array[String] => Unit,
       tokenizer: CsvParser): Iterator[Array[String]] = {
-    convertStream(inputStream, dropFirstRecord, tokenizer, checkFirstRecord)(tokens => tokens)
+    convertStream(inputStream, dropFirstRecord, tokenizer)(tokens => tokens)
   }
 
   /**
@@ -264,7 +263,7 @@ private[csv] object UnivocityParser {
       inputStream: InputStream,
       dropFirstRecord: Boolean,
       tokenizer: CsvParser,
-      checkFirstRecord: Array[String] => Unit)(
+      checkFirstRecord: Array[String] => Unit = _ => ())(
       convert: Array[String] => T) = new Iterator[T] {
     tokenizer.beginParsing(inputStream)
     private var nextRecord = {

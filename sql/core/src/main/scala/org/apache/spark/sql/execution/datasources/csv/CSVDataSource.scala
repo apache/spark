@@ -298,15 +298,12 @@ object MultiLineCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
-    // The header is not checked because there is no schema against with it could be check
-    def checkHeader(header: Array[String]): Unit = ()
 
     csv.flatMap { lines =>
       val path = new Path(lines.getPath())
       UnivocityParser.tokenizeStream(
         CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
         dropFirstRecord = false,
-        checkHeader,
         new CsvParser(parsedOptions.asParserSettings))
     }.take(1).headOption match {
       case Some(firstRow) =>
@@ -318,7 +315,6 @@ object MultiLineCSVDataSource extends CSVDataSource {
               lines.getConfiguration,
               new Path(lines.getPath())),
             parsedOptions.headerFlag,
-            checkHeader,
             new CsvParser(parsedOptions.asParserSettings))
         }
         val sampled = CSVUtils.sample(tokenRDD, parsedOptions)
