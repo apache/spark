@@ -105,14 +105,14 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       val keyCopy = key.copy()
       val valueCopy = value.copy()
       mapToUpdate.put(keyCopy, valueCopy)
-      writeUpdateToDeltaFile(compressedStream, keyCopy, valueCopy)
+      deltaFileHandler.writeKeyValue(compressedStream, keyCopy, valueCopy)
     }
 
     override def remove(key: UnsafeRow): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
-        writeRemoveToDeltaFile(compressedStream, key)
+        deltaFileHandler.writeRemove(compressedStream, key)
       }
     }
 
@@ -146,7 +146,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       // the other used for read+write. We don't want the read-only to delete state files.
       if (state == UPDATING) {
         state = ABORTED
-        cancelDeltaFile(compressedStream, deltaFileStream)
+        deltaFileHandler.cancelFile(compressedStream, deltaFileStream)
       } else {
         state = ABORTED
       }
@@ -248,11 +248,14 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   private lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
+  private val deltaFileHandler: DeltaFileHandler = new DeltaFileHandler
+  private val snapshotFileHandler: SnapshotFileHandler = new SnapshotFileHandler
+
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 
   private def commitUpdates(newVersion: Long, map: MapType, output: DataOutputStream): Unit = {
     synchronized {
-      finalizeDeltaFile(output)
+      deltaFileHandler.finalizeWriting(output)
       putStateIntoStateCacheMap(newVersion, map)
     }
   }
@@ -319,7 +322,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       "Note that this is normal for the first batch of starting query.")
 
     val (result, elapsedMs) = Utils.timeTakenMs {
-      val snapshotCurrentVersionMap = readSnapshotFile(version)
+      val snapshotCurrentVersionMap = snapshotFileHandler.readFromFile(version)
       if (snapshotCurrentVersionMap.isDefined) {
         synchronized { putStateIntoStateCacheMap(version, snapshotCurrentVersionMap.get) }
         return snapshotCurrentVersionMap.get
@@ -338,7 +341,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         } else {
           lastAvailableMap =
             synchronized { Option(loadedMaps.get(lastAvailableVersion)) }
-              .orElse(readSnapshotFile(lastAvailableVersion))
+              .orElse(snapshotFileHandler.readFromFile(lastAvailableVersion))
         }
       }
 
@@ -346,7 +349,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       // The last available version is the one with a full snapshot, so it doesn't need deltas.
       val resultMap = new MapType(lastAvailableMap.get)
       for (deltaVersion <- lastAvailableVersion + 1 to version) {
-        updateFromDeltaFile(deltaVersion, resultMap)
+        deltaFileHandler.updateFromDeltaFile(deltaVersion, resultMap)
       }
 
       synchronized { putStateIntoStateCacheMap(version, resultMap) }
@@ -358,178 +361,186 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     result
   }
 
-  private def writeUpdateToDeltaFile(
-      output: DataOutputStream,
-      key: UnsafeRow,
-      value: UnsafeRow): Unit = {
-    val keyBytes = key.getBytes()
-    val valueBytes = value.getBytes()
-    output.writeInt(keyBytes.size)
-    output.write(keyBytes)
-    output.writeInt(valueBytes.size)
-    output.write(valueBytes)
-  }
+  /**
+   * Helper to manipulate HDFS backed state store file.
+   *
+   * Key/Value is written to store file as follow:
+   *
+   * Key Size (Int) | Key (bytes) | Value Size (Int) | Value (bytes)
+   *
+   * and removal of key is written to store file as follow:
+   *
+   * Key Size (Int) | Key (bytes) | -1 (magic number for tombstone)
+   *
+   * Magic number "-1" is written at the end of file to represent EOF, which enables to determine
+   * whether the file is finalized or not.
+   */
+  private trait HDFSBackedStateStoreFileOps {
+    val MAGIC_NUMBER_VALUE_END_OF_FILE: Int = -1
+    val MAGIC_NUMBER_VALUE_TOMBSTONE: Int = -1
 
-  private def writeRemoveToDeltaFile(output: DataOutputStream, key: UnsafeRow): Unit = {
-    val keyBytes = key.getBytes()
-    output.writeInt(keyBytes.size)
-    output.write(keyBytes)
-    output.writeInt(-1)
-  }
-
-  private def finalizeDeltaFile(output: DataOutputStream): Unit = {
-    output.writeInt(-1)  // Write this magic number to signify end of file
-    output.close()
-  }
-
-  private def updateFromDeltaFile(version: Long, map: MapType): Unit = {
-    val fileToRead = deltaFile(version)
-    var input: DataInputStream = null
-    val sourceStream = try {
-      fm.open(fileToRead)
-    } catch {
-      case f: FileNotFoundException =>
-        throw new IllegalStateException(
-          s"Error reading delta file $fileToRead of $this: $fileToRead does not exist", f)
+    def writeKeyValue(output: DataOutputStream, key: UnsafeRow, value: UnsafeRow): Unit = {
+      val keyBytes = key.getBytes()
+      val valueBytes = value.getBytes()
+      output.writeInt(keyBytes.size)
+      output.write(keyBytes)
+      output.writeInt(valueBytes.size)
+      output.write(valueBytes)
     }
-    try {
-      input = decompressStream(sourceStream)
-      var eof = false
 
-      while(!eof) {
-        val keySize = input.readInt()
-        if (keySize == -1) {
-          eof = true
-        } else if (keySize < 0) {
-          throw new IOException(
-            s"Error reading delta file $fileToRead of $this: key size cannot be $keySize")
-        } else {
-          val keyRowBuffer = new Array[Byte](keySize)
-          ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
+    def writeRemove(output: DataOutputStream, key: UnsafeRow): Unit = {
+      val keyBytes = key.getBytes()
+      output.writeInt(keyBytes.size)
+      output.write(keyBytes)
+      output.writeInt(MAGIC_NUMBER_VALUE_TOMBSTONE)
+    }
 
-          val keyRow = new UnsafeRow(keySchema.fields.length)
-          keyRow.pointTo(keyRowBuffer, keySize)
+    def finalizeWriting(output: DataOutputStream): Unit = {
+      output.writeInt(MAGIC_NUMBER_VALUE_END_OF_FILE)
+      output.close()
+    }
 
-          val valueSize = input.readInt()
-          if (valueSize < 0) {
-            map.remove(keyRow)
+    def readSize(input: DataInputStream): Int = {
+      input.readInt()
+    }
+
+    def readKeyData(input: DataInputStream, schema: StructType, size: Int): UnsafeRow = {
+      val rowBuffer = new Array[Byte](size)
+      ByteStreams.readFully(input, rowBuffer, 0, size)
+
+      val row = new UnsafeRow(schema.fields.length)
+      row.pointTo(rowBuffer, size)
+
+      row
+    }
+
+    def readValueData(input: DataInputStream, schema: StructType, size: Int): UnsafeRow = {
+      val valueRowBuffer = new Array[Byte](size)
+      ByteStreams.readFully(input, valueRowBuffer, 0, size)
+
+      val row = new UnsafeRow(schema.fields.length)
+
+      // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+      // This is a workaround for the following:
+      // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+      // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+      row.pointTo(valueRowBuffer, (size / 8) * 8)
+
+      row
+    }
+
+    def updateMapFromFile(fileToRead: Path, map: MapType, enableDeletingRow: Boolean): Unit = {
+      var input: DataInputStream = null
+      val sourceStream = fm.open(fileToRead)
+      try {
+        input = decompressStream(sourceStream)
+        var eof = false
+
+        while(!eof) {
+          val keySize = readSize(input)
+          if (keySize == MAGIC_NUMBER_VALUE_END_OF_FILE) {
+            eof = true
+          } else if (keySize < 0) {
+            throw new IOException(
+              s"Error reading file $fileToRead of $this: key size cannot be $keySize")
           } else {
-            val valueRowBuffer = new Array[Byte](valueSize)
-            ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
-            val valueRow = new UnsafeRow(valueSchema.fields.length)
-            // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
-            // This is a workaround for the following:
-            // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
-            // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
-            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
-            map.put(keyRow, valueRow)
+            val keyRow = readKeyData(input, keySchema, keySize)
+
+            val valueSize = readSize(input)
+            if (enableDeletingRow && valueSize == MAGIC_NUMBER_VALUE_TOMBSTONE) {
+              map.remove(keyRow)
+            } else if (valueSize < 0) {
+              throw new IOException(
+                s"Error reading file $fileToRead of $this: value size cannot be $valueSize")
+            } else {
+              val valueRow = readValueData(input, valueSchema, valueSize)
+              map.put(keyRow, valueRow)
+            }
           }
         }
+      } finally {
+        if (input != null) input.close()
       }
-    } finally {
-      if (input != null) input.close()
     }
-    logInfo(s"Read delta file for version $version of $this from $fileToRead")
-  }
 
-  private def writeSnapshotFile(version: Long, map: MapType): Unit = {
-    val targetFile = snapshotFile(version)
-    var rawOutput: CancellableFSDataOutputStream = null
-    var output: DataOutputStream = null
-    try {
-      rawOutput = fm.createAtomic(targetFile, overwriteIfPossible = true)
-      output = compressStream(rawOutput)
-      val iter = map.entrySet().iterator()
-      while(iter.hasNext) {
-        val entry = iter.next()
-        val keyBytes = entry.getKey.getBytes()
-        val valueBytes = entry.getValue.getBytes()
-        output.writeInt(keyBytes.size)
-        output.write(keyBytes)
-        output.writeInt(valueBytes.size)
-        output.write(valueBytes)
+    def dumpMapToFile(fileToWrite: Path, map: MapType): Unit = {
+      var rawOutput: CancellableFSDataOutputStream = null
+      var output: DataOutputStream = null
+      try {
+        rawOutput = fm.createAtomic(fileToWrite, overwriteIfPossible = true)
+        output = compressStream(rawOutput)
+        val iter = map.entrySet().iterator()
+        while(iter.hasNext) {
+          val entry = iter.next()
+          writeKeyValue(output, entry.getKey, entry.getValue)
+        }
+        finalizeWriting(output)
+      } catch {
+        case e: Throwable =>
+          cancelFile(compressedStream = output, rawStream = rawOutput)
+          throw e
       }
-      output.writeInt(-1)
-      output.close()
-    } catch {
-      case e: Throwable =>
-        cancelDeltaFile(compressedStream = output, rawStream = rawOutput)
-        throw e
     }
-    logInfo(s"Written snapshot file for version $version of $this at $targetFile")
-  }
 
-  /**
-   * Try to cancel the underlying stream and safely close the compressed stream.
-   *
-   * @param compressedStream the compressed stream.
-   * @param rawStream the underlying stream which needs to be cancelled.
-   */
-  private def cancelDeltaFile(
-      compressedStream: DataOutputStream,
-      rawStream: CancellableFSDataOutputStream): Unit = {
-    try {
-      if (rawStream != null) rawStream.cancel()
-      IOUtils.closeQuietly(compressedStream)
-    } catch {
-      case e: FSError if e.getCause.isInstanceOf[IOException] =>
+    /**
+     * Try to cancel the underlying stream and safely close the compressed stream.
+     *
+     * @param compressedStream the compressed stream.
+     * @param rawStream the underlying stream which needs to be cancelled.
+     */
+    def cancelFile(compressedStream: DataOutputStream,
+                   rawStream: CancellableFSDataOutputStream): Unit = {
+      try {
+        if (rawStream != null) rawStream.cancel()
+        IOUtils.closeQuietly(compressedStream)
+      } catch {
+        case e: FSError if e.getCause.isInstanceOf[IOException] =>
         // Closing the compressedStream causes the stream to write/flush flush data into the
         // rawStream. Since the rawStream is already closed, there may be errors.
         // Usually its an IOException. However, Hadoop's RawLocalFileSystem wraps
         // IOException into FSError.
-    }
-  }
-
-  private def readSnapshotFile(version: Long): Option[MapType] = {
-    val fileToRead = snapshotFile(version)
-    val map = new MapType()
-    var input: DataInputStream = null
-
-    try {
-      input = decompressStream(fm.open(fileToRead))
-      var eof = false
-
-      while (!eof) {
-        val keySize = input.readInt()
-        if (keySize == -1) {
-          eof = true
-        } else if (keySize < 0) {
-          throw new IOException(
-            s"Error reading snapshot file $fileToRead of $this: key size cannot be $keySize")
-        } else {
-          val keyRowBuffer = new Array[Byte](keySize)
-          ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
-
-          val keyRow = new UnsafeRow(keySchema.fields.length)
-          keyRow.pointTo(keyRowBuffer, keySize)
-
-          val valueSize = input.readInt()
-          if (valueSize < 0) {
-            throw new IOException(
-              s"Error reading snapshot file $fileToRead of $this: value size cannot be $valueSize")
-          } else {
-            val valueRowBuffer = new Array[Byte](valueSize)
-            ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
-            val valueRow = new UnsafeRow(valueSchema.fields.length)
-            // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
-            // This is a workaround for the following:
-            // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
-            // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
-            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
-            map.put(keyRow, valueRow)
-          }
-        }
       }
-      logInfo(s"Read snapshot file for version $version of $this from $fileToRead")
-      Some(map)
-    } catch {
-      case _: FileNotFoundException =>
-        None
-    } finally {
-      if (input != null) input.close()
+    }
+
+  }
+
+  /** Handler of delta file. Write operations are defined in [[HDFSBackedStateStoreFileOps]]. */
+  private class DeltaFileHandler extends HDFSBackedStateStoreFileOps {
+    def updateFromDeltaFile(version: Long, map: MapType): Unit = {
+      val fileToRead = deltaFile(version)
+      try {
+        updateMapFromFile(fileToRead, map, enableDeletingRow = true)
+      } catch {
+        case f: FileNotFoundException =>
+          throw new IllegalStateException(
+            s"Error reading delta file $fileToRead of $this: $fileToRead does not exist", f)
+      }
+      logInfo(s"Read delta file for version $version of $this from $fileToRead")
     }
   }
 
+  /** Handler of snapshot file. */
+  private class SnapshotFileHandler extends HDFSBackedStateStoreFileOps {
+    def readFromFile(version: Long): Option[MapType] = {
+      val fileToRead = snapshotFile(version)
+      val map = new MapType()
+
+      try {
+        updateMapFromFile(fileToRead, map, enableDeletingRow = false)
+        logInfo(s"Read snapshot file for version $version of $this from $fileToRead")
+        Some(map)
+      } catch {
+        case _: FileNotFoundException =>
+          None
+      }
+    }
+
+    def writeToFile(version: Long, map: MapType): Unit = {
+      val targetFile = snapshotFile(version)
+      dumpMapToFile(targetFile, map)
+      logInfo(s"Written snapshot file for version $version of $this at $targetFile")
+    }
+  }
 
   /** Perform a snapshot of the store to allow delta files to be consolidated */
   private def doSnapshot(): Unit = {
@@ -544,7 +555,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         synchronized { Option(loadedMaps.get(lastVersion)) } match {
           case Some(map) =>
             if (deltaFilesForLastVersion.size > storeConf.minDeltasForSnapshot) {
-              val (_, e2) = Utils.timeTakenMs(writeSnapshotFile(lastVersion, map))
+              val (_, e2) = Utils.timeTakenMs(snapshotFileHandler.writeToFile(lastVersion, map))
               logDebug(s"writeSnapshotFile() took $e2 ms.")
             }
           case None =>
