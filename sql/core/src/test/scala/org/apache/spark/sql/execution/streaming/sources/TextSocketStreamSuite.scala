@@ -330,8 +330,8 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         serverThread.enqueue(i.toString)
       }
       tasks.asScala.foreach {
-        case t: TextSocketContinuousDataReaderFactory =>
-          val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousDataReader]
+        case t: TextSocketContinuousInputPartition =>
+          val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousInputPartitionReader]
           for (i <- 0 until numRecords / 2) {
             r.next()
             offsets.append(r.getOffset().asInstanceOf[ContinuousRecordPartitionOffset].offset)
@@ -393,8 +393,8 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       serverThread.enqueue(i.toString)
     }
     tasks.asScala.foreach {
-      case t: TextSocketContinuousDataReaderFactory =>
-        val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousDataReader]
+      case t: TextSocketContinuousInputPartition =>
+        val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousInputPartitionReader]
         for (i <- 0 until numRecords / 2) {
           r.next()
           assert(r.get().get(0).isInstanceOf[(String, Timestamp)])

@@ -139,7 +139,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
 
     startOffset.offsets.zipWithIndex.map {
       case (offset, i) =>
-        TextSocketContinuousDataReaderFactory(
+        TextSocketContinuousInputPartition(
           endpointName, i, offset, includeTimestamp): InputPartition[Row]
     }.asJava
 
@@ -217,9 +217,9 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
 }
 
 /**
- * Continuous text socket data reader factory.
+ * Continuous text socket input partition.
  */
-case class TextSocketContinuousDataReaderFactory(
+case class TextSocketContinuousInputPartition(
     driverEndpointName: String,
     partitionId: Int,
     startOffset: Int,
@@ -227,16 +227,16 @@ case class TextSocketContinuousDataReaderFactory(
 extends InputPartition[Row] {
 
   override def createPartitionReader(): InputPartitionReader[Row] =
-    new TextSocketContinuousDataReader(driverEndpointName, partitionId, startOffset,
+    new TextSocketContinuousInputPartitionReader(driverEndpointName, partitionId, startOffset,
       includeTimestamp)
 }
 
 /**
- * Continuous text socket data reader.
+ * Continuous text socket input partition reader.
  *
  * Polls the driver endpoint for new records.
  */
-class TextSocketContinuousDataReader(
+class TextSocketContinuousInputPartitionReader(
     driverEndpointName: String,
     partitionId: Int,
     startOffset: Int,
