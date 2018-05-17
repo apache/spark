@@ -39,6 +39,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
 
   override def afterEach(): Unit = {
     ctx.markTaskCompleted(None)
+    TaskContext.unset()
     ctx = null
     super.afterEach()
   }
