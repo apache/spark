@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -2116,17 +2115,6 @@ case class Concat(children: Seq[Expression]) extends Expression {
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    val unsafeArraySizeInBytes = s"""
-      |long $arraySizeName = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-      |  $numElemName,
-      |  ${elementType.defaultSize});
-      |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
-      |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $arraySizeName +
-      |    " bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH bytes" +
-      |    " for UnsafeArrayData.");
-      |}
-      """.stripMargin
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
     s"""
@@ -2869,6 +2857,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
        |$arrayDataName = new $genericArrayClass($arrayName);
      """.stripMargin
   }
+
 }
 
 /**
@@ -3391,37 +3380,32 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val i = ctx.freshName("i")
+    val value = ctx.freshName("value")
+    val size = ctx.freshName("size")
     val ary = ctx.freshName("ary")
     val arraySetUtils = "org.apache.spark.sql.catalyst.expressions.ArraySetLike"
     val genericArrayData = classOf[GenericArrayData].getName
-    val unsafeArrayData = classOf[UnsafeArrayData].getName
     val openHashSet = classOf[OpenHashSet[_]].getName
-    val (postFix, classTag, getter, javaTypeName, arrayBuilder) = if (!cn) {
+    val (postFix, classTag, getter, setter, javaTypeName, arrayBuilder) = if (!cn) {
       val ptName = CodeGenerator.primitiveTypeName(elementType)
       elementType match {
         case ByteType | ShortType | IntegerType | LongType =>
+          val uary = ctx.freshName("uary")
           (if (elementType == LongType) s"$$mcJ$$sp" else s"$$mcI$$sp",
-            s"scala.reflect.ClassTag$$.MODULE$$.$ptName()", s"get$ptName($i)",
-            CodeGenerator.javaType(elementType),
+            s"scala.reflect.ClassTag$$.MODULE$$.$ptName()",
+            s"get$ptName($i)", s"set$ptName($i, $value)", CodeGenerator.javaType(elementType),
             s"""
-             |long numBytes = (long) ${elementType.defaultSize} * $ary.length;
-             |long unsafeArraySizeInBytes =
-             |  $unsafeArrayData.calculateHeaderPortionInBytes($ary.length) +
-             |    org.apache.spark.unsafe.array.ByteArrayMethods
-             |      .roundNumberOfBytesToNearestWord(numBytes);
-             |if (unsafeArraySizeInBytes <= Integer.MAX_VALUE) {
-             |  ${ev.value} = $unsafeArrayData.fromPrimitiveArray($ary);
-             |} else {
-             |  ${ev.value} = new $genericArrayData($ary);
-             |}
+             |${ctx.createUnsafeArray(uary, size, elementType, s" $prettyName failed.")}
+             |${ev.value} = $uary;
            """.stripMargin)
         case _ =>
           val et = ctx.addReferenceObj("elementType", elementType)
-          ("", s"scala.reflect.ClassTag$$.MODULE$$.Object()", s"get($i, $et)",
-           "Object", s"${ev.value} = new $genericArrayData($ary);")
+          ("", s"scala.reflect.ClassTag$$.MODULE$$.Object()",
+           s"get($i, $et)", s"update($i, $value)", "Object",
+           s"${ev.value} = new $genericArrayData(new Object[$size]);")
       }
     } else {
-      ("", "", "", "", "")
+      ("", "", "", "", "", "")
     }
 
     val hs = ctx.freshName("hs")
@@ -3438,17 +3422,17 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
            |  $hs2.add$postFix($ary2.$getter);
            |}
            |$secondLoop
-           |$javaTypeName[] $ary = new $javaTypeName[$hs.size()];
+           |int $size = $hs.size();
+           |$arrayBuilder
            |int $invalidPos = $openHashSet.INVALID_POS();
            |int $pos = $hs.nextPos(0);
            |int $i = 0;
            |while ($pos != $invalidPos) {
-           |  $ary[$i] = ($javaTypeName) $hs.getValue$postFix($pos);
+           |  $javaTypeName $value = ($javaTypeName) $hs.getValue$postFix($pos);
+           |  ${ev.value}.$setter;
            |  $pos = $hs.nextPos($pos + 1);
            |  $i++;
            |}
-           |
-           |$arrayBuilder
          """.stripMargin
       } else {
         val setOp = if (typeId == ArraySetLike.kindUnion) {

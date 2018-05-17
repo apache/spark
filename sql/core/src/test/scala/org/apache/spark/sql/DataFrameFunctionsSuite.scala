@@ -1147,30 +1147,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df5.select(array_union($"a", $"b")), ans5)
     checkAnswer(df5.selectExpr("array_union(a, b)"), ans5)
 
-    val df6 = Seq((Array(1), Array("a"))).toDF("a", "b")
-    val ans6 = Row(Seq("1", "a"))
-    checkAnswer(df6.select(array_union($"a", $"b")), ans6)
-    checkAnswer(df6.selectExpr("array_union(a, b)"), ans6)
+    val df6 = Seq((null, Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df6.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df6.selectExpr("array_union(a, b)")
+    }
 
-    val df7 = Seq((null, Array("a"))).toDF("a", "b")
-    val ans7 = Row(null)
-    checkAnswer(df7.select(array_union($"a", $"b")), ans7)
-    checkAnswer(df7.selectExpr("array_union(a, b)"), ans7)
+    val df7 = Seq((null, null)).toDF("a", "b")
+    intercept[AnalysisException] {
+      df7.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df7.selectExpr("array_union(a, b)")
+    }
 
-    val df8 = Seq((null, null)).toDF("a", "b")
+    val df8 = Seq((Array(Array(1)), Array("a"))).toDF("a", "b")
     intercept[AnalysisException] {
       df8.select(array_union($"a", $"b"))
     }
     intercept[AnalysisException] {
       df8.selectExpr("array_union(a, b)")
-    }
-
-    val df9 = Seq((Array(Array(1)), Array("a"))).toDF("a", "b")
-    intercept[AnalysisException] {
-      df9.select(array_union($"a", $"b"))
-    }
-    intercept[AnalysisException] {
-      df9.selectExpr("array_union(a, b)")
     }
   }
 
