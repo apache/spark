@@ -102,12 +102,18 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
         queue.addListener(listener)
 
       case None =>
-        val newQueue = new AsyncEventQueue(queue, conf, metrics)
+        val newQueue = new AsyncEventQueue(queue, conf, metrics, this)
         newQueue.addListener(listener)
         if (started.get()) {
           newQueue.start(sparkContext)
         }
         queues.add(newQueue)
+    }
+  }
+
+  private[scheduler] def removeQueue(queue: String): Unit = synchronized {
+    queues.asScala.find(_.name == queue).foreach { q =>
+      queues.remove(q)
     }
   }
 
