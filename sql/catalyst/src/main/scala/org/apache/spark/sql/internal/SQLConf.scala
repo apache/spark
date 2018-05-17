@@ -1253,6 +1253,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val TOP_K_SORT_FALLBACK_THRESHOLD =
+    buildConf("spark.sql.execution.topKSortFallbackThreshold")
+      .internal()
+      .doc("In SQL queries with a SORT followed by a LIMIT like " +
+          "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
+          " in memory, otherwise do a global sort which spills to disk if necessary.")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1423,6 +1432,8 @@ class SQLConf extends Serializable with Logging {
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
+
+  def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

@@ -492,6 +492,35 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("arrays_overlap function") {
+    val df = Seq(
+      (Seq[Option[Int]](Some(1), Some(2)), Seq[Option[Int]](Some(-1), Some(10))),
+      (Seq[Option[Int]](Some(1), Some(2)), Seq[Option[Int]](Some(-1), None)),
+      (Seq[Option[Int]](Some(3), Some(2)), Seq[Option[Int]](Some(1), Some(2)))
+    ).toDF("a", "b")
+
+    val answer = Seq(Row(false), Row(null), Row(true))
+
+    checkAnswer(df.select(arrays_overlap(df("a"), df("b"))), answer)
+    checkAnswer(df.selectExpr("arrays_overlap(a, b)"), answer)
+
+    checkAnswer(
+      Seq((Seq(1, 2, 3), Seq(2.0, 2.5))).toDF("a", "b").selectExpr("arrays_overlap(a, b)"),
+      Row(true))
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(array(1, 2, 3), array('a', 'b', 'c'))")
+    }
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(null, null)")
+    }
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(map(1, 2), map(3, 4))")
+    }
+  }
+
   test("slice function") {
     val df = Seq(
       Seq(1, 2, 3),
