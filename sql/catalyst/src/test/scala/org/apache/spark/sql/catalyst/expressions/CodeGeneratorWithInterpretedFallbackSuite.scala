@@ -24,34 +24,18 @@ import org.apache.spark.sql.types.{IntegerType, LongType}
 
 class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanTestBase {
 
-  // Given a factory object and corresponding input, checking if `SQLConf.CODEGEN_FACTORY_MODE`
-  // can switch between codegen/interpreted implementation.
-  private def testCodegenFactory[IN, OUT](factory: CodeGeneratorWithInterpretedFallback[IN, OUT],
-      input: IN, checkerForCodegen: OUT => Unit, checkerForInterpreted: OUT => Unit) = {
-
-    val modes = Seq("CODEGEN_ONLY", "NO_CODEGEN")
-      .zip(Seq(checkerForCodegen, checkerForInterpreted))
-
-    for ((fallbackMode, checker) <- modes) {
-      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode) {
-        val obj = factory.createObject(input)
-        checker(obj)
-      }
-    }
-  }
-
-  test("test UnsafeProjection factory") {
+  test("UnsafeProjection with codegen factory mode") {
     val input = Seq(LongType, IntegerType)
       .zipWithIndex.map(x => BoundReference(x._2, x._1, true))
 
-    def checkerForCodegen(projection: UnsafeProjection): Unit = {
-      assert(projection.getClass.getName.contains("GeneratedClass$SpecificUnsafeProjection"))
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+      val obj = UnsafeProjection.createObject(input)
+      assert(obj.getClass.getName.contains("GeneratedClass$SpecificUnsafeProjection"))
     }
 
-    def checkerForInterpreted(projection: UnsafeProjection): Unit = {
-      assert(projection.isInstanceOf[InterpretedUnsafeProjection])
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+      val obj = UnsafeProjection.createObject(input)
+      assert(obj.isInstanceOf[InterpretedUnsafeProjection])
     }
-
-    testCodegenFactory(UnsafeProjection, input, checkerForCodegen, checkerForInterpreted)
   }
 }
