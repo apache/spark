@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.thriftserver
 import java.io.PrintStream
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -48,6 +50,16 @@ private[hive] object SparkSQLEnv extends Logging {
       val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
       sparkContext = sparkSession.sparkContext
       sqlContext = sparkSession.sqlContext
+
+      val currentUser = UserGroupInformation.getCurrentUser
+      if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
+        logInfo("Add credentials from token for proxy user")
+        val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+        val credentials = currentUser.getCredentials
+        val tokenManager = new HadoopDelegationTokenManager(sparkConf, hadoopConf)
+        tokenManager.obtainDelegationTokens(hadoopConf, credentials)
+        currentUser.addCredentails(credentials)
+      }
 
       val metadataHive = sparkSession
         .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
