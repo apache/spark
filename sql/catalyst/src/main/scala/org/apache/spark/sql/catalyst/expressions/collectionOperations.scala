@@ -839,6 +839,9 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
+  @transient
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
@@ -870,7 +873,6 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
 
   override protected def nullSafeEval(input: Any): Any = {
     var min: Any = null
-    val ordering = TypeUtils.getInterpretedOrdering(dataType)
     input.asInstanceOf[ArrayData].foreach(dataType, (_, item) =>
       if (item != null && (min == null || ordering.lt(item, min))) {
         min = item
@@ -903,6 +905,9 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
+  @transient
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
@@ -934,7 +939,6 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
   override protected def nullSafeEval(input: Any): Any = {
     var max: Any = null
-    val ordering = TypeUtils.getInterpretedOrdering(dataType)
     input.asInstanceOf[ArrayData].foreach(dataType, (_, item) =>
       if (item != null && (max == null || ordering.gt(item, max))) {
         max = item
