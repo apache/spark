@@ -28,7 +28,9 @@ case class GetRecord(offset: ContinuousRecordPartitionOffset)
  * A RPC end point for continuous readers to poll for
  * records from the driver.
  *
- * @param buckets the data buckets
+ * @param buckets the data buckets. Each bucket contains a sequence of items to be
+ *                returned for a partition. The number of buckets should be equal to
+ *                to the number of partitions.
  * @param lock a lock object for locking the buckets for read
  */
 class ContinuousRecordEndpoint(buckets: Seq[Seq[Any]], lock: Object)
@@ -36,6 +38,12 @@ class ContinuousRecordEndpoint(buckets: Seq[Seq[Any]], lock: Object)
 
   private var startOffsets: Seq[Int] = List.fill(buckets.size)(0)
 
+  /**
+   * Sets the start offset.
+   *
+   * @param offsets the base offset per partition to be used
+   *                while retrieving the data in {#receiveAndReply}.
+   */
   def setStartOffsets(offsets: Seq[Int]): Unit = {
     lock.synchronized {
       startOffsets = offsets
