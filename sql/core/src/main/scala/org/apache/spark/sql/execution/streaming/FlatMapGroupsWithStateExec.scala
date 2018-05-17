@@ -138,7 +138,6 @@ case class FlatMapGroupsWithStateExec(
           case _ =>
             iter
         }
-
         // Generate a iterator that returns the rows grouped by the grouping function
         // Note that this code ensures that the filtering for timeout occurs only after
         // all the data has been processed. This is to ensure that the timeout information of all
@@ -206,11 +205,11 @@ case class FlatMapGroupsWithStateExec(
             throw new IllegalStateException(
               s"Cannot filter timed out keys for $timeoutConf")
         }
-        val timingOutKeys = store.getRange(None, None).filter { rowPair =>
+        val timingOutPairs = store.getRange(None, None).filter { rowPair =>
           val timeoutTimestamp = getTimeoutTimestamp(rowPair.value)
           timeoutTimestamp != NO_TIMESTAMP && timeoutTimestamp < timeoutThreshold
         }
-        timingOutKeys.flatMap { rowPair =>
+        timingOutPairs.flatMap { rowPair =>
           callFunctionAndUpdateState(rowPair.key, Iterator.empty, rowPair.value, hasTimedOut = true)
         }
       } else Iterator.empty

@@ -778,35 +778,39 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       CheckNewAnswer(("b", "-1"), ("c", "1")),
       assertNumStateRows(total = 1, updated = 2),
 
-      AddData(inputData, "c"),
-      AdvanceManualClock(20 * 1000),
-      CheckNewAnswer(("c", "2")),
-      assertNumStateRows(total = 1, updated = 1)
+      AdvanceManualClock(12 * 1000),
+      AssertOnQuery { _ => clock.getTimeMillis() == 35000 },
+      Execute { q =>
+        failAfter(streamingTimeout) {
+          while (q.lastProgress.timestamp != "1970-01-01T00:00:35.000Z") {
+            Thread.sleep(1)
+          }
+        }
+      },
+      CheckNewAnswer(("c", "-1")),
+      assertNumStateRows(total = 0, updated = 0)
     )
   }
 
   test("flatMapGroupsWithState - streaming with event time timeout + watermark") {
-    // Function to maintain the max event time
-    // Returns the max event time in the state, or -1 if the state was removed by timeout
+    // Function to maintain the max event time, and set the timeout timestamp based on the current
+    // max event time seen. It returns the max event time in the state, or -1 if the state was
+    // removed by timeout.
     val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
       assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
       assertCanGetWatermark { state.getCurrentWatermarkMs() >= -1 }
 
-      val timeoutDelay = 5
-      if (key != "a") {
-        Iterator.empty
+      val timeoutDelaySec = 5
+      if (state.hasTimedOut) {
+        state.remove()
+        Iterator((key, -1))
       } else {
-        if (state.hasTimedOut) {
-          state.remove()
-          Iterator((key, -1))
-        } else {
-          val valuesSeq = values.toSeq
-          val maxEventTime = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
-          val timeoutTimestampMs = maxEventTime + timeoutDelay
-          state.update(maxEventTime)
-          state.setTimeoutTimestamp(timeoutTimestampMs * 1000)
-          Iterator((key, maxEventTime.toInt))
-        }
+        val valuesSeq = values.toSeq
+        val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
+        val timeoutTimestampSec = maxEventTimeSec + timeoutDelaySec
+        state.update(maxEventTimeSec)
+        state.setTimeoutTimestamp(timeoutTimestampSec * 1000)
+        Iterator((key, maxEventTimeSec.toInt))
       }
     }
     val inputData = MemoryStream[(String, Int)]
@@ -819,13 +823,23 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
         .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
 
     testStream(result, Update)(
-      StartStream(Trigger.ProcessingTime("1 second")),
-      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)), // Set timeout timestamp of ...
-      CheckNewAnswer(("a", 15)),                           // "a" to 15 + 5 = 20s, watermark to 5s
+      StartStream(),
+
+      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+      // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+      CheckNewAnswer(("a", 15)),  // Output = max event time of a
+
       AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
       CheckNewAnswer(),                   // No output as data should get filtered by watermark
-      AddData(inputData, ("dummy", 35)),  // Set watermark = 35 - 10 = 25s
-      CheckNewAnswer(("a", -1))           // State for "a" should timeout and emit -1
+
+      AddData(inputData, ("a", 10)),      // Add data newer than watermark for "a"
+      CheckNewAnswer(("a", 15)),          // Max event time is still the same
+      // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
+      // Watermark is still 5 as max event time for all data is still 15.
+
+      AddData(inputData, ("b", 31)),      // Add data newer than watermark for "b", not "a"
+      // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
+      CheckNewAnswer(("a", -1), ("b", 31))           // State for "a" should timeout and emit -1
     )
   }
 
