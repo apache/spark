@@ -22,13 +22,14 @@ import java.util.UUID
 import org.apache.spark.{Partition, SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.NextIterator
 
 case class ContinuousShuffleReadPartition(index: Int) extends Partition {
   // Initialized only on the executor, and only once even as we call compute() multiple times.
   lazy val (receiver, endpoint) = {
     val env = SparkEnv.get.rpcEnv
-    val receiver = new UnsafeRowReceiver(env)
+    val receiver = new UnsafeRowReceiver(SQLConf.get.continuousStreamingExecutorQueueSize, env)
     val endpoint = env.setupEndpoint(UUID.randomUUID().toString, receiver)
     TaskContext.get().addTaskCompletionListener { ctx =>
       env.stop(endpoint)

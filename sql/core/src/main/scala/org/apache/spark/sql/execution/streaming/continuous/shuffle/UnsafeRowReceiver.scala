@@ -38,11 +38,13 @@ private[shuffle] case class ReceiverEpochMarker() extends UnsafeRowReceiverMessa
  * TODO: Support multiple source tasks. We need to output a single epoch marker once all
  * source tasks have sent one.
  */
-private[shuffle] class UnsafeRowReceiver(val rpcEnv: RpcEnv)
+private[shuffle] class UnsafeRowReceiver(
+      queueSize: Int,
+      override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
   // Note that this queue will be drained from the main task thread and populated in the RPC
   // response thread.
-  private val queue = new ArrayBlockingQueue[UnsafeRowReceiverMessage](1024)
+  private val queue = new ArrayBlockingQueue[UnsafeRowReceiverMessage](queueSize)
   var stopped = new AtomicBoolean(false)
 
   override def onStop(): Unit = {
