@@ -32,9 +32,7 @@ import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
-
 private[clustering] case class TestRow(features: Vector)
-
 
 class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTest {
 

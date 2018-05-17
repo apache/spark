@@ -26,9 +26,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql._
 
-
 object LDASuite {
-
   def generateLDAData(
       spark: SparkSession,
       rows: Int,
