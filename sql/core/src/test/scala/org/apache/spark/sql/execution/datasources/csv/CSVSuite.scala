@@ -1388,7 +1388,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
             .collect()
         }
         assert(exception.getMessage.contains(
-          "CSV file header does not contain the expected fields"
+          "CSV header is not conform to the schema"
         ))
 
         val shortSchema = new StructType().add("f1", DoubleType)
@@ -1434,7 +1434,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
             .collect()
         }
         assert(caseSensitiveException.getMessage.contains(
-          "CSV file header does not contain the expected fields"
+          "CSV header is not conform to the schema"
         ))
       }
     }
@@ -1487,6 +1487,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       spark.read.schema(ischema).option("header", true).option("enforceSchema", false).csv(ds)
     }
 
-    assert(exception.getMessage.contains("CSV file header does not contain the expected fields"))
+    assert(exception.getMessage.contains("CSV header is not conform to the schema"))
   }
 }

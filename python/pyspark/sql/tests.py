@@ -3053,7 +3053,7 @@ class SQLTests(ReusedSQLTestCase):
                 .csv(tmpPath, enforceSchema=False)
             self.assertRaisesRegexp(
                 Exception,
-                "CSV file header does not contain the expected fields",
+                "CSV header is not conform to the schema",
                 lambda: df.collect())
         finally:
             shutil.rmtree(tmpPath)

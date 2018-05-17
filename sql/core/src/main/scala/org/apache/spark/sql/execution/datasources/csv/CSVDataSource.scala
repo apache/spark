@@ -130,9 +130,9 @@ object CSVDataSource {
       schema: StructType,
       columnNames: Array[String],
       fileName: String,
-      checkHeaderFlag: Boolean,
+      enforceSchema: Boolean,
       caseSensitive: Boolean): Unit = {
-    if (checkHeaderFlag && columnNames != null) {
+    if (!enforceSchema && columnNames != null) {
       val fieldNames = schema.map(_.name).toIndexedSeq
       val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
 
@@ -146,10 +146,10 @@ object CSVDataSource {
           }
           if (nameInHeader != nameInSchema) {
             throw new IllegalArgumentException(
-              s"""|CSV file header does not contain the expected fields.
+              s"""|CSV header is not conform to the schema.
                   | Header: ${columnNames.mkString(", ")}
                   | Schema: ${fieldNames.mkString(", ")}
-                  |Expected: ${columnNames(i)} but found: ${fieldNames(i)}
+                  |Expected: ${fieldNames(i)} but found: ${columnNames(i)}
                   |CSV file: $fileName""".stripMargin)
           }
           i += 1
@@ -172,10 +172,10 @@ object CSVDataSource {
       parser: CsvParser,
       schema: StructType,
       fileName: String,
-      checkHeaderFlag: Boolean,
+      enforceSchema: Boolean,
       caseSensitive: Boolean): Unit = {
-    if (checkHeaderFlag) {
-      checkHeaderColumnNames(schema, parser.parseLine(header), fileName, checkHeaderFlag,
+    if (!enforceSchema) {
+      checkHeaderColumnNames(schema, parser.parseLine(header), fileName, enforceSchema,
         caseSensitive)
     }
   }
@@ -207,7 +207,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
         CSVDataSource.checkHeader(header, parser.tokenizer, dataSchema, file.filePath,
-          checkHeaderFlag = !parser.options.enforceSchema, caseSensitive)
+          parser.options.enforceSchema, caseSensitive)
       }
     }
 
@@ -285,7 +285,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
       caseSensitive: Boolean): Iterator[InternalRow] = {
     def checkHeader(header: Array[String]): Unit = {
       CSVDataSource.checkHeaderColumnNames(dataSchema, header, file.filePath,
-        checkHeaderFlag = !parser.options.enforceSchema, caseSensitive)
+        parser.options.enforceSchema, caseSensitive)
     }
 
     UnivocityParser.parseStream(
