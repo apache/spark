@@ -192,11 +192,18 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
     val fillValue = evals.zipWithIndex.map { case (eval, index) =>
       s"""
-      |if ($j == ${index}) {
-      |  $myobject[$j] = ${CodeGenerator.getValue(s"$arrVals[$j]", arrayTypes(index), i)};
-      |}
+      |      if ($j == ${index}) {
+      |        $myobject[$j] = ${CodeGenerator.getValue(s"$arrVals[$j]", arrayTypes(index), i)};
+      |      }
       """.stripMargin
-    }.mkString("\n")
+    }
+
+    val fillValueSplitted = ctx.splitExpressions(
+      expressions = fillValue,
+      funcName = "fillValue",
+      arguments =
+        ("int", j) ::
+        ("Array[] Object", myobject) :: Nil)
 
     ev.copy(s"""
       |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
@@ -208,7 +215,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |  Object[] $myobject = new Object[$numberOfArrays];
       |  for (int $j = 0; $j < $numberOfArrays; $j ++) {
       |    if ($arrVals[$j] != null && $arrCardinality[$j] > $i && !$arrVals[$j].isNullAt($i)) {
-      |      $fillValue;
+      |      $fillValueSplitted
       |    } else {
       |      $myobject[$j] = null;
       |    }
