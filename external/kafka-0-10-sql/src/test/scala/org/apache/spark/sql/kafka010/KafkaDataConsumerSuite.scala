@@ -17,21 +17,19 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.util.ArrayList
 import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.Duration
 import scala.util.Random
 
-import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, ConsumerRecords}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{TaskContext, TaskContextImpl}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.ThreadUtils
 
 class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
 
@@ -120,5 +118,38 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
     } finally {
       threadpool.shutdown()
     }
+  }
+
+
+  test("SPARK-23685: returning record and not throwing exception in fetchData when a " +
+    "specific offset in the user request range is not found ") {
+    val topicPartition = new TopicPartition("testTopic", 0)
+    val data = new ArrayList[ConsumerRecord[Array[Byte], Array[Byte]]]();
+    data.add(new ConsumerRecord("testTopic", 0, 1L, "mykey".getBytes(), "myvalue1".getBytes()))
+    data.add(new ConsumerRecord("testTopic", 0, 2L, "mykey".getBytes(), "myvalue2".getBytes()))
+    data.add(new ConsumerRecord("testTopic", 0, 3L, "mykey".getBytes(), "myvalue3".getBytes()))
+    data.add(new ConsumerRecord("testTopic", 0, 5L, "mykey".getBytes(), "myvalue5".getBytes()))
+    data.add(new ConsumerRecord("testTopic", 0, 6L, "mykey".getBytes(), "myvalue6".getBytes()))
+
+    var recordsMap = new java.util.HashMap[TopicPartition,
+      java.util.List[ConsumerRecord[Array[Byte], Array[Byte]]]]
+    recordsMap.put(topicPartition, data)
+    var consumerRecords = new ConsumerRecords(recordsMap)
+    var fetchedData = consumerRecords.iterator
+
+    var map = new java.util.HashMap[String, Object]
+    map.put("group.id", "groupid")
+    map.put("bootstrap.servers", "http://127.0.0.1:8080")
+    map.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
+    map.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
+
+    val consumer = InternalKafkaConsumer(topicPartition, map)
+    consumer.nextOffsetInFetchedData = 0L
+    consumer.fetchedData = fetchedData
+    // set value for the fetchedData
+    val record = consumer.get(0L, 4L, 100L, true)
+
+    assert(data.get(0) === record)
+
   }
 }
