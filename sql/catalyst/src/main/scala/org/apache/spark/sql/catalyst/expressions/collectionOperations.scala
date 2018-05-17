@@ -164,15 +164,20 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val evals = children.map(_.genCode(ctx))
     val numArrs = evals.length
 
-    val arrCardinality = ctx.freshName("args")
+    val arrCardinality = ctx.freshName("arrCardinality")
     val arrVals = ctx.freshName("arrVals")
 
     val arrayTypes = children.map(_.dataType.asInstanceOf[ArrayType].elementType)
+
     val inputs = evals.zipWithIndex.map { case (eval, index) =>
       s"""
         |${eval.code}
         |if (!${eval.isNull}) {
         |  $arrVals[$index] = ${eval.value};
+        |  $arrCardinality[$index] = ${eval.value}.numElements();
+        |} else {
+        |  $arrVals[$index] = null;
+        |  $arrCardinality[$index] = 0;
         |}
       """.stripMargin
     }.mkString("\n")
@@ -183,10 +188,11 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val i = ctx.freshName("i")
     val args = ctx.freshName("args")
 
-    val retrieveValues = evals.zipWithIndex.map { case (eval, index) =>
+    val fillValue = evals.zipWithIndex.map { case (eval, index) =>
       s"""
-      |${eval.code}
-      |$myobject[$j] = ${eval.value}.get($i, ${arrayTypes(index)});
+      |if ($j == ${index}) {
+      |  $myobject[$j] = ${CodeGenerator.getValue(s"$arrVals[$j]", arrayTypes(index), i)};
+      |}
       """.stripMargin
     }.mkString("\n")
 
@@ -196,21 +202,21 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |$inputs
       |int $biggestCardinality = 0;
       |for (int $i = 0; $i < $numArrs; $i ++) {
-      |  if ($arrVals[$i] == null) {
-      |    $arrCardinality[$i] = 0;
-      |  } else {
-      |    $arrCardinality[$i] = $arrVals[$i].numElements();
-      |  }
       |  $biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$i]);
       |}
       |Object[] $args = new Object[$biggestCardinality];
       |for (int $i = 0; $i < $biggestCardinality; $i ++) {
       |  Object[] $myobject = new Object[$numArrs];
       |  for (int $j = 0; $j < $numArrs; $j ++) {
-      |    $retrieveValues
+      |    if ($arrVals[$j] != null && $arrCardinality[$j] > $i) {
+      |      $fillValue;
+      |    } else {
+      |      $myobject[$j] = null;
+      |    }
       |  }
       |  $args[$i] = new $genericInternalRow($myobject);
       |}
+      |boolean ${ev.isNull} = false;
       |$genericArrayData ${ev.value} = new $genericArrayData($args);
     """.stripMargin)
   }
@@ -223,7 +229,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val numberOfArrays = children.length
     val biggestCardinality = inputArrays.map { arr =>
       if (arr != null) {
-        arr.numElements())
+        arr.numElements()
       } else {
         0
       }
