@@ -3041,22 +3041,22 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
 
     def test_checking_csv_header(self):
-        tmpPath = tempfile.mkdtemp()
-        shutil.rmtree(tmpPath)
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
         try:
             self.spark.createDataFrame([[1, 1000], [2000, 2]])\
-                .toDF('f1', 'f2').write.option("header", "true").csv(tmpPath)
+                .toDF('f1', 'f2').write.option("header", "true").csv(path)
             schema = StructType([
                 StructField('f2', IntegerType(), nullable=True),
                 StructField('f1', IntegerType(), nullable=True)])
             df = self.spark.read.option('header', 'true').schema(schema)\
-                .csv(tmpPath, enforceSchema=False)
+                .csv(path, enforceSchema=False)
             self.assertRaisesRegexp(
                 Exception,
                 "CSV header is not conform to the schema",
                 lambda: df.collect())
         finally:
-            shutil.rmtree(tmpPath)
+            shutil.rmtree(path)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):

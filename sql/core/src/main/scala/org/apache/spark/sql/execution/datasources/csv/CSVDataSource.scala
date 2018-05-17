@@ -298,12 +298,11 @@ object MultiLineCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
-
     csv.flatMap { lines =>
       val path = new Path(lines.getPath())
       UnivocityParser.tokenizeStream(
         CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
-        dropFirstRecord = false,
+        shouldDropHeader = false,
         new CsvParser(parsedOptions.asParserSettings))
     }.take(1).headOption match {
       case Some(firstRow) =>

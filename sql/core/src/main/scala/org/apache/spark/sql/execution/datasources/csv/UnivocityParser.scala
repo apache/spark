@@ -234,9 +234,9 @@ private[csv] object UnivocityParser {
    */
   def tokenizeStream(
       inputStream: InputStream,
-      dropFirstRecord: Boolean,
+      shouldDropHeader: Boolean,
       tokenizer: CsvParser): Iterator[Array[String]] = {
-    convertStream(inputStream, dropFirstRecord, tokenizer)(tokens => tokens)
+    convertStream(inputStream, shouldDropHeader, tokenizer)(tokens => tokens)
   }
 
   /**

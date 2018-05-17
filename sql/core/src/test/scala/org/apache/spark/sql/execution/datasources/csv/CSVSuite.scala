@@ -1387,9 +1387,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(exception.getMessage.contains(
-          "CSV header is not conform to the schema"
-        ))
+        assert(exception.getMessage.contains("CSV header is not conform to the schema"))
 
         val shortSchema = new StructType().add("f1", DoubleType)
         val exceptionForShortSchema = intercept[SparkException] {
@@ -1402,8 +1400,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
             .collect()
         }
         assert(exceptionForShortSchema.getMessage.contains(
-          "Number of column in CSV header is not equal to number of fields in the schema"
-        ))
+          "Number of column in CSV header is not equal to number of fields in the schema"))
 
         val longSchema = new StructType()
           .add("f1", DoubleType)
@@ -1419,9 +1416,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(exceptionForLongSchema.getMessage.contains(
-          "Header length: 2, schema size: 3"
-        ))
+        assert(exceptionForLongSchema.getMessage.contains("Header length: 2, schema size: 3"))
 
         val caseSensitiveSchema = new StructType().add("F1", DoubleType).add("f2", DoubleType)
         val caseSensitiveException = intercept[SparkException] {
@@ -1434,8 +1429,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
             .collect()
         }
         assert(caseSensitiveException.getMessage.contains(
-          "CSV header is not conform to the schema"
-        ))
+          "CSV header is not conform to the schema"))
       }
     }
   }
