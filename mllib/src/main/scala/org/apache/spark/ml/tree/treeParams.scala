@@ -579,7 +579,11 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
-    getLossType match {
+    convertToOldLossType(getLossType)
+  }
+
+  private[ml] def convertToOldLossType(loss: String): OldLoss = {
+    loss match {
       case "squared" => OldSquaredError
       case "absolute" => OldAbsoluteError
       case _ =>

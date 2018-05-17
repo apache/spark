@@ -299,6 +299,15 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
+    expression[RegrCount]("regr_count"),
+    expression[RegrSXX]("regr_sxx"),
+    expression[RegrSYY]("regr_syy"),
+    expression[RegrAvgX]("regr_avgx"),
+    expression[RegrAvgY]("regr_avgy"),
+    expression[RegrSXY]("regr_sxy"),
+    expression[RegrSlope]("regr_slope"),
+    expression[RegrR2]("regr_r2"),
+    expression[RegrIntercept]("regr_intercept"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -419,6 +428,7 @@ object FunctionRegistry {
     expression[Reverse]("reverse"),
     expression[Concat]("concat"),
     expression[Flatten]("flatten"),
+    expression[ArrayRepeat]("array_repeat"),
     CreateStruct.registryEntry,
 
     // misc functions

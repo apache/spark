@@ -887,6 +887,82 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("array_repeat function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
+    val strDF = Seq(
+      ("hi", 2),
+      (null, 2)
+    ).toDF("a", "b")
+
+    val strDFTwiceResult = Seq(
+      Row(Seq("hi", "hi")),
+      Row(Seq(null, null))
+    )
+
+    checkAnswer(strDF.select(array_repeat($"a", 2)), strDFTwiceResult)
+    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), strDFTwiceResult)
+    checkAnswer(strDF.select(array_repeat($"a", $"b")), strDFTwiceResult)
+    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), strDFTwiceResult)
+    checkAnswer(strDF.selectExpr("array_repeat(a, 2)"), strDFTwiceResult)
+    checkAnswer(strDF.selectExpr("array_repeat(a, b)"), strDFTwiceResult)
+
+    val intDF = {
+      val schema = StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType)))
+      val data = Seq(
+        Row(3, 2),
+        Row(null, 2)
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val intDFTwiceResult = Seq(
+      Row(Seq(3, 3)),
+      Row(Seq(null, null))
+    )
+
+    checkAnswer(intDF.select(array_repeat($"a", 2)), intDFTwiceResult)
+    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), intDFTwiceResult)
+    checkAnswer(intDF.select(array_repeat($"a", $"b")), intDFTwiceResult)
+    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), intDFTwiceResult)
+    checkAnswer(intDF.selectExpr("array_repeat(a, 2)"), intDFTwiceResult)
+    checkAnswer(intDF.selectExpr("array_repeat(a, b)"), intDFTwiceResult)
+
+    val nullCountDF = {
+      val schema = StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType)))
+      val data = Seq(
+        Row("hi", null),
+        Row(null, null)
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    checkAnswer(
+      nullCountDF.select(array_repeat($"a", $"b")),
+      Seq(
+        Row(null),
+        Row(null)
+      )
+    )
+
+    // Error test cases
+    val invalidTypeDF = Seq(("hi", "1")).toDF("a", "b")
+
+    intercept[AnalysisException] {
+      invalidTypeDF.select(array_repeat($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      invalidTypeDF.select(array_repeat($"a", lit("1")))
+    }
+    intercept[AnalysisException] {
+      invalidTypeDF.selectExpr("array_repeat(a, 1.0)")
+    }
+
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

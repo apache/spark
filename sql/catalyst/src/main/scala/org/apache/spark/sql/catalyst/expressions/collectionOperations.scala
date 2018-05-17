@@ -1621,3 +1621,152 @@ case class Flatten(child: Expression) extends UnaryExpression {
 
   override def prettyName: String = "flatten"
 }
+
+/**
+ * Returns the array containing the given input value (left) count (right) times.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(element, count) - Returns the array containing element count times.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('123', 2);
+       ['123', '123']
+  """,
+  since = "2.4.0")
+case class ArrayRepeat(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  private val MAX_ARRAY_LENGTH = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+
+  override def dataType: ArrayType = ArrayType(left.dataType, left.nullable)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType)
+
+  override def nullable: Boolean = right.nullable
+
+  override def eval(input: InternalRow): Any = {
+    val count = right.eval(input)
+    if (count == null) {
+      null
+    } else {
+      if (count.asInstanceOf[Int] > MAX_ARRAY_LENGTH) {
+        throw new RuntimeException(s"Unsuccessful try to create array with $count elements " +
+          s"due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+      }
+      val element = left.eval(input)
+      new GenericArrayData(Array.fill(count.asInstanceOf[Int])(element))
+    }
+  }
+
+  override def prettyName: String = "array_repeat"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val leftGen = left.genCode(ctx)
+    val rightGen = right.genCode(ctx)
+    val element = leftGen.value
+    val count = rightGen.value
+    val et = dataType.elementType
+
+    val coreLogic = if (CodeGenerator.isPrimitiveType(et)) {
+      genCodeForPrimitiveElement(ctx, et, element, count, leftGen.isNull, ev.value)
+    } else {
+      genCodeForNonPrimitiveElement(ctx, element, count, leftGen.isNull, ev.value)
+    }
+    val resultCode = nullElementsProtection(ev, rightGen.isNull, coreLogic)
+
+    ev.copy(code =
+      s"""
+         |boolean ${ev.isNull} = false;
+         |${leftGen.code}
+         |${rightGen.code}
+         |${CodeGenerator.javaType(dataType)} ${ev.value} =
+         |  ${CodeGenerator.defaultValue(dataType)};
+         |$resultCode
+       """.stripMargin)
+  }
+
+  private def nullElementsProtection(
+      ev: ExprCode,
+      rightIsNull: String,
+      coreLogic: String): String = {
+    if (nullable) {
+      s"""
+         |if ($rightIsNull) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${coreLogic}
+         |}
+       """.stripMargin
+    } else {
+      coreLogic
+    }
+  }
+
+  private def genCodeForNumberOfElements(ctx: CodegenContext, count: String): (String, String) = {
+    val numElements = ctx.freshName("numElements")
+    val numElementsCode =
+      s"""
+         |int $numElements = 0;
+         |if ($count > 0) {
+         |  $numElements = $count;
+         |}
+         |if ($numElements > $MAX_ARRAY_LENGTH) {
+         |  throw new RuntimeException("Unsuccessful try to create array with " + $numElements +
+         |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+         |}
+       """.stripMargin
+
+    (numElements, numElementsCode)
+  }
+
+  private def genCodeForPrimitiveElement(
+      ctx: CodegenContext,
+      elementType: DataType,
+      element: String,
+      count: String,
+      leftIsNull: String,
+      arrayDataName: String): String = {
+    val tempArrayDataName = ctx.freshName("tempArrayData")
+    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+    val errorMessage = s" $prettyName failed."
+    val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
+
+    s"""
+       |$numElemCode
+       |${ctx.createUnsafeArray(tempArrayDataName, numElemName, elementType, errorMessage)}
+       |if (!$leftIsNull) {
+       |  for (int k = 0; k < $tempArrayDataName.numElements(); k++) {
+       |    $tempArrayDataName.set$primitiveValueTypeName(k, $element);
+       |  }
+       |} else {
+       |  for (int k = 0; k < $tempArrayDataName.numElements(); k++) {
+       |    $tempArrayDataName.setNullAt(k);
+       |  }
+       |}
+       |$arrayDataName = $tempArrayDataName;
+     """.stripMargin
+  }
+
+  private def genCodeForNonPrimitiveElement(
+      ctx: CodegenContext,
+      element: String,
+      count: String,
+      leftIsNull: String,
+      arrayDataName: String): String = {
+    val genericArrayClass = classOf[GenericArrayData].getName
+    val arrayName = ctx.freshName("arrayObject")
+    val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
+
+    s"""
+       |$numElemCode
+       |Object[] $arrayName = new Object[(int)$numElemName];
+       |if (!$leftIsNull) {
+       |  for (int k = 0; k < $numElemName; k++) {
+       |    $arrayName[k] = $element;
+       |  }
+       |}
+       |$arrayDataName = new $genericArrayClass($arrayName);
+     """.stripMargin
+  }
+
+}
