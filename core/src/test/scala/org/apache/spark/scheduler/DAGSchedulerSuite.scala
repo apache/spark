@@ -579,15 +579,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     val mapStageB = scheduler.createShuffleMapStage(shuffleDepB, 1)
     assert(scheduler.getAllAncestorStages(mapStageB).size === 2)
-      
-    submit(rddD, Array(0)) 
-    assert(scheduler.activeJobs.size === 1) 
+
+    submit(rddD, Array(0))
+    assert(scheduler.activeJobs.size === 1)
 
     val finalStage = scheduler.activeJobs.head.finalStage
     assert(scheduler.getAllAncestorStages(finalStage).size === 3)
   }
 
-  /** 
+  /**
    * This test ensure in Continuous Processing model submitJob will submit all stages at-once
    * It constructs the following chain of dependencies:
    *
@@ -595,12 +595,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    *             \                /
    *               <-------------
    * Here, RDD B has a shuffle dependency on RDD A, RDD C has shuffle dependency on both
-   * B and A, RDD D has shuffle dependency on RDD C, RDD E has a one-to-one dependency on RDD D. 
+   * B and A, RDD D has shuffle dependency on RDD C, RDD E has a one-to-one dependency on RDD D.
    * and RDD F has a one-to-one dependency on RDD E.
-   * 
+   *
    * The shuffle dependency IDs are numbers in the DAGScheduler, but to make the example
    * easier to understand, let's call the shuffled data from A shuffle dependency ID s_A,
-   * s_B, s_C is the same meaning 
+   * s_B, s_C is the same meaning.
    *
    * Note: [] means an RDD, (s_*) means a shuffle dependency, (one) means a one-to-one dependency.
    */
@@ -637,10 +637,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val prop = new Properties();
     prop.setProperty(SparkEnv.START_EPOCH_KEY, "0")
     prop.setProperty("spark.streaming.totalShuffleNumber", "3")
-    submit(rddF, Array(0), properties = prop) 
+    submit(rddF, Array(0), properties = prop)
     assert(scheduler.shuffleIdToMapStage.size === 3)
     assert(scheduler.activeJobs.size === 1)
-    assert(scheduler.runningStages.size === 4) 
+    assert(scheduler.runningStages.size === 4)
     assert(scheduler.waitingStages.size === 0)
     assert(scheduler.failedStages.size === 0)
   }
