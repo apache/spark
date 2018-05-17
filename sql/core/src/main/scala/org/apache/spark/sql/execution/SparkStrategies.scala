@@ -361,7 +361,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         case Join(left, right, _, _) if left.isStreaming && right.isStreaming =>
           throw new AnalysisException(
-            "Stream stream joins without equality predicate is not supported", plan = Some(plan))
+            "Stream-stream join without equality predicate is not supported", plan = Some(plan))
 
         case _ => Nil
       }
