@@ -119,4 +119,18 @@ class ContinuousShuffleReadSuite extends StreamTest {
     assert(rdd.compute(rdd.partitions(0), ctx).isEmpty)
     assert(rdd.compute(rdd.partitions(0), ctx).isEmpty)
   }
+
+  test("multiple partitions") {
+    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 5)
+    for (p <- rdd.partitions) {
+      val part = p.asInstanceOf[ContinuousShuffleReadPartition]
+      // Send index to ensure data doesn't somehow cross over between partitions.
+      part.endpoint.askSync[Unit](ReceiverRow(unsafeRow(part.index)))
+      part.endpoint.askSync[Unit](ReceiverEpochMarker())
+
+      val iter = rdd.compute(part, ctx)
+      assert(iter.next().getInt(0) == part.index)
+      assert(!iter.hasNext)
+    }
+  }
 }
