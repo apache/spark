@@ -156,8 +156,8 @@ private[spark] class ExecutorPodsEventHandler(
       kubernetesClient.pods().create(podsToAllocate: _*)
       pendingExecutors.addAll(newExecutorIds)
     } else if (currentRunningExecutors == currentTotalExpectedExecutors) {
-      logDebug("Current number of running executors is equal to the number of requested executors." +
-        " Not scaling up further.")
+      logDebug("Current number of running executors is equal to the number of requested" +
+        " executors. Not scaling up further.")
     } else if (!pendingExecutors.isEmpty) {
       logInfo(s"Still waiting for ${pendingExecutors.size} executors to begin running before" +
         s" requesting for more executors.")
