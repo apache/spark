@@ -379,8 +379,10 @@ class DataFrameReader(OptionUtils):
                               validated against all headers in CSV files or the first header in RDD
                               if the ``header`` option is set to ``true``. Field names in the schema
                               and column names in CSV headers are checked by their positions
-                              taking into account ``spark.sql.caseSensitive``.
-                              If None is set, ``true`` is used by default.
+                              taking into account ``spark.sql.caseSensitive``. If None is set,
+                              ``true`` is used by default. Though the default value is ``true``,
+                              it is recommended to disable the ``enforceSchema`` option
+                              to avoid incorrect results.
         :param ignoreLeadingWhiteSpace: A flag indicating whether or not leading whitespaces from
                                         values being read should be skipped. If None is set, it
                                         uses the default value, ``false``.

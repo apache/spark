@@ -552,7 +552,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * If the option is set to `false`, the schema will be validated against all headers in CSV files
    * in the case when the `header` option is set to `true`. Field names in the schema
    * and column names in CSV headers are checked by their positions taking into account
-   * `spark.sql.caseSensitive`.</li>
+   * `spark.sql.caseSensitive`. Though the default value is true, it is recommended to disable
+   * the `enforceSchema` option to avoid incorrect results.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
    * <li>`samplingRatio` (default is 1.0): defines fraction of rows used for schema inferring.</li>
