@@ -34,7 +34,10 @@ import org.apache.spark.util.Utils
  * Delivery will only begin when the `start()` method is called. The `stop()` method should be
  * called when no more events need to be delivered.
  */
-private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveListenerBusMetrics,
+private class AsyncEventQueue(
+    val name: String,
+    conf: SparkConf,
+    metrics: LiveListenerBusMetrics,
     bus: LiveListenerBus)
   extends SparkListenerBus
   with Logging {

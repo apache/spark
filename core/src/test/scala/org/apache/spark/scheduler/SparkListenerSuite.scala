@@ -504,7 +504,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     bus.start(mockSparkContext, mockMetricsSystem)
 
-    // after we post one event, the shared queue should get stopped because of the interrupt
+    // after we post one event, the shared queue should stop because of the interrupt
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(bus.activeQueues() === Set(APP_STATUS_QUEUE))
