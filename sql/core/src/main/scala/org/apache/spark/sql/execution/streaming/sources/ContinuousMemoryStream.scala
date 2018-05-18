@@ -41,9 +41,9 @@ import org.apache.spark.util.RpcUtils
 
 /**
  * The overall strategy here is:
- *    ContinuousMemoryStream maintains a list of records for each partition. addData() will
+ *  * ContinuousMemoryStream maintains a list of records for each partition. addData() will
  *    distribute records evenly-ish across partitions.
- *    RecordEndpoint is set up as an endpoint for executor-side
+ *  * RecordEndpoint is set up as an endpoint for executor-side
  *    ContinuousMemoryStreamInputPartitionReader instances to poll. It returns the record at
  *    the specified offset within the list, or null if that offset doesn't yet have a record.
  */
