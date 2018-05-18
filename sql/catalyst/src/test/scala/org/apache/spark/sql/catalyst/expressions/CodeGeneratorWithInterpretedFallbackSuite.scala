@@ -28,12 +28,14 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
     val input = Seq(LongType, IntegerType)
       .zipWithIndex.map(x => BoundReference(x._2, x._1, true))
 
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+    val codegenOnly = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
       val obj = UnsafeProjection.createObject(input)
       assert(obj.getClass.getName.contains("GeneratedClass$SpecificUnsafeProjection"))
     }
 
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+    val noCodegen = CodegenObjectFactoryMode.NO_CODEGEN.toString
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> noCodegen) {
       val obj = UnsafeProjection.createObject(input)
       assert(obj.isInstanceOf[InterpretedUnsafeProjection])
     }

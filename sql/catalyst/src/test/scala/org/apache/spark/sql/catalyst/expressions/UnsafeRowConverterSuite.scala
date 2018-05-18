@@ -36,9 +36,10 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
   private def roundedSize(size: Int) = ByteArrayMethods.roundNumberOfBytesToNearestWord(size)
 
   private def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
-    for (fallbackMode <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+    for (fallbackMode <- modes) {
       test(name + " with " + fallbackMode) {
-        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode) {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
           f
         }
       }
