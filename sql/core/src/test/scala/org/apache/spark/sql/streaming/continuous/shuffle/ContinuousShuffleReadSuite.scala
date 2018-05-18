@@ -142,7 +142,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
   test("blocks waiting for new rows") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
 
-    val readRow = new Thread {
+    val readRowThread = new Thread {
       override def run(): Unit = {
         // set the non-inheritable thread local
         TaskContext.setTaskContext(ctx)
@@ -152,13 +152,13 @@ class ContinuousShuffleReadSuite extends StreamTest {
     }
 
     try {
-      readRow.start()
+      readRowThread.start()
       eventually(timeout(streamingTimeout)) {
-        assert(readRow.getState == Thread.State.WAITING)
+        assert(readRowThread.getState == Thread.State.WAITING)
       }
     } finally {
-      readRow.interrupt()
-      readRow.join()
+      readRowThread.interrupt()
+      readRowThread.join()
     }
   }
 }
