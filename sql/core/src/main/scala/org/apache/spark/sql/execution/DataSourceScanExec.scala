@@ -69,7 +69,7 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
    * Shorthand for calling redactString() without specifying redacting rules
    */
   private def redact(text: String): String = {
-    Utils.redact(sqlContext.sessionState.conf.stringRedationPattern, text)
+    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
   }
 }
 

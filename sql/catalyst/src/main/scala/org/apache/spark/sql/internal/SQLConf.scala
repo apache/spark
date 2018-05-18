@@ -1103,8 +1103,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SQL_OPTIONS_REDACTION_PATTERN =
+    buildConf("spark.sql.redaction.options.regex")
+      .doc("Regex to decide which keys in a Spark SQL command's options map contain sensitive " +
+        "information. The values of options whose names that match this regex will be redacted " +
+        "in the explain output. This redaction is applied on top of the global redaction " +
+        s"configuration defined by ${SECRET_REDACTION_PATTERN.key}.")
+    .regexConf
+    .createWithDefault("(?i)url".r)
+
   val SQL_STRING_REDACTION_PATTERN =
-    ConfigBuilder("spark.sql.redaction.string.regex")
+    buildConf("spark.sql.redaction.string.regex")
       .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
         "information. When this regex matches a string part, that string part is replaced by a " +
         "dummy value. This is currently used to redact the output of SQL explain commands. " +
@@ -1331,7 +1340,7 @@ class SQLConf extends Serializable with Logging {
 
   def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
 
-  def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
+  def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
@@ -1628,6 +1637,17 @@ class SQLConf extends Serializable with Logging {
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc)
     }.toSeq
+  }
+
+  /**
+   * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
+   */
+  def redactOptions(options: Map[String, String]): Map[String, String] = {
+    val regexes = Seq(
+      getConf(SQL_OPTIONS_REDACTION_PATTERN),
+      SECRET_REDACTION_PATTERN.readFrom(reader))
+
+    regexes.foldLeft(options.toSeq) { case (opts, r) => Utils.redact(Some(r), opts) }.toMap
   }
 
   /**
