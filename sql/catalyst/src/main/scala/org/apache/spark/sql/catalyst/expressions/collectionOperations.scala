@@ -1246,13 +1246,29 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 case class ArrayPosition(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(right.dataType)
+
   override def dataType: DataType = LongType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case f: TypeCheckResult.TypeCheckFailure => f
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (RowOrdering.isOrderable(right.dataType)) {
+          TypeCheckResult.TypeCheckSuccess
+        } else {
+          TypeCheckResult.TypeCheckFailure(
+            s"${right.dataType.simpleString} cannot be used in comparison.")
+        }
+    }
+  }
+
   override def nullSafeEval(arr: Any, value: Any): Any = {
     arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
-      if (v == value) {
+      if (v != null && ordering.equiv(v, value)) {
         return (i + 1).toLong
       }
     )
