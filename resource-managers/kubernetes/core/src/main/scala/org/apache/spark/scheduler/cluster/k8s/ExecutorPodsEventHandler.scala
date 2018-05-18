@@ -151,6 +151,7 @@ private[spark] class ExecutorPodsEventHandler(
           .addToContainers(executorPod.container)
           .endSpec()
           .build()
+        podsToAllocate.add(podWithAttachedContainer)
         newExecutorIds.add(newExecutorId)
       }
       kubernetesClient.pods().create(podsToAllocate: _*)
