@@ -102,6 +102,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
     send(
       endpoint,
       ReceiverRow(unsafeRow(111)),
+      ReceiverEpochMarker(),
       ReceiverRow(unsafeRow(222)),
       ReceiverRow(unsafeRow(333)),
       ReceiverEpochMarker()
