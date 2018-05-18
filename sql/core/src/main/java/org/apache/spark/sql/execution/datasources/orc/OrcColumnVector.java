@@ -47,7 +47,11 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   OrcColumnVector(DataType type, ColumnVector vector) {
     super(type);
 
-    isTimestamp = type instanceof TimestampType;
+    if (type instanceof TimestampType) {
+      isTimestamp = true;
+    } else {
+      isTimestamp = false;
+    }
 
     baseData = vector;
     if (vector instanceof LongColumnVector) {

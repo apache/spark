@@ -244,17 +244,18 @@ object FileFormatWriter extends Logging {
       iterator: Iterator[InternalRow]): WriteTaskResult = {
 
     val jobId = SparkHadoopWriterUtils.createJobID(new Date, sparkStageId)
+    val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
+    val taskAttemptId = new TaskAttemptID(taskId, sparkAttemptNumber)
 
     // Set up the attempt context required to use in the output committer.
     val taskAttemptContext: TaskAttemptContext = {
-      val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
-      val taskAttemptId = new TaskAttemptID(taskId, sparkAttemptNumber)
       // Set up the configuration object
       val hadoopConf = description.serializableHadoopConf.value
       hadoopConf.set("mapreduce.job.id", jobId.toString)
       hadoopConf.set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
       hadoopConf.set("mapreduce.task.attempt.id", taskAttemptId.toString)
       hadoopConf.setBoolean("mapreduce.task.ismap", true)
+      hadoopConf.setInt("mapreduce.task.partition", 0)
 
       new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
     }
@@ -377,7 +378,7 @@ object FileFormatWriter extends Logging {
         dataSchema = description.dataColumns.toStructType,
         context = taskAttemptContext)
 
-      statsTrackers.foreach(_.newFile(currentPath))
+      statsTrackers.map(_.newFile(currentPath))
     }
 
     override def execute(iter: Iterator[InternalRow]): ExecutedWriteSummary = {
@@ -428,10 +429,10 @@ object FileFormatWriter extends Logging {
       committer: FileCommitProtocol) extends ExecuteWriteTask {
 
     /** Flag saying whether or not the data to be written out is partitioned. */
-    private val isPartitioned = desc.partitionColumns.nonEmpty
+    val isPartitioned = desc.partitionColumns.nonEmpty
 
     /** Flag saying whether or not the data to be written out is bucketed. */
-    private val isBucketed = desc.bucketIdExpression.isDefined
+    val isBucketed = desc.bucketIdExpression.isDefined
 
     assert(isPartitioned || isBucketed,
       s"""DynamicPartitionWriteTask should be used for writing out data that's either
