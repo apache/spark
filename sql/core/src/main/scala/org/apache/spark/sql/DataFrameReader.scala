@@ -474,6 +474,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * it determines the columns as string types and it reads only the first line to determine the
    * names and the number of fields.
    *
+   * If the enforceSchema is set to `false`, only the CSV header in the first line is checked
+   * to conform specified or inferred schema.
+   *
    * @param csvDataset input Dataset with one CSV row per record
    * @since 2.2.0
    */
@@ -544,10 +547,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`enforceSchema` (default `true`): If it is set to `true`, the specified or inferred schema
-   * will be forcibly applied to datasource files and headers in CSV files will be ignored.
-   * If the option is set to `false`, the schema will be validated against headers in CSV files
-   * in the case when the `header` option is set to `true`. The validation is performed in column
-   * ordering aware manner by taking into account `spark.sql.caseSensitive`.</li>
+   * will be forcibly applied to datasource files, and headers in CSV files will be ignored.
+   * If the option is set to `false`, the schema will be validated against all headers in CSV files
+   * in the case when the `header` option is set to `true`. Field names in the schema
+   * and column names in CSV headers are checked by their positions taking into account
+   * `spark.sql.caseSensitive`.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
    * <li>`samplingRatio` (default is 1.0): defines fraction of rows used for schema inferring.</li>
@@ -592,6 +596,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines.</li>
    * </ul>
+   *
    * @since 2.0.0
    */
   @scala.annotation.varargs
