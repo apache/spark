@@ -713,11 +713,11 @@ class Analyzer(
         s"between $left and $right")
 
       right.collect {
-        // For `AnalysisBarrier`, recursively de-duplicate its child.
-        case oldVersion: AnalysisBarrier
+        // For `Barrier`, recursively de-duplicate its child.
+        case oldVersion @ Barrier(child, analysisOnly)
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          val newVersion = dedupRight(left, oldVersion.child)
-          (oldVersion, AnalysisBarrier(newVersion))
+          val newVersion = dedupRight(left, child)
+          (oldVersion, Barrier(newVersion, analysisOnly))
 
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
@@ -1122,7 +1122,7 @@ class Analyzer(
   object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
-      case sa @ Sort(_, _, AnalysisBarrier(child: Aggregate)) => sa
+      case sa @ Sort(_, _, Barrier(child: Aggregate)) => sa
       case sa @ Sort(_, _, child: Aggregate) => sa
 
       case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
@@ -1154,11 +1154,11 @@ class Analyzer(
         (exprs, plan)
       } else {
         plan match {
-          // For `AnalysisBarrier`, recursively resolve expressions and add missing attributes via
+          // For `Barrier`, recursively resolve expressions and add missing attributes via
           // its child.
-          case barrier: AnalysisBarrier =>
-            val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(exprs, barrier.child)
-            (newExprs, AnalysisBarrier(newChild))
+          case Barrier(child, analysisOnly) =>
+            val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(exprs, child)
+            (newExprs, Barrier(newChild, analysisOnly))
 
           case p: Project =>
             val maybeResolvedExprs = exprs.map(resolveExpression(_, p))
@@ -1424,8 +1424,8 @@ class Analyzer(
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-      case Filter(cond, AnalysisBarrier(agg: Aggregate)) =>
-        apply(Filter(cond, agg)).mapChildren(AnalysisBarrier)
+      case Filter(cond, b @ Barrier(agg: Aggregate, analysisOnly)) =>
+        apply(Filter(cond, agg)).mapChildren(Barrier(_, analysisOnly))
       case f @ Filter(cond, agg @ Aggregate(grouping, originalAggExprs, child)) if agg.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
@@ -1483,8 +1483,8 @@ class Analyzer(
           case ae: AnalysisException => f
         }
 
-      case Sort(sortOrder, global, AnalysisBarrier(aggregate: Aggregate)) =>
-        apply(Sort(sortOrder, global, aggregate)).mapChildren(AnalysisBarrier)
+      case Sort(sortOrder, global, b @ Barrier(aggregate: Aggregate, analysisOnly)) =>
+        apply(Sort(sortOrder, global, aggregate)).mapChildren(Barrier(_, analysisOnly))
       case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
 
         // Try resolving the ordering as though it is in the aggregate clause.
@@ -2377,7 +2377,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
 /** Remove the barrier nodes of analysis */
 object EliminateBarriers extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case AnalysisBarrier(child) => child
+    case Barrier(child, true) => child
   }
 }
 

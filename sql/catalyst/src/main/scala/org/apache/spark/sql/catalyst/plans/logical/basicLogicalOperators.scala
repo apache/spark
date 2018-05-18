@@ -918,7 +918,7 @@ case class Deduplicate(
 }
 
 /**
- * A logical plan for setting a barrier of analysis.
+ * A logical plan for setting a barrier of analysis, and optionally a barrier for optimization.
  *
  * The SQL Analyzer goes through a whole query plan even most part of it is analyzed. This
  * increases the time spent on query analysis for long pipelines in ML, especially.
@@ -928,11 +928,30 @@ case class Deduplicate(
  * logical plan and just acts as a wrapper to hide it from analyzer. New operations on the dataset
  * will be put on the barrier, so only the new nodes created will be analyzed.
  *
- * This analysis barrier will be removed at the end of analysis stage.
+ * If the barrier is for analysis only, it will be removed at the end of analysis stage. Otherwise,
+ * which means the barrier has been set by user explicitly as an optimization barrier, it will stay
+ * through the entire process of logical planning so as to apply optimizations independently above
+ * and below this barrier node.
  */
-case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
+trait Barrier extends LeafNode {
+  def child: LogicalPlan
+  def analysisOnly: Boolean
   override protected def innerChildren: Seq[LogicalPlan] = Seq(child)
   override def output: Seq[Attribute] = child.output
   override def isStreaming: Boolean = child.isStreaming
   override def doCanonicalize(): LogicalPlan = child.canonicalized
+  override def computeStats(): Statistics = child.stats
+  override protected def validConstraints: Set[Expression] = child.constraints
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+}
+
+object Barrier {
+  def apply(child: LogicalPlan, analysisOnly: Boolean): Barrier = child match {
+    case Barrier(c, a) => new BarrierImpl(c, a && analysisOnly)
+    case _ => new BarrierImpl(child, analysisOnly)
+  }
+
+  def unapply(b: Barrier): Option[(LogicalPlan, Boolean)] = Some((b.child, b.analysisOnly))
+
+  private case class BarrierImpl(child: LogicalPlan, analysisOnly: Boolean) extends Barrier { }
 }

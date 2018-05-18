@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
-import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -46,7 +45,6 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
 import org.apache.spark.sql.execution.command._
@@ -196,7 +194,7 @@ class Dataset[T] private[sql](
   }
 
   // Wraps analyzed logical plans with an analysis barrier so we won't traverse/resolve it again.
-  @transient private val planWithBarrier = AnalysisBarrier(logicalPlan)
+  @transient private val planWithBarrier = Barrier(logicalPlan, true)
 
   /**
    * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
@@ -1837,9 +1835,13 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def union(other: Dataset[T]): Dataset[T] = withSetOperator {
+    // If there is an optimizer barrier, we skip union flattening.
+    val left = if (planWithBarrier.analysisOnly) logicalPlan else planWithBarrier
+    val right = if (other.planWithBarrier.analysisOnly) other.logicalPlan
+      else other.planWithBarrier
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, other.logicalPlan)).mapChildren(AnalysisBarrier)
+    CombineUnions(Union(left, right)).mapChildren(Barrier(_, true))
   }
 
   /**
@@ -1896,9 +1898,13 @@ class Dataset[T] private[sql](
     val notFoundAttrs = rightOutputAttrs.diff(rightProjectList)
     val rightChild = Project(rightProjectList ++ notFoundAttrs, other.logicalPlan)
 
+    // If there is an optimizer barrier, we skip union flattening.
+    val left = if (planWithBarrier.analysisOnly) logicalPlan else planWithBarrier
+    val right = if (other.planWithBarrier.analysisOnly) rightChild
+      else Barrier(rightChild, false)
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, rightChild)).mapChildren(AnalysisBarrier)
+    CombineUnions(Union(left, right)).mapChildren(Barrier(_, true))
   }
 
   /**
@@ -2972,6 +2978,28 @@ class Dataset[T] private[sql](
   @transient private lazy val rddQueryExecution: QueryExecution = {
     val deserialized = CatalystSerde.deserialize[T](planWithBarrier)
     sparkSession.sessionState.executePlan(deserialized)
+  }
+
+  /**
+   * Returns a new Dataset with a logical barrier on top of this Dataset. This logical barrier
+   * serves as an isolation point for applying optimizer rules, which means these rules will
+   * be applied independently above and below this barrier.
+   *
+   * For example, a filter cannot be pushed down through a barrier, and thus two filters on
+   * each side of the barrier will not be combined.
+   * {{{
+   *   // There will be two filter nodes in the final execution plan:
+   *   peopleDs.where($"age" > 15).withOptimizerBarrier().where($"age" < 50)
+   * }}}
+   *
+   * One typical usage of this barrier is to avoid slow operations (e.g., filters) being pushed
+   * down to the data source.
+   *
+   * @group basic
+   * @since 2.4.0
+   */
+  def withOptimizerBarrier(): Dataset[T] = withTypedPlan {
+    Barrier(logicalPlan, false)
   }
 
   /**

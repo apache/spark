@@ -157,7 +157,20 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       CollapseProject,
       RemoveRedundantProject) :+
     Batch("UpdateAttributeReferences", Once,
-      UpdateNullabilityInAttributeReferences)
+      UpdateNullabilityInAttributeReferences) :+
+    Batch("Barriers", Once,
+      OptimizeBarriers)
+  }
+
+  /**
+   * Optimize all the sub-trees inside [[Barrier]].
+   */
+  object OptimizeBarriers extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Barrier(child, false) =>
+        val newPlan = Optimizer.this.execute(child)
+        Barrier(newPlan, false)
+    }
   }
 
   /**

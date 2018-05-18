@@ -62,7 +62,7 @@ class LogicalPlanSuite extends SparkFunSuite {
 
   test("transformUp skips all ready resolved plans wrapped in analysis barrier") {
     invocationCount = 0
-    val plan = AnalysisBarrier(Project(Nil, Project(Nil, testRelation)))
+    val plan = Barrier(Project(Nil, Project(Nil, testRelation)), true)
     plan transformUp function
 
     assert(invocationCount === 0)
@@ -74,7 +74,7 @@ class LogicalPlanSuite extends SparkFunSuite {
 
   test("transformUp skips partially resolved plans wrapped in analysis barrier") {
     invocationCount = 0
-    val plan1 = AnalysisBarrier(Project(Nil, testRelation))
+    val plan1 = Barrier(Project(Nil, testRelation), true)
     val plan2 = Project(Nil, plan1)
     plan2 transformUp function
 

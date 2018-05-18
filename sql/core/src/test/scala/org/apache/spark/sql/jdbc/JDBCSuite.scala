@@ -313,6 +313,10 @@ class JDBCSuite extends SparkFunSuite
     }
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
+
+    // SPARK-24288: Enable preventing predicate pushdown
+    val df3 = sql("SELECT * FROM foobar").withOptimizerBarrier().where("THEID = 1")
+    assert(checkNotPushdown(df3).collect().size == 1)
   }
 
   test("SELECT COUNT(1) WHERE (predicates)") {
