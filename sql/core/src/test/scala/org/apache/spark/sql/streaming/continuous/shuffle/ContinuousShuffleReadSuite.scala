@@ -29,6 +29,9 @@ class ContinuousShuffleReadSuite extends StreamTest {
       new GenericInternalRow(Array(value: Any)))
   }
 
+  // In this unit test, we emulate that we're in the task thread where
+  // ContinuousShuffleReadRDD.compute() will be evaluated. This requires a task context
+  // thread local to be set.
   var ctx: TaskContextImpl = _
 
   override def beforeEach(): Unit = {
@@ -133,6 +136,24 @@ class ContinuousShuffleReadSuite extends StreamTest {
       val iter = rdd.compute(part, ctx)
       assert(iter.next().getInt(0) == part.index)
       assert(!iter.hasNext)
+    }
+  }
+
+  test("blocks waiting for new rows") {
+    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
+
+    val readRow = new Thread {
+      override def run(): Unit = {
+        // set the non-inheritable thread local
+        TaskContext.setTaskContext(ctx)
+        val epoch = rdd.compute(rdd.partitions(0), ctx)
+        epoch.next().getInt(0)
+      }
+    }
+
+    readRow.start()
+    eventually(timeout(streamingTimeout)) {
+      assert(readRow.getState == Thread.State.WAITING)
     }
   }
 }

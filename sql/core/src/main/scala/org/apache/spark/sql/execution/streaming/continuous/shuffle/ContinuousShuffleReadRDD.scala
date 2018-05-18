@@ -56,7 +56,7 @@ class ContinuousShuffleReadRDD(sc: SparkContext, numPartitions: Int)
     val receiver = split.asInstanceOf[ContinuousShuffleReadPartition].receiver
 
     new NextIterator[UnsafeRow] {
-      override def getNext(): UnsafeRow = receiver.poll() match {
+      override def getNext(): UnsafeRow = receiver.take() match {
         case ReceiverRow(r) => r
         case ReceiverEpochMarker() =>
           finished = true

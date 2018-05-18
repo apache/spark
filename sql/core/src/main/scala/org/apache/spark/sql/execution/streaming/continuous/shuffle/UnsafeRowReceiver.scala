@@ -60,7 +60,7 @@ private[shuffle] class UnsafeRowReceiver(
   }
 
   /**
-   * Polls until a new row is available.
+   * Take the next row, blocking until it's ready.
    */
-  def poll(): UnsafeRowReceiverMessage = queue.poll()
+  def take(): UnsafeRowReceiverMessage = queue.take()
 }
