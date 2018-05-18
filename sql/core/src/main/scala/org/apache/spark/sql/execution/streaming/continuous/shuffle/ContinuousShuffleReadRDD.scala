@@ -30,7 +30,7 @@ case class ContinuousShuffleReadPartition(index: Int, queueSize: Int) extends Pa
   lazy val (reader: ContinuousShuffleReader, endpoint) = {
     val env = SparkEnv.get.rpcEnv
     val receiver = new UnsafeRowReceiver(queueSize, env)
-    val endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID().toString}", receiver)
+    val endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID()}", receiver)
     TaskContext.get().addTaskCompletionListener { ctx =>
       env.stop(endpoint)
     }
