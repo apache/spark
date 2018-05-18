@@ -209,17 +209,13 @@ object YarnSparkHadoopUtil {
       val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
       // Retrieving the filesystem for the nameservices where HA is not enabled
       val filesystemsWithoutHA = nameservices.flatMap { ns =>
-        hadoopConf.get(s"dfs.namenode.rpc-address.$ns") match {
-          case null => None
-          case nameNode => Some(new Path(s"hdfs://$nameNode").getFileSystem(hadoopConf))
-        }
+        Option(hadoopConf.get(s"dfs.namenode.rpc-address.$ns")).map(nameNode =>
+          Some(new Path(s"hdfs://$nameNode").getFileSystem(hadoopConf)))
       }
       // Retrieving the filesystem for the nameservices where HA is enabled
       val filesystemsWithHA = nameservices.flatMap { ns =>
-        hadoopConf.get(s"dfs.ha.namenodes.$ns") match {
-          case null => None
-          case _ => Some(new Path(s"hdfs://$ns").getFileSystem(hadoopConf))
-        }
+        Option(hadoopConf.get(s"dfs.ha.namenodes.$ns")).map(_ =>
+          Some(new Path(s"hdfs://$ns").getFileSystem(hadoopConf)))
       }
       (filesystemsWithoutHA ++ filesystemsWithHA).toSet
     }
