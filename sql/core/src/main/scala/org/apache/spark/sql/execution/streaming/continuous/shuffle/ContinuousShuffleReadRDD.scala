@@ -27,7 +27,7 @@ import org.apache.spark.util.NextIterator
 
 case class ContinuousShuffleReadPartition(index: Int, queueSize: Int) extends Partition {
   // Initialized only on the executor, and only once even as we call compute() multiple times.
-  lazy val (receiver, endpoint) = {
+  lazy val (reader: ContinuousShuffleReader, endpoint) = {
     val env = SparkEnv.get.rpcEnv
     val receiver = new UnsafeRowReceiver(queueSize, env)
     val endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID().toString}", receiver)
@@ -53,17 +53,6 @@ class ContinuousShuffleReadRDD(sc: SparkContext, numPartitions: Int)
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
-    val receiver = split.asInstanceOf[ContinuousShuffleReadPartition].receiver
-
-    new NextIterator[UnsafeRow] {
-      override def getNext(): UnsafeRow = receiver.take() match {
-        case ReceiverRow(r) => r
-        case ReceiverEpochMarker() =>
-          finished = true
-          null
-      }
-
-      override def close(): Unit = {}
-    }
+    split.asInstanceOf[ContinuousShuffleReadPartition].reader.read()
   }
 }

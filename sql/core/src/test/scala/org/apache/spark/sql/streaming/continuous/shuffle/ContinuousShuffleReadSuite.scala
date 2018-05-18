@@ -54,9 +54,9 @@ class ContinuousShuffleReadSuite extends StreamTest {
     endpoint.askSync[Unit](ReceiverRow(unsafeRow(111)))
 
     ctx.markTaskCompleted(None)
-    val receiver = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].receiver
+    val receiver = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].reader
     eventually(timeout(streamingTimeout)) {
-      assert(receiver.stopped.get())
+      assert(receiver.asInstanceOf[UnsafeRowReceiver].stopped.get())
     }
   }
 
@@ -67,9 +67,9 @@ class ContinuousShuffleReadSuite extends StreamTest {
     endpoint.askSync[Unit](ReceiverEpochMarker())
 
     ctx.markTaskCompleted(None)
-    val receiver = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].receiver
+    val receiver = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].reader
     eventually(timeout(streamingTimeout)) {
-      assert(receiver.stopped.get())
+      assert(receiver.asInstanceOf[UnsafeRowReceiver].stopped.get())
     }
   }
 

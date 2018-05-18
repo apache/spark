@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.util.NextIterator
 
 /**
  * Messages for the UnsafeRowReceiver endpoint. Either an incoming row or an epoch marker.
@@ -41,7 +42,7 @@ private[shuffle] case class ReceiverEpochMarker() extends UnsafeRowReceiverMessa
 private[shuffle] class UnsafeRowReceiver(
       queueSize: Int,
       override val rpcEnv: RpcEnv)
-    extends ThreadSafeRpcEndpoint with Logging {
+    extends ThreadSafeRpcEndpoint with ContinuousShuffleReader with Logging {
   // Note that this queue will be drained from the main task thread and populated in the RPC
   // response thread.
   private val queue = new ArrayBlockingQueue[UnsafeRowReceiverMessage](queueSize)
@@ -59,8 +60,16 @@ private[shuffle] class UnsafeRowReceiver(
       context.reply(())
   }
 
-  /**
-   * Take the next row, blocking until it's ready.
-   */
-  def take(): UnsafeRowReceiverMessage = queue.take()
+  override def read(): Iterator[UnsafeRow] = {
+    new NextIterator[UnsafeRow] {
+      override def getNext(): UnsafeRow = queue.take() match {
+        case ReceiverRow(r) => r
+        case ReceiverEpochMarker() =>
+          finished = true
+          null
+      }
+
+      override def close(): Unit = {}
+    }
+  }
 }
