@@ -385,27 +385,21 @@ private[spark] class MemoryStore(
     }
   }
 
-  private def maybeReleaseResources(entry: MemoryEntry[_]): Unit = {
+  private def maybeReleaseResources(resource: (BlockId, MemoryEntry[_])): Unit = {
+    maybeReleaseResources(resource._1, resource._2)
+  }
+
+  private def maybeReleaseResources(blockId: BlockId, entry: MemoryEntry[_]): Unit = {
     entry match {
       case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
-      case DeserializedMemoryEntry(values: Array[Any], _, _) => maybeCloseValues(values)
+      case DeserializedMemoryEntry(values: Array[Any], _, _) => maybeCloseValues(values, blockId)
       case _ =>
     }
   }
 
-  private def maybeCloseValues(values: Array[Any]): Unit = {
-    values.foreach {
-      case closable: AutoCloseable =>
-        safelyCloseValue(closable)
-      case _ =>
-    }
-  }
-
-  private def safelyCloseValue(closable: AutoCloseable): Unit = {
-    try {
-      closable.close()
-    } catch {
-      case ex: Exception => logWarning(s"Failed to close AutoClosable $closable", ex)
+  private def maybeCloseValues(values: Array[Any], blockId: BlockId): Unit = {
+    if (blockId.isBroadcast) {
+      values.foreach(value => Utils.tryClose(value))
     }
   }
 
@@ -414,9 +408,7 @@ private[spark] class MemoryStore(
       entries.remove(blockId)
     }
     if (entry != null) {
-      if (blockId.isBroadcast) {
-        maybeReleaseResources(entry)
-      }
+      maybeReleaseResources(blockId, entry)
       memoryManager.releaseStorageMemory(entry.size, entry.memoryMode)
       logDebug(s"Block $blockId of size ${entry.size} dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")
@@ -428,7 +420,7 @@ private[spark] class MemoryStore(
 
   def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
-      entries.values().asScala.foreach(maybeReleaseResources)
+      entries.asScala.foreach(maybeReleaseResources)
       entries.clear()
     }
     onHeapUnrollMemoryMap.clear()

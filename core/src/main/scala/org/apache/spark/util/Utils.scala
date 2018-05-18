@@ -1930,6 +1930,18 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  def tryClose(value: Any): Unit = {
+    value match {
+      case closable: AutoCloseable =>
+        try {
+          closable.close()
+        } catch {
+          case ex: Exception => logError(s"Failed to close AutoClosable $closable", ex)
+        }
+      case _ =>
+    }
+  }
+
   /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
   def isFatalError(e: Throwable): Boolean = {
     e match {

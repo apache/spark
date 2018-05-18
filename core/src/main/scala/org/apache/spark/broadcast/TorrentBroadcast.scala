@@ -238,6 +238,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
               // need to re-fetch it.
               val storageLevel = StorageLevel.MEMORY_AND_DISK
               if (!blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
+                Utils.tryClose(obj)
                 throw new SparkException(s"Failed to store $broadcastId in BlockManager")
               }
 
