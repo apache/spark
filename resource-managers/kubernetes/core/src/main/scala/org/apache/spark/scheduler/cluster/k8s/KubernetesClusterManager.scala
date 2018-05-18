@@ -56,17 +56,34 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
 
-    val allocatorExecutor = ThreadUtils
-      .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
       "kubernetes-executor-requests")
+
+    val eventsProcessorExecutor = ThreadUtils
+      .newDaemonSingleThreadScheduledExecutor("kubernetes-executor-pods-event-handler")
+    val executorPodsEventHandler = new ExecutorPodsEventHandler(
+      sc.conf,
+      new KubernetesExecutorBuilder(),
+      kubernetesClient,
+      eventsProcessorExecutor)
+
+    val podsWatchEventSource = new ExecutorPodsWatchEventSource(
+      executorPodsEventHandler,
+      kubernetesClient)
+
+    val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "kubernetes-executor-pod-polling-sync")
+    val podsPollingEventSource = new ExecutorPodsPollingEventSource(
+      kubernetesClient, executorPodsEventHandler, eventsPollingExecutor)
+
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
       sc.env.rpcEnv,
-      new KubernetesExecutorBuilder,
       kubernetesClient,
-      allocatorExecutor,
-      requestExecutorsService)
+      requestExecutorsService,
+      executorPodsEventHandler,
+      podsWatchEventSource,
+      podsPollingEventSource)
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {

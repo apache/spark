@@ -150,6 +150,7 @@
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.4</commons.httpclient.version>
     <commons.httpcore.version>4.4.8</commons.httpcore.version>
+    <trove.version>3.0.1</trove.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -433,6 +434,11 @@
         <groupId>commons-collections</groupId>
         <artifactId>commons-collections</artifactId>
         <version>${commons.collections.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>net.sf.trove4j</groupId>
+        <artifactId>trove4j</artifactId>
+        <version>${trove.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.ivy</groupId>
