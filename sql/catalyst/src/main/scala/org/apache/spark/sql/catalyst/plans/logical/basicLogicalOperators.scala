@@ -953,5 +953,9 @@ object Barrier {
 
   def unapply(b: Barrier): Option[(LogicalPlan, Boolean)] = Some((b.child, b.analysisOnly))
 
-  private case class BarrierImpl(child: LogicalPlan, analysisOnly: Boolean) extends Barrier { }
+  private case class BarrierImpl(child: LogicalPlan, analysisOnly: Boolean) extends Barrier {
+    override def simpleString: String = {
+      if (analysisOnly) "AnalysisBarrier" else "OptimizerBarrier"
+    }
+  }
 }
