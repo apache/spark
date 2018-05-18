@@ -20,19 +20,22 @@ package org.apache.spark.sql.execution.streaming.continuous.shuffle
 import java.util.UUID
 
 import org.apache.spark.{Partition, SparkContext, SparkEnv, TaskContext}
-
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.NextIterator
 
-case class ContinuousShuffleReadPartition(index: Int) extends Partition {
-  // Semantically lazy vals - initialized only on the executor, and only once even as we call
-  // compute() multiple times. We need to initialize them inside compute() so we have access to the
-  // RDD's conf.
-  var receiver: UnsafeRowReceiver = _
-  var endpoint: RpcEndpointRef = _
+case class ContinuousShuffleReadPartition(index: Int, queueSize: Int) extends Partition {
+  // Initialized only on the executor, and only once even as we call compute() multiple times.
+  lazy val (receiver, endpoint) = {
+    val env = SparkEnv.get.rpcEnv
+    val receiver = new UnsafeRowReceiver(queueSize, env)
+    val endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID().toString}", receiver)
+    TaskContext.get().addTaskCompletionListener { ctx =>
+      env.stop(endpoint)
+    }
+    (receiver, endpoint)
+  }
 }
 
 /**
@@ -46,23 +49,13 @@ class ContinuousShuffleReadRDD(sc: SparkContext, numPartitions: Int)
   private val queueSize = sc.conf.get(SQLConf.CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
   override protected def getPartitions: Array[Partition] = {
-    (0 until numPartitions).map(ContinuousShuffleReadPartition).toArray
+    (0 until numPartitions).map(ContinuousShuffleReadPartition(_, queueSize)).toArray
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
-    val part = split.asInstanceOf[ContinuousShuffleReadPartition]
-    if (part.receiver == null) {
-      val env = SparkEnv.get.rpcEnv
-      part.receiver = new UnsafeRowReceiver(queueSize, env)
-      part.endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID()}", part.receiver)
-      TaskContext.get().addTaskCompletionListener { _ =>
-        env.stop(part.endpoint)
-      }
-    }
+    val receiver = split.asInstanceOf[ContinuousShuffleReadPartition].receiver
 
     new NextIterator[UnsafeRow] {
-      private val receiver = part.receiver
-
       override def getNext(): UnsafeRow = receiver.poll() match {
         case ReceiverRow(r) => r
         case ReceiverEpochMarker() =>

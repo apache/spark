@@ -79,10 +79,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
     endpoint.askSync[Unit](ReceiverEpochMarker())
 
     val iter = rdd.compute(rdd.partitions(0), ctx)
-    assert(iter.next().getInt(0) == 111)
-    assert(iter.next().getInt(0) == 222)
-    assert(iter.next().getInt(0) == 333)
-    assert(!iter.hasNext)
+    assert(iter.toSeq.map(_.getInt(0)) == Seq(111, 222, 333))
   }
 
   test("multiple epochs") {
@@ -95,13 +92,10 @@ class ContinuousShuffleReadSuite extends StreamTest {
     endpoint.askSync[Unit](ReceiverEpochMarker())
 
     val firstEpoch = rdd.compute(rdd.partitions(0), ctx)
-    assert(firstEpoch.next().getInt(0) == 111)
-    assert(!firstEpoch.hasNext)
+    assert(firstEpoch.toSeq.map(_.getInt(0)) == Seq(111))
 
     val secondEpoch = rdd.compute(rdd.partitions(0), ctx)
-    assert(secondEpoch.next().getInt(0) == 222)
-    assert(secondEpoch.next().getInt(0) == 333)
-    assert(!secondEpoch.hasNext)
+    assert(secondEpoch.toSeq.map(_.getInt(0)) == Seq(222, 333))
   }
 
   test("empty epochs") {
@@ -112,23 +106,30 @@ class ContinuousShuffleReadSuite extends StreamTest {
     endpoint.askSync[Unit](ReceiverRow(unsafeRow(111)))
     endpoint.askSync[Unit](ReceiverEpochMarker())
     endpoint.askSync[Unit](ReceiverEpochMarker())
+    endpoint.askSync[Unit](ReceiverEpochMarker())
 
     assert(rdd.compute(rdd.partitions(0), ctx).isEmpty)
     assert(rdd.compute(rdd.partitions(0), ctx).isEmpty)
+
     val thirdEpoch = rdd.compute(rdd.partitions(0), ctx)
-    assert(thirdEpoch.next().getInt(0) == 111)
+    assert(thirdEpoch.toSeq.map(_.getInt(0)) == Seq(111))
+
     assert(rdd.compute(rdd.partitions(0), ctx).isEmpty)
     assert(rdd.compute(rdd.partitions(0), ctx).isEmpty)
   }
 
   test("multiple partitions") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 5)
+    // Send all data before processing to ensure there's no crossover.
     for (p <- rdd.partitions) {
       val part = p.asInstanceOf[ContinuousShuffleReadPartition]
-      // Send index to ensure data doesn't somehow cross over between partitions.
+      // Send index for identification.
       part.endpoint.askSync[Unit](ReceiverRow(unsafeRow(part.index)))
       part.endpoint.askSync[Unit](ReceiverEpochMarker())
+    }
 
+    for (p <- rdd.partitions) {
+      val part = p.asInstanceOf[ContinuousShuffleReadPartition]
       val iter = rdd.compute(part, ctx)
       assert(iter.next().getInt(0) == part.index)
       assert(!iter.hasNext)
