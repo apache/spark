@@ -171,6 +171,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val arrVals = ctx.freshName("arrVals")
     val arrCardinality = ctx.freshName("arrCardinality")
     val biggestCardinality = ctx.freshName("biggestCardinality")
+    val storedArrTypes = ctx.freshName("storedArrTypes")
 
     val inputs = evals.zipWithIndex.map { case (eval, index) =>
       s"""
@@ -182,6 +183,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
         |  $arrVals[$index] = null;
         |  $arrCardinality[$index] = 0;
         |}
+        |$storedArrTypes[$index] = "${arrayElementTypes(index)}";
         |$biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
       """.stripMargin
     }.mkString("\n")
@@ -191,10 +193,10 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val i = ctx.freshName("i")
     val args = ctx.freshName("args")
 
-    val fillValue = evals.zipWithIndex.map { case (eval, index) =>
-      val getArrValsItem = CodeGenerator.getValue(s"$arrVals[$j]", arrayElementTypes(index), i)
+    val fillValue = arrayElementTypes.distinct.map { case (elementType) =>
+      val getArrValsItem = CodeGenerator.getValue(s"$arrVals[$j]", elementType, i)
       s"""
-      |      if ($j == ${index}) {
+      |      if ($storedArrTypes[$j] == "${elementType}") {
       |        $myobject[$j] = $getArrValsItem;
       |      }
       """.stripMargin
@@ -211,6 +213,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
       |int[] $arrCardinality = new int[$numberOfArrays];
       |int $biggestCardinality = 0;
+      |String[] $storedArrTypes = new String[$numberOfArrays];
       |$inputs
       |Object[] $args = new Object[$biggestCardinality];
       |for (int $i = 0; $i < $biggestCardinality; $i ++) {
