@@ -151,9 +151,14 @@ class ContinuousShuffleReadSuite extends StreamTest {
       }
     }
 
-    readRow.start()
-    eventually(timeout(streamingTimeout)) {
-      assert(readRow.getState == Thread.State.WAITING)
+    try {
+      readRow.start()
+      eventually(timeout(streamingTimeout)) {
+        assert(readRow.getState == Thread.State.WAITING)
+      }
+    } finally {
+      readRow.interrupt()
+      readRow.join()
     }
   }
 }
