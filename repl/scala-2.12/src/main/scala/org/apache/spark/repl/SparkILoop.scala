@@ -37,7 +37,14 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     @transient val spark = if (org.apache.spark.repl.Main.sparkSession != null) {
         org.apache.spark.repl.Main.sparkSession
       } else {
-        org.apache.spark.repl.Main.createSparkSession()
+        try {
+          org.apache.spark.repl.Main.createSparkSession()
+        } catch {
+          case e: Exception =>
+            println("Failed to initialize Spark session:")
+            e.printStackTrace()
+            sys.exit(1)
+        }
       }
     @transient val sc = {
       val _sc = spark.sparkContext
