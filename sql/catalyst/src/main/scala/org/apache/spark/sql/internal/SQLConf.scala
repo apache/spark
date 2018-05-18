@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -819,6 +820,15 @@ object SQLConf {
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
 
+  val SQL_OPTIONS_REDACTION_PATTERN =
+    buildConf("spark.sql.redaction.options.regex")
+      .doc("Regex to decide which keys in a Spark SQL command's options map contain sensitive " +
+        "information. The values of options whose names that match this regex will be redacted " +
+        "in the explain output. This redaction is applied on top of the global redaction " +
+        s"configuration defined by ${SECRET_REDACTION_PATTERN.key}.")
+    .regexConf
+    .createWithDefault("(?i)url".r)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1179,6 +1189,17 @@ class SQLConf extends Serializable with Logging {
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       (entry.key, getConfString(entry.key, entry.defaultValueString), entry.doc)
     }.toSeq
+  }
+
+  /**
+   * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
+   */
+  def redactOptions(options: Map[String, String]): Map[String, String] = {
+    val regexes = Seq(
+      getConf(SQL_OPTIONS_REDACTION_PATTERN),
+      SECRET_REDACTION_PATTERN.readFrom(reader))
+
+    regexes.foldLeft(options.toSeq) { case (opts, r) => Utils.redact(Some(r), opts) }.toMap
   }
 
   /**
