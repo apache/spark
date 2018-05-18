@@ -151,9 +151,12 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
   lazy val numberOfArrays: Int = children.length
 
+  private lazy val arrayTypes = children.map(_.dataType.asInstanceOf[ArrayType])
+
+  private lazy val arrayElementTypes = arrayTypes.map(_.elementType)
+
   def mountSchema: StructType = {
-    val arrayAT = children.map(_.dataType.asInstanceOf[ArrayType])
-    val fields = arrayAT.zipWithIndex.foldRight(List[StructField]()) { case ((arr, idx), list) =>
+    val fields = arrayTypes.zipWithIndex.foldRight(List[StructField]()) { case ((arr, idx), list) =>
       StructField(s"_$idx", arr.elementType, children(idx).nullable || arr.containsNull) :: list
     }
     StructType(fields)
@@ -164,8 +167,6 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val genericInternalRow = classOf[GenericInternalRow].getName
 
     val evals = children.map(_.genCode(ctx))
-
-    val arrayTypes = children.map(_.dataType.asInstanceOf[ArrayType].elementType)
 
     val arrVals = ctx.freshName("arrVals")
     val arrCardinality = ctx.freshName("arrCardinality")
@@ -191,9 +192,10 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val args = ctx.freshName("args")
 
     val fillValue = evals.zipWithIndex.map { case (eval, index) =>
+      val getArrValsItem = CodeGenerator.getValue(s"$arrVals[$j]", arrayElementTypes(index), i)
       s"""
       |      if ($j == ${index}) {
-      |        $myobject[$j] = ${CodeGenerator.getValue(s"$arrVals[$j]", arrayTypes(index), i)};
+      |        $myobject[$j] = $getArrValsItem;
       |      }
       """.stripMargin
     }
@@ -229,7 +231,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
   override def eval(input: InternalRow): Any = {
     val inputArrays = children.map(_.eval(input).asInstanceOf[ArrayData])
-    val arrayTypes = children.map(_.dataType.asInstanceOf[ArrayType].elementType)
+
     val biggestCardinality = inputArrays.map { arr =>
       if (arr != null) {
         arr.numElements()
@@ -243,7 +245,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     for (i <- 0 until biggestCardinality) {
       val currentLayer: Seq[Object] = zippedArrs.map { case (arr, index) =>
         if (arr != null && arr.numElements() > i && !arr.isNullAt(i)) {
-          arr.get(i, arrayTypes(index))
+          arr.get(i, arrayElementTypes(index))
         } else {
           null
         }
