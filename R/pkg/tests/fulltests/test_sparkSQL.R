@@ -1504,15 +1504,16 @@ test_that("column functions", {
   expect_equal(result, "cba")
 
   # Test array_sort() and sort_array()
-  df <- createDataFrame(list(list(list(2L, 1L, 3L, NA)), list(list(NA, 6L, 5L, NA, 4L))))
+  df <- createDataFrame(list(list(list(2L, 1L, 3L, NA)), list(list(NA, 5L, NA, 4L))))
+  as_integer_lists <- function(x) lapply(x, lapply, as.integer)
 
-  result <- collect(select(df, array_sort(df[[1]])))[[1]]
-  expect_equal(result, list(list(1L, 2L, 3L, NA), list(4L, 5L, 6L, NA, NA)))
+  result <- as_integer_lists(collect(select(df, array_sort(df[[1]])))[[1]])
+  expect_equal(result, list(list(1L, 2L, 3L, NA_integer_), list(4L, 5L, NA_integer_, NA_integer_)))
 
-  result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
-  expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
-  result <- collect(select(df, sort_array(df[[1]])))[[1]]
-  expect_equal(result, list(list(NA, 1L, 2L, 3L), list(NA, NA, 4L, 5L, 6L)))
+  result <- as_integer_lists(collect(select(df, sort_array(df[[1]], FALSE)))[[1]])
+  expect_equal(result, list(list(3L, 2L, 1L, NA_integer_), list(5L, 4L, NA_integer_, NA_integer_)))
+  result <- as_integer_lists(collect(select(df, sort_array(df[[1]])))[[1]])
+  expect_equal(result, list(list(NA_integer_, 1L, 2L, 3L), list(NA_integer_, NA_integer_, 4L, 5L)))
 
   # Test slice()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(4L, 5L))))
