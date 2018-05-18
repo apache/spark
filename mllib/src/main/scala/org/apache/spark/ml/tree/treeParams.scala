@@ -466,17 +466,14 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
 
   /**
    * Threshold for stopping early when fit with validation is used.
-   * If the error rate on the validation input changes by less than the validationTol,
-   * then learning will stop early (before [[maxIter]]).
-   * This parameter is ignored when fit without validation is used.
-   * The end of iteration is decided based on below logic:
+   * (This parameter is ignored when fit without validation is used.)
+   * The decision to stop early is decided based on this logic:
    * If the current loss on the validation set is greater than 0.01, the diff
    * of validation error is compared to relative tolerance which is
    * validationTol * (current loss on the validation set).
    * If the current loss on the validation set is less than or equal to 0.01,
    * the diff of validation error is compared to absolute tolerance which is
    * validationTol * 0.01.
-   * (default = 0.01)
    * @group param
    * @see validationIndicatorCol
    */
