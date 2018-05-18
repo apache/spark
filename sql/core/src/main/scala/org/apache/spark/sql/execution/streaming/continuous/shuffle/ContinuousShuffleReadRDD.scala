@@ -25,11 +25,12 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.NextIterator
 
-case class ContinuousShuffleReadPartition(index: Int, queueSize: Int) extends Partition {
+case class ContinuousShuffleReadPartition(index: Int, queueSize: Int, numShuffleWriters: Int)
+    extends Partition {
   // Initialized only on the executor, and only once even as we call compute() multiple times.
   lazy val (reader: ContinuousShuffleReader, endpoint) = {
     val env = SparkEnv.get.rpcEnv
-    val receiver = new UnsafeRowReceiver(queueSize, env)
+    val receiver = new UnsafeRowReceiver(queueSize, numShuffleWriters, env)
     val endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID().toString}", receiver)
     TaskContext.get().addTaskCompletionListener { ctx =>
       env.stop(endpoint)
@@ -43,13 +44,15 @@ case class ContinuousShuffleReadPartition(index: Int, queueSize: Int) extends Pa
  * shuffle output to the wrapped receivers in partitions of this RDD; each of the RDD's tasks
  * poll from their receiver until an epoch marker is sent.
  */
-class ContinuousShuffleReadRDD(sc: SparkContext, numPartitions: Int)
+class ContinuousShuffleReadRDD(sc: SparkContext, numPartitions: Int, numShuffleWriters: Int = 1)
     extends RDD[UnsafeRow](sc, Nil) {
 
   private val queueSize = sc.conf.get(SQLConf.CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
   override protected def getPartitions: Array[Partition] = {
-    (0 until numPartitions).map(ContinuousShuffleReadPartition(_, queueSize)).toArray
+    (0 until numPartitions).map { partIndex =>
+      ContinuousShuffleReadPartition(partIndex, queueSize, numShuffleWriters)
+    }.toArray
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
