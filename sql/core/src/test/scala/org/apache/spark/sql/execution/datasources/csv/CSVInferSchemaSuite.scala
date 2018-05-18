@@ -59,11 +59,19 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(IntegerType, textValueOne, options) == expectedTypeOne)
   }
 
-  test("Timestamp field types are inferred correctly via custom data format") {
-    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-mm"), "GMT")
+  test("Timestamp field types are inferred correctly via custom date format") {
+    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-MM"), "GMT")
     assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
     options = new CSVOptions(Map("timestampFormat" -> "yyyy"), "GMT")
     assert(CSVInferSchema.inferField(TimestampType, "2015", options) == TimestampType)
+  }
+
+  test("Date field types are inferred correctly via custom date and timestamp format") {
+    val options = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy",
+      "timestampFormat" -> "dd/MM/yyyy HH:mm:ss.SSS"), "GMT")
+    assert(CSVInferSchema.inferField(TimestampType,
+      "28/01/2017 22:31:46.913", options) == TimestampType)
+    assert(CSVInferSchema.inferField(DateType, "16/12/2012", options) == DateType)
   }
 
   test("Timestamp field types are inferred correctly from other types") {
@@ -111,7 +119,7 @@ class CSVInferSchemaSuite extends SparkFunSuite {
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
-    val options = new CSVOptions(Map("TiMeStampFormat" -> "yyyy-mm"), "GMT")
+    val options = new CSVOptions(Map("TiMeStampFormat" -> "yyyy-MM"), "GMT")
     assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
   }
 

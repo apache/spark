@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.InputStream
 import java.math.BigDecimal
+import java.time.{LocalDate, LocalDateTime}
+import java.time.temporal.ChronoField
 
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -131,9 +133,8 @@ class UnivocityParser(
 
     case _: TimestampType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        Try(options.timestampFormat.parse(datum).getTime * 1000L)
+        Try(DateTimeUtils.dateTimeToMicroseconds(LocalDateTime
+          .parse(datum, options.timestampFormatter), options.timeZone))
           .getOrElse {
           // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
           // compatibility.
@@ -143,9 +144,8 @@ class UnivocityParser(
 
     case _: DateType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.x
-        Try(DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime))
+        Try(Math.toIntExact(LocalDate.parse(datum, options.dateFormatter)
+          .getLong(ChronoField.EPOCH_DAY)))
           .getOrElse {
           // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
           // compatibility.

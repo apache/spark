@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
+import java.time.LocalDateTime
+import java.time.temporal.ChronoField
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.{Function => JFunction}
@@ -141,6 +143,12 @@ object DateTimeUtils {
   def daysToMillis(days: SQLDate, timeZone: TimeZone): Long = {
     val millisLocal = days.toLong * MILLIS_PER_DAY
     millisLocal - getOffsetFromLocalMillis(millisLocal, timeZone)
+  }
+
+  def dateTimeToMicroseconds(localDateTime: LocalDateTime, timeZone: TimeZone): Long = {
+    val microOfSecond = localDateTime.getLong(ChronoField.MICRO_OF_SECOND)
+    val epochSecond = localDateTime.atZone(timeZone.toZoneId).toInstant.getEpochSecond
+    epochSecond * 1000000L + microOfSecond
   }
 
   def dateToString(days: SQLDate): String =

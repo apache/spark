@@ -19,11 +19,14 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
+import org.junit.Assert.assertEquals
 
 class DateTimeUtilsSuite extends SparkFunSuite {
 
@@ -643,6 +646,18 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", inputTS2.get, tz)
       }
     }
+  }
+
+  test("Java 8 LocalDateTime to microseconds") {
+    val nanos = "2015-05-09 00:10:23.999750987"
+    var formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSSSSS")
+    val localDateTimeInNanos = LocalDateTime.parse(nanos, formatter)
+    val timeInMicros = dateTimeToMicroseconds(localDateTimeInNanos, TimeZonePST)
+    assertEquals(1431155423999750L, timeInMicros)
+    val micros = "2015-05-09 00:10:23.999750"
+    formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS")
+    val localDateTimeInMicros = LocalDateTime.parse(micros, formatter)
+    assertEquals(timeInMicros, dateTimeToMicroseconds(localDateTimeInMicros, TimeZonePST))
   }
 
   test("daysToMillis and millisToDays") {

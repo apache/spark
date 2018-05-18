@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.util.Locale
+import java.time.{LocalDate, LocalDateTime}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -107,20 +107,26 @@ class UnivocityParserSuite extends SparkFunSuite {
     assert(parser.makeConverter("_1", BooleanType, options = options).apply("true") == true)
 
     val timestampsOptions =
-      new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy hh:mm"), "GMT")
+      new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy HH:mm"), "GMT")
     val customTimestamp = "31/01/2015 00:00"
-    val expectedTime = timestampsOptions.timestampFormat.parse(customTimestamp).getTime
+
+    val expectedTime = LocalDateTime.parse(customTimestamp, timestampsOptions.timestampFormatter)
+      .atZone(options.timeZone.toZoneId)
+      .toInstant.toEpochMilli
     val castedTimestamp =
-      parser.makeConverter("_1", TimestampType, nullable = true, options = timestampsOptions)
+      parser.makeConverter("_1", TimestampType, nullable = true, timestampsOptions)
         .apply(customTimestamp)
     assert(castedTimestamp == expectedTime * 1000L)
 
-    val customDate = "31/01/2015"
     val dateOptions = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy"), "GMT")
-    val expectedDate = dateOptions.dateFormat.parse(customDate).getTime
+    val customDate = "31/01/2015"
+
+    val expectedDate = LocalDate.parse(customDate, dateOptions.dateFormatter)
+      .atStartOfDay(options.timeZone.toZoneId)
+      .toInstant.toEpochMilli
     val castedDate =
-      parser.makeConverter("_1", DateType, nullable = true, options = dateOptions)
-        .apply(customTimestamp)
+      parser.makeConverter("_1", DateType, nullable = true, dateOptions)
+        .apply(customDate)
     assert(castedDate == DateTimeUtils.millisToDays(expectedDate))
 
     val timestamp = "2015-01-01 00:00:00"
