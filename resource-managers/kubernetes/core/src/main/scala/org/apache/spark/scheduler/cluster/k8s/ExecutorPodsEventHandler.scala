@@ -30,6 +30,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
@@ -37,7 +38,7 @@ private[spark] class ExecutorPodsEventHandler(
     conf: SparkConf,
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
-    eventProcessorExecutor: ScheduledExecutorService) {
+    eventProcessorExecutor: ScheduledExecutorService) extends Logging {
 
   import ExecutorPodsEventHandler._
 
@@ -132,9 +133,10 @@ private[spark] class ExecutorPodsEventHandler(
     if (pendingExecutors.isEmpty && currentRunningExecutors < currentTotalExpectedExecutors) {
       val numExecutorsToAllocate = math.min(
         currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
+      logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
       val newExecutorIds = new TLongArrayList()
       val podsToAllocate = mutable.Buffer.empty[Pod]
-      for (_ <- 0 until numExecutorsToAllocate) {
+      for ( _ <- 0 until numExecutorsToAllocate) {
         val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
         val executorConf = KubernetesConf.createExecutorConf(
           conf,
@@ -151,6 +153,12 @@ private[spark] class ExecutorPodsEventHandler(
       }
       kubernetesClient.pods().create(podsToAllocate: _*)
       pendingExecutors.addAll(newExecutorIds)
+    } else if (currentRunningExecutors == currentTotalExpectedExecutors) {
+      logDebug("Current number of running executors is equal to the number of requested executors." +
+        " Not scaling up further.")
+    } else if (!pendingExecutors.isEmpty) {
+      logInfo(s"Still waiting for ${pendingExecutors.size} executors to begin running before" +
+        s" requesting for more executors.")
     }
   }
 
