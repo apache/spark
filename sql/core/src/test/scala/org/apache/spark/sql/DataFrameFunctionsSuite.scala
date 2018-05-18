@@ -487,6 +487,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df5 = Seq((Seq(-1), Seq(null), Seq(), Seq(null, null))).toDF("val1", "val2", "val3", "val4")
     val df6 = Seq((Seq(192.toByte, 256.toByte), Seq(1.1), Seq(), Seq(null, null)))
       .toDF("v1", "v2", "v3", "v4")
+    val df7 = Seq((Seq(Seq(1, 2, 3), Seq(4, 5)), Seq(1.1, 2.2))).toDF("v1", "v2")
+    val df8 = Seq((Seq(Array[Byte](1.toByte, 5.toByte)), Seq(null))).toDF("v1", "v2")
 
     val expectedValue1 = Row(Seq(Row(9001, 4), Row(9002, 5), Row(9003, 6)))
     checkAnswer(df1.select(zip($"val1", $"val2")), expectedValue1)
@@ -512,6 +514,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(192.toByte, 1.1, null, null), Row(256.toByte, null, null, null)))
     checkAnswer(df6.select(zip($"v1", $"v2", $"v3", $"v4")), expectedValue6)
     checkAnswer(df6.selectExpr("zip(v1, v2, v3, v4)"), expectedValue6)
+
+    val expectedValue7 = Row(Seq(
+      Row(Seq(1, 2, 3), 1.1), Row(Seq(4, 5), 2.2)))
+    checkAnswer(df7.select(zip($"v1", $"v2")), expectedValue7)
+    checkAnswer(df7.selectExpr("zip(v1, v2)"), expectedValue7)
+
+    val expectedValue8 = Row(Seq(
+      Row(Array[Byte](1.toByte, 5.toByte), null)))
+    checkAnswer(df8.select(zip($"v1", $"v2")), expectedValue8)
+    checkAnswer(df8.selectExpr("zip(v1, v2)"), expectedValue8)
   }
 
   test("map size function") {

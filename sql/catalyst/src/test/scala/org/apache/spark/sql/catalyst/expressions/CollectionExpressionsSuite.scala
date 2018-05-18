@@ -326,7 +326,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq(1.1, null, 1.3, null), ArrayType(DoubleType)),
       Literal.create(Seq(), ArrayType(NullType)),
       Literal.create(Seq(null), ArrayType(NullType)),
-      Literal.create(Seq(192.toByte), ArrayType(ByteType))
+      Literal.create(Seq(192.toByte), ArrayType(ByteType)),
+      Literal.create(
+        Seq(Seq(1, 2, 3), null, Seq(4, 5), Seq(1, null, 3)), ArrayType(ArrayType(IntegerType))),
+      Literal.create(Seq(Array[Byte](1.toByte, 5.toByte)), ArrayType(BinaryType))
     )
 
     checkEvaluation(Zip(Seq(literals(0), literals(1))),
@@ -364,6 +367,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Row(false, null, null, null, null),
         Row(true, 1.3, null, null, null),
         Row(null, null, null, null, null)))
+
+    checkEvaluation(Zip(Seq(literals(9), literals(0))),
+      List(
+        Row(List(1, 2, 3), 9001),
+        Row(null, 9002),
+        Row(List(4, 5), 9003),
+        Row(List(1, null, 3), null)))
+
+    checkEvaluation(Zip(Seq(literals(7), literals(10))),
+      List(Row(null, Array[Byte](1.toByte, 5.toByte))))
   }
 
   test("Array Min") {
