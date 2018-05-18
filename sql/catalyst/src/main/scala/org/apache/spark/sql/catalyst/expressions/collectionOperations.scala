@@ -523,7 +523,12 @@ case class ArrayContains(left: Expression, right: Expression)
       TypeCheckResult.TypeCheckFailure(
         "Arguments must be an array followed by a value of same type as the array members")
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      if (RowOrdering.isOrderable(right.dataType)) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure(
+          s"${right.dataType.simpleString} cannot be used in comparison.")
+      }
     }
   }
 
