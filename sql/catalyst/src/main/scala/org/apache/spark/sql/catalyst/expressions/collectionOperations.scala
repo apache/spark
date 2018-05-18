@@ -3264,6 +3264,8 @@ case class ArrayDistinct(child: Expression)
 object ArraySetLike {
   val kindUnion = 1
 
+  private val MAX_ARRAY_LENGTH: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+
   def toArrayDataInt(hs: OpenHashSet[Int]): ArrayData = {
     val array = new Array[Int](hs.size)
     var pos = hs.nextPos(0)
@@ -3306,19 +3308,55 @@ object ArraySetLike {
     }
   }
 
-  def arrayUnion(array1: ArrayData, array2: ArrayData, et: DataType): ArrayData = {
-    new GenericArrayData(array1.toArray[AnyRef](et).union(array2.toArray[AnyRef](et))
-      .distinct.asInstanceOf[Array[Any]])
-  }
-
-  def arrayIntersect(array1: ArrayData, array2: ArrayData, et: DataType): ArrayData = {
-    new GenericArrayData(array1.toArray[AnyRef](et).intersect(array2.toArray[AnyRef](et))
-      .distinct.asInstanceOf[Array[Any]])
-  }
-
-  def arrayExcept(array1: ArrayData, array2: ArrayData, et: DataType): ArrayData = {
-    new GenericArrayData(array1.toArray[AnyRef](et).diff(array2.toArray[AnyRef](et))
-      .distinct.asInstanceOf[Array[Any]])
+  def arrayUnion(
+      array1: ArrayData,
+      array2: ArrayData,
+      et: DataType,
+      ordering: Ordering[Any]): ArrayData = {
+    if (ordering == null) {
+      new GenericArrayData(array1.toObjectArray(et).union(array2.toObjectArray(et))
+        .distinct.asInstanceOf[Array[Any]])
+    } else {
+      val length = math.min(array1.numElements().toLong + array2.numElements().toLong,
+        ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+      val array = new Array[Any](length.toInt)
+      var hasNull = false
+      array1.foreach(et, (i, v) => {
+        array(i) = v
+        if (v == null) {
+          hasNull = true
+        }
+      })
+      var pos = array1.numElements()
+      array2.foreach(et, (_, v) => {
+        var found = false
+        if (v == null) {
+          if (hasNull) {
+            found = true
+          } else {
+            hasNull = true
+          }
+        } else {
+          var j = 0
+          while (!found && j < pos) {
+            val va = array(j)
+            if (va != null && ordering.equiv(va, v)) {
+              found = true
+            }
+            j = j + 1
+          }
+        }
+        if (!found) {
+          if (pos > MAX_ARRAY_LENGTH) {
+            throw new RuntimeException(s"Unsuccessful try to union arrays with $pos" +
+              s" elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.")
+          }
+          array(pos) = v
+          pos = pos + 1
+        }
+      })
+      new GenericArrayData(array.slice(0, pos))
+    }
   }
 }
 
@@ -3327,8 +3365,27 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
 
   override def dataType: DataType = left.dataType
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val typeCheckResult = super.checkInputDataTypes()
+    if (typeCheckResult.isSuccess) {
+      TypeUtils.checkForOrderingExpr(dataType.asInstanceOf[ArrayType].elementType,
+        s"function $prettyName")
+    } else {
+      typeCheckResult
+    }
+  }
+
   private def cn = left.dataType.asInstanceOf[ArrayType].containsNull ||
     right.dataType.asInstanceOf[ArrayType].containsNull
+
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(elementType)
+
+  @transient private lazy val elementTypeSupportEquals = elementType match {
+    case BinaryType => false
+    case _: AtomicType => true
+    case _ => false
+  }
 
   def intEval(ary: ArrayData, hs2: OpenHashSet[Int]): OpenHashSet[Int]
   def longEval(ary: ArrayData, hs2: OpenHashSet[Long]): OpenHashSet[Long]
@@ -3371,7 +3428,8 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
       }
     } else {
       if (typeId == ArraySetLike.kindUnion) {
-        ArraySetLike.arrayUnion(ary1, ary2, elementType)
+        ArraySetLike.arrayUnion(ary1, ary2, elementType,
+          if (elementTypeSupportEquals) null else ordering)
       } else {
         null
       }
@@ -3441,7 +3499,9 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
           ""
         }
         val et = ctx.addReferenceObj("elementTypeUtil", elementType)
-        s"${ev.value} = $arraySetUtils$$.MODULE$$.array$setOp($ary1, $ary2, $et);"
+        val order = if (elementTypeSupportEquals) "null"
+          else ctx.addReferenceObj("orderingUtil", ordering)
+        s"${ev.value} = $arraySetUtils$$.MODULE$$.array$setOp($ary1, $ary2, $et, $order);"
       }
     })
   }
