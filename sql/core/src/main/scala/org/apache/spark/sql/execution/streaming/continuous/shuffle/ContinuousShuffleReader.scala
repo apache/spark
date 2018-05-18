@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
  */
 trait ContinuousShuffleReader {
   /**
-   * Returns an iterator over the incoming rows in the current epoch. Note that this iterator can
-   * block waiting for new rows to arrive.
+   * Returns an iterator over the incoming rows in an epoch. Implementations should block waiting
+   * for new rows to arrive, and end the iterator once they've received epoch markers from all
+   * shuffle writers.
    */
   def read(): Iterator[UnsafeRow]
 }
