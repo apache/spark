@@ -771,13 +771,21 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a0 = Literal.create(Seq(2, 1, 2, 3, 4, 4, 5), ArrayType(IntegerType))
     val a1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
     val a2 = Literal.create(Seq("b", "a", "a", "c", "b"), ArrayType(StringType))
-    val a3 = Literal.create(Seq("b", null, "a", "a"), ArrayType(StringType))
-    val a4 = Literal.create(Seq(null, null), ArrayType(NullType))
+    val a3 = Literal.create(Seq("b", null, "a", null, "a", null), ArrayType(StringType))
+    val a4 = Literal.create(Seq(null, null, null), ArrayType(NullType))
+    val a5 = Literal.create(Seq(true, false, false, true), ArrayType(BooleanType))
+    val a6 = Literal.create(Seq(1.123, 0.1234, 1.121, 1.123, 1.1230, 1.121, 0.1234),
+      ArrayType(DoubleType))
+    val a7 = Literal.create(Seq(1.123f, 0.1234f, 1.121f, 1.123f, 1.1230f, 1.121f, 0.1234f),
+      ArrayType(FloatType))
 
     checkEvaluation(new ArrayDistinct(a0), Seq(2, 1, 3, 4, 5))
     checkEvaluation(new ArrayDistinct(a1), Seq.empty[Integer])
     checkEvaluation(new ArrayDistinct(a2), Seq("b", "a", "c"))
     checkEvaluation(new ArrayDistinct(a3), Seq("b", null, "a"))
     checkEvaluation(new ArrayDistinct(a4), Seq(null))
+    checkEvaluation(new ArrayDistinct(a5), Seq(true, false))
+    checkEvaluation(new ArrayDistinct(a6), Seq(1.123, 0.1234, 1.121))
+    checkEvaluation(new ArrayDistinct(a7), Seq(1.123f, 0.1234f, 1.121f))
   }
 }

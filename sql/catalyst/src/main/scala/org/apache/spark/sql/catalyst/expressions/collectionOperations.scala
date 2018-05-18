@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Comparator
 
 import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
@@ -2386,22 +2387,20 @@ case class ArrayDistinct(child: Expression)
       val i = ctx.freshName("i")
       val j = ctx.freshName("j")
       val hs = ctx.freshName("hs")
+      val foundNullElement = ctx.freshName("foundNullElement")
       val distinctArrayLen = ctx.freshName("distinctArrayLen")
       val getValue = CodeGenerator.getValue(array, elementType, i)
       val openHashSet = classOf[OpenHashSet[_]].getName
       val classTag = s"scala.reflect.ClassTag$$.MODULE$$.Object()"
       s"""
          |int $distinctArrayLen = 0;
+         |boolean $foundNullElement = false;
          |$openHashSet $hs = new $openHashSet($classTag);
          |for (int $i = 0; $i < $array.numElements(); $i++) {
          |  if ($array.isNullAt($i)) {
-         |    int $j;
-         |    for ($j = 0; $j < $i; $j ++) {
-         |      if ($array.isNullAt($j))
-         |        break;
-         |    }
-         |    if ($i == $j) {
+         |    if (!($foundNullElement)) {
          |      $distinctArrayLen = $distinctArrayLen + 1;
+         |      $foundNullElement = true;
          |    }
          |  }
          |  else {
@@ -2427,6 +2426,7 @@ case class ArrayDistinct(child: Expression)
     val i = ctx.freshName("i")
     val j = ctx.freshName("j")
     val pos = ctx.freshName("pos")
+    val foundNullElement = ctx.freshName("foundNullElement")
     val genericArrayData = classOf[GenericArrayData].getName
     val getValue = CodeGenerator.getValue(inputArray, elementType, i)
 
@@ -2436,17 +2436,14 @@ case class ArrayDistinct(child: Expression)
       s"""
          |Object[] $distinctArr = new Object[$newArraySize];
          |int $pos = 0;
+         |boolean $foundNullElement = false;
          |$openHashSet $hs = new $openHashSet($classTag);
          |for (int $i = 0; $i < $inputArray.numElements(); $i++) {
          |  if ($inputArray.isNullAt($i)) {
-         |    int $j;
-         |    for ($j = 0; $j < $i; $j ++) {
-         |      if ($inputArray.isNullAt($j))
-         |        break;
-         |    }
-         |    if ($i == $j) {
+         |    if (!($foundNullElement)) {
          |      $distinctArr[$pos] = null;
          |      $pos = $pos + 1;
+         |      $foundNullElement = true;
          |    }
          |  }
          |  else {
@@ -2465,17 +2462,14 @@ case class ArrayDistinct(child: Expression)
       s"""
          |${ctx.createUnsafeArray(distinctArr, newArraySize, elementType, s" $prettyName failed.")}
          |int $pos = 0;
+         |boolean $foundNullElement = false;
          |$openHashSet $hs = new $openHashSet($classTag);
          |for (int $i = 0; $i < $inputArray.numElements(); $i++) {
          |  if ($inputArray.isNullAt($i)) {
-         |    int $j;
-         |    for ($j = 0; $j < $i; $j ++) {
-         |      if ($inputArray.isNullAt($j))
-         |        break;
-         |    }
-         |    if ($i == $j) {
+         |    if (!($foundNullElement)) {
          |      $distinctArr.setNullAt($pos);
          |      $pos = $pos + 1;
+         |      $foundNullElement = true;
          |    }
          |  }
          |  else {
