@@ -43,13 +43,16 @@ case class ContinuousShuffleReadPartition(index: Int, queueSize: Int) extends Pa
  * shuffle output to the wrapped receivers in partitions of this RDD; each of the RDD's tasks
  * poll from their receiver until an epoch marker is sent.
  */
-class ContinuousShuffleReadRDD(sc: SparkContext, numPartitions: Int)
-    extends RDD[UnsafeRow](sc, Nil) {
-
-  private val queueSize = sc.conf.get(SQLConf.CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
+class ContinuousShuffleReadRDD(
+    sc: SparkContext,
+    numPartitions: Int,
+    queueSize: Int = 1024)
+  extends RDD[UnsafeRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
-    (0 until numPartitions).map(ContinuousShuffleReadPartition(_, queueSize)).toArray
+    (0 until numPartitions).map { partIndex =>
+      ContinuousShuffleReadPartition(partIndex, queueSize)
+    }.toArray
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
