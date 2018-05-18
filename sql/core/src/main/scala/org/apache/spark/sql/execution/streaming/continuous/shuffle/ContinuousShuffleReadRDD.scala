@@ -54,7 +54,7 @@ class ContinuousShuffleReadRDD(sc: SparkContext, numPartitions: Int)
     if (part.receiver == null) {
       val env = SparkEnv.get.rpcEnv
       part.receiver = new UnsafeRowReceiver(queueSize, env)
-      part.endpoint = env.setupEndpoint(UUID.randomUUID().toString, part.receiver)
+      part.endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID()}", part.receiver)
       TaskContext.get().addTaskCompletionListener { _ =>
         env.stop(part.endpoint)
       }
