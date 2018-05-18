@@ -420,7 +420,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
     val m2 = Literal.create(null, MapType(StringType, StringType))
 
-    checkEvaluation(ElementAt(m0, Literal(1.0)), null)
+    assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes().isFailure)
 
     checkEvaluation(ElementAt(m0, Literal("d")), null)
 
@@ -431,6 +431,19 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ElementAt(m0, Literal("c")), null)
 
     checkEvaluation(ElementAt(m2, Literal("a")), null)
+
+    // test complex types as keys
+    val mb0 = Literal.create(
+      Map(Array[Byte](1, 2) -> "1", Array[Byte](3, 4) -> null, Array[Byte](2, 1) -> "2"),
+      MapType(BinaryType, StringType))
+    val mb1 = Literal.create(Map[Array[Byte], String](), MapType(BinaryType, StringType))
+
+    checkEvaluation(ElementAt(mb0, Literal(Array[Byte](1, 2, 3))), null)
+
+    checkEvaluation(ElementAt(mb1, Literal(Array[Byte](1, 2))), null)
+    checkEvaluation(ElementAt(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
+    checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
+
   }
 
   test("Concat") {

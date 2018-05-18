@@ -1317,6 +1317,9 @@ case class ArrayPosition(left: Expression, right: Expression)
   since = "2.4.0")
 case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
 
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(left.dataType.asInstanceOf[MapType].keyType)
+
   override def dataType: DataType = left.dataType match {
     case ArrayType(elementType, _) => elementType
     case MapType(_, valueType, _) => valueType
@@ -1329,6 +1332,18 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
         case _: MapType => left.dataType.asInstanceOf[MapType].keyType
       }
     )
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    def mapKeyType = left.dataType.asInstanceOf[MapType].keyType
+    super.checkInputDataTypes() match {
+      case f: TypeCheckResult.TypeCheckFailure => f
+      case TypeCheckResult.TypeCheckSuccess
+          if left.dataType.isInstanceOf[MapType] && !RowOrdering.isOrderable(mapKeyType) =>
+        TypeCheckResult.TypeCheckFailure(
+          s"${mapKeyType.simpleString} cannot be used in comparison.")
+      case TypeCheckResult.TypeCheckSuccess => TypeCheckResult.TypeCheckSuccess
+    }
   }
 
   override def nullable: Boolean = true
@@ -1355,7 +1370,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
           }
         }
       case _: MapType =>
-        getValueEval(value, ordinal, left.dataType.asInstanceOf[MapType].keyType)
+        getValueEval(value, ordinal, left.dataType.asInstanceOf[MapType].keyType, ordering)
     }
   }
 
