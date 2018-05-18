@@ -65,7 +65,7 @@ private[spark] class ExecutorPodsEventHandler(
   // We could use CoarseGrainedSchedulerBackend#totalRegisteredExecutors here for tallying the
   // executors that are running. But, here we choose instead to maintain all state within this
   // class from the persecptive of the k8s API. Therefore whether or not this scheduler loop
-  // believes a scheduler is running is dictated by the K8s API rather than Spark's RPC events.
+  // believes an executor is running is dictated by the K8s API rather than Spark's RPC events.
   // We may need to consider where these perspectives may differ and which perspective should
   // take precedence.
   private val runningExecutors = new TLongHashSet()
@@ -91,7 +91,6 @@ private[spark] class ExecutorPodsEventHandler(
   private def processEvents(
       applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend) {
     val currentEvents = new java.util.ArrayList[Seq[Pod]](eventQueue.size())
-      eventQueue.size())
     eventQueue.drainTo(currentEvents)
     currentEvents.asScala.flatten.foreach { updatedPod =>
       val execId = updatedPod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong
