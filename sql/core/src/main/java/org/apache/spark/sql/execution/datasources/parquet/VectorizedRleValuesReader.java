@@ -571,7 +571,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int ch3 = in.read();
     int ch2 = in.read();
     int ch1 = in.read();
-    return ((ch1 << 24) + (ch2 << 16) + (ch3 << 8) + (ch4 << 0));
+    return ((ch1 << 24) + (ch2 << 16) + (ch3 << 8) + (ch4));
   }
 
   /**
@@ -592,7 +592,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         int ch3 = in.read();
         int ch2 = in.read();
         int ch1 = in.read();
-        return (ch1 << 16) + (ch2 << 8) + (ch3 << 0);
+        return (ch1 << 16) + (ch2 << 8) + (ch3);
       }
       case 4: {
         return readIntLittleEndian();
