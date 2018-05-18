@@ -28,7 +28,7 @@ private[spark] class ExecutorPodsPollingEventSource(
     eventHandler: ExecutorPodsEventHandler,
     pollingExecutor: ScheduledExecutorService) {
 
-  private var pollingFuture: Future[_] = _
+  private var pollingFuture: Future[_] = null
 
   def start(applicationId: String): Unit = {
     require(pollingFuture == null, "Cannot start polling more than once.")

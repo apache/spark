@@ -71,10 +71,12 @@ private[spark] class ExecutorPodsEventHandler(
   // take precedence.
   private val runningExecutors = new TLongHashSet()
 
-  private var eventProcessorFuture: Future[_] = _
+  private var eventProcessorFuture: Future[_] = null
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     require(eventProcessorFuture == null, "Cannot start event processing twice.")
+    logInfo(s"Starting Kubernetes executor pods event handler for application with" +
+      s" id $applicationId.")
     val eventProcessor = new Runnable {
       override def run(): Unit = processEvents(applicationId, schedulerBackend)
     }
