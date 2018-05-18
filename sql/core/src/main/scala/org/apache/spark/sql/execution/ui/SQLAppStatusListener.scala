@@ -170,7 +170,7 @@ class SQLAppStatusListener(
       .filter { case (id, _) => metricIds.contains(id) }
       .groupBy(_._1)
       .map { case (id, values) =>
-        id -> SQLMetrics.stringValue(metricTypes(id), values.map(_._2))
+        id -> SQLMetrics.stringValue(metricTypes(id), values.map(_._2).toSeq)
       }
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
