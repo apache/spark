@@ -260,14 +260,16 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("test for DROPMALFORMED parsing mode") {
-    Seq(false, true).foreach { multiLine =>
-      val cars = spark.read
-        .format("csv")
-        .option("multiLine", multiLine)
-        .options(Map("header" -> "true", "mode" -> "dropmalformed"))
-        .load(testFile(carsFile))
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false") {
+      Seq(false, true).foreach { multiLine =>
+        val cars = spark.read
+          .format("csv")
+          .option("multiLine", multiLine)
+          .options(Map("header" -> "true", "mode" -> "dropmalformed"))
+          .load(testFile(carsFile))
 
-      assert(cars.collect().size === 2)
+        assert(cars.select("year").collect().size === 2)
+      }
     }
   }
 
