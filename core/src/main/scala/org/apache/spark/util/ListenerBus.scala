@@ -61,6 +61,15 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   }
 
   /**
+   * This can be overriden by subclasses if there is any extra cleanup to do when removing a
+   * listener.  In particular AsyncEventQueues can clean up queues in the LiveListenerBus.
+   */
+  def removeListenerOnError(listener: L): Unit = {
+    removeListener(listener)
+  }
+
+
+  /**
    * Post the event to all registered listeners. The `postToAll` caller should guarantee calling
    * `postToAll` in the same thread for all events.
    */
@@ -80,6 +89,11 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       }
       try {
         doPostEvent(listener, event)
+        if (Thread.interrupted()) {
+          logError(s"Interrupted while posting to ${Utils.getFormattedClassName(listener)}.  " +
+            s"Removing that listener.")
+          removeListenerOnError(listener)
+        }
       } catch {
         case NonFatal(e) if !isIgnorableException(e) =>
           logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)

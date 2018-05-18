@@ -85,28 +85,18 @@ private class AsyncEventQueue(
   }
 
   private def dispatch(): Unit = LiveListenerBus.withinListenerThread.withValue(true) {
-    try {
-      var next: SparkListenerEvent = eventQueue.take()
-      while (next != POISON_PILL) {
-        val ctx = processingTime.time()
-        try {
-          super.postToAll(next)
-        } finally {
-          ctx.stop()
-        }
-        eventCount.decrementAndGet()
-        next = eventQueue.take()
+    var next: SparkListenerEvent = eventQueue.take()
+    while (next != POISON_PILL) {
+      val ctx = processingTime.time()
+      try {
+        super.postToAll(next)
+      } finally {
+        ctx.stop()
       }
       eventCount.decrementAndGet()
-    } catch {
-      case ie: InterruptedException =>
-        logInfo(s"Stopping listener queue $name.", ie)
-        stopped.set(true)
-        bus.removeQueue(name)
-        // we're not going to process any more events in this queue, so might as well clear it
-        eventQueue.clear()
-        eventCount.set(0)
+      next = eventQueue.take()
     }
+    eventCount.decrementAndGet()
   }
 
   override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
@@ -139,7 +129,11 @@ private class AsyncEventQueue(
       eventCount.incrementAndGet()
       eventQueue.put(POISON_PILL)
     }
-    dispatchThread.join()
+    // this thread might be trying to stop itself as part of error handling -- we can't join
+    // in that case.
+    if (Thread.currentThread() != dispatchThread) {
+      dispatchThread.join()
+    }
   }
 
   def post(event: SparkListenerEvent): Unit = {
@@ -194,6 +188,12 @@ private class AsyncEventQueue(
       Thread.sleep(10)
     }
     true
+  }
+
+  override def removeListenerOnError(listener: SparkListenerInterface): Unit = {
+    // the listener failed in an unrecoverably way, we want to remove it from the entire
+    // LiveListenerBus (potentially stopping a queue if its empty)
+    bus.removeListener(listener)
   }
 
 }
