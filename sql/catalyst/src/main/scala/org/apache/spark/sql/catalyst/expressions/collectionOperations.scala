@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Comparator
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
@@ -31,6 +30,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * Base trait for [[BinaryExpression]]s with two arrays of the same element type and implicit
@@ -2373,6 +2373,8 @@ case class ArrayDistinct(child: Expression)
 
   override def dataType: DataType = child.dataType
 
+  lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+
   override def nullSafeEval(array: Any): Any = {
     val elementType = child.dataType.asInstanceOf[ArrayType].elementType
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType).distinct
@@ -2380,70 +2382,113 @@ case class ArrayDistinct(child: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val elementType = dataType.asInstanceOf[ArrayType].elementType
     nullSafeCodeGen(ctx, ev, (array) => {
-      val arrayClass = classOf[GenericArrayData].getName
-      val distinctArray = ctx.freshName("distinctArray")
       val i = ctx.freshName("i")
       val j = ctx.freshName("j")
-      val pos = ctx.freshName("arrayPosition")
-      val getValue1 = CodeGenerator.getValue(array, elementType, i)
-      val getValue2 = CodeGenerator.getValue(array, elementType, j)
+      val hs = ctx.freshName("hs")
+      val distinctArrayLen = ctx.freshName("distinctArrayLen")
+      val getValue = CodeGenerator.getValue(array, elementType, i)
+      val openHashSet = classOf[OpenHashSet[_]].getName
+      val classTag = s"scala.reflect.ClassTag$$.MODULE$$.Object()"
       s"""
-         |int $pos = 0;
-         |for (int $i = 0; $i < $array.numElements(); $i ++) {
+         |int $distinctArrayLen = 0;
+         |$openHashSet $hs = new $openHashSet($classTag);
+         |for (int $i = 0; $i < $array.numElements(); $i++) {
          |  if ($array.isNullAt($i)) {
-         |     int $j;
-         |     for ($j = 0; $j < $i; $j ++) {
-         |       if ($array.isNullAt($j))
-         |         break;
-         |     }
-         |     if ($i == $j) {
-         |       $pos = $pos + 1;
-         |     }
-         |  }
-         |  else {
          |    int $j;
          |    for ($j = 0; $j < $i; $j ++) {
-         |      if (!$array.isNullAt($j) && ${ctx.genEqual(elementType, getValue1, getValue2)})
+         |      if ($array.isNullAt($j))
          |        break;
          |    }
          |    if ($i == $j) {
-         |     $pos = $pos + 1;
+         |      $distinctArrayLen = $distinctArrayLen + 1;
          |    }
-         |  }
-         |}
-         |
-         |Object[] $distinctArray = new Object[$pos];
-         |$pos = 0;
-         |for (int $i = 0; $i < $array.numElements(); $i ++) {
-         |  if ($array.isNullAt($i)) {
-         |     int $j;
-         |     for ($j = 0; $j < $i; $j ++) {
-         |       if ($array.isNullAt($j))
-         |         break;
-         |     }
-         |     if ($i == $j) {
-         |       $distinctArray[$pos] = null;
-         |       $pos = $pos + 1;
-         |     }
          |  }
          |  else {
-         |    int $j;
-         |    for ($j = 0; $j < $i; $j ++) {
-         |      if (!$array.isNullAt($j) && ${ctx.genEqual(elementType, getValue1, getValue2)})
-         |        break;
-         |    }
-         |    if ($i == $j) {
-         |     $distinctArray[$pos] = ${CodeGenerator.getValue(array, elementType, s"$i")};
-         |     $pos = $pos + 1;
+         |    if (!($hs.contains($getValue))) {
+         |      $hs.add($getValue);
+         |      $distinctArrayLen = $distinctArrayLen + 1;
          |    }
          |  }
          |}
-         |
-         |${ev.value} = new $arrayClass($distinctArray);
-       """.stripMargin
+         |${genCodeForResult(ctx, ev, array, distinctArrayLen)}
+      """.stripMargin
     })
+  }
+
+  def genCodeForResult(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      inputArray: String,
+      newArraySize: String): String = {
+    val distinctArr = ctx.freshName("distinctArray")
+    val hs = ctx.freshName("hs")
+    val openHashSet = classOf[OpenHashSet[_]].getName
+    val i = ctx.freshName("i")
+    val j = ctx.freshName("j")
+    val pos = ctx.freshName("pos")
+    val genericArrayData = classOf[GenericArrayData].getName
+    val getValue = CodeGenerator.getValue(inputArray, elementType, i)
+
+    if (!CodeGenerator.isPrimitiveType(elementType)) {
+      val arrayClass = classOf[GenericArrayData].getName
+      val classTag = s"scala.reflect.ClassTag$$.MODULE$$.Object()"
+      s"""
+         |Object[] $distinctArr = new Object[$newArraySize];
+         |int $pos = 0;
+         |$openHashSet $hs = new $openHashSet($classTag);
+         |for (int $i = 0; $i < $inputArray.numElements(); $i++) {
+         |  if ($inputArray.isNullAt($i)) {
+         |    int $j;
+         |    for ($j = 0; $j < $i; $j ++) {
+         |      if ($inputArray.isNullAt($j))
+         |        break;
+         |    }
+         |    if ($i == $j) {
+         |      $distinctArr[$pos] = null;
+         |      $pos = $pos + 1;
+         |    }
+         |  }
+         |  else {
+         |    if (!($hs.contains($getValue))) {
+         |      $hs.add($getValue);
+         |      $distinctArr[$pos] = $getValue;
+         |      $pos = $pos + 1;
+         |    }
+         |  }
+         |}
+         |${ev.value} = new $arrayClass($distinctArr);
+       """.stripMargin
+    } else {
+      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+      val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$primitiveValueTypeName()"
+      s"""
+         |${ctx.createUnsafeArray(distinctArr, newArraySize, elementType, s" $prettyName failed.")}
+         |int $pos = 0;
+         |$openHashSet $hs = new $openHashSet($classTag);
+         |for (int $i = 0; $i < $inputArray.numElements(); $i++) {
+         |  if ($inputArray.isNullAt($i)) {
+         |    int $j;
+         |    for ($j = 0; $j < $i; $j ++) {
+         |      if ($inputArray.isNullAt($j))
+         |        break;
+         |    }
+         |    if ($i == $j) {
+         |      $distinctArr.setNullAt($pos);
+         |      $pos = $pos + 1;
+         |    }
+         |  }
+         |  else {
+         |    if (!($hs.contains($getValue))) {
+         |      $hs.add($getValue);
+         |      $distinctArr.set$primitiveValueTypeName($pos, $getValue);
+         |      $pos = $pos + 1;
+         |    }
+         |  }
+         |}
+         |${ev.value} = $distinctArr;
+      """.stripMargin
+    }
   }
 
   override def prettyName: String = "array_distinct"
