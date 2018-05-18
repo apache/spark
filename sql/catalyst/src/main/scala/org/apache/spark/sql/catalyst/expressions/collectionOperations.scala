@@ -184,9 +184,18 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
         |  $arrCardinality[$index] = 0;
         |}
         |$storedArrTypes[$index] = "${arrayElementTypes(index)}";
-        |$biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
+        |$biggestCardinality[0] = Math.max($biggestCardinality[0], $arrCardinality[$index]);
       """.stripMargin
-    }.mkString("\n")
+    }
+
+    val inputsSplitted = ctx.splitExpressions(
+      expressions = inputs,
+      funcName = "getInputAndCardinality",
+      arguments =
+        ("ArrayData[]", arrVals) ::
+        ("int[]", arrCardinality) ::
+        ("String[]", storedArrTypes) ::
+        ("int[]", biggestCardinality) :: Nil)
 
     val myobject = ctx.freshName("myobject")
     val j = ctx.freshName("j")
@@ -212,11 +221,12 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     ev.copy(s"""
       |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
       |int[] $arrCardinality = new int[$numberOfArrays];
-      |int $biggestCardinality = 0;
+      |int[] $biggestCardinality = new int[1];
+      |$biggestCardinality[0] = 0;
       |String[] $storedArrTypes = new String[$numberOfArrays];
-      |$inputs
-      |Object[] $args = new Object[$biggestCardinality];
-      |for (int $i = 0; $i < $biggestCardinality; $i ++) {
+      |$inputsSplitted
+      |Object[] $args = new Object[$biggestCardinality[0]];
+      |for (int $i = 0; $i < $biggestCardinality[0]; $i ++) {
       |  Object[] $myobject = new Object[$numberOfArrays];
       |  for (int $j = 0; $j < $numberOfArrays; $j ++) {
       |    if ($arrVals[$j] != null && $arrCardinality[$j] > $i && !$arrVals[$j].isNullAt($i)) {
