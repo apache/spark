@@ -1829,7 +1829,7 @@ def create_map_from_arrays(col1, col2):
 
     >>> df = spark.createDataFrame([([2, 5], ["Alice", "Bob"])], ['k', 'v'])
     >>> df.select(create_map_from_arrays(df.k, df.v).alias("map")).collect()
-    [Row(map={5: u'Bob', 2: u'Alice'})]
+    [Row(map={2: u'Alice', 5: u'Bob'})]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.map_from_arrays(_to_java_column(col1), _to_java_column(col2)))
