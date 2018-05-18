@@ -45,7 +45,9 @@ private[shuffle] class UnsafeRowReceiver(
   // Note that this queue will be drained from the main task thread and populated in the RPC
   // response thread.
   private val queue = new ArrayBlockingQueue[UnsafeRowReceiverMessage](queueSize)
-  var stopped = new AtomicBoolean(false)
+
+  // Exposed for testing to determine if the endpoint gets stopped on task end.
+  private[shuffle] val stopped = new AtomicBoolean(false)
 
   override def onStop(): Unit = {
     stopped.set(true)
