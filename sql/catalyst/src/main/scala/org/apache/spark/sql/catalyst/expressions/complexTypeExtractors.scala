@@ -354,12 +354,7 @@ case class GetMapValue(child: Expression, key: Expression)
     super.checkInputDataTypes() match {
       case f: TypeCheckResult.TypeCheckFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
-        if (RowOrdering.isOrderable(keyType)) {
-          TypeCheckResult.TypeCheckSuccess
-        } else {
-          TypeCheckResult.TypeCheckFailure(
-            s"${keyType.simpleString} cannot be used in comparison.")
-        }
+        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
     }
   }
 

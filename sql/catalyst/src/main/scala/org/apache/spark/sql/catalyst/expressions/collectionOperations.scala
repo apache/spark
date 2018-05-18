@@ -523,12 +523,7 @@ case class ArrayContains(left: Expression, right: Expression)
       TypeCheckResult.TypeCheckFailure(
         "Arguments must be an array followed by a value of same type as the array members")
     } else {
-      if (RowOrdering.isOrderable(right.dataType)) {
-        TypeCheckResult.TypeCheckSuccess
-      } else {
-        TypeCheckResult.TypeCheckFailure(
-          s"${right.dataType.simpleString} cannot be used in comparison.")
-      }
+      TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
     }
   }
 
@@ -590,11 +585,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
-      if (RowOrdering.isOrderable(elementType)) {
-        TypeCheckResult.TypeCheckSuccess
-      } else {
-        TypeCheckResult.TypeCheckFailure(s"${elementType.simpleString} cannot be used in comparison.")
-      }
+      TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
     case failure => failure
   }
 
@@ -1257,12 +1248,7 @@ case class ArrayPosition(left: Expression, right: Expression)
     super.checkInputDataTypes() match {
       case f: TypeCheckResult.TypeCheckFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
-        if (RowOrdering.isOrderable(right.dataType)) {
-          TypeCheckResult.TypeCheckSuccess
-        } else {
-          TypeCheckResult.TypeCheckFailure(
-            s"${right.dataType.simpleString} cannot be used in comparison.")
-        }
+        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
     }
   }
 
@@ -1335,13 +1321,11 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    def mapKeyType = left.dataType.asInstanceOf[MapType].keyType
     super.checkInputDataTypes() match {
       case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess
-          if left.dataType.isInstanceOf[MapType] && !RowOrdering.isOrderable(mapKeyType) =>
-        TypeCheckResult.TypeCheckFailure(
-          s"${mapKeyType.simpleString} cannot be used in comparison.")
+      case TypeCheckResult.TypeCheckSuccess if left.dataType.isInstanceOf[MapType] =>
+        TypeUtils.checkForOrderingExpr(
+          left.dataType.asInstanceOf[MapType].keyType, s"function $prettyName")
       case TypeCheckResult.TypeCheckSuccess => TypeCheckResult.TypeCheckSuccess
     }
   }
