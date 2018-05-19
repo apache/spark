@@ -90,6 +90,11 @@ class HadoopMapReduceCommitProtocol(
    */
   private def stagingDir = new Path(path, ".spark-staging-" + jobId)
 
+  /**
+   * The temp job file
+   */
+  protected def tempDir = new Path(path, ".temp-" + jobId)
+
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
@@ -166,9 +171,21 @@ class HadoopMapReduceCommitProtocol(
     committer.commitJob(jobContext)
 
     if (hasValidPath) {
+
+      val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+      // move all file from temp dir to output
+      val files = fs.listFiles(tempDir, false)
+      while (files.hasNext) {
+        val file = files.next()
+        val name = file.getPath().getName()
+        val to = new Path(path, name)
+        fs.rename(file.getPath, to)
+      }
+
+      fs.delete(tempDir, true)
+
       val (allAbsPathFiles, allPartitionPaths) =
         taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])]).unzip
-      val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
 
       val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
       logDebug(s"Committing files staged for absolute locations $filesToMove")
@@ -235,4 +252,6 @@ class HadoopMapReduceCommitProtocol(
       tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
     }
   }
+
+  override def getJobId(): String = jobId
 }

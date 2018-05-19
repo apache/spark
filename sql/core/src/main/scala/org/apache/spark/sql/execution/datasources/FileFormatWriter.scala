@@ -117,7 +117,10 @@ object FileFormatWriter extends Logging {
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
     job.setOutputValueClass(classOf[InternalRow])
-    FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
+    val jobOutputPath = new Path(outputSpec.outputPath, s".temp-${committer.getJobId()}")
+    val fs = jobOutputPath.getFileSystem(hadoopConf)
+    fs.mkdirs(jobOutputPath)
+    FileOutputFormat.setOutputPath(job, jobOutputPath)
 
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = outputSpec.outputColumns.filterNot(partitionSet.contains)

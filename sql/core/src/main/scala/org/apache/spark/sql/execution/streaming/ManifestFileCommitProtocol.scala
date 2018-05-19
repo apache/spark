@@ -117,4 +117,6 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     // Do nothing
     // TODO: we can also try delete the addedFiles as a best-effort cleanup.
   }
+
+  override def getJobId(): String = jobId
 }

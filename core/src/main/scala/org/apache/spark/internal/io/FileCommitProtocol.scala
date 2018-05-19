@@ -45,6 +45,7 @@ import org.apache.spark.util.Utils
 abstract class FileCommitProtocol {
   import FileCommitProtocol._
 
+  def getJobId(): String
   /**
    * Setups up a job. Must be called on the driver before any other methods can be invoked.
    */
