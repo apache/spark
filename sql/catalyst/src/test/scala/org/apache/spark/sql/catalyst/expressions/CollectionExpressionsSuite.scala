@@ -1216,18 +1216,24 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayType(BinaryType))
     val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](4, 3)),
       ArrayType(BinaryType))
-    val b3 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), null), ArrayType(BinaryType))
-    val b4 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)), ArrayType(BinaryType))
+    val b3 = Literal.create(Seq[Array[Byte]](
+      Array[Byte](1, 2), Array[Byte](4, 3), Array[Byte](1, 2)), ArrayType(BinaryType))
+    val b4 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), null), ArrayType(BinaryType))
+    val b5 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)), ArrayType(BinaryType))
+    val b6 = Literal.create(Seq.empty, ArrayType(BinaryType))
     val arrayWithBinaryNull = Literal.create(Seq(null), ArrayType(BinaryType))
 
     checkEvaluation(ArrayUnion(b0, b1),
       Seq(Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](2, 1), Array[Byte](4, 3)))
     checkEvaluation(ArrayUnion(b0, b2),
       Seq(Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](4, 3)))
-    checkEvaluation(ArrayUnion(b2, b3), Seq(Array[Byte](1, 2), Array[Byte](4, 3), null))
-    checkEvaluation(ArrayUnion(b3, b0), Seq(Array[Byte](1, 2), null, Array[Byte](5, 6)))
-    checkEvaluation(ArrayUnion(b3, b4), Seq(Array[Byte](1, 2), null))
-    checkEvaluation(ArrayUnion(b3, arrayWithBinaryNull), Seq(Array[Byte](1, 2), null))
+    checkEvaluation(ArrayUnion(b2, b4), Seq(Array[Byte](1, 2), Array[Byte](4, 3), null))
+    checkEvaluation(ArrayUnion(b3, b0),
+      Seq(Array[Byte](1, 2), Array[Byte](4, 3), Array[Byte](5, 6)))
+    checkEvaluation(ArrayUnion(b4, b0), Seq(Array[Byte](1, 2), null, Array[Byte](5, 6)))
+    checkEvaluation(ArrayUnion(b4, b5), Seq(Array[Byte](1, 2), null))
+    checkEvaluation(ArrayUnion(b6, b4), Seq(Array[Byte](1, 2), null))
+    checkEvaluation(ArrayUnion(b4, arrayWithBinaryNull), Seq(Array[Byte](1, 2), null))
 
     val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))

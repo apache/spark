@@ -3320,15 +3320,9 @@ object ArraySetLike {
       val length = math.min(array1.numElements().toLong + array2.numElements().toLong,
         ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
       val array = new Array[Any](length.toInt)
+      var pos = 0
       var hasNull = false
-      array1.foreach(et, (i, v) => {
-        array(i) = v
-        if (v == null) {
-          hasNull = true
-        }
-      })
-      var pos = array1.numElements()
-      array2.foreach(et, (_, v) => {
+      Seq(array1, array2).foreach(_.foreach(et, (_, v) => {
         var found = false
         if (v == null) {
           if (hasNull) {
@@ -3354,7 +3348,7 @@ object ArraySetLike {
           array(pos) = v
           pos = pos + 1
         }
-      })
+      }))
       new GenericArrayData(array.slice(0, pos))
     }
   }
