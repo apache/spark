@@ -78,6 +78,12 @@ class DataFrame(object):
         self.is_cached = False
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
+        self._eager_eval = sql_ctx.getConf(
+            "spark.jupyter.eagerEval.enabled", "false").lower() == "true"
+        self._default_console_row = int(sql_ctx.getConf(
+            "spark.jupyter.default.showRows", u"20"))
+        self._default_console_truncate = int(sql_ctx.getConf(
+            "spark.jupyter.default.showRows", u"20"))
 
     @property
     @since(1.3)
@@ -347,12 +353,17 @@ class DataFrame(object):
          name | Bob
         """
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20, vertical))
+            print(self._jdf.showString(n, 20, vertical, False))
         else:
-            print(self._jdf.showString(n, int(truncate), vertical))
+            print(self._jdf.showString(n, int(truncate), vertical, False))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    def _repr_html_(self):
+        if self._eager_eval:
+            return self._jdf.showString(
+                self._default_console_row, self._default_console_truncate, False, True)
 
     @since(2.1)
     def checkpoint(self, eager=True):

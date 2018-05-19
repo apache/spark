@@ -159,7 +159,6 @@ private[sql] object Dataset {
  * @groupname action Actions
  * @groupname untypedrel Untyped transformations
  * @groupname typedrel Typed transformations
- *
  * @since 1.6.0
  */
 @InterfaceStability.Stable
@@ -237,9 +236,13 @@ class Dataset[T] private[sql](
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
    *                   all cells will be aligned right.
    * @param vertical If set to true, prints output rows vertically (one line per column value).
+   * @param html     If set to true, return output as html table.
    */
   private[sql] def showString(
-      _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
+      _numRows: Int,
+      truncate: Int = 20,
+      vertical: Boolean = false,
+      html: Boolean = false): String = {
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
     val newDf = toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
@@ -292,31 +295,24 @@ class Dataset[T] private[sql](
       }
 
       // Create SeparateLine
-      val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+      val sep: String = if (html) {
+        // Initial append table label
+        sb.append("<table border='1'>\n")
+        "\n"
+      } else {
+        colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+      }
 
       // column names
-      rows.head.zipWithIndex.map { case (cell, i) =>
-        if (truncate > 0) {
-          StringUtils.leftPad(cell, colWidths(i))
-        } else {
-          StringUtils.rightPad(cell, colWidths(i))
-        }
-      }.addString(sb, "|", "|", "|\n")
-
+      appendRowString(rows.head, truncate, colWidths, html, true, sb)
       sb.append(sep)
 
       // data
-      rows.tail.foreach {
-        _.zipWithIndex.map { case (cell, i) =>
-          if (truncate > 0) {
-            StringUtils.leftPad(cell.toString, colWidths(i))
-          } else {
-            StringUtils.rightPad(cell.toString, colWidths(i))
-          }
-        }.addString(sb, "|", "|", "|\n")
+      rows.tail.foreach { row =>
+        appendRowString(row.map(_.toString), truncate, colWidths, html, false, sb)
       }
-
       sb.append(sep)
+      if (html) sb.append("</table>\n")
     } else {
       // Extended display mode enabled
       val fieldNames = rows.head
@@ -356,6 +352,41 @@ class Dataset[T] private[sql](
     }
 
     sb.toString()
+  }
+
+  /**
+   * Transform current row string and append to builder
+   *
+   * @param row       Current row of string
+   * @param truncate  If set to more than 0, truncates strings to `truncate` characters and
+   *                    all cells will be aligned right.
+   * @param colWidths The width of each column
+   * @param html      If set to true, return output as html table.
+   * @param head      Set to true while current row is table head.
+   * @param sb        StringBuilder for current row.
+   */
+  private[sql] def appendRowString(
+      row: Seq[String],
+      truncate: Int,
+      colWidths: Array[Int],
+      html: Boolean,
+      head: Boolean,
+      sb: StringBuilder): Unit = {
+    val data = row.zipWithIndex.map { case (cell, i) =>
+      if (truncate > 0) {
+        StringUtils.leftPad(cell, colWidths(i))
+      } else {
+        StringUtils.rightPad(cell, colWidths(i))
+      }
+    }
+    (html, head) match {
+      case (true, true) =>
+        data.addString(sb, "<tr><th>", "</th><th>", "</th></tr>")
+      case (true, false) =>
+        data.addString(sb, "<tr><td>", "</td><td>", "</td></tr>")
+      case _ =>
+        data.addString(sb, "|", "|", "|\n")
+    }
   }
 
   override def toString: String = {
@@ -655,7 +686,6 @@ class Dataset[T] private[sql](
    * @param delayThreshold the minimum delay to wait to data to arrive late, relative to the latest
    *                       record that has been processed in the form of an interval
    *                       (e.g. "1 minute" or "5 hours"). NOTE: This should not be negative.
-   *
    * @group streaming
    * @since 2.1.0
    */
@@ -685,7 +715,6 @@ class Dataset[T] private[sql](
    * }}}
    *
    * @param numRows Number of rows to show
-   *
    * @group action
    * @since 1.6.0
    */
@@ -705,7 +734,6 @@ class Dataset[T] private[sql](
    *
    * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *                 be truncated and all cells will be aligned right
-   *
    * @group action
    * @since 1.6.0
    */
@@ -721,10 +749,10 @@ class Dataset[T] private[sql](
    *   1983  03    0.410516        0.442194
    *   1984  04    0.450090        0.483521
    * }}}
+   *
    * @param numRows Number of rows to show
    * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *              be truncated and all cells will be aligned right
-   *
    * @group action
    * @since 1.6.0
    */
@@ -837,7 +865,6 @@ class Dataset[T] private[sql](
    * Behaves as an INNER JOIN and requires a subsequent join predicate.
    *
    * @param right Right side of the join operation.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -858,11 +885,9 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join operation.
    * @param usingColumn Name of the column to join on. This column must exist on both sides.
-   *
    * @note If you perform a self-join using this function without aliasing the input
    * `DataFrame`s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -883,11 +908,9 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
-   *
    * @note If you perform a self-join using this function without aliasing the input
    * `DataFrame`s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -908,11 +931,9 @@ class Dataset[T] private[sql](
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
    *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
    *                 `right`, `right_outer`, `left_semi`, `left_anti`.
-   *
    * @note If you perform a self-join using this function without aliasing the input
    * `DataFrame`s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -965,7 +986,6 @@ class Dataset[T] private[sql](
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
    *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
    *                 `right`, `right_outer`, `left_semi`, `left_anti`.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -1016,9 +1036,7 @@ class Dataset[T] private[sql](
    * Explicit cartesian join with another `DataFrame`.
    *
    * @param right Right side of the join operation.
-   *
    * @note Cartesian joins are very expensive without an extra filter that can be pushed down.
-   *
    * @group untypedrel
    * @since 2.1.0
    */
@@ -1044,7 +1062,6 @@ class Dataset[T] private[sql](
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
    *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
    *                 `right`, `right_outer`.
-   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -1120,7 +1137,6 @@ class Dataset[T] private[sql](
    *
    * @param other Right side of the join.
    * @param condition Join expression.
-   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -1211,7 +1227,6 @@ class Dataset[T] private[sql](
    * Selects column based on the column name and returns it as a [[Column]].
    *
    * @note The column name can also reference to a nested column like `a.b`.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -1237,7 +1252,6 @@ class Dataset[T] private[sql](
    * Selects column based on the column name and returns it as a [[Column]].
    *
    * @note The column name can also reference to a nested column like `a.b`.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -1255,6 +1269,7 @@ class Dataset[T] private[sql](
 
   /**
    * Selects column based on the column name specified as a regex and returns it as [[Column]].
+   *
    * @group untypedrel
    * @since 2.3.0
    */
@@ -1596,6 +1611,7 @@ class Dataset[T] private[sql](
    *     "age" -> "max"
    *   ))
    * }}}
+   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -1717,6 +1733,7 @@ class Dataset[T] private[sql](
    *     "age" -> "max"
    *   ))
    * }}}
+   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -1909,7 +1926,6 @@ class Dataset[T] private[sql](
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
-   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -1923,7 +1939,6 @@ class Dataset[T] private[sql](
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
-   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -1937,10 +1952,8 @@ class Dataset[T] private[sql](
    *
    * @param fraction Fraction of rows to generate, range [0.0, 1.0].
    * @param seed Seed for sampling.
-   *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
    * of the given [[Dataset]].
-   *
    * @group typedrel
    * @since 2.3.0
    */
@@ -1953,10 +1966,8 @@ class Dataset[T] private[sql](
    * using a random seed.
    *
    * @param fraction Fraction of rows to generate, range [0.0, 1.0].
-   *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
    * of the given [[Dataset]].
-   *
    * @group typedrel
    * @since 2.3.0
    */
@@ -1970,10 +1981,8 @@ class Dataset[T] private[sql](
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate, range [0.0, 1.0].
    * @param seed Seed for sampling.
-   *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
    * of the given [[Dataset]].
-   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -1988,10 +1997,8 @@ class Dataset[T] private[sql](
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate, range [0.0, 1.0].
-   *
    * @note This is NOT guaranteed to provide exactly the fraction of the total count
    * of the given [[Dataset]].
-   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -2006,7 +2013,6 @@ class Dataset[T] private[sql](
    * @param seed Seed for sampling.
    *
    * For Java API, use [[randomSplitAsList]].
-   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -2044,7 +2050,6 @@ class Dataset[T] private[sql](
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
-   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -2414,7 +2419,6 @@ class Dataset[T] private[sql](
    * Use [[summary]] for expanded statistics and control over which statistics to compute.
    *
    * @param cols Columns to compute statistics on.
-   *
    * @group action
    * @since 1.6.0
    */
@@ -2477,7 +2481,6 @@ class Dataset[T] private[sql](
    * See also [[describe]] for basic statistics.
    *
    * @param statistics Statistics from above list to be computed.
-   *
    * @group action
    * @since 2.3.0
    */
@@ -2489,7 +2492,6 @@ class Dataset[T] private[sql](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-   *
    * @group action
    * @since 1.6.0
    */
@@ -2497,6 +2499,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the first row.
+   *
    * @group action
    * @since 1.6.0
    */
@@ -2504,6 +2507,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the first row. Alias for head().
+   *
    * @group action
    * @since 1.6.0
    */
@@ -2755,7 +2759,6 @@ class Dataset[T] private[sql](
    * @note this results in multiple Spark jobs, and if the input Dataset is the result
    * of a wide transformation (e.g. join with different partitioners), to avoid
    * recomputing the input Dataset should be cached first.
-   *
    * @group action
    * @since 2.0.0
    */
@@ -2775,6 +2778,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the number of rows in the Dataset.
+   *
    * @group action
    * @since 1.6.0
    */
@@ -2898,7 +2902,6 @@ class Dataset[T] private[sql](
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
-   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -2925,10 +2928,10 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the given storage level.
+   *
    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
    *                 `MEMORY_AND_DISK_2`, etc.
-   *
    * @group basic
    * @since 1.6.0
    */
@@ -2953,7 +2956,6 @@ class Dataset[T] private[sql](
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
    *
    * @param blocking Whether to block until all blocks are deleted.
-   *
    * @group basic
    * @since 1.6.0
    */
@@ -2991,6 +2993,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a `JavaRDD` of `T`s.
+   *
    * @group basic
    * @since 1.6.0
    */
@@ -2998,6 +3001,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a `JavaRDD` of `T`s.
+   *
    * @group basic
    * @since 1.6.0
    */
@@ -3024,7 +3028,6 @@ class Dataset[T] private[sql](
    * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
    *
    * @throws AnalysisException if the view name is invalid or already exists
-   *
    * @group basic
    * @since 2.0.0
    */
@@ -3056,7 +3059,6 @@ class Dataset[T] private[sql](
    * view, e.g. `SELECT * FROM global_temp.view1`.
    *
    * @throws AnalysisException if the view name is invalid or already exists
-   *
    * @group basic
    * @since 2.1.0
    */
@@ -3136,6 +3138,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
+   *
    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
