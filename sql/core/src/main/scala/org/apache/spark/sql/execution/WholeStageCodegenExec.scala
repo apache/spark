@@ -260,7 +260,7 @@ trait CodegenSupport extends SparkPlan {
    * them to be evaluated twice.
    */
   protected def evaluateVariables(variables: Seq[ExprCode]): String = {
-    val evaluate = variables.filter(_.code.toString != "").map(_.code.toString).mkString("\n")
+    val evaluate = variables.filter(_.code.nonEmpty).map(_.code.toString).mkString("\n")
     variables.foreach(_.code = EmptyBlock)
     evaluate
   }

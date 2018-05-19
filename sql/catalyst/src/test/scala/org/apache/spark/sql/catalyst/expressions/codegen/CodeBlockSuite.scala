@@ -23,10 +23,18 @@ import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 class CodeBlockSuite extends SparkFunSuite {
 
-  test("Block can interpolate string and ExprValue inputs") {
+  test("Block interpolates string and ExprValue inputs") {
     val isNull = JavaCode.isNullVariable("expr1_isNull")
-    val code = code"boolean ${isNull} = ${JavaCode.defaultLiteral(BooleanType)};"
+    val stringLiteral = "false"
+    val code = code"boolean $isNull = $stringLiteral;"
     assert(code.toString == "boolean expr1_isNull = false;")
+  }
+
+  test("Literals are folded into string code parts instead of block inputs") {
+    val value = JavaCode.variable("expr1", IntegerType)
+    val intLiteral = 1
+    val code = code"int $value = $intLiteral;"
+    assert(code.asInstanceOf[CodeBlock].blockInputs === Seq(value))
   }
 
   test("Block.stripMargin") {
@@ -92,7 +100,7 @@ class CodeBlockSuite extends SparkFunSuite {
   }
 
   test("Throws exception when interpolating unexcepted object in code block") {
-    val obj = TestClass(100)
+    val obj = Tuple2(1, 1)
     val e = intercept[IllegalArgumentException] {
       code"$obj"
     }
@@ -100,18 +108,18 @@ class CodeBlockSuite extends SparkFunSuite {
   }
 
   test("replace expr values in code block") {
-    val statement = JavaCode.expression("1 + 1", IntegerType)
+    val expr = JavaCode.expression("1 + 1", IntegerType)
     val isNull = JavaCode.isNullVariable("expr1_isNull")
     val exprInFunc = JavaCode.variable("expr1", IntegerType)
 
     val code =
       code"""
-           |callFunc(int $statement) {
+           |callFunc(int $expr) {
            |  boolean $isNull = false;
-           |  int $exprInFunc = $statement + 1;
+           |  int $exprInFunc = $expr + 1;
            |}""".stripMargin
 
-    val aliasedParam = JavaCode.variable("aliased", statement.javaType)
+    val aliasedParam = JavaCode.variable("aliased", expr.javaType)
     val aliasedInputs = code.asInstanceOf[CodeBlock].blockInputs.map {
       case _: SimpleExprValue => aliasedParam
       case other => other
@@ -126,5 +134,3 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(aliasedCode.toString == expected.toString)
   }
 }
-
-private case class TestClass(a: Int)

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.lang.{Boolean => JBool}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.language.{existentials, implicitConversions}
 
 import org.apache.spark.sql.types.{BooleanType, DataType}
@@ -130,6 +131,8 @@ trait Block extends JavaCode {
 
   def length: Int = toString.length
 
+  def nonEmpty: Boolean = toString.nonEmpty
+
   // The leading prefix that should be stripped from each line.
   // By default we strip blanks or control characters followed by '|' from the line.
   var _marginChar: Option[Char] = Some('|')
@@ -167,9 +170,40 @@ object Block {
           case other => throw new IllegalArgumentException(
             s"Can not interpolate ${other.getClass.getName} into code block.")
         }
-        CodeBlock(sc.parts, args)
+
+        val (codeParts, blockInputs) = foldLiteralArgs(sc.parts, args)
+        CodeBlock(codeParts, blockInputs)
       }
     }
+  }
+
+  // Folds eagerly the literal args into the code parts.
+  private def foldLiteralArgs(parts: Seq[String], args: Seq[Any]): (Seq[String], Seq[Any]) = {
+    val codeParts = ArrayBuffer.empty[String]
+    val blockInputs = ArrayBuffer.empty[Any]
+
+    val strings = parts.iterator
+    val inputs = args.iterator
+    val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
+
+    buf append strings.next
+    while (strings.hasNext) {
+      val input = inputs.next
+      input match {
+        case _: ExprValue | _: Block =>
+          codeParts += buf.toString
+          buf.clear
+          blockInputs += input
+        case _ =>
+          buf append input
+      }
+      buf append strings.next
+    }
+    if (buf.nonEmpty) {
+      codeParts += buf.toString
+    }
+
+    (codeParts.toSeq, blockInputs.toSeq)
   }
 }
 
@@ -182,11 +216,10 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[Any]) extends Bloc
     blockInputs.flatMap {
       case b: Block => b.exprValues
       case e: ExprValue => Set(e)
-      case _ => Set.empty[ExprValue]
     }.toSet
   }
 
-  override def code: String = {
+  override lazy val code: String = {
     val strings = codeParts.iterator
     val inputs = blockInputs.iterator
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
@@ -207,7 +240,7 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[Any]) extends Bloc
 
 case class Blocks(blocks: Seq[Block]) extends Block {
   override lazy val exprValues: Set[ExprValue] = blocks.flatMap(_.exprValues).toSet
-  override def code: String = blocks.map(_.toString).mkString("\n")
+  override lazy val code: String = blocks.map(_.toString).mkString("\n")
 
   override def + (other: Block): Block = other match {
     case c: CodeBlock => Blocks(blocks :+ c)
@@ -217,7 +250,7 @@ case class Blocks(blocks: Seq[Block]) extends Block {
 }
 
 object EmptyBlock extends Block with Serializable {
-  override def code: String = ""
+  override val code: String = ""
   override val exprValues: Set[ExprValue] = Set.empty
 
   override def + (other: Block): Block = other

@@ -59,7 +59,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = code"${ctx.registerComment(str)}\n" + (if (nullable) {
+    val code = code"${ctx.registerComment(str)}" + (if (nullable) {
       code"""
         boolean $isNullVar = $columnVar.isNullAt($ordinal);
         $javaType $valueVar = $isNullVar ? ${CodeGenerator.defaultValue(dataType)} : ($value);

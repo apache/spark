@@ -43,8 +43,9 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
-    ev.copy(code = code"final ${CodeGenerator.javaType(dataType)} ${ev.value} = " +
-      code"$className.getInputFilePath();", isNull = FalseLiteral)
+    val typeDef = s"final ${CodeGenerator.javaType(dataType)}"
+    ev.copy(code = code"$typeDef ${ev.value} = $className.getInputFilePath();",
+      isNull = FalseLiteral)
   }
 }
 
@@ -66,8 +67,8 @@ case class InputFileBlockStart() extends LeafExpression with Nondeterministic {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
-    ev.copy(code = code"final ${CodeGenerator.javaType(dataType)} ${ev.value} = " +
-      code"$className.getStartOffset();", isNull = FalseLiteral)
+    val typeDef = s"final ${CodeGenerator.javaType(dataType)}"
+    ev.copy(code = code"$typeDef ${ev.value} = $className.getStartOffset();", isNull = FalseLiteral)
   }
 }
 
@@ -89,7 +90,7 @@ case class InputFileBlockLength() extends LeafExpression with Nondeterministic {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
-    ev.copy(code = code"final ${CodeGenerator.javaType(dataType)} ${ev.value} = " +
-      code"$className.getLength();", isNull = FalseLiteral)
+    val typeDef = s"final ${CodeGenerator.javaType(dataType)}"
+    ev.copy(code = code"$typeDef ${ev.value} = $className.getLength();", isNull = FalseLiteral)
   }
 }
