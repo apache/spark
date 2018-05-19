@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -430,29 +431,30 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
     val underlyingMapIterator = underlyingIt.upstream
     assert(underlyingMapIterator != null)
     val underlyingMapIteratorClass = underlyingMapIterator.getClass
-    assert(underlyingMapIteratorClass.getEnclosingClass == classOf[AppendOnlyMap[_,_]])
+    assert(underlyingMapIteratorClass.getEnclosingClass == classOf[AppendOnlyMap[_, _]])
 
     val underlyingMap = map.currentMap
     assert(underlyingMap != null)
 
-    val first50Keys = for( _ <- 0 until 50) yield {
-      val (k,vs) =  it.next
+    val first50Keys = for ( _ <- 0 until 50) yield {
+      val (k, vs) = it.next
       val sortedVs = vs.sorted
       assert(sortedVs.seq == (0 until 10).map(10 * k + _))
       k
     }
     assert( map.numSpills == 0 )
     map.spill(Long.MaxValue, null)
-    //assert( map.numSpills == 1)
-    //these asserts basically try to show that we're no longer holding references to the underlying AppendOnlyMap
-    //it'd be nice to use something like https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala#L69-89
+    // these asserts try to show that we're no longer holding references to the underlying map.
+    // it'd be nice to use something like
+    // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
+    // (lines 69-89)
     assert(map.currentMap == null)
     assert(underlyingIt.upstream ne underlyingMapIterator)
     assert(underlyingIt.upstream.getClass != underlyingMapIteratorClass)
-    assert(underlyingIt.upstream.getClass.getEnclosingClass != classOf[AppendOnlyMap[_,_]])
+    assert(underlyingIt.upstream.getClass.getEnclosingClass != classOf[AppendOnlyMap[_, _]])
 
-    val next50Keys = for( _ <- 0 until 50) yield {
-      val (k,vs) =  it.next
+    val next50Keys = for ( _ <- 0 until 50) yield {
+      val (k, vs) = it.next
       val sortedVs = vs.sorted
       assert(sortedVs.seq == (0 until 10).map(10 * k + _))
       k
