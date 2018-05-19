@@ -59,7 +59,8 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         val pathString = path.getCanonicalPath
         spark.range(10).select('id.as("ID")).write.json(pathString)
         spark.range(10).write.mode("append").json(pathString)
-        assert(spark.read.json(pathString).columns.toSet == Set("id", "ID"))
+        val df = spark.read.option("samplingRatio", 1).json(pathString)
+        assert(df.columns.toSet == Set("id", "ID"))
       }
     }
   }
