@@ -174,15 +174,17 @@ class HadoopMapReduceCommitProtocol(
 
       val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
       // move all file from temp dir to output
-      val files = fs.listFiles(tempDir, false)
-      while (files.hasNext) {
-        val file = files.next()
-        val name = file.getPath().getName()
-        val to = new Path(path, name)
-        fs.rename(file.getPath, to)
-      }
+      if (fs.exists(tempDir)) {
+        val files = fs.listFiles(tempDir, false)
+        while (files.hasNext) {
+          val file = files.next()
+          val name = file.getPath().getName()
+          val to = new Path(path, name)
+          fs.rename(file.getPath, to)
+        }
 
-      fs.delete(tempDir, true)
+        fs.delete(tempDir, true)
+      }
 
       val (allAbsPathFiles, allPartitionPaths) =
         taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])]).unzip
