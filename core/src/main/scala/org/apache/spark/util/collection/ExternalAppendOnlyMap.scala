@@ -109,7 +109,6 @@ class ExternalAppendOnlyMap[K, V, C](
 
   // Write metrics
   private val writeMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics()
-  private val writeMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics()
 
   // Peak size of the in-memory map observed so far, in bytes
   private var _peakMemoryUsedBytes: Long = 0L
