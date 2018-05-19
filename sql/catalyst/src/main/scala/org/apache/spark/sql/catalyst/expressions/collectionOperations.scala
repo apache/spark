@@ -184,18 +184,25 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
         |  $arrCardinality[$index] = 0;
         |}
         |$storedArrTypes[$index] = "${arrayElementTypes(index)}";
-        |$biggestCardinality[0] = Math.max($biggestCardinality[0], $arrCardinality[$index]);
+        |$biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
       """.stripMargin
     }
 
     val inputsSplitted = ctx.splitExpressions(
       expressions = inputs,
       funcName = "getInputAndCardinality",
+      returnType = "int",
+      makeSplitFunction = body =>
+        s"""
+          |$body
+          |return $biggestCardinality;
+        """.stripMargin,
+      foldFunctions = _.map(funcCall => s"$biggestCardinality = $funcCall;").mkString("\n"),
       arguments =
         ("ArrayData[]", arrVals) ::
         ("int[]", arrCardinality) ::
         ("String[]", storedArrTypes) ::
-        ("int[]", biggestCardinality) :: Nil)
+        ("int", biggestCardinality) :: Nil)
 
     val myobject = ctx.freshName("myobject")
     val j = ctx.freshName("j")
@@ -205,32 +212,24 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val fillValue = arrayElementTypes.distinct.map { case (elementType) =>
       val getArrValsItem = CodeGenerator.getValue(s"$arrVals[$j]", elementType, i)
       s"""
-      |      if ($storedArrTypes[$j] == "${elementType}") {
-      |        $myobject[$j] = $getArrValsItem;
-      |      }
+      |if ($storedArrTypes[$j] == "${elementType}") {
+      |  $myobject[$j] = $getArrValsItem;
+      |}
       """.stripMargin
-    }
-
-    val fillValueSplitted = ctx.splitExpressions(
-      expressions = fillValue,
-      funcName = "fillValue",
-      arguments =
-        ("int", j) ::
-        ("Array[] Object", myobject) :: Nil)
+    }.mkString("\n")
 
     ev.copy(s"""
       |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
       |int[] $arrCardinality = new int[$numberOfArrays];
-      |int[] $biggestCardinality = new int[1];
-      |$biggestCardinality[0] = 0;
+      |int $biggestCardinality = 0;
       |String[] $storedArrTypes = new String[$numberOfArrays];
       |$inputsSplitted
-      |Object[] $args = new Object[$biggestCardinality[0]];
-      |for (int $i = 0; $i < $biggestCardinality[0]; $i ++) {
+      |Object[] $args = new Object[$biggestCardinality];
+      |for (int $i = 0; $i < $biggestCardinality; $i ++) {
       |  Object[] $myobject = new Object[$numberOfArrays];
       |  for (int $j = 0; $j < $numberOfArrays; $j ++) {
       |    if ($arrVals[$j] != null && $arrCardinality[$j] > $i && !$arrVals[$j].isNullAt($i)) {
-      |      $fillValueSplitted
+      |      $fillValue
       |    } else {
       |      $myobject[$j] = null;
       |    }

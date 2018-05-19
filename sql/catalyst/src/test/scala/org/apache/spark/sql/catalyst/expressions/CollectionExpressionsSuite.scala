@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -377,6 +377,25 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(Zip(Seq(literals(7), literals(10))),
       List(Row(null, Array[Byte](1.toByte, 5.toByte))))
+
+    val longLiteral =
+      Literal.create((0 to 1000).toSeq, ArrayType(IntegerType))
+
+    checkEvaluation(Zip(Seq(literals(0), longLiteral)),
+      List(Row(9001, 0), Row(9002, 1), Row(9003, 2)) ++
+      (3 to 1000).map { Row(null, _) }.toList)
+
+    val manyLiterals = (0 to 1000).map { case (number) =>
+      Literal.create(Seq(1), ArrayType(IntegerType))
+    }.toSeq
+
+    val numbers = List(
+      Seq(9001) ++ (0 to 1000).map { case (number) => 1 }.toSeq,
+      Seq(9002) ++ (0 to 1000).map { case (number) => null }.toSeq,
+      Seq(9003) ++ (0 to 1000).map { case (number) => null }.toSeq,
+      Seq(null) ++ (0 to 1000).map { case (number) => null }.toSeq)
+    checkEvaluation(Zip(Seq(literals(0)) ++ manyLiterals),
+      List(Row(numbers(0): _*), Row(numbers(1): _*), Row(numbers(2): _*), Row(numbers(3): _*)))
   }
 
   test("Array Min") {
