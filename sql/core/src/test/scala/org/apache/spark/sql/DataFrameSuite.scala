@@ -2280,5 +2280,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val h3 = p3.queryExecution.logical.canonicalized.semanticHash()
     assert(h1 == h2)
     assert(h1 != h3)
+
+    val df2 = Seq(Array(1, 2)).toDF("id")
+    val arrays1 = df2.where($"id".isin(lit(Array(1, 2)), lit(Array(2, 1))))
+    val arrays2 = df2.where($"id".isin(lit(Array(2, 1)), lit(Array(1, 2))))
+    val arrays3 = df2.where($"id".isin(lit(Array(3, 2)), lit(Array(2, 1))))
+    assert(arrays1.queryExecution.executedPlan.sameResult(arrays2.queryExecution.executedPlan))
+    assert(!arrays1.queryExecution.executedPlan.sameResult(arrays3.queryExecution.executedPlan))
+    val arraysHash1 = arrays1.queryExecution.logical.canonicalized.semanticHash()
+    val arraysHash2 = arrays2.queryExecution.logical.canonicalized.semanticHash()
+    val arraysHash3 = arrays3.queryExecution.logical.canonicalized.semanticHash()
+    assert(arraysHash1 == arraysHash2)
+    assert(arraysHash1 != arraysHash3)
   }
 }
