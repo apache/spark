@@ -46,10 +46,13 @@ private[sql] object JsonInferSchema {
     val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
 
     // perform schema inference on each row and merge afterwards
-    val rootType = json.mapPartitions { iter =>
+    // SPARK-24250: we can't call `RDD.fold` because it folds inferred types locally in
+    // `DAGScheduler`'s event loop thread which is not child thread of current thread. So
+    // there is no active spark session and SQL conf will be default.
+    val allTypes = json.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
-      iter.flatMap { row =>
+      val typeInPartition = iter.flatMap { row =>
         try {
           Utils.tryWithResource(createParser(factory, row)) { parser =>
             parser.nextToken()
@@ -66,8 +69,12 @@ private[sql] object JsonInferSchema {
                 s"Parse Mode: ${FailFastMode.name}.", e)
           }
         }
-      }
-    }.fold(StructType(Nil))(
+      }.fold(StructType(Nil))(
+        compatibleRootType(columnNameOfCorruptRecord, parseMode))
+      Iterator(typeInPartition)
+    }.collect()
+
+    val rootType = allTypes.fold(StructType(Nil))(
       compatibleRootType(columnNameOfCorruptRecord, parseMode))
 
     canonicalizeType(rootType) match {
