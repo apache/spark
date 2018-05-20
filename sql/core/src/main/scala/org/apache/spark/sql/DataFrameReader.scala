@@ -504,7 +504,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val parsed = linesWithoutHeader.mapPartitions { iter =>
       val rawParser = new UnivocityParser(actualSchema, parsedOptions)
       val parser = new FailureSafeParser[String](
-        input => Seq(rawParser.parse(input)),
+        input => rawParser.parse(input),
         parsedOptions.parseMode,
         schema,
         parsedOptions.columnNameOfCorruptRecord)

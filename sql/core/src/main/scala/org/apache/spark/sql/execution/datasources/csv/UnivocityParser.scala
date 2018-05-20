@@ -182,10 +182,12 @@ class UnivocityParser(
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): InternalRow = convert(tokenizer.parseLine(input))
+  def parse(input: String): Seq[InternalRow] = convert(tokenizer.parseLine(input))
 
-  private def convert(tokens: Array[String]): InternalRow = {
-    if (tokens.length != schema.length) {
+  private def convert(tokens: Array[String]): Seq[InternalRow] = {
+    if (tokens == null) {
+      Seq.empty
+    } else if (tokens.length != schema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
       // However, we still have chance to parse some of the tokens, by adding extra null tokens in
       // the tail if the number is smaller, or by dropping extra tokens if the number is larger.
@@ -196,7 +198,7 @@ class UnivocityParser(
       }
       def getPartialResult(): Option[InternalRow] = {
         try {
-          Some(convert(checkedTokens))
+          convert(checkedTokens).headOption
         } catch {
           case _: BadRecordException => None
         }
@@ -215,7 +217,7 @@ class UnivocityParser(
           row(i) = valueConverters(from).apply(tokens(from))
           i += 1
         }
-        row
+        Seq(row)
       } catch {
         case NonFatal(e) =>
           // For corrupted records with the number of tokens same as the schema,
@@ -249,7 +251,7 @@ private[csv] object UnivocityParser {
       schema: StructType): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
-      input => Seq(parser.convert(input)),
+      input => parser.convert(input),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -300,11 +302,11 @@ private[csv] object UnivocityParser {
       lines
     }
 
-    val filteredLines: Iterator[String] =
-      CSVUtils.filterCommentAndEmpty(linesWithoutHeader, options)
+    val filteredLines: Iterator[String] = linesWithoutHeader
+      // CSVUtils.filterCommentAndEmpty(linesWithoutHeader, options)
 
     val safeParser = new FailureSafeParser[String](
-      input => Seq(parser.parse(input)),
+      input => parser.parse(input),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
