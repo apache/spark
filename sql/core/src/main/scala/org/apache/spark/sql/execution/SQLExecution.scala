@@ -105,6 +105,10 @@ object SQLExecution {
     }
   }
 
+  /**
+   * Wrap an action with specified SQL configs. These configs will be propagated to the executor
+   * side via job local properties.
+   */
   def withSQLConfPropagated[T](sparkSession: SparkSession)(body: => T): T = {
     val sc = sparkSession.sparkContext
     // Set all the specified SQL configs to local properties, so that they can be available at
