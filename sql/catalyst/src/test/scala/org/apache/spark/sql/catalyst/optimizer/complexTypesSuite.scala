@@ -440,7 +440,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkRule(originalQuery, correctAnswer)
   }
 
-  test("SPARK-24313: support complex types as map keys") {
+  test("SPARK-24313: support binary type as map keys in GetMapValue") {
     val mb0 = Literal.create(
       Map(Array[Byte](1, 2) -> "1", Array[Byte](3, 4) -> null, Array[Byte](2, 1) -> "2"),
       MapType(BinaryType, StringType))
