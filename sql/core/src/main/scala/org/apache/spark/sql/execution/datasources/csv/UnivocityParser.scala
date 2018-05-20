@@ -302,14 +302,11 @@ private[csv] object UnivocityParser {
       lines
     }
 
-    val filteredLines: Iterator[String] = linesWithoutHeader
-      // CSVUtils.filterCommentAndEmpty(linesWithoutHeader, options)
-
     val safeParser = new FailureSafeParser[String](
       input => parser.parse(input),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
-    filteredLines.flatMap(safeParser.parse)
+    linesWithoutHeader.flatMap(safeParser.parse)
   }
 }
