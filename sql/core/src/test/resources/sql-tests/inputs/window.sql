@@ -110,14 +110,58 @@ FROM testData
 WINDOW w AS ()
 ORDER BY cate, val;
 
--- sum(distinct)
+-- sum(distinct) for entire partition frame
 SELECT val, cate,
 sum(val) OVER (PARTITION BY cate) AS sum1,
 sum(DISTINCT val) OVER (PARTITION BY cate) AS sum2
-FROM testData;
+FROM testData
+ORDER BY cate, val;
 
--- count(distinct)
+-- count(distinct) for entire partition frame
 SELECT val, cate,
 count(val) OVER (PARTITION BY cate) AS cnt1,
 count(DISTINCT val) OVER (PARTITION BY cate) AS cnt2
-FROM testData;
+FROM testData
+ORDER BY cate, val;
+
+-- sum(distinct) for growing frame
+SELECT val, cate,
+sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum1,
+sum(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum2
+FROM testData
+ORDER BY cate, val;
+
+-- count(distinct) for growing frame
+SELECT val, cate,
+count(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cnt1,
+count(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cnt2
+FROM testData
+ORDER BY cate, val;
+
+-- sum(distinct) for shrinking frame
+SELECT val, cate,
+sum(val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS sum1,
+sum(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS sum2
+FROM testData
+ORDER BY cate, val;
+
+-- count(distinct) for shrinking frame
+SELECT val, cate,
+count(val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS cnt1,
+count(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS cnt2
+FROM testData
+ORDER BY cate, val;
+
+-- sum(distinct) for moving frame
+SELECT val, cate,
+sum(val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS sum1,
+sum(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS sum2
+FROM testData
+ORDER BY cate, val;
+
+-- count(distinct) for moving frame
+SELECT val, cate,
+count(val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS cnt1,
+count(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS cnt2
+FROM testData
+ORDER BY cate, val;

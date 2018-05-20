@@ -370,18 +370,19 @@ SELECT val, cate,
 sum(val) OVER (PARTITION BY cate) AS sum1,
 sum(DISTINCT val) OVER (PARTITION BY cate) AS sum2
 FROM testData
+ORDER BY cate, val
 -- !query 11 schema
 struct<val:int,cate:string,sum1:bigint,sum2:bigint>
 -- !query 11 output
-1	a	4	3
-1	a	4	3
-1	b	6	6
-2	a	4	3
-2	b	6	6
-3	NULL	3	3
-3	b	6	6
 NULL	NULL	3	3
+3	NULL	3	3
 NULL	a	4	3
+1	a	4	3
+1	a	4	3
+2	a	4	3
+1	b	6	6
+2	b	6	6
+3	b	6	6
 
 
 -- !query 12
@@ -389,15 +390,130 @@ SELECT val, cate,
 count(val) OVER (PARTITION BY cate) AS cnt1,
 count(DISTINCT val) OVER (PARTITION BY cate) AS cnt2
 FROM testData
+ORDER BY cate, val
 -- !query 12 schema
 struct<val:int,cate:string,cnt1:bigint,cnt2:bigint>
 -- !query 12 output
-1	a	3	2
-1	a	3	2
-1	b	3	3
-2	a	3	2
-2	b	3	3
-3	NULL	1	1
-3	b	3	3
 NULL	NULL	1	1
+3	NULL	1	1
 NULL	a	3	2
+1	a	3	2
+1	a	3	2
+2	a	3	2
+1	b	3	3
+2	b	3	3
+3	b	3	3
+
+-- !query13
+SELECT val, cate,
+sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum1,
+sum(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum2
+FROM testData
+ORDER BY cate, val
+-- !query 13 schema
+struct<val:int,cate:string,sum1:bigint,sum2:bigint>
+-- !query 13 output
+NULL	NULL	NULL	NULL
+3	NULL	3	3
+NULL	a	NULL	NULL
+1	a	1	1
+1	a	2	1
+2	a	4	3
+1	b	1	1
+2	b	3	3
+3	b	6	6
+
+-- !query14
+SELECT val, cate,
+count(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cnt1,
+count(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cnt2
+FROM testData
+ORDER BY cate, val
+-- !query 14 schema
+struct<val:int,cate:string,cnt1:bigint,cnt2:bigint>
+-- !query 14 output
+NULL	NULL	0	0
+3	NULL	1	1
+NULL	a	0	0
+1	a	1	1
+1	a	2	1
+2	a	3	2
+1	b	1	1
+2	b	2	2
+3	b	3	3
+
+-- !query15
+SELECT val, cate,
+sum(val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS sum1,
+sum(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS sum2
+FROM testData
+ORDER BY cate, val
+-- !query 15 schema
+struct<val:int,cate:string,sum1:bigint,sum2:bigint>
+-- !query 15 output
+NULL	NULL	3	3
+3	NULL	3	3
+NULL	a	4	3
+1	a	4	3
+1	a	3	3
+2	a	2	2
+1	b	6	6
+2	b	5	5
+3	b	3	3
+
+-- !query16
+SELECT val, cate,
+count(val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS cnt1,
+count(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS cnt2
+FROM testData
+ORDER BY cate, val
+-- !query 16 schema
+struct<val:int,cate:string,cnt1:bigint,cnt2:bigint>
+-- !query 16 output
+NULL	NULL	1	1
+3	NULL	1	1
+NULL	a	3	2
+1	a	3	2
+1	a	2	2
+2	a	1	1
+1	b	3	3
+2	b	2	2
+3	b	1	1
+
+-- !query17
+SELECT val, cate,
+sum(val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS sum1,
+sum(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS sum2
+FROM testData
+ORDER BY cate, val
+-- !query 17 schema
+struct<val:int,cate:string,sum1:bigint,sum2:bigint>
+-- !query 17 output
+NULL	NULL	3	3
+3	NULL	3	3
+NULL	a	1	1
+1	a	2	1
+1	a	3	3
+2	a	2	2
+1	b	3	3
+2	b	5	5
+3	b	3	3
+
+-- !query18
+SELECT val, cate,
+count(val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS cnt1,
+count(DISTINCT val) OVER (PARTITION BY cate ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS cnt2
+FROM testData
+ORDER BY cate, val
+-- !query 18 schema
+struct<val:int,cate:string,cnt1:bigint,cnt2:bigint>
+-- !query 18 output
+NULL	NULL	1	1
+3	NULL	1	1
+NULL	a	1	1
+1	a	2	1
+1	a	2	2
+2	a	1	1
+1	b	2	2
+2	b	2	2
+3	b	1	1

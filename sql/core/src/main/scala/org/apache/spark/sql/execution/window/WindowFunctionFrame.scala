@@ -231,6 +231,7 @@ private[window] final class SlidingWindowFunctionFrame(
 
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
+      previousRow = null
       processor.initialize(input.length)
       val iter = buffer.iterator()
       while (iter.hasNext) {
@@ -453,8 +454,10 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
       processor.initialize(input.length)
+      previousRow = null
       if (nextRow != null) {
         processor.update(nextRow)
+        previousRow = nextRow
       }
       while (iterator.hasNext) {
         val row = iterator.next()
