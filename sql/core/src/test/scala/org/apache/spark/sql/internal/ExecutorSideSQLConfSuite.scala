@@ -40,7 +40,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     spark = null
   }
 
-  test("ReadonlySQLConf is correctly created at the executor side") {
+  test("ReadOnlySQLConf is correctly created at the executor side") {
     SQLConf.get.setConfString("spark.sql.x", "a")
     try {
       val checks = spark.range(10).mapPartitions { it =>

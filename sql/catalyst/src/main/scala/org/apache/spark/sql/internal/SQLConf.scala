@@ -27,7 +27,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
@@ -111,6 +111,13 @@ object SQLConf {
     if (TaskContext.get != null) {
       new ReadOnlySQLConf(TaskContext.get())
     } else {
+      if (Utils.isTesting && SparkContext.getActive.isDefined) {
+        val schedulerEventLoopThread =
+          SparkContext.getActive.get.dagScheduler.eventProcessLoop.eventThread
+        if (schedulerEventLoopThread.getId == Thread.currentThread().getId) {
+          throw new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+        }
+      }
       confGetter.get()()
     }
   }
