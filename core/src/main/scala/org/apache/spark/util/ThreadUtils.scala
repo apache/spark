@@ -27,7 +27,6 @@ import scala.util.control.NonFatal
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 
 import org.apache.spark.SparkException
-import org.apache.spark.memory.SparkOutOfMemoryException
 
 private[spark] object ThreadUtils {
 
@@ -201,8 +200,8 @@ private[spark] object ThreadUtils {
       val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
       awaitable.result(atMost)(awaitPermission)
     } catch {
-      case e: SparkOutOfMemoryException =>
-        throw e.getOOM
+      case e: SparkFatalException =>
+        throw e.throwable
       // TimeoutException is thrown in the current thread, so not need to warp the exception.
       case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)

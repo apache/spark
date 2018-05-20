@@ -14,25 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.memory;
-
-import org.apache.spark.annotation.Private;
+package org.apache.spark.util
 
 /**
  * SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we catch
- * {@link OutOfMemoryError} in {@link scala.concurrent.Future}'s body, and re-throw
- * SparkOutOfMemoryException instead.
+ * fatal throwable in {@link scala.concurrent.Future}'s body, and re-throw
+ * SparkFatalException, which wraps the fatal throwable inside.
  */
-@Private
-public final class SparkOutOfMemoryException extends Exception {
-
-  private OutOfMemoryError oe;
-
-  public SparkOutOfMemoryException(OutOfMemoryError e) {
-    oe = e;
-  }
-
-  public OutOfMemoryError getOOM(){
-    return oe;
-  }
-}
+private[spark] final class SparkFatalException(val throwable: Throwable) extends Exception
