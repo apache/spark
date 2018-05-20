@@ -218,20 +218,6 @@ case class WindowExec(
           (expressions, schema) =>
             newMutableProjection(expressions, schema, subexpressionEliminationEnabled))
 
-        def createOrdering(): Ordering[InternalRow] = {
-          val exprs = orderSpec.map(_.child)
-          val sortExprs = orderSpec.zipWithIndex.map { case (e, i) =>
-            SortOrder(BoundReference(i, e.dataType, e.nullable), e.direction)
-          }
-          val ordering = newOrdering(sortExprs, Nil)
-          new Ordering[InternalRow] {
-            override def compare(x: InternalRow, y: InternalRow): Int = {
-              ordering.compare(newMutableProjection(exprs, child.output)(x),
-                newMutableProjection(exprs, child.output)(y))
-            }
-          }
-        }
-
         // Create the factory
         val factory = key match {
           // Offset Frame
@@ -251,7 +237,7 @@ case class WindowExec(
           case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, isDistinct) =>
             target: InternalRow => {
               new UnboundedWindowFunctionFrame(
-                target, processor, isDistinct, Some(createOrdering()))
+                target, processor, isDistinct, Some(newOrdering(orderSpec, child.output)))
             }
 
           // Growing Frame.
@@ -262,7 +248,7 @@ case class WindowExec(
                 processor,
                 createBoundOrdering(frameType, upper, timeZone),
                 isDistinct,
-                Some(createOrdering()))
+                Some(newOrdering(orderSpec, child.output)))
             }
 
           // Shrinking Frame.
@@ -273,7 +259,7 @@ case class WindowExec(
                 processor,
                 createBoundOrdering(frameType, lower, timeZone),
                 isDistinct,
-                Some(createOrdering()))
+                Some(newOrdering(orderSpec, child.output)))
             }
 
           // Moving Frame.
@@ -285,7 +271,7 @@ case class WindowExec(
                 createBoundOrdering(frameType, lower, timeZone),
                 createBoundOrdering(frameType, upper, timeZone),
                 isDistinct,
-                Some(createOrdering()))
+                Some(newOrdering(orderSpec, child.output)))
             }
         }
 
