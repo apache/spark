@@ -22,6 +22,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.memory.SparkOutOfMemoryException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -112,10 +113,15 @@ case class BroadcastExchangeExec(
           broadcasted
         } catch {
           case oe: OutOfMemoryError =>
-            throw new SparkException(s"Not enough memory to build and broadcast the table to " +
+            // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
+            // SparkOutOfMemoryException, which is a subclass of Exception. ThreadUtils.awaitResult
+            // will catch this exception and re-throw the wrapped OutOfMemoryError.
+            throw new SparkOutOfMemoryException(
+              new OutOfMemoryError(s"Not enough memory to build and broadcast the table to " +
               s"all worker nodes. As a workaround, you can either disable broadcast by setting " +
               s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark driver " +
-              s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value", oe)
+              s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value")
+              .initCause(oe.getCause).asInstanceOf[OutOfMemoryError])
         }
       }
     }(BroadcastExchangeExec.executionContext)
