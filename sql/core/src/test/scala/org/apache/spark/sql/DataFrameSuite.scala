@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Unio
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
@@ -2264,5 +2265,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("Uuid expressions should produce same results at retries in the same DataFrame") {
     val df = spark.range(1).select($"id", new Column(Uuid()))
     checkAnswer(df, df.collect())
+  }
+
+  test("SPARK-24051: using the same alias can produce incorrect result") {
+    val ds1 = Seq((1, 42), (2, 99)).toDF("a", "b")
+    val ds2 = Seq(3).toDF("a").withColumn("b", lit(0))
+
+    val cols = Seq(col("a"), col("b").alias("b"),
+      count(lit(1)).over(Window.partitionBy()).alias("n"))
+
+    val df = ds1.select(cols: _*).union(ds2.select(cols: _*))
+    checkAnswer(df, Row(1, 42, 2) :: Row(2, 99, 2) :: Row(3, 0, 1) :: Nil)
   }
 }

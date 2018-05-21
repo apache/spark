@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
@@ -145,6 +147,8 @@ class Analyzer(
       ResolveHints.RemoveAllHints),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
+    Batch("DeduplicateAliases", Once,
+      DeduplicateAliases),
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
@@ -281,6 +285,80 @@ class Analyzer(
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
+    }
+  }
+
+  /**
+   * Replaces [[Alias]] with the same exprId but different references with [[Alias]] having
+   * different exprIds. This is a rare situation which can cause incorrect results.
+   */
+  object DeduplicateAliases extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val allAliases = collectAllAliasesInPlan(plan)
+      val dupAliases = allAliases.groupBy(_.exprId).collect {
+        case (eId, aliases) if containsDifferentAliases(aliases) => eId
+      }.toSeq
+      if (dupAliases.nonEmpty) {
+        val exprIdsDictionary = mutable.HashMap[ExprId, ExprId]()
+        resolveConflictingAliases(plan, dupAliases, exprIdsDictionary)
+      } else {
+        plan
+      }
+    }
+
+    def containsDifferentAliases(aliases: Seq[Alias]): Boolean = {
+      aliases.exists(a1 => aliases.exists(a2 => !a1.fastEquals(a2)))
+    }
+
+    def collectAllAliasesInPlan(plan: LogicalPlan): Seq[Alias] = {
+      plan.flatMap {
+        case Project(projectList, _) => projectList.collect { case a: Alias => a }
+        case AnalysisBarrier(child) => collectAllAliasesInPlan(child)
+        case _ => Nil
+      }
+    }
+
+    def containsExprIds(
+        projectList: Seq[NamedExpression],
+        exprIds: Seq[ExprId]): Boolean = {
+      projectList.count {
+        case a: Alias if exprIds.contains(a.exprId) => true
+        case a: AttributeReference if exprIds.contains(a.exprId) => true
+        case _ => false
+      } > 0
+    }
+
+    def renewConflictingAliases(
+        exprs: Seq[NamedExpression],
+        exprIds: Seq[ExprId],
+        exprIdsDictionary: mutable.HashMap[ExprId, ExprId]): Seq[NamedExpression] = {
+      exprs.map {
+        case a: Alias if exprIds.contains(a.exprId) =>
+          val newAlias = Alias(a.child, a.name)()
+          // update the map with the new id to replace
+          // since we are in a transformUp, all the parent nodes will see the updated map
+          exprIdsDictionary(a.exprId) = newAlias.exprId
+          newAlias
+        case a: AttributeReference if exprIds.contains(a.exprId) =>
+          // replace with the new id
+          a.withExprId(exprIdsDictionary(a.exprId))
+        case other => other
+      }
+    }
+
+    def resolveConflictingAliases(
+        plan: LogicalPlan,
+        dupAliases: Seq[ExprId],
+        exprIdsDictionary: mutable.HashMap[ExprId, ExprId]): LogicalPlan = {
+      plan.transformUp {
+        case p @ Project(projectList, _) if containsExprIds(projectList, dupAliases) =>
+          p.copy(renewConflictingAliases(projectList, dupAliases, exprIdsDictionary))
+        case a @ Aggregate(_, aggs, _) if containsExprIds(aggs, dupAliases) =>
+          a.copy(aggregateExpressions =
+            renewConflictingAliases(aggs, dupAliases, exprIdsDictionary))
+        case AnalysisBarrier(child) =>
+          AnalysisBarrier(resolveConflictingAliases(child, dupAliases, exprIdsDictionary))
+      }
     }
   }
 
