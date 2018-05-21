@@ -78,7 +78,11 @@ private[spark] class ExecutorPodsEventHandler(
     logInfo(s"Starting Kubernetes executor pods event handler for application with" +
       s" id $applicationId.")
     val eventProcessor = new Runnable {
-      override def run(): Unit = processEvents(applicationId, schedulerBackend)
+      override def run(): Unit = {
+        Utils.tryLogNonFatalError {
+          processEvents(applicationId, schedulerBackend)
+        }
+      }
     }
     eventProcessorFuture = eventProcessorExecutor.scheduleWithFixedDelay(
       eventProcessor, 0L, 5L, TimeUnit.SECONDS)
@@ -113,7 +117,6 @@ private[spark] class ExecutorPodsEventHandler(
             }
           // TODO (SPARK-24135) - handle more classes of errors
           case "error" | "failed" | "succeeded" =>
-            removeExecutorFromSpark(schedulerBackend, updatedPod, execId)
             // If deletion failed on a previous try, we can try again if resync informs us the pod
             // is still around.
             // Delete as best attempt - duplicate deletes will throw an exception but the end state
@@ -126,6 +129,7 @@ private[spark] class ExecutorPodsEventHandler(
                   .delete()
               }
             }
+            removeExecutorFromSpark(schedulerBackend, updatedPod, execId)
         }
       }
     }
@@ -151,11 +155,9 @@ private[spark] class ExecutorPodsEventHandler(
           .addToContainers(executorPod.container)
           .endSpec()
           .build()
-        podsToAllocate += podWithAttachedContainer
-        newExecutorIds.add(newExecutorId)
+        kubernetesClient.pods().create(podWithAttachedContainer)
+        pendingExecutors.add(newExecutorId)
       }
-      kubernetesClient.pods().create(podsToAllocate: _*)
-      pendingExecutors.addAll(newExecutorIds)
     } else if (currentRunningExecutors == currentTotalExpectedExecutors) {
       logDebug("Current number of running executors is equal to the number of requested" +
         " executors. Not scaling up further.")
