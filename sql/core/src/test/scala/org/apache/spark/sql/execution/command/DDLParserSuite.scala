@@ -826,8 +826,8 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     val expected1_table = AlterTableDropPartitionCommand(
       tableIdent,
       Seq(
-        (Map("dt" -> "2008-08-08", "country" -> "us"), List()),
-        (Map("dt" -> "2009-09-09", "country" -> "uk"), List())),
+        (Map("dt" -> "2008-08-08", "country" -> "us"), Seq()),
+        (Map("dt" -> "2009-09-09", "country" -> "uk"), Seq())),
       ifExists = true,
       purge = false,
       retainData = false)
