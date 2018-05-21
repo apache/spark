@@ -192,7 +192,7 @@ private class AsyncEventQueue(
 
   override def removeListenerOnError(listener: SparkListenerInterface): Unit = {
     // the listener failed in an unrecoverably way, we want to remove it from the entire
-    // LiveListenerBus (potentially stopping a queue if its empty)
+    // LiveListenerBus (potentially stopping a queue if it is empty)
     bus.removeListener(listener)
   }
 
