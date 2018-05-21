@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import scala.util.{Random, Try}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
@@ -37,8 +38,8 @@ import org.apache.spark.util.{Benchmark, Utils}
  */
 object DataSourceReadBenchmark {
   val conf = new SparkConf()
-    .setMaster("local[1]")
     .setAppName("DataSourceReadBenchmark")
+    .setIfMissing("spark.master", "local[1]")
     .setIfMissing("spark.driver.memory", "3g")
     .setIfMissing("spark.executor.memory", "3g")
 
