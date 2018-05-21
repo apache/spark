@@ -100,12 +100,16 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Request executors in batches. Allow another batch to be requested if" +
-    " some start running.") {
+    " all pending executors start running.") {
     eventHandlerUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
     eventProcessorExecutor.tick(podAllocationDelay, TimeUnit.MILLISECONDS)
-    for (execId <- 1 to podAllocationSize) {
+    for (execId <- 1 until podAllocationSize) {
       eventHandlerUnderTest.sendUpdatedPodMetadata(runExecutor(execId))
     }
+    eventProcessorExecutor.tick(podAllocationDelay, TimeUnit.MILLISECONDS)
+    verify(podOperations, never()).create(
+      podWithAttachedContainerForId(podAllocationSize + 1))
+    eventHandlerUnderTest.sendUpdatedPodMetadata(runExecutor(podAllocationSize))
     eventProcessorExecutor.tick(podAllocationDelay, TimeUnit.MILLISECONDS)
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
     verify(podOperations, never()).create(podWithAttachedContainerForId(podAllocationSize + 2))

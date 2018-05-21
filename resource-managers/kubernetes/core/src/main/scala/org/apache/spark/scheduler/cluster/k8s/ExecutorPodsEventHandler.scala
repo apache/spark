@@ -19,8 +19,6 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.{Future, LinkedBlockingQueue, ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
-import gnu.trove.list.array.TLongArrayList
-import gnu.trove.set.hash.TLongHashSet
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
@@ -63,7 +61,7 @@ private[spark] class ExecutorPodsEventHandler(
   // Use sets of ids instead of counters to be able to handle duplicate events.
 
   // Executor IDs that have been requested from Kubernetes but are not running yet.
-  private val pendingExecutors = new TLongHashSet()
+  private val pendingExecutors = mutable.Set.empty[Long]
 
   // We could use CoarseGrainedSchedulerBackend#totalRegisteredExecutors here for tallying the
   // executors that are running. But, here we choose instead to maintain all state within this
@@ -71,9 +69,9 @@ private[spark] class ExecutorPodsEventHandler(
   // believes an executor is running is dictated by the K8s API rather than Spark's RPC events.
   // We may need to consider where these perspectives may differ and which perspective should
   // take precedence.
-  private val runningExecutors = new TLongHashSet()
+  private val runningExecutors = mutable.Set.empty[Long]
 
-  private var eventProcessorFuture: Future[_] = null
+  private var eventProcessorFuture: Future[_] = _
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     require(eventProcessorFuture == null, "Cannot start event processing twice.")
@@ -142,7 +140,7 @@ private[spark] class ExecutorPodsEventHandler(
       val numExecutorsToAllocate = math.min(
         currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
       logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
-      val newExecutorIds = new TLongArrayList()
+      val newExecutorIds = mutable.Buffer.empty[Long]
       val podsToAllocate = mutable.Buffer.empty[Pod]
       for ( _ <- 0 until numExecutorsToAllocate) {
         val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
@@ -158,12 +156,12 @@ private[spark] class ExecutorPodsEventHandler(
           .endSpec()
           .build()
         kubernetesClient.pods().create(podWithAttachedContainer)
-        pendingExecutors.add(newExecutorId)
+        pendingExecutors += newExecutorId
       }
     } else if (currentRunningExecutors == currentTotalExpectedExecutors) {
       logDebug("Current number of running executors is equal to the number of requested" +
         " executors. Not scaling up further.")
-    } else if (!pendingExecutors.isEmpty) {
+    } else if (pendingExecutors.nonEmpty) {
       logInfo(s"Still waiting for ${pendingExecutors.size} executors to begin running before" +
         s" requesting for more executors.")
     }

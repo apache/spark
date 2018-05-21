@@ -70,12 +70,6 @@
       <version>${fasterxml.jackson.version}</version>
     </dependency>
 
-    <dependency>
-      <groupId>net.sf.trove4j</groupId>
-      <artifactId>trove4j</artifactId>
-      <version>${trove.version}</version>
-    </dependency>
-
     <!-- Explicitly depend on shaded dependencies from the parent, since shaded deps aren't transitive -->
     <dependency>
       <groupId>com.google.guava</groupId>
