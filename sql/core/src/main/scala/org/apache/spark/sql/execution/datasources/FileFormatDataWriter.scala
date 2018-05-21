@@ -118,7 +118,7 @@ class SingleDirectoryDataWriter(
       dataSchema = description.dataColumns.toStructType,
       context = taskAttemptContext)
 
-    statsTrackers.map(_.newFile(currentPath))
+    statsTrackers.foreach(_.newFile(currentPath))
   }
 
   override def write(record: InternalRow): Unit = {
