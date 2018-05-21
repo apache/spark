@@ -460,23 +460,23 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.jupyter.eagerEval.enabled</code></td>
   <td>false</td>
   <td>
-    Open eager evaluation on jupyter or not. If yes, dataframe will be ran automatically
+    Enable eager evaluation on Jupyter or not. If true, dataframe will be ran automatically
     and html table will feedback the queries user have defined (see
     <a href="https://issues.apache.org/jira/browse/SPARK-24215">SPARK-24215</a> for more details).
   </td>
 </tr>
 <tr>
-  <td><code>spark.jupyter.default.showRows</code></td>
+  <td><code>spark.jupyter.eagerEval.showRows</code></td>
   <td>20</td>
   <td>
-    Default number of rows in jupyter html table.
+    Default number of rows in jupyter HTML table.
   </td>
 </tr>
 <tr>
-  <td><code>spark.jupyter.default.truncate</code></td>
+  <td><code>spark.jupyter.eagerEval.truncate</code></td>
   <td>20</td>
   <td>
-    Default number of truncate in jupyter html table.
+    Default number of truncate in jupyter HTML table.
   </td>
 </tr>
 <tr>
