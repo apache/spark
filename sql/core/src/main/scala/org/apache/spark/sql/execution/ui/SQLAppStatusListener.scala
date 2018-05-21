@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Function
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.internal.Logging
@@ -45,6 +46,7 @@ class SQLAppStatusListener(
   // thread-safe.
   private val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
   private val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
+  val sqlTexts = new mutable.ArrayBuffer[SQLTextData]()
 
   // Returns true if this listener has no live data. Exposed for tests only.
   private[sql] def noLiveData(): Boolean = {
@@ -294,10 +296,16 @@ class SQLAppStatusListener(
     }
   }
 
+  private def onSQLTextCaptured(event: SparkListenerSQLTextCaptured): Unit = {
+    val SparkListenerSQLTextCaptured(submissionTime, sqlText) = event
+    sqlTexts += new SQLTextData(submissionTime, sqlText)
+  }
+
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case e: SparkListenerSQLExecutionStart => onExecutionStart(e)
     case e: SparkListenerSQLExecutionEnd => onExecutionEnd(e)
     case e: SparkListenerDriverAccumUpdates => onDriverAccumUpdates(e)
+    case e: SparkListenerSQLTextCaptured => onSQLTextCaptured(e)
     case _ => // Ignore
   }
 

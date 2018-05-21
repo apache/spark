@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.ui.SparkListenerSQLTextCaptured
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
@@ -148,6 +149,8 @@ class SparkSession private(
         state
       }
   }
+
+  lazy private val substitutor = new VariableSubstitution(sessionState.conf)
 
   /**
    * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
@@ -638,6 +641,9 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
+    sparkContext.listenerBus.post(
+      SparkListenerSQLTextCaptured(System.currentTimeMillis(), substitutor.substitute(sqlText))
+    )
     Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))
   }
 

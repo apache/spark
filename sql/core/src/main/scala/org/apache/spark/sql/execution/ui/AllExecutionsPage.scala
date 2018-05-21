@@ -111,6 +111,15 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           }
         </ul>
       </div>
+
+    val captured = sqlStore.capturedSqlTexts
+    if (captured.nonEmpty) {
+      val sqlTexts: NodeSeq = new SQLTextTable(
+        parent, "captured-sql-text-table",
+        s"Captured SQL sentences (${captured.size})", captured).toNodeSeq
+      content ++= sqlTexts
+    }
+
     UIUtils.headerSparkPage("SQL", summary ++ content, parent, Some(5000))
   }
 }
@@ -269,4 +278,34 @@ private[ui] class FailedExecutionTable(
 
   override protected def header: Seq[String] =
     baseHeader ++ Seq("Succeeded Job IDs", "Failed Job IDs")
+}
+
+private[ui] class SQLTextTable(
+    parent: SQLTab,
+    tableId: String,
+    tableName: String,
+    sqlTextDatas: Seq[SQLTextData]) {
+
+  def header: Seq[String] = Seq(
+    "Submission Time",
+    "SQL Text")
+
+  def row(sqlTextData: SQLTextData): Seq[Node] = {
+    <tr>
+      <td sorttable_customkey={sqlTextData.submissionTime.toString}>
+        {UIUtils.formatDate(sqlTextData.submissionTime)}
+      </td>
+      <td>
+        {sqlTextData.sqlText}
+      </td>
+    </tr>
+  }
+
+  def toNodeSeq: Seq[Node] = {
+    <div>
+      <h4>{tableName}</h4>
+      {UIUtils.listingTable[SQLTextData](
+      header, row(_), sqlTextDatas, id = Some(tableId))}
+    </div>
+  }
 }
