@@ -254,4 +254,39 @@ class ContinuousShuffleReadSuite extends StreamTest {
     // Join to pick up assertion failures.
     readEpochMarkerThread.join()
   }
+
+  test("writer epochs non aligned") {
+    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1, numShuffleWriters = 3)
+    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    // We send multiple epochs for 0, then multiple for 1, then multiple for 2. The receiver should
+    // collate them as though the markers were aligned in the first place.
+    send(
+      endpoint,
+      ReceiverRow(0, unsafeRow("writer0-row0")),
+      ReceiverEpochMarker(0),
+      ReceiverRow(0, unsafeRow("writer0-row1")),
+      ReceiverEpochMarker(0),
+      ReceiverEpochMarker(0),
+
+      ReceiverEpochMarker(1),
+      ReceiverRow(1, unsafeRow("writer1-row0")),
+      ReceiverEpochMarker(1),
+      ReceiverRow(1, unsafeRow("writer1-row1")),
+      ReceiverEpochMarker(1),
+
+      ReceiverEpochMarker(2),
+      ReceiverEpochMarker(2),
+      ReceiverRow(2, unsafeRow("writer2-row0")),
+      ReceiverEpochMarker(2)
+    )
+
+    val firstEpoch = rdd.compute(rdd.partitions(0), ctx).map(_.getUTF8String(0).toString).toSet
+    assert(firstEpoch == Set("writer0-row0"))
+
+    val secondEpoch = rdd.compute(rdd.partitions(0), ctx).map(_.getUTF8String(0).toString).toSet
+    assert(secondEpoch == Set("writer0-row1", "writer1-row0"))
+
+    val thirdEpoch = rdd.compute(rdd.partitions(0), ctx).map(_.getUTF8String(0).toString).toSet
+    assert(thirdEpoch == Set("writer1-row1", "writer2-row0"))
+  }
 }
