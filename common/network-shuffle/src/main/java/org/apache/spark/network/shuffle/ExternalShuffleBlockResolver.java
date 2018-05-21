@@ -246,18 +246,19 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
+  private FilenameFilter filter = new FilenameFilter() {
+    @Override
+    public boolean accept(File dir, String name) {
+      // Don't delete shuffle data or shuffle index files.
+      return !name.endsWith(".index") && !name.endsWith(".data");
+    }
+  };
+
   /**
    * Synchronously deletes non-shuffle files in each directory recursively.
    * Should be executed in its own thread, as this may take a long time.
    */
   private void deleteNonShuffleFiles(String[] dirs) {
-    FilenameFilter filter = new FilenameFilter() {
-      @Override
-      public boolean accept(File dir, String name) {
-        // Don't delete shuffle data or shuffle index files.
-        return !name.endsWith(".index") && !name.endsWith(".data");
-      }
-    };
     for (String localDir : dirs) {
       try {
         JavaUtils.deleteRecursively(new File(localDir), filter);

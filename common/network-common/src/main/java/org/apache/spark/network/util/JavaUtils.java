@@ -97,7 +97,7 @@ public class JavaUtils {
    *
    * @param file Input file / dir to be deleted
    * @param filter A filename filter that make sure only files / dirs with the satisfied filenames
-   *              are deleted.
+   *               are deleted.
    * @throws IOException if deletion is unsuccessful
    */
   public static void deleteRecursively(File file, FilenameFilter filter) throws IOException {
