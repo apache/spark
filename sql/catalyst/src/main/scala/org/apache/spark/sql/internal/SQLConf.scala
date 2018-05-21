@@ -95,7 +95,9 @@ object SQLConf {
 
   /**
    * Returns the active config object within the current scope. If there is an active SparkSession,
-   * the proper SQLConf associated with the thread's session is used.
+   * the proper SQLConf associated with the thread's active session is used. If it's called from
+   * tasks in the executor side, a SQLConf will be created from job local properties, which are set
+   * and propagated from the driver side.
    *
    * The way this works is a little bit convoluted, due to the fact that config was added initially
    * only for physical plans (and as a result not in sql/catalyst module).
@@ -112,6 +114,8 @@ object SQLConf {
       new ReadOnlySQLConf(TaskContext.get())
     } else {
       if (Utils.isTesting && SparkContext.getActive.isDefined) {
+        // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
+        // will return `fallbackConf` which is unexpected. Here we prevent it from happening.
         val schedulerEventLoopThread =
           SparkContext.getActive.get.dagScheduler.eventProcessLoop.eventThread
         if (schedulerEventLoopThread.getId == Thread.currentThread().getId) {
