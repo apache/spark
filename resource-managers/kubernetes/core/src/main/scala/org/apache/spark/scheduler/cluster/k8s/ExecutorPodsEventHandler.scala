@@ -50,6 +50,8 @@ private[spark] class ExecutorPodsEventHandler(
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
 
+  private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
+
   private val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(throw new SparkException("Must specify the driver pod name"))
@@ -85,7 +87,7 @@ private[spark] class ExecutorPodsEventHandler(
       }
     }
     eventProcessorFuture = eventProcessorExecutor.scheduleWithFixedDelay(
-      eventProcessor, 0L, 5L, TimeUnit.SECONDS)
+      eventProcessor, 0L, podAllocationDelay, TimeUnit.MILLISECONDS)
   }
 
   def stop(): Unit = {

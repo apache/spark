@@ -767,6 +767,12 @@
         <scope>test</scope>
       </dependency>
       <dependency>
+        <groupId>org.jmock</groupId>
+        <artifactId>jmock-junit4</artifactId>
+        <scope>test</scope>
+        <version>2.8.4</version>
+      </dependency>
+      <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
         <version>1.13.5</version>
