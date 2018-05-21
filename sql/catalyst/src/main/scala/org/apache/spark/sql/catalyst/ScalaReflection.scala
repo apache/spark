@@ -703,6 +703,33 @@ object ScalaReflection extends ScalaReflection {
    */
   def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.dealias.typeSymbol.asClass)
 
+  def getClassFromTypeHandleArray(tpe: Type): Class[_] = cleanUpReflectionObjects {
+    tpe.dealias match {
+      case ty if ty <:< localTypeOf[Array[_]] =>
+        def arrayClassFromType(tpe: `Type`): Class[_] =
+          ScalaReflection.cleanUpReflectionObjects {
+            tpe.dealias match {
+              case t if t <:< definitions.IntTpe => classOf[Array[Int]]
+              case t if t <:< definitions.LongTpe => classOf[Array[Long]]
+              case t if t <:< definitions.DoubleTpe => classOf[Array[Double]]
+              case t if t <:< definitions.FloatTpe => classOf[Array[Float]]
+              case t if t <:< definitions.ShortTpe => classOf[Array[Short]]
+              case t if t <:< definitions.ByteTpe => classOf[Array[Byte]]
+              case t if t <:< definitions.BooleanTpe => classOf[Array[Boolean]]
+              case _ =>
+                // There is probably a better way to do this, but I couldn't find it...
+                val elementType = getClassFromTypeHandleArray(tpe)
+                java.lang.reflect.Array.newInstance(elementType, 1).getClass
+            }
+          }
+
+        val TypeRef(_, _, Seq(elementType)) = ty
+        arrayClassFromType(elementType)
+
+      case ty => getClassFromType(ty)
+    }
+  }
+
   case class Schema(dataType: DataType, nullable: Boolean)
 
   /** Returns a Sequence of attributes for the given case class type. */
