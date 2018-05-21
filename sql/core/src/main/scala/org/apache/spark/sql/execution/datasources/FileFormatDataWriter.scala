@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -38,8 +37,7 @@ import org.apache.spark.util.SerializableConfiguration
 abstract class FileFormatDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol
-) extends DataWriter[InternalRow] {
+    committer: FileCommitProtocol) {
   /**
    * Max number of files a single task writes out due to file size. In most cases the number of
    * files written should be very small. This is just a safe guard to protect some really bad
@@ -53,6 +51,9 @@ abstract class FileFormatDataWriter(
   /** Trackers for computing various statistics on the data as it's being written out. */
   val statsTrackers: Seq[WriteTaskStatsTracker] =
     description.statsTrackers.map(_.newTaskInstance())
+
+  /** Writes a record */
+  def write(record: InternalRow): Unit
 
   def releaseResources(): Unit = {
     if (currentWriter != null) {
@@ -70,16 +71,16 @@ abstract class FileFormatDataWriter(
    * to the driver and used to update the catalog. Other information will be sent back to the
    * driver too and used to e.g. update the metrics in UI.
    */
-  override def commit(): WriteTaskResult = {
+  def commit(): WriteTaskResult = {
     releaseResources()
     committer.commitTask(taskAttemptContext)
     val summary = ExecutedWriteSummary(
-      updatedPartitions = Set.empty,
+      updatedPartitions = updatedPartitions.toSet,
       stats = statsTrackers.map(_.getFinalStats()))
     WriteTaskResult(committer.commitTask(taskAttemptContext), summary)
   }
 
-  override def abort(): Unit = {
+  def abort(): Unit = {
     try {
       releaseResources()
     } finally {
@@ -298,7 +299,6 @@ class WriteJobDescription(
 
 /** The result of a successful write task. */
 case class WriteTaskResult(commitMsg: TaskCommitMessage, summary: ExecutedWriteSummary)
-  extends WriterCommitMessage
 
 /**
  * Wrapper class for the metrics of writing data out.
