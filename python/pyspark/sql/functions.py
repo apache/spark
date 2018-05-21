@@ -2344,6 +2344,26 @@ def map_values(col):
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
+@since(2.4)
+def map_entries(col):
+    """
+    Collection function: Returns an unordered array of all entries in the given map.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_entries
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_entries("data").alias("entries")).show()
+    +----------------+
+    |         entries|
+    +----------------+
+    |[[1, a], [2, b]]|
+    +----------------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_entries(_to_java_column(col)))
+
+
 @ignore_unicode_prefix
 @since(2.4)
 def array_repeat(col, count):
