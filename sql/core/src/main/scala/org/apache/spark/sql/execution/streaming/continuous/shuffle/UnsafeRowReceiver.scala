@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.streaming.continuous.shuffle
 import java.util.concurrent._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
-import scala.concurrent.Future
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow

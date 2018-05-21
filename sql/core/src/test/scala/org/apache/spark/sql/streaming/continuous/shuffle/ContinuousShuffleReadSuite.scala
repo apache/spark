@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
-import scala.concurrent.Future
-
 import org.apache.spark.{TaskContext, TaskContextImpl}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
@@ -34,7 +32,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
   }
 
   private def unsafeRow(value: String) = {
-    UnsafeProjection.create(Array(StringType: DataType))(
+    UnsafeProjection.create(Array(StringType : DataType))(
       new GenericInternalRow(Array(UTF8String.fromString(value): Any)))
   }
 

@@ -1214,7 +1214,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>1.2.1</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>0.12.0</code> through <code>2.3.2</code>.
+      options are <code>0.12.0</code> through <code>2.3.3</code>.
     </td>
   </tr>
   <tr>
@@ -1336,6 +1336,17 @@ the following case-insensitive options:
        If the number of partitions to write exceeds this limit, we decrease it to this limit by
        calling <code>coalesce(numPartitions)</code> before writing.
      </td>
+  </tr>
+
+  <tr>
+    <td><code>queryTimeout</code></td>
+    <td>
+      The number of seconds the driver will wait for a Statement object to execute to the given
+      number of seconds. Zero means there is no limit. In the write path, this option depends on
+      how JDBC drivers implement the API <code>setQueryTimeout</code>, e.g., the h2 JDBC driver
+      checks the timeout of each query instead of an entire JDBC batch.
+      It defaults to <code>0</code>.
+    </td>
   </tr>
 
   <tr>
@@ -2237,7 +2248,7 @@ referencing a singleton.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently, Hive SerDes and UDFs are based on Hive 1.2.1,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 2.3.2. Also see [Interacting with Different Versions of Hive Metastore](#interacting-with-different-versions-of-hive-metastore)).
+(from 0.12.0 to 2.3.3. Also see [Interacting with Different Versions of Hive Metastore](#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 

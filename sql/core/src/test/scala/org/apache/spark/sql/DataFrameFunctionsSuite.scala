@@ -405,6 +405,50 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("map_entries") {
+    val dummyFilter = (c: Column) => c.isNotNull || c.isNull
+
+    // Primitive-type elements
+    val idf = Seq(
+      Map[Int, Int](1 -> 100, 2 -> 200, 3 -> 300),
+      Map[Int, Int](),
+      null
+    ).toDF("m")
+    val iExpected = Seq(
+      Row(Seq(Row(1, 100), Row(2, 200), Row(3, 300))),
+      Row(Seq.empty),
+      Row(null)
+    )
+
+    checkAnswer(idf.select(map_entries('m)), iExpected)
+    checkAnswer(idf.selectExpr("map_entries(m)"), iExpected)
+    checkAnswer(idf.filter(dummyFilter('m)).select(map_entries('m)), iExpected)
+    checkAnswer(
+      spark.range(1).selectExpr("map_entries(map(1, null, 2, null))"),
+      Seq(Row(Seq(Row(1, null), Row(2, null)))))
+    checkAnswer(
+      spark.range(1).filter(dummyFilter('id)).selectExpr("map_entries(map(1, null, 2, null))"),
+      Seq(Row(Seq(Row(1, null), Row(2, null)))))
+
+    // Non-primitive-type elements
+    val sdf = Seq(
+      Map[String, String]("a" -> "f", "b" -> "o", "c" -> "o"),
+      Map[String, String]("a" -> null, "b" -> null),
+      Map[String, String](),
+      null
+    ).toDF("m")
+    val sExpected = Seq(
+      Row(Seq(Row("a", "f"), Row("b", "o"), Row("c", "o"))),
+      Row(Seq(Row("a", null), Row("b", null))),
+      Row(Seq.empty),
+      Row(null)
+    )
+
+    checkAnswer(sdf.select(map_entries('m)), sExpected)
+    checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
+    checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
+  }
+
   test("array contains function") {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
@@ -440,6 +484,35 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+  }
+
+  test("arrays_overlap function") {
+    val df = Seq(
+      (Seq[Option[Int]](Some(1), Some(2)), Seq[Option[Int]](Some(-1), Some(10))),
+      (Seq[Option[Int]](Some(1), Some(2)), Seq[Option[Int]](Some(-1), None)),
+      (Seq[Option[Int]](Some(3), Some(2)), Seq[Option[Int]](Some(1), Some(2)))
+    ).toDF("a", "b")
+
+    val answer = Seq(Row(false), Row(null), Row(true))
+
+    checkAnswer(df.select(arrays_overlap(df("a"), df("b"))), answer)
+    checkAnswer(df.selectExpr("arrays_overlap(a, b)"), answer)
+
+    checkAnswer(
+      Seq((Seq(1, 2, 3), Seq(2.0, 2.5))).toDF("a", "b").selectExpr("arrays_overlap(a, b)"),
+      Row(true))
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(array(1, 2, 3), array('a', 'b', 'c'))")
+    }
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(null, null)")
+    }
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(map(1, 2), map(3, 4))")
+    }
   }
 
   test("slice function") {
@@ -841,6 +914,82 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       oneRowDF.selectExpr("flatten(null)")
     }
+  }
+
+  test("array_repeat function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
+    val strDF = Seq(
+      ("hi", 2),
+      (null, 2)
+    ).toDF("a", "b")
+
+    val strDFTwiceResult = Seq(
+      Row(Seq("hi", "hi")),
+      Row(Seq(null, null))
+    )
+
+    checkAnswer(strDF.select(array_repeat($"a", 2)), strDFTwiceResult)
+    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), strDFTwiceResult)
+    checkAnswer(strDF.select(array_repeat($"a", $"b")), strDFTwiceResult)
+    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), strDFTwiceResult)
+    checkAnswer(strDF.selectExpr("array_repeat(a, 2)"), strDFTwiceResult)
+    checkAnswer(strDF.selectExpr("array_repeat(a, b)"), strDFTwiceResult)
+
+    val intDF = {
+      val schema = StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType)))
+      val data = Seq(
+        Row(3, 2),
+        Row(null, 2)
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val intDFTwiceResult = Seq(
+      Row(Seq(3, 3)),
+      Row(Seq(null, null))
+    )
+
+    checkAnswer(intDF.select(array_repeat($"a", 2)), intDFTwiceResult)
+    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), intDFTwiceResult)
+    checkAnswer(intDF.select(array_repeat($"a", $"b")), intDFTwiceResult)
+    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), intDFTwiceResult)
+    checkAnswer(intDF.selectExpr("array_repeat(a, 2)"), intDFTwiceResult)
+    checkAnswer(intDF.selectExpr("array_repeat(a, b)"), intDFTwiceResult)
+
+    val nullCountDF = {
+      val schema = StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType)))
+      val data = Seq(
+        Row("hi", null),
+        Row(null, null)
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    checkAnswer(
+      nullCountDF.select(array_repeat($"a", $"b")),
+      Seq(
+        Row(null),
+        Row(null)
+      )
+    )
+
+    // Error test cases
+    val invalidTypeDF = Seq(("hi", "1")).toDF("a", "b")
+
+    intercept[AnalysisException] {
+      invalidTypeDF.select(array_repeat($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      invalidTypeDF.select(array_repeat($"a", lit("1")))
+    }
+    intercept[AnalysisException] {
+      invalidTypeDF.selectExpr("array_repeat(a, 1.0)")
+    }
+
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
