@@ -111,12 +111,6 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     }
   }
 
-  private[scheduler] def removeQueue(queue: String): Unit = synchronized {
-    queues.asScala.find(_.name == queue).foreach { q =>
-      queues.remove(q)
-    }
-  }
-
   def removeListener(listener: SparkListenerInterface): Unit = synchronized {
     // Remove listener from all queues it was added to, and stop queues that have become empty.
     queues.asScala

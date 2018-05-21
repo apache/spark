@@ -90,9 +90,9 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       try {
         doPostEvent(listener, event)
         if (Thread.interrupted()) {
-          logError(s"Interrupted while posting to ${Utils.getFormattedClassName(listener)}.  " +
-            s"Removing that listener.")
-          removeListenerOnError(listener)
+          // We want to throw the InterruptedException right away so we can associate the interrupt
+          // with this listener, as opposed to waiting for a queue.take() etc. to detect it.
+          throw new InterruptedException()
         }
       } catch {
         case ie: InterruptedException =>
