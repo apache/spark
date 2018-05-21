@@ -95,6 +95,10 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
           removeListenerOnError(listener)
         }
       } catch {
+        case ie: InterruptedException =>
+          logError(s"Interrupted while posting to ${Utils.getFormattedClassName(listener)}.  " +
+            s"Removing that listener.", ie)
+          removeListenerOnError(listener)
         case NonFatal(e) if !isIgnorableException(e) =>
           logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
       } finally {
