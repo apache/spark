@@ -88,12 +88,8 @@ object Canonicalize {
     case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
 
     // order the list in the In operator
-    // we can do this only if all the elements in the list are literals with the same datatype
-    case i @ In(value, list)
-        if i.inSetConvertible && list.map(_.dataType.asNullable).distinct.size == 1 =>
-      val literals = list.map(_.asInstanceOf[Literal])
-      val ordering = TypeUtils.getInterpretedOrdering(literals.head.dataType)
-      In(value, literals.sortBy(_.value)(ordering))
+    case In(value, list) =>
+      In(value, list.sortBy(_.semanticHash()))
 
     case _ => e
   }
