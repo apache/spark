@@ -18,6 +18,8 @@
 package org.apache.spark.examples.ml;
 
 // $example on$
+import java.util.Arrays;
+import java.util.List;
 
 import org.apache.spark.ml.clustering.PowerIterationClustering;
 import org.apache.spark.sql.Dataset;
@@ -28,10 +30,6 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-
-import java.util.Arrays;
-import java.util.List;
-
 // $example off$
 
 /**
@@ -51,18 +49,20 @@ public class JavaPowerIterationClusteringExample {
                 .getOrCreate();
 
         // $example on$
-        // Creates data.
         List<Row> data = Arrays.asList(
-                RowFactory.create(0L, Arrays.asList(1L), Arrays.asList(0.9)),
-                RowFactory.create(1L, Arrays.asList(2L), Arrays.asList(0.9)),
-                RowFactory.create(2L, Arrays.asList(3L), Arrays.asList(0.9)),
-                RowFactory.create(3L, Arrays.asList(4L), Arrays.asList(0.1)),
-                RowFactory.create(4L, Arrays.asList(5L), Arrays.asList(0.9))
+                RowFactory.create(0L, Arrays.asList(1L, 2L, 4L), Arrays.asList(0.9, 0.9, 0.1)),
+                RowFactory.create(1L, Arrays.asList(0L, 2L), Arrays.asList(0.9, 0.9)),
+                RowFactory.create(2L, Arrays.asList(0L, 1L), Arrays.asList(0.9, 0.9)),
+                RowFactory.create(3L, Arrays.asList(4L), Arrays.asList(0.9)),
+                RowFactory.create(4L, Arrays.asList(3L, 0L), Arrays.asList(0.9, 0.1))
+
         );
         StructType schema = new StructType(new StructField[]{
                 new StructField("id", DataTypes.LongType, false, Metadata.empty()),
-                new StructField("neighbors", DataTypes.createArrayType(DataTypes.LongType, false), false, Metadata.empty()),
-                new StructField("similarities", DataTypes.createArrayType(DataTypes.DoubleType, false), false, Metadata.empty())
+                new StructField("neighbors", DataTypes.createArrayType(DataTypes.LongType, false),
+                        false, Metadata.empty()),
+                new StructField("similarities", DataTypes.createArrayType(DataTypes.DoubleType, false),
+                        false, Metadata.empty())
         });
 
         Dataset<Row> df = spark.createDataFrame(data, schema);
@@ -73,13 +73,13 @@ public class JavaPowerIterationClusteringExample {
 
         Dataset<Row> result = pic.transform(df);
 
-        // printing results
-        System.out.println("Clustering results [id , cluster]");
-        for (Row row : result.select("id","prediction").collectAsList()) {
-            System.out.println("[" + row.get(0) + " , " + row.get(1) + "]");
+        // Printing results
+        System.out.println("Clustering results [id, cluster]");
+        for (Row row : result.select("id", "prediction").collectAsList()) {
+            System.out.println("[" + row.get(0) + ", " + row.get(1) + "]");
         }
-
         // $example off$
+
         spark.stop();
     }
 }
