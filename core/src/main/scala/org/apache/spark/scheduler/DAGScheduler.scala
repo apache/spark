@@ -206,7 +206,7 @@ class DAGScheduler(
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
-  private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
   /**
