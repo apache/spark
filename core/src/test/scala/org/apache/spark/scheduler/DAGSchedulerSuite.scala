@@ -1883,9 +1883,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val accumUpdates2 = Seq(accUpdate3)
     val accumInfo2 = accumUpdates2.map(AccumulatorSuite.makeInfo)
 
-    val taskKilled = new TaskKilled(
-      "test",
-      accumInfo2).copy(accums = accumUpdates2)
+    val taskKilled = new TaskKilled( "test", accumInfo2, accums = accumUpdates2)
     runEvent(makeCompletionEvent(taskSets.head.tasks.head, taskKilled, "result"))
 
     assert(AccumulatorContext.get(acc3.id).get.value === 18L)
