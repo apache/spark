@@ -405,6 +405,50 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("map_entries") {
+    val dummyFilter = (c: Column) => c.isNotNull || c.isNull
+
+    // Primitive-type elements
+    val idf = Seq(
+      Map[Int, Int](1 -> 100, 2 -> 200, 3 -> 300),
+      Map[Int, Int](),
+      null
+    ).toDF("m")
+    val iExpected = Seq(
+      Row(Seq(Row(1, 100), Row(2, 200), Row(3, 300))),
+      Row(Seq.empty),
+      Row(null)
+    )
+
+    checkAnswer(idf.select(map_entries('m)), iExpected)
+    checkAnswer(idf.selectExpr("map_entries(m)"), iExpected)
+    checkAnswer(idf.filter(dummyFilter('m)).select(map_entries('m)), iExpected)
+    checkAnswer(
+      spark.range(1).selectExpr("map_entries(map(1, null, 2, null))"),
+      Seq(Row(Seq(Row(1, null), Row(2, null)))))
+    checkAnswer(
+      spark.range(1).filter(dummyFilter('id)).selectExpr("map_entries(map(1, null, 2, null))"),
+      Seq(Row(Seq(Row(1, null), Row(2, null)))))
+
+    // Non-primitive-type elements
+    val sdf = Seq(
+      Map[String, String]("a" -> "f", "b" -> "o", "c" -> "o"),
+      Map[String, String]("a" -> null, "b" -> null),
+      Map[String, String](),
+      null
+    ).toDF("m")
+    val sExpected = Seq(
+      Row(Seq(Row("a", "f"), Row("b", "o"), Row("c", "o"))),
+      Row(Seq(Row("a", null), Row("b", null))),
+      Row(Seq.empty),
+      Row(null)
+    )
+
+    checkAnswer(sdf.select(map_entries('m)), sExpected)
+    checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
+    checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
+  }
+
   test("array contains function") {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
