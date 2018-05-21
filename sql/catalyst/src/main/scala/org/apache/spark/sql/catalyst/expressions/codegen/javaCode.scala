@@ -22,14 +22,17 @@ import java.lang.{Boolean => JBool}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.{existentials, implicitConversions}
 
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
  * Trait representing an opaque fragments of java code.
  */
-trait JavaCode {
+trait JavaCode extends TreeNode[JavaCode] {
   def code: String
   override def toString: String = code
+
+  override def verboseString: String = toString
 }
 
 /**
@@ -42,7 +45,7 @@ object JavaCode {
   def literal(v: String, dataType: DataType): LiteralValue = dataType match {
     case BooleanType if v == "true" => TrueLiteral
     case BooleanType if v == "false" => FalseLiteral
-    case _ => new LiteralValue(v, CodeGenerator.javaClass(dataType))
+    case _ => new LiteralExpr(v, CodeGenerator.javaClass(dataType))
   }
 
   /**
@@ -50,7 +53,7 @@ object JavaCode {
    * -1 for other primitive types.
    */
   def defaultLiteral(dataType: DataType): LiteralValue = {
-    new LiteralValue(
+    new LiteralExpr(
       CodeGenerator.defaultValue(dataType, typedNull = true),
       CodeGenerator.javaClass(dataType))
   }
@@ -120,7 +123,7 @@ object JavaCode {
  */
 trait Block extends JavaCode {
 
-  // The expressions to be evaluated inside this block.
+  // All expressions to be evaluated inside this block and underlying blocks.
   def exprValues: Set[ExprValue]
 
   // Returns java code string for this code block.
@@ -149,6 +152,34 @@ trait Block extends JavaCode {
 
   // Concatenates this block with other block.
   def + (other: Block): Block
+
+  /**
+   * Apply a map function to each java expression codes present in this java code, and return a new
+   * java code based on the mapped java expression codes.
+   */
+  def transformExprValues(f: PartialFunction[ExprValue, ExprValue]): this.type = {
+    var changed = false
+
+    @inline def transform(e: ExprValue): ExprValue = {
+      val newE = f lift e
+      if (!newE.isDefined || newE.get.fastEquals(e)) {
+        e
+      } else {
+        changed = true
+        newE.get
+      }
+    }
+
+    def doTransform(arg: Any): AnyRef = arg match {
+      case e: ExprValue => transform(e)
+      case Some(value) => Some(doTransform(value))
+      case seq: Traversable[_] => seq.map(doTransform)
+      case other: AnyRef => other
+    }
+
+    val newArgs = mapProductIterator(doTransform)
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
+  }
 }
 
 object Block {
@@ -219,6 +250,9 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[Any]) extends Bloc
     }.toSet
   }
 
+  override def children: Seq[Block] =
+    blockInputs.filter(_.isInstanceOf[Block]).asInstanceOf[Seq[Block]]
+
   override lazy val code: String = {
     val strings = codeParts.iterator
     val inputs = blockInputs.iterator
@@ -242,6 +276,8 @@ case class Blocks(blocks: Seq[Block]) extends Block {
   override lazy val exprValues: Set[ExprValue] = blocks.flatMap(_.exprValues).toSet
   override lazy val code: String = blocks.map(_.toString).mkString("\n")
 
+  override def children: Seq[Block] = blocks
+
   override def + (other: Block): Block = other match {
     case c: CodeBlock => Blocks(blocks :+ c)
     case b: Blocks => Blocks(blocks ++ b.blocks)
@@ -249,11 +285,13 @@ case class Blocks(blocks: Seq[Block]) extends Block {
   }
 }
 
-object EmptyBlock extends Block with Serializable {
+case object EmptyBlock extends Block with Serializable {
   override val code: String = ""
   override val exprValues: Set[ExprValue] = Set.empty
 
   override def + (other: Block): Block = other
+
+  override def children: Seq[Block] = Seq.empty
 }
 
 /**
@@ -262,6 +300,8 @@ object EmptyBlock extends Block with Serializable {
 trait ExprValue extends JavaCode {
   def javaType: Class[_]
   def isPrimitive: Boolean = javaType.isPrimitive
+
+  override def children: Seq[ExprValue] = Seq.empty
 }
 
 object ExprValue {
@@ -292,7 +332,8 @@ case class GlobalValue(value: String, javaType: Class[_]) extends ExprValue {
 /**
  * A literal java expression.
  */
-class LiteralValue(val value: String, val javaType: Class[_]) extends ExprValue with Serializable {
+abstract class LiteralValue(val value: String, val javaType: Class[_])
+    extends ExprValue with Serializable {
   override def code: String = value
 
   override def equals(arg: Any): Boolean = arg match {
@@ -302,6 +343,9 @@ class LiteralValue(val value: String, val javaType: Class[_]) extends ExprValue 
 
   override def hashCode(): Int = value.hashCode() * 31 + javaType.hashCode()
 }
+
+case class LiteralExpr(override val value: String, override val javaType: Class[_])
+    extends LiteralValue(value, javaType)
 
 case object TrueLiteral extends LiteralValue("true", JBool.TYPE)
 case object FalseLiteral extends LiteralValue("false", JBool.TYPE)

@@ -107,7 +107,7 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(e.getMessage().contains(s"Can not interpolate ${obj.getClass.getName}"))
   }
 
-  test("replace expr values in code block") {
+  test("transform expr in code block") {
     val expr = JavaCode.expression("1 + 1", IntegerType)
     val isNull = JavaCode.isNullVariable("expr1_isNull")
     val exprInFunc = JavaCode.variable("expr1", IntegerType)
@@ -120,11 +120,11 @@ class CodeBlockSuite extends SparkFunSuite {
            |}""".stripMargin
 
     val aliasedParam = JavaCode.variable("aliased", expr.javaType)
-    val aliasedInputs = code.asInstanceOf[CodeBlock].blockInputs.map {
-      case _: SimpleExprValue => aliasedParam
-      case other => other
+
+    // We want to replace all occurrences of `expr` with the variable `aliasedParam`.
+    val aliasedCode = code.transformExprValues {
+      case SimpleExprValue("1 + 1", _) => aliasedParam
     }
-    val aliasedCode = CodeBlock(code.asInstanceOf[CodeBlock].codeParts, aliasedInputs).stripMargin
     val expected =
       code"""
            |callFunc(int $aliasedParam) {
@@ -132,5 +132,55 @@ class CodeBlockSuite extends SparkFunSuite {
            |  int $exprInFunc = $aliasedParam + 1;
            |}""".stripMargin
     assert(aliasedCode.toString == expected.toString)
+  }
+
+  test ("transform expr in nested blocks") {
+    val expr = JavaCode.expression("1 + 1", IntegerType)
+    val isNull = JavaCode.isNullVariable("expr1_isNull")
+    val exprInFunc = JavaCode.variable("expr1", IntegerType)
+
+    val funcs = Seq("callFunc1", "callFunc2", "callFunc3")
+    val subBlocks = funcs.map { funcName =>
+      code"""
+           |$funcName(int $expr) {
+           |  boolean $isNull = false;
+           |  int $exprInFunc = $expr + 1;
+           |}""".stripMargin
+    }
+
+    val aliasedParam = JavaCode.variable("aliased", expr.javaType)
+
+    val block = subBlocks.fold(EmptyBlock)(_ + _)
+    val transformedBlock = block.transform {
+      case b: Block => b.transformExprValues {
+        case SimpleExprValue("1 + 1", _) => aliasedParam
+      }
+    }.asInstanceOf[Blocks]
+
+    val expected1 =
+      code"""
+        |callFunc1(int aliased) {
+        |  boolean expr1_isNull = false;
+        |  int expr1 = aliased + 1;
+        |}""".stripMargin
+
+    val expected2 =
+      code"""
+        |callFunc2(int aliased) {
+        |  boolean expr1_isNull = false;
+        |  int expr1 = aliased + 1;
+        |}""".stripMargin
+
+    val expected3 =
+      code"""
+        |callFunc3(int aliased) {
+        |  boolean expr1_isNull = false;
+        |  int expr1 = aliased + 1;
+        |}""".stripMargin
+
+    assert(transformedBlock.blocks(0).toString == expected1.toString)
+    assert(transformedBlock.blocks(1).toString == expected2.toString)
+    assert(transformedBlock.blocks(2).toString == expected3.toString)
+    assert(transformedBlock.toString == (expected1 + expected2 + expected3).toString)
   }
 }
