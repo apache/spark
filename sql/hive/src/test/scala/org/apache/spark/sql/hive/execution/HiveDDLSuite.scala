@@ -496,7 +496,16 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-17732; Drop partitions by filter") {
+  def testDropPartition(dataType: DataType, value: Any): Unit = {
+    withTable("tbl_x") {
+      sql(s"CREATE TABLE tbl_x (a INT) PARTITIONED BY (p ${dataType.sql})")
+      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = $value)")
+      sql(s"ALTER TABLE tbl_x DROP PARTITION (p >= $value)")
+      checkAnswer(sql("SHOW PARTITIONS tbl_x"), Nil)
+    }
+  }
+
+  test("SPARK-17732: Drop partitions by filter") {
     withTable("sales") {
       sql("CREATE TABLE sales (id INT) PARTITIONED BY (country STRING, quarter STRING)")
 
@@ -562,6 +571,15 @@ class HiveDDLSuite
       sql("ALTER TABLE sales DROP PARTITION (quarter <= '4'), PARTITION (quarter <= '3')")
       checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
     }
+    testDropPartition(IntegerType, 1)
+    testDropPartition(BooleanType, true)
+    testDropPartition(StringType, "'true'")
+    testDropPartition(LongType, 1L)
+    testDropPartition(ShortType, 1.toShort)
+    testDropPartition(ByteType, 1.toByte)
+    testDropPartition(FloatType, 1.0F)
+    testDropPartition(DoubleType, 1.0)
+    testDropPartition(DecimalType(2, 1), Decimal(1.5))
   }
 
   test("SPARK-14922, SPARK-17732: Error handling for drop partitions by filter") {
@@ -600,7 +618,7 @@ class HiveDDLSuite
       // The query is not executed because `PARTITION (quarter <= '2')` is invalid.
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") :: Nil)
-      assert(m6.contains("There is no partition for (`quarter` <= '2')"))
+      assert(m6.contains("There is no partition for (`quarter` <= CAST('2' AS STRING))"))
     }
   }
 

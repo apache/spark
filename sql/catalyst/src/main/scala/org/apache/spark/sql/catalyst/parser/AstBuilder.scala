@@ -285,21 +285,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create a partition filter specification.
    */
-  def visitPartitionFilterSpec(ctx: PartitionSpecContext): Expression = withOrigin(ctx) {
+  def visitPartitionFilterSpec(ctx: PartitionSpecContext): Seq[Expression] = withOrigin(ctx) {
     val parts = ctx.expression.asScala.map { pVal =>
       expression(pVal) match {
         case EqualNullSafe(_, _) =>
           throw new ParseException("'<=>' operator is not allowed in partition specification.", ctx)
         case cmp @ BinaryComparison(UnresolvedAttribute(name :: Nil), constant: Literal) =>
-          cmp.withNewChildren(Seq(AttributeReference(name, StringType)(), constant))
+          cmp
         case _ =>
           throw new ParseException("Invalid partition filter specification", ctx)
       }
     }
     if(parts.isEmpty) {
-      null
+      Seq.empty[Expression]
     } else {
-      parts.reduceLeft(And)
+      parts
     }
   }
 
@@ -318,7 +318,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a partition specification map without optional values
    * and a partition filter specification.
    */
-  protected def visitPartition(ctx: PartitionSpecContext): (Map[String, String], Expression) = {
+  protected def visitPartition(
+      ctx: PartitionSpecContext): (Map[String, String], Seq[Expression]) = {
     (visitNonOptionalPartitionSpec(ctx), visitPartitionFilterSpec(ctx))
   }
 

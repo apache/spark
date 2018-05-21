@@ -29,10 +29,10 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BinaryComparison, Cast, Expression, Literal, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
@@ -515,7 +515,7 @@ case class AlterTableRenamePartitionCommand(
  */
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
-    partitions: Seq[(TablePartitionSpec, Expression)],
+    partitions: Seq[(TablePartitionSpec, Seq[Expression])],
     ifExists: Boolean,
     purge: Boolean,
     retainData: Boolean)
@@ -536,19 +536,27 @@ case class AlterTableDropPartitionCommand(
             sparkSession.sessionState.conf.resolver)
 
       val partitionSet = {
-        if (partition._2 != null) {
-          partition._2.references.foreach { attr =>
-            if (!table.partitionColumnNames.exists(resolver(_, attr.name))) {
-              throw new AnalysisException(s"${attr.name} is not a valid partition column " +
+        if (partition._2.nonEmpty) {
+          val parts = partition._2.map { expr =>
+            val (attrName, value) = expr match {
+              case BinaryComparison(UnresolvedAttribute(name :: Nil), constant: Literal) =>
+                (name, constant.value)
+            }
+            if (!table.partitionColumnNames.exists(resolver(_, attrName))) {
+              throw new AnalysisException(s"${attrName} is not a valid partition column " +
                 s"in table ${table.identifier.quotedString}.")
             }
+            val dataType = table.partitionSchema.apply(attrName).dataType
+            expr.withNewChildren(Seq(AttributeReference(attrName, dataType)(),
+              Cast(Literal(value.toString), dataType)))
+          }.reduce(And)
+
+          val partitions = catalog.listPartitionsByFilter(
+            table.identifier, Seq(parts)).map(_.spec)
+          if (partitions.isEmpty && !ifExists) {
+            throw new AnalysisException(s"There is no partition for ${parts.sql}")
           }
-            val partitions = catalog.listPartitionsByFilter(
-              table.identifier, Seq(partition._2)).map(_.spec)
-            if (partitions.isEmpty && !ifExists) {
-              throw new AnalysisException(s"There is no partition for ${partition._2.sql}")
-            }
-            partitions
+          partitions
         } else {
           Seq.empty[TablePartitionSpec]
         }
