@@ -74,10 +74,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
     assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
     assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
-
-    // SPARK-24313: access binary keys
-    val mapWithBinaryKey = map(lit(Array[Byte](1.toByte)), lit(1))
-    checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
   }
 
   test("table scan") {
@@ -2268,5 +2264,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("Uuid expressions should produce same results at retries in the same DataFrame") {
     val df = spark.range(1).select($"id", new Column(Uuid()))
     checkAnswer(df, df.collect())
+  }
+
+  test("SPARK-24313: access map with binary keys") {
+    val mapWithBinaryKey = map(lit(Array[Byte](1.toByte)), lit(1))
+    checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
   }
 }
