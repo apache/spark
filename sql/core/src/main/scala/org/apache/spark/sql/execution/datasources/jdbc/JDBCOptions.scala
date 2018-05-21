@@ -117,6 +117,9 @@ class JDBCOptions(
         "the JDBC driver ignores the value and does the estimates.")
     size
   }
+  // Whether to quote a partition column name
+  val quotePartitionColumnName: Boolean =
+    parameters.getOrElse(JDBC_QUOTE_PARTITION_COLUMN_NAME, "false").toBoolean
 
   // ------------------------------------------------------------
   // Optional parameters only for writing
@@ -165,6 +168,7 @@ object JDBCOptions {
   val JDBC_UPPER_BOUND = newOption("upperBound")
   val JDBC_NUM_PARTITIONS = newOption("numPartitions")
   val JDBC_QUERY_TIMEOUT = newOption("queryTimeout")
+  val JDBC_QUOTE_PARTITION_COLUMN_NAME = newOption("quotePartitionColumnName")
   val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
   val JDBC_TRUNCATE = newOption("truncate")
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")

@@ -51,7 +51,8 @@ private[sql] object JDBCRelation extends Logging {
    * @param partitioning partition information to generate the where clause for each partition
    * @return an array of partitions with where clause for each partition
    */
-  def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
+  def columnPartition(
+      partitioning: JDBCPartitioningInfo, jdbcOptions: JDBCOptions): Array[Partition] = {
     if (partitioning == null || partitioning.numPartitions <= 1 ||
       partitioning.lowerBound == partitioning.upperBound) {
       return Array[Partition](JDBCPartition(null, 0))
@@ -78,7 +79,12 @@ private[sql] object JDBCRelation extends Logging {
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
     val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
-    val column = partitioning.column
+    val column = if (jdbcOptions.quotePartitionColumnName) {
+      val dialect = JdbcDialects.get(jdbcOptions.url)
+      dialect.quoteIdentifier(partitioning.column)
+    } else {
+      partitioning.column
+    }
     var i: Int = 0
     var currentValue: Long = lowerBound
     val ans = new ArrayBuffer[Partition]()

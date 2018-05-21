@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -1205,5 +1205,31 @@ class JDBCSuite extends SparkFunSuite
       df.collect()
     }.getMessage
     assert(errMsg.contains("Statement was canceled or the session timed out"))
+  }
+
+  test("SPARK-24327 quotes a partition column name if `quotePartitionColumnNames` is true") {
+    Seq(true, false).foreach { quotePartitionColumnName =>
+      val df = spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", "TEST.PEOPLE")
+        .option("partitionColumn", "THEID")
+        .option("lowerBound", 1)
+        .option("upperBound", 4)
+        .option("numPartitions", 3)
+        .option("quotePartitionColumnName", quotePartitionColumnName)
+        .load()
+      val colName = if (quotePartitionColumnName) {
+        testH2Dialect.quoteIdentifier("THEID")
+      } else {
+        "THEID"
+      }
+      df.logicalPlan match {
+        case LogicalRelation(JDBCRelation(parts, _), _, _, _) =>
+          val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+          assert(whereClauses === Set(
+            s"$colName < 2 or $colName is null", s"$colName >= 2 AND $colName < 3",
+            s"$colName >= 3"))
+      }
+    }
   }
 }
