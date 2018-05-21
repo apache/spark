@@ -67,7 +67,7 @@ private[spark] class KafkaRDD[K, V](
 
   // TODO is it necessary to have separate configs for initial poll time vs ongoing poll time?
   private val pollTimeout = conf.getLong("spark.streaming.kafka.consumer.poll.ms",
-    conf.getTimeAsMs("spark.network.timeout", "120s"))
+    conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L)
   private val cacheInitialCapacity =
     conf.getInt("spark.streaming.kafka.consumer.cache.initialCapacity", 16)
   private val cacheMaxCapacity =
