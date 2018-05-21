@@ -49,7 +49,7 @@ from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
-    get_used_memory, ExternalSorter, ExternalGroupBy
+    get_used_memory, ExternalSorter, ExternalGroupBy, safe_iter
 from pyspark.traceback_utils import SCCallSiteSync
 
 
@@ -171,6 +171,7 @@ def ignore_unicode_prefix(f):
         literal_re = re.compile(r"(\W|^)[uU](['])", re.UNICODE)
         f.__doc__ = literal_re.sub(r'\1\2', f.__doc__)
     return f
+
 
 
 class Partitioner(object):
@@ -332,7 +333,7 @@ class RDD(object):
         [('a', 1), ('b', 1), ('c', 1)]
         """
         def func(_, iterator):
-            return map(f, iterator)
+            return map(safe_iter(f), iterator)
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def flatMap(self, f, preservesPartitioning=False):
@@ -347,7 +348,7 @@ class RDD(object):
         [(2, 2), (2, 2), (3, 3), (3, 3), (4, 4), (4, 4)]
         """
         def func(s, iterator):
-            return chain.from_iterable(map(f, iterator))
+            return chain.from_iterable(map(safe_iter(f), iterator))
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def mapPartitions(self, f, preservesPartitioning=False):
@@ -410,7 +411,7 @@ class RDD(object):
         [2, 4]
         """
         def func(iterator):
-            return filter(f, iterator)
+            return filter(safe_iter(f), iterator)
         return self.mapPartitions(func, True)
 
     def distinct(self, numPartitions=None):
@@ -791,9 +792,11 @@ class RDD(object):
         >>> def f(x): print(x)
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreach(f)
         """
+        safe_f = safe_iter(f)
+
         def processPartition(iterator):
             for x in iterator:
-                f(x)
+                safe_f(x)
             return iter([])
         self.mapPartitions(processPartition).count()  # Force evaluation
 
@@ -840,13 +843,15 @@ class RDD(object):
             ...
         ValueError: Can not reduce() empty RDD
         """
+        safe_f = safe_iter(f)
+
         def func(iterator):
             iterator = iter(iterator)
             try:
                 initial = next(iterator)
             except StopIteration:
                 return
-            yield reduce(f, iterator, initial)
+            yield reduce(safe_f, iterator, initial)
 
         vals = self.mapPartitions(func).collect()
         if vals:
@@ -911,10 +916,12 @@ class RDD(object):
         >>> sc.parallelize([1, 2, 3, 4, 5]).fold(0, add)
         15
         """
+        safe_op = safe_iter(op)
+
         def func(iterator):
             acc = zeroValue
             for obj in iterator:
-                acc = op(acc, obj)
+                acc = safe_op(acc, obj)
             yield acc
         # collecting result of mapPartitions here ensures that the copy of
         # zeroValue provided to each partition is unique from the one provided
@@ -943,16 +950,19 @@ class RDD(object):
         >>> sc.parallelize([]).aggregate((0, 0), seqOp, combOp)
         (0, 0)
         """
+        safe_seqOp = safe_iter(seqOp)
+        safe_combOp = safe_iter(combOp)
+
         def func(iterator):
             acc = zeroValue
             for obj in iterator:
-                acc = seqOp(acc, obj)
+                acc = safe_seqOp(acc, obj)
             yield acc
         # collecting result of mapPartitions here ensures that the copy of
         # zeroValue provided to each partition is unique from the one provided
         # to the final reduce call
         vals = self.mapPartitions(func).collect()
-        return reduce(combOp, vals, zeroValue)
+        return reduce(safe_combOp, vals, zeroValue)
 
     def treeAggregate(self, zeroValue, seqOp, combOp, depth=2):
         """
@@ -1636,15 +1646,17 @@ class RDD(object):
         >>> sorted(rdd.reduceByKeyLocally(add).items())
         [('a', 2), ('b', 1)]
         """
+        safe_func = safe_iter(func)
+
         def reducePartition(iterator):
             m = {}
             for k, v in iterator:
-                m[k] = func(m[k], v) if k in m else v
+                m[k] = safe_func(m[k], v) if k in m else v
             yield m
 
         def mergeMaps(m1, m2):
             for k, v in m2.items():
-                m1[k] = func(m1[k], v) if k in m1 else v
+                m1[k] = safe_func(m1[k], v) if k in m1 else v
             return m1
         return self.mapPartitions(reducePartition).reduce(mergeMaps)
 
@@ -1846,6 +1858,7 @@ class RDD(object):
         >>> sorted(x.combineByKey(to_list, append, extend).collect())
         [('a', [1, 2]), ('b', [1])]
         """
+
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 

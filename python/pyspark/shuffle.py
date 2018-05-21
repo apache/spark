@@ -67,6 +67,19 @@ except ImportError:
         return 0
 
 
+def safe_iter(f):
+    """ wraps f to make it safe (= does not lead to data loss) to use inside a for loop
+        make StopIteration's raised inside f explicit
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except StopIteration as exc:
+            raise RuntimeError('StopIteration in client code', exc)
+
+    return wrapper
+
+
 def _get_local_dirs(sub):
     """ Get all the directories """
     path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
@@ -94,9 +107,9 @@ class Aggregator(object):
     """
 
     def __init__(self, createCombiner, mergeValue, mergeCombiners):
-        self.createCombiner = createCombiner
-        self.mergeValue = mergeValue
-        self.mergeCombiners = mergeCombiners
+        self.createCombiner = safe_iter(createCombiner)
+        self.mergeValue = safe_iter(mergeValue)
+        self.mergeCombiners = safe_iter(mergeCombiners)
 
 
 class SimpleAggregator(Aggregator):
