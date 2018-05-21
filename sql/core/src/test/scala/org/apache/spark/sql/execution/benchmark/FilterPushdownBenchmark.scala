@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
 import scala.util.{Random, Try}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{Benchmark, Utils}
@@ -29,11 +30,13 @@ import org.apache.spark.util.{Benchmark, Utils}
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
+ * To run this:
+ *  spark-submit --class <this class> <spark sql test jar>
  */
 object FilterPushdownBenchmark {
   val conf = new SparkConf()
-    .setMaster("local[1]")
     .setAppName("FilterPushdownBenchmark")
+    .setIfMissing("spark.master", "local[1]")
     .setIfMissing("spark.driver.memory", "3g")
     .setIfMissing("spark.executor.memory", "3g")
     .setIfMissing("orc.compression", "snappy")
