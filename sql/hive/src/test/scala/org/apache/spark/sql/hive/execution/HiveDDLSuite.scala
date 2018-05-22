@@ -619,6 +619,13 @@ class HiveDDLSuite
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") :: Nil)
       assert(m6.contains("There is no partition for (`quarter` <= CAST('2' AS STRING))"))
+
+      val m7 = intercept[ParseException] {
+        sql("ALTER TABLE sales DROP PARTITION ( '4' > quarter)")
+      }.getMessage
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=3") :: Nil)
+      assert(m7.contains("Literal 4 is supported only on the rigth-side"))
     }
   }
 

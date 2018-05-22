@@ -292,6 +292,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           throw new ParseException("'<=>' operator is not allowed in partition specification.", ctx)
         case cmp @ BinaryComparison(UnresolvedAttribute(name :: Nil), constant: Literal) =>
           cmp
+        case bc @ BinaryComparison(constant: Literal, _) =>
+          throw new ParseException("Literal " + constant
+            + " is supported only on the rigth-side.", ctx)
         case _ =>
           throw new ParseException("Invalid partition filter specification", ctx)
       }
