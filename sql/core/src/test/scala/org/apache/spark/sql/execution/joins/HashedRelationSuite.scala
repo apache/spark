@@ -266,9 +266,9 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
 
     val key = 0L
-    // the page array is initialized with length 1 << 17,
-    // so here we need a value larger than 1 << 18
-    val bigStr = UTF8String.fromString("x" * 1024 * 1024 * 2)
+    // the page array is initialized with length 1 << 17 (1M bytes),
+    // so here we need a value larger than 1 << 18 (2M bytes),to trigger the bug
+    val bigStr = UTF8String.fromString("x" * (1 << 22))
 
     map.append(key, unsafeProj(InternalRow(bigStr)))
     map.optimize()
