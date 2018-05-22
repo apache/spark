@@ -2293,4 +2293,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(arraysHash1 == arraysHash2)
     assert(arraysHash1 != arraysHash3)
   }
+
+  test("SPARK-24313: access map with binary keys") {
+    val mapWithBinaryKey = map(lit(Array[Byte](1.toByte)), lit(1))
+    checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
+  }
 }

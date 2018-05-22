@@ -69,7 +69,7 @@ case class BroadcastExchangeExec(
     Future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
-      SQLExecution.withExecutionId(sparkContext, executionId) {
+      SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
         try {
           val beforeCollect = System.nanoTime()
           // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
