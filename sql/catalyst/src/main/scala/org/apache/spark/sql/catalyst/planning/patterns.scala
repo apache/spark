@@ -285,6 +285,7 @@ object PhysicalWindow {
   def unapply(a: Any): Option[ReturnType] = a match {
     case expr @ logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
 
+      // The window expression should not be empty here, otherwise it's a bug.
       if (windowExpressions.isEmpty) {
         throw new AnalysisException(s"Window expression is empty in $expr")
       }
@@ -292,6 +293,7 @@ object PhysicalWindow {
       val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)
         .reduceLeft { (t1: WindowFunctionType, t2: WindowFunctionType) =>
           if (t1 != t2) {
+            // We shouldn't have different window function type here, otherwise it's a bug.
             throw new AnalysisException(
               s"Found different window function type in $windowExpressions")
           } else {
