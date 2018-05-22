@@ -19,17 +19,17 @@ package org.apache.spark.sql.hive
 
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
+import java.net.URI
 import java.util
 import java.util.Locale
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -230,11 +230,29 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
     // to create the table directory and write out data before we create this table, to avoid
     // exposing a partial written table.
-    val needDefaultTableLocation = tableDefinition.tableType == MANAGED &&
-      tableDefinition.storage.locationUri.isEmpty
-
-    val tableLocation = if (needDefaultTableLocation) {
-      Some(CatalogUtils.stringToURI(defaultTablePath(tableDefinition.identifier)))
+    //
+    // CDH-51334: when using a remote metastore, and if a managed table is being created with its
+    // location explicitly set to the location where it would be created anyway, then do
+    // not set its location explicitly. This avoids an issue with Sentry in secure clusters.
+    // Otherwise, the above comment applies.
+    //
+    // This workaround is not done for embedded metastores because (i) there's no Sentry in that
+    // case, and (ii) HiveSparkSubmitSuite has a unit test that relies on the behavior without
+    // the CDH change.
+    val tableLocation: Option[URI] = if (tableDefinition.tableType == MANAGED) {
+      val metastoreURIs = client.getConf(HiveConf.ConfVars.METASTOREURIS.varname, "")
+      if (metastoreURIs.nonEmpty && DDLUtils.isHiveTable(tableDefinition)) {
+        tableDefinition.storage.locationUri
+          .map { path => makeQualified(path) }
+          .filter { loc =>
+            val metastoreTableLocation = makeQualified(
+              CatalogUtils.stringToURI(defaultTablePath(tableDefinition.identifier)))
+            loc != metastoreTableLocation
+          }
+      } else {
+        tableDefinition.storage.locationUri
+          .orElse(Some(CatalogUtils.stringToURI(defaultTablePath(tableDefinition.identifier))))
+      }
     } else {
       tableDefinition.storage.locationUri
     }
@@ -257,6 +275,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
       client.createTable(tableWithDataSourceProps, ignoreIfExists)
     }
+  }
+
+  private def makeQualified(uri: URI): URI = {
+    val path = new Path(uri)
+    val fs = path.getFileSystem(hadoopConf)
+    fs.makeQualified(path).toUri
   }
 
   private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
