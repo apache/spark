@@ -28,6 +28,7 @@ import sys
 import pyspark.heapq3 as heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
     CompressedSerializer, AutoBatchedSerializer
+from pyspark.util import fail_on_StopIteration
 
 
 try:
@@ -67,19 +68,6 @@ except ImportError:
         return 0
 
 
-def safe_iter(f):
-    """ wraps f to make it safe (= does not lead to data loss) to use inside a for loop
-        make StopIteration's raised inside f explicit
-    """
-    def wrapper(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except StopIteration as exc:
-            raise RuntimeError('StopIteration in client code', exc)
-
-    return wrapper
-
-
 def _get_local_dirs(sub):
     """ Get all the directories """
     path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
@@ -107,9 +95,9 @@ class Aggregator(object):
     """
 
     def __init__(self, createCombiner, mergeValue, mergeCombiners):
-        self.createCombiner = safe_iter(createCombiner)
-        self.mergeValue = safe_iter(mergeValue)
-        self.mergeCombiners = safe_iter(mergeCombiners)
+        self.createCombiner = fail_on_StopIteration(createCombiner)
+        self.mergeValue = fail_on_StopIteration(mergeValue)
+        self.mergeCombiners = fail_on_StopIteration(mergeCombiners)
 
 
 class SimpleAggregator(Aggregator):

@@ -49,8 +49,9 @@ from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
-    get_used_memory, ExternalSorter, ExternalGroupBy, safe_iter
+    get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
+from pyspark.util import fail_on_StopIteration
 
 
 __all__ = ["RDD"]
@@ -171,7 +172,6 @@ def ignore_unicode_prefix(f):
         literal_re = re.compile(r"(\W|^)[uU](['])", re.UNICODE)
         f.__doc__ = literal_re.sub(r'\1\2', f.__doc__)
     return f
-
 
 
 class Partitioner(object):
@@ -333,7 +333,7 @@ class RDD(object):
         [('a', 1), ('b', 1), ('c', 1)]
         """
         def func(_, iterator):
-            return map(safe_iter(f), iterator)
+            return map(fail_on_StopIteration(f), iterator)
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def flatMap(self, f, preservesPartitioning=False):
@@ -348,7 +348,7 @@ class RDD(object):
         [(2, 2), (2, 2), (3, 3), (3, 3), (4, 4), (4, 4)]
         """
         def func(s, iterator):
-            return chain.from_iterable(map(safe_iter(f), iterator))
+            return chain.from_iterable(map(fail_on_StopIteration(f), iterator))
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def mapPartitions(self, f, preservesPartitioning=False):
@@ -411,7 +411,7 @@ class RDD(object):
         [2, 4]
         """
         def func(iterator):
-            return filter(safe_iter(f), iterator)
+            return filter(fail_on_StopIteration(f), iterator)
         return self.mapPartitions(func, True)
 
     def distinct(self, numPartitions=None):
@@ -792,7 +792,7 @@ class RDD(object):
         >>> def f(x): print(x)
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreach(f)
         """
-        safe_f = safe_iter(f)
+        safe_f = fail_on_StopIteration(f)
 
         def processPartition(iterator):
             for x in iterator:
@@ -843,7 +843,7 @@ class RDD(object):
             ...
         ValueError: Can not reduce() empty RDD
         """
-        safe_f = safe_iter(f)
+        safe_f = fail_on_StopIteration(f)
 
         def func(iterator):
             iterator = iter(iterator)
@@ -916,7 +916,7 @@ class RDD(object):
         >>> sc.parallelize([1, 2, 3, 4, 5]).fold(0, add)
         15
         """
-        safe_op = safe_iter(op)
+        safe_op = fail_on_StopIteration(op)
 
         def func(iterator):
             acc = zeroValue
@@ -950,8 +950,8 @@ class RDD(object):
         >>> sc.parallelize([]).aggregate((0, 0), seqOp, combOp)
         (0, 0)
         """
-        safe_seqOp = safe_iter(seqOp)
-        safe_combOp = safe_iter(combOp)
+        safe_seqOp = fail_on_StopIteration(seqOp)
+        safe_combOp = fail_on_StopIteration(combOp)
 
         def func(iterator):
             acc = zeroValue
@@ -1646,7 +1646,7 @@ class RDD(object):
         >>> sorted(rdd.reduceByKeyLocally(add).items())
         [('a', 2), ('b', 1)]
         """
-        safe_func = safe_iter(func)
+        safe_func = fail_on_StopIteration(func)
 
         def reducePartition(iterator):
             m = {}

@@ -89,6 +89,19 @@ class VersionUtils(object):
                              " version numbers.")
 
 
+def fail_on_StopIteration(f):
+    """ wraps f to make it safe (= does not lead to data loss) to use inside a for loop
+        make StopIteration's raised inside f explicit
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except StopIteration as exc:
+            raise RuntimeError('StopIteration in client code', exc)
+
+    return wrapper
+
+
 if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
