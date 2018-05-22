@@ -24,9 +24,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -90,7 +92,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    ev.copy(code = s"""
+    ev.copy(code = code"""
       boolean ${ev.isNull} = false;
       ${childGen.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
@@ -152,6 +154,158 @@ case class MapValues(child: Expression)
   }
 
   override def prettyName: String = "map_values"
+}
+
+/**
+ * Returns an unordered array of all entries in the given map.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(map) - Returns an unordered array of all entries in the given map.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'));
+       [(1,"a"),(2,"b")]
+  """,
+  since = "2.4.0")
+case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
+
+  lazy val childDataType: MapType = child.dataType.asInstanceOf[MapType]
+
+  override def dataType: DataType = {
+    ArrayType(
+      StructType(
+        StructField("key", childDataType.keyType, false) ::
+        StructField("value", childDataType.valueType, childDataType.valueContainsNull) ::
+        Nil),
+      false)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    val childMap = input.asInstanceOf[MapData]
+    val keys = childMap.keyArray()
+    val values = childMap.valueArray()
+    val length = childMap.numElements()
+    val resultData = new Array[AnyRef](length)
+    var i = 0;
+    while (i < length) {
+      val key = keys.get(i, childDataType.keyType)
+      val value = values.get(i, childDataType.valueType)
+      val row = new GenericInternalRow(Array[Any](key, value))
+      resultData.update(i, row)
+      i += 1
+    }
+    new GenericArrayData(resultData)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val numElements = ctx.freshName("numElements")
+      val keys = ctx.freshName("keys")
+      val values = ctx.freshName("values")
+      val isKeyPrimitive = CodeGenerator.isPrimitiveType(childDataType.keyType)
+      val isValuePrimitive = CodeGenerator.isPrimitiveType(childDataType.valueType)
+      val code = if (isKeyPrimitive && isValuePrimitive) {
+        genCodeForPrimitiveElements(ctx, keys, values, ev.value, numElements)
+      } else {
+        genCodeForAnyElements(ctx, keys, values, ev.value, numElements)
+      }
+      s"""
+         |final int $numElements = $c.numElements();
+         |final ArrayData $keys = $c.keyArray();
+         |final ArrayData $values = $c.valueArray();
+         |$code
+       """.stripMargin
+    })
+  }
+
+  private def getKey(varName: String) = CodeGenerator.getValue(varName, childDataType.keyType, "z")
+
+  private def getValue(varName: String) = {
+    CodeGenerator.getValue(varName, childDataType.valueType, "z")
+  }
+
+  private def genCodeForPrimitiveElements(
+      ctx: CodegenContext,
+      keys: String,
+      values: String,
+      arrayData: String,
+      numElements: String): String = {
+    val unsafeRow = ctx.freshName("unsafeRow")
+    val unsafeArrayData = ctx.freshName("unsafeArrayData")
+    val structsOffset = ctx.freshName("structsOffset")
+    val calculateHeader = "UnsafeArrayData.calculateHeaderPortionInBytes"
+
+    val baseOffset = Platform.BYTE_ARRAY_OFFSET
+    val wordSize = UnsafeRow.WORD_SIZE
+    val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + wordSize * 2
+    val structSizeAsLong = structSize + "L"
+    val keyTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
+    val valueTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
+
+    val valueAssignment = s"$unsafeRow.set$valueTypeName(1, ${getValue(values)});"
+    val valueAssignmentChecked = if (childDataType.valueContainsNull) {
+      s"""
+         |if ($values.isNullAt(z)) {
+         |  $unsafeRow.setNullAt(1);
+         |} else {
+         |  $valueAssignment
+         |}
+       """.stripMargin
+    } else {
+      valueAssignment
+    }
+
+    val assignmentLoop = (byteArray: String) =>
+      s"""
+         |final int $structsOffset = $calculateHeader($numElements) + $numElements * $wordSize;
+         |UnsafeRow $unsafeRow = new UnsafeRow(2);
+         |for (int z = 0; z < $numElements; z++) {
+         |  long offset = $structsOffset + z * $structSizeAsLong;
+         |  $unsafeArrayData.setLong(z, (offset << 32) + $structSizeAsLong);
+         |  $unsafeRow.pointTo($byteArray, $baseOffset + offset, $structSize);
+         |  $unsafeRow.set$keyTypeName(0, ${getKey(keys)});
+         |  $valueAssignmentChecked
+         |}
+         |$arrayData = $unsafeArrayData;
+       """.stripMargin
+
+    ctx.createUnsafeArrayWithFallback(
+      unsafeArrayData,
+      numElements,
+      structSize + wordSize,
+      assignmentLoop,
+      genCodeForAnyElements(ctx, keys, values, arrayData, numElements))
+  }
+
+  private def genCodeForAnyElements(
+      ctx: CodegenContext,
+      keys: String,
+      values: String,
+      arrayData: String,
+      numElements: String): String = {
+    val genericArrayClass = classOf[GenericArrayData].getName
+    val rowClass = classOf[GenericInternalRow].getName
+    val data = ctx.freshName("internalRowArray")
+
+    val isValuePrimitive = CodeGenerator.isPrimitiveType(childDataType.valueType)
+    val getValueWithCheck = if (childDataType.valueContainsNull && isValuePrimitive) {
+      s"$values.isNullAt(z) ? null : (Object)${getValue(values)}"
+    } else {
+      getValue(values)
+    }
+
+    s"""
+       |final Object[] $data = new Object[$numElements];
+       |for (int z = 0; z < $numElements; z++) {
+       |  $data[z] = new $rowClass(new Object[]{${getKey(keys)}, $getValueWithCheck});
+       |}
+       |$arrayData = new $genericArrayClass($data);
+     """.stripMargin
+  }
+
+  override def prettyName: String = "map_entries"
 }
 
 /**
@@ -504,6 +658,9 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def dataType: DataType = BooleanType
 
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(right.dataType)
+
   override def inputTypes: Seq[AbstractDataType] = right.dataType match {
     case NullType => Seq.empty
     case _ => left.dataType match {
@@ -520,7 +677,7 @@ case class ArrayContains(left: Expression, right: Expression)
       TypeCheckResult.TypeCheckFailure(
         "Arguments must be an array followed by a value of same type as the array members")
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
     }
   }
 
@@ -533,7 +690,7 @@ case class ArrayContains(left: Expression, right: Expression)
     arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
       if (v == null) {
         hasNull = true
-      } else if (v == value) {
+      } else if (ordering.equiv(v, value)) {
         return true
       }
     )
@@ -582,11 +739,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
-      if (RowOrdering.isOrderable(elementType)) {
-        TypeCheckResult.TypeCheckSuccess
-      } else {
-        TypeCheckResult.TypeCheckFailure(s"${elementType.simpleString} cannot be used in comparison.")
-      }
+      TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
     case failure => failure
   }
 
@@ -1025,14 +1178,14 @@ case class ArrayJoin(
     }
     if (nullable) {
       ev.copy(
-        s"""
+        code"""
            |boolean ${ev.isNull} = true;
            |UTF8String ${ev.value} = null;
            |$code
          """.stripMargin)
     } else {
       ev.copy(
-        s"""
+        code"""
            |UTF8String ${ev.value} = null;
            |$code
          """.stripMargin, FalseLiteral)
@@ -1117,11 +1270,11 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
     val childGen = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
     val i = ctx.freshName("i")
-    val item = ExprCode("",
+    val item = ExprCode(EmptyBlock,
       isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
       value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
     ev.copy(code =
-      s"""
+      code"""
          |${childGen.code}
          |boolean ${ev.isNull} = true;
          |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -1182,11 +1335,11 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
     val childGen = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
     val i = ctx.freshName("i")
-    val item = ExprCode("",
+    val item = ExprCode(EmptyBlock,
       isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
       value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
     ev.copy(code =
-      s"""
+      code"""
          |${childGen.code}
          |boolean ${ev.isNull} = true;
          |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -1238,13 +1391,24 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 case class ArrayPosition(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(right.dataType)
+
   override def dataType: DataType = LongType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case f: TypeCheckResult.TypeCheckFailure => f
+      case TypeCheckResult.TypeCheckSuccess =>
+        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+    }
+  }
+
   override def nullSafeEval(arr: Any, value: Any): Any = {
     arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
-      if (v == value) {
+      if (v != null && ordering.equiv(v, value)) {
         return (i + 1).toLong
       }
     )
@@ -1293,6 +1457,9 @@ case class ArrayPosition(left: Expression, right: Expression)
   since = "2.4.0")
 case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
 
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(left.dataType.asInstanceOf[MapType].keyType)
+
   override def dataType: DataType = left.dataType match {
     case ArrayType(elementType, _) => elementType
     case MapType(_, valueType, _) => valueType
@@ -1305,6 +1472,16 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
         case _: MapType => left.dataType.asInstanceOf[MapType].keyType
       }
     )
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case f: TypeCheckResult.TypeCheckFailure => f
+      case TypeCheckResult.TypeCheckSuccess if left.dataType.isInstanceOf[MapType] =>
+        TypeUtils.checkForOrderingExpr(
+          left.dataType.asInstanceOf[MapType].keyType, s"function $prettyName")
+      case TypeCheckResult.TypeCheckSuccess => TypeCheckResult.TypeCheckSuccess
+    }
   }
 
   override def nullable: Boolean = true
@@ -1331,7 +1508,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
           }
         }
       case _: MapType =>
-        getValueEval(value, ordinal, left.dataType.asInstanceOf[MapType].keyType)
+        getValueEval(value, ordinal, left.dataType.asInstanceOf[MapType].keyType, ordering)
     }
   }
 
@@ -1477,7 +1654,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
       expressions = inputs,
       funcName = "valueConcat",
       extraArguments = (s"$javaType[]", args) :: Nil)
-    ev.copy(s"""
+    ev.copy(code"""
       $initCode
       $codes
       $javaType ${ev.value} = $concatenator.concat($args);
@@ -1787,7 +1964,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
     val resultCode = nullElementsProtection(ev, rightGen.isNull, coreLogic)
 
     ev.copy(code =
-      s"""
+      code"""
          |boolean ${ev.isNull} = false;
          |${leftGen.code}
          |${rightGen.code}

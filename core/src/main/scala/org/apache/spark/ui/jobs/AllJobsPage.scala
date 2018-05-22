@@ -248,7 +248,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         jobs,
         tableHeaderId,
         jobTag,
-        UIUtils.prependBaseUri(parent.basePath),
+        UIUtils.prependBaseUri(request, parent.basePath),
         "jobs", // subPath
         parameterOtherTable,
         killEnabled,
@@ -407,7 +407,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +
       " Click on a job to see information about the stages of tasks inside it."
 
-    UIUtils.headerSparkPage("Spark Jobs", content, parent, helpText = Some(helpText))
+    UIUtils.headerSparkPage(request, "Spark Jobs", content, parent, helpText = Some(helpText))
   }
 
 }

@@ -25,6 +25,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
@@ -79,6 +80,8 @@ class CSVOptions(
       throw new Exception(s"$paramName flag can be true or false")
     }
   }
+
+  private[csv] val columnPruning = SQLConf.get.getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
   val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))

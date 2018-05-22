@@ -156,7 +156,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       logDebug(generateDebugString(newBlocks.flatten, startOrdinal, endOrdinal))
 
       newBlocks.map { block =>
-        new MemoryStreamDataReaderFactory(block).asInstanceOf[InputPartition[UnsafeRow]]
+        new MemoryStreamInputPartition(block).asInstanceOf[InputPartition[UnsafeRow]]
       }.asJava
     }
   }
@@ -201,7 +201,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 }
 
 
-class MemoryStreamDataReaderFactory(records: Array[UnsafeRow])
+class MemoryStreamInputPartition(records: Array[UnsafeRow])
   extends InputPartition[UnsafeRow] {
   override def createPartitionReader(): InputPartitionReader[UnsafeRow] = {
     new InputPartitionReader[UnsafeRow] {
