@@ -38,7 +38,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
   private def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
     val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
     for (fallbackMode <- modes) {
-      test(name + " with " + fallbackMode) {
+      test(s"$name with $fallbackMode") {
         withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
           f
         }
