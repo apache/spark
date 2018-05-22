@@ -1469,6 +1469,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
       left.dataType match {
         case _: ArrayType => IntegerType
         case _: MapType => left.dataType.asInstanceOf[MapType].keyType
+        case _ => AnyDataType // no match for a wrong 'left' expression type
       }
     )
   }

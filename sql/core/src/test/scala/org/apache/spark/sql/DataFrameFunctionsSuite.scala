@@ -756,6 +756,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("element_at(a, -1)"),
       Seq(Row("3"), Row(""), Row(null))
     )
+
+    intercept[AnalysisException] {
+      Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
+    }
   }
 
   test("concat function - arrays") {
