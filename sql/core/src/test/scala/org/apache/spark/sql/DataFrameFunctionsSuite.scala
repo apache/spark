@@ -709,9 +709,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1L), Row(1L))
     )
 
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
     }
+    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
   }
 
   test("element_at function") {
