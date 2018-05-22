@@ -134,16 +134,42 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
     val failedPod = failedExecutorWithoutDeletion(podAllocationSize)
     eventHandlerUnderTest.sendUpdatedPodMetadata(failedPod)
     runProcessor()
-    val msg = s"""The executor with id $podAllocationSize exited with exit code 1.
-       | The API gave the following brief reason: ${failedPod.getStatus.getReason}.
-       | The API gave the following message: ${failedPod.getStatus.getMessage}.
-       | The API gave the following container statuses:
-       | ${failedPod.getStatus.getContainerStatuses.asScala.map(_.toString).mkString("\n===\n")}
-         """.stripMargin
+    val msg = exitReasonMessage(podAllocationSize, failedPod)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend).doRemoveExecutor(podAllocationSize.toString, expectedLossReason)
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
     verify(namedExecutorPods(failedPod.getMetadata.getName)).delete()
+  }
+
+  test("When a current batch reaches a running state and then one executor reaches an error" +
+    " state, re-request it on the next batch.") {
+    eventHandlerUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
+    runProcessor()
+    for (execId <- 1 to podAllocationSize) {
+      eventHandlerUnderTest.sendUpdatedPodMetadata(runningExecutor(execId))
+    }
+    runProcessor()
+    eventHandlerUnderTest.sendUpdatedPodMetadata(runningExecutor(podAllocationSize + 1))
+    val failedExecutorId = podAllocationSize - 1
+    val failedPod = failedExecutorWithoutDeletion(failedExecutorId)
+    eventHandlerUnderTest.sendUpdatedPodMetadata(failedPod)
+    runProcessor()
+    val msg = exitReasonMessage(failedExecutorId, failedPod)
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend).doRemoveExecutor(failedExecutorId.toString, expectedLossReason)
+    verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 2))
+    verify(namedExecutorPods(failedPod.getMetadata.getName)).delete()
+  }
+
+  private def exitReasonMessage(failedExecutorId: Int, failedPod: Pod): String = {
+    s"""
+       |The executor with id $failedExecutorId exited with exit code 1.
+       |The API gave the following brief reason: ${failedPod.getStatus.getReason}
+       |The API gave the following message: ${failedPod.getStatus.getMessage}
+       |The API gave the following container statuses:
+       |
+       |${failedPod.getStatus.getContainerStatuses.asScala.map(_.toString).mkString("\n===\n")}
+      """.stripMargin
   }
 
   private def runProcessor(): Unit = {
@@ -165,6 +191,16 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
         .addNewContainerStatus()
           .withName("spark-executor")
           .withImage("k8s-spark")
+          .withNewState()
+            .withNewTerminated()
+              .withMessage("Failed")
+              .withExitCode(1)
+              .endTerminated()
+            .endState()
+          .endContainerStatus()
+        .addNewContainerStatus()
+          .withName("spark-executor-sidecar")
+          .withImage("k8s-spark-sidecar")
           .withNewState()
             .withNewTerminated()
               .withMessage("Failed")
@@ -224,8 +260,8 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
     val sparkPod = executorPodWithId(executorId.toString)
     val podWithAttachedContainer = new PodBuilder(sparkPod.pod)
       .editOrNewSpec()
-      .addToContainers(sparkPod.container)
-      .endSpec()
+        .addToContainers(sparkPod.container)
+        .endSpec()
       .build()
     podWithAttachedContainer
   }
@@ -233,11 +269,11 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
   private def executorPodWithId(executorId: String): SparkPod = {
     val pod = new PodBuilder()
       .withNewMetadata()
-      .withName(s"spark-executor-$executorId")
-      .addToLabels(SPARK_APP_ID_LABEL, appId)
-      .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-      .addToLabels(SPARK_EXECUTOR_ID_LABEL, executorId)
-      .endMetadata()
+        .withName(s"spark-executor-$executorId")
+        .addToLabels(SPARK_APP_ID_LABEL, appId)
+        .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+        .addToLabels(SPARK_EXECUTOR_ID_LABEL, executorId)
+        .endMetadata()
       .build()
     val container = new ContainerBuilder()
       .withName("spark-executor")
