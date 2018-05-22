@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.util.TypeUtils
-
 /**
  * Rewrites an expression using rules that are guaranteed preserve the result while attempting
  * to remove cosmetic variations. Deterministic expressions that are `equal` after canonicalization
