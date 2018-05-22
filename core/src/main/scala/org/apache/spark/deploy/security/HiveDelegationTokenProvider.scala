@@ -85,7 +85,10 @@ private[spark] class HiveDelegationTokenProvider
       val principal = conf.getTrimmed(principalKey, "")
       require(principal.nonEmpty, s"Hive principal $principalKey undefined")
       val metastoreUri = conf.getTrimmed("hive.metastore.uris", "")
-      require(metastoreUri.nonEmpty, "Hive metastore uri undefined")
+      if (metastoreUri.isEmpty) {
+        logInfo("Hive metastore uri undefined, ignore to obtain Credentials")
+        return None
+      }
 
       val currentUser = UserGroupInformation.getCurrentUser()
       logDebug(s"Getting Hive delegation token for ${currentUser.getUserName()} against " +
