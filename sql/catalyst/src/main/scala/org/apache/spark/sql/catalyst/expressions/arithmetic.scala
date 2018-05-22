@@ -225,7 +225,7 @@ trait DivModLike extends BinaryArithmetic {
 
   override def nullable: Boolean = true
 
-  protected def evalHelper(input: InternalRow, op: => (Any, Any) => Any): Any = {
+  final override def eval(input: InternalRow): Any = {
     val input2 = right.eval(input)
     if (input2 == null || input2 == 0) {
       null
@@ -234,10 +234,12 @@ trait DivModLike extends BinaryArithmetic {
       if (input1 == null) {
         null
       } else {
-        op(input1, input2)
+        evalOperation(input1, input2)
       }
     }
   }
+
+  def evalOperation(left: Any, right: Any): Any
 
   /**
    * Special case handling due to division/remainder by 0 => null.
@@ -303,13 +305,12 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
-  override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
   }
 
-  override def eval(input: InternalRow): Any = evalHelper(input, div)
+  override def evalOperation(left: Any, right: Any): Any = div(left, right)
 }
 
 @ExpressionDescription(
@@ -328,20 +329,23 @@ case class Remainder(left: Expression, right: Expression) extends DivModLike {
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
 
-  private lazy val integral = dataType match {
-    case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]
-    case i: FractionalType => i.asIntegral.asInstanceOf[Integral[Any]]
+  private lazy val mod: (Any, Any) => Any = dataType match {
+    // special cases to make float/double primitive types faster
+    case DoubleType =>
+      (left, right) => left.asInstanceOf[Double] % right.asInstanceOf[Double]
+    case FloatType =>
+      (left, right) => left.asInstanceOf[Float] % right.asInstanceOf[Float]
+
+    // catch-all cases
+    case i: IntegralType =>
+      val integral = i.integral.asInstanceOf[Integral[Any]]
+      (left, right) => integral.rem(left, right)
+    case i: FractionalType => // should only be DecimalType for now
+      val integral = i.asIntegral.asInstanceOf[Integral[Any]]
+      (left, right) => integral.rem(left, right)
   }
 
-  override def eval(input: InternalRow): Any = {
-    evalHelper(input, (input1, input2) => {
-      input1 match {
-        case d: Double => d % input2.asInstanceOf[java.lang.Double]
-        case f: Float => f % input2.asInstanceOf[java.lang.Float]
-        case _ => integral.rem(input1, input2)
-      }
-    })
-  }
+  override def evalOperation(left: Any, right: Any): Any = mod(left, right)
 }
 
 @ExpressionDescription(
