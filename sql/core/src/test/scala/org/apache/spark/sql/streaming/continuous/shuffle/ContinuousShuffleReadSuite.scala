@@ -124,24 +124,6 @@ class ContinuousShuffleReadSuite extends StreamTest {
     assert(secondEpoch.toSeq.map(_.getInt(0)) == Seq(222, 333))
   }
 
-  test("multiple writers") {
-    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1, numShuffleWriters = 3)
-    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
-    send(
-      endpoint,
-      ReceiverRow(0, unsafeRow("writer0-row0")),
-      ReceiverRow(1, unsafeRow("writer1-row0")),
-      ReceiverRow(2, unsafeRow("writer2-row0")),
-      ReceiverEpochMarker(0),
-      ReceiverEpochMarker(1),
-      ReceiverEpochMarker(2)
-    )
-
-    val firstEpoch = rdd.compute(rdd.partitions(0), ctx)
-    assert(firstEpoch.toSeq.map(_.getUTF8String(0).toString).toSet ==
-      Set("writer0-row0", "writer1-row0", "writer2-row0"))
-  }
-
   test("empty epochs") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
@@ -213,6 +195,24 @@ class ContinuousShuffleReadSuite extends StreamTest {
     }
   }
 
+  test("multiple writers") {
+    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1, numShuffleWriters = 3)
+    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    send(
+      endpoint,
+      ReceiverRow(0, unsafeRow("writer0-row0")),
+      ReceiverRow(1, unsafeRow("writer1-row0")),
+      ReceiverRow(2, unsafeRow("writer2-row0")),
+      ReceiverEpochMarker(0),
+      ReceiverEpochMarker(1),
+      ReceiverEpochMarker(2)
+    )
+
+    val firstEpoch = rdd.compute(rdd.partitions(0), ctx)
+    assert(firstEpoch.toSeq.map(_.getUTF8String(0).toString).toSet ==
+      Set("writer0-row0", "writer1-row0", "writer2-row0"))
+  }
+
   test("epoch only ends when all writers send markers") {
     val rdd = new ContinuousShuffleReadRDD(
       sparkContext, numPartitions = 1, numShuffleWriters = 3, checkpointIntervalMs = Long.MaxValue)
@@ -240,7 +240,6 @@ class ContinuousShuffleReadSuite extends StreamTest {
     }
 
     readEpochMarkerThread.start()
-
     eventually(timeout(streamingTimeout)) {
       assert(readEpochMarkerThread.getState == Thread.State.TIMED_WAITING)
     }
