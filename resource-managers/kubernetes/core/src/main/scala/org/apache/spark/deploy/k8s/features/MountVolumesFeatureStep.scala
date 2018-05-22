@@ -34,11 +34,11 @@ private[spark] class MountVolumesFeatureStep(
       .endSpec()
       .build()
 
-    val containerWithLocalDirVolumeMounts = new ContainerBuilder(pod.container)
+    val containerWithVolumeMounts = new ContainerBuilder(pod.container)
       .addToVolumeMounts(volumeMounts.toSeq: _*)
       .build()
 
-    SparkPod(podWithVolumes, containerWithLocalDirVolumeMounts)
+    SparkPod(podWithVolumes, containerWithVolumeMounts)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
@@ -54,22 +54,27 @@ private[spark] class MountVolumesFeatureStep(
         .withName(spec.volumeName)
         .build()
 
-      val volume = spec.volumeType match {
+      val volumeBuilder = spec.volumeType match {
         case KUBERNETES_VOLUMES_HOSTPATH_KEY =>
           val hostPath = spec.optionsSpec(KUBERNETES_VOLUMES_PATH_KEY)
           new VolumeBuilder()
             .withHostPath(new HostPathVolumeSource(hostPath))
-            .withName(spec.volumeName)
-            .build()
 
         case KUBERNETES_VOLUMES_PVC_KEY =>
           val claimName = spec.optionsSpec(KUBERNETES_VOLUMES_CLAIM_NAME_KEY)
           new VolumeBuilder()
             .withPersistentVolumeClaim(
               new PersistentVolumeClaimVolumeSource(claimName, spec.mountReadOnly))
-            .withName(spec.volumeName)
-            .build()
+
+        case KUBERNETES_VOLUMES_EMPTYDIR_KEY =>
+          val medium = spec.optionsSpec(KUBERNETES_VOLUMES_MEDIUM_KEY)
+          val sizeLimit = spec.optionsSpec(KUBERNETES_VOLUMES_SIZE_LIMIT_KEY)
+          new VolumeBuilder()
+            .withEmptyDir(new EmptyDirVolumeSource(medium, new Quantity(sizeLimit)))
       }
+
+      val volume = volumeBuilder.withName(spec.volumeName).build()
+
 
       (volumeMount, volume)
     }

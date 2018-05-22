@@ -17,8 +17,9 @@
 package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesVolumeSpec}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_VOLUMES_HOSTPATH_KEY
+import org.apache.spark.deploy.k8s.features._
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
@@ -28,6 +29,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
   private val SECRETS_STEP_TYPE = "mount-secrets"
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
+  private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicDriverFeatureStep])
@@ -47,6 +49,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
 
+  private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
+
   private val builderUnderTest: KubernetesDriverBuilder =
     new KubernetesDriverBuilder(
       _ => basicFeatureStep,
@@ -54,7 +59,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => serviceStep,
       _ => secretsStep,
       _ => envSecretsStep,
-      _ => localDirsStep)
+      _ => localDirsStep,
+      _ => mountVolumesStep)
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
@@ -106,6 +112,38 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       ENV_SECRETS_STEP_TYPE
     )
   }
+
+  test("Apply volumes step if mounts are present.") {
+    val volumeSpec = KubernetesVolumeSpec(
+      "volume",
+      KUBERNETES_VOLUMES_HOSTPATH_KEY,
+      "/tmp",
+      false,
+      Map.empty)
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        None,
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      volumeSpec :: Nil)
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      MOUNT_VOLUMES_STEP_TYPE)
+  }
+
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
     : Unit = {

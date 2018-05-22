@@ -173,11 +173,14 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_VOLUMES_HOSTPATH_KEY = "hostPath"
   val KUBERNETES_VOLUMES_PVC_KEY = "persistentVolumeClaim"
+  val KUBERNETES_VOLUMES_EMPTYDIR_KEY = "emptyDir"
   val KUBERNETES_VOLUMES_MOUNT_KEY = "mount"
   val KUBERNETES_VOLUMES_PATH_KEY = "path"
   val KUBERNETES_VOLUMES_CLAIM_NAME_KEY = "claimName"
   val KUBERNETES_VOLUMES_READONLY_KEY = "readOnly"
   val KUBERNETES_VOLUMES_OPTIONS_KEY = "options"
+  val KUBERNETES_VOLUMES_MEDIUM_KEY = "medium"
+  val KUBERNETES_VOLUMES_SIZE_LIMIT_KEY = "sizeLimit"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 }
