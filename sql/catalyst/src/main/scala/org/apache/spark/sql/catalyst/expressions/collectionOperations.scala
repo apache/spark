@@ -1903,10 +1903,35 @@ case class ArrayRemove(left: Expression, right: Expression)
 
   lazy val elementType: DataType = left.dataType.asInstanceOf[ArrayType].elementType
 
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(right.dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!left.dataType.isInstanceOf[ArrayType]
+      || left.dataType.asInstanceOf[ArrayType].elementType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(
+        "Arguments must be an array followed by a value of same type as the array members")
+    } else {
+      TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+    }
+  }
+
   override def nullSafeEval(arr: Any, value: Any): Any = {
-    val elementType = left.dataType.asInstanceOf[ArrayType].elementType
-    val data = arr.asInstanceOf[ArrayData].toArray[AnyRef](elementType).filter(_ != value)
-    new GenericArrayData(data.asInstanceOf[Array[Any]])
+    val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements())
+    var pos = 0
+    arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
+      if (v == null) {
+        if (value != null) {
+          newArray(pos) = null
+          pos += 1
+        }
+      }
+      else if (!ordering.equiv(v, value)) {
+        newArray(pos) = v
+        pos += 1
+      }
+    )
+    new GenericArrayData(newArray.slice(0, pos))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
