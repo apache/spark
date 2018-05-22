@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.AtomicBoolean
+
+import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
@@ -73,7 +75,9 @@ private[shuffle] class UnsafeRowReceiver(
 
   override def read(): Iterator[UnsafeRow] = {
     new NextIterator[UnsafeRow] {
-      private val numWriterEpochMarkers = new AtomicInteger(0)
+      // An array of flags for whether each writer ID has gotten an epoch marker.
+      private val writerEpochMarkersReceived =
+        mutable.Map.empty[Int, Boolean].withDefaultValue(false)
 
       private val executor = Executors.newFixedThreadPool(numShuffleWriters)
       private val completion = new ExecutorCompletionService[UnsafeRowReceiverMessage](executor)
@@ -112,9 +116,9 @@ private[shuffle] class UnsafeRowReceiver(
               // TODO use writerId
               case ReceiverEpochMarker(writerId) =>
                 // Don't read any more from this queue. If all the writers have sent epoch markers,
-                // the epoch is over; otherwise we need rows from one of the remaining writers.
-                val writersCompleted = numWriterEpochMarkers.incrementAndGet()
-                if (writersCompleted == numShuffleWriters) {
+                // the epoch is over; otherwise we need to poll from the remaining writers.
+                writerEpochMarkersReceived.put(writerId, true)
+                if ((0 until numShuffleWriters).forall(id => writerEpochMarkersReceived(id))) {
                   finished = true
                   // Break out of the while loop and end the iterator.
                   return null
