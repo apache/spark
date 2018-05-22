@@ -618,27 +618,24 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     }
   }
 
-  private def grow(neededSize: Int): Unit = {
-    // There is 8 bytes for the pointer to next value
-    val totalNeededSize = cursor + 8 + neededSize
-    val nowSize = page.length * 8L + Platform.LONG_ARRAY_OFFSET
-    if (totalNeededSize > nowSize) {
-      val used = page.length
-      if (used >= (1 << 30)) {
+  private def grow(inputRowSize: Int): Unit = {
+    val neededNumWords = (cursor - Platform.LONG_ARRAY_OFFSET + 8 + inputRowSize + 7) / 8
+    if (neededNumWords > page.length) {
+      if (neededNumWords > (1 << 30)) {
         throw new UnsupportedOperationException(
           "Can not build a HashedRelation that is larger than 8G")
       }
-      val multiples = math.floor(totalNeededSize.toDouble / nowSize).toInt * 2
-      val newLength = used * multiples
-      if (newLength > ARRAY_MAX) {
+      val newNumWords = math.max(neededNumWords, math.min(page.length * 2, 1 << 30))
+      if (newNumWords > ARRAY_MAX) {
         throw new UnsupportedOperationException(
-          "Cannot grow internal buffer by size " + newLength +
+          "Cannot grow internal buffer by size " + newNumWords +
             " because the size after growing " + "exceeds size limitation " + ARRAY_MAX)
       }
-      ensureAcquireMemory(newLength * 8L)
-      val newPage = new Array[Long](newLength)
+      ensureAcquireMemory(newNumWords * 8L)
+      val newPage = new Array[Long](newNumWords.toInt)
       Platform.copyMemory(page, Platform.LONG_ARRAY_OFFSET, newPage, Platform.LONG_ARRAY_OFFSET,
         cursor - Platform.LONG_ARRAY_OFFSET)
+      val used = page.length
       page = newPage
       freeMemory(used * 8L)
     }
