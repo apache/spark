@@ -79,7 +79,7 @@ class JacksonParser(
         val array = convertArray(parser, elementConverter)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
-        if (array.numElements() == 0) {
+        if (array == null || array.numElements() == 0) {
           Nil
         } else {
           array.toArray[InternalRow](schema).toSeq

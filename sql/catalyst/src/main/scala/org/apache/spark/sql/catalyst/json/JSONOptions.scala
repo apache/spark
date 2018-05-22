@@ -73,7 +73,7 @@ private[sql] class JSONOptions(
   val columnNameOfCorruptRecord =
     parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
 
-  // Whether to ignore column of all null values or empty array during JSON schema inference
+  // Whether to ignore column of all null values or empty array/struct during schema inference
   val dropFieldIfAllNull = parameters.get("dropFieldIfAllNull").map(_.toBoolean).getOrElse(false)
 
   val timeZone: TimeZone = DateTimeUtils.getTimeZone(

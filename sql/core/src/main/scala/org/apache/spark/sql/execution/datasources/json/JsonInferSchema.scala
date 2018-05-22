@@ -126,9 +126,13 @@ private[sql] object JsonInferSchema {
             nullable = true)
         }
         val fields: Array[StructField] = builder.result()
-        // Note: other code relies on this sorting for correctness, so don't remove it!
-        java.util.Arrays.sort(fields, structFieldComparator)
-        StructType(fields)
+        if (configOptions.dropFieldIfAllNull && fields.isEmpty) {
+          NullType
+        } else {
+          // Note: other code relies on this sorting for correctness, so don't remove it!
+          java.util.Arrays.sort(fields, structFieldComparator)
+          StructType(fields)
+        }
 
       case START_ARRAY =>
         // If this JSON array is empty, we use NullType as a placeholder.
@@ -140,7 +144,11 @@ private[sql] object JsonInferSchema {
             elementType, inferField(parser, configOptions))
         }
 
-        ArrayType(elementType)
+        if (configOptions.dropFieldIfAllNull && elementType == NullType) {
+          NullType
+        } else {
+          ArrayType(elementType)
+        }
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) if configOptions.primitivesAsString => StringType
 

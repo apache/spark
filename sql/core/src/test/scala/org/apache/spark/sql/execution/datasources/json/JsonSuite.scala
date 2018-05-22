@@ -2408,4 +2408,24 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       spark.read.option("mode", "PERMISSIVE").option("encoding", "UTF-8").json(Seq(badJson).toDS()),
       Row(badJson))
   }
+
+  test("SPARK-23772 ignore column of all null values or empty array during schema inference") {
+     withTempPath { tempDir =>
+      val path = tempDir.getAbsolutePath
+      Seq(
+        """{"a":null, "b":[null, null], "c":null, "d":[[], [null]], "e":{}}""",
+        """{"a":null, "b":[null], "c":[], "d": [null, []], "e":{}}""",
+        """{"a":null, "b":[], "c":[], "d": null, "e":null}""")
+        .toDS().write.mode("overwrite").text(path)
+      val df = spark.read.format("json")
+        .option("dropFieldIfAllNull", true)
+        .load(path)
+      val expectedSchema = new StructType()
+        .add("a", NullType).add("b", NullType).add("c", NullType).add("d", NullType)
+        .add("e", NullType)
+      assert(df.schema === expectedSchema)
+      val nullRow = Row(null, null, null, null, null)
+      checkAnswer(df, nullRow :: nullRow :: nullRow :: Nil)
+    }
+  }
 }
