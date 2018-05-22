@@ -24,11 +24,11 @@ import scala.util.Random
 
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap}
 import org.apache.spark.sql.internal.SQLConf
@@ -624,56 +624,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("SPARK-23772 Ignore column of all null values or empty array during JSON schema inference") {
-    withTempDirs { case (src, tmp) =>
-      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
-
-        // Add a file so that we can infer its schema
-        stringToFile(new File(src, "existing"),
-          "{'c0': 1, 'c1': null, 'c2': []}\n{'c0': 2, 'c1': null, 'c2': null}")
-
-        val fileStream = createFileStream(
-          "json", src.getCanonicalPath, options = Map("dropFieldIfAllNull" -> "true"))
-
-        // FileStreamSource should infer the column "k"
-        assert(fileStream.schema === StructType(
-          StructField("c0", LongType) ::
-            StructField("c1", NullType) ::
-            StructField("c2", ArrayType(NullType)) :: Nil))
-
-        testStream(fileStream)(
-
-          // Should not pick up column v in the file added before start
-          AddTextFileData("{'c0': 3, 'c1': 3.8, 'c2': [null, null]}", src, tmp),
-          CheckSchema(StructType(
-            StructField("c0", LongType) ::
-              StructField("c1", DoubleType) ::
-              StructField("c2", ArrayType(NullType)) :: Nil)),
-          //
-          // CheckAnswer(Row(1, null, Array()) :: Row(2, null, null) ::
-          //   Row(3, 3.8, Array(null, null)) :: Nil: _*),
-          //
-          // Canonicalize arrays; an array is null if all its elements are null
-          CheckAnswer(Row(1, null, null) :: Row(2, null, null) :: Row(3, 3.8, null)
-            :: Nil: _*),
-
-          // Should read data in column k, and ignore v
-          AddTextFileData("{'c0': 4, 'c1': 1.1, 'c2': [1, 2, 3]}", src, tmp),
-          CheckSchema(StructType(
-            StructField("c0", LongType) ::
-              StructField("c1", DoubleType) ::
-              StructField("c2", ArrayType(LongType)) :: Nil)),
-          //
-          // CheckAnswer(Row(1, null, Array()) :: Row(2, null, null) ::
-          //   Row(3, 3.8, Array(null, null)) :: Row(4, 1.1, Array(1, 2, 3)) :: Nil: _*))
-          //
-          // Canonicalize arrays; an array is null if all its elements are null
-          CheckAnswer(Row(1, null, null) :: Row(2, null, null) ::
-            Row(3, 3.8, null) :: Row(4, 1.1, Array(1, 2, 3)) :: Nil: _*))
-      }
-    }
-  }
-
   // =============== ORC file stream tests ================
 
   test("read from orc files") {
@@ -1165,8 +1115,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
       val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
       // Test `explain` not throwing errors
-      val explainCmd = ExplainCommand(df.queryExecution.logical, extended = false)
-      spark.sessionState.executePlan(explainCmd).executedPlan
+      df.explain()
 
       val q = df.writeStream.queryName("file_explain").format("memory").start()
         .asInstanceOf[StreamingQueryWrapper]

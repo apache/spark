@@ -44,9 +44,9 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -202,8 +202,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     override def toString: String = s"$operatorName"
     private def operatorName = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
   }
-
-  case class CheckSchema(expectedSchema: StructType) extends StreamAction with StreamMustBeRunning
 
   case class CheckNewAnswerRows(expectedAnswer: Seq[Row])
     extends StreamAction with StreamMustBeRunning {
@@ -457,7 +455,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     var lastFetchedMemorySinkLastBatchId: Long = -1
 
-    def waitAllDataProcessed() = {
+    def fetchStreamAnswer(
+        currentStream: StreamExecution,
+        lastOnly: Boolean = false,
+        sinceLastFetchOnly: Boolean = false) = {
+      verify(
+        !(lastOnly && sinceLastFetchOnly), "both lastOnly and sinceLastFetchOnly cannot be true")
       verify(currentStream != null, "stream not running")
 
       // Block until all data added has been processed for all the source
@@ -470,16 +473,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           }
         }
       }
-    }
-
-    def fetchStreamAnswer(
-        currentStream: StreamExecution,
-        lastOnly: Boolean = false,
-        sinceLastFetchOnly: Boolean = false) = {
-      verify(
-        !(lastOnly && sinceLastFetchOnly), "both lastOnly and sinceLastFetchOnly cannot be true")
-
-      waitAllDataProcessed()
 
       val lastExecution = currentStream.lastExecution
       if (currentStream.isInstanceOf[MicroBatchExecution] && lastExecution != null) {
@@ -752,27 +745,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           val sparkAnswer = fetchStreamAnswer(currentStream, sinceLastFetchOnly = true)
           QueryTest.sameRows(expectedAnswer, sparkAnswer).foreach {
             error => failTest(error)
-          }
-
-        case CheckSchema(expectedSchema) =>
-          waitAllDataProcessed()
-          val resultSchema = currentStream.lastExecution.analyzed.schema
-          if (expectedSchema != resultSchema) {
-            failTest(
-              s"""
-                 |== Results ==
-                 |${
-                sideBySide(
-                  s"""
-                     |== Correct Schema ==
-                     |${expectedSchema.simpleString}
-                   """.stripMargin,
-                  s"""
-                     |== Spark Result Schema ==
-                     |${resultSchema.simpleString}
-                   """.stripMargin).mkString("\n")
-              }
-              """.stripMargin)
           }
       }
       pos += 1

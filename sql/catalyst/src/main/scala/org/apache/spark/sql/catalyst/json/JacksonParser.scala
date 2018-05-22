@@ -330,7 +330,6 @@ class JacksonParser(
       values += fieldConverter.apply(parser)
     }
     // Canonicalize arrays; an array is null if all its elements are null
-    // TODO: Reconsider this
     if (options.dropFieldIfAllNull && values.forall(_ == null)) {
       null
     } else {

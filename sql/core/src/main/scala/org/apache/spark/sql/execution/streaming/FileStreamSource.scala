@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.streaming
 
 import java.net.URI
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
-import org.apache.spark.sql.types.{NullType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * A very simple source that reads files from the given directory as they appear.
@@ -34,16 +36,12 @@ class FileStreamSource(
     sparkSession: SparkSession,
     path: String,
     fileFormatClassName: String,
-    initialSchema: StructType,
+    override val schema: StructType,
     partitionColumns: Seq[String],
     metadataPath: String,
     options: Map[String, String]) extends Source with Logging {
 
   import FileStreamSource._
-
-  private var _schema: Option[StructType] = None
-
-  override def schema: StructType = _schema.getOrElse(initialSchema)
 
   private val sourceOptions = new FileStreamOptions(options)
 
@@ -165,28 +163,16 @@ class FileStreamSource(
     val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
     logInfo(s"Processing ${files.length} files from ${startOffset + 1}:$endOffset")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
-
-    // If the current schema has `NullType`s, we will trigger schema inference again in
-    // the current batch.
-    val doInferSchemaInCurrentBatch = schema.existsRecursively(_.acceptsType(NullType))
-
     val newDataSource =
       DataSource(
         sparkSession,
         paths = files.map(f => new Path(new URI(f.path)).toString),
-        userSpecifiedSchema = if (!doInferSchemaInCurrentBatch) Some(schema) else None,
+        userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         className = fileFormatClassName,
         options = optionsWithPartitionBasePath)
-
-    val rel = newDataSource.resolveRelation(checkFilesExist = false)
-    // If schema inference triggered in the current batch, replaces the current `schema`
-    // with the inferred one.
-    if (doInferSchemaInCurrentBatch) {
-      _schema = Some(rel.schema)
-    }
-
-    Dataset.ofRows(sparkSession, LogicalRelation(rel, isStreaming = true))
+    Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
+      checkFilesExist = false), isStreaming = true))
   }
 
   /**
