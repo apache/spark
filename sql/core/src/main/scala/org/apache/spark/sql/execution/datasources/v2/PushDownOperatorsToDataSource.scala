@@ -62,7 +62,9 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] {
   }
 
   /**
-   * Pushes down filters to the data source reader, returns pushed filter and post-scan filters.
+   * Pushes down filters to the data source reader
+   *
+   * @return pushed filter and post-scan filters.
    */
   private def pushFilters(
       reader: DataSourceReader,
@@ -101,6 +103,12 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Applies column pruning to the data source, w.r.t. the references of the given expressions.
+   *
+   * @return new output attributes after column pruning.
+   */
+  // TODO: nested column pruning.
   private def pruneColumns(
       reader: DataSourceReader,
       relation: DataSourceV2Relation,
