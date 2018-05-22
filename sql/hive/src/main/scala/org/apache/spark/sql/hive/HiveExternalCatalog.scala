@@ -231,14 +231,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // to create the table directory and write out data before we create this table, to avoid
     // exposing a partial written table.
     //
-    // CDH-51334: when using a remote metastore, and if a managed table is being created with its
+    // When using a remote metastore, and if a managed table is being created with its
     // location explicitly set to the location where it would be created anyway, then do
     // not set its location explicitly. This avoids an issue with Sentry in secure clusters.
     // Otherwise, the above comment applies.
     //
     // This workaround is not done for embedded metastores because (i) there's no Sentry in that
     // case, and (ii) HiveSparkSubmitSuite has a unit test that relies on the behavior without
-    // the CDH change.
+    // this change.
     val tableLocation: Option[URI] = if (tableDefinition.tableType == MANAGED) {
       val metastoreURIs = client.getConf(HiveConf.ConfVars.METASTOREURIS.varname, "")
       if (metastoreURIs.nonEmpty && DDLUtils.isHiveTable(tableDefinition)) {
