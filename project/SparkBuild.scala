@@ -747,7 +747,8 @@ object Checkstyle {
     javaSource in (Compile, checkstyle) := baseDirectory.value / "src/main/java",
     javaSource in (Test, checkstyle) := baseDirectory.value / "src/test/java",
     checkstyleConfigLocation := CheckstyleConfigLocation.File("dev/checkstyle.xml"),
-    checkstyleOutputFile := baseDirectory.value / "target/checkstyle-output.xml"
+    checkstyleOutputFile := baseDirectory.value / "target/checkstyle-output.xml",
+    checkstyleOutputFile in Test := baseDirectory.value / "target/checkstyle-output.xml"
   )
 }
 
