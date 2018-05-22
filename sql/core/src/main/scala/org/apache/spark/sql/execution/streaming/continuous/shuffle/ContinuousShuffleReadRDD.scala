@@ -25,12 +25,16 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.NextIterator
 
-case class ContinuousShuffleReadPartition(index: Int, queueSize: Int, numShuffleWriters: Int)
+case class ContinuousShuffleReadPartition(
+      index: Int,
+      queueSize: Int,
+      numShuffleWriters: Int,
+      checkpointIntervalMs: Long)
     extends Partition {
   // Initialized only on the executor, and only once even as we call compute() multiple times.
   lazy val (reader: ContinuousShuffleReader, endpoint) = {
     val env = SparkEnv.get.rpcEnv
-    val receiver = new UnsafeRowReceiver(queueSize, numShuffleWriters, env)
+    val receiver = new UnsafeRowReceiver(queueSize, numShuffleWriters, checkpointIntervalMs, env)
     val endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID()}", receiver)
     TaskContext.get().addTaskCompletionListener { ctx =>
       env.stop(endpoint)
@@ -43,17 +47,24 @@ case class ContinuousShuffleReadPartition(index: Int, queueSize: Int, numShuffle
  * RDD at the map side of each continuous processing shuffle task. Upstream tasks send their
  * shuffle output to the wrapped receivers in partitions of this RDD; each of the RDD's tasks
  * poll from their receiver until an epoch marker is sent.
+ *
+ * @param sc the RDD context
+ * @param numPartitions the number of read partitions for this RDD
+ * @param queueSize the size of the row buffers to use
+ * @param numShuffleWriters the number of continuous shuffle writers feeding into this RDD
+ * @param checkpointIntervalMs the checkpoint interval of the streaming query
  */
 class ContinuousShuffleReadRDD(
     sc: SparkContext,
     numPartitions: Int,
     queueSize: Int = 1024,
-    numShuffleWriters: Int = 1)
+    numShuffleWriters: Int = 1,
+    checkpointIntervalMs: Long = 1000)
   extends RDD[UnsafeRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
     (0 until numPartitions).map { partIndex =>
-      ContinuousShuffleReadPartition(partIndex, queueSize, numShuffleWriters)
+      ContinuousShuffleReadPartition(partIndex, queueSize, numShuffleWriters, checkpointIntervalMs)
     }.toArray
   }
 

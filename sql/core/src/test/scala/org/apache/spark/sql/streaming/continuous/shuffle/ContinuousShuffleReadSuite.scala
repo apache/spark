@@ -188,7 +188,8 @@ class ContinuousShuffleReadSuite extends StreamTest {
   }
 
   test("blocks waiting for new rows") {
-    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
+    val rdd = new ContinuousShuffleReadRDD(
+      sparkContext, numPartitions = 1, checkpointIntervalMs = Long.MaxValue)
     val epoch = rdd.compute(rdd.partitions(0), ctx)
 
     val readRowThread = new Thread {
@@ -204,7 +205,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
     try {
       readRowThread.start()
       eventually(timeout(streamingTimeout)) {
-        assert(readRowThread.getState == Thread.State.WAITING)
+        assert(readRowThread.getState == Thread.State.TIMED_WAITING)
       }
     } finally {
       readRowThread.interrupt()
@@ -213,7 +214,8 @@ class ContinuousShuffleReadSuite extends StreamTest {
   }
 
   test("epoch only ends when all writers send markers") {
-    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1, numShuffleWriters = 3)
+    val rdd = new ContinuousShuffleReadRDD(
+      sparkContext, numPartitions = 1, numShuffleWriters = 3, checkpointIntervalMs = Long.MaxValue)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
     send(
       endpoint,
@@ -240,7 +242,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
     readEpochMarkerThread.start()
 
     eventually(timeout(streamingTimeout)) {
-      assert(readEpochMarkerThread.getState == Thread.State.WAITING)
+      assert(readEpochMarkerThread.getState == Thread.State.TIMED_WAITING)
     }
 
     // Send the last epoch marker - now the epoch should finish.

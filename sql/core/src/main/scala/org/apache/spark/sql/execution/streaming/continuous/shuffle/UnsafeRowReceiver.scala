@@ -49,6 +49,7 @@ private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends UnsafeRow
 private[shuffle] class UnsafeRowReceiver(
       queueSize: Int,
       numShuffleWriters: Int,
+      checkpointIntervalMs: Long,
       override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with ContinuousShuffleReader with Logging {
   // Note that this queue will be drained from the main task thread and populated in the RPC
@@ -92,23 +93,40 @@ private[shuffle] class UnsafeRowReceiver(
        * task for it in this epoch. The iterator is over once all writers have sent an epoch marker.
        */
       override def getNext(): UnsafeRow = {
-        completion.take().get() match {
-          case ReceiverRow(writerId, r) =>
-            // Start reading the next element in the queue we just took from.
-            completion.submit(completionTask(writerId))
-            r
-            // TODO use writerId
-          case ReceiverEpochMarker(writerId) =>
-            // Don't read any more from this queue. If all the writers have sent epoch markers,
-            // the epoch is over; otherwise we need rows from one of the remaining writers.
-            val writersCompleted = numWriterEpochMarkers.incrementAndGet()
-            if (writersCompleted == numShuffleWriters) {
-              finished = true
+        var nextRow: UnsafeRow = null
+        while (nextRow == null) {
+          nextRow = completion.poll(checkpointIntervalMs, TimeUnit.MILLISECONDS) match {
+            case null =>
+              // Try again if the poll didn't wait long enough to get a real result.
+              // But we should be getting at least an epoch marker every checkpoint interval.
+              logWarning(
+                s"Completion service failed to make progress after $checkpointIntervalMs ms")
               null
-            } else {
-              getNext()
+
+            // The completion service guarantees this future will be available immediately.
+            case future => future.get() match {
+              case ReceiverRow(writerId, r) =>
+                // Start reading the next element in the queue we just took from.
+                completion.submit(completionTask(writerId))
+                r
+              // TODO use writerId
+              case ReceiverEpochMarker(writerId) =>
+                // Don't read any more from this queue. If all the writers have sent epoch markers,
+                // the epoch is over; otherwise we need rows from one of the remaining writers.
+                val writersCompleted = numWriterEpochMarkers.incrementAndGet()
+                if (writersCompleted == numShuffleWriters) {
+                  finished = true
+                  // Break out of the while loop and end the iterator.
+                  return null
+                } else {
+                  // Poll again for the next completion result.
+                  null
+                }
             }
+          }
         }
+
+        nextRow
       }
 
       override def close(): Unit = {
