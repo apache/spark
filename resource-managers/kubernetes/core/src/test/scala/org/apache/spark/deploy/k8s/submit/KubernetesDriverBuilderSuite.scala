@@ -18,13 +18,14 @@ package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
   private val BASIC_STEP_TYPE = "basic"
   private val CREDENTIALS_STEP_TYPE = "credentials"
   private val SERVICE_STEP_TYPE = "service"
+  private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
   private val SECRETS_STEP_TYPE = "mount-secrets"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
@@ -36,6 +37,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val serviceStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SERVICE_STEP_TYPE, classOf[DriverServiceFeatureStep])
 
+  private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
+
   private val secretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
 
@@ -44,7 +48,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => basicFeatureStep,
       _ => credentialsStep,
       _ => serviceStep,
-      _ => secretsStep)
+      _ => secretsStep,
+      _ => localDirsStep)
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
@@ -64,7 +69,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE)
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE)
   }
 
   test("Apply secrets step if secrets are present.") {
@@ -86,6 +92,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
       SECRETS_STEP_TYPE)
   }
 

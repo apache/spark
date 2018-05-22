@@ -398,7 +398,7 @@ hintStatement
     ;
 
 fromClause
-    : FROM relation (',' relation)* (pivotClause | lateralView*)?
+    : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
 aggregation

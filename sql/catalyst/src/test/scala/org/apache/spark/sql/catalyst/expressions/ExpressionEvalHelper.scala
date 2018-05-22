@@ -107,6 +107,12 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
 
   protected def checkExceptionInExpression[T <: Throwable : ClassTag](
       expression: => Expression,
+      expectedErrMsg: String): Unit = {
+    checkExceptionInExpression[T](expression, InternalRow.empty, expectedErrMsg)
+  }
+
+  protected def checkExceptionInExpression[T <: Throwable : ClassTag](
+      expression: => Expression,
       inputRow: InternalRow,
       expectedErrMsg: String): Unit = {
 

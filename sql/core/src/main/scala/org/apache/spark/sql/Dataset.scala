@@ -512,6 +512,16 @@ class Dataset[T] private[sql](
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
 
   /**
+   * Returns true if the `Dataset` is empty.
+   *
+   * @group basic
+   * @since 2.4.0
+   */
+  def isEmpty: Boolean = withAction("isEmpty", limit(1).groupBy().count().queryExecution) { plan =>
+    plan.executeCollect().head.getLong(0) == 0
+  }
+
+  /**
    * Returns true if this Dataset contains one or more sources that continuously
    * return data as it arrives. A Dataset that reads data from a streaming source
    * must be executed as a `StreamingQuery` using the `start()` method in
@@ -1607,7 +1617,9 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def reduce(func: (T, T) => T): T = rdd.reduce(func)
+  def reduce(func: (T, T) => T): T = withNewRDDExecutionId {
+    rdd.reduce(func)
+  }
 
   /**
    * :: Experimental ::
@@ -3187,7 +3199,7 @@ class Dataset[T] private[sql](
     EvaluatePython.javaToPython(rdd)
   }
 
-  private[sql] def collectToPython(): Int = {
+  private[sql] def collectToPython(): Array[Any] = {
     EvaluatePython.registerPicklers()
     withAction("collectToPython", queryExecution) { plan =>
       val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
@@ -3200,7 +3212,7 @@ class Dataset[T] private[sql](
   /**
    * Collect a Dataset as ArrowPayload byte arrays and serve to PySpark.
    */
-  private[sql] def collectAsArrowToPython(): Int = {
+  private[sql] def collectAsArrowToPython(): Array[Any] = {
     withAction("collectAsArrowToPython", queryExecution) { plan =>
       val iter: Iterator[Array[Byte]] =
         toArrowPayload(plan).collect().iterator.map(_.asPythonSerializable)
@@ -3208,7 +3220,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  private[sql] def toPythonIterator(): Int = {
+  private[sql] def toPythonIterator(): Array[Any] = {
     withNewExecutionId {
       PythonRDD.toLocalIteratorAndServe(javaToPython.rdd)
     }
