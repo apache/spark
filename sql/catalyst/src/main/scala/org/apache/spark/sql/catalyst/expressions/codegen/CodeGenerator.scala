@@ -56,8 +56,15 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  *                 to null.
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
+ * @param inputRow A term that holds the input row name when generating this code.
+ * @param inputVars A list of [[ExprInputVar]] that holds input variables when generating this code.
  */
-case class ExprCode(var code: String, var isNull: ExprValue, var value: ExprValue)
+case class ExprCode(
+    var code: String,
+    var isNull: ExprValue,
+    var value: ExprValue,
+    var inputRow: String = null,
+    var inputVars: Seq[ExprInputVar] = Seq.empty)
 
 object ExprCode {
   def apply(isNull: ExprValue, value: ExprValue): ExprCode = {
@@ -72,6 +79,15 @@ object ExprCode {
     ExprCode(code = "", isNull = FalseLiteral, value = value)
   }
 }
+
+/**
+ * Represents an input variable [[ExprCode]] to an evaluation of an [[Expression]].
+ *
+ * @param exprCode The [[ExprCode]] that represents the evaluation result for the input variable.
+ * @param dataType The data type of the input variable.
+ * @param nullable Whether the input variable can be null or not.
+ */
+case class ExprInputVar(exprCode: ExprCode, dataType: DataType, nullable: Boolean)
 
 /**
  * State used for subexpression elimination.
@@ -1076,16 +1092,25 @@ class CodegenContext {
     commonExprs.foreach { e =>
       val expr = e.head
       val fnName = freshName("subExpr")
-      val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
+      val isNull = if (expr.nullable) {
+        addMutableState(JAVA_BOOLEAN, "subExprIsNull")
+      } else {
+        ""
+      }
       val value = addMutableState(javaType(expr.dataType), "subExprValue")
 
       // Generate the code for this expression tree and wrap it in a function.
       val eval = expr.genCode(this)
+      val assignIsNull = if (expr.nullable) {
+        s"$isNull = ${eval.isNull};"
+      } else {
+        ""
+      }
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
            |  ${eval.code.trim}
-           |  $isNull = ${eval.isNull};
+           |  $assignIsNull
            |  $value = ${eval.value};
            |}
            """.stripMargin
@@ -1105,9 +1130,15 @@ class CodegenContext {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(
-        JavaCode.isNullGlobal(isNull),
-        JavaCode.global(value, expr.dataType))
+      val state = if (expr.nullable) {
+        SubExprEliminationState(
+          JavaCode.isNullGlobal(isNull),
+          JavaCode.global(value, expr.dataType))
+      } else {
+        SubExprEliminationState(
+          FalseLiteral,
+          JavaCode.global(value, expr.dataType))
+      }
       subExprEliminationExprs ++= e.map(_ -> state).toMap
     }
   }

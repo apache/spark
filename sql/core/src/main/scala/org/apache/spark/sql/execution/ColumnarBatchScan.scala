@@ -119,7 +119,9 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
          |}""".stripMargin)
 
     ctx.currentVars = null
-    val rowidx = ctx.freshName("rowIdx")
+    // `rowIdx` isn't in `ctx.currentVars`. If the expressions are split later, we can't track it.
+    // So making it as global variable.
+    val rowidx = ctx.addMutableState(CodeGenerator.JAVA_INT, "rowIdx")
     val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
       genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable)
     }
@@ -139,7 +141,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
        |  int $numRows = $batch.numRows();
        |  int $localEnd = $numRows - $idx;
        |  for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
-       |    int $rowidx = $idx + $localIdx;
+       |    $rowidx = $idx + $localIdx;
        |    ${consume(ctx, columnsBatchInput).trim}
        |    $shouldStop
        |  }

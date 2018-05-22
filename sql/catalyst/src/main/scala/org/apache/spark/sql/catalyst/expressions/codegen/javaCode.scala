@@ -120,6 +120,7 @@ object JavaCode {
 trait ExprValue extends JavaCode {
   def javaType: Class[_]
   def isPrimitive: Boolean = javaType.isPrimitive
+  def canGlobalAccess: Boolean = false
 }
 
 object ExprValue {
@@ -146,6 +147,7 @@ case class VariableValue(variableName: String, javaType: Class[_]) extends ExprV
  */
 case class GlobalValue(value: String, javaType: Class[_]) extends ExprValue {
   override def code: String = value
+  override def canGlobalAccess: Boolean = true
 }
 
 /**
@@ -160,6 +162,8 @@ class LiteralValue(val value: String, val javaType: Class[_]) extends ExprValue 
   }
 
   override def hashCode(): Int = value.hashCode() * 31 + javaType.hashCode()
+
+  override def canGlobalAccess: Boolean = true
 }
 
 case object TrueLiteral extends LiteralValue("true", JBool.TYPE)
