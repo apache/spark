@@ -363,8 +363,6 @@ private[joins] object UnsafeHashedRelation {
 private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, capacity: Int)
   extends MemoryConsumer(mm) with Externalizable with KryoSerializable {
 
-  private val ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-
   // Whether the keys are stored in dense mode or not.
   private var isDense = false
 
@@ -619,6 +617,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   }
 
   private def grow(inputRowSize: Int): Unit = {
+    // There is 8 bytes for the pointer to next value
     val neededNumWords = (cursor - Platform.LONG_ARRAY_OFFSET + 8 + inputRowSize + 7) / 8
     if (neededNumWords > page.length) {
       if (neededNumWords > (1 << 30)) {
@@ -626,11 +625,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
           "Can not build a HashedRelation that is larger than 8G")
       }
       val newNumWords = math.max(neededNumWords, math.min(page.length * 2, 1 << 30))
-      if (newNumWords > ARRAY_MAX) {
-        throw new UnsupportedOperationException(
-          "Cannot grow internal buffer by size " + newNumWords +
-            " because the size after growing " + "exceeds size limitation " + ARRAY_MAX)
-      }
       ensureAcquireMemory(newNumWords * 8L)
       val newPage = new Array[Long](newNumWords.toInt)
       Platform.copyMemory(page, Platform.LONG_ARRAY_OFFSET, newPage, Platform.LONG_ARRAY_OFFSET,
