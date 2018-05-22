@@ -53,7 +53,7 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
     } catch {
       case _: NoSuchElementException =>
         // Rather than crashing, render an "RDD Not Found" page
-        return UIUtils.headerSparkPage("RDD Not Found", Seq.empty[Node], parent)
+        return UIUtils.headerSparkPage(request, "RDD Not Found", Seq.empty[Node], parent)
     }
 
     // Worker table
@@ -72,7 +72,7 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
     }
     val blockTableHTML = try {
       val _blockTable = new BlockPagedTable(
-        UIUtils.prependBaseUri(parent.basePath) + s"/storage/rdd/?id=${rddId}",
+        UIUtils.prependBaseUri(request, parent.basePath) + s"/storage/rdd/?id=${rddId}",
         rddStorageInfo.partitions.get,
         blockPageSize,
         blockSortColumn,
@@ -145,7 +145,8 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
         {blockTableHTML ++ jsForScrollingDownToBlockTable}
       </div>;
 
-    UIUtils.headerSparkPage("RDD Storage Info for " + rddStorageInfo.name, content, parent)
+    UIUtils.headerSparkPage(
+      request, "RDD Storage Info for " + rddStorageInfo.name, content, parent)
   }
 
   /** Header fields for the worker table */

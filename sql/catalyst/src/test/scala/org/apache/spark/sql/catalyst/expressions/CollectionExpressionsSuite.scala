@@ -157,6 +157,33 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
+
+    // binary
+    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
+      ArrayType(BinaryType))
+    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
+      ArrayType(BinaryType))
+    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null),
+      ArrayType(BinaryType))
+    val b3 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)),
+      ArrayType(BinaryType))
+    val be = Literal.create(Array[Byte](1, 2), BinaryType)
+    val nullBinary = Literal.create(null, BinaryType)
+
+    checkEvaluation(ArrayContains(b0, be), true)
+    checkEvaluation(ArrayContains(b1, be), false)
+    checkEvaluation(ArrayContains(b0, nullBinary), null)
+    checkEvaluation(ArrayContains(b2, be), null)
+    checkEvaluation(ArrayContains(b3, be), true)
+
+    // complex data types
+    val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
+      ArrayType(ArrayType(IntegerType)))
+    val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
+      ArrayType(ArrayType(IntegerType)))
+    val aae = Literal.create(Seq[Int](1, 2), ArrayType(IntegerType))
+    checkEvaluation(ArrayContains(aa0, aae), true)
+    checkEvaluation(ArrayContains(aa1, aae), false)
   }
 
   test("ArraysOverlap") {
@@ -372,6 +399,14 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(ArrayPosition(a3, Literal("")), null)
     checkEvaluation(ArrayPosition(a3, Literal.create(null, StringType)), null)
+
+    val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
+      ArrayType(ArrayType(IntegerType)))
+    val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
+      ArrayType(ArrayType(IntegerType)))
+    val aae = Literal.create(Seq[Int](1, 2), ArrayType(IntegerType))
+    checkEvaluation(ArrayPosition(aa0, aae), 1L)
+    checkEvaluation(ArrayPosition(aa1, aae), 0L)
   }
 
   test("elementAt") {
@@ -409,7 +444,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
     val m2 = Literal.create(null, MapType(StringType, StringType))
 
-    checkEvaluation(ElementAt(m0, Literal(1.0)), null)
+    assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes().isFailure)
 
     checkEvaluation(ElementAt(m0, Literal("d")), null)
 
@@ -420,6 +455,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ElementAt(m0, Literal("c")), null)
 
     checkEvaluation(ElementAt(m2, Literal("a")), null)
+
+    // test binary type as keys
+    val mb0 = Literal.create(
+      Map(Array[Byte](1, 2) -> "1", Array[Byte](3, 4) -> null, Array[Byte](2, 1) -> "2"),
+      MapType(BinaryType, StringType))
+    val mb1 = Literal.create(Map[Array[Byte], String](), MapType(BinaryType, StringType))
+
+    checkEvaluation(ElementAt(mb0, Literal(Array[Byte](1, 2, 3))), null)
+
+    checkEvaluation(ElementAt(mb1, Literal(Array[Byte](1, 2))), null)
+    checkEvaluation(ElementAt(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
+    checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
   test("Concat") {
