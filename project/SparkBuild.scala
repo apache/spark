@@ -318,7 +318,7 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ CheckStyle.settings))
+      ExcludedDependencies.settings ++ Checkstyle.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -741,7 +741,7 @@ object Unidoc {
   )
 }
 
-object CheckStyle {
+object Checkstyle {
   lazy val settings = Seq(
     checkstyleSeverityLevel := Some(CheckstyleSeverityLevel.Error),
     javaSource in (Compile, checkstyle) := baseDirectory.value / "src/main/java",
