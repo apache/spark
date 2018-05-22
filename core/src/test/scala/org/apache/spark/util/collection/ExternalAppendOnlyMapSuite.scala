@@ -25,7 +25,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.util.CompletionIterator
 
-class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
+class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
   import TestUtils.{assertNotSpilled, assertSpilled}
 
   private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS

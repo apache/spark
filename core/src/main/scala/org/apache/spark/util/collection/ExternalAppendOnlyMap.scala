@@ -599,11 +599,12 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    def destroy() : Unit = {
+    private def destroy() : Unit = {
       freeCurrentMap()
       upstream = Iterator.empty
     }
 
+    private[ExternalAppendOnlyMap]
     def toCompletionIterator: CompletionIterator[(K, C), SpillableIterator] = {
       CompletionIterator[(K, C), SpillableIterator](this, this.destroy )
     }
@@ -643,7 +644,7 @@ private[spark] object ExternalAppendOnlyMap {
   }
 
   /**
-   * A comparator which sorts arbitrary keys bas on their hash codes.
+   * A comparator which sorts arbitrary keys based on their hash codes.
    */
   private class HashComparator[K] extends Comparator[K] {
     def compare(key1: K, key2: K): Int = {
