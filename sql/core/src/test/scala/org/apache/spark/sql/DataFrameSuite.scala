@@ -2261,6 +2261,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 
+  test("SPARK-24341: IN subqueries with struct fields") {
+    Seq((1, 1)).toDF("a", "b").createOrReplaceTempView("tab")
+    checkAnswer(sql("select 1 from range(1) where (1, 1) in (select a, b from tab)"), Row(1))
+
+    Seq((1, 1)).toDF("a", "b").createOrReplaceTempView("tab_a")
+    Seq((1, 1)).toDF("na", "nb").createOrReplaceTempView("tab_b")
+    intercept[AnalysisException] {
+      sql("select 1 from tab_a where (a, b) not in (select (na, nb) from tab_b)").collect()
+    }
+
+    testData2.select(struct("a", "b").as("record")).createOrReplaceTempView("struct_tab")
+    checkAnswer(
+      sql("select count(*) from struct_tab where record in " +
+        "(select (na as a, nb as b) from tab_b)"),
+      Row(1))
+    checkAnswer(
+      sql("select count(*) from struct_tab where record not in " +
+        "(select (na as a, nb as b) from tab_b)"),
+      Row(5))
+  }
+
   test("Uuid expressions should produce same results at retries in the same DataFrame") {
     val df = spark.range(1).select($"id", new Column(Uuid()))
     checkAnswer(df, df.collect())

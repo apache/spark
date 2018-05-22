@@ -1240,16 +1240,16 @@ class TypeCoercionSuite extends AnalysisTest {
     // InConversion
     val inConversion = TypeCoercion.InConversion(conf)
     ruleTest(inConversion,
-      In(UnresolvedAttribute("a"), Seq(Literal(1))),
-      In(UnresolvedAttribute("a"), Seq(Literal(1)))
+      In(Seq(UnresolvedAttribute("a")), Seq(Literal(1))),
+      In(Seq(UnresolvedAttribute("a")), Seq(Literal(1)))
     )
     ruleTest(inConversion,
-      In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1))),
-      In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1)))
+      In(Seq(Literal("test")), Seq(UnresolvedAttribute("a"), Literal(1))),
+      In(Seq(Literal("test")), Seq(UnresolvedAttribute("a"), Literal(1)))
     )
     ruleTest(inConversion,
-      In(Literal("a"), Seq(Literal(1), Literal("b"))),
-      In(Cast(Literal("a"), StringType),
+      In(Seq(Literal("a")), Seq(Literal(1), Literal("b"))),
+      In(Seq(Cast(Literal("a"), StringType)),
         Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
   }

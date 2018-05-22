@@ -161,9 +161,18 @@ case class Not(child: Expression)
        true
   """)
 // scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(values: Seq[Expression], list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
+
+  @transient lazy val value = if (values.length > 1) {
+    CreateNamedStruct(values.zipWithIndex.flatMap {
+      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
+      case (v, idx) => Seq(Literal(s"_$idx"), v)
+    })
+  } else {
+    values.head
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
@@ -171,23 +180,19 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     if (mismatchOpt.isDefined) {
       list match {
         case ListQuery(_, _, _, childOutputs) :: Nil =>
-          val valExprs = value match {
-            case cns: CreateNamedStruct => cns.valExprs
-            case expr => Seq(expr)
-          }
-          if (valExprs.length != childOutputs.length) {
+          if (values.length != childOutputs.length) {
             TypeCheckResult.TypeCheckFailure(
               s"""
                  |The number of columns in the left hand side of an IN subquery does not match the
                  |number of columns in the output of subquery.
-                 |#columns in left hand side: ${valExprs.length}.
+                 |#columns in left hand side: ${values.length}.
                  |#columns in right hand side: ${childOutputs.length}.
                  |Left side columns:
-                 |[${valExprs.map(_.sql).mkString(", ")}].
+                 |[${values.map(_.sql).mkString(", ")}].
                  |Right side columns:
                  |[${childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
           } else {
-            val mismatchedColumns = valExprs.zip(childOutputs).flatMap {
+            val mismatchedColumns = values.zip(childOutputs).flatMap {
               case (l, r) if l.dataType != r.dataType =>
                 s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
               case _ => None
@@ -199,7 +204,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
                  |Mismatched columns:
                  |[${mismatchedColumns.mkString(", ")}]
                  |Left side:
-                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+                 |[${values.map(_.dataType.catalogString).mkString(", ")}].
                  |Right side:
                  |[${childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
           }
@@ -212,7 +217,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def children: Seq[Expression] = value +: list
+  override def children: Seq[Expression] = values ++: list
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
@@ -307,9 +312,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def sql: String = {
-    val childrenSQL = children.map(_.sql)
-    val valueSQL = childrenSQL.head
-    val listSQL = childrenSQL.tail.mkString(", ")
+    val valueSQL = value.sql
+    val listSQL = list.map(_.sql).mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
 }

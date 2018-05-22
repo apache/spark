@@ -1347,11 +1347,17 @@ class Analyzer(
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(e, plans)(Exists(_, _, exprId))
-        case In(value, Seq(l @ ListQuery(sub, _, exprId, _))) if value.resolved && !l.resolved =>
+        case i @ In(values, Seq(l @ ListQuery(_, _, exprId, _)))
+            if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, plans)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
-          In(value, Seq(expr))
+          val subqueryOutputNum = expr.asInstanceOf[ListQuery].childOutputs.length
+          if (values.length != subqueryOutputNum) {
+            throw new AnalysisException(s"${i.sql} has ${values.length} values, but the " +
+              s"subquery has $subqueryOutputNum output values.")
+          }
+          In(values, Seq(expr))
       }
     }
 

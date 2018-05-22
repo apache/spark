@@ -164,7 +164,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       case op @ GreaterThanOrEqual(l: Literal, ar: Attribute) =>
         evaluateBinary(LessThanOrEqual(ar, l), ar, l, update)
 
-      case In(ar: Attribute, expList)
+      case In(Seq(ar: Attribute), expList)
         if expList.forall(e => e.isInstanceOf[Literal]) =>
         // Expression [In (value, seq[Literal])] will be replaced with optimized version
         // [InSet (value, HashSet[Literal])] in Optimizer, but only for list.size > 10.

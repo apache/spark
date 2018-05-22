@@ -88,7 +88,10 @@ package object dsl {
     def <=> (other: Expression): Predicate = EqualNullSafe(expr, other)
     def =!= (other: Expression): Predicate = Not(EqualTo(expr, other))
 
-    def in(list: Expression*): Expression = In(expr, list)
+    def in(list: Expression*): Expression = expr match {
+      case c: CreateNamedStruct => In(c.valExprs, list)
+      case other => In(Seq(other), list)
+    }
 
     def like(other: Expression): Expression = Like(expr, other)
     def rlike(other: Expression): Expression = RLike(expr, other)
