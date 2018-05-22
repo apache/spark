@@ -147,8 +147,6 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
   override def nullable: Boolean = children.forall(_.nullable)
 
-  lazy val numberOfArrays: Int = children.length
-
   private lazy val arrayTypes = children.map(_.dataType.asInstanceOf[ArrayType])
 
   private lazy val arrayElementTypes = arrayTypes.map(_.elementType)
@@ -167,15 +165,15 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val numberOfArrays: Int = children.length
     val genericArrayData = classOf[GenericArrayData].getName
     val genericInternalRow = classOf[GenericInternalRow].getName
-
-    val evals = children.map(_.genCode(ctx))
-
     val arrVals = ctx.freshName("arrVals")
     val arrCardinality = ctx.freshName("arrCardinality")
     val biggestCardinality = ctx.freshName("biggestCardinality")
     val storedArrTypes = ctx.freshName("storedArrTypes")
+    val returnNull = ctx.freshName("returnNull")
+    val evals = children.map(_.genCode(ctx))
 
     val inputs = evals.zipWithIndex.map { case (eval, index) =>
       s"""
@@ -186,6 +184,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
         |} else {
         |  $arrVals[$index] = null;
         |  $arrCardinality[$index] = 0;
+        |  $returnNull[0] = true;
         |}
         |$storedArrTypes[$index] = "${arrayElementTypes(index)}";
         |$biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
@@ -206,7 +205,8 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
         ("ArrayData[]", arrVals) ::
         ("int[]", arrCardinality) ::
         ("String[]", storedArrTypes) ::
-        ("int", biggestCardinality) :: Nil)
+        ("int", biggestCardinality) ::
+        ("boolean[]", returnNull) :: Nil)
 
     val myobject = ctx.freshName("myobject")
     val j = ctx.freshName("j")
@@ -227,7 +227,10 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |int[] $arrCardinality = new int[$numberOfArrays];
       |int $biggestCardinality = 0;
       |String[] $storedArrTypes = new String[$numberOfArrays];
+      |boolean[] $returnNull = new boolean[1];
+      |$returnNull[0] = false;
       |$inputsSplitted
+      |${CodeGenerator.javaType(dataType)} ${ev.value};
       |Object[] $args = new Object[$biggestCardinality];
       |for (int $i = 0; $i < $biggestCardinality; $i ++) {
       |  Object[] $myobject = new Object[$numberOfArrays];
@@ -240,42 +243,50 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |  }
       |  $args[$i] = new $genericInternalRow($myobject);
       |}
-      |boolean ${ev.isNull} = false;
-      |$genericArrayData ${ev.value} = new $genericArrayData($args);
+      |boolean ${ev.isNull} = $returnNull[0];
+      |if (${ev.isNull}) {
+      |  ${ev.value} = null;
+      |} else {
+      |  ${ev.value} = new $genericArrayData($args);
+      |}
     """.stripMargin)
   }
 
   override def eval(input: InternalRow): Any = {
     val inputArrays = children.map(_.eval(input).asInstanceOf[ArrayData])
-    val inputCardinality = inputArrays.map { arr =>
-      if (arr != null) {
-        arr.numElements()
-      } else {
-        0
-      }
-    }
-
-    val biggestCardinality = if (inputCardinality.isEmpty) {
-      0
+    if (inputArrays.contains(null)) {
+      null
     } else {
-      inputCardinality.foldLeft(0)(_.max(_))
-    }
-
-    val result = new Array[InternalRow](biggestCardinality)
-    val zippedArrs: Seq[(ArrayData, Int)] = inputArrays.zipWithIndex
-
-    for (i <- 0 until biggestCardinality) {
-      val currentLayer: Seq[Object] = zippedArrs.map { case (arr, index) =>
-        if (arr != null && arr.numElements() > i && !arr.isNullAt(i)) {
-          arr.get(i, arrayElementTypes(index))
+      val inputCardinality = inputArrays.map { arr =>
+        if (arr != null) {
+          arr.numElements()
         } else {
-          null
+          0
         }
       }
 
-      result(i) = InternalRow.apply(currentLayer: _*)
+      val biggestCardinality = if (inputCardinality.isEmpty) {
+        0
+      } else {
+        inputCardinality.foldLeft(0)(_.max(_))
+      }
+
+      val result = new Array[InternalRow](biggestCardinality)
+      val zippedArrs: Seq[(ArrayData, Int)] = inputArrays.zipWithIndex
+
+      for (i <- 0 until biggestCardinality) {
+        val currentLayer: Seq[Object] = zippedArrs.map { case (arr, index) =>
+          if (arr != null && arr.numElements() > i && !arr.isNullAt(i)) {
+            arr.get(i, arrayElementTypes(index))
+          } else {
+            null
+          }
+        }
+
+        result(i) = InternalRow.apply(currentLayer: _*)
+      }
+      new GenericArrayData(result)
     }
-    new GenericArrayData(result)
   }
 }
 

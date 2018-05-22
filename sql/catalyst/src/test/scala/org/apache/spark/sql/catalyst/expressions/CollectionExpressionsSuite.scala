@@ -390,14 +390,15 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     }.toSeq
 
     val numbers = List(
-      Seq(9001) ++ (0 to 1000).map { _ => 1 }.toSeq,
-      Seq(9002) ++ (0 to 1000).map { _ => null }.toSeq,
-      Seq(9003) ++ (0 to 1000).map { _ => null }.toSeq,
-      Seq(null) ++ (0 to 1000).map { _ => null }.toSeq)
+      Row(Seq(9001) ++ (0 to 1000).map { _ => 1 }.toSeq: _*),
+      Row(Seq(9002) ++ (0 to 1000).map { _ => null }.toSeq: _*),
+      Row(Seq(9003) ++ (0 to 1000).map { _ => null }.toSeq: _*),
+      Row(Seq(null) ++ (0 to 1000).map { _ => null }.toSeq: _*))
     checkEvaluation(Zip(Seq(literals(0)) ++ manyLiterals),
-      List(Row(numbers(0): _*), Row(numbers(1): _*), Row(numbers(2): _*), Row(numbers(3): _*)))
+      List(numbers(0), numbers(1), numbers(2), numbers(3)))
 
     checkEvaluation(Zip(Seq()), List())
+    checkEvaluation(Zip(Seq(literals(0), Literal.create(null, ArrayType(IntegerType)))), null)
   }
 
   test("Array Min") {
