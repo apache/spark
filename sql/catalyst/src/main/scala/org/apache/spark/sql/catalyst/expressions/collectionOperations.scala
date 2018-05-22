@@ -227,6 +227,9 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def dataType: DataType = BooleanType
 
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(right.dataType)
+
   override def inputTypes: Seq[AbstractDataType] = right.dataType match {
     case NullType => Seq.empty
     case _ => left.dataType match {
@@ -243,7 +246,7 @@ case class ArrayContains(left: Expression, right: Expression)
       TypeCheckResult.TypeCheckFailure(
         "Arguments must be an array followed by a value of same type as the array members")
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
     }
   }
 
@@ -256,7 +259,7 @@ case class ArrayContains(left: Expression, right: Expression)
     arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
       if (v == null) {
         hasNull = true
-      } else if (v == value) {
+      } else if (ordering.equiv(v, value)) {
         return true
       }
     )

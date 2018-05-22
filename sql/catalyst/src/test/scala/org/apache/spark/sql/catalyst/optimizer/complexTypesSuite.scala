@@ -331,4 +331,17 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       .analyze
     comparePlans(Optimizer execute rel, expected)
   }
+
+  test("SPARK-24313: support binary type as map keys in GetMapValue") {
+    val mb0 = Literal.create(
+      Map(Array[Byte](1, 2) -> "1", Array[Byte](3, 4) -> null, Array[Byte](2, 1) -> "2"),
+      MapType(BinaryType, StringType))
+    val mb1 = Literal.create(Map[Array[Byte], String](), MapType(BinaryType, StringType))
+
+    checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](1, 2, 3))), null)
+
+    checkEvaluation(GetMapValue(mb1, Literal(Array[Byte](1, 2))), null)
+    checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
+    checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
+  }
 }
