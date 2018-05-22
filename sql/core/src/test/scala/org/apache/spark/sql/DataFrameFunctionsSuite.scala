@@ -756,6 +756,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("element_at(a, -1)"),
       Seq(Row("3"), Row(""), Row(null))
     )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
+    }
+    assert(e.message.contains(
+      "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
   }
 
   test("concat function - arrays") {
