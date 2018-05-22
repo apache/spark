@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.{KnownSizeEstimation, Utils}
 

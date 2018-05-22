@@ -28,7 +28,7 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.CompactBuffer
@@ -262,19 +262,19 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
         Long.MaxValue,
         1),
       0)
-    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, StringType, false)))
-    val keys = Seq(0L)
+    val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
     val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
+
+    val key = 0L
+    // the page array is initialized with length 1 << 17,
+    // so here we need a value larger than 1 << 18
     val bigStr = UTF8String.fromString("x" * 1024 * 1024 * 2)
-    keys.foreach { k =>
-      map.append(k, unsafeProj(InternalRow(bigStr)))
-    }
+
+    map.append(key, unsafeProj(InternalRow(bigStr)))
     map.optimize()
-    val row = unsafeProj(InternalRow(bigStr)).copy()
-    keys.foreach { k =>
-      assert(map.getValue(k, row) eq row)
-      assert(row.getUTF8String(0) === bigStr)
-    }
+
+    val resultRow = new UnsafeRow(1)
+    assert(map.getValue(key, resultRow).getUTF8String(0) === bigStr)
     map.free()
   }
 
