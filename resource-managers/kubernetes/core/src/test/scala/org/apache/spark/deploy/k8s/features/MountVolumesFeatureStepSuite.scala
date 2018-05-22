@@ -102,6 +102,29 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
     assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
     assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
+  }
 
+  test("Mounts multiple volumes") {
+    val hpVolumeConf = KubernetesVolumeSpec(
+      "hpVolume",
+      KUBERNETES_VOLUMES_HOSTPATH_KEY,
+      "/tmp",
+      false,
+      Map(KUBERNETES_VOLUMES_PATH_KEY -> "/hostPath/tmp")
+    )
+    val pvcVolumeConf = KubernetesVolumeSpec(
+      "checkpointVolume",
+      KUBERNETES_VOLUMES_PVC_KEY,
+      "/checkpoints",
+      true,
+      Map(KUBERNETES_VOLUMES_CLAIM_NAME_KEY -> "pvcClaim")
+    )
+    val volumesConf = hpVolumeConf :: pvcVolumeConf :: Nil
+    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumesConf)
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 2)
+    assert(configuredPod.container.getVolumeMounts.size() === 2)
   }
 }

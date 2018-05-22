@@ -16,10 +16,6 @@
  */
 package org.apache.spark.deploy.k8s
 
-import scala.collection.mutable.HashMap
-
-import io.fabric8.kubernetes.api.model._
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 
