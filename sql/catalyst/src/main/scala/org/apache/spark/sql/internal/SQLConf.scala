@@ -1274,8 +1274,8 @@ object SQLConf {
   val MAX_EPOCH_BACKLOG = buildConf("spark.sql.streaming.continuous.maxEpochBacklog")
     .internal()
     .doc("The max number of epochs to be stored in queue to wait for late epochs. " +
-      "To prevent OOM, if this parameter is exceeded by the size of the queue, " +
-      "an error is reported and further epochs are not remembered until queue size decreases.")
+      "If this parameter is exceeded by the size of the queue, stream is stopped with an error " +
+      "indicating too many epochs stacked up.")
     .intConf
     .createWithDefault(10000)
 
