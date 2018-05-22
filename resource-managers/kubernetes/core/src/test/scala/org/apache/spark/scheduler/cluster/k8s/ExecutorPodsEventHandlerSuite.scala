@@ -23,16 +23,20 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentMatcher, Matchers, MockitoAnnotations}
-import org.mockito.Mockito.{never, verify, when}
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.mockito.MockitoAnnotations.Mock
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.scheduler.ExecutorExited
 
 class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -59,6 +63,8 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val eventProcessorExecutor = new DeterministicScheduler
 
+  private var namedExecutorPods: mutable.Map[String, PodResource[Pod, DoneablePod]] = _
+
   @Mock
   private var kubernetesClient: KubernetesClient = _
 
@@ -66,7 +72,7 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
   private var podOperations: Pods = _
 
   @Mock
-  private var namedPods: PodResource[Pod, DoneablePod] = _
+  private var driverPodOperations: PodResource[Pod, DoneablePod] = _
 
   @Mock
   private var executorBuilder: KubernetesExecutorBuilder = _
@@ -78,9 +84,11 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
 
   before {
     MockitoAnnotations.initMocks(this)
+    namedExecutorPods = mutable.Map.empty[String, PodResource[Pod, DoneablePod]]
     when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.withName(driverPodName)).thenReturn(namedPods)
-    when(namedPods.get).thenReturn(driverPod)
+    when(podOperations.withName(any(classOf[String]))).thenAnswer(namedPodsAnswer())
+    when(podOperations.withName(driverPodName)).thenReturn(driverPodOperations)
+    when(driverPodOperations.get).thenReturn(driverPod)
     when(executorBuilder.buildFromFeatures(kubernetesConfWithCorrectFields()))
       .thenAnswer(executorPodAnswer())
     eventHandlerUnderTest = new ExecutorPodsEventHandler(
@@ -91,7 +99,7 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
   test("Initially request executors in batches. Do not request another batch if the" +
     " first has not finished.") {
     eventHandlerUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
-    eventProcessorExecutor.tick(podAllocationDelay, TimeUnit.MILLISECONDS)
+    runProcessor()
     for (nextId <- 1 to podAllocationSize) {
       verify(podOperations).create(podWithAttachedContainerForId(nextId))
     }
@@ -102,23 +110,70 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
   test("Request executors in batches. Allow another batch to be requested if" +
     " all pending executors start running.") {
     eventHandlerUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
-    eventProcessorExecutor.tick(podAllocationDelay, TimeUnit.MILLISECONDS)
+    runProcessor()
     for (execId <- 1 until podAllocationSize) {
-      eventHandlerUnderTest.sendUpdatedPodMetadata(runExecutor(execId))
+      eventHandlerUnderTest.sendUpdatedPodMetadata(runningExecutor(execId))
     }
-    eventProcessorExecutor.tick(podAllocationDelay, TimeUnit.MILLISECONDS)
+    runProcessor()
     verify(podOperations, never()).create(
       podWithAttachedContainerForId(podAllocationSize + 1))
-    eventHandlerUnderTest.sendUpdatedPodMetadata(runExecutor(podAllocationSize))
-    eventProcessorExecutor.tick(podAllocationDelay, TimeUnit.MILLISECONDS)
+    eventHandlerUnderTest.sendUpdatedPodMetadata(runningExecutor(podAllocationSize))
+    runProcessor()
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
-    verify(podOperations, never()).create(podWithAttachedContainerForId(podAllocationSize + 2))
+    runProcessor()
+    verify(podOperations, times(podAllocationSize + 1)).create(any(classOf[Pod]))
   }
 
-  private def runExecutor(executorId: Int): Pod = {
+  test("When a current batch reaches error states immediately, re-request" +
+    " them on the next batch.") {
+    eventHandlerUnderTest.setTotalExpectedExecutors(podAllocationSize)
+    runProcessor()
+    for (execId <- 1 until podAllocationSize) {
+      eventHandlerUnderTest.sendUpdatedPodMetadata(runningExecutor(execId))
+    }
+    val failedPod = failedExecutorWithoutDeletion(podAllocationSize)
+    eventHandlerUnderTest.sendUpdatedPodMetadata(failedPod)
+    runProcessor()
+    val msg = s"""The executor with id $podAllocationSize exited with exit code 1.
+       | The API gave the following brief reason: ${failedPod.getStatus.getReason}.
+       | The API gave the following message: ${failedPod.getStatus.getMessage}.
+       | The API gave the following container statuses:
+       | ${failedPod.getStatus.getContainerStatuses.asScala.map(_.toString).mkString("\n===\n")}
+         """.stripMargin
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend).doRemoveExecutor(podAllocationSize.toString, expectedLossReason)
+    verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
+    verify(namedExecutorPods(failedPod.getMetadata.getName)).delete()
+  }
+
+  private def runProcessor(): Unit = {
+    eventProcessorExecutor.tick(podAllocationDelay, TimeUnit.MILLISECONDS)
+  }
+
+  private def runningExecutor(executorId: Int): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("running")
+        .endStatus()
+      .build()
+  }
+
+  private def failedExecutorWithoutDeletion(executorId: Int): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId))
+      .editOrNewStatus()
+        .withPhase("error")
+        .addNewContainerStatus()
+          .withName("spark-executor")
+          .withImage("k8s-spark")
+          .withNewState()
+            .withNewTerminated()
+              .withMessage("Failed")
+              .withExitCode(1)
+              .endTerminated()
+            .endState()
+          .endContainerStatus()
+        .withMessage("Executor failed.")
+        .withReason("Executor failed because of a thrown error.")
         .endStatus()
       .build()
   }
@@ -151,6 +206,16 @@ class ExecutorPodsEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
         val k8sConf = invocation.getArgumentAt(
           0, classOf[KubernetesConf[KubernetesExecutorSpecificConf]])
         executorPodWithId(k8sConf.roleSpecificConf.executorId)
+      }
+    }
+  }
+
+  private def namedPodsAnswer(): Answer[PodResource[Pod, DoneablePod]] = {
+    new Answer[PodResource[Pod, DoneablePod]] {
+      override def answer(invocation: InvocationOnMock): PodResource[Pod, DoneablePod] = {
+        val podName = invocation.getArgumentAt(0, classOf[String])
+        namedExecutorPods.getOrElseUpdate(
+          podName, mock(classOf[PodResource[Pod, DoneablePod]]))
       }
     }
   }

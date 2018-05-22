@@ -196,7 +196,7 @@ private[spark] class ExecutorPodsEventHandler(
       (false, s"The executor with id $execId was deleted by a user or the framework.")
     } else {
       val msg =
-        s""" The executor with id $execId exited with exit code $exitCode.
+        s"""The executor with id $execId exited with exit code $exitCode.
            | The API gave the following brief reason: ${pod.getStatus.getReason}.
            | The API gave the following message: ${pod.getStatus.getMessage}.
            | The API gave the following container statuses:
