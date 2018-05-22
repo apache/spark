@@ -40,16 +40,6 @@ object CodegenError {
  */
 object CodegenObjectFactoryMode extends Enumeration {
   val FALLBACK, CODEGEN_ONLY, NO_CODEGEN = Value
-
-  def currentMode: CodegenObjectFactoryMode.Value = {
-    // If we weren't on task execution, accesses that config.
-    if (TaskContext.get == null) {
-      val config = SQLConf.get.getConf(SQLConf.CODEGEN_FACTORY_MODE)
-      CodegenObjectFactoryMode.withName(config)
-    } else {
-      CodegenObjectFactoryMode.FALLBACK
-    }
-  }
 }
 
 /**
@@ -61,18 +51,20 @@ abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] {
 
   def createObject(in: IN): OUT = {
     // We are allowed to choose codegen-only or no-codegen modes if under tests.
-    if (Utils.isTesting &&
-        CodegenObjectFactoryMode.currentMode != CodegenObjectFactoryMode.FALLBACK) {
-      CodegenObjectFactoryMode.currentMode match {
-        case CodegenObjectFactoryMode.CODEGEN_ONLY => createCodeGeneratedObject(in)
-        case CodegenObjectFactoryMode.NO_CODEGEN => createInterpretedObject(in)
-      }
-    } else {
-      try {
+    val config = SQLConf.get.getConf(SQLConf.CODEGEN_FACTORY_MODE)
+    val fallbackMode = CodegenObjectFactoryMode.withName(config)
+
+    fallbackMode match {
+      case CodegenObjectFactoryMode.CODEGEN_ONLY if Utils.isTesting =>
         createCodeGeneratedObject(in)
-      } catch {
-        case CodegenError(_) => createInterpretedObject(in)
-      }
+      case CodegenObjectFactoryMode.NO_CODEGEN if Utils.isTesting =>
+        createInterpretedObject(in)
+      case _ =>
+        try {
+          createCodeGeneratedObject(in)
+        } catch {
+          case CodegenError(_) => createInterpretedObject(in)
+        }
     }
   }
 
