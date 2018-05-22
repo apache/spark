@@ -206,7 +206,7 @@ class DAGScheduler(
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
-  private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
   /**
@@ -1210,7 +1210,7 @@ class DAGScheduler(
           case _ =>
             updateAccumulators(event)
         }
-      case _: ExceptionFailure => updateAccumulators(event)
+      case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
       case _ =>
     }
     postTaskEnd(event)
@@ -1414,13 +1414,13 @@ class DAGScheduler(
       case commitDenied: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case exceptionFailure: ExceptionFailure =>
+      case _: ExceptionFailure | _: TaskKilled =>
         // Nothing left to do, already handled above for accumulator updates.
 
       case TaskResultLost =>
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
-      case _: ExecutorLostFailure | _: TaskKilled | UnknownReason =>
+      case _: ExecutorLostFailure | UnknownReason =>
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
     }

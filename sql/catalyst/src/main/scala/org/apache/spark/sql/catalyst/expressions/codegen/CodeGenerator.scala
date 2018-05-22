@@ -766,6 +766,40 @@ class CodegenContext {
   }
 
   /**
+   * Generates code creating a [[UnsafeArrayData]]. The generated code executes
+   * a provided fallback when the size of backing array would exceed the array size limit.
+   * @param arrayName a name of the array to create
+   * @param numElements a piece of code representing the number of elements the array should contain
+   * @param elementSize a size of an element in bytes
+   * @param bodyCode a function generating code that fills up the [[UnsafeArrayData]]
+   *                 and getting the backing array as a parameter
+   * @param fallbackCode a piece of code executed when the array size limit is exceeded
+   */
+  def createUnsafeArrayWithFallback(
+      arrayName: String,
+      numElements: String,
+      elementSize: Int,
+      bodyCode: String => String,
+      fallbackCode: String): String = {
+    val arraySize = freshName("size")
+    val arrayBytes = freshName("arrayBytes")
+    s"""
+       |final long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
+       |  $numElements,
+       |  $elementSize);
+       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+       |  $fallbackCode
+       |} else {
+       |  final byte[] $arrayBytes = new byte[(int)$arraySize];
+       |  UnsafeArrayData $arrayName = new UnsafeArrayData();
+       |  Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
+       |  $arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
+       |  ${bodyCode(arrayBytes)}
+       |}
+     """.stripMargin
+  }
+
+  /**
    * Generates code to do null safe execution, i.e. only execute the code when the input is not
    * null by adding null check if necessary.
    *
