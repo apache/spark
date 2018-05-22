@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
+import java.util.concurrent.Semaphore
 
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord, KafkaConsumer }
 import org.apache.kafka.common.{ KafkaException, TopicPartition }
@@ -54,7 +55,11 @@ class CachedKafkaConsumer[K, V] private(
   protected var buffer = ju.Collections.emptyListIterator[ConsumerRecord[K, V]]()
   protected var nextOffset = -2L
 
-  def close(): Unit = consumer.close()
+  private val usePermit = new Semaphore(1)
+
+  def close(): Unit = usePermit.release()
+
+  private def reallyClose(): Unit = consumer.close()
 
   /**
    * Get the record for the given offset, waiting up to timeout ms if IO is necessary.
@@ -139,6 +144,12 @@ class CachedKafkaConsumer[K, V] private(
     buffer = r.listIterator
   }
 
+  private def acquireAndGet(): CachedKafkaConsumer[K, V] = {
+    usePermit.acquire()
+    this
+  }
+
+  private def tryAcquire(): Boolean = usePermit.tryAcquire()
 }
 
 private[kafka010]
@@ -161,15 +172,29 @@ object CachedKafkaConsumer extends Logging {
         override def removeEldestEntry(
           entry: ju.Map.Entry[CacheKey, CachedKafkaConsumer[_, _]]): Boolean = {
           if (this.size > maxCapacity) {
-            try {
-              entry.getValue.consumer.close()
-            } catch {
-              case x: KafkaException =>
-                logError("Error closing oldest Kafka consumer", x)
+            val consumer = entry.getValue
+            // try to close the consumer now or as soon as is free
+            if (consumer.tryAcquire()) {
+              closeConsumer(consumer)
+            } else {
+              val closingThread = new Thread(new Runnable {
+                override def run(): Unit = closeConsumer(consumer.acquireAndGet())
+              }, s"CachedKafkaConsumer-delayed-closing")
+              closingThread.setDaemon(true)
+              closingThread.start()
             }
             true
           } else {
             false
+          }
+        }
+
+        private def closeConsumer(consumer: CachedKafkaConsumer[_, _]): Unit = {
+          try {
+            consumer.reallyClose()
+          } catch {
+            case x: KafkaException =>
+              logError("Error closing oldest Kafka consumer", x)
           }
         }
       }
@@ -192,11 +217,11 @@ object CachedKafkaConsumer extends Logging {
         logInfo(s"Cache miss for $k")
         logDebug(cache.keySet.toString)
         val c = new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
-        cache.put(k, c)
+        cache.put(k, c.acquireAndGet())
         c
       } else {
         // any given topicpartition should have a consistent key and value type
-        v.asInstanceOf[CachedKafkaConsumer[K, V]]
+        v.acquireAndGet().asInstanceOf[CachedKafkaConsumer[K, V]]
       }
     }
 
@@ -209,7 +234,9 @@ object CachedKafkaConsumer extends Logging {
       topic: String,
       partition: Int,
       kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
-    new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
+    new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams) {
+      override def close(): Unit = super.reallyClose()
+    }
 
   /** remove consumer for given groupId, topic, and partition, if it exists */
   def remove(groupId: String, topic: String, partition: Int): Unit = {
@@ -219,7 +246,7 @@ object CachedKafkaConsumer extends Logging {
       cache.remove(k)
     }
     if (null != v) {
-      v.close()
+      v.reallyClose()
       logInfo(s"Removed $k from cache")
     }
   }

@@ -256,11 +256,11 @@ private class KafkaRDDIterator[K, V](
 
   var requestOffset = part.fromOffset
 
-  def closeIfNeeded(): Unit = {
-    if (!useConsumerCache && consumer != null) {
-      consumer.close()
+    def closeIfNeeded(): Unit = {
+      if (consumer != null) {
+        consumer.close()
+      }
     }
-  }
 
   override def hasNext(): Boolean = requestOffset < part.untilOffset
 
