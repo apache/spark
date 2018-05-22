@@ -629,7 +629,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
     Future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
-      SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+      SQLExecution.withExecutionId(sparkContext, executionId) {
         val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val rows: Array[InternalRow] = child.executeCollect()
