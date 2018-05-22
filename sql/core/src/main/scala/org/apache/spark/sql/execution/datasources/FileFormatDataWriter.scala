@@ -43,19 +43,15 @@ abstract class FileFormatDataWriter(
    * files written should be very small. This is just a safe guard to protect some really bad
    * settings, e.g. maxRecordsPerFile = 1.
    */
-  val MAX_FILE_COUNTER = 1000 * 1000
-  protected val updatedPartitions = mutable.Set[String]()
+  protected val MAX_FILE_COUNTER: Int = 1000 * 1000
+  protected val updatedPartitions: mutable.Set[String] = mutable.Set[String]()
   protected var currentWriter: OutputWriter = _
-  protected var fileCounter: Int = _
-  protected var recordsInFile: Long = _
+
   /** Trackers for computing various statistics on the data as it's being written out. */
-  val statsTrackers: Seq[WriteTaskStatsTracker] =
+  protected val statsTrackers: Seq[WriteTaskStatsTracker] =
     description.statsTrackers.map(_.newTaskInstance())
 
-  /** Writes a record */
-  def write(record: InternalRow): Unit
-
-  def releaseResources(): Unit = {
+  protected def releaseResources(): Unit = {
     if (currentWriter != null) {
       try {
         currentWriter.close()
@@ -64,6 +60,9 @@ abstract class FileFormatDataWriter(
       }
     }
   }
+
+  /** Writes a record */
+  def write(record: InternalRow): Unit
 
   /**
    * Returns the summary of relative information which
@@ -103,6 +102,8 @@ class SingleDirectoryDataWriter(
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol)
   extends FileFormatDataWriter(description, taskAttemptContext, committer) {
+  private var fileCounter: Int = _
+  private var recordsInFile: Long = _
   // Initialize currentWriter and statsTrackers
   newOutputWriter()
 
@@ -150,19 +151,21 @@ class DynamicPartitionDataWriter(
   extends FileFormatDataWriter(description, taskAttemptContext, committer) {
 
   /** Flag saying whether or not the data to be written out is partitioned. */
-  val isPartitioned = description.partitionColumns.nonEmpty
+  private val isPartitioned = description.partitionColumns.nonEmpty
 
   /** Flag saying whether or not the data to be written out is bucketed. */
-  val isBucketed = description.bucketIdExpression.isDefined
+  private val isBucketed = description.bucketIdExpression.isDefined
 
   assert(isPartitioned || isBucketed,
     s"""DynamicPartitionWriteTask should be used for writing out data that's either
          |partitioned or bucketed. In this case neither is true.
-         |WriteJobDescription: ${description}
+         |WriteJobDescription: $description
        """.stripMargin)
 
-  var currentPartionValues: Option[UnsafeRow] = None
-  var currentBucketId: Option[Int] = None
+  private var fileCounter: Int = _
+  private var recordsInFile: Long = _
+  private var currentPartionValues: Option[UnsafeRow] = None
+  private var currentBucketId: Option[Int] = None
 
   /** Extracts the partition values out of an input row. */
   private lazy val getPartitionValues: InternalRow => UnsafeRow = {

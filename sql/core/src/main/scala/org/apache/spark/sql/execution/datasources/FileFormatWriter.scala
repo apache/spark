@@ -223,7 +223,7 @@ object FileFormatWriter extends Logging {
 
     committer.setupTask(taskAttemptContext)
 
-    val writeTask =
+    val dataWriter =
       if (sparkPartitionId != 0 && !iterator.hasNext) {
         // In case of empty job, leave first partition to save meta for file format like parquet.
         new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
@@ -236,13 +236,13 @@ object FileFormatWriter extends Logging {
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
-        for (row <- iterator) {
-          writeTask.write(row)
+        while (iterator.hasNext) {
+          dataWriter.write(iterator.next())
         }
-        writeTask.commit()
+        dataWriter.commit()
       })(catchBlock = {
         // If there is an error, abort the task
-        writeTask.abort()
+        dataWriter.abort()
         logError(s"Job $jobId aborted.")
       })
     } catch {
