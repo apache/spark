@@ -163,12 +163,6 @@ class MergerTests(unittest.TestCase):
 
     def test_stopiteration_is_raised(self):
 
-        def validate_exception(exc):
-            if isinstance(exc, RuntimeError):
-                self.assertEquals('StopIteration in client code', exc.args[0])
-            else:
-                self.assertIn('StopIteration in client code', exc.java_exception.toString())
-
         def stopit(*args, **kwargs):
             raise StopIteration()
 
@@ -187,19 +181,16 @@ class MergerTests(unittest.TestCase):
         m = ExternalMerger(Aggregator(stopit, legit_merge_value, legit_merge_combiners), 20)
         with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
             m.mergeValues(data)
-        validate_exception(cm.exception)
 
         # wrong merge value
         m = ExternalMerger(Aggregator(legit_create_combiner, stopit, legit_merge_combiners), 20)
         with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
             m.mergeValues(data)
-        validate_exception(cm.exception)
 
         # wrong merge combiners
         m = ExternalMerger(Aggregator(legit_create_combiner, legit_merge_value, stopit), 20)
         with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
             m.mergeCombiners(map(lambda x_y1: (x_y1[0], [x_y1[1]]), data))
-        validate_exception(cm.exception)
 
 
 class SorterTests(unittest.TestCase):
@@ -1300,12 +1291,6 @@ class RDDTests(ReusedPySparkTestCase):
         def do_test(action, *args, **kwargs):
             with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
                 action(*args, **kwargs)
-            if isinstance(cm.exception, RuntimeError):
-                self.assertEquals('StopIteration in client code',
-                                  cm.exception.args[0])
-            else:
-                self.assertIn('StopIteration in client code',
-                              cm.exception.java_exception.toString())
 
         do_test(a_rdd().map(stopit).collect)
         do_test(a_rdd().filter(stopit).collect)
