@@ -27,6 +27,10 @@ import org.apache.spark.util.NextIterator
 
 /**
  * Messages for the UnsafeRowReceiver endpoint. Either an incoming row or an epoch marker.
+ *
+ * Each message comes tagged with writerId, identifying which writer the message is coming
+ * from. The receiver will only begin the next epoch once all writers have sent an epoch
+ * marker ending the current epoch.
  */
 private[shuffle] sealed trait UnsafeRowReceiverMessage extends Serializable {
   def writerId: Int
@@ -77,8 +81,16 @@ private[shuffle] class UnsafeRowReceiver(
         override def call(): UnsafeRowReceiverMessage = queues(writerId).take()
       }
 
+      // Initialize by submitting tasks to read the first row from each writer.
       (0 until numShuffleWriters).foreach(writerId => completion.submit(completionTask(writerId)))
 
+      /**
+       * In each call to getNext(), we pull the next row available in the completion queue, and then
+       * submit another task to read the next row from the writer which returned it.
+       *
+       * When a writer sends an epoch marker, we note that it's finished and don't submit another
+       * task for it in this epoch. The iterator is over once all writers have sent an epoch marker.
+       */
       override def getNext(): UnsafeRow = {
         completion.take().get() match {
           case ReceiverRow(writerId, r) =>
