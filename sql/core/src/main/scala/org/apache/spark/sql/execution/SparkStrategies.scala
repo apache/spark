@@ -502,39 +502,37 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     )
 
     lazy val operatorToConstructorParameters: Map[Class[_ <: LogicalPlan], Seq[(String, Type)]] =
-      passThroughOperators.map {
-        case (srcOpCls, _) =>
-          (srcOpCls, ScalaReflection.getConstructorParameters(srcOpCls))
+      passThroughOperators.map { case (srcOpCls, _) =>
+        (srcOpCls, ScalaReflection.getConstructorParameters(srcOpCls))
       }.toMap
 
     lazy val operatorToTargetConstructor: Map[Class[_ <: LogicalPlan], Constructor[_]] =
-      passThroughOperators.map {
-        case (srcOpCls, tgtOpCls) =>
-          val logicalPlanCls = classOf[LogicalPlan]
-          val m = runtimeMirror(logicalPlanCls.getClassLoader)
-          val classSymbol = m.staticClass(logicalPlanCls.getName)
-          val logicalPlanType = classSymbol.selfType
+      passThroughOperators.map { case (srcOpCls, tgtOpCls) =>
+        val logicalPlanCls = classOf[LogicalPlan]
+        val m = runtimeMirror(logicalPlanCls.getClassLoader)
+        val classSymbol = m.staticClass(logicalPlanCls.getName)
+        val logicalPlanType = classSymbol.selfType
 
-          val paramTypes = operatorToConstructorParameters(srcOpCls).map(_._2)
-          val convertedParamTypes = ScalaReflection.cleanUpReflectionObjects {
-            paramTypes.map {
-              case ty if ty <:< logicalPlanType =>
-                m.staticClass(classOf[SparkPlan].getName).selfType
+        val paramTypes = operatorToConstructorParameters(srcOpCls).map(_._2)
+        val convertedParamTypes = ScalaReflection.cleanUpReflectionObjects {
+          paramTypes.map {
+            case ty if ty <:< logicalPlanType =>
+              m.staticClass(classOf[SparkPlan].getName).selfType
 
-              case ty => ty
-            }
+            case ty => ty
           }
+        }
 
-          val convertedParamClasses = convertedParamTypes.map(
-            ScalaReflection.getClassFromTypeHandleArray)
-          val constructorOption = ScalaReflection.findConstructor(tgtOpCls, convertedParamClasses)
+        val convertedParamClasses = convertedParamTypes.map(
+          ScalaReflection.getClassFromTypeHandleArray)
+        val constructorOption = ScalaReflection.findConstructor(tgtOpCls, convertedParamClasses)
 
-          constructorOption match {
-            case Some(const: Constructor[_]) => (srcOpCls, const)
-            case _ => throw new IllegalStateException(
-              s"Matching constructor ${srcOpCls.getName} must be presented in ${tgtOpCls.getName}!")
-          }
-        }.toMap
+        constructorOption match {
+          case Some(const: Constructor[_]) => (srcOpCls, const)
+          case _ => throw new IllegalStateException(
+            s"Matching constructor ${srcOpCls.getName} must be presented in ${tgtOpCls.getName}!")
+        }
+      }.toMap
 
     def createPassThroughOutputPlan(src: LogicalPlan): SparkPlan = {
       val srcClass = src.getClass
