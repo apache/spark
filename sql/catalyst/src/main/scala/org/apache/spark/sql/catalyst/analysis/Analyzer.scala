@@ -1891,8 +1891,6 @@ class Analyzer(
           case window: WindowExpression => window.windowSpec
         }.distinct
 
-        val windowFunctionType = WindowFunctionType.functionType(expr)
-
         // We do a final check and see if we only have a single Window Spec defined in an
         // expressions.
         if (distinctWindowSpec.isEmpty) {
@@ -1904,7 +1902,7 @@ class Analyzer(
             s"Please file a bug report with this error message, stack trace, and the query.")
         } else {
           val spec = distinctWindowSpec.head
-          (spec.partitionSpec, spec.orderSpec, windowFunctionType)
+          (spec.partitionSpec, spec.orderSpec, WindowFunctionType.functionType(expr))
         }
       }.toSeq
 
