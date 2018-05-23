@@ -34,10 +34,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class UnivocityParser(
-    dataSchema: StructType,
+    schema: StructType,
     requiredSchema: StructType,
     val options: CSVOptions) extends Logging {
-  require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
+  require(requiredSchema.toSet.subsetOf(schema.toSet),
     "requiredSchema should be the subset of schema.")
 
   def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
@@ -45,17 +45,9 @@ class UnivocityParser(
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
-  private val tokenizer = {
-    val parserSetting = options.asParserSettings
-    if (options.columnPruning && requiredSchema.length < dataSchema.length) {
-      val tokenIndexArr = requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f)))
-      parserSetting.selectIndexes(tokenIndexArr: _*)
-    }
-    new CsvParser(parserSetting)
-  }
-  private val schema = if (options.columnPruning) requiredSchema else dataSchema
+  private val tokenizer = new CsvParser(options.asParserSettings)
 
-  private val row = new GenericInternalRow(schema.length)
+  private val row = new GenericInternalRow(requiredSchema.length)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -81,8 +73,11 @@ class UnivocityParser(
   // Each input token is placed in each output row's position by mapping these. In this case,
   //
   //   output row - ["A", 2]
-  private val valueConverters: Array[ValueConverter] = {
+  private val valueConverters: Array[ValueConverter] =
     schema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+
+  private val tokenIndexArr: Array[Int] = {
+    requiredSchema.map(f => schema.indexOf(f)).toArray
   }
 
   /**
@@ -215,8 +210,9 @@ class UnivocityParser(
     } else {
       try {
         var i = 0
-        while (i < schema.length) {
-          row(i) = valueConverters(i).apply(tokens(i))
+        while (i < requiredSchema.length) {
+          val from = tokenIndexArr(i)
+          row(i) = valueConverters(from).apply(tokens(from))
           i += 1
         }
         row
