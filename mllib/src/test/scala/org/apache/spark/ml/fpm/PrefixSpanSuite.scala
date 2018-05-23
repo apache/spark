@@ -33,7 +33,7 @@ class PrefixSpanSuite extends MLTest {
       .setMinSupport(1.0)
       .setMaxPatternLength(2)
       .setMaxLocalProjDBSize(32000000)
-      .findFrequentSequentialPatterns(smallDataset, "sequence")
+      .findFrequentSequentialPatterns(smallDataset)
       .as[(Seq[Seq[Int]], Long)].collect()
     val expected = Array(
       (Seq(Seq(1)), 1L),
@@ -97,7 +97,7 @@ class PrefixSpanSuite extends MLTest {
       .setMinSupport(0.5)
       .setMaxPatternLength(5)
       .setMaxLocalProjDBSize(32000000)
-      .findFrequentSequentialPatterns(df, "sequence")
+      .findFrequentSequentialPatterns(df)
       .as[(Seq[Seq[Int]], Long)].collect()
 
     compareResults[Int](smallTestDataExpectedResult, result)
@@ -109,7 +109,7 @@ class PrefixSpanSuite extends MLTest {
       .setMinSupport(0.5)
       .setMaxPatternLength(5)
       .setMaxLocalProjDBSize(32000000)
-      .findFrequentSequentialPatterns(df, "sequence")
+      .findFrequentSequentialPatterns(df)
       .as[(Seq[Seq[Int]], Long)].collect()
 
     compareResults[Int](smallTestDataExpectedResult, result)
@@ -124,7 +124,7 @@ class PrefixSpanSuite extends MLTest {
       .setMinSupport(0.5)
       .setMaxPatternLength(5)
       .setMaxLocalProjDBSize(32000000)
-      .findFrequentSequentialPatterns(df, "sequence")
+      .findFrequentSequentialPatterns(df)
       .as[(Seq[Seq[String]], Long)].collect()
 
     val expected = smallTestDataExpectedResult.map { case (seq, freq) =>
