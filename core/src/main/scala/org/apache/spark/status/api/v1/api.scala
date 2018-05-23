@@ -25,7 +25,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.scheduler.MemoryTypes
+import org.apache.spark.metrics.MetricGetter
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -110,7 +110,7 @@ class MemoryMetrics private[spark](
 
 class PeakMemoryMetrics private[spark]() {
   // TODO special json-ification
-  val metrics = new Array[Long](MemoryTypes.values().length)
+  val metrics = new Array[Long](MetricGetter.values.length)
 }
 
 class JobData private[spark](

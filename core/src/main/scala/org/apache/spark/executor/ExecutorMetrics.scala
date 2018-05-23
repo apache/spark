@@ -18,7 +18,7 @@
 package org.apache.spark.executor
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.scheduler.MemoryTypes
+import org.apache.spark.metrics.MetricGetter
 
 /**
  * :: DeveloperApi ::
@@ -32,5 +32,5 @@ import org.apache.spark.scheduler.MemoryTypes
  */
 @DeveloperApi
 class ExecutorMetrics private[spark] (val timestamp: Long) extends Serializable {
-  val metrics = new Array[Long](MemoryTypes.values().length)
+  val metrics = new Array[Long](MetricGetter.values.length)
 }

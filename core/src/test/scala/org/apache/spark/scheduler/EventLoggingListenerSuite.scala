@@ -34,7 +34,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.{MetricGetter, MetricsSystem}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -412,16 +412,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     (executorMetrics1, executorMetrics2) match {
       case (Some(e1), Some(e2)) =>
         assert(e1.timestamp === e2.timestamp)
-        assert(e1.jvmUsedHeapMemory === e2.jvmUsedHeapMemory)
-        assert(e1.jvmUsedNonHeapMemory === e2.jvmUsedNonHeapMemory)
-        assert(e1.onHeapExecutionMemory === e2.onHeapExecutionMemory)
-        assert(e1.offHeapExecutionMemory === e2.offHeapExecutionMemory)
-        assert(e1.onHeapStorageMemory === e2.onHeapStorageMemory)
-        assert(e1.offHeapStorageMemory === e2.offHeapStorageMemory)
-        assert(e1.onHeapUnifiedMemory === e2.onHeapUnifiedMemory)
-        assert(e1.offHeapUnifiedMemory === e2.offHeapUnifiedMemory)
-        assert(e1.directMemory === e2.directMemory)
-        assert(e1.mappedMemory === e2.mappedMemory)
+        (0 until MetricGetter.values.length).foreach { idx =>
+          assert(e1.metrics(idx) === e2.metrics(idx))
+        }
       case (None, None) =>
       case _ =>
         assert(false)

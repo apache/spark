@@ -30,6 +30,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.metrics.MetricGetter
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -686,12 +687,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
     (metrics1, metrics2) match {
       case (Some(m1), Some(m2)) =>
         assert(m1.timestamp === m2.timestamp)
-        assert(m1.jvmUsedHeapMemory === m2.jvmUsedHeapMemory)
-        assert(m1.jvmUsedNonHeapMemory === m2.jvmUsedNonHeapMemory)
-        assert(m1.onHeapExecutionMemory === m2.onHeapExecutionMemory)
-        assert(m1.offHeapExecutionMemory === m2.offHeapExecutionMemory)
-        assert(m1.onHeapStorageMemory === m2.onHeapStorageMemory)
-        assert(m1.offHeapStorageMemory === m2.offHeapStorageMemory)
+        (0 until MetricGetter.values.length).foreach { idx =>
+          assert(m1.metrics(idx) === m2.metrics(idx))
+        }
       case (None, None) =>
       case _ =>
         assert(false)
