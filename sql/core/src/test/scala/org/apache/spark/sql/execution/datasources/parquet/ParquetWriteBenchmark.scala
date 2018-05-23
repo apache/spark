@@ -71,7 +71,7 @@ object ParquetWriteBenchmark {
       val benchmark = new Benchmark(name, values)
       benchmark.addCase("Parquet Writer") { _ =>
         withTempPath { dir =>
-          spark.sql("select cast(id as INT) as id from t1").write.parquet(dir.getCanonicalPath)
+          spark.sql(sql).write.parquet(dir.getCanonicalPath)
         }
       }
       benchmark.run()
@@ -79,24 +79,31 @@ object ParquetWriteBenchmark {
   }
 
   def intWriteBenchmark(values: Int): Unit = {
+    /*
+    Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+
+    Output Single Int Column:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Parquet Writer                                2536 / 2610          6.2         161.3       1.0X
+    */
     runSQL("Output Single Int Column", "select cast(id as INT) as id from t1", values)
   }
 
-  def intStringScanBenchmark(values: Int): Unit = {
+  def intStringWriteBenchmark(values: Int): Unit = {
+    /*
+    Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+
+    Output Int and String Column:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Parquet Writer                                4644 / 4673          2.3         442.9       1.0X
+    */
     runSQL(name = "Output Int and String Column",
       sql = "select cast(id as INT) as c1, cast(id as STRING) as c2 from t1",
       values = values)
   }
 
-  def stringWithNullsScanBenchmark(values: Int, fractionOfNulls: Double): Unit = {
-    runSQL(name = "String with Nulls",
-      sql = s"select IF(rand(1) < $fractionOfNulls, NULL, cast(id as STRING)) as c1, " +
-        s"IF(rand(2) < $fractionOfNulls, NULL, cast(id as STRING)) as c2 from t1",
-      values = values)
-  }
-
-  def partitionTableScanBenchmark(values: Int): Unit = {
-    withTempTable("t1", "tempTable") {
+  def partitionTableWriteBenchmark(values: Int): Unit = {
+    withTempTable("t1") {
       spark.range(values).createOrReplaceTempView("t1")
       val benchmark = new Benchmark("Partitioned Table", values)
       benchmark.addCase("Parquet Writer") { _ =>
@@ -119,10 +126,7 @@ object ParquetWriteBenchmark {
 
   def main(args: Array[String]): Unit = {
     intWriteBenchmark(1024 * 1024 * 15)
-    intStringScanBenchmark(1024 * 1024 * 10)
-    partitionTableScanBenchmark(1024 * 1024 * 15)
-    for (fractionOfNulls <- List(0.0, 0.50, 0.95)) {
-      stringWithNullsScanBenchmark(1024 * 1024 * 10, fractionOfNulls)
-    }
+    intStringWriteBenchmark(1024 * 1024 * 10)
+    partitionTableWriteBenchmark(1024 * 1024 * 15)
   }
 }
