@@ -47,6 +47,7 @@ object DataSourceReadBenchmark {
 
   // Set default configs. Individual cases will change them if necessary.
   spark.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
+  spark.conf.set(SQLConf.ORC_COPY_BATCH_TO_SPARK.key, "false")
   spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
   spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
 
