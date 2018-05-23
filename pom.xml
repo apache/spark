@@ -145,8 +145,8 @@
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.2.5</codahale.metrics.version>
-    <dropwizard.version>0.9.2</dropwizard.version>
-    <spark-influx-sink.version>0.3.12</spark-influx-sink.version>
+    <dropwizard.version>1.0.0</dropwizard.version>
+    <spark-influx-sink.version>0.4.0</spark-influx-sink.version>
     <avro.version>1.8.1</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.9.4</jets3t.version>
@@ -168,8 +168,8 @@
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.6.7</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.6.7.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.9.5</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.9.5</fasterxml.jackson.databind.version>
     <snappy.version>1.1.7.1</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
@@ -786,6 +786,11 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
           </exclusion>
+          <!-- Old lz4 dependency with different coordinates -->
+          <exclusion>
+            <groupId>net.jpountz.lz4</groupId>
+            <artifactId>lz4</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -848,7 +853,7 @@
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.datatype</groupId>
-        <artifactId>jackson-datatype-jdk7</artifactId>
+        <artifactId>jackson-datatype-jdk8</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
