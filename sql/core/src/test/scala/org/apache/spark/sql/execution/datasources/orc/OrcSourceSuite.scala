@@ -24,11 +24,9 @@ import java.util.Locale
 import org.apache.orc.OrcConf.COMPRESS
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.execution.datasources.orc.TestingUDT.{NullData, NullUDT}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
@@ -261,20 +259,5 @@ class OrcSourceSuite extends OrcSuite with SharedSQLContext {
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
-  }
-}
-
-object TestingUDT {
-
-  @SQLUserDefinedType(udt = classOf[NullUDT])
-  private[sql] class NullData extends Serializable
-
-  private[sql] class NullUDT extends UserDefinedType[NullData] {
-
-    override def sqlType: DataType = NullType
-    override def serialize(obj: NullData): Any = throw new NotImplementedError("Not implemented")
-    override def deserialize(datum: Any): NullData =
-      throw new NotImplementedError("Not implemented")
-    override def userClass: Class[NullData] = classOf[NullData]
   }
 }

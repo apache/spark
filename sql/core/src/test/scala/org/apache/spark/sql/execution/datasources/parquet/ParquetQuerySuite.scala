@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
-import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, NullData, NullUDT, SingleElement}
+import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -966,17 +966,5 @@ object TestingUDT {
           NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
       }
     }
-  }
-
-  @SQLUserDefinedType(udt = classOf[NullUDT])
-  private[sql] class NullData extends Serializable
-
-  private[sql] class NullUDT extends UserDefinedType[NullData] {
-
-    override def sqlType: DataType = NullType
-    override def serialize(obj: NullData): Any = throw new NotImplementedError("Not implemented")
-    override def deserialize(datum: Any): NullData =
-      throw new NotImplementedError("Not implemented")
-    override def userClass: Class[NullData] = classOf[NullData]
   }
 }
