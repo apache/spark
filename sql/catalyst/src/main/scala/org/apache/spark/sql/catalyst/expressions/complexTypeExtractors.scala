@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -301,7 +301,7 @@ case class GetMapValue(child: Expression, key: Expression)
     var i = 0
     var found = false
     while (i < length && !found) {
-      if (keys.get(i, keyType) == ordinal) {
+      if (ordering.equiv(keys.get(i, keyType), ordinal)) {
         found = true
       } else {
         i += 1
@@ -351,5 +351,16 @@ case class GetMapValue(child: Expression, key: Expression)
         }
       """
     })
+  }
+
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(keyType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case f: TypeCheckResult.TypeCheckFailure => f
+      case TypeCheckResult.TypeCheckSuccess =>
+        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
+    }
   }
 }
