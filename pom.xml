@@ -748,6 +748,11 @@
         <artifactId>jline</artifactId>
         <version>2.12.1</version>
       </dependency>
+	  <dependency>
+        <groupId>io.reactivex.rxjava2</groupId>
+        <artifactId>rxjava</artifactId>
+        <version>2.1.13</version>
+      </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>

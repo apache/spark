@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsWatchEventSource(
-    eventHandler: ExecutorPodsEventHandler,
+    podsEventQueue: ExecutorPodsEventQueue,
     kubernetesClient: KubernetesClient) extends Logging {
 
   private var watchConnection: Closeable = null
@@ -51,7 +51,7 @@ private[spark] class ExecutorPodsWatchEventSource(
 
   private class ExecutorPodsWatcher extends Watcher[Pod] {
     override def eventReceived(action: Action, pod: Pod): Unit = {
-      eventHandler.sendUpdatedPodMetadata(pod)
+      podsEventQueue.pushPodUpdate(pod)
     }
 
     override def onClose(e: KubernetesClientException): Unit = {

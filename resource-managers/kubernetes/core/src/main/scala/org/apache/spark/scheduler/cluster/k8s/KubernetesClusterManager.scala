@@ -61,27 +61,33 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     val eventsProcessorExecutor = ThreadUtils
       .newDaemonSingleThreadScheduledExecutor("kubernetes-executor-pods-event-handler")
-    val executorPodsEventHandler = new ExecutorPodsEventHandler(
+    val eventQueue = new ExecutorPodsEventQueue(eventsProcessorExecutor)
+    val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleEventHandler(
       sc.conf,
       new KubernetesExecutorBuilder(),
       kubernetesClient,
-      eventsProcessorExecutor)
+      eventQueue)
+
+    val executorPodsAllocator = new ExecutorPodsAllocator(
+      sc.conf, new KubernetesExecutorBuilder(), kubernetesClient, eventQueue)
 
     val podsWatchEventSource = new ExecutorPodsWatchEventSource(
-      executorPodsEventHandler,
+      eventQueue,
       kubernetesClient)
 
     val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
       "kubernetes-executor-pod-polling-sync")
     val podsPollingEventSource = new ExecutorPodsPollingEventSource(
-      kubernetesClient, executorPodsEventHandler, eventsPollingExecutor)
+      kubernetesClient, eventQueue, eventsPollingExecutor)
 
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
       sc.env.rpcEnv,
       kubernetesClient,
       requestExecutorsService,
-      executorPodsEventHandler,
+      eventQueue,
+      executorPodsAllocator,
+      executorPodsLifecycleEventHandler,
       podsWatchEventSource,
       podsPollingEventSource)
   }

@@ -32,7 +32,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     rpcEnv: RpcEnv,
     kubernetesClient: KubernetesClient,
     requestExecutorsService: ExecutorService,
-    eventHandler: ExecutorPodsEventHandler,
+    eventQueue: ExecutorPodsEventQueue,
+    podAllocator: ExecutorPodsAllocator,
+    lifecycleEventHandler: ExecutorPodsLifecycleEventHandler,
     watchEvents: ExecutorPodsWatchEventSource,
     pollEvents: ExecutorPodsPollingEventSource)
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
@@ -57,19 +59,19 @@ private[spark] class KubernetesClusterSchedulerBackend(
   override def start(): Unit = {
     super.start()
     if (!Utils.isDynamicAllocationEnabled(conf)) {
-      eventHandler.setTotalExpectedExecutors(initialExecutors)
+      podAllocator.setTotalExpectedExecutors(initialExecutors)
     }
-    eventHandler.start(applicationId(), this)
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
+    lifecycleEventHandler.start(this)
+    podAllocator.start(applicationId())
+    eventQueue.startProcessingEvents()
   }
 
   override def stop(): Unit = {
     super.stop()
 
-    Utils.tryLogNonFatalError {
-      eventHandler.stop()
-    }
+    eventQueue.stopProcessingEvents()
 
     Utils.tryLogNonFatalError {
       watchEvents.stop()
@@ -92,7 +94,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future[Boolean] {
-    eventHandler.setTotalExpectedExecutors(requestedTotal)
+    lifecycleEventHandler.setTotalExpectedExecutors(requestedTotal)
     true
   }
 

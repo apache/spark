@@ -25,10 +25,9 @@ import org.apache.spark.deploy.k8s.Constants._
 
 private[spark] class ExecutorPodsPollingEventSource(
     kubernetesClient: KubernetesClient,
-    eventHandler: ExecutorPodsEventHandler,
+    eventQueue: ExecutorPodsEventQueue,
     pollingExecutor: ScheduledExecutorService) {
-
-  private var pollingFuture: Future[_] = null
+  private var pollingFuture: Future[_] = _
 
   def start(applicationId: String): Unit = {
     require(pollingFuture == null, "Cannot start polling more than once.")
@@ -45,13 +44,14 @@ private[spark] class ExecutorPodsPollingEventSource(
 
   private class PollRunnable(applicationId: String) extends Runnable {
     override def run(): Unit = {
-      eventHandler.sendUpdatedPodMetadata(kubernetesClient
+      kubernetesClient
         .pods()
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .list()
         .getItems
-        .asScala)
+        .asScala
+        .foreach(eventQueue.pushPodUpdate)
     }
   }
 
