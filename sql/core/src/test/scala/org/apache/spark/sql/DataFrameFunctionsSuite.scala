@@ -308,7 +308,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null, null, null)))
     checkAnswer(sql("select mask(null)"), Row(null))
     checkAnswer(sql("select mask('AAaa11', null, null, null)"), Row("XXxxnn"))
-    checkAnswer(df.selectExpr("mask(a, a)"), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
+    intercept[AnalysisException] {
+      checkAnswer(df.selectExpr("mask(a, a)"), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
+    }
 
     checkAnswer(
       df.selectExpr(
@@ -323,7 +325,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null, null, null, null)))
     checkAnswer(sql("select mask_first_n(null)"), Row(null))
     checkAnswer(sql("select mask_first_n('A1aA1a', null, null, null, null)"), Row("XnxX1a"))
-    checkAnswer(spark.range(1).selectExpr("mask_first_n('A1aA1a', id)"), Row("XnxX1a"))
+    intercept[AnalysisException] {
+      checkAnswer(spark.range(1).selectExpr("mask_first_n('A1aA1a', id)"), Row("XnxX1a"))
+    }
 
     checkAnswer(
       df.selectExpr(
@@ -338,7 +342,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null, null, null, null)))
     checkAnswer(sql("select mask_last_n(null)"), Row(null))
     checkAnswer(sql("select mask_last_n('A1aA1a', null, null, null, null)"), Row("A1xXnx"))
-    checkAnswer(spark.range(1).selectExpr("mask_last_n('A1aA1a', id)"), Row("A1xXnx"))
+    intercept[AnalysisException] {
+      checkAnswer(spark.range(1).selectExpr("mask_last_n('A1aA1a', id)"), Row("A1xXnx"))
+    }
 
     checkAnswer(
       df.selectExpr(
@@ -353,7 +359,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null, null, null, null)))
     checkAnswer(sql("select mask_show_first_n(null)"), Row(null))
     checkAnswer(sql("select mask_show_first_n('A1aA1a', null, null, null, null)"), Row("A1aAnx"))
-    checkAnswer(spark.range(1).selectExpr("mask_show_first_n('A1aA1a', id)"), Row("A1aAnx"))
+    intercept[AnalysisException] {
+      checkAnswer(spark.range(1).selectExpr("mask_show_first_n('A1aA1a', id)"), Row("A1aAnx"))
+    }
 
     checkAnswer(
       df.selectExpr(
@@ -368,7 +376,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null, null, null, null)))
     checkAnswer(sql("select mask_show_last_n(null)"), Row(null))
     checkAnswer(sql("select mask_show_last_n('A1aA1a', null, null, null, null)"), Row("XnaA1a"))
-    checkAnswer(spark.range(1).selectExpr("mask_show_last_n('A1aA1a', id)"), Row("XnaA1a"))
+    intercept[AnalysisException] {
+      checkAnswer(spark.range(1).selectExpr("mask_show_last_n('A1aA1a', id)"), Row("XnaA1a"))
+    }
 
     checkAnswer(sql("select mask_hash(null)"), Row(null))
   }

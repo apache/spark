@@ -132,14 +132,14 @@ object MaskLike {
       if (i == null) defaultCharCount else i.asInstanceOf[Int]
     case Literal(_, dt) => throw new AnalysisException("Expected literal expression of type " +
       s"${IntegerType.simpleString}, but got literal of ${dt.simpleString}")
-    case _ => defaultCharCount
+    case other => throw new AnalysisException(s"Expected literal expression, but got ${other.sql}")
   }
 
   def extractReplacement(e: Expression): String = e match {
     case Literal(s, StringType | NullType) => if (s == null) null else s.toString
     case Literal(_, dt) => throw new AnalysisException("Expected literal expression of type " +
       s"${StringType.simpleString}, but got literal of ${dt.simpleString}")
-    case _ => null
+    case other => throw new AnalysisException(s"Expected literal expression, but got ${other.sql}")
   }
 }
 
