@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.metrics.MetricGetter
 import org.apache.spark.status.api.v1.PeakMemoryMetrics
 
 /**
@@ -25,7 +26,7 @@ import org.apache.spark.status.api.v1.PeakMemoryMetrics
  * values have been recorded yet.
  */
 private[spark] class PeakExecutorMetrics {
-  val metrics = new Array[Long](MemoryTypes.values().length)
+  val metrics = new Array[Long](MetricGetter.values.length)
   metrics(0) = -1
 
   /**
@@ -38,7 +39,7 @@ private[spark] class PeakExecutorMetrics {
   def compareAndUpdate(executorMetrics: ExecutorMetrics): Boolean = {
     var updated: Boolean = false
 
-    (0 until MemoryTypes.values().length).foreach { metricIdx =>
+    (0 until MetricGetter.values.length).foreach { metricIdx =>
       val newVal = executorMetrics.metrics(metricIdx)
       if ( newVal > metrics(metricIdx)) {
         updated = true

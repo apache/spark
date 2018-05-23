@@ -23,6 +23,7 @@ import org.apache.spark.memory.MemoryManager
 
 sealed trait MetricGetter {
   def getMetricValue(memoryManager: MemoryManager): Long
+  val name = getClass().getName().stripSuffix("$")
 }
 
 abstract class MemoryManagerMetricGetter(f: MemoryManager => Long) extends MetricGetter {
@@ -32,9 +33,8 @@ abstract class MemoryManagerMetricGetter(f: MemoryManager => Long) extends Metri
 }
 
 abstract class MBeanMetricGetter(mBeanName: String) extends MetricGetter {
-  private val name = new ObjectName(mBeanName)
   val bean = ManagementFactory.newPlatformMXBeanProxy(ManagementFactory.getPlatformMBeanServer,
-    name.toString, classOf[BufferPoolMXBean])
+    new ObjectName(mBeanName).toString, classOf[BufferPoolMXBean])
 
   override def getMetricValue(memoryManager: MemoryManager): Long = {
     bean.getMemoryUsed
