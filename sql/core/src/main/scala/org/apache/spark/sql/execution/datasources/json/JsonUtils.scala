@@ -21,7 +21,6 @@ import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.json.JSONOptions
-import org.apache.spark.sql.types._
 
 object JsonUtils {
   /**
@@ -48,34 +47,5 @@ object JsonUtils {
     } else {
       json.sample(withReplacement = false, options.samplingRatio, 1)
     }
-  }
-
-  /**
-   * Verify if the schema is supported in JSON datasource.
-   */
-  def verifySchema(schema: StructType): Unit = {
-    def verifyType(dataType: DataType): Unit = dataType match {
-      case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
-           StringType | BinaryType | DateType | TimestampType | _: DecimalType =>
-
-      case st: StructType => st.foreach { f => verifyType(f.dataType) }
-
-      case ArrayType(elementType, _) => verifyType(elementType)
-
-      case MapType(keyType, valueType, _) =>
-        verifyType(keyType)
-        verifyType(valueType)
-
-      case udt: UserDefinedType[_] => verifyType(udt.sqlType)
-
-      // For backward-compatibility
-      case NullType =>
-
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"JSON data source does not support ${dataType.simpleString} data type.")
-    }
-
-    schema.foreach(field => verifyType(field.dataType))
   }
 }

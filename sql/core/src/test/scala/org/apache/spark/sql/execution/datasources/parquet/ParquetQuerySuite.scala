@@ -891,51 +891,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
-
-  test("SPARK-24204 error handling for unsupported data types") {
-    withTempDir { dir =>
-      val parquetDir = new File(dir, "parquet").getCanonicalPath
-
-      // write path
-      var msg = intercept[AnalysisException] {
-        sql("select interval 1 days").write.mode("overwrite").parquet(parquetDir)
-      }.getMessage
-      assert(msg.contains("Cannot save interval data type into external storage."))
-
-      msg = intercept[UnsupportedOperationException] {
-        sql("select null").write.mode("overwrite").parquet(parquetDir)
-      }.getMessage
-      assert(msg.contains("Parquet data source does not support null data type."))
-
-      msg = intercept[UnsupportedOperationException] {
-        spark.udf.register("testType", () => new NullData())
-        sql("select testType()").write.mode("overwrite").parquet(parquetDir)
-      }.getMessage
-      assert(msg.contains("Parquet data source does not support null data type."))
-
-      // read path
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
-        spark.range(1).write.mode("overwrite").parquet(parquetDir)
-        spark.read.schema(schema).parquet(parquetDir).collect()
-      }.getMessage
-      assert(msg.contains("Parquet data source does not support calendarinterval data type."))
-
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", NullType, true) :: Nil)
-        spark.range(1).write.mode("overwrite").parquet(parquetDir)
-        spark.read.schema(schema).parquet(parquetDir).collect()
-      }.getMessage
-      assert(msg.contains("Parquet data source does not support null data type."))
-
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", new NullUDT(), true) :: Nil)
-        spark.range(1).write.mode("overwrite").parquet(parquetDir)
-        spark.read.schema(schema).parquet(parquetDir).collect()
-      }.getMessage
-      assert(msg.contains("Parquet data source does not support null data type."))
-    }
-  }
 }
 
 object TestingUDT {

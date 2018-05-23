@@ -178,51 +178,6 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       checkAnswer(spark.read.orc(path.getCanonicalPath), Row(ts))
     }
   }
-
-  test("SPARK-24204 error handling for unsupported data types") {
-    withTempDir { dir =>
-      val orcDir = new File(dir, "orc").getCanonicalPath
-
-      // write path
-      var msg = intercept[AnalysisException] {
-        sql("select interval 1 days").write.mode("overwrite").orc(orcDir)
-      }.getMessage
-      assert(msg.contains("Cannot save interval data type into external storage."))
-
-      msg = intercept[UnsupportedOperationException] {
-        sql("select null").write.mode("overwrite").orc(orcDir)
-      }.getMessage
-      assert(msg.contains("ORC data source does not support null data type."))
-
-      msg = intercept[UnsupportedOperationException] {
-        spark.udf.register("testType", () => new NullData())
-        sql("select testType()").write.mode("overwrite").orc(orcDir)
-      }.getMessage
-      assert(msg.contains("ORC data source does not support null data type."))
-
-      // read path
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
-        spark.range(1).write.mode("overwrite").orc(orcDir)
-        spark.read.schema(schema).orc(orcDir).collect()
-      }.getMessage
-      assert(msg.contains("ORC data source does not support calendarinterval data type."))
-
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", NullType, true) :: Nil)
-        spark.range(1).write.mode("overwrite").orc(orcDir)
-        spark.read.schema(schema).orc(orcDir).collect()
-      }.getMessage
-      assert(msg.contains("ORC data source does not support null data type."))
-
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", new NullUDT(), true) :: Nil)
-        spark.range(1).write.mode("overwrite").orc(orcDir)
-        spark.read.schema(schema).orc(orcDir).collect()
-      }.getMessage
-      assert(msg.contains("ORC data source does not support null data type."))
-    }
-  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSQLContext {

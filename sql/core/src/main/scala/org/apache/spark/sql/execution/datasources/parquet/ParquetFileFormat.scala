@@ -78,7 +78,7 @@ class ParquetFileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    ParquetUtils.verifySchema(dataSchema)
+    DataSourceUtils.verifySchema("Parquet", dataSchema)
 
     val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
 
@@ -303,7 +303,7 @@ class ParquetFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    ParquetUtils.verifySchema(dataSchema)
+    DataSourceUtils.verifySchema("Parquet", dataSchema)
 
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(

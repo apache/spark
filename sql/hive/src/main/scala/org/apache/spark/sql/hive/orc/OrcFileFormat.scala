@@ -39,12 +39,11 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.{OrcOptions, OrcUtils}
+import org.apache.spark.sql.execution.datasources.orc.OrcOptions
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
-
 
 /**
  * `FileFormat` for reading ORC files. If this is moved or renamed, please update
@@ -73,7 +72,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    OrcUtils.verifySchema(dataSchema)
+    DataSourceUtils.verifySchema("ORC", dataSchema)
 
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
 
@@ -124,7 +123,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    OrcUtils.verifySchema(dataSchema)
+    DataSourceUtils.verifySchema("ORC", dataSchema)
 
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates

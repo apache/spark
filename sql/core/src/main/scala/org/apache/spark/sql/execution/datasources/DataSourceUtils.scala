@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.types._
 
 
-object ParquetUtils {
+object DataSourceUtils {
 
   /**
-   * Verify if the schema is supported in Parquet datasource.
+   * Verify if the schema is supported in datasource.
    */
-  def verifySchema(schema: StructType): Unit = {
+  def verifySchema(format: String, schema: StructType): Unit = {
     def verifyType(dataType: DataType): Unit = dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
            StringType | BinaryType | DateType | TimestampType | _: DecimalType =>
@@ -40,9 +40,12 @@ object ParquetUtils {
 
       case udt: UserDefinedType[_] => verifyType(udt.sqlType)
 
+      // For backward-compatibility
+      case NullType if format == "JSON" =>
+
       case _ =>
         throw new UnsupportedOperationException(
-          s"Parquet data source does not support ${dataType.simpleString} data type.")
+          s"$format data source does not support ${dataType.simpleString} data type.")
     }
 
     schema.foreach(field => verifyType(field.dataType))
