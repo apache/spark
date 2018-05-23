@@ -81,7 +81,11 @@ abstract class DataType extends AbstractDataType {
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def sameType(other: DataType): Boolean =
-    DataType.equalsIgnoreNullability(this, other)
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      DataType.equalsIgnoreNullability(this, other)
+    } else {
+      DataType.equalsIgnoreCaseAndNullability(this, other)
+    }
 
   /**
    * Returns the same data type but set all nullability fields are true
@@ -214,7 +218,7 @@ object DataType {
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
-  private[sql] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+  private[types] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)

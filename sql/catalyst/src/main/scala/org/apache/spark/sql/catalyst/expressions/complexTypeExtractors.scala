@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -273,7 +273,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
 abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
   // todo: current search is O(n), improve it.
-  def getValueEval(value: Any, ordinal: Any, keyType: DataType): Any = {
+  def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
     val map = value.asInstanceOf[MapData]
     val length = map.numElements()
     val keys = map.keyArray()
@@ -282,7 +282,7 @@ abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTy
     var i = 0
     var found = false
     while (i < length && !found) {
-      if (keys.get(i, keyType) == ordinal) {
+      if (ordering.equiv(keys.get(i, keyType), ordinal)) {
         found = true
       } else {
         i += 1
@@ -345,7 +345,18 @@ abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTy
 case class GetMapValue(child: Expression, key: Expression)
   extends GetMapValueUtil with ExtractValue with NullIntolerant {
 
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(keyType)
+
   private def keyType = child.dataType.asInstanceOf[MapType].keyType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case f: TypeCheckResult.TypeCheckFailure => f
+      case TypeCheckResult.TypeCheckSuccess =>
+        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
+    }
+  }
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `key`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
@@ -363,7 +374,7 @@ case class GetMapValue(child: Expression, key: Expression)
 
   // todo: current search is O(n), improve it.
   override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    getValueEval(value, ordinal, keyType)
+    getValueEval(value, ordinal, keyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
