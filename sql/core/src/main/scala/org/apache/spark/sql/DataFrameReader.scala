@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, ReadSupportWithSchema}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -500,9 +501,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
-
+    val columnPruning = sparkSession.sessionState.conf.getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
     val parsed = linesWithoutHeader.mapPartitions { iter =>
-      val rawParser = new UnivocityParser(actualSchema, parsedOptions)
+      val rawParser = new UnivocityParser(actualSchema, parsedOptions, columnPruning)
       val parser = new FailureSafeParser[String](
         input => Seq(rawParser.parse(input)),
         parsedOptions.parseMode,

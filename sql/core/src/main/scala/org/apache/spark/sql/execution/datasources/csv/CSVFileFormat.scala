@@ -26,6 +26,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -122,13 +123,15 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
           "df.filter($\"_corrupt_record\".isNotNull).count()."
       )
     }
+    val columnPruning = sparkSession.sessionState.conf.getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
       val parser = new UnivocityParser(
         StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
-        parsedOptions)
+        parsedOptions,
+        columnPruning)
       CSVDataSource(parsedOptions).readFile(conf, file, parser, requiredSchema)
     }
   }

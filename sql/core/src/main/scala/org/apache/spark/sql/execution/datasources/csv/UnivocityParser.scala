@@ -36,24 +36,27 @@ import org.apache.spark.unsafe.types.UTF8String
 class UnivocityParser(
     dataSchema: StructType,
     requiredSchema: StructType,
-    val options: CSVOptions) extends Logging {
+    val options: CSVOptions,
+    columnPruning: Boolean) extends Logging {
   require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
     "requiredSchema should be the subset of schema.")
 
-  def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
+  def this(schema: StructType, options: CSVOptions, columnPruning: Boolean) = {
+    this(schema, schema, options, columnPruning)
+  }
 
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
   private val tokenizer = {
     val parserSetting = options.asParserSettings
-    if (options.columnPruning && requiredSchema.length < dataSchema.length) {
+    if (columnPruning && requiredSchema.length < dataSchema.length) {
       val tokenIndexArr = requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f)))
       parserSetting.selectIndexes(tokenIndexArr: _*)
     }
     new CsvParser(parserSetting)
   }
-  private val schema = if (options.columnPruning) requiredSchema else dataSchema
+  private val schema = if (columnPruning) requiredSchema else dataSchema
 
   private val row = new GenericInternalRow(schema.length)
 
