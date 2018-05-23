@@ -355,12 +355,16 @@ class DataFrame(object):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def _repr_html_(self):
+        """Returns a dataframe with html code when you enabled eager evaluation
+        by 'spark.sql.repl.eagerEval.enabled', this only called by repr you're
+        using support eager evaluation with HTML.
+        """
         eager_eval = self.sql_ctx.getConf(
-            "spark.jupyter.eagerEval.enabled", "false").lower() == "true"
+            "spark.sql.repl.eagerEval.enabled", "false").lower() == "true"
         console_row = int(self.sql_ctx.getConf(
-            "spark.jupyter.eagerEval.showRows", u"20"))
+            "spark.sql.repl.eagerEval.showRows", u"20"))
         console_truncate = int(self.sql_ctx.getConf(
-            "spark.jupyter.eagerEval.truncate", u"20"))
+            "spark.sql.repl.eagerEval.truncate", u"20"))
         if eager_eval:
             return self._jdf.showString(
                 console_row, console_truncate, False, True)

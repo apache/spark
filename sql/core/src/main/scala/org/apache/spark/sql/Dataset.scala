@@ -300,7 +300,7 @@ class Dataset[T] private[sql](
       val sep: String = if (html) {
         // Initial append table label
         sb.append("<table border='1'>\n")
-        "\n"
+        ""
       } else {
         colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
       }
@@ -311,7 +311,7 @@ class Dataset[T] private[sql](
 
       // data
       rows.tail.foreach { row =>
-        appendRowString(row.map(_.toString), truncate, colWidths, html, false, sb)
+        appendRowString(row, truncate, colWidths, html, false, sb)
       }
 
       sb.append(sep)
@@ -385,10 +385,10 @@ class Dataset[T] private[sql](
     (html, head) match {
       case (true, true) =>
         data.map(StringEscapeUtils.escapeHtml).addString(
-          sb, "<tr><th>", "</th><th>", "</th></tr>")
+          sb, "<tr><th>", "</th>\n<th>", "</th></tr>\n")
       case (true, false) =>
         data.map(StringEscapeUtils.escapeHtml).addString(
-          sb, "<tr><td>", "</td><td>", "</td></tr>")
+          sb, "<tr><td>", "</td>\n<td>", "</td></tr>\n")
       case _ =>
         data.addString(sb, "|", "|", "|\n")
     }

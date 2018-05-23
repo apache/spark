@@ -1248,15 +1248,19 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-24215 showString: html = true") {
     // test for normal html
     val expectedAnswer = """<table border='1'>
-                           |<tr><th>key</th><th>value</th></tr>
-                           |<tr><td>  1</td><td>    1</td></tr>
+                           |<tr><th>key</th>
+                           |<th>value</th></tr>
+                           |<tr><td>  1</td>
+                           |<td>    1</td></tr>
                            |</table>
                            |only showing top 1 row
                            |""".stripMargin
     // test for html escape
     val escapeExpectedAnswer = """<table border='1'>
-                                 |<tr><th>key</th><th>(value &gt; 1)</th></tr>
-                                 |<tr><td>  1</td><td>      false</td></tr>
+                                 |<tr><th>key</th>
+                                 |<th>(value &gt; 1)</th></tr>
+                                 |<tr><td>  1</td>
+                                 |<td>      false</td></tr>
                                  |</table>
                                  |only showing top 1 row
                                  |""".stripMargin
