@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -87,21 +87,21 @@ private [sql] object GenArrayData {
       ctx: CodegenContext,
       elementType: DataType,
       elementsCode: Seq[ExprCode],
-      isMapKey: Boolean): (String, String, String, String) = {
-    val arrayDataName = ctx.freshName("arrayData")
+      isMapKey: Boolean): (Block, Block, Block, ExprValue) = {
     val numElements = elementsCode.length
 
     if (!CodeGenerator.isPrimitiveType(elementType)) {
-      val arrayName = ctx.freshName("arrayObject")
-      val genericArrayClass = classOf[GenericArrayData].getName
+      val arrayDataName = JavaCode.variable(ctx.freshName("arrayData"), classOf[ArrayData])
+      val arrayName = JavaCode.variable(ctx.freshName("arrayObject"), classOf[Array[Object]])
+      val genericArrayClass = inline"${classOf[GenericArrayData].getName}"
 
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
-          s"$arrayName[$i] = null;"
+          code"$arrayName[$i] = null;"
         } else {
-          "throw new RuntimeException(\"Cannot use null as map key!\");"
+          code"""throw new RuntimeException("Cannot use null as map key!");"""
         }
-        eval.code + s"""
+        eval.code + code"""
          if (${eval.isNull}) {
            $isNullAssignment
          } else {
@@ -112,27 +112,28 @@ private [sql] object GenArrayData {
       val assignmentString = ctx.splitExpressionsWithCurrentInputs(
         expressions = assignments,
         funcName = "apply",
-        extraArguments = ("Object[]", arrayName) :: Nil)
+        extraArguments = (arrayName) :: Nil)
 
-      (s"Object[] $arrayName = new Object[$numElements];",
+      (code"Object[] $arrayName = new Object[$numElements];",
        assignmentString,
-       s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
+       code"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
        arrayDataName)
     } else {
-      val arrayName = ctx.freshName("array")
+      val arrayDataName = JavaCode.variable(ctx.freshName("arrayData"), classOf[UnsafeArrayData])
+      val arrayName = JavaCode.variable(ctx.freshName("array"), BinaryType)
       val unsafeArraySizeInBytes =
         UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
-      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+      val primitiveValueTypeName = inline"${CodeGenerator.primitiveTypeName(elementType)}"
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
-          s"$arrayDataName.setNullAt($i);"
+          code"$arrayDataName.setNullAt($i);"
         } else {
-          "throw new RuntimeException(\"Cannot use null as map key!\");"
+          code"""throw new RuntimeException("Cannot use null as map key!");"""
         }
-        eval.code + s"""
+        eval.code + code"""
          if (${eval.isNull}) {
            $isNullAssignment
          } else {
@@ -143,16 +144,16 @@ private [sql] object GenArrayData {
       val assignmentString = ctx.splitExpressionsWithCurrentInputs(
         expressions = assignments,
         funcName = "apply",
-        extraArguments = ("UnsafeArrayData", arrayDataName) :: Nil)
+        extraArguments = (arrayDataName) :: Nil)
 
-      (s"""
+      (code"""
         byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
         UnsafeArrayData $arrayDataName = new UnsafeArrayData();
         Platform.putLong($arrayName, $baseOffset, $numElements);
         $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
       """,
        assignmentString,
-       "",
+       EmptyBlock,
        arrayDataName)
     }
   }
@@ -211,7 +212,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val mapClass = classOf[ArrayBasedMapData].getName
+    val mapClass = inline"${classOf[ArrayBasedMapData].getName}"
     val MapType(keyDt, valueDt, _) = dataType
     val evalKeys = keys.map(e => e.genCode(ctx))
     val evalValues = values.map(e => e.genCode(ctx))
@@ -355,11 +356,11 @@ trait CreateNamedStructLike extends Expression {
 case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStructLike {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rowClass = classOf[GenericInternalRow].getName
-    val values = ctx.freshName("values")
+    val rowClass = inline"${classOf[GenericInternalRow].getName}"
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[Array[Object]])
     val valCodes = valExprs.zipWithIndex.map { case (e, i) =>
       val eval = e.genCode(ctx)
-      s"""
+      code"""
          |${eval.code}
          |if (${eval.isNull}) {
          |  $values[$i] = null;
@@ -371,7 +372,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
     val valuesCode = ctx.splitExpressionsWithCurrentInputs(
       expressions = valCodes,
       funcName = "createNamedStruct",
-      extraArguments = "Object[]" -> values :: Nil)
+      extraArguments = values :: Nil)
 
     ev.copy(code =
       code"""

@@ -151,11 +151,11 @@ case class ExpandExec(
         // This column is the same across all output rows. Just generate code for it here.
         BindReferences.bindReference(firstExpr, child.output).genCode(ctx)
       } else {
-        val isNull = ctx.freshName("isNull")
-        val value = ctx.freshName("value")
+        val isNull = JavaCode.isNullVariable(ctx.freshName("isNull"))
+        val value = JavaCode.variable(ctx.freshName("value"), firstExpr.dataType)
         val code = code"""
           |boolean $isNull = true;
-          |${CodeGenerator.javaType(firstExpr.dataType)} $value =
+          |${inline"${CodeGenerator.javaType(firstExpr.dataType)}"} $value =
           |  ${CodeGenerator.defaultValue(firstExpr.dataType)};
          """.stripMargin
         ExprCode(

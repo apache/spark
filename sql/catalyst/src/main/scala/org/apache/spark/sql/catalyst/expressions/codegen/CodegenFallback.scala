@@ -27,7 +27,11 @@ trait CodegenFallback extends Expression {
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // LeafNode does not need `input`
-    val input = if (this.isInstanceOf[LeafExpression]) "null" else ctx.INPUT_ROW
+    val input = if (this.isInstanceOf[LeafExpression]) {
+      JavaCode.literal("null", dataType)
+    } else {
+      ctx.INPUT_ROW
+    }
     val idx = ctx.references.length
     ctx.references += this
     var childIndex = idx
@@ -43,9 +47,10 @@ trait CodegenFallback extends Expression {
           """.stripMargin)
       case _ =>
     }
-    val objectTerm = ctx.freshName("obj")
+    val objectTerm = JavaCode.variable(ctx.freshName("obj"), classOf[Object])
     val placeHolder = ctx.registerComment(this.toString)
-    val javaType = CodeGenerator.javaType(this.dataType)
+    val javaType = inline"${CodeGenerator.javaType(this.dataType)}"
+    val boxedType = inline"${CodeGenerator.boxedType(this.dataType)}"
     if (nullable) {
       ev.copy(code = code"""
         $placeHolder
@@ -53,13 +58,13 @@ trait CodegenFallback extends Expression {
         boolean ${ev.isNull} = $objectTerm == null;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
         if (!${ev.isNull}) {
-          ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+          ${ev.value} = ($boxedType) $objectTerm;
         }""")
     } else {
       ev.copy(code = code"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
-        $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+        $javaType ${ev.value} = ($boxedType) $objectTerm;
         """, isNull = FalseLiteral)
     }
   }

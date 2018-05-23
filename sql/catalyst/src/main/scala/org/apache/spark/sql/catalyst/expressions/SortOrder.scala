@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
@@ -153,32 +153,32 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.child.genCode(ctx)
     val input = childCode.value
-    val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
-    val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
-    val StringPrefixCmp = classOf[StringPrefixComparator].getName
+    val BinaryPrefixCmp = inline"${classOf[BinaryPrefixComparator].getName}"
+    val DoublePrefixCmp = inline"${classOf[DoublePrefixComparator].getName}"
+    val StringPrefixCmp = inline"${classOf[StringPrefixComparator].getName}"
     val prefixCode = child.child.dataType match {
       case BooleanType =>
-        s"$input ? 1L : 0L"
+        code"$input ? 1L : 0L"
       case _: IntegralType =>
-        s"(long) $input"
+        code"(long) $input"
       case DateType | TimestampType =>
-        s"(long) $input"
+        code"(long) $input"
       case FloatType | DoubleType =>
-        s"$DoublePrefixCmp.computePrefix((double)$input)"
-      case StringType => s"$StringPrefixCmp.computePrefix($input)"
-      case BinaryType => s"$BinaryPrefixCmp.computePrefix($input)"
+        code"$DoublePrefixCmp.computePrefix((double)$input)"
+      case StringType => code"$StringPrefixCmp.computePrefix($input)"
+      case BinaryType => code"$BinaryPrefixCmp.computePrefix($input)"
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
         if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-          s"$input.toUnscaledLong()"
+          code"$input.toUnscaledLong()"
         } else {
           // reduce the scale to fit in a long
           val p = Decimal.MAX_LONG_DIGITS
           val s = p - (dt.precision - dt.scale)
-          s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : ${Long.MinValue}L"
+          code"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : ${Long.MinValue}L"
         }
       case dt: DecimalType =>
-        s"$DoublePrefixCmp.computePrefix($input.toDouble())"
-      case _ => "0L"
+        code"$DoublePrefixCmp.computePrefix($input.toDouble())"
+      case _ => code"0L"
     }
 
     ev.copy(code = childCode.code +

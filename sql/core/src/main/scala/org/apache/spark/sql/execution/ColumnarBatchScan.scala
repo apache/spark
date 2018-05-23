@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 
@@ -46,18 +47,18 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
    */
   private def genCodeColumnVector(
       ctx: CodegenContext,
-      columnVar: String,
-      ordinal: String,
+      columnVar: ExprValue,
+      ordinal: ExprValue,
       dataType: DataType,
       nullable: Boolean): ExprCode = {
-    val javaType = CodeGenerator.javaType(dataType)
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     val value = CodeGenerator.getValueFromVector(columnVar, dataType, ordinal)
     val isNullVar = if (nullable) {
       JavaCode.isNullVariable(ctx.freshName("isNull"))
     } else {
       FalseLiteral
     }
-    val valueVar = ctx.freshName("value")
+    val valueVar = JavaCode.variable(ctx.freshName("value"), dataType)
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
     val code = code"${ctx.registerComment(str)}" + (if (nullable) {
       code"""
@@ -101,7 +102,8 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       Seq.fill(output.indices.size)(classOf[ColumnVector].getName))
     val (colVars, columnAssigns) = columnVectorClzs.zipWithIndex.map {
       case (columnVectorClz, i) =>
-        val name = ctx.addMutableState(columnVectorClz, s"colInstance$i")
+        val name = JavaCode.global(ctx.addMutableState(columnVectorClz, s"colInstance$i"),
+          classOf[ColumnVector])
         (name, s"$name = ($columnVectorClz) $batch.column($i);")
     }.unzip
 
@@ -120,7 +122,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
          |}""".stripMargin)
 
     ctx.currentVars = null
-    val rowidx = ctx.freshName("rowIdx")
+    val rowidx = JavaCode.variable(ctx.freshName("rowIdx"), IntegerType)
     val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
       genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable)
     }
@@ -157,7 +159,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val row = ctx.freshName("row")
 
-    ctx.INPUT_ROW = row
+    ctx.INPUT_ROW = JavaCode.variable(row, classOf[InternalRow])
     ctx.currentVars = null
     // Always provide `outputVars`, so that the framework can help us build unsafe row if the input
     // row is not unsafe row, i.e. `needsUnsafeRowConversion` is true.

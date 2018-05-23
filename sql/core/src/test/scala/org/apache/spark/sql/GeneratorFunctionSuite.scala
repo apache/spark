@@ -315,7 +315,7 @@ case class EmptyGenerator() extends Generator {
   override def elementSchema: StructType = new StructType().add("id", IntegerType)
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val iteratorClass = classOf[Iterator[_]].getName
+    val iteratorClass = inline"${classOf[Iterator[_]].getName}"
     ev.copy(code =
       code"$iteratorClass<InternalRow> ${ev.value} = $iteratorClass$$.MODULE$$.empty();")
   }

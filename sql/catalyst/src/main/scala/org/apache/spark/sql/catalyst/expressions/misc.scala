@@ -43,9 +43,10 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   private val outputPrefix = s"Result of ${child.simpleString} is "
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val outputPrefixField = ctx.addReferenceObj("outputPrefix", outputPrefix)
+    val outputPrefixField = JavaCode.global(ctx.addReferenceObj("outputPrefix", outputPrefix),
+      classOf[String])
     nullSafeCodeGen(ctx, ev, c =>
-      s"""
+      code"""
          | System.err.println($outputPrefixField + $c);
          | ${ev.value} = $c;
        """.stripMargin)
@@ -88,7 +89,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the value is null or false.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
+    val errMsgField = JavaCode.global(ctx.addReferenceObj("errMsg", errMsg), classOf[String])
     ExprCode(code = code"""${eval.code}
        |if (${eval.isNull} || !${eval.value}) {
        |  throw new RuntimeException($errMsgField);
@@ -145,7 +146,8 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
     randomGenerator.getNextUUIDUTF8String()
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val randomGen = ctx.freshName("randomGen")
+    val randomGen = JavaCode.variable(ctx.freshName("randomGen"),
+      classOf[org.apache.spark.sql.catalyst.util.RandomUUIDGenerator])
     ctx.addMutableState("org.apache.spark.sql.catalyst.util.RandomUUIDGenerator", randomGen,
       forceInline = true,
       useFreshName = false)

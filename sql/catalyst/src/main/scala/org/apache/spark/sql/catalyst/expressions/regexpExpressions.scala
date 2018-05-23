@@ -111,23 +111,25 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   override def toString: String = s"$left LIKE $right"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val patternClass = classOf[Pattern].getName
-    val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
+    val patternClass = inline"${classOf[Pattern].getName}"
+    val escapeFunc =
+      inline"${StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"}"
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
 
     if (right.foldable) {
       val rVal = right.eval()
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-        val pattern = ctx.addMutableState(patternClass, "patternLike",
-          v => s"""$v = $patternClass.compile("$regexStr");""")
+        val pattern = JavaCode.global(ctx.addMutableState(patternClass.code, "patternLike",
+          v => s"""$v = $patternClass.compile("$regexStr");"""), classOf[Pattern])
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
         ev.copy(code = code"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
           }
@@ -135,14 +137,14 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
       } else {
         ev.copy(code = code"""
           boolean ${ev.isNull} = true;
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         """)
       }
     } else {
-      val pattern = ctx.freshName("pattern")
-      val rightStr = ctx.freshName("rightStr")
+      val pattern = JavaCode.variable(ctx.freshName("pattern"), classOf[Pattern])
+      val rightStr = JavaCode.variable(ctx.freshName("rightStr"), classOf[String])
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        s"""
+        code"""
           String $rightStr = $eval2.toString();
           $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
@@ -187,22 +189,23 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   override def toString: String = s"$left RLIKE $right"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val patternClass = classOf[Pattern].getName
+    val patternClass = inline"${classOf[Pattern].getName}"
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
 
     if (right.foldable) {
       val rVal = right.eval()
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
-        val pattern = ctx.addMutableState(patternClass, "patternRLike",
-          v => s"""$v = $patternClass.compile("$regexStr");""")
+        val pattern = JavaCode.global(ctx.addMutableState(patternClass.code, "patternRLike",
+          v => s"""$v = $patternClass.compile("$regexStr");"""), classOf[Pattern])
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
         ev.copy(code = code"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
           }
@@ -210,14 +213,14 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       } else {
         ev.copy(code = code"""
           boolean ${ev.isNull} = true;
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         """)
       }
     } else {
-      val rightStr = ctx.freshName("rightStr")
-      val pattern = ctx.freshName("pattern")
+      val rightStr = JavaCode.variable(ctx.freshName("rightStr"), classOf[String])
+      val pattern = JavaCode.variable(ctx.freshName("pattern"), classOf[Pattern])
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        s"""
+        code"""
           String $rightStr = $eval2.toString();
           $patternClass $pattern = $patternClass.compile($rightStr);
           ${ev.value} = $pattern.matcher($eval1.toString()).find(0);
@@ -252,10 +255,10 @@ case class StringSplit(str: Expression, pattern: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val arrayClass = classOf[GenericArrayData].getName
+    val arrayClass = inline"${classOf[GenericArrayData].getName}"
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.split($pattern, -1));""")
+      code"""${ev.value} = new $arrayClass($str.split($pattern, -1));""")
   }
 
   override def prettyName: String = "split"
@@ -317,26 +320,33 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def prettyName: String = "regexp_replace"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val termResult = ctx.freshName("termResult")
+    val classNameStringBuffer = inline"${classOf[java.lang.StringBuffer].getCanonicalName}"
+    val classNameMatcher = inline"${classOf[java.util.regex.Matcher].getCanonicalName}"
 
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
+    val termResult = JavaCode.variable(ctx.freshName("termResult"),
+      classOf[java.lang.StringBuffer])
 
-    val matcher = ctx.freshName("matcher")
+    val classNamePattern = inline"${classOf[Pattern].getCanonicalName}"
 
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-    val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
-    val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
+    val matcher = JavaCode.variable(ctx.freshName("matcher"), classOf[java.util.regex.Matcher])
+
+    val termLastRegex = JavaCode.global(
+      ctx.addMutableState("UTF8String", "lastRegex"), classOf[UTF8String])
+    val termPattern = JavaCode.global(
+      ctx.addMutableState(classNamePattern.code, "pattern"), classOf[Pattern])
+    val termLastReplacement = JavaCode.global(
+      ctx.addMutableState("String", "lastReplacement"), classOf[String])
+    val termLastReplacementInUTF8 = JavaCode.global(
+      ctx.addMutableState("UTF8String", "lastReplacementInUTF8"), classOf[UTF8String])
 
     val setEvNotNull = if (nullable) {
-      s"${ev.isNull} = false;"
+      code"${ev.isNull} = false;"
     } else {
-      ""
+      EmptyBlock
     }
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep) => {
-    s"""
+    code"""
       if (!$regexp.equals($termLastRegex)) {
         // regex value changed
         $termLastRegex = $regexp.clone();
@@ -348,7 +358,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         $termLastReplacement = $termLastReplacementInUTF8.toString();
       }
       $classNameStringBuffer $termResult = new $classNameStringBuffer();
-      java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+      $classNameMatcher $matcher = $termPattern.matcher($subject.toString());
 
       while ($matcher.find()) {
         $matcher.appendReplacement($termResult, $termLastReplacement);
@@ -409,21 +419,24 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val matcher = ctx.freshName("matcher")
-    val matchResult = ctx.freshName("matchResult")
+    val classNamePattern = inline"${classOf[Pattern].getCanonicalName}"
+    val matcher = JavaCode.variable(ctx.freshName("matcher"), classOf[java.util.regex.Matcher])
+    val matchResult = JavaCode.variable(ctx.freshName("matchResult"),
+      classOf[java.util.regex.MatchResult])
 
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+    val termLastRegex = JavaCode.global(ctx.addMutableState("UTF8String", "lastRegex"),
+      classOf[UTF8String])
+    val termPattern = JavaCode.global(ctx.addMutableState(classNamePattern.code, "pattern"),
+      classOf[Pattern])
 
     val setEvNotNull = if (nullable) {
-      s"${ev.isNull} = false;"
+      code"${ev.isNull} = false;"
     } else {
-      ""
+      EmptyBlock
     }
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
-      s"""
+      code"""
       if (!$regexp.equals($termLastRegex)) {
         // regex value changed
         $termLastRegex = $regexp.clone();

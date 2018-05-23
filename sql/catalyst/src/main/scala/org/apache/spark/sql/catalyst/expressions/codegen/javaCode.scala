@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import java.lang.{Boolean => JBool}
+import java.lang.{Boolean => JBool, Double => JDouble, Float => JFloat, Integer => JInt, Long => JLong}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.{existentials, implicitConversions}
 
-import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Trait representing an opaque fragments of java code.
@@ -36,6 +37,8 @@ trait JavaCode {
  * Utility functions for creating [[JavaCode]] fragments.
  */
 object JavaCode {
+  import Block._
+
   /**
    * Create a java literal.
    */
@@ -51,7 +54,7 @@ object JavaCode {
    */
   def defaultLiteral(dataType: DataType): LiteralValue = {
     new LiteralValue(
-      CodeGenerator.defaultValue(dataType, typedNull = true),
+      CodeGenerator.defaultValue(dataType, typedNull = true).code,
       CodeGenerator.javaClass(dataType))
   }
 
@@ -88,6 +91,7 @@ object JavaCode {
     GlobalValue(name, javaClass)
   }
 
+
   /**
    * Create a global isNull variable.
    */
@@ -113,6 +117,41 @@ object JavaCode {
   def isNullExpression(code: String): SimpleExprValue = {
     expression(code, BooleanType)
   }
+
+  /**
+   * We only allow values of four basic primitive types to be implicitly converted
+   * to `LiteralValue`. This conversion is convenient for interpolation in `Block`.
+   * We explicitly disallow string interpolation so we won't mistakently interpolate
+   * section of code as string and loss any references to `Block` and `ExprValue`.
+   */
+  implicit def intToLiteral(i: Int): LiteralValue =
+    new LiteralValue(i.toString, JInt.TYPE)
+  implicit def longToLiteral(l: Long): LiteralValue =
+    new LiteralValue(l.toString, JLong.TYPE)
+  implicit def floatToLiteral(f: Float): LiteralValue =
+    new LiteralValue(f.toString, JFloat.TYPE)
+  implicit def doubleToLiteral(d: Double): LiteralValue =
+    new LiteralValue(d.toString, JDouble.TYPE)
+
+
+  val javaClassDataTypeMapping = Map[Class[_], DataType](
+    classOf[Boolean] -> BooleanType,
+    classOf[Byte] -> ByteType,
+    classOf[Short] -> ShortType,
+    classOf[Int] -> IntegerType,
+    classOf[Long] -> LongType,
+    classOf[Float] -> FloatType,
+    classOf[Double] -> DoubleType,
+    classOf[UTF8String] -> StringType
+  )
+
+  /**
+   * Return an inline block of Java Type for given `ExprValue`.
+   */
+  def javaType(expr: ExprValue): Block = {
+    val dt = javaClassDataTypeMapping.get(expr.javaType).getOrElse(ObjectType(expr.javaType))
+    inline"${CodeGenerator.javaType(dt)}"
+  }
 }
 
 /**
@@ -123,8 +162,7 @@ trait Block extends JavaCode {
   // The expressions to be evaluated inside this block.
   def exprValues: Set[ExprValue]
 
-  // Returns java code string for this code block.
-  override def toString: String = _marginChar match {
+  protected def doStripMargin(code: String): String = _marginChar match {
     case Some(c) => code.stripMargin(c).trim
     case _ => code.trim
   }
@@ -134,14 +172,14 @@ trait Block extends JavaCode {
   def nonEmpty: Boolean = toString.nonEmpty
 
   // The leading prefix that should be stripped from each line.
-  // By default we strip blanks or control characters followed by '|' from the line.
-  var _marginChar: Option[Char] = Some('|')
+  var _marginChar: Option[Char] = None
 
   def stripMargin(c: Char): this.type = {
     _marginChar = Some(c)
     this
   }
 
+  // Strip blanks or control characters followed by '|' from the line when materialized the code.
   def stripMargin: this.type = {
     _marginChar = Some('|')
     this
@@ -155,23 +193,35 @@ object Block {
 
   val CODE_BLOCK_BUFFER_LENGTH: Int = 512
 
+  /**
+   * A custom string interpolator which inlines all types of input arguments into a string without
+   * tracking any reference of `JavaCode` instances.
+   */
+  implicit class InlineHelper(val sc: StringContext) extends AnyVal {
+    def inline(args: Any*): Block = {
+      val inlineString = sc.raw(args: _*)
+      InlineBlock(inlineString)
+    }
+  }
+
   implicit def blocksToBlock(blocks: Seq[Block]): Block = Blocks(blocks)
 
+  /**
+   * A custom string interpolator which allows only `JavaCode` instances to be interpolated into
+   * a Java code `Block`. `Block`s will be interpolated. `ExprValue`s will be interpolated too and
+   * also referneced in `exprValues` property of returned `Block`.
+   */
   implicit class BlockHelper(val sc: StringContext) extends AnyVal {
-    def code(args: Any*): Block = {
+    def code(args: JavaCode*): Block = {
       sc.checkLengths(args)
-      if (sc.parts.length == 0) {
+      val processedArgs = args.map {
+        case l: LiteralValue => l.value
+        case other => other
+      }
+      val (codeParts, blockInputs) = foldLiteralArgs(sc.parts, processedArgs)
+      if (codeParts.length == 0) {
         EmptyBlock
       } else {
-        args.foreach {
-          case _: ExprValue =>
-          case _: Int | _: Long | _: Float | _: Double | _: String =>
-          case _: Block =>
-          case other => throw new IllegalArgumentException(
-            s"Can not interpolate ${other.getClass.getName} into code block.")
-        }
-
-        val (codeParts, blockInputs) = foldLiteralArgs(sc.parts, args)
         CodeBlock(codeParts, blockInputs)
       }
     }
@@ -186,7 +236,7 @@ object Block {
     val inputs = args.iterator
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
 
-    buf.append(strings.next)
+    buf.append(StringContext.treatEscapes(strings.next))
     while (strings.hasNext) {
       val input = inputs.next
       input match {
@@ -197,13 +247,23 @@ object Block {
         case _ =>
           buf.append(input)
       }
-      buf.append(strings.next)
+      buf.append(StringContext.treatEscapes(strings.next))
     }
-    if (buf.nonEmpty) {
-      codeParts += buf.toString
-    }
+    codeParts += buf.toString
 
     (codeParts.toSeq, blockInputs.toSeq)
+  }
+}
+
+case class InlineBlock(block: String) extends Block {
+  override val code: String = block
+  override val exprValues: Set[ExprValue] = Set.empty
+
+  override def + (other: Block): Block = other match {
+    case c: CodeBlock => Blocks(Seq(this, c))
+    case i: InlineBlock => InlineBlock(block + i.block)
+    case b: Blocks => Blocks(Seq(this) ++ b.blocks)
+    case EmptyBlock => this
   }
 }
 
@@ -225,14 +285,15 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
     buf.append(StringContext.treatEscapes(strings.next))
     while (strings.hasNext) {
-      buf.append(inputs.next)
+      buf.append(inputs.next.code)
       buf.append(StringContext.treatEscapes(strings.next))
     }
-    buf.toString
+    doStripMargin(buf.toString)
   }
 
   override def + (other: Block): Block = other match {
     case c: CodeBlock => Blocks(Seq(this, c))
+    case i: InlineBlock => Blocks(Seq(this, i))
     case b: Blocks => Blocks(Seq(this) ++ b.blocks)
     case EmptyBlock => this
   }
@@ -240,10 +301,11 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
 
 case class Blocks(blocks: Seq[Block]) extends Block {
   override lazy val exprValues: Set[ExprValue] = blocks.flatMap(_.exprValues).toSet
-  override lazy val code: String = blocks.map(_.toString).mkString("\n")
+  override lazy val code: String = doStripMargin(blocks.map(_.toString).mkString("\n"))
 
   override def + (other: Block): Block = other match {
     case c: CodeBlock => Blocks(blocks :+ c)
+    case i: InlineBlock => Blocks(blocks :+ i)
     case b: Blocks => Blocks(blocks ++ b.blocks)
     case EmptyBlock => this
   }

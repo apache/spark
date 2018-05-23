@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, JavaCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -114,8 +114,10 @@ class RowBasedHashMapGenerator(
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        s"""(${ctx.genEqual(key.dataType, CodeGenerator.getValue("row",
-          key.dataType, ordinal.toString()), key.name)})"""
+        val rowValue = JavaCode.variable("row", classOf[UnsafeRow])
+        val keyValue = JavaCode.variable(key.name, key.dataType)
+        s"""(${ctx.genEqual(key.dataType, CodeGenerator.getValue(rowValue,
+          key.dataType, ordinal.toString()), keyValue)})"""
       }.mkString(" && ")
     }
 

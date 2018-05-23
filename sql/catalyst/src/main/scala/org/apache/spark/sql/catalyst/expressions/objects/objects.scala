@@ -63,7 +63,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
    * @param ctx a [[CodegenContext]]
    * @return (code to prepare arguments, argument string, result of argument null check)
    */
-  def prepareArguments(ctx: CodegenContext): (String, String, ExprValue) = {
+  def prepareArguments(ctx: CodegenContext): (Block, Block, ExprValue) = {
 
     val resultIsNull = if (needNullCheck) {
       val resultIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "resultIsNull")
@@ -72,20 +72,22 @@ trait InvokeLike extends Expression with NonSQLExpression {
       FalseLiteral
     }
     val argValues = arguments.map { e =>
-      val argValue = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "argValue")
+      val argValue = JavaCode.global(
+        ctx.addMutableState(CodeGenerator.javaType(e.dataType), "argValue"),
+        e.dataType)
       argValue
     }
 
     val argCodes = if (needNullCheck) {
-      val reset = s"$resultIsNull = false;"
+      val reset = code"$resultIsNull = false;"
       val argCodes = arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
         val updateResultIsNull = if (e.nullable) {
-          s"$resultIsNull = ${expr.isNull};"
+          code"$resultIsNull = ${expr.isNull};"
         } else {
-          ""
+          EmptyBlock
         }
-        s"""
+        code"""
           if (!$resultIsNull) {
             ${expr.code}
             $updateResultIsNull
@@ -97,15 +99,22 @@ trait InvokeLike extends Expression with NonSQLExpression {
     } else {
       arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
-        s"""
+        code"""
           ${expr.code}
           ${argValues(i)} = ${expr.value};
         """
       }
     }
     val argCode = ctx.splitExpressionsWithCurrentInputs(argCodes)
+    val argValueBlock = argValues.foldLeft[Block](EmptyBlock) { (block, argValue) =>
+      if (block.length == 0) {
+        code"$argValue"
+      } else {
+        code"$block, $argValue"
+      }
+    }
 
-    (argCode, argValues.mkString(", "), resultIsNull)
+    (argCode, argValueBlock, resultIsNull)
   }
 
   /**
@@ -159,19 +168,19 @@ trait SerializerSupport {
    * Adds a immutable state to the generated class containing a reference to the serializer.
    * @return a string containing the name of the variable referencing the serializer
    */
-  def addImmutableSerializerIfNeeded(ctx: CodegenContext): String = {
+  def addImmutableSerializerIfNeeded(ctx: CodegenContext): ExprValue = {
     val (serializerInstance, serializerInstanceClass) = {
       if (kryo) {
-        ("kryoSerializer",
+        (JavaCode.variable("kryoSerializer", classOf[KryoSerializerInstance]),
           classOf[KryoSerializerInstance].getName)
       } else {
-        ("javaSerializer",
+        (JavaCode.variable("javaSerializer", classOf[JavaSerializerInstance]),
           classOf[JavaSerializerInstance].getName)
       }
     }
     val newSerializerMethod = s"${classOf[SerializerSupport].getName}$$.MODULE$$.newSerializer"
     // Code to initialize the serializer
-    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializerInstance, v =>
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializerInstance.code, v =>
       s"""
          |$v = ($serializerInstanceClass) $newSerializerMethod($kryo);
        """.stripMargin)
@@ -237,29 +246,32 @@ case class StaticInvoke(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = CodeGenerator.javaType(dataType)
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
 
     val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
-    val callFunc = s"$objectName.$functionName($argString)"
+    val callFunc =
+      code"${inline"$objectName"}.${inline"$functionName"}($argString)"
 
     val prepareIsNull = if (nullable) {
-      s"boolean ${ev.isNull} = $resultIsNull;"
+      code"boolean ${ev.isNull} = $resultIsNull;"
     } else {
       ev.isNull = FalseLiteral
-      ""
+      EmptyBlock
     }
 
     val evaluate = if (returnNullable) {
-      if (CodeGenerator.defaultValue(dataType) == "null") {
-        s"""
+      if (CodeGenerator.defaultValue(dataType).code == "null") {
+        code"""
           ${ev.value} = $callFunc;
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
-        val boxedResult = ctx.freshName("boxedResult")
-        s"""
-          ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
+        val boxedResult = JavaCode.variable(ctx.freshName("boxedResult"),
+          ScalaReflection.javaBoxedType(dataType))
+        val boxedJavaType = CodeGenerator.boxedType(dataType)
+        code"""
+          ${inline"$boxedJavaType"} $boxedResult = $callFunc;
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -267,7 +279,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      s"${ev.value} = $callFunc;"
+      code"${ev.value} = $callFunc;"
     }
 
     val code = code"""
@@ -342,7 +354,7 @@ case class Invoke(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = CodeGenerator.javaType(dataType)
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     val obj = targetObject.genCode(ctx)
 
     val (argCode, argString, resultIsNull) = prepareArguments(ctx)
@@ -350,8 +362,8 @@ case class Invoke(
     val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
     val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
 
-    def getFuncResult(resultVal: String, funcCall: String): String = if (needTryCatch) {
-      s"""
+    def getFuncResult(resultVal: ExprValue, funcCall: Block): Block = if (needTryCatch) {
+      code"""
         try {
           $resultVal = $funcCall;
         } catch (Exception e) {
@@ -359,29 +371,31 @@ case class Invoke(
         }
       """
     } else {
-      s"$resultVal = $funcCall;"
+      code"$resultVal = $funcCall;"
     }
 
+    val functionName = inline"$encodedFunctionName"
     val evaluate = if (returnPrimitive) {
-      getFuncResult(ev.value, s"${obj.value}.$encodedFunctionName($argString)")
+      getFuncResult(ev.value, code"${obj.value}.$functionName($argString)")
     } else {
-      val funcResult = ctx.freshName("funcResult")
+      val funcResult = JavaCode.variable(ctx.freshName("funcResult"), classOf[Object])
+      val boxedType = inline"${CodeGenerator.boxedType(javaType.code)}"
       // If the function can return null, we do an extra check to make sure our null bit is still
       // set correctly.
       val assignResult = if (!returnNullable) {
-        s"${ev.value} = (${CodeGenerator.boxedType(javaType)}) $funcResult;"
+        code"${ev.value} = ($boxedType) $funcResult;"
       } else {
-        s"""
+        code"""
           if ($funcResult != null) {
-            ${ev.value} = (${CodeGenerator.boxedType(javaType)}) $funcResult;
+            ${ev.value} = ($boxedType) $funcResult;
           } else {
             ${ev.isNull} = true;
           }
         """
       }
-      s"""
+      code"""
         Object $funcResult = null;
-        ${getFuncResult(funcResult, s"${obj.value}.$encodedFunctionName($argString)")}
+        ${getFuncResult(funcResult, code"${obj.value}.$functionName($argString)")}
         $assignResult
       """
     }
@@ -478,7 +492,7 @@ case class NewInstance(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = CodeGenerator.javaType(dataType)
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
 
     val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
@@ -487,14 +501,14 @@ case class NewInstance(
     ev.isNull = resultIsNull
 
     val constructorCall = outer.map { gen =>
-      s"${gen.value}.new ${cls.getSimpleName}($argString)"
+      code"${gen.value}.new ${inline"${cls.getSimpleName}"}($argString)"
     }.getOrElse {
-      s"new $className($argString)"
+      code"new ${inline"$className"}($argString)"
     }
 
     val code = code"""
       $argCode
-      ${outer.map(_.code).getOrElse("")}
+      ${outer.map(_.code).getOrElse(EmptyBlock)}
       final $javaType ${ev.value} = ${ev.isNull} ?
         ${CodeGenerator.defaultValue(dataType)} : $constructorCall;
     """
@@ -529,13 +543,13 @@ case class UnwrapOption(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = CodeGenerator.javaType(dataType)
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     val inputObject = child.genCode(ctx)
 
     val code = inputObject.code + code"""
       final boolean ${ev.isNull} = ${inputObject.isNull} || ${inputObject.value}.isEmpty();
       $javaType ${ev.value} = ${ev.isNull} ? ${CodeGenerator.defaultValue(dataType)} :
-        (${CodeGenerator.boxedType(javaType)}) ${inputObject.value}.get();
+        (${inline"${CodeGenerator.boxedType(javaType.code)}"}) ${inputObject.value}.get();
     """
     ev.copy(code = code)
   }
@@ -790,35 +804,38 @@ case class MapObjects private(
       ArrayType(lambdaFunction.dataType, containsNull = lambdaFunction.nullable))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val elementJavaType = CodeGenerator.javaType(loopVarDataType)
-    ctx.addMutableState(elementJavaType, loopValue, forceInline = true, useFreshName = false)
+    val elementJavaType = inline"${CodeGenerator.javaType(loopVarDataType)}"
+    ctx.addMutableState(elementJavaType.code, loopValue, forceInline = true, useFreshName = false)
     val genInputData = inputData.genCode(ctx)
     val genFunction = lambdaFunction.genCode(ctx)
-    val dataLength = ctx.freshName("dataLength")
-    val convertedArray = ctx.freshName("convertedArray")
-    val loopIndex = ctx.freshName("loopIndex")
-
-    val convertedType = CodeGenerator.boxedType(lambdaFunction.dataType)
+    val convertedType = inline"${CodeGenerator.boxedType(lambdaFunction.dataType)}"
+    val dataLength = JavaCode.variable(ctx.freshName("dataLength"), IntegerType)
+    val convertedArray = JavaCode.variable(ctx.freshName("convertedArray"),
+      ArrayType(lambdaFunction.dataType))
+    val loopIndex = JavaCode.variable(ctx.freshName("loopIndex"), IntegerType)
+    val loopValueInCodegen = JavaCode.variable(loopValue, loopVarDataType)
+    val loopIsNullInCodegen = JavaCode.isNullVariable(loopIsNull)
 
     // Because of the way Java defines nested arrays, we have to handle the syntax specially.
     // Specifically, we have to insert the [$dataLength] in between the type and any extra nested
     // array declarations (i.e. new String[1][]).
-    val arrayConstructor = if (convertedType contains "[]") {
-      val rawType = convertedType.takeWhile(_ != '[')
-      val arrayPart = convertedType.reverse.takeWhile(c => c == '[' || c == ']').reverse
-      s"new $rawType[$dataLength]$arrayPart"
+    val arrayConstructor = if (convertedType.code contains "[]") {
+      val rawType = inline"${convertedType.code.takeWhile(_ != '[')}"
+      val arrayPart =
+        inline"${convertedType.code.reverse.takeWhile(c => c == '[' || c == ']').reverse}"
+      code"new $rawType[$dataLength]$arrayPart"
     } else {
-      s"new $convertedType[$dataLength]"
+      code"new $convertedType[$dataLength]"
     }
 
     // In RowEncoder, we use `Object` to represent Array or Seq, so we need to determine the type
     // of input collection at runtime for this case.
-    val seq = ctx.freshName("seq")
-    val array = ctx.freshName("array")
+    val seq = JavaCode.variable(ctx.freshName("seq"), classOf[Seq[_]])
+    val array = JavaCode.variable(ctx.freshName("array"), ArrayType(loopVarDataType))
     val determineCollectionType = inputData.dataType match {
       case ObjectType(cls) if cls == classOf[Object] =>
-        val seqClass = classOf[Seq[_]].getName
-        s"""
+        val seqClass = inline"${classOf[Seq[_]].getName}"
+        code"""
           $seqClass $seq = null;
           $elementJavaType[] $array = null;
           if (${genInputData.value}.getClass().isArray()) {
@@ -827,7 +844,7 @@ case class MapObjects private(
             $seq = ($seqClass) ${genInputData.value};
           }
          """
-      case _ => ""
+      case _ => EmptyBlock
     }
 
     // `MapObjects` generates a while loop to traverse the elements of the input collection. We
@@ -835,104 +852,112 @@ case class MapObjects private(
     // like `list.get(1)`. Here we use Iterator to traverse Seq and List.
     val (getLength, prepareLoop, getLoopVar) = inputDataType match {
       case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-        val it = ctx.freshName("it")
+        val it = JavaCode.variable(ctx.freshName("it"), classOf[scala.collection.Iterator[_]])
         (
-          s"${genInputData.value}.size()",
-          s"scala.collection.Iterator $it = ${genInputData.value}.toIterator();",
-          s"$it.next()"
+          code"${genInputData.value}.size()",
+          code"scala.collection.Iterator $it = ${genInputData.value}.toIterator();",
+          code"$it.next()"
         )
       case ObjectType(cls) if cls.isArray =>
         (
-          s"${genInputData.value}.length",
-          "",
-          s"${genInputData.value}[$loopIndex]"
+          code"${genInputData.value}.length",
+          EmptyBlock,
+          code"${genInputData.value}[$loopIndex]"
         )
       case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-        val it = ctx.freshName("it")
+        val it = JavaCode.variable(ctx.freshName("it"), classOf[java.util.Iterator[_]])
         (
-          s"${genInputData.value}.size()",
-          s"java.util.Iterator $it = ${genInputData.value}.iterator();",
-          s"$it.next()"
+          code"${genInputData.value}.size()",
+          code"java.util.Iterator $it = ${genInputData.value}.iterator();",
+          code"$it.next()"
         )
       case ArrayType(et, _) =>
         (
-          s"${genInputData.value}.numElements()",
-          "",
+          code"${genInputData.value}.numElements()",
+          EmptyBlock,
           CodeGenerator.getValue(genInputData.value, et, loopIndex)
         )
       case ObjectType(cls) if cls == classOf[Object] =>
-        val it = ctx.freshName("it")
+        val it = JavaCode.variable(ctx.freshName("it"), classOf[scala.collection.Iterator[_]])
         (
-          s"$seq == null ? $array.length : $seq.size()",
-          s"scala.collection.Iterator $it = $seq == null ? null : $seq.toIterator();",
-          s"$it == null ? $array[$loopIndex] : $it.next()"
+          code"$seq == null ? $array.length : $seq.size()",
+          code"scala.collection.Iterator $it = $seq == null ? null : $seq.toIterator();",
+          code"$it == null ? $array[$loopIndex] : $it.next()"
         )
     }
 
     // Make a copy of the data if it's unsafe-backed
-    def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
-      s"$value instanceof ${clazz.getSimpleName}? ${value}.copy() : $value"
-    val genFunctionValue: String = lambdaFunction.dataType match {
+    def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: ExprValue) =
+      code"$value instanceof ${inline"${clazz.getSimpleName}"}? ${value}.copy() : $value"
+    val genFunctionValue: Block = lambdaFunction.dataType match {
       case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
       case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
       case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
-      case _ => genFunction.value
+      case _ => code"${genFunction.value}"
     }
 
     val loopNullCheck = if (loopIsNull != "false") {
       ctx.addMutableState(
         CodeGenerator.JAVA_BOOLEAN, loopIsNull, forceInline = true, useFreshName = false)
       inputDataType match {
-        case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
-        case _ => s"$loopIsNull = $loopValue == null;"
+        case _: ArrayType =>
+          code"$loopIsNullInCodegen = ${genInputData.value}.isNullAt($loopIndex);"
+        case _ => code"$loopIsNullInCodegen = $loopValueInCodegen == null;"
       }
     } else {
-      ""
+      EmptyBlock
     }
 
-    val (initCollection, addElement, getResult): (String, String => String, String) =
+    val (initCollection, addElement, getResult): (Block, Block => Block, Block) =
       customCollectionCls match {
         case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set
-          val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder()"
-          val builder = ctx.freshName("collectionBuilder")
+          val getBuilder = code"${inline"${cls.getName}"}$$.MODULE$$.newBuilder()"
+          val builder =
+            JavaCode.variable(ctx.freshName("collectionBuilder"), classOf[Builder[_, _]])
+          val builderType = inline"${classOf[Builder[_, _]].getName}"
           (
-            s"""
-               ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
+            code"""
+               $builderType $builder = $getBuilder;
                $builder.sizeHint($dataLength);
              """,
-            genValue => s"$builder.$$plus$$eq($genValue);",
-            s"(${cls.getName}) $builder.result();"
+            genValue => code"$builder.$$plus$$eq($genValue);",
+            code"(${inline"${cls.getName}"}) $builder.result();"
           )
         case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
           // Java list
-          val builder = ctx.freshName("collectionBuilder")
+          val builder = JavaCode.variable(ctx.freshName("collectionBuilder"),
+            classOf[java.util.List[_]])
           (
             if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
               cls == classOf[java.util.AbstractSequentialList[_]]) {
-              s"${cls.getName} $builder = new java.util.ArrayList($dataLength);"
+              val className = inline"${cls.getName}"
+              code"$className $builder = new java.util.ArrayList($dataLength);"
             } else {
-              val param = Try(cls.getConstructor(Integer.TYPE)).map(_ => dataLength).getOrElse("")
-              s"${cls.getName} $builder = new ${cls.getName}($param);"
+              val className = inline"${cls.getName}"
+              Try(cls.getConstructor(Integer.TYPE)).map { _ =>
+                code"$className $builder = new $className($dataLength);"
+              }.getOrElse(code"$className $builder = new $className();")
             },
-            genValue => s"$builder.add($genValue);",
-            s"$builder;"
+            genValue => code"$builder.add($genValue);",
+            code"$builder;"
           )
         case None =>
           // array
           (
-            s"""
+            code"""
                $convertedType[] $convertedArray = null;
                $convertedArray = $arrayConstructor;
              """,
-            genValue => s"$convertedArray[$loopIndex] = $genValue;",
-            s"new ${classOf[GenericArrayData].getName}($convertedArray);"
+            genValue => code"$convertedArray[$loopIndex] = $genValue;",
+            code"new ${inline"${classOf[GenericArrayData].getName}"}($convertedArray);"
           )
       }
 
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     val code = genInputData.code + code"""
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
 
       if (!${genInputData.isNull}) {
         $determineCollectionType
@@ -942,12 +967,12 @@ case class MapObjects private(
         int $loopIndex = 0;
         $prepareLoop
         while ($loopIndex < $dataLength) {
-          $loopValue = ($elementJavaType) ($getLoopVar);
+          $loopValueInCodegen = ($elementJavaType) ($getLoopVar);
           $loopNullCheck
 
           ${genFunction.code}
           if (${genFunction.isNull}) {
-            ${addElement("null")}
+            ${addElement(code"null")}
           } else {
             ${addElement(genFunctionValue)}
           }
@@ -1076,34 +1101,40 @@ case class CatalystToExternalMap private(
     }
 
     val mapType = inputDataType(inputData.dataType).asInstanceOf[MapType]
-    val keyElementJavaType = CodeGenerator.javaType(mapType.keyType)
-    ctx.addMutableState(keyElementJavaType, keyLoopValue, forceInline = true, useFreshName = false)
+    val keyElementJavaType = inline"${CodeGenerator.javaType(mapType.keyType)}"
+    ctx.addMutableState(keyElementJavaType.code, keyLoopValue, forceInline = true,
+      useFreshName = false)
     val genKeyFunction = keyLambdaFunction.genCode(ctx)
-    val valueElementJavaType = CodeGenerator.javaType(mapType.valueType)
-    ctx.addMutableState(valueElementJavaType, valueLoopValue, forceInline = true,
+    val valueElementJavaType = inline"${CodeGenerator.javaType(mapType.valueType)}"
+    ctx.addMutableState(valueElementJavaType.code, valueLoopValue, forceInline = true,
       useFreshName = false)
     val genValueFunction = valueLambdaFunction.genCode(ctx)
     val genInputData = inputData.genCode(ctx)
-    val dataLength = ctx.freshName("dataLength")
-    val loopIndex = ctx.freshName("loopIndex")
-    val tupleLoopValue = ctx.freshName("tupleLoopValue")
-    val builderValue = ctx.freshName("builderValue")
+    val dataLength = JavaCode.variable(ctx.freshName("dataLength"), IntegerType)
+    val loopIndex = JavaCode.variable(ctx.freshName("loopIndex"), IntegerType)
+    val tupleLoopValue = JavaCode.variable(ctx.freshName("tupleLoopValue"), classOf[(_, _)])
+    val builderValue = JavaCode.variable(ctx.freshName("builderValue"), classOf[Builder[_, _]])
 
-    val getLength = s"${genInputData.value}.numElements()"
+    val keyLoopValueInCodegen = JavaCode.variable(keyLoopValue, mapType.keyType)
+    val valueLoopValueInCodegen = JavaCode.variable(valueLoopValue, mapType.valueType)
+    val valueLoopIsNullInCodegen = JavaCode.isNullVariable(valueLoopIsNull)
 
-    val keyArray = ctx.freshName("keyArray")
-    val valueArray = ctx.freshName("valueArray")
+    val getLength = code"${genInputData.value}.numElements()"
+
+    val keyArray = JavaCode.variable(ctx.freshName("keyArray"), classOf[ArrayData])
+    val valueArray = JavaCode.variable(ctx.freshName("valueArray"), classOf[ArrayData])
+    val arrayDataType = inline"${classOf[ArrayData].getName}"
     val getKeyArray =
-      s"${classOf[ArrayData].getName} $keyArray = ${genInputData.value}.keyArray();"
+      code"$arrayDataType $keyArray = ${genInputData.value}.keyArray();"
     val getKeyLoopVar = CodeGenerator.getValue(keyArray, inputDataType(mapType.keyType), loopIndex)
     val getValueArray =
-      s"${classOf[ArrayData].getName} $valueArray = ${genInputData.value}.valueArray();"
+      code"$arrayDataType $valueArray = ${genInputData.value}.valueArray();"
     val getValueLoopVar = CodeGenerator.getValue(
       valueArray, inputDataType(mapType.valueType), loopIndex)
 
     // Make a copy of the data if it's unsafe-backed
-    def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
-      s"$value instanceof ${clazz.getSimpleName}? $value.copy() : $value"
+    def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: ExprValue) =
+      code"$value instanceof ${inline"${clazz.getSimpleName}"}? $value.copy() : $value"
     def genFunctionValue(lambdaFunction: Expression, genFunction: ExprCode) =
       lambdaFunction.dataType match {
         case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
@@ -1117,19 +1148,20 @@ case class CatalystToExternalMap private(
     val valueLoopNullCheck = if (valueLoopIsNull != "false") {
       ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, valueLoopIsNull, forceInline = true,
         useFreshName = false)
-      s"$valueLoopIsNull = $valueArray.isNullAt($loopIndex);"
+      code"$valueLoopIsNullInCodegen = $valueArray.isNullAt($loopIndex);"
     } else {
-      ""
+      EmptyBlock
     }
 
-    val builderClass = classOf[Builder[_, _]].getName
-    val constructBuilder = s"""
-      $builderClass $builderValue = ${collClass.getName}$$.MODULE$$.newBuilder();
+    val builderClass = inline"${classOf[Builder[_, _]].getName}"
+    val collClassName = inline"${collClass.getName}"
+    val constructBuilder = code"""
+      $builderClass $builderValue = $collClassName$$.MODULE$$.newBuilder();
       $builderValue.sizeHint($dataLength);
     """
 
-    val tupleClass = classOf[(_, _)].getName
-    val appendToBuilder = s"""
+    val tupleClass = inline"${classOf[(_, _)].getName}"
+    val appendToBuilder = code"""
       $tupleClass $tupleLoopValue;
 
       if (${genValueFunction.isNull}) {
@@ -1140,10 +1172,12 @@ case class CatalystToExternalMap private(
 
       $builderValue.$$plus$$eq($tupleLoopValue);
      """
-    val getBuilderResult = s"${ev.value} = (${collClass.getName}) $builderValue.result();"
+    val getBuilderResult =
+      code"${ev.value} = (${inline"${(collClass.getName)}"}) $builderValue.result();"
 
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     val code = genInputData.code + code"""
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
 
       if (!${genInputData.isNull}) {
         int $dataLength = $getLength;
@@ -1153,8 +1187,8 @@ case class CatalystToExternalMap private(
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
-          $keyLoopValue = ($keyElementJavaType) ($getKeyLoopVar);
-          $valueLoopValue = ($valueElementJavaType) ($getValueLoopVar);
+          $keyLoopValueInCodegen = ($keyElementJavaType) ($getKeyLoopVar);
+          $valueLoopValueInCodegen = ($valueElementJavaType) ($getValueLoopVar);
           $valueLoopNullCheck
 
           ${genKeyFunction.code}
@@ -1320,74 +1354,84 @@ case class ExternalMapToCatalyst private(
     val inputMap = child.genCode(ctx)
     val genKeyConverter = keyConverter.genCode(ctx)
     val genValueConverter = valueConverter.genCode(ctx)
-    val length = ctx.freshName("length")
-    val index = ctx.freshName("index")
-    val convertedKeys = ctx.freshName("convertedKeys")
-    val convertedValues = ctx.freshName("convertedValues")
-    val entry = ctx.freshName("entry")
-    val entries = ctx.freshName("entries")
+    val length = JavaCode.variable(ctx.freshName("length"), IntegerType)
+    val index = JavaCode.variable(ctx.freshName("index"), IntegerType)
+    val convertedKeys = JavaCode.variable(ctx.freshName("convertedKeys"), classOf[Array[Object]])
+    val convertedValues = JavaCode.variable(ctx.freshName("convertedValues"),
+      classOf[Array[Object]])
 
     val keyElementJavaType = CodeGenerator.javaType(keyType)
     val valueElementJavaType = CodeGenerator.javaType(valueType)
     ctx.addMutableState(keyElementJavaType, key, forceInline = true, useFreshName = false)
     ctx.addMutableState(valueElementJavaType, value, forceInline = true, useFreshName = false)
+    val keyBoxedType = inline"${CodeGenerator.boxedType(keyType)}"
+    val valueBoxedType = inline"${CodeGenerator.boxedType(valueType)}"
+    val keyInCodegen = JavaCode.variable(key, ScalaReflection.javaBoxedType(keyType))
+    val valueInCodegen = JavaCode.variable(value, ScalaReflection.javaBoxedType(valueType))
+    val keyIsNullVariable = JavaCode.isNullVariable(keyIsNull)
+    val valueIsNullVariable = JavaCode.isNullVariable(valueIsNull)
 
-    val (defineEntries, defineKeyValue) = child.dataType match {
+    val (entries, defineEntries, defineKeyValue) = child.dataType match {
       case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
-        val javaIteratorCls = classOf[java.util.Iterator[_]].getName
-        val javaMapEntryCls = classOf[java.util.Map.Entry[_, _]].getName
+        val entries = JavaCode.variable(ctx.freshName("entries"), classOf[java.util.Iterator[_]])
+        val entry = JavaCode.variable(ctx.freshName("entry"), classOf[java.util.Map.Entry[_, _]])
+        val javaIteratorCls = inline"${classOf[java.util.Iterator[_]].getName}"
+        val javaMapEntryCls = inline"${classOf[java.util.Map.Entry[_, _]].getName}"
 
         val defineEntries =
-          s"final $javaIteratorCls $entries = ${inputMap.value}.entrySet().iterator();"
+          code"final $javaIteratorCls $entries = ${inputMap.value}.entrySet().iterator();"
 
         val defineKeyValue =
-          s"""
+          code"""
             final $javaMapEntryCls $entry = ($javaMapEntryCls) $entries.next();
-            $key = (${CodeGenerator.boxedType(keyType)}) $entry.getKey();
-            $value = (${CodeGenerator.boxedType(valueType)}) $entry.getValue();
+            $keyInCodegen = ($keyBoxedType) $entry.getKey();
+            $valueInCodegen = ($valueBoxedType) $entry.getValue();
           """
 
-        defineEntries -> defineKeyValue
+        (entries, defineEntries, defineKeyValue)
 
       case ObjectType(cls) if classOf[scala.collection.Map[_, _]].isAssignableFrom(cls) =>
-        val scalaIteratorCls = classOf[Iterator[_]].getName
-        val scalaMapEntryCls = classOf[Tuple2[_, _]].getName
+        val entries = JavaCode.variable(ctx.freshName("entries"), classOf[Iterator[_]])
+        val entry = JavaCode.variable(ctx.freshName("entry"), classOf[Tuple2[_, _]])
+        val scalaIteratorCls = inline"${classOf[Iterator[_]].getName}"
+        val scalaMapEntryCls = inline"${classOf[Tuple2[_, _]].getName}"
 
-        val defineEntries = s"final $scalaIteratorCls $entries = ${inputMap.value}.iterator();"
+        val defineEntries = code"final $scalaIteratorCls $entries = ${inputMap.value}.iterator();"
 
         val defineKeyValue =
-          s"""
+          code"""
             final $scalaMapEntryCls $entry = ($scalaMapEntryCls) $entries.next();
-            $key = (${CodeGenerator.boxedType(keyType)}) $entry._1();
-            $value = (${CodeGenerator.boxedType(valueType)}) $entry._2();
+            $keyInCodegen = ($keyBoxedType) $entry._1();
+            $valueInCodegen = ($valueBoxedType) $entry._2();
           """
 
-        defineEntries -> defineKeyValue
+        (entries, defineEntries, defineKeyValue)
     }
 
     val keyNullCheck = if (keyIsNull != "false") {
       ctx.addMutableState(
         CodeGenerator.JAVA_BOOLEAN, keyIsNull, forceInline = true, useFreshName = false)
-      s"$keyIsNull = $key == null;"
+      code"$keyIsNullVariable = $keyInCodegen == null;"
     } else {
-      ""
+      EmptyBlock
     }
 
     val valueNullCheck = if (valueIsNull != "false") {
       ctx.addMutableState(
         CodeGenerator.JAVA_BOOLEAN, valueIsNull, forceInline = true, useFreshName = false)
-      s"$valueIsNull = $value == null;"
+      code"$valueIsNullVariable = $valueInCodegen == null;"
     } else {
-      ""
+      EmptyBlock
     }
 
-    val arrayCls = classOf[GenericArrayData].getName
-    val mapCls = classOf[ArrayBasedMapData].getName
-    val convertedKeyType = CodeGenerator.boxedType(keyConverter.dataType)
-    val convertedValueType = CodeGenerator.boxedType(valueConverter.dataType)
+    val arrayCls = inline"${classOf[GenericArrayData].getName}"
+    val mapCls = inline"${classOf[ArrayBasedMapData].getName}"
+    val convertedKeyType = inline"${CodeGenerator.boxedType(keyConverter.dataType)}"
+    val convertedValueType = inline"${CodeGenerator.boxedType(valueConverter.dataType)}"
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     val code = inputMap.code +
       code"""
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         if (!${inputMap.isNull}) {
           final int $length = ${inputMap.value}.size();
           final Object[] $convertedKeys = new Object[$length];
@@ -1442,12 +1486,12 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rowClass = classOf[GenericRowWithSchema].getName
-    val values = ctx.freshName("values")
+    val rowWithSchemaClass = inline"${classOf[GenericRowWithSchema].getName}"
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[Array[Object]])
 
     val childrenCodes = children.zipWithIndex.map { case (e, i) =>
       val eval = e.genCode(ctx)
-      s"""
+      code"""
          |${eval.code}
          |if (${eval.isNull}) {
          |  $values[$i] = null;
@@ -1460,14 +1504,14 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
     val childrenCode = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenCodes,
       funcName = "createExternalRow",
-      extraArguments = "Object[]" -> values :: Nil)
-    val schemaField = ctx.addReferenceObj("schema", schema)
-
+      extraArguments = values :: Nil)
+    val schemaField = JavaCode.global(ctx.addReferenceObj("schema", schema), classOf[StructType])
+    val rowClass = inline"${classOf[Row].getName}"
     val code =
       code"""
          |Object[] $values = new Object[${children.size}];
          |$childrenCode
-         |final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
+         |final $rowClass ${ev.value} = new $rowWithSchemaClass($values, $schemaField);
        """.stripMargin
     ev.copy(code = code, isNull = FalseLiteral)
   }
@@ -1489,8 +1533,8 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
     val serializer = addImmutableSerializerIfNeeded(ctx)
     // Code to serialize.
     val input = child.genCode(ctx)
-    val javaType = CodeGenerator.javaType(dataType)
-    val serialize = s"$serializer.serialize(${input.value}, null).array()"
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
+    val serialize = code"$serializer.serialize(${input.value}, null).array()"
 
     val code = input.code + code"""
       final $javaType ${ev.value} =
@@ -1520,9 +1564,9 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
     val serializer = addImmutableSerializerIfNeeded(ctx)
     // Code to deserialize.
     val input = child.genCode(ctx)
-    val javaType = CodeGenerator.javaType(dataType)
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     val deserialize =
-      s"($javaType) $serializer.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null)"
+      code"($javaType) $serializer.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null)"
 
     val code = input.code + code"""
       final $javaType ${ev.value} =
@@ -1587,23 +1631,23 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val instanceGen = beanInstance.genCode(ctx)
 
-    val javaBeanInstance = ctx.freshName("javaBean")
-    val beanInstanceJavaType = CodeGenerator.javaType(beanInstance.dataType)
+    val javaBeanInstance = JavaCode.variable(ctx.freshName("javaBean"), beanInstance.dataType)
+    val beanInstanceJavaType = inline"${CodeGenerator.javaType(beanInstance.dataType)}"
 
     val initialize = setters.map {
       case (setterMethod, fieldValue) =>
         val fieldGen = fieldValue.genCode(ctx)
-        s"""
+        code"""
            |${fieldGen.code}
            |if (!${fieldGen.isNull}) {
-           |  $javaBeanInstance.$setterMethod(${fieldGen.value});
+           |  $javaBeanInstance.${inline"$setterMethod"}(${fieldGen.value});
            |}
          """.stripMargin
     }
     val initializeCode = ctx.splitExpressionsWithCurrentInputs(
       expressions = initialize.toSeq,
       funcName = "initializeJavaBean",
-      extraArguments = beanInstanceJavaType -> javaBeanInstance :: Nil)
+      extraArguments = javaBeanInstance :: Nil)
 
     val code = instanceGen.code +
       code"""
@@ -1652,7 +1696,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
 
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the value is null.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
+    val errMsgField = JavaCode.global(ctx.addReferenceObj("errMsg", errMsg), classOf[String])
 
     val code = childGen.code + code"""
       if (${childGen.isNull}) {
@@ -1695,7 +1739,7 @@ case class GetExternalRowField(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the field is null.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
+    val errMsgField = JavaCode.global(ctx.addReferenceObj("errMsg", errMsg), classOf[String])
     val row = child.genCode(ctx)
     val code = code"""
       ${row.code}
@@ -1758,26 +1802,34 @@ case class ValidateExternalType(child: Expression, expected: DataType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the type doesn't match.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
+    val errMsgField = JavaCode.global(ctx.addReferenceObj("errMsg", errMsg), classOf[String])
     val input = child.genCode(ctx)
     val obj = input.value
+
+    val boxedType = inline"${CodeGenerator.boxedType(dataType)}"
 
     val typeCheck = expected match {
       case _: DecimalType =>
         Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
-          .map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
+          .map(cls => code"$obj instanceof ${inline"${cls.getName}"}")
+          .reduceLeft { (blocks, block) =>
+            code"$blocks || $block"
+          }
       case _: ArrayType =>
-        s"$obj.getClass().isArray() || $obj instanceof ${classOf[Seq[_]].getName}"
+        val seqClassName = inline"${classOf[Seq[_]].getName}"
+        code"$obj.getClass().isArray() || $obj instanceof $seqClassName"
       case _ =>
-        s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
+        code"$obj instanceof $boxedType"
     }
+
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
 
     val code = code"""
       ${input.code}
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${input.isNull}) {
         if ($typeCheck) {
-          ${ev.value} = (${CodeGenerator.boxedType(dataType)}) $obj;
+          ${ev.value} = ($boxedType) $obj;
         } else {
           throw new RuntimeException($obj.getClass().getName() + $errMsgField);
         }

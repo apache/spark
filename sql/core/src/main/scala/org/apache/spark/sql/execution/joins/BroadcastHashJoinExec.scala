@@ -172,18 +172,18 @@ case class BroadcastHashJoinExec(
   /**
    * Generates the code for variable of build side.
    */
-  private def genBuildSideVars(ctx: CodegenContext, matched: String): Seq[ExprCode] = {
+  private def genBuildSideVars(ctx: CodegenContext, matched: ExprValue): Seq[ExprCode] = {
     ctx.currentVars = null
-    ctx.INPUT_ROW = matched
+    ctx.INPUT_ROW = JavaCode.variable(matched, classOf[InternalRow])
     buildPlan.output.zipWithIndex.map { case (a, i) =>
       val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
       if (joinType.isInstanceOf[InnerLike]) {
         ev
       } else {
         // the variables are needed even there is no matched rows
-        val isNull = ctx.freshName("isNull")
-        val value = ctx.freshName("value")
-        val javaType = CodeGenerator.javaType(a.dataType)
+        val isNull = JavaCode.isNullVariable(ctx.freshName("isNull"))
+        val value = JavaCode.variable(ctx.freshName("value"), a.dataType)
+        val javaType = inline"${CodeGenerator.javaType(a.dataType)}"
         val code = code"""
           |boolean $isNull = true;
           |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
@@ -205,7 +205,7 @@ case class BroadcastHashJoinExec(
   private def getJoinCondition(
       ctx: CodegenContext,
       input: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
-    val matched = ctx.freshName("matched")
+    val matched = JavaCode.variable(ctx.freshName("matched"), classOf[UnsafeRow])
     val buildVars = genBuildSideVars(ctx, matched)
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
@@ -281,7 +281,7 @@ case class BroadcastHashJoinExec(
   private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val matched = ctx.freshName("matched")
+    val matched = JavaCode.variable(ctx.freshName("matched"), classOf[UnsafeRow])
     val buildVars = genBuildSideVars(ctx, matched)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
@@ -469,7 +469,7 @@ case class BroadcastHashJoinExec(
     val numOutput = metricTerm(ctx, "numOutputRows")
     val existsVar = ctx.freshName("exists")
 
-    val matched = ctx.freshName("matched")
+    val matched = JavaCode.variable(ctx.freshName("matched"), classOf[UnsafeRow])
     val buildVars = genBuildSideVars(ctx, matched)
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get

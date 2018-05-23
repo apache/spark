@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, JavaCode}
 import org.apache.spark.sql.execution.vectorized.{MutableColumnarRow, OnHeapColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -50,6 +50,8 @@ class VectorizedHashMapGenerator(
     bufferSchema: StructType)
   extends HashMapGenerator (ctx, aggregateExpressions, generatedClassName,
     groupingKeySchema, bufferSchema) {
+
+  val numRows = JavaCode.variable("numRows", IntegerType)
 
   override protected def initializeAggregateHashMap(): String = {
     val generatedSchema: String =
@@ -87,7 +89,7 @@ class VectorizedHashMapGenerator(
        |  private double loadFactor = 0.5;
        |  private int numBuckets = (int) (capacity / loadFactor);
        |  private int maxSteps = 2;
-       |  private int numRows = 0;
+       |  private int $numRows = 0;
        |  private org.apache.spark.sql.types.StructType schema = $generatedSchema
        |  private org.apache.spark.sql.types.StructType aggregateBufferSchema =
        |    $generatedAggBufferSchema
@@ -127,9 +129,11 @@ class VectorizedHashMapGenerator(
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        val value = CodeGenerator.getValueFromVector(s"vectors[$ordinal]", key.dataType,
-          "buckets[idx]")
-        s"(${ctx.genEqual(key.dataType, value, key.name)})"
+        val vector = JavaCode.variable(s"vectors[$ordinal]", classOf[OnHeapColumnVector])
+        val bucket = JavaCode.variable("buckets[idx]", IntegerType)
+        val value = CodeGenerator.getValueFromVector(vector, key.dataType, bucket)
+        val keyValue = JavaCode.variable(key.name, key.dataType)
+        s"(${ctx.genEqual(key.dataType, value, keyValue)})"
       }.mkString(" && ")
     }
 
@@ -183,14 +187,18 @@ class VectorizedHashMapGenerator(
 
     def genCodeToSetKeys(groupingKeys: Seq[Buffer]): Seq[String] = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        CodeGenerator.setValue(s"vectors[$ordinal]", "numRows", key.dataType, key.name)
+        val vector = JavaCode.variable(s"vectors[$ordinal]", classOf[OnHeapColumnVector])
+        val keyValue = JavaCode.variable(key.name, key.dataType)
+        CodeGenerator.setValue(vector, numRows, key.dataType, keyValue).code
       }
     }
 
     def genCodeToSetAggBuffers(bufferValues: Seq[Buffer]): Seq[String] = {
       bufferValues.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        CodeGenerator.updateColumn(s"vectors[${groupingKeys.length + ordinal}]", "numRows",
-          key.dataType, buffVars(ordinal), nullable = true)
+        val vector = JavaCode.variable(s"vectors[${groupingKeys.length + ordinal}]",
+          classOf[OnHeapColumnVector])
+        CodeGenerator.updateColumn(vector, numRows, key.dataType, buffVars(ordinal),
+          nullable = true).code
       }
     }
 
@@ -202,7 +210,7 @@ class VectorizedHashMapGenerator(
        |  while (step < maxSteps) {
        |    // Return bucket index if it's either an empty slot or already contains the key
        |    if (buckets[idx] == -1) {
-       |      if (numRows < capacity) {
+       |      if ($numRows < capacity) {
        |
        |        // Initialize aggregate keys
        |        ${genCodeToSetKeys(groupingKeys).mkString("\n")}
@@ -212,7 +220,7 @@ class VectorizedHashMapGenerator(
        |        // Initialize aggregate values
        |        ${genCodeToSetAggBuffers(bufferValues).mkString("\n")}
        |
-       |        buckets[idx] = numRows++;
+       |        buckets[idx] = $numRows++;
        |        aggBufferRow.rowId = buckets[idx];
        |        return aggBufferRow;
        |      } else {
@@ -235,7 +243,7 @@ class VectorizedHashMapGenerator(
   protected def generateRowIterator(): String = {
     s"""
        |public java.util.Iterator<${classOf[InternalRow].getName}> rowIterator() {
-       |  batch.setNumRows(numRows);
+       |  batch.setNumRows($numRows);
        |  return batch.rowIterator();
        |}
      """.stripMargin

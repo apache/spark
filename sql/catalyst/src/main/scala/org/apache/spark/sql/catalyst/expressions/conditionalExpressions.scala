@@ -65,12 +65,12 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     val condEval = predicate.genCode(ctx)
     val trueEval = trueValue.genCode(ctx)
     val falseEval = falseValue.genCode(ctx)
-
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     val code =
       code"""
          |${condEval.code}
          |boolean ${ev.isNull} = false;
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${condEval.isNull} && ${condEval.value}) {
          |  ${trueEval.code}
          |  ${ev.isNull} = ${trueEval.isNull};
@@ -191,7 +191,7 @@ case class CaseWhen(
     val HAS_NULL = 1
     // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
     // We won't go on anymore on the computation.
-    val resultState = ctx.freshName("caseWhenResultState")
+    val resultState = JavaCode.variable(ctx.freshName("caseWhenResultState"), ByteType)
     ev.value = JavaCode.global(
       ctx.addMutableState(CodeGenerator.javaType(dataType), ev.value),
       dataType)
@@ -204,7 +204,7 @@ case class CaseWhen(
     val cases = branches.map { case (condExpr, valueExpr) =>
       val cond = condExpr.genCode(ctx)
       val res = valueExpr.genCode(ctx)
-      s"""
+      code"""
          |${cond.code}
          |if (!${cond.isNull} && ${cond.value}) {
          |  ${res.code}
@@ -217,7 +217,7 @@ case class CaseWhen(
 
     val elseCode = elseValue.map { elseExpr =>
       val res = elseExpr.genCode(ctx)
-      s"""
+      code"""
          |${res.code}
          |$resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
          |${ev.value} = ${res.value};
@@ -256,18 +256,20 @@ case class CaseWhen(
            |} while (false);
            |return $resultState;
          """.stripMargin,
-      foldFunctions = _.map { funcCall =>
-        s"""
-           |$resultState = $funcCall;
-           |if ($resultState != $NOT_MATCHED) {
-           |  continue;
-           |}
-         """.stripMargin
-      }.mkString)
+      foldFunctions = funcCalls =>
+        Blocks(funcCalls.map { funcCall =>
+          code"""
+             |$resultState = $funcCall;
+             |if ($resultState != $NOT_MATCHED) {
+             |  continue;
+             |}
+           """
+        })
+      )
 
     ev.copy(code =
       code"""
-         |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
+         |${inline"${CodeGenerator.JAVA_BYTE}"} $resultState = $NOT_MATCHED;
          |do {
          |  $codes
          |} while (false);

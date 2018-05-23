@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
@@ -53,8 +53,10 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       ev.copy(code = oev.code)
     } else {
       assert(ctx.INPUT_ROW != null, "INPUT_ROW and currentVars cannot both be null.")
-      val javaType = CodeGenerator.javaType(dataType)
-      val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
+      val javaType = inline"${CodeGenerator.javaType(dataType)}"
+      val value = JavaCode.expression(
+        CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString),
+        dataType)
       if (nullable) {
         ev.copy(code =
           code"""

@@ -27,7 +27,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, JavaCode}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources._
@@ -113,7 +113,7 @@ case class RowDataSourceScanExec(
     val exprRows = output.zipWithIndex.map{ case (a, i) =>
       BoundReference(i, a.dataType, a.nullable)
     }
-    val row = ctx.freshName("row")
+    val row = JavaCode.variable(ctx.freshName("row"), classOf[InternalRow])
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columnsRowInput = exprRows.map(_.genCode(ctx))

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, EmptyBlock, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, EmptyBlock, ExprCode, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 /**
@@ -35,7 +36,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
     input.asInstanceOf[Decimal].toUnscaledLong
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"$c.toUnscaledLong()")
+    defineCodeGen(ctx, ev, c => code"$c.toUnscaledLong()")
   }
 }
 
@@ -55,7 +56,7 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"""
+      code"""
         ${ev.value} = (new Decimal()).setOrNull($eval, $precision, $scale);
         ${ev.isNull} = ${ev.value} == null;
       """
@@ -92,8 +93,8 @@ case class CheckOverflow(child: Expression, dataType: DecimalType) extends Unary
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
-      val tmp = ctx.freshName("tmp")
-      s"""
+      val tmp = JavaCode.variable(ctx.freshName("tmp"), classOf[Decimal])
+      code"""
          | Decimal $tmp = $eval.clone();
          | if ($tmp.changePrecision(${dataType.precision}, ${dataType.scale})) {
          |   ${ev.value} = $tmp;

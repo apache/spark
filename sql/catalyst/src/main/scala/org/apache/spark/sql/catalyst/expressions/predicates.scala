@@ -21,7 +21,7 @@ import scala.collection.immutable.TreeSet
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Blocks, CodegenContext, CodeGenerator, EmptyBlock, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, JavaCode, Predicate => BasePredicate}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -132,7 +132,7 @@ case class Not(child: Expression)
   protected override def nullSafeEval(input: Any): Any = !input.asInstanceOf[Boolean]
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"!($c)")
+    defineCodeGen(ctx, ev, c => code"!($c)")
   }
 
   override def sql: String = s"(NOT ${child.sql})"
@@ -244,7 +244,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaDataType = CodeGenerator.javaType(value.dataType)
+    val javaDataType = inline"${CodeGenerator.javaType(value.dataType)}"
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
     // inTmpResult has 3 possible values:
@@ -254,12 +254,12 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val NOT_MATCHED = 0
     // 1 means one value in the list is matched
     val MATCHED = 1
-    val tmpResult = ctx.freshName("inTmpResult")
-    val valueArg = ctx.freshName("valueArg")
+    val tmpResult = JavaCode.variable(ctx.freshName("inTmpResult"), ByteType)
+    val valueArg = JavaCode.variable(ctx.freshName("valueArg"), value.dataType)
     // All the blocks are meant to be inside a do { ... } while (false); loop.
     // The evaluation of variables can be stopped when we find a matching value.
     val listCode = listGen.map(x =>
-      s"""
+      code"""
          |${x.code}
          |if (${x.isNull}) {
          |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
@@ -272,7 +272,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = listCode,
       funcName = "valueIn",
-      extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BYTE, tmpResult) :: Nil,
+      extraArguments = (valueArg) :: (tmpResult) :: Nil,
       returnType = CodeGenerator.JAVA_BYTE,
       makeSplitFunction = body =>
         s"""
@@ -281,14 +281,16 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
            |} while (false);
            |return $tmpResult;
          """.stripMargin,
-      foldFunctions = _.map { funcCall =>
-        s"""
-           |$tmpResult = $funcCall;
-           |if ($tmpResult == $MATCHED) {
-           |  continue;
-           |}
-         """.stripMargin
-      }.mkString("\n"))
+      foldFunctions = funcCalls => {
+        Blocks(funcCalls.map { funcCall =>
+          code"""
+             |$tmpResult = $funcCall;
+             |if ($tmpResult == $MATCHED) {
+             |  continue;
+             |}
+           """.stripMargin
+        })
+      })
 
     ev.copy(code =
       code"""
@@ -347,18 +349,18 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val setTerm = ctx.addReferenceObj("set", set)
+    val setTerm = JavaCode.global(ctx.addReferenceObj("set", set), classOf[Set[Any]])
     val childGen = child.genCode(ctx)
     val setIsNull = if (hasNull) {
-      s"${ev.isNull} = !${ev.value};"
+      code"${ev.isNull} = !${ev.value};"
     } else {
-      ""
+      EmptyBlock
     }
     ev.copy(code =
       code"""
          |${childGen.code}
-         |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
-         |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
+         |boolean ${ev.isNull} = ${childGen.isNull};
+         |${inline"${CodeGenerator.javaType(dataType)}"} ${ev.value} = false;
          |if (!${ev.isNull}) {
          |  ${ev.value} = $setTerm.contains(${childGen.value});
          |  $setIsNull
@@ -379,7 +381,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override def inputType: AbstractDataType = BooleanType
 
-  override def symbol: String = "&&"
+  override def symbol: JavaCode = inline"&&"
 
   override def sqlOperator: String = "AND"
 
@@ -442,7 +444,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override def inputType: AbstractDataType = BooleanType
 
-  override def symbol: String = "||"
+  override def symbol: JavaCode = inline"||"
 
   override def sqlOperator: String = "OR"
 
@@ -519,9 +521,9 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
         && left.dataType != FloatType
         && left.dataType != DoubleType) {
       // faster version
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1 $symbol $c2")
+      defineCodeGen(ctx, ev, (c1, c2) => code"$c1 $symbol $c2")
     } else {
-      defineCodeGen(ctx, ev, (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0")
+      defineCodeGen(ctx, ev, (c1, c2) => code"${ctx.genComp(left.dataType, c1, c2)} $symbol 0")
     }
   }
 
@@ -567,7 +569,7 @@ object Equality {
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
-  override def symbol: String = "="
+  override def symbol: JavaCode = inline"="
 
   protected override def nullSafeEval(left: Any, right: Any): Any = ordering.equiv(left, right)
 
@@ -602,7 +604,7 @@ case class EqualTo(left: Expression, right: Expression)
   """)
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
-  override def symbol: String = "<=>"
+  override def symbol: JavaCode = inline"<=>"
 
   override def nullable: Boolean = false
 
@@ -653,7 +655,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
-  override def symbol: String = "<"
+  override def symbol: JavaCode = inline"<"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
@@ -683,7 +685,7 @@ case class LessThan(left: Expression, right: Expression)
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
-  override def symbol: String = "<="
+  override def symbol: JavaCode = inline"<="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
@@ -713,7 +715,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
-  override def symbol: String = ">"
+  override def symbol: JavaCode = inline">"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
@@ -743,7 +745,7 @@ case class GreaterThan(left: Expression, right: Expression)
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
-  override def symbol: String = ">="
+  override def symbol: JavaCode = inline">="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }

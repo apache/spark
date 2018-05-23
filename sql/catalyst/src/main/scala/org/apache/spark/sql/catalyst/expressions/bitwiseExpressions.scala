@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 
@@ -37,7 +38,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
 
   override def inputType: AbstractDataType = IntegralType
 
-  override def symbol: String = "&"
+  override def symbol: JavaCode = inline"&"
 
   private lazy val and: (Any, Any) => Any = dataType match {
     case ByteType =>
@@ -69,7 +70,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 
   override def inputType: AbstractDataType = IntegralType
 
-  override def symbol: String = "|"
+  override def symbol: JavaCode = inline"|"
 
   private lazy val or: (Any, Any) => Any = dataType match {
     case ByteType =>
@@ -101,7 +102,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
 
   override def inputType: AbstractDataType = IntegralType
 
-  override def symbol: String = "^"
+  override def symbol: JavaCode = inline"^"
 
   private lazy val xor: (Any, Any) => Any = dataType match {
     case ByteType =>
@@ -147,7 +148,8 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"(${CodeGenerator.javaType(dataType)}) ~($c)")
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
+    defineCodeGen(ctx, ev, c => code"($javaType) ~($c)")
   }
 
   protected override def nullSafeEval(input: Any): Any = not(input)

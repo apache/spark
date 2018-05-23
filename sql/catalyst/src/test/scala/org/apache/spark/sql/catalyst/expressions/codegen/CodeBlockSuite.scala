@@ -23,10 +23,10 @@ import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 class CodeBlockSuite extends SparkFunSuite {
 
-  test("Block interpolates string and ExprValue inputs") {
+  test("Block interpolates ExprValue inputs") {
     val isNull = JavaCode.isNullVariable("expr1_isNull")
-    val stringLiteral = "false"
-    val code = code"boolean $isNull = $stringLiteral;"
+    val booleanLiteral = JavaCode.literal("false", BooleanType)
+    val code = code"boolean $isNull = $booleanLiteral;"
     assert(code.toString == "boolean expr1_isNull = false;")
   }
 
@@ -75,7 +75,6 @@ class CodeBlockSuite extends SparkFunSuite {
     val value1 = JavaCode.variable("expr1", IntegerType)
     val isNull2 = JavaCode.isNullVariable("expr2_isNull")
     val value2 = JavaCode.variable("expr2", IntegerType)
-    val literal = JavaCode.literal("100", IntegerType)
 
     val code =
       code"""
@@ -83,7 +82,7 @@ class CodeBlockSuite extends SparkFunSuite {
            |int $value1 = -1;""".stripMargin +
       code"""
            |boolean $isNull2 = true;
-           |int $value2 = $literal;""".stripMargin
+           |int $value2 = 100;""".stripMargin
 
     val expected =
       """
@@ -95,16 +94,8 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(code.toString == expected)
 
     val exprValues = code.exprValues
-    assert(exprValues.size == 5)
-    assert(exprValues === Set(isNull1, value1, isNull2, value2, literal))
-  }
-
-  test("Throws exception when interpolating unexcepted object in code block") {
-    val obj = Tuple2(1, 1)
-    val e = intercept[IllegalArgumentException] {
-      code"$obj"
-    }
-    assert(e.getMessage().contains(s"Can not interpolate ${obj.getClass.getName}"))
+    assert(exprValues.size == 4)
+    assert(exprValues === Set(isNull1, value1, isNull2, value2))
   }
 
   test("replace expr values in code block") {
@@ -119,7 +110,7 @@ class CodeBlockSuite extends SparkFunSuite {
            |  int $exprInFunc = $expr + 1;
            |}""".stripMargin
 
-    val aliasedParam = JavaCode.variable("aliased", expr.javaType)
+    val aliasedParam = JavaCode.variable("aliased", IntegerType)
     val aliasedInputs = code.asInstanceOf[CodeBlock].blockInputs.map {
       case _: SimpleExprValue => aliasedParam
       case other => other

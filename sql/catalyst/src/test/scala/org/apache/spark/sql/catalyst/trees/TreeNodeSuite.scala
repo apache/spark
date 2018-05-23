@@ -118,7 +118,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Seq("+", "1", "*", "2", "-", "3", "4")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformDown {
-      case b: BinaryOperator => actual += b.symbol; b
+      case b: BinaryOperator => actual += b.symbol.toString; b
       case l: Literal => actual += l.toString; l
     }
 
@@ -130,7 +130,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Seq("1", "2", "3", "4", "-", "*", "+")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformUp {
-      case b: BinaryOperator => actual += b.symbol; b
+      case b: BinaryOperator => actual += b.symbol.toString; b
       case l: Literal => actual += l.toString; l
     }
 
@@ -181,7 +181,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Seq("1", "2", "3", "4", "-", "*", "+")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression foreachUp {
-      case b: BinaryOperator => actual += b.symbol;
+      case b: BinaryOperator => actual += b.symbol.toString;
       case l: Literal => actual += l.toString;
     }
 

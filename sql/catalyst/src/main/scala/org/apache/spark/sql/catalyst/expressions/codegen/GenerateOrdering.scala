@@ -25,7 +25,8 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -74,30 +75,33 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   def genComparisons(ctx: CodegenContext, ordering: Seq[SortOrder]): String = {
     val oldInputRow = ctx.INPUT_ROW
     val oldCurrentVars = ctx.currentVars
-    val inputRow = "i"
+    val inputRow = JavaCode.variable("i", classOf[InternalRow])
     ctx.INPUT_ROW = inputRow
     // to use INPUT_ROW we must make sure currentVars is null
     ctx.currentVars = null
 
+    val varA = JavaCode.variable("a", classOf[InternalRow])
+    val varB = JavaCode.variable("b", classOf[InternalRow])
     val comparisons = ordering.map { order =>
       val eval = order.child.genCode(ctx)
       val asc = order.isAscending
-      val isNullA = ctx.freshName("isNullA")
-      val primitiveA = ctx.freshName("primitiveA")
-      val isNullB = ctx.freshName("isNullB")
-      val primitiveB = ctx.freshName("primitiveB")
-      s"""
-          ${ctx.INPUT_ROW} = a;
+      val isNullA = JavaCode.isNullVariable(ctx.freshName("isNullA"))
+      val primitiveType = inline"${CodeGenerator.javaType(order.child.dataType)}"
+      val primitiveA = JavaCode.variable(ctx.freshName("primitiveA"), order.child.dataType)
+      val isNullB = JavaCode.isNullVariable(ctx.freshName("isNullB"))
+      val primitiveB = JavaCode.variable(ctx.freshName("primitiveB"), order.child.dataType)
+      code"""
+          ${ctx.INPUT_ROW} = $varA;
           boolean $isNullA;
-          ${CodeGenerator.javaType(order.child.dataType)} $primitiveA;
+          $primitiveType $primitiveA;
           {
             ${eval.code}
             $isNullA = ${eval.isNull};
             $primitiveA = ${eval.value};
           }
-          ${ctx.INPUT_ROW} = b;
+          ${ctx.INPUT_ROW} = $varB;
           boolean $isNullB;
-          ${CodeGenerator.javaType(order.child.dataType)} $primitiveB;
+          $primitiveType $primitiveB;
           {
             ${eval.code}
             $isNullB = ${eval.isNull};
@@ -108,19 +112,19 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           } else if ($isNullA) {
             return ${
               order.nullOrdering match {
-                case NullsFirst => "-1"
-                case NullsLast => "1"
+                case NullsFirst => code"-1"
+                case NullsLast => code"1"
               }};
           } else if ($isNullB) {
             return ${
               order.nullOrdering match {
-                case NullsFirst => "1"
-                case NullsLast => "-1"
+                case NullsFirst => code"1"
+                case NullsLast => code"-1"
               }};
           } else {
             int comp = ${ctx.genComp(order.child.dataType, primitiveA, primitiveB)};
             if (comp != 0) {
-              return ${if (asc) "comp" else "-comp"};
+              return ${if (asc) code"comp" else code"-comp"};
             }
           }
       """
@@ -129,7 +133,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     val code = ctx.splitExpressions(
       expressions = comparisons,
       funcName = "compare",
-      arguments = Seq(("InternalRow", "a"), ("InternalRow", "b")),
+      arguments = Seq(varA, varB),
       returnType = "int",
       makeSplitFunction = { body =>
         s"""
@@ -139,15 +143,16 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
         """
       },
       foldFunctions = { funCalls =>
-        funCalls.zipWithIndex.map { case (funCall, i) =>
-          val comp = ctx.freshName("comp")
-          s"""
+        val blocks = funCalls.zipWithIndex.map { case (funCall, i) =>
+          val comp = JavaCode.variable(ctx.freshName("comp"), IntegerType)
+          code"""
             int $comp = $funCall;
             if ($comp != 0) {
               return $comp;
             }
           """
-        }.mkString
+        }
+        Blocks(blocks)
       })
     ctx.currentVars = oldCurrentVars
     ctx.INPUT_ROW = oldInputRow

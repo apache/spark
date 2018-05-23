@@ -997,9 +997,12 @@ case class ScalaUDF(
     val converters: Array[Any => Any] = children.map { c =>
       CatalystTypeConverters.createToScalaConverter(c.dataType)
     }.toArray :+ CatalystTypeConverters.createToCatalystConverter(dataType)
-    val convertersTerm = ctx.addReferenceObj("converters", converters, s"$converterClassName[]")
-    val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
-    val resultTerm = ctx.freshName("result")
+    val convertersTerm = JavaCode.global(
+      ctx.addReferenceObj("converters", converters, s"$converterClassName[]"),
+      classOf[Array[Object]])
+    val errorMsgTerm = JavaCode.global(ctx.addReferenceObj("errMsg", udfErrorMessage),
+      classOf[String])
+    val resultTerm = JavaCode.variable(ctx.freshName("result"), dataType)
 
     // codegen for children expressions
     val evals = children.map(_.genCode(ctx))
@@ -1008,20 +1011,28 @@ case class ScalaUDF(
     // We need to get the boxedType of dataType's javaType here. Because for the dataType
     // such as IntegerType, its javaType is `int` and the returned type of user-defined
     // function is Object. Trying to convert an Object to `int` will cause casting exception.
-    val evalCode = evals.map(_.code).mkString("\n")
+    val evalCode = Blocks(evals.map(_.code))
     val (funcArgs, initArgs) = evals.zipWithIndex.map { case (eval, i) =>
-      val argTerm = ctx.freshName("arg")
-      val convert = s"$convertersTerm[$i].apply(${eval.value})"
-      val initArg = s"Object $argTerm = ${eval.isNull} ? null : $convert;"
+      val argTerm = JavaCode.variable(ctx.freshName("arg"), classOf[Object])
+      val convert = code"$convertersTerm[$i].apply(${eval.value})"
+      val initArg = code"Object $argTerm = ${eval.isNull} ? null : $convert;"
       (argTerm, initArg)
     }.unzip
 
-    val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
-    val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
-    val resultConverter = s"$convertersTerm[${children.length}]"
-    val boxedType = CodeGenerator.boxedType(dataType)
+    val udf = JavaCode.global(
+      ctx.addReferenceObj("udf", function, s"scala.Function${children.length}"), classOf[Object])
+    val funcArgBlock = funcArgs.foldLeft[Block](EmptyBlock) { (block, arg) =>
+      if (block.length == 0) {
+        code"$arg"
+      } else {
+        code"$block, $arg"
+      }
+    }
+    val getFuncResult = code"$udf.apply($funcArgBlock)"
+    val resultConverter = code"$convertersTerm[${children.length}]"
+    val boxedType = inline"${CodeGenerator.boxedType(dataType)}"
     val callFunc =
-      s"""
+      code"""
          |$boxedType $resultTerm = null;
          |try {
          |  $resultTerm = ($boxedType)$resultConverter.apply($getFuncResult);
@@ -1030,14 +1041,15 @@ case class ScalaUDF(
          |}
        """.stripMargin
 
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     ev.copy(code =
       code"""
          |$evalCode
-         |${initArgs.mkString("\n")}
+         |${Blocks(initArgs)}
          |$callFunc
          |
          |boolean ${ev.isNull} = $resultTerm == null;
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
          |}
