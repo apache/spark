@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -26,8 +25,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class UnivocityParserSuite extends SparkFunSuite {
-  private val parser =
-    new UnivocityParser(StructType(Seq.empty), new CSVOptions(Map.empty[String, String], "GMT"))
+  private val parser = new UnivocityParser(
+    StructType(Seq.empty),
+    new CSVOptions(Map.empty[String, String], "GMT"),
+    true)
 
   private def assertNull(v: Any) = assert(v == null)
 
