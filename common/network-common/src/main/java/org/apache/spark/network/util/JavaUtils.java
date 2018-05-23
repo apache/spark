@@ -175,7 +175,7 @@ public class JavaUtils {
   private static File[] listFilesSafely(File file, FilenameFilter filter) throws IOException {
     if (file.exists()) {
       File[] files = file.listFiles(filter);
-      if (files == null && filter == null) {
+      if (files == null) {
         throw new IOException("Failed to list files for dir: " + file);
       }
       return files;
