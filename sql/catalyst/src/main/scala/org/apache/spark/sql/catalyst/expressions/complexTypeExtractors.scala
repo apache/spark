@@ -356,8 +356,6 @@ case class GetMapValue(child: Expression, key: Expression)
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(keyType)
 
-  private def keyType = child.dataType.asInstanceOf[MapType].keyType
-
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
       case f: TypeCheckResult.TypeCheckFailure => f
