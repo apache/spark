@@ -415,7 +415,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spill during iteration") {
+  test("SPARK-22713 spill during iteration leaks internal map") {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
@@ -425,7 +425,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     assert(map.numSpills == 0, "map was not supposed to spill")
 
     val it = map.iterator
-    assert( it.isInstanceOf[CompletionIterator[_, _]])
+    assert(it.isInstanceOf[CompletionIterator[_, _]])
     val underlyingIt = map.readingIterator
     assert( underlyingIt != null )
     val underlyingMapIterator = underlyingIt.upstream
@@ -508,7 +508,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     assert(underlyingIt.upstream.getClass.getEnclosingClass != classOf[AppendOnlyMap[_, _]])
   }
 
-  test("external aggregation updates peak execution memory") {
+  test("SPARK-22713 external aggregation updates peak execution memory") {
     val spillThreshold = 1000
     val conf = createSparkConf(loadDefaults = false)
       .set("spark.shuffle.spill.numElementsForceSpillThreshold", spillThreshold.toString)
