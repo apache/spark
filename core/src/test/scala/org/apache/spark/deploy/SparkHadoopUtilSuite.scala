@@ -77,6 +77,21 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers {
     })
   }
 
+  test("SparkHadoopUtil ServiceLoader implementation") {
+
+    assert(SparkHadoopUtil.getInstance(Nil).getClass == classOf[SparkHadoopUtil])
+
+    val thrown = intercept[RuntimeException] {
+      SparkHadoopUtil.getInstance(List(new SparkHadoopUtil, new DummySparkHadoopUtil))
+    }
+    assert(thrown.getMessage == "Multiple sources found for SparkHadoopUtil " +
+      "(org.apache.spark.deploy.SparkHadoopUtil, org.apache.spark.deploy.DummySparkHadoopUtil), " +
+      "please specify one fully qualified class name.")
+
+    assert(SparkHadoopUtil
+      .getInstance(List(new DummySparkHadoopUtil)).getClass == classOf[DummySparkHadoopUtil])
+  }
+
   private def fileStatus(
       owner: String,
       group: String,
@@ -95,3 +110,5 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers {
       null)
   }
 }
+
+class DummySparkHadoopUtil extends SparkHadoopUtil {}
