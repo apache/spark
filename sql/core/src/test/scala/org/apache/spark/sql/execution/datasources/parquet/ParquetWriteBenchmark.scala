@@ -86,7 +86,9 @@ object ParquetWriteBenchmark {
     ------------------------------------------------------------------------------------------------
     Parquet Writer                                2536 / 2610          6.2         161.3       1.0X
     */
-    runSQL("Output Single Int Column", "select cast(id as INT) as id from t1", values)
+    runSQL(name = "Output Single Int Column",
+      sql = "select cast(id as INT) as id from t1",
+      values = values)
   }
 
   def intStringWriteBenchmark(values: Int): Unit = {
