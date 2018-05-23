@@ -479,7 +479,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def csv(csvDataset: Dataset[String]): DataFrame = {
     val parsedOptions: CSVOptions = new CSVOptions(
       extraOptions.toMap,
-      sparkSession.sessionState.conf.sessionLocalTimeZone)
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      columnPruning = sparkSession.sessionState.conf.csvColumnPruning)
     val filteredLines: Dataset[String] =
       CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
     val maybeFirstLine: Option[String] = filteredLines.take(1).headOption
