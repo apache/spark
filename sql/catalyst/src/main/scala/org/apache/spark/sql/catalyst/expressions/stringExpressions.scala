@@ -27,6 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -105,7 +106,7 @@ case class ConcatWs(children: Seq[Expression])
           expressions = inputs,
           funcName = "valueConcatWs",
           extraArguments = ("UTF8String[]", args) :: Nil)
-      ev.copy(s"""
+      ev.copy(code"""
         UTF8String[] $args = new UTF8String[$numArgs];
         ${separator.code}
         $codes
@@ -149,7 +150,7 @@ case class ConcatWs(children: Seq[Expression])
         }
       }.unzip
 
-      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code))
+      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code.toString))
 
       val varargCounts = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargCount,
@@ -176,7 +177,7 @@ case class ConcatWs(children: Seq[Expression])
         foldFunctions = _.map(funcCall => s"$idxVararg = $funcCall;").mkString("\n"))
 
       ev.copy(
-        s"""
+        code"""
         $codes
         int $varargNum = ${children.count(_.dataType == StringType) - 1};
         int $idxVararg = 0;
@@ -288,7 +289,7 @@ case class Elt(children: Seq[Expression]) extends Expression {
       }.mkString)
 
     ev.copy(
-      s"""
+      code"""
          |${index.code}
          |final int $indexVal = ${index.value};
          |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
@@ -654,7 +655,7 @@ case class StringTrim(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -671,7 +672,7 @@ case class StringTrim(
         } else {
           ${ev.value} = ${srcString.value}.trim(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -754,7 +755,7 @@ case class StringTrimLeft(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -771,7 +772,7 @@ case class StringTrimLeft(
         } else {
           ${ev.value} = ${srcString.value}.trimLeft(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -856,7 +857,7 @@ case class StringTrimRight(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -873,7 +874,7 @@ case class StringTrimRight(
         } else {
           ${ev.value} = ${srcString.value}.trimRight(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -1024,7 +1025,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     val substrGen = substr.genCode(ctx)
     val strGen = str.genCode(ctx)
     val startGen = start.genCode(ctx)
-    ev.copy(code = s"""
+    ev.copy(code = code"""
       int ${ev.value} = 0;
       boolean ${ev.isNull} = false;
       ${startGen.code}
@@ -1350,7 +1351,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val formatter = classOf[java.util.Formatter].getName
     val sb = ctx.freshName("sb")
     val stringBuffer = classOf[StringBuffer].getName
-    ev.copy(code = s"""
+    ev.copy(code = code"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
