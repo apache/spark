@@ -339,7 +339,11 @@ abstract class DStream[T: ClassTag] (
           // recovery; see SPARK-4835 for more details. We need to have this call here because
           // compute() might cause Spark jobs to be launched.
           SparkHadoopWriterUtils.disableOutputSpecValidation.withValue(true) {
-            compute(time)
+            try {
+              compute(time)
+            } catch {
+              case _: StackOverflowError => None
+            }
           }
         }
 
