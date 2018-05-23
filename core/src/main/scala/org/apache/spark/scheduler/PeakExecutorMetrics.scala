@@ -39,10 +39,10 @@ private[spark] class PeakExecutorMetrics {
     var updated: Boolean = false
 
     (0 until MemoryTypes.values().length).foreach { metricIdx =>
-      val metricVal = MemoryTypes.values()(metricIdx).get(executorMetrics)
-      if (metricVal > metrics(metricIdx)) {
+      val newVal = executorMetrics.metrics(metricIdx)
+      if ( newVal > metrics(metricIdx)) {
         updated = true
-        metrics(metricIdx) = metricVal
+        metrics(metricIdx) = newVal
       }
     }
     updated
