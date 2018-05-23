@@ -25,36 +25,8 @@ import org.apache.spark.status.api.v1.PeakMemoryMetrics
  * values have been recorded yet.
  */
 private[spark] class PeakExecutorMetrics {
-  private var _jvmUsedHeapMemory = -1L;
-  private var _jvmUsedNonHeapMemory = 0L;
-  private var _onHeapExecutionMemory = 0L
-  private var _offHeapExecutionMemory = 0L
-  private var _onHeapStorageMemory = 0L
-  private var _offHeapStorageMemory = 0L
-  private var _onHeapUnifiedMemory = 0L
-  private var _offHeapUnifiedMemory = 0L
-  private var _directMemory = 0L
-  private var _mappedMemory = 0L
-
-  def jvmUsedHeapMemory: Long = _jvmUsedHeapMemory
-
-  def jvmUsedNonHeapMemory: Long = _jvmUsedNonHeapMemory
-
-  def onHeapExecutionMemory: Long = _onHeapExecutionMemory
-
-  def offHeapExecutionMemory: Long = _offHeapExecutionMemory
-
-  def onHeapStorageMemory: Long = _onHeapStorageMemory
-
-  def offHeapStorageMemory: Long = _offHeapStorageMemory
-
-  def onHeapUnifiedMemory: Long = _onHeapUnifiedMemory
-
-  def offHeapUnifiedMemory: Long = _offHeapUnifiedMemory
-
-  def directMemory: Long = _directMemory
-
-  def mappedMemory: Long = _mappedMemory
+  val metrics = new Array[Long](MemoryTypes.values().length)
+  metrics(0) = -1
 
   /**
    * Compare the specified memory values with the saved peak executor memory
@@ -66,47 +38,13 @@ private[spark] class PeakExecutorMetrics {
   def compareAndUpdate(executorMetrics: ExecutorMetrics): Boolean = {
     var updated: Boolean = false
 
-    if (executorMetrics.jvmUsedHeapMemory > _jvmUsedHeapMemory) {
-      _jvmUsedHeapMemory = executorMetrics.jvmUsedHeapMemory
-      updated = true
+    (0 until MemoryTypes.values().length).foreach { metricIdx =>
+      val metricVal = MemoryTypes.values()(metricIdx).get(executorMetrics)
+      if (metricVal > metrics(metricIdx)) {
+        updated = true
+        metrics(metricIdx) = metricVal
+      }
     }
-    if (executorMetrics.jvmUsedNonHeapMemory > _jvmUsedNonHeapMemory) {
-      _jvmUsedNonHeapMemory = executorMetrics.jvmUsedNonHeapMemory
-      updated = true
-    }
-    if (executorMetrics.onHeapExecutionMemory > _onHeapExecutionMemory) {
-      _onHeapExecutionMemory = executorMetrics.onHeapExecutionMemory
-      updated = true
-    }
-    if (executorMetrics.offHeapExecutionMemory > _offHeapExecutionMemory) {
-      _offHeapExecutionMemory = executorMetrics.offHeapExecutionMemory
-      updated = true
-    }
-    if (executorMetrics.onHeapStorageMemory > _onHeapStorageMemory) {
-      _onHeapStorageMemory = executorMetrics.onHeapStorageMemory
-      updated = true
-    }
-    if (executorMetrics.offHeapStorageMemory > _offHeapStorageMemory) {
-      _offHeapStorageMemory = executorMetrics.offHeapStorageMemory
-      updated = true
-    }
-    if (executorMetrics.onHeapUnifiedMemory > _onHeapUnifiedMemory) {
-      _onHeapUnifiedMemory = executorMetrics.onHeapUnifiedMemory
-      updated = true
-    }
-    if (executorMetrics.offHeapUnifiedMemory > _offHeapUnifiedMemory) {
-      _offHeapUnifiedMemory = executorMetrics.offHeapUnifiedMemory
-      updated = true
-    }
-    if (executorMetrics.directMemory > _directMemory) {
-      _directMemory = executorMetrics.directMemory
-      updated = true
-    }
-    if (executorMetrics.mappedMemory > _mappedMemory) {
-      _mappedMemory = executorMetrics.mappedMemory
-      updated = true
-    }
-
     updated
   }
 
@@ -115,13 +53,18 @@ private[spark] class PeakExecutorMetrics {
    *         values set.
    */
   def getPeakMemoryMetrics: Option[PeakMemoryMetrics] = {
-    if (_jvmUsedHeapMemory < 0) {
+    if (metrics(0) < 0) {
       None
     } else {
-      Some(new PeakMemoryMetrics(_jvmUsedHeapMemory, _jvmUsedNonHeapMemory,
-        _onHeapExecutionMemory, _offHeapExecutionMemory, _onHeapStorageMemory,
-        _offHeapStorageMemory, _onHeapUnifiedMemory, _offHeapUnifiedMemory,
-        _directMemory, _mappedMemory))
+      val copy = new PeakMemoryMetrics
+      System.arraycopy(this.metrics, 0, copy.metrics, 0, this.metrics.length)
+      Some(copy)
     }
+  }
+
+  /** Clears/resets the saved peak values. */
+  def reset(): Unit = {
+    (0 until metrics.length).foreach { idx => metrics(idx) = 0}
+    metrics(0) = -1
   }
 }
