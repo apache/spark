@@ -151,15 +151,12 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
   private lazy val arrayElementTypes = arrayTypes.map(_.elementType)
 
-
   def mountSchema: StructType = {
-    val fields = arrayTypes.zipWithIndex.map { case (arr, idx) =>
-      val fieldName = if (children(idx).isInstanceOf[NamedExpression]) {
-          children(idx).asInstanceOf[NamedExpression].name
-        } else {
-          s"$idx"
-        }
-      StructField(fieldName, arr.elementType, children(idx).nullable || arr.containsNull)
+    val fields = children.zip(arrayElementTypes).zipWithIndex.map {
+      case ((expr: NamedExpression, elementType), _) =>
+        StructField(expr.name, elementType, nullable = true)
+      case ((_, elementType), idx) =>
+        StructField(s"$idx", elementType, nullable = true)
     }
     StructType(fields)
   }
@@ -231,22 +228,6 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |$returnNull[0] = false;
       |$inputsSplitted
       |${CodeGenerator.javaType(dataType)} ${ev.value};
-      |Object[] $args = new Object[$biggestCardinality];
-      |for (int $i = 0; $i < $biggestCardinality; $i ++) {
-      |  Object[] $myobject = new Object[$numberOfArrays];
-      |  for (int $j = 0; $j < $numberOfArrays; $j ++) {
-      |    if ($arrVals[$j] != null && $arrCardinality[$j] > $i && !$arrVals[$j].isNullAt($i)) {
-      |      switch ($storedArrTypes[$j]) {
-      |        ${cases.mkString("\n")}
-      |       default:
-      |         break;
-      |      }
-      |    } else {
-      |      $myobject[$j] = null;
-      |    }
-      |  }
-      |  $args[$i] = new $genericInternalRow($myobject);
-      |}
       |boolean ${ev.isNull} = $returnNull[0];
       |if (${ev.isNull}) {
       |  ${ev.value} = null;
@@ -254,6 +235,22 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |  if ($numberOfArrays == 0) {
       |    ${ev.value} = new $genericArrayData(new Object[0]);
       |  } else {
+      |    Object[] $args = new Object[$biggestCardinality];
+      |    for (int $i = 0; $i < $biggestCardinality; $i ++) {
+      |      Object[] $myobject = new Object[$numberOfArrays];
+      |      for (int $j = 0; $j < $numberOfArrays; $j ++) {
+      |        if ($arrVals[$j] != null && $arrCardinality[$j] > $i && !$arrVals[$j].isNullAt($i)) {
+      |          switch ($storedArrTypes[$j]) {
+      |            ${cases.mkString("\n")}
+      |           default:
+      |             break;
+      |          }
+      |        } else {
+      |          $myobject[$j] = null;
+      |        }
+      |      }
+      |      $args[$i] = new $genericInternalRow($myobject);
+      |    }
       |    ${ev.value} = new $genericArrayData($args);
       |  }
       |}
@@ -265,18 +262,10 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     if (inputArrays.contains(null)) {
       null
     } else {
-      val inputCardinality = inputArrays.map { arr =>
-        if (arr != null) {
-          arr.numElements()
-        } else {
-          0
-        }
-      }
-
-      val biggestCardinality = if (inputCardinality.isEmpty) {
+      val biggestCardinality = if (inputArrays.isEmpty) {
         0
       } else {
-        inputCardinality.foldLeft(0)(_.max(_))
+        inputArrays.map(_.numElements()).max
       }
 
       val result = new Array[InternalRow](biggestCardinality)
@@ -284,7 +273,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
       for (i <- 0 until biggestCardinality) {
         val currentLayer: Seq[Object] = zippedArrs.map { case (arr, index) =>
-          if (arr != null && arr.numElements() > i && !arr.isNullAt(i)) {
+          if (i < arr.numElements() && !arr.isNullAt(i)) {
             arr.get(i, arrayElementTypes(index))
           } else {
             null
