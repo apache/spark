@@ -104,8 +104,8 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
   def setMaxLocalProjDBSize(value: Long): this.type = set(maxLocalProjDBSize, value)
 
   /**
-   * Param for the name of the sequence column in dataset, rows with nulls in this column
-   * are ignored.
+   * Param for the name of the sequence column in dataset (default "sequence"), rows with
+   * nulls in this column are ignored.
    * @group param
    */
   @Since("2.4.0")
