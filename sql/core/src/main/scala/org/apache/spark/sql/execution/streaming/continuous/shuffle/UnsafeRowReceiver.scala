@@ -76,8 +76,7 @@ private[shuffle] class UnsafeRowReceiver(
   override def read(): Iterator[UnsafeRow] = {
     new NextIterator[UnsafeRow] {
       // An array of flags for whether each writer ID has gotten an epoch marker.
-      private val writerEpochMarkersReceived =
-        mutable.Map.empty[Int, Boolean].withDefaultValue(false)
+      private val writerEpochMarkersReceived = Array.fill(numShuffleWriters)(false)
 
       private val executor = Executors.newFixedThreadPool(numShuffleWriters)
       private val completion = new ExecutorCompletionService[UnsafeRowReceiverMessage](executor)
@@ -113,12 +112,11 @@ private[shuffle] class UnsafeRowReceiver(
                 // Start reading the next element in the queue we just took from.
                 completion.submit(completionTask(writerId))
                 r
-              // TODO use writerId
               case ReceiverEpochMarker(writerId) =>
                 // Don't read any more from this queue. If all the writers have sent epoch markers,
                 // the epoch is over; otherwise we need to poll from the remaining writers.
-                writerEpochMarkersReceived.put(writerId, true)
-                if ((0 until numShuffleWriters).forall(id => writerEpochMarkersReceived(id))) {
+                writerEpochMarkersReceived(writerId) = true
+                if (writerEpochMarkersReceived.forall(flag => flag)) {
                   finished = true
                   // Break out of the while loop and end the iterator.
                   return null
