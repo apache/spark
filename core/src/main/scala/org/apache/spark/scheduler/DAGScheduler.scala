@@ -214,12 +214,6 @@ class DAGScheduler(
   private val heartbeater: Heartbeater = new Heartbeater(reportHeartBeat, "driver-heartbeater",
     sc.conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
 
-  /** BufferPoolMXBean for direct memory */
-  private val directBufferPool = Executor.getBufferPool(Executor.DIRECT_BUFFER_POOL_NAME)
-
-  /** BufferPoolMXBean for mapped memory */
-  private val mappedBufferPool = Executor.getBufferPool(Executor.MAPPED_BUFFER_POOL_NAME)
-
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -1770,8 +1764,7 @@ class DAGScheduler(
   /** Reports heartbeat metrics for the driver. */
   private def reportHeartBeat(): Unit = {
     // get driver memory metrics
-    val driverUpdates = Executor.getCurrentExecutorMetrics(
-      sc.env.memoryManager, directBufferPool, mappedBufferPool)
+    val driverUpdates = Executor.getCurrentExecutorMetrics(sc.env.memoryManager)
     val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
     listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
       Some(driverUpdates)))

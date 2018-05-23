@@ -18,50 +18,21 @@
 package org.apache.spark.scheduler;
 
 import org.apache.spark.executor.ExecutorMetrics;
+import org.apache.spark.memory.MemoryManager;
 
 public enum MemoryTypes {
-  JvmUsedMemory{
+  JvmUsedMemory {
     @Override
-    long get(ExecutorMetrics em) {
-      return em.jvmUsedMemory();
+    long getValue(MemoryManager memoryManager) {
+      return 0;
     }
   },
-  OnHeapExecutionMemory {
-    @Override
-    long get(ExecutorMetrics em) {
-      return em.onHeapExecutionMemory();
-    }
-  },
-  OffHeapExecutionMemory {
-    @Override
-    long get(ExecutorMetrics em) {
-      return em.offHeapExecutionMemory();
-    }
-  },
-  OnHeapStorageMemory {
-    @Override
-    long get(ExecutorMetrics em) {
-      return em.onHeapStorageMemory();
-    }
-  },
-  OffHeapStorageMemory {
-    @Override
-    long get(ExecutorMetrics em) {
-      return em.offHeapStorageMemory();
-    }
-  },
-  OnHeapUnifiedMemory {
-    @Override
-    long get(ExecutorMetrics em) {
-      return em.onHeapExecutionMemory() + em.onHeapStorageMemory();
-    }
-  },
-  OffHeapUnifiedMemory {
-    @Override
-    long get(ExecutorMetrics em) {
-      return em.offHeapExecutionMemory() + em.offHeapStorageMemory();
-    }
-  };
+  OnHeapExecutionMemory,
+  OffHeapExecutionMemory,
+  OnHeapStorageMemory,
+  OffHeapStorageMemory,
+  OnHeapUnifiedMemory,
+  OffHeapUnifiedMemory;
 
-  abstract long get(ExecutorMetrics em);
+  abstract long getValue(MemoryManager memoryManager);
 }
