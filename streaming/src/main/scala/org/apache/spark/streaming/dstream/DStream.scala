@@ -342,7 +342,10 @@ abstract class DStream[T: ClassTag] (
             try {
               compute(time)
             } catch {
-              case _: StackOverflowError => None
+              case soe: StackOverflowError =>
+                logWarning(s"Getting or computing the RDD corresponding" +
+                  s" to the time $time was failed", soe)
+                None
             }
           }
         }
