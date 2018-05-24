@@ -748,7 +748,7 @@
         <artifactId>jline</artifactId>
         <version>2.12.1</version>
       </dependency>
-	  <dependency>
+      <dependency>
         <groupId>io.reactivex.rxjava2</groupId>
         <artifactId>rxjava</artifactId>
         <version>2.1.13</version>
