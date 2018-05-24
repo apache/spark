@@ -36,8 +36,8 @@ import org.apache.spark.annotation.InterfaceStability;
 public interface InputPartition<T> extends Serializable {
 
   /**
-   * The preferred locations where the input partition reader returned by this partition can run
-   * faster, but Spark does not guarantee to run the input partition reader on these locations.
+   * The preferred locations where the input partition reader returned by this partition can run faster,
+   * but Spark does not guarantee to run the input partition reader on these locations.
    * The implementations should make sure that it can be run on any location.
    * The location is a string representing the host name.
    *
