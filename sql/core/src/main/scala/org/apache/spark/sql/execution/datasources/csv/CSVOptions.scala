@@ -28,21 +28,21 @@ import org.apache.spark.sql.catalyst.util._
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
+    val columnPruning: Boolean,
     defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String,
-    val columnPruning: Boolean)
+    defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable {
 
   def this(
     parameters: Map[String, String],
+    columnPruning: Boolean,
     defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String = "",
-    columnPruning: Boolean = true) = {
+    defaultColumnNameOfCorruptRecord: String = "") = {
       this(
         CaseInsensitiveMap(parameters),
+        columnPruning,
         defaultTimeZoneId,
-        defaultColumnNameOfCorruptRecord,
-        columnPruning)
+        defaultColumnNameOfCorruptRecord)
   }
 
   private def getChar(paramName: String, default: Char): Char = {

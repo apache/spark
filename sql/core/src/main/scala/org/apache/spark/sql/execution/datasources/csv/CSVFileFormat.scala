@@ -43,8 +43,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       path: Path): Boolean = {
     val parsedOptions = new CSVOptions(
       options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      columnPruning = sparkSession.sessionState.conf.csvColumnPruning)
+      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
     val csvDataSource = CSVDataSource(parsedOptions)
     csvDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
@@ -55,8 +55,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new CSVOptions(
       options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      columnPruning = sparkSession.sessionState.conf.csvColumnPruning)
+      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
 
     CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
@@ -68,7 +68,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       dataSchema: StructType): OutputWriterFactory = {
     CSVUtils.verifySchema(dataSchema)
     val conf = job.getConfiguration
-    val csvOptions = new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val csvOptions = new CSVOptions(
+      options,
+      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
     csvOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -101,9 +104,9 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     val parsedOptions = new CSVOptions(
       options,
+      sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
-      sparkSession.sessionState.conf.csvColumnPruning)
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     dataSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
