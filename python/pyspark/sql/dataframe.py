@@ -78,6 +78,7 @@ class DataFrame(object):
         self.is_cached = False
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
+        self._support_repr_html = False
 
     @property
     @since(1.3)
@@ -351,13 +352,9 @@ class DataFrame(object):
         else:
             print(self._jdf.showString(n, int(truncate), vertical, False))
 
-    def __repr__(self):
-        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
-
-    def _repr_html_(self):
-        """Returns a dataframe with html code when you enabled eager evaluation
-        by 'spark.sql.repl.eagerEval.enabled', this only called by repr you're
-        using support eager evaluation with HTML.
+    def _get_repl_config(self):
+        """Return the configs for eager evaluation each time when __repr__ or
+        _repr_html_ called by user or notebook.
         """
         eager_eval = self.sql_ctx.getConf(
             "spark.sql.repl.eagerEval.enabled", "false").lower() == "true"
@@ -365,6 +362,24 @@ class DataFrame(object):
             "spark.sql.repl.eagerEval.showRows", u"20"))
         console_truncate = int(self.sql_ctx.getConf(
             "spark.sql.repl.eagerEval.truncate", u"20"))
+        return (eager_eval, console_row, console_truncate)
+
+    def __repr__(self):
+        (eager_eval, console_row, console_truncate) = self._get_repl_config()
+        if not self._support_repr_html and eager_eval:
+            return self._jdf.showString(
+                console_row, console_truncate, False, False)
+        else:
+            return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    def _repr_html_(self):
+        """Returns a dataframe with html code when you enabled eager evaluation
+        by 'spark.sql.repl.eagerEval.enabled', this only called by repr you're
+        using support eager evaluation with HTML.
+        """
+        if not self._support_repr_html:
+            self._support_repr_html = True
+        (eager_eval, console_row, console_truncate) = self._get_repl_config()
         if eager_eval:
             return self._jdf.showString(
                 console_row, console_truncate, False, True)
