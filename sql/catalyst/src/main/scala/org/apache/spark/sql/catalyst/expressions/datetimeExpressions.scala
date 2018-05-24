@@ -1434,14 +1434,14 @@ case class TruncDate(date: Expression, format: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'YEAR');
-       2015-01-01T00:00:00
-      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'MM');
-       2015-03-01T00:00:00
-      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'DD');
-       2015-03-05T00:00:00
-      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'HOUR');
-       2015-03-05T09:00:00
+      > SELECT _FUNC_('YEAR', '2015-03-05T09:32:05.359');
+       2015-01-01 00:00:00
+      > SELECT _FUNC_('MM', '2015-03-05T09:32:05.359');
+       2015-03-01 00:00:00
+      > SELECT _FUNC_('DD', '2015-03-05T09:32:05.359');
+       2015-03-05 00:00:00
+      > SELECT _FUNC_('HOUR', '2015-03-05T09:32:05.359');
+       2015-03-05 09:00:00
   """,
   since = "2.3.0")
 // scalastyle:on line.size.limit
