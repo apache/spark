@@ -51,7 +51,7 @@ private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends UnsafeRow
 private[shuffle] class UnsafeRowReceiver(
       queueSize: Int,
       numShuffleWriters: Int,
-      checkpointIntervalMs: Long,
+      epochIntervalMs: Long,
       override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with ContinuousShuffleReader with Logging {
   // Note that this queue will be drained from the main task thread and populated in the RPC
@@ -98,12 +98,16 @@ private[shuffle] class UnsafeRowReceiver(
       override def getNext(): UnsafeRow = {
         var nextRow: UnsafeRow = null
         while (nextRow == null) {
-          nextRow = completion.poll(checkpointIntervalMs, TimeUnit.MILLISECONDS) match {
+          nextRow = completion.poll(epochIntervalMs, TimeUnit.MILLISECONDS) match {
             case null =>
               // Try again if the poll didn't wait long enough to get a real result.
               // But we should be getting at least an epoch marker every checkpoint interval.
+              val writerIdsUncommitted = writerEpochMarkersReceived.zipWithIndex.collect {
+                case (flag, idx) if !flag => idx
+              }
               logWarning(
-                s"Completion service failed to make progress after $checkpointIntervalMs ms")
+                s"Completion service failed to make progress after $epochIntervalMs ms. Waiting " +
+                  s"for writers $writerIdsUncommitted to send epoch markers.")
               null
 
             // The completion service guarantees this future will be available immediately.

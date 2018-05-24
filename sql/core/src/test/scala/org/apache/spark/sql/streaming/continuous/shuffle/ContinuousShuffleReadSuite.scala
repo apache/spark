@@ -171,7 +171,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
 
   test("blocks waiting for new rows") {
     val rdd = new ContinuousShuffleReadRDD(
-      sparkContext, numPartitions = 1, checkpointIntervalMs = Long.MaxValue)
+      sparkContext, numPartitions = 1, epochIntervalMs = Long.MaxValue)
     val epoch = rdd.compute(rdd.partitions(0), ctx)
 
     val readRowThread = new Thread {
@@ -215,7 +215,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
 
   test("epoch only ends when all writers send markers") {
     val rdd = new ContinuousShuffleReadRDD(
-      sparkContext, numPartitions = 1, numShuffleWriters = 3, checkpointIntervalMs = Long.MaxValue)
+      sparkContext, numPartitions = 1, numShuffleWriters = 3, epochIntervalMs = Long.MaxValue)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
     send(
       endpoint,
