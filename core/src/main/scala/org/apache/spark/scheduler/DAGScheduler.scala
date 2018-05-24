@@ -1167,9 +1167,7 @@ class DAGScheduler(
    */
   private[scheduler] def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
-    val taskId = event.taskInfo.id
     val stageId = task.stageId
-    val taskType = Utils.getFormattedClassName(task)
 
     outputCommitCoordinator.taskCompleted(
       stageId,
@@ -1323,7 +1321,7 @@ class DAGScheduler(
               "tasks in ShuffleMapStages.")
         }
 
-      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
+      case FetchFailed(bmAddress, shuffleId, mapId, _, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
@@ -1411,7 +1409,7 @@ class DAGScheduler(
           }
         }
 
-      case commitDenied: TaskCommitDenied =>
+      case _: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
       case _: ExceptionFailure | _: TaskKilled =>
