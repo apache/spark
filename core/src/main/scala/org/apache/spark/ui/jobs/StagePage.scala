@@ -112,7 +112,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <div id="no-info">
             <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
           </div>
-        return UIUtils.headerSparkPage(stageHeader, content, parent)
+        return UIUtils.headerSparkPage(request, stageHeader, content, parent)
       }
 
     val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
@@ -125,7 +125,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <h4>Summary Metrics</h4> No tasks have started yet
           <h4>Tasks</h4> No tasks have started yet
         </div>
-      return UIUtils.headerSparkPage(stageHeader, content, parent)
+      return UIUtils.headerSparkPage(request, stageHeader, content, parent)
     }
 
     val storedTasks = store.taskCount(stageData.stageId, stageData.attemptId)
@@ -282,7 +282,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val (taskTable, taskTableHTML) = try {
       val _taskTable = new TaskPagedTable(
         stageData,
-        UIUtils.prependBaseUri(parent.basePath) +
+        UIUtils.prependBaseUri(request, parent.basePath) +
           s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
         currentTime,
         pageSize = taskPageSize,
@@ -498,7 +498,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div class="aggregated-tasks collapsible-table">
         {taskTableHTML ++ jsForScrollingDownToTaskTable}
       </div>
-    UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
+    UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true)
   }
 
   def makeTimeline(tasks: Seq[TaskData], currentTime: Long): Seq[Node] = {
