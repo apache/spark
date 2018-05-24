@@ -25,7 +25,6 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang.StringEscapeUtils
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.TaskContext
@@ -217,6 +216,9 @@ class Dataset[T] private[sql](
   // sqlContext must be val because a stable identifier is expected when you import implicits
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
+  // We set a minimum column width at '3' in showString
+  val minimumColWidth = 3
+
   private[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
       .getOrElse {
@@ -232,20 +234,17 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Compose the string representing rows for output
+   * Get rows represented in Sequence by specific truncate and vertical requirment.
    *
-   * @param _numRows Number of rows to show
+   * @param numRows Number of rows to return
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
    *                   all cells will be aligned right.
-   * @param vertical If set to true, prints output rows vertically (one line per column value).
-   * @param html     If set to true, return output as html table.
+   * @param vertical If set to true, the rows to return don't need truncate.
    */
-  private[sql] def showString(
-      _numRows: Int,
-      truncate: Int = 20,
-      vertical: Boolean = false,
-      html: Boolean = false): String = {
-    val numRows = _numRows.max(0).min(Int.MaxValue - 1)
+  private[sql] def getRows(
+      numRows: Int,
+      truncate: Int,
+      vertical: Boolean): (Seq[Seq[String]], Boolean) = {
     val newDf = toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
       // Since binary types in top-level schema fields have a specific format to print,
@@ -263,7 +262,7 @@ class Dataset[T] private[sql](
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
-    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
+    var rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
@@ -280,12 +279,8 @@ class Dataset[T] private[sql](
       }: Seq[String]
     }
 
-    val sb = new StringBuilder
-    val numCols = schema.fieldNames.length
-    // We set a minimum column width at '3'
-    val minimumColWidth = 3
-
     if (!vertical) {
+      val numCols = schema.fieldNames.length
       // Initialise the width of each column to a minimum value
       val colWidths = Array.fill(numCols)(minimumColWidth)
 
@@ -296,31 +291,54 @@ class Dataset[T] private[sql](
         }
       }
 
-      // Create SeparateLine
-      val sep: String = if (html) {
-        // Initial append table label
-        sb.append("<table border='1'>\n")
-        ""
-      } else {
-        colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+      rows = rows.map {
+        _.zipWithIndex.map { case (cell, i) =>
+          if (truncate > 0) {
+            StringUtils.leftPad(cell, colWidths(i))
+          } else {
+            StringUtils.rightPad(cell, colWidths(i))
+          }
+        }
       }
+    }
+    (rows, hasMoreData)
+  }
+
+  /**
+   * Compose the string representing rows for output
+   *
+   * @param _numRows Number of rows to show
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                   all cells will be aligned right.
+   * @param vertical If set to true, prints output rows vertically (one line per column value).
+   */
+  private[sql] def showString(
+      _numRows: Int,
+      truncate: Int = 20,
+      vertical: Boolean = false): String = {
+    val numRows = _numRows.max(0).min(Int.MaxValue - 1)
+
+    val sb = new StringBuilder
+    val (rows, hasMoreData) = getRows(numRows, truncate, vertical)
+    val fieldNames = rows.head
+    val dataRows = rows.tail
+
+    if (!vertical) {
+      // Create SeparateLine
+      val sep: String = fieldNames.map(_.length).toArray
+        .map("-" * _).addString(sb, "+", "+", "+\n").toString()
 
       // column names
-      appendRowString(rows.head, truncate, colWidths, html, true, sb)
+      fieldNames.addString(sb, "|", "|", "|\n")
       sb.append(sep)
 
       // data
-      rows.tail.foreach { row =>
-        appendRowString(row, truncate, colWidths, html, false, sb)
+      dataRows.foreach {
+        _.addString(sb, "|", "|", "|\n")
       }
-
       sb.append(sep)
-      if (html) sb.append("</table>\n")
     } else {
       // Extended display mode enabled
-      val fieldNames = rows.head
-      val dataRows = rows.tail
-
       // Compute the width of field name and data columns
       val fieldNameColWidth = fieldNames.foldLeft(minimumColWidth) { case (curMax, fieldName) =>
         math.max(curMax, fieldName.length)
@@ -345,7 +363,7 @@ class Dataset[T] private[sql](
     }
 
     // Print a footer
-    if (vertical && data.isEmpty) {
+    if (vertical && dataRows.isEmpty) {
       // In a vertical mode, print an empty row set explicitly
       sb.append("(0 rows)\n")
     } else if (hasMoreData) {
@@ -355,43 +373,6 @@ class Dataset[T] private[sql](
     }
 
     sb.toString()
-  }
-
-  /**
-   * Transform current row string and append to builder
-   *
-   * @param row       Current row of string
-   * @param truncate  If set to more than 0, truncates strings to `truncate` characters and
-   *                    all cells will be aligned right.
-   * @param colWidths The width of each column
-   * @param html      If set to true, return output as html table.
-   * @param head      Set to true while current row is table head.
-   * @param sb        StringBuilder for current row.
-   */
-  private[sql] def appendRowString(
-      row: Seq[String],
-      truncate: Int,
-      colWidths: Array[Int],
-      html: Boolean,
-      head: Boolean,
-      sb: StringBuilder): Unit = {
-    val data = row.zipWithIndex.map { case (cell, i) =>
-      if (truncate > 0) {
-        StringUtils.leftPad(cell, colWidths(i))
-      } else {
-        StringUtils.rightPad(cell, colWidths(i))
-      }
-    }
-    (html, head) match {
-      case (true, true) =>
-        data.map(StringEscapeUtils.escapeHtml).addString(
-          sb, "<tr><th>", "</th>\n<th>", "</th></tr>\n")
-      case (true, false) =>
-        data.map(StringEscapeUtils.escapeHtml).addString(
-          sb, "<tr><td>", "</td>\n<td>", "</td></tr>\n")
-      case _ =>
-        data.addString(sb, "|", "|", "|\n")
-    }
   }
 
   override def toString: String = {

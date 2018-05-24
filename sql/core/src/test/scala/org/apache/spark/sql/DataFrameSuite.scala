@@ -1245,30 +1245,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.showString(10, vertical = true) === expectedAnswer)
   }
 
-  test("SPARK-24215 showString: html = true") {
-    // test for normal html
-    val expectedAnswer = """<table border='1'>
-                           |<tr><th>key</th>
-                           |<th>value</th></tr>
-                           |<tr><td>  1</td>
-                           |<td>    1</td></tr>
-                           |</table>
-                           |only showing top 1 row
-                           |""".stripMargin
-    // test for html escape
-    val escapeExpectedAnswer = """<table border='1'>
-                                 |<tr><th>key</th>
-                                 |<th>(value &gt; 1)</th></tr>
-                                 |<tr><td>  1</td>
-                                 |<td>      false</td></tr>
-                                 |</table>
-                                 |only showing top 1 row
-                                 |""".stripMargin
-    assert(testData.select($"*").showString(1, html = true) === expectedAnswer)
-    assert(testData.select(testData("key"), testData("value") > 1).showString(
-      1, html = true) === escapeExpectedAnswer)
-  }
-
   test("SPARK-7319 showString") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
