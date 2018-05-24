@@ -1093,6 +1093,44 @@ class SparkSubmitSuite
     assert(exception.getMessage() === "hello")
   }
 
+  test("support --py-files/spark.submit.pyFiles in non pyspark application") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+
+    val tmpDir = Utils.createTempDir()
+    val pyFile = File.createTempFile("tmpPy", ".egg", tmpDir)
+
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--py-files", s"s3a://${pyFile.getAbsolutePath}",
+      "spark-internal"
+    )
+
+    val appArgs = new SparkSubmitArguments(args)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, conf = Some(hadoopConf))
+
+    conf.get("spark.yarn.dist.pyFiles") should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf.get("spark.submit.pyFiles") should (startWith("/"))
+
+    // Verify "spark.submit.pyFiles"
+    val args1 = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--conf", s"spark.submit.pyFiles=s3a://${pyFile.getAbsolutePath}",
+      "spark-internal"
+    )
+
+    val appArgs1 = new SparkSubmitArguments(args1)
+    val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1, conf = Some(hadoopConf))
+
+    conf1.get("spark.yarn.dist.pyFiles") should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf1.get("spark.submit.pyFiles") should (startWith("/"))
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
