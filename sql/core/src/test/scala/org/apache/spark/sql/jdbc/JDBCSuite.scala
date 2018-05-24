@@ -1190,4 +1190,20 @@ class JDBCSuite extends SparkFunSuite
       assert(sql("select * from people_view").schema === schema)
     }
   }
+
+  test("SPARK-23856 Spark jdbc setQueryTimeout option") {
+    val numJoins = 100
+    val longRunningQuery =
+      s"SELECT t0.NAME AS c0, ${(1 to numJoins).map(i => s"t$i.NAME AS c$i").mkString(", ")} " +
+        s"FROM test.people t0 ${(1 to numJoins).map(i => s"join test.people t$i").mkString(" ")}"
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("dbtable", s"($longRunningQuery)")
+      .option("queryTimeout", 1)
+      .load()
+    val errMsg = intercept[SparkException] {
+      df.collect()
+    }.getMessage
+    assert(errMsg.contains("Statement was canceled or the session timed out"))
+  }
 }
