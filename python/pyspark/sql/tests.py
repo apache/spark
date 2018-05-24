@@ -909,7 +909,7 @@ class SQLTests(ReusedSQLTestCase):
             raise StopIteration()
 
         with self.assertRaises(Py4JJavaError):
-            self.spark.range(0, 1000).withColumn('v', udf(foo)).show()
+            self.spark.range(0, 1000).withColumn('v', udf(foo)('id')).show()
 
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json

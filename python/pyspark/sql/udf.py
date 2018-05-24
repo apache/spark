@@ -25,7 +25,7 @@ from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string,\
     to_arrow_type, to_arrow_schema
-from pyspark.util import _get_argspec
+from pyspark.util import _get_argspec, fail_on_stopiteration
 
 __all__ = ["UDFRegistration"]
 
@@ -92,7 +92,7 @@ class UserDefinedFunction(object):
             raise TypeError(
                 "Invalid evalType: evalType should be an int but is {}".format(evalType))
 
-        self.func = func
+        self.func = fail_on_stopiteration(func)
         self._returnType = returnType
         # Stores UserDefinedPythonFunctions jobj, once initialized
         self._returnType_placeholder = None

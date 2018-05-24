@@ -91,8 +91,8 @@ class VersionUtils(object):
 
 def fail_on_stopiteration(f):
     """
-        Wraps the input function to fail on 'StopIteration' by raising a 'RuntimeError'
-        prevents silent loss of data when 'f' is used in a for loop
+    Wraps the input function to fail on 'StopIteration' by raising a 'RuntimeError'
+    prevents silent loss of data when 'f' is used in a for loop
     """
     def wrapper(*args, **kwargs):
         try:
