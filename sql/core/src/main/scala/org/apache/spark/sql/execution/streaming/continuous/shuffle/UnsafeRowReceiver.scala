@@ -120,7 +120,7 @@ private[shuffle] class UnsafeRowReceiver(
                 // the epoch is over; otherwise we need to loop again to poll from the remaining
                 // writers.
                 writerEpochMarkersReceived(writerId) = true
-                if (writerEpochMarkersReceived.forall(flag => flag)) {
+                if (writerEpochMarkersReceived.forall(_ == true)) {
                   finished = true
                 }
             }
