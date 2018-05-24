@@ -16,14 +16,14 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import java.util.concurrent.{Callable, LinkedBlockingQueue, ScheduledExecutorService, TimeUnit}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
+import com.google.common.collect.Lists
 import io.fabric8.kubernetes.api.model.Pod
-import io.reactivex.Flowable
 import io.reactivex.disposables.Disposable
-import io.reactivex.functions.{BooleanSupplier, Consumer}
+import io.reactivex.functions.Consumer
 import io.reactivex.schedulers.Schedulers
+import io.reactivex.subjects.PublishSubject
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -31,16 +31,7 @@ import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsEventQueue(eventsProcessorExecutor: ScheduledExecutorService) {
 
-  private val eventQueue = new LinkedBlockingQueue[Pod]()
-  private val terminationSignal = new AtomicBoolean(false)
-  private val eventsObservable =
-    // Source is from the blocking queue
-    Flowable.fromCallable(toCallable(eventQueue.take()))
-      // Keep polling for items until we're told to stop. When the event queue is empty we'll
-      // be able to stall, preventing overload of the downstream observables.
-      .repeatUntil(toReactivexBooleanSupplier(() => terminationSignal.get()))
-      // Forces every event to be shared amongst all observers. Will
-      .publish()
+  private val eventsObservable = PublishSubject.create[Pod]()
   private val observedDisposables = mutable.Buffer.empty[Disposable]
 
   def addSubscriber(processBatchIntervalMillis: Long)(onNextBatch: Seq[Pod] => Unit): Unit = {
@@ -54,7 +45,7 @@ private[spark] class ExecutorPodsEventQueue(eventsProcessorExecutor: ScheduledEx
         // For testing - specifically use the given scheduled executor service to trigger
         // buffer boundaries. Allows us to inject a deterministic scheduler here.
         Schedulers.from(eventsProcessorExecutor))
-      .subscribeOn(Schedulers.from(eventsProcessorExecutor))
+      .startWith(Lists.newArrayList[Pod]())
       .subscribe(toReactivexConsumer { (pods: java.util.List[Pod]) =>
         Utils.tryLogNonFatalError {
           onNextBatch(pods.asScala)
@@ -62,35 +53,16 @@ private[spark] class ExecutorPodsEventQueue(eventsProcessorExecutor: ScheduledEx
       })
   }
 
-  def startProcessingEvents(): Unit = eventsObservable.connect()
-
   def stopProcessingEvents(): Unit = {
-    terminationSignal.set(true)
-    observedDisposables.foreach { disposable =>
-      Utils.tryLogNonFatalError {
-        disposable.dispose()
-      }
-    }
-    eventsProcessorExecutor.shutdownNow()
+    observedDisposables.foreach(_.dispose())
+    eventsObservable.onComplete()
   }
 
-  def pushPodUpdate(updatedPod: Pod): Unit = eventQueue.add(updatedPod)
-
-  private def toCallable[T](callable: => T): Callable[T] = {
-    new Callable[T] {
-      override def call(): T = callable
-    }
-  }
+  def pushPodUpdate(updatedPod: Pod): Unit = eventsObservable.onNext(updatedPod)
 
   private def toReactivexConsumer[T](consumer: T => Unit): Consumer[T] = {
     new Consumer[T] {
       override def accept(item: T): Unit = consumer(item)
-    }
-  }
-
-  private def toReactivexBooleanSupplier(supplier: () => Boolean): BooleanSupplier = {
-    new BooleanSupplier {
-      override def getAsBoolean = supplier()
     }
   }
 }

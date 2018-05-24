@@ -58,17 +58,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def start(): Unit = {
     super.start()
+    if (!Utils.isDynamicAllocationEnabled(conf)) {
+      podAllocator.setTotalExpectedExecutors(initialExecutors)
+    }
+    lifecycleEventHandler.start(this)
+    podAllocator.start(applicationId())
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
-    lifecycleEventHandler.start(this)
-
-    if (!Utils.isDynamicAllocationEnabled(conf)) {
-      podAllocator.start(applicationId(), initialExecutors)
-    } else {
-      podAllocator.start(applicationId())
-    }
-
-    eventQueue.startProcessingEvents()
   }
 
   override def stop(): Unit = {

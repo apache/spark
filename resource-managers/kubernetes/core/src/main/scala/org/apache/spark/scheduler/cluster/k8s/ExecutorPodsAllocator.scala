@@ -69,15 +69,6 @@ private[spark] class ExecutorPodsAllocator(
     }
   }
 
-  def start(applicationId: String, initialExecutors: Int): Unit = {
-    // Bootstrap immediately - the subsequent requests will only occur asynchronously after the
-    // given delay.
-    setTotalExpectedExecutors(initialExecutors)
-    processUpdatedPodEvents(applicationId, Seq.empty[Pod])
-
-    start(applicationId)
-  }
-
   def setTotalExpectedExecutors(total: Int): Unit = totalExpectedExecutors.set(total)
 
   private def processUpdatedPodEvents(applicationId: String, updatedPods: Seq[Pod]): Unit = {
