@@ -771,9 +771,13 @@ class SparkSubmitSuite
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
 
     // Test remote python files
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
     val f4 = File.createTempFile("test-submit-remote-python-files", "", tmpDir)
+    val pyFile1 = File.createTempFile("file1", ".py", tmpDir)
+    val pyFile2 = File.createTempFile("file2", ".py", tmpDir)
     val writer4 = new PrintWriter(f4)
-    val remotePyFiles = "hdfs:///tmp/file1.py,hdfs:///tmp/file2.py"
+    val remotePyFiles = s"s3a://${pyFile1.getAbsolutePath},s3a://${pyFile2.getAbsolutePath}"
     writer4.println("spark.submit.pyFiles " + remotePyFiles)
     writer4.close()
     val clArgs4 = Seq(
@@ -783,7 +787,7 @@ class SparkSubmitSuite
       "hdfs:///tmp/mister.py"
     )
     val appArgs4 = new SparkSubmitArguments(clArgs4)
-    val (_, _, conf4, _) = submit.prepareSubmitEnvironment(appArgs4)
+    val (_, _, conf4, _) = submit.prepareSubmitEnvironment(appArgs4, conf = Some(hadoopConf))
     // Should not format python path for yarn cluster mode
     conf4.get("spark.submit.pyFiles") should be(Utils.resolveURIs(remotePyFiles))
   }
