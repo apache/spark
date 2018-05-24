@@ -330,8 +330,8 @@ object InMemoryFileIndex extends Logging {
     }
 
     if (missingFiles.nonEmpty) {
-      logWarning(s"The paths [${missingFiles.mkString(", ")}] were not found. " +
-        "Were they deleted very recently?")
+      logWarning("the following files were missing during file " +
+        s"scan:\n  ${missingFiles.mkString("\n  ")}")
     }
 
     resolvedLeafStatuses
