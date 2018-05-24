@@ -1395,8 +1395,14 @@ case class ArrayPosition(left: Expression, right: Expression)
     TypeUtils.getInterpretedOrdering(right.dataType)
 
   override def dataType: DataType = LongType
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    val elementType = left.dataType match {
+      case t: ArrayType => t.elementType
+      case _ => AnyDataType
+    }
+    Seq(ArrayType, elementType)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {

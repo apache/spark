@@ -204,7 +204,7 @@ def run_scala_style_checks():
 
 def run_java_style_checks():
     set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-java")])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle")])
 
 
 def run_python_style_checks():
@@ -574,8 +574,7 @@ def main():
                                 or f.endswith("checkstyle.xml")
                                 or f.endswith("checkstyle-suppressions.xml")
                                 for f in changed_files):
-        # run_java_style_checks()
-        pass
+        run_java_style_checks()
     if not changed_files or any(f.endswith("lint-python")
                                 or f.endswith("tox.ini")
                                 or f.endswith(".py")
