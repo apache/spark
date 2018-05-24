@@ -212,18 +212,18 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     }
   }
 
-  test("cleanup non-shuffle files after executor death when config " +
-      "spark.storage.cleanupFilesAfterExecutorDeath=true") {
+  test("cleanup non-shuffle files after executor exits when config " +
+      "spark.storage.cleanupFilesAfterExecutorExit=true") {
     testCleanupFilesWithConfig(true)
   }
 
-  test("don't cleanup non-shuffle files after executor death when config " +
-      "spark.storage.cleanupFilesAfterExecutorDeath=false") {
+  test("don't cleanup non-shuffle files after executor exits when config " +
+      "spark.storage.cleanupFilesAfterExecutorExit=false") {
     testCleanupFilesWithConfig(false)
   }
 
   private def testCleanupFilesWithConfig(value: Boolean) = {
-    val conf = new SparkConf().set("spark.storage.cleanupFilesAfterExecutorDeath", value.toString)
+    val conf = new SparkConf().set("spark.storage.cleanupFilesAfterExecutorExit", value.toString)
 
     val cleanupCalled = new AtomicBoolean(false)
     when(shuffleService.executorRemoved(any[String], any[String])).thenAnswer(new Answer[Unit] {

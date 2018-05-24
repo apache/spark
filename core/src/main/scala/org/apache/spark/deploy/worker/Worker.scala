@@ -99,9 +99,9 @@ private[deploy] class Worker(
   private val APP_DATA_RETENTION_SECONDS =
     conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
-  // Whether or not cleanup the non-shuffle files on executor death.
+  // Whether or not cleanup the non-shuffle files on executor exits.
   private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
-    conf.getBoolean("spark.storage.cleanupFilesAfterExecutorDeath", true)
+    conf.getBoolean("spark.storage.cleanupFilesAfterExecutorExit", true)
 
   private val testing: Boolean = sys.props.contains("spark.testing")
   private var master: Option[RpcEndpointRef] = None

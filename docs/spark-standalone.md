@@ -255,11 +255,11 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.cleanupFilesAfterExecutorDeath</code></td>
+  <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
   <td>true</td>
   <td>
     Enable cleanup non-shuffle files(such as temp. shuffle blocks, cached RDD/broadcast blocks,
-    spill files, etc) of worker directories following executor death. Note that this doesn't
+    spill files, etc) of worker directories following executor exits. Note that this doesn't
     overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
     local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
     all files/subdirectories of a stopped and timeout application.
