@@ -330,8 +330,8 @@ object InMemoryFileIndex extends Logging {
     }
 
     if (missingFiles.nonEmpty) {
-      logWarning("the following files were missing during file " +
-        s"scan:\n  ${missingFiles.mkString("\n  ")}")
+      logWarning(
+        s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
     }
 
     resolvedLeafStatuses
