@@ -189,27 +189,13 @@ public class RpcIntegrationSuite {
     RpcResult res = new RpcResult();
     res.successMessages = Collections.synchronizedSet(new HashSet<String>());
     res.errorMessages = Collections.synchronizedSet(new HashSet<String>());
-    RpcResponseCallback callback = new RpcResponseCallback() {
-      @Override
-      public void onSuccess(ByteBuffer message) {
-        String response = JavaUtils.bytesToString(message);
-        res.successMessages.add(response);
-        sem.release();
-      }
-
-      @Override
-      public void onFailure(Throwable e) {
-        res.errorMessages.add(e.getMessage());
-        sem.release();
-      }
-    };
 
     for (String stream: streams) {
       int idx = stream.lastIndexOf('/');
       ManagedBuffer meta = new NioManagedBuffer(JavaUtils.stringToBytes(stream));
       String streamName = (idx == -1) ? stream : stream.substring(idx + 1);
       ManagedBuffer data = testData.openStream(conf, streamName);
-      client.uploadStream(meta, data, callback);
+      client.uploadStream(meta, data, new RpcStreamCallback(stream, res, sem));
     }
     streamCallbacks.values().forEach(streamCallback -> {
       try {
@@ -225,6 +211,29 @@ public class RpcIntegrationSuite {
     }
     client.close();
     return res;
+  }
+
+  private static class RpcStreamCallback implements RpcResponseCallback {
+    final String streamId;
+    final RpcResult res;
+    final Semaphore sem;
+    RpcStreamCallback(String streamId, RpcResult res, Semaphore sem) {
+      this.streamId = streamId;
+      this.res = res;
+      this.sem = sem;
+    }
+
+    @Override
+    public void onSuccess(ByteBuffer message) {
+      res.successMessages.add(streamId);
+      sem.release();
+    }
+
+    @Override
+    public void onFailure(Throwable e) {
+      res.errorMessages.add(e.getMessage());
+      sem.release();
+    }
   }
 
   @Test
