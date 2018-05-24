@@ -427,7 +427,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     val it = map.iterator
     assert(it.isInstanceOf[CompletionIterator[_, _]])
     val underlyingIt = map.readingIterator
-    assert( underlyingIt != null )
+    assert(underlyingIt != null)
     val underlyingMapIterator = underlyingIt.upstream
     assert(underlyingMapIterator != null)
     val underlyingMapIteratorClass = underlyingMapIterator.getClass
@@ -444,7 +444,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
       assert(sortedVs.seq == (0 until 10).map(10 * k + _))
       k
     }
-    assert( map.numSpills == 0 )
+    assert(map.numSpills == 0)
     map.spill(Long.MaxValue, null)
     // these asserts try to show that we're no longer holding references to the underlying map.
     // it'd be nice to use something like
@@ -480,7 +480,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     val it = map.iterator
     assert(it.isInstanceOf[CompletionIterator[_, _]])
     val underlyingIt = map.readingIterator
-    assert(underlyingIt != null )
+    assert(underlyingIt != null)
     val underlyingMapIterator = underlyingIt.upstream
     assert(underlyingMapIterator != null)
     val underlyingMapIteratorClass = underlyingMapIterator.getClass
@@ -503,7 +503,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     assert(it.isEmpty)
     assert(keys == (0 until 100))
 
-    assert(map.numSpills == 0 )
+    assert(map.numSpills == 0)
     // these asserts try to show that we're no longer holding references to the underlying map.
     // it'd be nice to use something like
     // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
