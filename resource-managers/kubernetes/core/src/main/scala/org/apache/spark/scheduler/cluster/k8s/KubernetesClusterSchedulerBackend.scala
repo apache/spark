@@ -97,7 +97,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future[Boolean] {
-    lifecycleEventHandler.setTotalExpectedExecutors(requestedTotal)
+    podAllocator.setTotalExpectedExecutors(requestedTotal)
     true
   }
 

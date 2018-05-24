@@ -44,7 +44,7 @@ private[spark] class ExecutorPodsLifecycleEventHandler(
   // bounds.
   private val removedExecutors = CacheBuilder.newBuilder()
     .expireAfterWrite(3, TimeUnit.MINUTES)
-    .build[Long, java.lang.Long]
+    .build[java.lang.Long, java.lang.Long]()
 
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     podsEventQueue.addSubscriber(1000L) { updatedPods =>
