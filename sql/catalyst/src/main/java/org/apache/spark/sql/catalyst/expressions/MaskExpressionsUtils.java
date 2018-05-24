@@ -21,7 +21,7 @@ package org.apache.spark.sql.catalyst.expressions;
  * Contains all the Utils methods used in the masking expressions.
  */
 public class MaskExpressionsUtils {
-  final static int UNMASKED_VAL = -1;
+  static final int UNMASKED_VAL = -1;
 
   /**
    * Returns the masking character for {@param c} or {@param c} is it should not be masked.
