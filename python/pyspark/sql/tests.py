@@ -908,7 +908,7 @@ class SQLTests(ReusedSQLTestCase):
         def foo(x):
             raise StopIteration()
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaises(Py4JJavaError):
             self.spark.range(0, 1000).withColumn('v', udf(foo)).show()
 
     def test_validate_column_types(self):

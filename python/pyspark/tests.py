@@ -1279,28 +1279,22 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_stopiteration_in_client_code(self):
 
-        def a_rdd(keyed=False):
-            return self.sc.parallelize(
-                ((x % 2, x) if keyed else x)
-                for x in range(10)
-            )
-
         def stopit(*x):
             raise StopIteration()
 
-        def do_test(action, *args, **kwargs):
-            with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
-                action(*args, **kwargs)
+        seq_rdd = self.sc.parallelize(range(10))
+        keyed_rdd = self.sc.parallelize((x % 2, x) for x in range(10))
+        exc = Py4JJavaError, RuntimeError
 
-        do_test(a_rdd().map(stopit).collect)
-        do_test(a_rdd().filter(stopit).collect)
-        do_test(a_rdd().cartesian(a_rdd()).flatMap(stopit).collect)
-        do_test(a_rdd().foreach, stopit)
-        do_test(a_rdd(keyed=True).reduceByKeyLocally, stopit)
-        do_test(a_rdd().reduce, stopit)
-        do_test(a_rdd().fold, 0, stopit)
-        do_test(a_rdd().aggregate, 0, stopit, lambda *x: 1)
-        do_test(a_rdd().aggregate, 0, lambda *x: 1, stopit)
+        self.assertRaises(exc, seq_rdd.map(stopit).collect)
+        self.assertRaises(exc, seq_rdd.filter(stopit).collect)
+        self.assertRaises(exc, seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
+        self.assertRaises(exc, seq_rdd.foreach, stopit)
+        self.assertRaises(exc, keyed_rdd.reduceByKeyLocally, stopit)
+        self.assertRaises(exc, seq_rdd.reduce, stopit)
+        self.assertRaises(exc, seq_rdd.fold, 0, stopit)
+        self.assertRaises(exc, seq_rdd.aggregate, 0, stopit, lambda *x: 1)
+        self.assertRaises(exc, seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
 
 class ProfilerTests(PySparkTestCase):
