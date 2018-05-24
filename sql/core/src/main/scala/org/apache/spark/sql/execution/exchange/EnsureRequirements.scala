@@ -179,16 +179,20 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         numPartitionsSet.headOption
       }
 
-      val nonShuffleChildrenNumPartitions =
-        childrenIndexes.filterNot(children(_).isInstanceOf[ShuffleExchangeExec])
-          .map(children(_).outputPartitioning.numPartitions).toSet
-      val selectedChildrenNumPartitions =
+      val selectedChildrenNumPartitions = if (conf.adaptiveExecutionEnabled) {
+        val nonShuffleChildrenNumPartitions =
+          childrenIndexes.filterNot(children(_).isInstanceOf[ShuffleExchangeExec])
+            .map(children(_).outputPartitioning.numPartitions).toSet
         if (nonShuffleChildrenNumPartitions.nonEmpty &&
+          // if user sets a big shuffle.partition on purpose, use the big one
           childrenNumPartitions.max > nonShuffleChildrenNumPartitions.max * 4) {
           childrenNumPartitions.max
         } else {
           nonShuffleChildrenNumPartitions.max
         }
+      } else {
+        childrenNumPartitions.max
+      }
       val targetNumPartitions = requiredNumPartitions.getOrElse(selectedChildrenNumPartitions)
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
