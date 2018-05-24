@@ -1391,10 +1391,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .csv(path.getCanonicalPath)
         .select('f15, 'f10, 'f5)
 
-      checkAnswer(
-        idf,
-        List(Row(15, 10, 5), Row(-15, -10, -5))
-      )
+      assert(idf.count() == 2)
+      checkAnswer(idf, List(Row(15, 10, 5), Row(-15, -10, -5)))
     }
   }
 }
