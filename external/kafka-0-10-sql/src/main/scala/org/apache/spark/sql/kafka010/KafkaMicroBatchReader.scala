@@ -68,7 +68,7 @@ private[kafka010] class KafkaMicroBatchReader(
 
   private val pollTimeoutMs = options.getLong(
     "kafkaConsumer.pollTimeoutMs",
-    SparkEnv.get.conf.getTimeAsMs("spark.network.timeout", "120s"))
+    SparkEnv.get.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L)
 
   private val maxOffsetsPerTrigger =
     Option(options.get("maxOffsetsPerTrigger").orElse(null)).map(_.toLong)
