@@ -92,10 +92,10 @@ like ZooKeeper and Hadoop itself.
     ./build/mvn -Pmesos -DskipTests clean package
 
 ## Building for Scala 2.10
-To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:
+To produce a Spark package compiled with Scala 2.10, use the `-Pscala-2.10` property:
 
     ./dev/change-scala-version.sh 2.10
-    ./build/mvn -Pyarn -Dscala-2.10 -DskipTests clean package
+    ./build/mvn -Pyarn -scala-2.10 -DskipTestsP clean package
 
 Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.2.0.
 
