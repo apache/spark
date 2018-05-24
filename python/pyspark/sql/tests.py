@@ -5039,6 +5039,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf, col, PandasUDFType
         df = self.data
 
+        # Function returns a pdf with required column names, but order could be arbitrary using dict
         def change_col_order(pdf):
             # Constructing a DataFrame from a dict should result in the same order,
             # but use from_items to ensure the pdf column order is different than schema
@@ -5053,8 +5054,11 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             PandasUDFType.GROUPED_MAP
         )
 
-        result = df.groupby('id').apply(ordered_udf).toPandas()
-        expected = df.toPandas().groupby('id').apply(change_col_order).reset_index(drop=True)
+        # The UDF result should assign columns by name from the pdf
+        result = df.groupby('id').apply(ordered_udf).sort('id', 'v')\
+            .select('id', 'u', 'v').toPandas()
+        pd_result = df.toPandas().groupby('id').apply(change_col_order)
+        expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected, result)
 
 
