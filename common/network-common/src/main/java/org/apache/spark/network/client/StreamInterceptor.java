@@ -24,7 +24,6 @@ import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.server.MessageHandler;
-import org.apache.spark.network.server.TransportRequestHandler;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
 /**

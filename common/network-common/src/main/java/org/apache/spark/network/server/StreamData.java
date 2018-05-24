@@ -17,11 +17,9 @@
 
 package org.apache.spark.network.server;
 
-import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.StreamInterceptor;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
 import java.io.IOException;

@@ -27,13 +27,11 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.collect.Sets;
 import com.google.common.io.Files;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.server.*;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;

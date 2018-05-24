@@ -24,7 +24,6 @@ import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import org.apache.spark.network.protocol.*;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportFrameDecoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
