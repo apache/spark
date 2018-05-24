@@ -255,7 +255,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
-  <td><code>spark.worker.cleanup.nonShuffleFiles.enabled</code></td>
+  <td><code>spark.storage.cleanupFilesAfterExecutorDeath</code></td>
   <td>true</td>
   <td>
     Enable cleanup non-shuffle files(such as temp. shuffle blocks, cached RDD/broadcast blocks,
