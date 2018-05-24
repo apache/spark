@@ -1131,6 +1131,13 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     def _create_model(self, java_model):
         return RandomForestClassificationModel(java_model)
 
+    @since("2.4.0")
+    def setFeatureSubsetStrategy(self, value):
+        """
+        Sets the value of :py:attr:`featureSubsetStrategy`.
+        """
+        return self._set(featureSubsetStrategy=value)
+
 
 class RandomForestClassificationModel(TreeEnsembleModel, JavaClassificationModel, JavaMLWritable,
                                       JavaMLReadable):
@@ -1301,6 +1308,13 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         Gets the value of lossType or its default value.
         """
         return self.getOrDefault(self.lossType)
+
+    @since("2.4.0")
+    def setFeatureSubsetStrategy(self, value):
+        """
+        Sets the value of :py:attr:`featureSubsetStrategy`.
+        """
+        return self._set(featureSubsetStrategy=value)
 
 
 class GBTClassificationModel(TreeEnsembleModel, JavaClassificationModel, JavaMLWritable,
