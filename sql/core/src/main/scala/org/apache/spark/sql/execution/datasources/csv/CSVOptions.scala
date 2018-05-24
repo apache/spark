@@ -37,7 +37,7 @@ class CSVOptions(
     parameters: Map[String, String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String = "",
-    columnPruning: Boolean = false) = {
+    columnPruning: Boolean = true) = {
       this(
         CaseInsensitiveMap(parameters),
         defaultTimeZoneId,
