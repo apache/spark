@@ -5034,6 +5034,29 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         expected4 = udf3.func((), pdf)
         self.assertPandasEqual(expected4, result4)
 
+    def test_column_order(self):
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf, col, PandasUDFType
+        df = self.data
+
+        def change_col_order(pdf):
+            # Constructing a DataFrame from a dict should result in the same order,
+            # but use from_items to ensure the pdf column order is different than schema
+            return pd.DataFrame.from_items([
+                ('id', pdf.id),
+                ('u', pdf.v * 2),
+                ('v', pdf.v)])
+
+        ordered_udf = pandas_udf(
+            change_col_order,
+            'id long, v int, u int',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        result = df.groupby('id').apply(ordered_udf).toPandas()
+        expected = df.toPandas().groupby('id').apply(change_col_order).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
