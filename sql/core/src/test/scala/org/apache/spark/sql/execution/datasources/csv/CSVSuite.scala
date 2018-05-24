@@ -1368,4 +1368,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       checkAnswer(computed, expected)
     }
   }
+
+  test("SPARK-24329: skip lines with comments, and one or multiple whitespaces") {
+    val schema = new StructType().add("colA", StringType)
+    val ds = spark
+      .read
+      .schema(schema)
+      .option("multiLine", false)
+      .option("header", true)
+      .option("comment", "#")
+      .option("ignoreLeadingWhiteSpace", false)
+      .option("ignoreTrailingWhiteSpace", false)
+      .csv(testFile("test-data/comments-whitespaces.csv"))
+
+    checkAnswer(ds, Seq(Row(""" "a" """)))
+  }
 }
