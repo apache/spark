@@ -655,6 +655,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sdf.select(map_entries('m)), sExpected)
     checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
     checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
+  }
 
   test("map_concat function") {
     val df1 = Seq(

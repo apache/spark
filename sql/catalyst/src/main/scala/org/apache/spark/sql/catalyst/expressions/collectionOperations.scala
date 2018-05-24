@@ -502,6 +502,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   }
 
   override def prettyName: String = "map_entries"
+}
 
 /**
  * Returns the union of all the given maps.
@@ -653,16 +654,15 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
         |  new $arrayBasedMapDataClass(new $genericArrayDataClass($mergedKeyArrayName),
         |  new $genericArrayDataClass($mergedValueArrayName));
       """.stripMargin
-    val code =
-      s"""
+    ev.copy(
+      code = code"""
         |$init
         |$codes
         |$mapMerge
         |if (!${ev.isNull}) {
         |  $createMapData
         |}
-      """.stripMargin
-    ev.copy(code = code)
+      """.stripMargin)
   }
 
   override def prettyName: String = "map_concat"
