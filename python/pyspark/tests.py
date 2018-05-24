@@ -1284,17 +1284,20 @@ class RDDTests(ReusedPySparkTestCase):
 
         seq_rdd = self.sc.parallelize(range(10))
         keyed_rdd = self.sc.parallelize((x % 2, x) for x in range(10))
-        exc = Py4JJavaError, RuntimeError
 
-        self.assertRaises(exc, seq_rdd.map(stopit).collect)
-        self.assertRaises(exc, seq_rdd.filter(stopit).collect)
-        self.assertRaises(exc, seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
-        self.assertRaises(exc, seq_rdd.foreach, stopit)
-        self.assertRaises(exc, keyed_rdd.reduceByKeyLocally, stopit)
-        self.assertRaises(exc, seq_rdd.reduce, stopit)
-        self.assertRaises(exc, seq_rdd.fold, 0, stopit)
-        self.assertRaises(exc, seq_rdd.aggregate, 0, stopit, lambda *x: 1)
-        self.assertRaises(exc, seq_rdd.aggregate, 0, lambda *x: 1, stopit)
+        self.assertRaises(Py4JJavaError, seq_rdd.map(stopit).collect)
+        self.assertRaises(Py4JJavaError, seq_rdd.filter(stopit).collect)
+        self.assertRaises(Py4JJavaError, seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
+        self.assertRaises(Py4JJavaError, seq_rdd.foreach, stopit)
+        self.assertRaises(Py4JJavaError, keyed_rdd.reduceByKeyLocally, stopit)
+        self.assertRaises(Py4JJavaError, seq_rdd.reduce, stopit)
+        self.assertRaises(Py4JJavaError, seq_rdd.fold, 0, stopit)
+
+        # the exception raised is non-deterministic
+        self.assertRaises((Py4JJavaError, RuntimeError),
+                          seq_rdd.aggregate, 0, stopit, lambda *x: 1)
+        self.assertRaises((Py4JJavaError, RuntimeError),
+                          seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
 
 class ProfilerTests(PySparkTestCase):
