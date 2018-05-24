@@ -21,13 +21,19 @@ import org.apache.spark.{TaskContext, TaskContextImpl}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.streaming.StreamTest
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class ContinuousShuffleReadSuite extends StreamTest {
 
   private def unsafeRow(value: Int) = {
     UnsafeProjection.create(Array(IntegerType : DataType))(
       new GenericInternalRow(Array(value: Any)))
+  }
+
+  private def unsafeRow(value: String) = {
+    UnsafeProjection.create(Array(StringType : DataType))(
+      new GenericInternalRow(Array(UTF8String.fromString(value): Any)))
   }
 
   private def send(endpoint: RpcEndpointRef, messages: UnsafeRowReceiverMessage*) = {
@@ -57,8 +63,8 @@ class ContinuousShuffleReadSuite extends StreamTest {
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
     send(
       endpoint,
-      ReceiverEpochMarker(),
-      ReceiverRow(unsafeRow(111))
+      ReceiverEpochMarker(0),
+      ReceiverRow(0, unsafeRow(111))
     )
 
     ctx.markTaskCompleted(None)
@@ -71,8 +77,11 @@ class ContinuousShuffleReadSuite extends StreamTest {
   test("receiver stopped with marker last") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
-    endpoint.askSync[Unit](ReceiverRow(unsafeRow(111)))
-    endpoint.askSync[Unit](ReceiverEpochMarker())
+    send(
+      endpoint,
+      ReceiverRow(0, unsafeRow(111)),
+      ReceiverEpochMarker(0)
+    )
 
     ctx.markTaskCompleted(None)
     val receiver = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].reader
@@ -86,10 +95,10 @@ class ContinuousShuffleReadSuite extends StreamTest {
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
     send(
       endpoint,
-      ReceiverRow(unsafeRow(111)),
-      ReceiverRow(unsafeRow(222)),
-      ReceiverRow(unsafeRow(333)),
-      ReceiverEpochMarker()
+      ReceiverRow(0, unsafeRow(111)),
+      ReceiverRow(0, unsafeRow(222)),
+      ReceiverRow(0, unsafeRow(333)),
+      ReceiverEpochMarker(0)
     )
 
     val iter = rdd.compute(rdd.partitions(0), ctx)
@@ -101,11 +110,11 @@ class ContinuousShuffleReadSuite extends StreamTest {
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
     send(
       endpoint,
-      ReceiverRow(unsafeRow(111)),
-      ReceiverEpochMarker(),
-      ReceiverRow(unsafeRow(222)),
-      ReceiverRow(unsafeRow(333)),
-      ReceiverEpochMarker()
+      ReceiverRow(0, unsafeRow(111)),
+      ReceiverEpochMarker(0),
+      ReceiverRow(0, unsafeRow(222)),
+      ReceiverRow(0, unsafeRow(333)),
+      ReceiverEpochMarker(0)
     )
 
     val firstEpoch = rdd.compute(rdd.partitions(0), ctx)
@@ -118,14 +127,15 @@ class ContinuousShuffleReadSuite extends StreamTest {
   test("empty epochs") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+
     send(
       endpoint,
-      ReceiverEpochMarker(),
-      ReceiverEpochMarker(),
-      ReceiverRow(unsafeRow(111)),
-      ReceiverEpochMarker(),
-      ReceiverEpochMarker(),
-      ReceiverEpochMarker()
+      ReceiverEpochMarker(0),
+      ReceiverEpochMarker(0),
+      ReceiverRow(0, unsafeRow(111)),
+      ReceiverEpochMarker(0),
+      ReceiverEpochMarker(0),
+      ReceiverEpochMarker(0)
     )
 
     assert(rdd.compute(rdd.partitions(0), ctx).isEmpty)
@@ -146,8 +156,8 @@ class ContinuousShuffleReadSuite extends StreamTest {
       // Send index for identification.
       send(
         part.endpoint,
-        ReceiverRow(unsafeRow(part.index)),
-        ReceiverEpochMarker()
+        ReceiverRow(0, unsafeRow(part.index)),
+        ReceiverEpochMarker(0)
       )
     }
 
@@ -160,25 +170,122 @@ class ContinuousShuffleReadSuite extends StreamTest {
   }
 
   test("blocks waiting for new rows") {
-    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
+    val rdd = new ContinuousShuffleReadRDD(
+      sparkContext, numPartitions = 1, epochIntervalMs = Long.MaxValue)
+    val epoch = rdd.compute(rdd.partitions(0), ctx)
 
     val readRowThread = new Thread {
       override def run(): Unit = {
-        // set the non-inheritable thread local
-        TaskContext.setTaskContext(ctx)
-        val epoch = rdd.compute(rdd.partitions(0), ctx)
-        epoch.next().getInt(0)
+        try {
+          epoch.next().getInt(0)
+        } catch {
+          case _: InterruptedException => // do nothing - expected at test ending
+        }
       }
     }
 
     try {
       readRowThread.start()
       eventually(timeout(streamingTimeout)) {
-        assert(readRowThread.getState == Thread.State.WAITING)
+        assert(readRowThread.getState == Thread.State.TIMED_WAITING)
       }
     } finally {
       readRowThread.interrupt()
       readRowThread.join()
     }
+  }
+
+  test("multiple writers") {
+    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1, numShuffleWriters = 3)
+    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    send(
+      endpoint,
+      ReceiverRow(0, unsafeRow("writer0-row0")),
+      ReceiverRow(1, unsafeRow("writer1-row0")),
+      ReceiverRow(2, unsafeRow("writer2-row0")),
+      ReceiverEpochMarker(0),
+      ReceiverEpochMarker(1),
+      ReceiverEpochMarker(2)
+    )
+
+    val firstEpoch = rdd.compute(rdd.partitions(0), ctx)
+    assert(firstEpoch.toSeq.map(_.getUTF8String(0).toString).toSet ==
+      Set("writer0-row0", "writer1-row0", "writer2-row0"))
+  }
+
+  test("epoch only ends when all writers send markers") {
+    val rdd = new ContinuousShuffleReadRDD(
+      sparkContext, numPartitions = 1, numShuffleWriters = 3, epochIntervalMs = Long.MaxValue)
+    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    send(
+      endpoint,
+      ReceiverRow(0, unsafeRow("writer0-row0")),
+      ReceiverRow(1, unsafeRow("writer1-row0")),
+      ReceiverRow(2, unsafeRow("writer2-row0")),
+      ReceiverEpochMarker(0),
+      ReceiverEpochMarker(2)
+    )
+
+    val epoch = rdd.compute(rdd.partitions(0), ctx)
+    val rows = (0 until 3).map(_ => epoch.next()).toSet
+    assert(rows.map(_.getUTF8String(0).toString) ==
+      Set("writer0-row0", "writer1-row0", "writer2-row0"))
+
+    // After checking the right rows, block until we get an epoch marker indicating there's no next.
+    // (Also fail the assertion if for some reason we get a row.)
+    val readEpochMarkerThread = new Thread {
+      override def run(): Unit = {
+        assert(!epoch.hasNext)
+      }
+    }
+
+    readEpochMarkerThread.start()
+    eventually(timeout(streamingTimeout)) {
+      assert(readEpochMarkerThread.getState == Thread.State.TIMED_WAITING)
+    }
+
+    // Send the last epoch marker - now the epoch should finish.
+    send(endpoint, ReceiverEpochMarker(1))
+    eventually(timeout(streamingTimeout)) {
+      !readEpochMarkerThread.isAlive
+    }
+
+    // Join to pick up assertion failures.
+    readEpochMarkerThread.join()
+  }
+
+  test("writer epochs non aligned") {
+    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1, numShuffleWriters = 3)
+    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    // We send multiple epochs for 0, then multiple for 1, then multiple for 2. The receiver should
+    // collate them as though the markers were aligned in the first place.
+    send(
+      endpoint,
+      ReceiverRow(0, unsafeRow("writer0-row0")),
+      ReceiverEpochMarker(0),
+      ReceiverRow(0, unsafeRow("writer0-row1")),
+      ReceiverEpochMarker(0),
+      ReceiverEpochMarker(0),
+
+      ReceiverEpochMarker(1),
+      ReceiverRow(1, unsafeRow("writer1-row0")),
+      ReceiverEpochMarker(1),
+      ReceiverRow(1, unsafeRow("writer1-row1")),
+      ReceiverEpochMarker(1),
+
+      ReceiverEpochMarker(2),
+      ReceiverEpochMarker(2),
+      ReceiverRow(2, unsafeRow("writer2-row0")),
+      ReceiverEpochMarker(2)
+    )
+
+    val firstEpoch = rdd.compute(rdd.partitions(0), ctx).map(_.getUTF8String(0).toString).toSet
+    assert(firstEpoch == Set("writer0-row0"))
+
+    val secondEpoch = rdd.compute(rdd.partitions(0), ctx).map(_.getUTF8String(0).toString).toSet
+    assert(secondEpoch == Set("writer0-row1", "writer1-row0"))
+
+    val thirdEpoch = rdd.compute(rdd.partitions(0), ctx).map(_.getUTF8String(0).toString).toSet
+    assert(thirdEpoch == Set("writer1-row1", "writer2-row0"))
   }
 }
