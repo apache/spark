@@ -39,7 +39,6 @@ private[spark] class ExecutorPodsEventQueue(eventsProcessorExecutor: ScheduledEx
       // Keep polling for items until we're told to stop. When the event queue is empty we'll
       // be able to stall, preventing overload of the downstream observables.
       .repeatUntil(toReactivexBooleanSupplier(() => terminationSignal.get()))
-      // When the call to future.get() returns, halt the event stream
       // Forces every event to be shared amongst all observers. Will
       .publish()
   private val observedDisposables = mutable.Buffer.empty[Disposable]
