@@ -182,11 +182,13 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       val nonShuffleChildrenNumPartitions =
         childrenIndexes.filterNot(children(_).isInstanceOf[ShuffleExchangeExec])
           .map(children(_).outputPartitioning.numPartitions).toSet
-      val selectedChildrenNumPartitions = if (nonShuffleChildrenNumPartitions.nonEmpty) {
-        nonShuffleChildrenNumPartitions.max
-      } else {
-        childrenNumPartitions.max
-      }
+      val selectedChildrenNumPartitions =
+        if (nonShuffleChildrenNumPartitions.nonEmpty &&
+          childrenNumPartitions.max > nonShuffleChildrenNumPartitions.max * 4) {
+          childrenNumPartitions.max
+        } else {
+          nonShuffleChildrenNumPartitions.max
+        }
       val targetNumPartitions = requiredNumPartitions.getOrElse(selectedChildrenNumPartitions)
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
