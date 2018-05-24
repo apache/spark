@@ -1920,13 +1920,7 @@ case class ArrayRemove(left: Expression, right: Expression)
     val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements())
     var pos = 0
     arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
-      if (v == null) {
-        if (value != null) {
-          newArray(pos) = null
-          pos += 1
-        }
-      }
-      else if (!ordering.equiv(v, value)) {
+      if (v == null || !ordering.equiv(v, value)) {
         newArray(pos) = v
         pos += 1
       }
