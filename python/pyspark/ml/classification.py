@@ -1201,7 +1201,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> td = si_model.transform(df)
     >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
     >>> gbt.getFeatureSubsetStrategy()
-    'auto'
+    'all'
     >>> model = gbt.fit(td)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
@@ -1256,13 +1256,13 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
                  maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
-                 featureSubsetStrategy="auto"):
+                 featureSubsetStrategy="all"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
-                 featureSubsetStrategy="auto")
+                 featureSubsetStrategy="all")
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1270,7 +1270,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0,
-                         featureSubsetStrategy="auto")
+                         featureSubsetStrategy="all")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1280,13 +1280,13 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
-                  featureSubsetStrategy="auto"):
+                  featureSubsetStrategy="all"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
-                  featureSubsetStrategy="auto")
+                  featureSubsetStrategy="all")
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self._input_kwargs
