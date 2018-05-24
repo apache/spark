@@ -130,7 +130,7 @@
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.8.3</parquet.version>
-    <orc.version>1.4.3</orc.version>
+    <orc.version>1.4.4</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.3.20.v20170531</jetty.version>
