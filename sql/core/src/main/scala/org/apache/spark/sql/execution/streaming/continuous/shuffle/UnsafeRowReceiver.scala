@@ -97,8 +97,8 @@ private[shuffle] class UnsafeRowReceiver(
        */
       override def getNext(): UnsafeRow = {
         var nextRow: UnsafeRow = null
-        while (nextRow == null) {
-          nextRow = completion.poll(epochIntervalMs, TimeUnit.MILLISECONDS) match {
+        while (!finished && nextRow == null) {
+          completion.poll(epochIntervalMs, TimeUnit.MILLISECONDS) match {
             case null =>
               // Try again if the poll didn't wait long enough to get a real result.
               // But we should be getting at least an epoch marker every checkpoint interval.
@@ -108,25 +108,20 @@ private[shuffle] class UnsafeRowReceiver(
               logWarning(
                 s"Completion service failed to make progress after $epochIntervalMs ms. Waiting " +
                   s"for writers $writerIdsUncommitted to send epoch markers.")
-              null
 
             // The completion service guarantees this future will be available immediately.
             case future => future.get() match {
               case ReceiverRow(writerId, r) =>
                 // Start reading the next element in the queue we just took from.
                 completion.submit(completionTask(writerId))
-                r
+                nextRow = r
               case ReceiverEpochMarker(writerId) =>
                 // Don't read any more from this queue. If all the writers have sent epoch markers,
-                // the epoch is over; otherwise we need to poll from the remaining writers.
+                // the epoch is over; otherwise we need to loop again to poll from the remaining
+                // writers.
                 writerEpochMarkersReceived(writerId) = true
                 if (writerEpochMarkersReceived.forall(flag => flag)) {
                   finished = true
-                  // Break out of the while loop and end the iterator.
-                  return null
-                } else {
-                  // Poll again for the next completion result.
-                  null
                 }
             }
           }
