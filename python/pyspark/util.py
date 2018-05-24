@@ -89,15 +89,16 @@ class VersionUtils(object):
                              " version numbers.")
 
 
-def fail_on_StopIteration(f):
-    """ wraps f to make it safe (= does not lead to data loss) to use inside a for loop
-        make StopIteration's raised inside f explicit
+def fail_on_stopiteration(f):
+    """
+        Wraps the input function to fail on 'StopIteration' by raising a 'RuntimeError'
+        prevents silent loss of data when 'f' is used in a for loop
     """
     def wrapper(*args, **kwargs):
         try:
             return f(*args, **kwargs)
         except StopIteration as exc:
-            raise RuntimeError('StopIteration in client code', exc)
+            raise RuntimeError("Caught StopIteration thrown from user's code; failing the task", exc)
 
     return wrapper
 

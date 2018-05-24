@@ -28,7 +28,7 @@ import sys
 import pyspark.heapq3 as heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
     CompressedSerializer, AutoBatchedSerializer
-from pyspark.util import fail_on_StopIteration
+from pyspark.util import fail_on_stopiteration
 
 
 try:
@@ -95,9 +95,9 @@ class Aggregator(object):
     """
 
     def __init__(self, createCombiner, mergeValue, mergeCombiners):
-        self.createCombiner = fail_on_StopIteration(createCombiner)
-        self.mergeValue = fail_on_StopIteration(mergeValue)
-        self.mergeCombiners = fail_on_StopIteration(mergeCombiners)
+        self.createCombiner = fail_on_stopiteration(createCombiner)
+        self.mergeValue = fail_on_stopiteration(mergeValue)
+        self.mergeCombiners = fail_on_stopiteration(mergeCombiners)
 
 
 class SimpleAggregator(Aggregator):
