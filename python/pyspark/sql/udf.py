@@ -92,7 +92,7 @@ class UserDefinedFunction(object):
             raise TypeError(
                 "Invalid evalType: evalType should be an int but is {}".format(evalType))
 
-        self.func = fail_on_stopiteration(func)
+        self.func = func
         self._returnType = returnType
         # Stores UserDefinedPythonFunctions jobj, once initialized
         self._returnType_placeholder = None
@@ -157,7 +157,7 @@ class UserDefinedFunction(object):
         spark = SparkSession.builder.getOrCreate()
         sc = spark.sparkContext
 
-        wrapped_func = _wrap_function(sc, self.func, self.returnType)
+        wrapped_func = _wrap_function(sc, fail_on_stopiteration(self.func), self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt, self.evalType, self.deterministic)
