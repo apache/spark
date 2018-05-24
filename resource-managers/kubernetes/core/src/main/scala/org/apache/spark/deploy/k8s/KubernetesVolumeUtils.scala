@@ -33,15 +33,18 @@ private[spark] object KubernetesVolumeUtils {
     prefix: String): Iterable[KubernetesVolumeSpec] = {
     val properties = sparkConf.getAllWithPrefix(prefix)
 
-    val propsByTypeName = properties.map { case (k, v) =>
-      k.split('.').toSeq match {
-        case tpe :: name :: rest => ((tpe, name), (rest.mkString("."), v))
-      }
-    }.groupBy(_._1).mapValues(_.map(_._2))
+    val propsByTypeName: Map[(String, String), Array[(String, String)]] =
+      properties.flatMap { case (k, v) =>
+        k.split('.').toList match {
+          case tpe :: name :: rest => Some(((tpe, name), (rest.mkString("."), v)))
+          case _ => None
+        }
+      }.groupBy(_._1).mapValues(_.map(_._2))
 
     propsByTypeName.map { case ((tpe, name), props) =>
-      val mountProps = props.filter(_._1.startsWith(KUBERNETES_VOLUMES_MOUNT_KEY)).toMap
-      val options = props.filter(_._1.startsWith(KUBERNETES_VOLUMES_OPTIONS_KEY)).toMap
+      val propMap = props.toMap
+      val mountProps = getAllWithPrefix(propMap, s"$KUBERNETES_VOLUMES_MOUNT_KEY.")
+      val options = getAllWithPrefix(propMap, s"$KUBERNETES_VOLUMES_OPTIONS_KEY.")
 
       KubernetesVolumeSpec(
         volumeName = name,
@@ -51,6 +54,18 @@ private[spark] object KubernetesVolumeUtils {
         optionsSpec = options
       )
     }
+  }
+
+  /**
+   * Extract subset of elements with keys matching on prefix, which is then excluded
+   * @param props properties to extract data from
+   * @param prefix prefix to match against
+   * @return subset of original props
+   */
+  private def getAllWithPrefix(props: Map[String, String], prefix: String): Map[String, String] = {
+    props
+      .filterKeys(_.startsWith(prefix))
+      .map { case (k, v) => k.substring(prefix.length) -> v }
   }
 
 }
