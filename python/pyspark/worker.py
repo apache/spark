@@ -110,9 +110,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
                 "Number of columns of the returned pandas.DataFrame "
                 "doesn't match specified schema. "
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
-        arrow_return_types = (to_arrow_type(field.dataType) for field in return_type)
-        return [(result[result.columns[i]], arrow_type)
-                for i, arrow_type in enumerate(arrow_return_types)]
+        return [(result[field.name], to_arrow_type(field.dataType)) for field in return_type]
 
     return wrapped
 
