@@ -36,7 +36,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     podAllocator: ExecutorPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleEventHandler,
     watchEvents: ExecutorPodsWatchEventSource,
-    pollEvents: ExecutorPodsPollingEventSource)
+                                                        pollEvents: ExecutorPodsPollingEventSource)
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
 
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(

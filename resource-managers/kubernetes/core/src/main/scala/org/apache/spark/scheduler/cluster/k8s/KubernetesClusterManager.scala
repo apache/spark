@@ -59,14 +59,14 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
       "kubernetes-executor-requests")
 
-    val eventsProcessorExecutor = ThreadUtils
-      .newDaemonSingleThreadScheduledExecutor("kubernetes-executor-pods-event-handler")
-    val eventQueue = new ExecutorPodsEventQueue(eventsProcessorExecutor)
+    val bufferEventsExecutor = ThreadUtils
+      .newDaemonSingleThreadScheduledExecutor("kubernetes-executor-pods-event-buffer")
+    val executeEventSubscribersExecutor = ThreadUtils
+      .newDaemonCachedThreadPool("kubernetes-executor-pods-event-handlers")
+    val eventQueue = new ExecutorPodsEventQueueImpl(
+      bufferEventsExecutor, executeEventSubscribersExecutor)
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleEventHandler(
-      sc.conf,
-      new KubernetesExecutorBuilder(),
-      kubernetesClient,
-      eventQueue)
+      new KubernetesExecutorBuilder(), kubernetesClient, eventQueue)
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
       sc.conf, new KubernetesExecutorBuilder(), kubernetesClient, eventQueue)

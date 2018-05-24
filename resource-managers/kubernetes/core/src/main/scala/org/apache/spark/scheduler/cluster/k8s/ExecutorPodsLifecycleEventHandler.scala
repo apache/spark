@@ -16,35 +16,32 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import java.util.concurrent.{Future, TimeUnit}
+import java.util.concurrent.TimeUnit
 
-import com.google.common.cache.CacheBuilder
+import com.google.common.cache.{Cache, CacheBuilder}
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsLifecycleEventHandler(
-    conf: SparkConf,
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
-    podsEventQueue: ExecutorPodsEventQueue) extends Logging {
+    podsEventQueue: ExecutorPodsEventQueue,
+    // Use a best-effort to track which executors have been removed already. It's not generally
+    // job-breaking if we remove executors more than once but it's ideal if we make an attempt
+    // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
+    // bounds.
+    removedExecutorsCache: Cache[java.lang.Long, java.lang.Long] =
+        CacheBuilder.newBuilder()
+          .expireAfterWrite(3, TimeUnit.MINUTES)
+          .build[java.lang.Long, java.lang.Long]()) extends Logging {
 
   import ExecutorPodsLifecycleEventHandler._
-
-  // Use a best-effort to track which executors have been removed already. It's not generally
-  // job-breaking if we remove executors more than once but it's ideal if we make an attempt
-  // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
-  // bounds.
-  private val removedExecutors = CacheBuilder.newBuilder()
-    .expireAfterWrite(3, TimeUnit.MINUTES)
-    .build[java.lang.Long, java.lang.Long]()
 
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     podsEventQueue.addSubscriber(1000L) { updatedPods =>
@@ -82,8 +79,8 @@ private[spark] class ExecutorPodsLifecycleEventHandler(
       schedulerBackend: KubernetesClusterSchedulerBackend,
       updatedPod: Pod,
       execId: Long): Unit = {
-    if (removedExecutors.getIfPresent(execId) == null) {
-      removedExecutors.put(execId, execId)
+    if (removedExecutorsCache.getIfPresent(execId) == null) {
+      removedExecutorsCache.put(execId, execId)
       val exitReason = findExitReason(updatedPod, execId)
       schedulerBackend.doRemoveExecutor(execId.toString, exitReason)
     }

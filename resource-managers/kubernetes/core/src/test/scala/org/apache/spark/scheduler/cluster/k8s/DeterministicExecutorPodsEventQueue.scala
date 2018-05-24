@@ -17,13 +17,25 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import io.fabric8.kubernetes.api.model.Pod
+import scala.collection.mutable
 
-private[spark] trait ExecutorPodsEventQueue {
+class DeterministicExecutorPodsEventQueue extends ExecutorPodsEventQueue {
 
-  def addSubscriber(processBatchIntervalMillis: Long)(onNextBatch: Seq[Pod] => Unit): Unit
+  private val eventBuffer = mutable.Buffer.empty[Pod]
+  private val subscribers = mutable.Buffer.empty[(Seq[Pod]) => Unit]
 
-  def stopProcessingEvents(): Unit
+  override def addSubscriber
+      (processBatchIntervalMillis: Long)
+      (onNextBatch: (Seq[Pod]) => Unit): Unit = {
+    subscribers += onNextBatch
+  }
 
-  def pushPodUpdate(updatedPod: Pod): Unit
+  override def stopProcessingEvents(): Unit = {}
 
+  override def pushPodUpdate(updatedPod: Pod): Unit = eventBuffer += updatedPod
+
+  def notifySubscribers(): Unit = {
+    subscribers.foreach { _(eventBuffer) }
+    eventBuffer.clear()
+  }
 }

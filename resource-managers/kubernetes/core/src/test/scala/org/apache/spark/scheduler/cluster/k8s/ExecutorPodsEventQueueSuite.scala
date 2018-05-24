@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
-import org.jmock.lib.concurrent.DeterministicScheduler
+import org.jmock.lib.concurrent.{DeterministicExecutor, DeterministicScheduler}
 import org.scalatest.BeforeAndAfter
 import scala.collection.mutable
 
@@ -28,12 +28,16 @@ import org.apache.spark.SparkFunSuite
 
 class ExecutorPodsEventQueueSuite extends SparkFunSuite with BeforeAndAfter {
 
-  private var eventProcessor: DeterministicScheduler = _
-  private var eventQueueUnderTest: ExecutorPodsEventQueue = _
+  private var eventBufferScheduler: DeterministicScheduler = _
+  private var executeSubscriptionsExecutor: DeterministicExecutor = _
+  private var eventQueueUnderTest: ExecutorPodsEventQueueImpl = _
 
   before {
-    eventProcessor = new DeterministicScheduler()
-    eventQueueUnderTest = new ExecutorPodsEventQueue(eventProcessor)
+    eventBufferScheduler = new DeterministicScheduler()
+    executeSubscriptionsExecutor = new DeterministicExecutor
+    eventQueueUnderTest = new ExecutorPodsEventQueueImpl(
+      eventBufferScheduler,
+      executeSubscriptionsExecutor)
   }
 
   test("Subscribers get notified of events periodically.") {
@@ -45,17 +49,24 @@ class ExecutorPodsEventQueueSuite extends SparkFunSuite with BeforeAndAfter {
     pushPodWithIndex(1)
     assert(receivedEvents1.isEmpty)
     assert(receivedEvents2.isEmpty)
-    eventProcessor.tick(1000, TimeUnit.MILLISECONDS)
+    // Force time to move forward so that the buffer is emitted, scheduling the
+    // processing task on the subscription executor...
+    eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
+    // ... then actually execute the subscribers.
+    executeSubscriptionsExecutor.runUntilIdle()
     assertIndicesMatch(receivedEvents1, 1)
     assert(receivedEvents2.isEmpty)
-    eventProcessor.tick(1000, TimeUnit.MILLISECONDS)
+    eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
+    executeSubscriptionsExecutor.runUntilIdle()
     assertIndicesMatch(receivedEvents2, 1)
     pushPodWithIndex(2)
     pushPodWithIndex(3)
-    eventProcessor.tick(1000, TimeUnit.MILLISECONDS)
+    eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
+    executeSubscriptionsExecutor.runUntilIdle()
     assertIndicesMatch(receivedEvents1, 1, 2, 3)
     assertIndicesMatch(receivedEvents2, 1)
-    eventProcessor.tick(2000, TimeUnit.MILLISECONDS)
+    eventBufferScheduler.tick(2000, TimeUnit.MILLISECONDS)
+    executeSubscriptionsExecutor.runUntilIdle()
     assertIndicesMatch(receivedEvents1, 1, 2, 3)
     assertIndicesMatch(receivedEvents2, 1, 2, 3)
   }
@@ -63,6 +74,8 @@ class ExecutorPodsEventQueueSuite extends SparkFunSuite with BeforeAndAfter {
   test("Even without sending events, initially receive an empty buffer.") {
     val receivedInitialBuffer = new AtomicReference[Seq[Pod]](null)
     eventQueueUnderTest.addSubscriber(1000) { receivedInitialBuffer.set }
+    assert(receivedInitialBuffer.get == null)
+    executeSubscriptionsExecutor.runPendingCommands()
     assert(receivedInitialBuffer.get != null)
   }
 
