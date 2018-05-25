@@ -74,7 +74,53 @@ object CSVBenchmarks {
     }
   }
 
+  def multiColumnsBenchmark(rowsNum: Int): Unit = {
+    val colsNum = 1000
+    val benchmark = new Benchmark(s"Wide rows with $colsNum columns", rowsNum)
+
+    withTempPath { path =>
+      val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
+      val schema = StructType(fields)
+      val values = (0 until colsNum).map(i => i.toString).mkString(",")
+      val columnNames = schema.fieldNames
+
+      spark.range(rowsNum)
+        .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
+        .write.option("header", true)
+        .csv(path.getAbsolutePath)
+
+      val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
+
+      benchmark.addCase(s"Select $colsNum columns", 3) { _ =>
+        ds.select("*").filter((row: Row) => true).count()
+      }
+      val cols100 = columnNames.take(100).map(Column(_))
+      benchmark.addCase(s"Select 100 columns", 3) { _ =>
+        ds.select(cols100: _*).filter((row: Row) => true).count()
+      }
+      benchmark.addCase(s"Select one column", 3) { _ =>
+        ds.select($"col1").filter((row: Row) => true).count()
+      }
+      benchmark.addCase(s"count()", 3) { _ =>
+        ds.count()
+      }
+
+      /*
+      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+
+      Wide rows with 1000 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      --------------------------------------------------------------------------------------------
+      Select 1000 columns                     81091 / 81692          0.0       81090.7       1.0X
+      Select 100 columns                      30003 / 34448          0.0       30003.0       2.7X
+      Select one column                       24792 / 24855          0.0       24792.0       3.3X
+      count()                                 24344 / 24642          0.0       24343.8       3.3X
+      */
+      benchmark.run()
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
+    multiColumnsBenchmark(rowsNum = 1000 * 1000)
   }
 }
