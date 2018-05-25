@@ -39,10 +39,7 @@ private[spark] class ExecutorPodsLifecycleEventHandler(
     // job-breaking if we remove executors more than once but it's ideal if we make an attempt
     // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
     // bounds.
-    removedExecutorsCache: Cache[java.lang.Long, java.lang.Long] =
-        CacheBuilder.newBuilder()
-          .expireAfterWrite(3, TimeUnit.MINUTES)
-          .build[java.lang.Long, java.lang.Long]()) extends Logging {
+    removedExecutorsCache: Cache[java.lang.Long, java.lang.Long]) {
 
   import ExecutorPodsLifecycleEventHandler._
 

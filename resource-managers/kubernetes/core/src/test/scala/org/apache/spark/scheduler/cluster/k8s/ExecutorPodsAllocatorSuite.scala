@@ -101,12 +101,12 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
     eventQueue.notifySubscribers()
     for (execId <- 1 until podAllocationSize) {
-      eventQueue.pushPodUpdate(runningExecutor(execId))
+      eventQueue.enqueue(runningExecutor(execId))
     }
     eventQueue.notifySubscribers()
     verify(podOperations, never()).create(
       podWithAttachedContainerForId(podAllocationSize + 1))
-    eventQueue.pushPodUpdate(
+    eventQueue.enqueue(
       runningExecutor(podAllocationSize))
     eventQueue.notifySubscribers()
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
@@ -119,10 +119,10 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize)
     eventQueue.notifySubscribers()
     for (execId <- 1 until podAllocationSize) {
-      eventQueue.pushPodUpdate(runningExecutor(execId))
+      eventQueue.enqueue(runningExecutor(execId))
     }
     val failedPod = failedExecutorWithoutDeletion(podAllocationSize)
-    eventQueue.pushPodUpdate(failedPod)
+    eventQueue.enqueue(failedPod)
     eventQueue.notifySubscribers()
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
   }

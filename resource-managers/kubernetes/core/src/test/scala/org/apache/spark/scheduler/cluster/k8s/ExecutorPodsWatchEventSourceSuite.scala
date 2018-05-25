@@ -69,7 +69,7 @@ class ExecutorPodsWatchEventSourceSuite extends SparkFunSuite with BeforeAndAfte
   test("Watch events should be pushed to the queue.") {
     watch.getValue.eventReceived(Action.ADDED, runningExecutor(1))
     watch.getValue.eventReceived(Action.MODIFIED, runningExecutor(2))
-    verify(eventQueue).pushPodUpdate(runningExecutor(1))
-    verify(eventQueue).pushPodUpdate(runningExecutor(2))
+    verify(eventQueue).enqueue(runningExecutor(1))
+    verify(eventQueue).enqueue(runningExecutor(2))
   }
 }

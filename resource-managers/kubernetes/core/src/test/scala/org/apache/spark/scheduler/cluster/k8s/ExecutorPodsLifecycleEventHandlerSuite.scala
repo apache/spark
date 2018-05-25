@@ -74,7 +74,7 @@ class ExecutorPodsLifecycleEventHandlerSuite extends SparkFunSuite with BeforeAn
 
   test("When an executor reaches error states immediately, remove from the scheduler backend.") {
     val failedPod = failedExecutorWithoutDeletion(1)
-    eventQueue.pushPodUpdate(failedPod)
+    eventQueue.enqueue(failedPod)
     eventQueue.notifySubscribers()
     val msg = exitReasonMessage(1, failedPod)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
@@ -84,8 +84,8 @@ class ExecutorPodsLifecycleEventHandlerSuite extends SparkFunSuite with BeforeAn
 
   test("Don't remove executors twice from Spark but remove from K8s repeatedly.") {
     val failedPod = failedExecutorWithoutDeletion(1)
-    eventQueue.pushPodUpdate(failedPod)
-    eventQueue.pushPodUpdate(failedPod)
+    eventQueue.enqueue(failedPod)
+    eventQueue.enqueue(failedPod)
     eventQueue.notifySubscribers()
     val msg = exitReasonMessage(1, failedPod)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)

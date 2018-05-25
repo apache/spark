@@ -30,9 +30,9 @@ class DeterministicExecutorPodsEventQueue extends ExecutorPodsEventQueue {
     subscribers += onNextBatch
   }
 
-  override def stopProcessingEvents(): Unit = {}
+  override def stop(): Unit = {}
 
-  override def pushPodUpdate(updatedPod: Pod): Unit = eventBuffer += updatedPod
+  override def enqueue(updatedPod: Pod): Unit = eventBuffer += updatedPod
 
   def notifySubscribers(): Unit = {
     subscribers.foreach { _(eventBuffer) }

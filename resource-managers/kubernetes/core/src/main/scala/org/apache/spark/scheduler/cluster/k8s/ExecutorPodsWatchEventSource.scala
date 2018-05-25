@@ -51,7 +51,7 @@ private[spark] class ExecutorPodsWatchEventSource(
 
   private class ExecutorPodsWatcher extends Watcher[Pod] {
     override def eventReceived(action: Action, pod: Pod): Unit = {
-      podsEventQueue.pushPodUpdate(pod)
+      podsEventQueue.enqueue(pod)
     }
 
     override def onClose(e: KubernetesClientException): Unit = {

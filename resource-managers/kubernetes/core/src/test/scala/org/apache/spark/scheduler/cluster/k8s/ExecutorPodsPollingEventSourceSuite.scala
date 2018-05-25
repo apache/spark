@@ -79,8 +79,8 @@ class ExecutorPodsPollingEventSourceSuite extends SparkFunSuite with BeforeAndAf
           runningExecutor(2))
         .build())
     pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
-    verify(eventQueue).pushPodUpdate(runningExecutor(1))
-    verify(eventQueue).pushPodUpdate(runningExecutor(2))
+    verify(eventQueue).enqueue(runningExecutor(1))
+    verify(eventQueue).enqueue(runningExecutor(2))
 
   }
 }

@@ -58,7 +58,7 @@ private[spark] class ExecutorPodsPollingEventSource(
         .list()
         .getItems
         .asScala
-        .foreach(eventQueue.pushPodUpdate)
+        .foreach(eventQueue.enqueue)
     }
   }
 

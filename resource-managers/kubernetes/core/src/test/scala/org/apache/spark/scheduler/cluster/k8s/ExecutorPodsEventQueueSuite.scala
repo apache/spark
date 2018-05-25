@@ -84,7 +84,7 @@ class ExecutorPodsEventQueueSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   private def pushPodWithIndex(index: Int): Unit =
-    eventQueueUnderTest.pushPodUpdate(podWithIndex(index))
+    eventQueueUnderTest.enqueue(podWithIndex(index))
 
   private def podWithIndex(index: Int): Pod =
     new PodBuilder()

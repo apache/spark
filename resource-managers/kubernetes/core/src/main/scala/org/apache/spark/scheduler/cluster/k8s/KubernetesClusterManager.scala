@@ -17,7 +17,9 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 
+import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.{SparkContext, SparkException}
@@ -65,11 +67,15 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       .newDaemonCachedThreadPool("kubernetes-executor-pods-event-handlers")
     val eventQueue = new ExecutorPodsEventQueueImpl(
       bufferEventsExecutor, executeEventSubscribersExecutor)
+    val removedExecutorsCache = CacheBuilder.newBuilder()
+      .expireAfterWrite(3, TimeUnit.MINUTES)
+      .build[java.lang.Long, java.lang.Long]()
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleEventHandler(
       sc.conf,
       new KubernetesExecutorBuilder(),
       kubernetesClient,
-      eventQueue)
+      eventQueue,
+      removedExecutorsCache)
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
       sc.conf, new KubernetesExecutorBuilder(), kubernetesClient, eventQueue)

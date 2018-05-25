@@ -115,7 +115,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
     schedulerBackendUnderTest.stop()
-    verify(eventQueue).stopProcessingEvents()
+    verify(eventQueue).stop()
     verify(watchEvents).stop()
     verify(pollEvents).stop()
     verify(labeledPods).delete()

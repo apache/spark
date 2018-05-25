@@ -62,12 +62,12 @@ private[spark] class ExecutorPodsEventQueueImpl(
       })
   }
 
-  def stopProcessingEvents(): Unit = {
+  def stop(): Unit = {
     observedDisposables.foreach(_.dispose())
     eventsObservable.onComplete()
   }
 
-  def pushPodUpdate(updatedPod: Pod): Unit = eventsObservable.onNext(updatedPod)
+  def enqueue(updatedPod: Pod): Unit = eventsObservable.onNext(updatedPod)
 
   private def toReactivexConsumer[T](consumer: T => Unit): Consumer[T] = {
     new Consumer[T] {

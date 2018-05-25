@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.ExecutorService
 
+import com.google.common.util.concurrent.MoreExecutors
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -70,7 +71,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
   override def stop(): Unit = {
     super.stop()
 
-    eventQueue.stopProcessingEvents()
+    Utils.tryLogNonFatalError {
+      eventQueue.stop()
+    }
 
     Utils.tryLogNonFatalError {
       watchEvents.stop()

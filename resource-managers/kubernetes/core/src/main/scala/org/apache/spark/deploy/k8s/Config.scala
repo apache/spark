@@ -156,8 +156,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
-      .doc("Interval between polls against the Kubernetes API server to inspect the" +
-        " state of executors.")
+      .doc("Interval between polls against the Kubernetes API server to inspect the " +
+        "state of executors.")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(interval => interval > 0, s"API server polling interval must be a" +
         s" positive time value.")

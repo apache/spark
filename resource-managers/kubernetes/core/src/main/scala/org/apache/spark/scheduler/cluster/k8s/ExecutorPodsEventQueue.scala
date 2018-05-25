@@ -22,8 +22,8 @@ private[spark] trait ExecutorPodsEventQueue {
 
   def addSubscriber(processBatchIntervalMillis: Long)(onNextBatch: Seq[Pod] => Unit): Unit
 
-  def stopProcessingEvents(): Unit
+  def stop(): Unit
 
-  def pushPodUpdate(updatedPod: Pod): Unit
+  def enqueue(updatedPod: Pod): Unit
 
 }
