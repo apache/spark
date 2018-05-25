@@ -22,9 +22,6 @@ cd "${TEST_ROOT_DIR}"
 
 source ./include/util.sh
 
-BRANCH="master"
-SPARK_REPO="https://github.com/apache/spark"
-SPARK_REPO_LOCAL_DIR="$TEST_ROOT_DIR/target/spark"
 DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 SPARK_TGZ="N/A"
@@ -36,14 +33,6 @@ SERVICE_ACCOUNT=
 # Parse arguments
 while (( "$#" )); do
   case $1 in
-    --spark-branch)
-      BRANCH="$2"
-      shift
-      ;;
-    --spark-repo)
-      SPARK_REPO="$2"
-      shift
-      ;;
     --image-repo)
       IMAGE_REPO="$2"
       shift
