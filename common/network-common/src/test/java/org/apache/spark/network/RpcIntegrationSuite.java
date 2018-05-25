@@ -26,6 +26,8 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.io.Files;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.StreamCallback;
@@ -322,29 +324,51 @@ public class RpcIntegrationSuite {
     // when there is a failure reading stream data, we don't try to keep the channel usable,
     // just send back a decent error msg.
     RpcResult noCallbackResult = sendRpcWithStream("fail/no callback/smallBuffer", "smallBuffer");
-    assertTrue("unexpected success: " + noCallbackResult.successMessages,
-        noCallbackResult.successMessages.isEmpty());
-    assertErrorsContain(noCallbackResult.errorMessages,
-        Sets.newHashSet("Destination did not register stream handler", "closed"));
+    assertErrorAndClosed(noCallbackResult, "Destination did not register stream handler");
+
 
     RpcResult multiCallbackResult = sendRpcWithStream("fail/multiple/smallBuffer", "smallBuffer");
-    assertTrue("unexpected success: " + multiCallbackResult.successMessages,
-        multiCallbackResult.successMessages.isEmpty());
-    assertErrorsContain(multiCallbackResult.errorMessages,
-        Sets.newHashSet("Cannot register more than one stream callback", "closed"));
+    assertErrorAndClosed(multiCallbackResult, "Cannot register more than one stream callback");
 
     RpcResult exceptionInCallbackResult = sendRpcWithStream("fail/exception/file", "smallBuffer");
-    assertTrue("unexpected success: " + exceptionInCallbackResult.successMessages,
-        exceptionInCallbackResult.successMessages.isEmpty());
-    assertErrorsContain(exceptionInCallbackResult.errorMessages,
-        Sets.newHashSet("Destination failed while reading stream", "Connection reset"));
+    assertErrorAndClosed(exceptionInCallbackResult, "Destination failed while reading stream");
   }
 
   private void assertErrorsContain(Set<String> errors, Set<String> contains) {
     assertEquals("Expected " + contains.size() + " errors, got " + errors.size() + "errors: " +
         errors, contains.size(), errors.size());
 
+    Pair<Set<String>, List<String>> r = checkErrorsContain(errors, contains);
+    assertTrue("Could not find error containing " + r.getRight() + "; errors: " + errors,
+        r.getRight().isEmpty());
+
+    assertTrue(r.getLeft().isEmpty());
+  }
+
+  private void assertErrorAndClosed(RpcResult result, String expectedError) {
+    assertTrue("unexpected success: " + result.successMessages, result.successMessages.isEmpty());
+    // we expect 1 additional error, which contains *either* "closed" or "Connection reset"
+    Set<String> errors = result.errorMessages;
+    assertEquals("Expected 2 errors, got " + errors.size() + "errors: " +
+        errors, 2, errors.size());
+
+    Set<String> containsAndClosed = Sets.newHashSet(expectedError);
+    containsAndClosed.add("closed");
+    containsAndClosed.add("Connection reset");
+
+    Pair<Set<String>, List<String>> r = checkErrorsContain(errors, containsAndClosed);
+
+    List<String> errorsNotFound = r.getRight();
+    assertEquals(1, errorsNotFound.size());
+    String err = errorsNotFound.get(0);
+    assertTrue(err.equals("closed") || err.equals("Connection reset"));
+
+    assertTrue(r.getLeft().isEmpty());
+  }
+
+  private Pair<Set<String>, List<String>> checkErrorsContain(Set<String> errors, Set<String> contains) {
     Set<String> remainingErrors = Sets.newHashSet(errors);
+    List<String> notFound = new LinkedList<String>();
     for (String contain : contains) {
       Iterator<String> it = remainingErrors.iterator();
       boolean foundMatch = false;
@@ -355,10 +379,11 @@ public class RpcIntegrationSuite {
           break;
         }
       }
-      assertTrue("Could not find error containing " + contain + "; errors: " + errors, foundMatch);
+      if (!foundMatch) {
+        notFound.add(contain);
+      }
     }
-
-    assertTrue(remainingErrors.isEmpty());
+    return new ImmutablePair<>(remainingErrors, notFound);
   }
 
   private static class VerifyingStreamCallback implements StreamCallback {
