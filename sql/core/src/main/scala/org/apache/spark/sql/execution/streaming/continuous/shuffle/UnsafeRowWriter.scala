@@ -17,36 +17,38 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
-import org.apache.spark.{Partition, Partitioner, TaskContext}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.Partitioner
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 
 /**
+ * A [[ContinuousShuffleWriter]] sending data to [[UnsafeRowReceiver]] instances.
  *
- * @param prev The RDD to write to the continuous shuffle.
+ * @param writerId The partition ID of this writer.
  * @param outputPartitioner The partitioner on the reader side of the shuffle.
  * @param endpoints The [[UnsafeRowReceiver]] endpoints to write to. Indexed by partition ID within
  *                  outputPartitioner.
  */
-class ContinuousShuffleWriteRDD(
-    var prev: RDD[UnsafeRow],
+class UnsafeRowWriter(
+    writerId: Int,
     outputPartitioner: Partitioner,
-    endpoints: Seq[RpcEndpointRef])
-    extends RDD[Unit](prev) {
+    endpoints: Array[RpcEndpointRef]) extends ContinuousShuffleWriter {
 
-  override def getPartitions: Array[Partition] = prev.partitions
-
-  override def compute(split: Partition, context: TaskContext): Iterator[Unit] = {
-    val writer: ContinuousShuffleWriter =
-      new UnsafeRowWriter(split.index, outputPartitioner, endpoints.toArray)
-    writer.write(prev.compute(split, context))
-
-    Iterator()
+  if (outputPartitioner.numPartitions != 1) {
+    throw new IllegalArgumentException("multiple readers not yet supported")
   }
 
-  override def clearDependencies() {
-    super.clearDependencies()
-    prev = null
+  if (outputPartitioner.numPartitions != endpoints.length) {
+    throw new IllegalArgumentException(s"partitioner size ${outputPartitioner.numPartitions} did " +
+      s"not match endpoint count ${endpoints.length}")
+  }
+
+  def write(epoch: Iterator[UnsafeRow]): Unit = {
+    while (epoch.hasNext) {
+      val row = epoch.next()
+      endpoints(outputPartitioner.getPartition(row)).ask[Unit](ReceiverRow(writerId, row))
+    }
+
+    endpoints.foreach(_.ask[Unit](ReceiverEpochMarker(writerId)))
   }
 }

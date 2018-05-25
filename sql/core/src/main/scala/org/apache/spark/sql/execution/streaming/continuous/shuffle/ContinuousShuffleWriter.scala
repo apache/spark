@@ -17,30 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
-import org.apache.spark.Partitioner
-import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 
-class ContinuousShuffleWriter(
-    writerId: Int,
-    outputPartitioner: Partitioner,
-    endpoints: Seq[RpcEndpointRef]) {
-
-  if (outputPartitioner.numPartitions != 1) {
-    throw new IllegalArgumentException("multiple readers not yet supported")
-  }
-
-  if (outputPartitioner.numPartitions != endpoints.size) {
-    throw new IllegalArgumentException(s"partitioner size ${outputPartitioner.numPartitions} did " +
-      s"not match endpoint count ${endpoints.size}")
-  }
-
-  def write(epoch: Iterator[UnsafeRow]): Unit = {
-    while (epoch.hasNext) {
-      val row = epoch.next()
-      endpoints(outputPartitioner.getPartition(row)).ask[Unit](ReceiverRow(writerId, row))
-    }
-
-    endpoints.foreach(_.ask[Unit](ReceiverEpochMarker(writerId)))
-  }
+/**
+ * Trait for writing to a continuous processing shuffle.
+ */
+trait ContinuousShuffleWriter {
+  def write(epoch: Iterator[UnsafeRow]): Unit
 }
