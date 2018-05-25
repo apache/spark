@@ -216,6 +216,9 @@ class ContinuousExecution(
     currentEpochCoordinatorId = epochCoordinatorId
     sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.EPOCH_COORDINATOR_ID_KEY, epochCoordinatorId)
+    sparkSessionForQuery.sparkContext.setLocalProperty(
+      ContinuousExecution.EPOCH_INTERVAL_KEY,
+      trigger.asInstanceOf[ContinuousTrigger].intervalMs.toString)
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint =
@@ -262,6 +265,9 @@ class ContinuousExecution(
         logInfo(s"Query $id ignoring exception from reconfiguring: $t")
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+      Thread.sleep(2000)
+
       epochEndpoint.askSync[Unit](StopContinuousExecutionWrites)
       SparkEnv.get.rpcEnv.stop(epochEndpoint)
 
@@ -269,7 +275,6 @@ class ContinuousExecution(
       epochUpdateThread.join()
 
       stopSources()
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
     }
   }
 
@@ -377,4 +382,5 @@ class ContinuousExecution(
 object ContinuousExecution {
   val START_EPOCH_KEY = "__continuous_start_epoch"
   val EPOCH_COORDINATOR_ID_KEY = "__epoch_coordinator_id"
+  val EPOCH_INTERVAL_KEY = "__continuous_epoch_interval"
 }

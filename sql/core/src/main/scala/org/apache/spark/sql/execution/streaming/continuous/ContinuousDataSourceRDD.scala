@@ -51,7 +51,7 @@ class ContinuousDataSourceRDD(
     sc: SparkContext,
     dataQueueSize: Int,
     epochPollIntervalMs: Long,
-    @transient private val readerFactories: Seq[InputPartition[UnsafeRow]])
+    private val readerFactories: Seq[InputPartition[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -75,7 +75,7 @@ class ContinuousDataSourceRDD(
       if (partition.queueReader == null) {
         partition.queueReader =
           new ContinuousQueuedDataReader(
-            partition.inputPartition, context, dataQueueSize, epochPollIntervalMs)
+            partition, context, dataQueueSize, epochPollIntervalMs)
       }
 
       partition.queueReader

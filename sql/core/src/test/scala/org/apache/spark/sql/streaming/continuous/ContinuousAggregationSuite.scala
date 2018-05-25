@@ -50,6 +50,24 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
     }
   }
 
+  test("basic 2part") {
+    withSQLConf(("spark.sql.streaming.unsupportedOperationCheck", "false")) {
+      val input = ContinuousMemoryStream[Int]
+
+      val df = input.toDF().coalesce(1).agg(max('value))
+
+      testStream(df, OutputMode.Complete)(
+        AddData(input, 0, 1, 2),
+        CheckAnswer(2),
+        StopStream,
+        AddData(input, 3, 4, 5),
+        StartStream(),
+        CheckAnswer(5),
+        AddData(input, -1, -2, -3),
+        CheckAnswer(5))
+    }
+  }
+
   test("repeated restart") {
     withSQLConf(("spark.sql.streaming.unsupportedOperationCheck", "false")) {
       val input = ContinuousMemoryStream.singlePartition[Int]

@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
 
 object DataSourceV2Strategy extends Strategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -35,6 +36,17 @@ object DataSourceV2Strategy extends Strategy {
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
+
+    case Repartition(1, false, child) =>
+      val isContinuous = child.collectFirst {
+        case StreamingDataSourceV2Relation(_, _, _, r: ContinuousReader) => r
+      }.isDefined
+
+      if (isContinuous) {
+        ContinuousCoalesceExec(1, planLater(child)) :: Nil
+      } else {
+        Nil
+      }
 
     case _ => Nil
   }

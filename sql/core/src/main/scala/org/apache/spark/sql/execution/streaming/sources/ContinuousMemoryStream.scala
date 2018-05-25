@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
+import scala.collection.SortedMap
 import scala.collection.mutable.ListBuffer
 
 import org.json4s.NoTypeHints
@@ -209,7 +210,7 @@ class ContinuousMemoryStreamInputPartitionReader(
 case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])
   extends Offset {
   private implicit val formats = Serialization.formats(NoTypeHints)
-  override def json(): String = Serialization.write(partitionNums)
+  override def json(): String = Serialization.write(SortedMap(partitionNums.toArray: _*))
 }
 
 case class ContinuousMemoryStreamPartitionOffset(partition: Int, numProcessed: Int)

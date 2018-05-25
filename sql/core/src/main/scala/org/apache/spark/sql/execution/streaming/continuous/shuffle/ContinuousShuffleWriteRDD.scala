@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
-import org.apache.spark.{Partition, Partitioner, TaskContext}
+import org.apache.spark.{Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointAddress, RpcEndpointRef}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochTracker}
 
@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution,
 class ContinuousShuffleWriteRDD(
     var prev: RDD[UnsafeRow],
     outputPartitioner: Partitioner,
-    endpoints: Seq[RpcEndpointRef])
+    endpoints: Seq[(RpcAddress, String)])
     extends RDD[Unit](prev) {
 
   override def getPartitions: Array[Partition] = prev.partitions
@@ -42,8 +42,12 @@ class ContinuousShuffleWriteRDD(
   override def compute(split: Partition, context: TaskContext): Iterator[Unit] = {
     EpochTracker.initializeCurrentEpoch(
       context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
+    val endpointRefs = endpoints.map {
+      case (addr, endpointName) =>
+        SparkEnv.get.rpcEnv.setupEndpointRef(addr, endpointName)
+    }
     val writer: ContinuousShuffleWriter =
-      new UnsafeRowWriter(split.index, outputPartitioner, endpoints.toArray)
+      new UnsafeRowWriter(split.index, outputPartitioner, endpointRefs.toArray)
 
     while (!context.isInterrupted() && !context.isCompleted()) {
       writer.write(prev.compute(split, context))

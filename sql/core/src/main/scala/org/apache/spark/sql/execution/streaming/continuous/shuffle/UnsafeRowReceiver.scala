@@ -96,7 +96,7 @@ private[shuffle] class UnsafeRowReceiver(
       override def getNext(): UnsafeRow = {
         var nextRow: UnsafeRow = null
         while (!finished && nextRow == null) {
-          completion.poll(epochIntervalMs, TimeUnit.MILLISECONDS) match {
+          completion.poll(epochIntervalMs * 10, TimeUnit.MILLISECONDS) match {
             case null =>
               // Try again if the poll didn't wait long enough to get a real result.
               // But we should be getting at least an epoch marker every checkpoint interval.
@@ -105,7 +105,7 @@ private[shuffle] class UnsafeRowReceiver(
               }
               logWarning(
                 s"Completion service failed to make progress after $epochIntervalMs ms. Waiting " +
-                  s"for writers $writerIdsUncommitted to send epoch markers.")
+                  s"for writers ${writerIdsUncommitted.mkString(",")} to send epoch markers.")
 
             // The completion service guarantees this future will be available immediately.
             case future => future.get() match {
