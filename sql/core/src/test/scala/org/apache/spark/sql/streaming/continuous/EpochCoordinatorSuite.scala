@@ -120,7 +120,7 @@ class EpochCoordinatorSuite
     verifyCommitsInOrderOf(List(1, 2))
   }
 
-  ignore("consequent epochs, a message for epoch k arrives after messages for epoch (k + 1)") {
+  test("consequent epochs, a message for epoch k arrives after messages for epoch (k + 1)") {
     setWriterPartitions(2)
     setReaderPartitions(2)
 
@@ -141,7 +141,7 @@ class EpochCoordinatorSuite
     verifyCommitsInOrderOf(List(1, 2))
   }
 
-  ignore("several epochs, messages arrive in order 1 -> 3 -> 4 -> 2") {
+  test("several epochs, messages arrive in order 1 -> 3 -> 4 -> 2") {
     setWriterPartitions(1)
     setReaderPartitions(1)
 
@@ -162,7 +162,7 @@ class EpochCoordinatorSuite
     verifyCommitsInOrderOf(List(1, 2, 3, 4))
   }
 
-  ignore("several epochs, messages arrive in order 1 -> 3 -> 5 -> 4 -> 2") {
+  test("several epochs, messages arrive in order 1 -> 3 -> 5 -> 4 -> 2") {
     setWriterPartitions(1)
     setReaderPartitions(1)
 
