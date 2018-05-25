@@ -172,7 +172,7 @@ object CatalystTypeConverters {
           new GenericArrayData(convertedIterable.toArray)
         case other => throw new IllegalArgumentException(
           s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + s"cannot be converted to an array of ${elementType.simpleString}")
+            + s"cannot be converted to an array of ${elementType.catalogString}")
       }
     }
 
@@ -212,7 +212,7 @@ object CatalystTypeConverters {
         case other => throw new IllegalArgumentException(
           s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
             + "cannot be converted to a map type with "
-            + s"key type (${keyType.simpleString}) and value type (${valueType.simpleString})")
+            + s"key type (${keyType.catalogString}) and value type (${valueType.catalogString})")
       }
     }
 
@@ -261,7 +261,7 @@ object CatalystTypeConverters {
         new GenericInternalRow(ar)
       case other => throw new IllegalArgumentException(
         s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to ${structType.simpleString}")
+          + s"cannot be converted to ${structType.catalogString}")
     }
 
     override def toScala(row: InternalRow): Row = {
@@ -324,7 +324,7 @@ object CatalystTypeConverters {
         case d: Decimal => d
         case other => throw new IllegalArgumentException(
           s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + s"cannot be converted to ${dataType.simpleString}")
+            + s"cannot be converted to ${dataType.catalogString}")
       }
       decimal.toPrecision(dataType.precision, dataType.scale)
     }
