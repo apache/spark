@@ -29,12 +29,12 @@ import org.apache.spark.SparkFunSuite
 class ExecutorPodsEventQueueSuite extends SparkFunSuite with BeforeAndAfter {
 
   private var eventBufferScheduler: DeterministicScheduler = _
-  private var executeSubscriptionsExecutor: DeterministicExecutor = _
+  private var executeSubscriptionsExecutor: DeterministicScheduler = _
   private var eventQueueUnderTest: ExecutorPodsEventQueueImpl = _
 
   before {
     eventBufferScheduler = new DeterministicScheduler()
-    executeSubscriptionsExecutor = new DeterministicExecutor
+    executeSubscriptionsExecutor = new DeterministicScheduler()
     eventQueueUnderTest = new ExecutorPodsEventQueueImpl(
       eventBufferScheduler,
       executeSubscriptionsExecutor)
@@ -75,7 +75,7 @@ class ExecutorPodsEventQueueSuite extends SparkFunSuite with BeforeAndAfter {
     val receivedInitialBuffer = new AtomicReference[Seq[Pod]](null)
     eventQueueUnderTest.addSubscriber(1000) { receivedInitialBuffer.set }
     assert(receivedInitialBuffer.get == null)
-    executeSubscriptionsExecutor.runPendingCommands()
+    executeSubscriptionsExecutor.runUntilIdle()
     assert(receivedInitialBuffer.get != null)
   }
 

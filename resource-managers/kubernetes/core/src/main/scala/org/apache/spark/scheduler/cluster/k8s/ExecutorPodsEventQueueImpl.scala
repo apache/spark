@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import java.util.concurrent.{Executor, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{ExecutorService, ScheduledExecutorService, TimeUnit}
 
 import com.google.common.collect.Lists
 import io.fabric8.kubernetes.api.model.Pod
@@ -27,11 +27,11 @@ import io.reactivex.subjects.PublishSubject
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class ExecutorPodsEventQueueImpl(
     bufferEventsExecutor: ScheduledExecutorService,
-    executeSubscriptionsExecutor: Executor)
+    executeSubscriptionsExecutor: ExecutorService)
   extends ExecutorPodsEventQueue {
 
   private val eventsObservable = PublishSubject.create[Pod]()
@@ -65,6 +65,8 @@ private[spark] class ExecutorPodsEventQueueImpl(
   def stop(): Unit = {
     observedDisposables.foreach(_.dispose())
     eventsObservable.onComplete()
+    ThreadUtils.shutdown(bufferEventsExecutor)
+    ThreadUtils.shutdown(executeSubscriptionsExecutor)
   }
 
   def enqueue(updatedPod: Pod): Unit = eventsObservable.onNext(updatedPod)

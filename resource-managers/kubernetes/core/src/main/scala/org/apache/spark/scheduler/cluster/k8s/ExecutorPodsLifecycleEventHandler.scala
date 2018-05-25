@@ -16,8 +16,6 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import java.util.concurrent.TimeUnit
-
 import com.google.common.cache.{Cache, CacheBuilder}
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -26,7 +24,6 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 

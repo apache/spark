@@ -19,12 +19,11 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
+import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor}
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
 import scala.util.control.NonFatal
-
-import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 
 import org.apache.spark.SparkException
 
@@ -227,4 +226,14 @@ private[spark] object ThreadUtils {
     }
   }
   // scalastyle:on awaitready
+
+  def shutdown(
+      executor: ExecutorService,
+      gracePeriod: Duration = FiniteDuration(30, TimeUnit.SECONDS)): Unit = {
+    executor.shutdown()
+    executor.awaitTermination(gracePeriod.toMillis, TimeUnit.MILLISECONDS)
+    if (!executor.isShutdown) {
+      executor.shutdownNow()
+    }
+  }
 }

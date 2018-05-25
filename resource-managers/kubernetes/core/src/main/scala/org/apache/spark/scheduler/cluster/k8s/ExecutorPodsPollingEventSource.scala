@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.util.ThreadUtils
 
 private[spark] class ExecutorPodsPollingEventSource(
     conf: SparkConf,
@@ -46,7 +47,7 @@ private[spark] class ExecutorPodsPollingEventSource(
       pollingFuture.cancel(true)
       pollingFuture = null
     }
-    pollingExecutor.shutdown()
+    ThreadUtils.shutdown(pollingExecutor)
   }
 
   private class PollRunnable(applicationId: String) extends Runnable {

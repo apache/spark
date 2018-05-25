@@ -26,7 +26,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -91,7 +91,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
 
     Utils.tryLogNonFatalError {
-      kubernetesClient.close()
+      ThreadUtils.shutdown(requestExecutorsService)
     }
   }
 
