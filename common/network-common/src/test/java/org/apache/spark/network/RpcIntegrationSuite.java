@@ -338,7 +338,7 @@ public class RpcIntegrationSuite {
     assertEquals("Expected " + contains.size() + " errors, got " + errors.size() + "errors: " +
         errors, contains.size(), errors.size());
 
-    Pair<Set<String>, List<String>> r = checkErrorsContain(errors, contains);
+    Pair<Set<String>, Set<String>> r = checkErrorsContain(errors, contains);
     assertTrue("Could not find error containing " + r.getRight() + "; errors: " + errors,
         r.getRight().isEmpty());
 
@@ -356,19 +356,21 @@ public class RpcIntegrationSuite {
     containsAndClosed.add("closed");
     containsAndClosed.add("Connection reset");
 
-    Pair<Set<String>, List<String>> r = checkErrorsContain(errors, containsAndClosed);
+    Pair<Set<String>, Set<String>> r = checkErrorsContain(errors, containsAndClosed);
 
-    List<String> errorsNotFound = r.getRight();
+    Set<String> errorsNotFound = r.getRight();
     assertEquals(1, errorsNotFound.size());
-    String err = errorsNotFound.get(0);
+    String err = errorsNotFound.iterator().next();
     assertTrue(err.equals("closed") || err.equals("Connection reset"));
 
     assertTrue(r.getLeft().isEmpty());
   }
 
-  private Pair<Set<String>, List<String>> checkErrorsContain(Set<String> errors, Set<String> contains) {
+  private Pair<Set<String>, Set<String>> checkErrorsContain(
+      Set<String> errors,
+      Set<String> contains) {
     Set<String> remainingErrors = Sets.newHashSet(errors);
-    List<String> notFound = new LinkedList<String>();
+    Set<String> notFound = Sets.newHashSet();
     for (String contain : contains) {
       Iterator<String> it = remainingErrors.iterator();
       boolean foundMatch = false;
