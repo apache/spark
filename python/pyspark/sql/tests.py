@@ -5036,7 +5036,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
     def test_column_order(self):
         import pandas as pd
-        from pyspark.sql.functions import pandas_udf, col, PandasUDFType
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
         df = self.data
 
         # Function returns a pdf with required column names, but order could be arbitrary using dict
@@ -5054,10 +5054,30 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             PandasUDFType.GROUPED_MAP
         )
 
+        def positional_col_order(pdf):
+            # Create a DataFrame with positional columns
+            return pd.DataFrame(zip(pdf.id, pdf.v * 3, pdf.v))
+
+        positional_udf = pandas_udf(
+            positional_col_order,
+            'id long, v int, u int',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        grouped_df = df.groupby('id')
+        grouped_pdf = df.toPandas().groupby('id')
+
         # The UDF result should assign columns by name from the pdf
-        result = df.groupby('id').apply(ordered_udf).sort('id', 'v')\
+        result = grouped_df.apply(ordered_udf).sort('id', 'v')\
             .select('id', 'u', 'v').toPandas()
-        pd_result = df.toPandas().groupby('id').apply(change_col_order)
+        pd_result = grouped_pdf.apply(change_col_order)
+        expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
+        # The UDF result uses positional columns from the pdf
+        result = grouped_df.apply(positional_udf).sort('id', 'v') \
+            .select('id', 'u', 'v').toPandas()
+        pd_result = grouped_pdf.apply(positional_udf)
         expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected, result)
 
