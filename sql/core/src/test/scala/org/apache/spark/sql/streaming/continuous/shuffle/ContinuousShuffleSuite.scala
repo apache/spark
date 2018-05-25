@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.{HashPartitioner, Partition, TaskContext, TaskContextImpl}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD, ContinuousShuffleWriteRDD}
+import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD, ContinuousShuffleWriteRDD, UnsafeRowWriter}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -70,7 +70,7 @@ class ContinuousShuffleSuite extends StreamTest {
     }
   }
 
-  private def unsafeRow(value: Int) = {
+  private implicit def unsafeRow(value: Int) = {
     UnsafeProjection.create(Array(IntegerType : DataType))(
       new GenericInternalRow(Array(value: Any)))
   }
@@ -88,26 +88,20 @@ class ContinuousShuffleSuite extends StreamTest {
   }
 
   test("one epoch") {
-    val data = sparkContext.parallelize(Seq(1, 2, 3).map(unsafeRow), 1)
-
     val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val writer = new ContinuousShuffleWriteRDD(
-      data, new HashPartitioner(1), Seq(readRDDEndpoint(reader)))
+    val writer = new UnsafeRowWriter(0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
 
-    writeEpoch(writer)
+    writer.write(Iterator(1, 2, 3))
 
     assert(readEpoch(reader) == Seq(1, 2, 3))
   }
 
   test("multiple epochs") {
-    val data = new MultipleEpochRDD(1, Array(1, 2, 3), Array(4, 5, 6))
-
     val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val writer = new ContinuousShuffleWriteRDD(
-      data, new HashPartitioner(1), Seq(readRDDEndpoint(reader)))
+    val writer = new UnsafeRowWriter(0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
 
-    writeEpoch(writer)
-    writeEpoch(writer)
+    writer.write(Iterator(1, 2, 3))
+    writer.write(Iterator(4, 5, 6))
 
     assert(readEpoch(reader) == Seq(1, 2, 3))
     assert(readEpoch(reader) == Seq(4, 5, 6))
@@ -117,12 +111,14 @@ class ContinuousShuffleSuite extends StreamTest {
     val data = new MultipleEpochRDD(1, Array(), Array(1, 2), Array(), Array(), Array(3, 4), Array())
 
     val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val writer = new ContinuousShuffleWriteRDD(
-      data, new HashPartitioner(1), Seq(readRDDEndpoint(reader)))
+    val writer = new UnsafeRowWriter(0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
 
-    for (_ <- 0 to 5) {
-      writeEpoch(writer)
-    }
+    writer.write(Iterator())
+    writer.write(Iterator(1, 2))
+    writer.write(Iterator())
+    writer.write(Iterator())
+    writer.write(Iterator(3, 4))
+    writer.write(Iterator())
 
     assert(readEpoch(reader) == Seq())
     assert(readEpoch(reader) == Seq(1, 2))
@@ -133,11 +129,8 @@ class ContinuousShuffleSuite extends StreamTest {
   }
 
   test("blocks waiting for writer") {
-    val data = new MultipleEpochRDD(1, Array(1))
-
     val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val writer = new ContinuousShuffleWriteRDD(
-      data, new HashPartitioner(1), Seq(readRDDEndpoint(reader)))
+    val writer = new UnsafeRowWriter(0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
 
     val readerEpoch = reader.compute(reader.partitions(0), ctx)
 
@@ -149,30 +142,30 @@ class ContinuousShuffleSuite extends StreamTest {
     readRowThread.start()
 
     eventually(timeout(streamingTimeout)) {
-      assert(readRowThread.getState == Thread.State.WAITING)
+      assert(readRowThread.getState == Thread.State.TIMED_WAITING)
     }
 
     // Once we write the epoch the thread should stop waiting and succeed.
-    writeEpoch(writer)
+    writer.write(Iterator(1))
     readRowThread.join()
   }
 
   test("multiple writer partitions") {
     val numWriterPartitions = 3
-    val data = new MultipleEpochRDD(
-      numWriterPartitions, Array(1, 2, 3, 4, 5, 6, 7), Array(4, 5, 6, 7, 8, 9, 10))
 
     val reader = new ContinuousShuffleReadRDD(
       sparkContext, numPartitions = 1, numShuffleWriters = numWriterPartitions)
-    val writer = new ContinuousShuffleWriteRDD(
-      data, new HashPartitioner(1), Seq(readRDDEndpoint(reader)))
+    val writers = (0 until 3).map { idx =>
+      new UnsafeRowWriter(idx, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+    }
 
-    writeEpoch(writer, 0)
-    writeEpoch(writer, 1)
-    writeEpoch(writer, 2)
-    writeEpoch(writer, 0)
-    writeEpoch(writer, 1)
-    writeEpoch(writer, 2)
+    writers(0).write(Iterator(1, 4, 7))
+    writers(1).write(Iterator(2, 5))
+    writers(2).write(Iterator(3, 6))
+
+    writers(0).write(Iterator(4, 7, 10))
+    writers(1).write(Iterator(5, 8))
+    writers(2).write(Iterator(6, 9))
 
     // Since there are multiple asynchronous writers, the original row sequencing is not guaranteed.
     // The epochs should be deterministically preserved, however.
@@ -186,11 +179,12 @@ class ContinuousShuffleSuite extends StreamTest {
 
     val reader = new ContinuousShuffleReadRDD(
       sparkContext, numPartitions = 1, numShuffleWriters = numWriterPartitions)
-    val writer = new ContinuousShuffleWriteRDD(
-      data, new HashPartitioner(1), Seq(readRDDEndpoint(reader)))
+    val writers = (0 until 3).map { idx =>
+      new UnsafeRowWriter(idx, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+    }
 
-    writeEpoch(writer, 1)
-    writeEpoch(writer, 2)
+    writers(1).write(Iterator())
+    writers(2).write(Iterator())
 
     val readerEpoch = reader.compute(reader.partitions(0), ctx)
 
@@ -202,10 +196,10 @@ class ContinuousShuffleSuite extends StreamTest {
 
     readEpochMarkerThread.start()
     eventually(timeout(streamingTimeout)) {
-      assert(readEpochMarkerThread.getState == Thread.State.WAITING)
+      assert(readEpochMarkerThread.getState == Thread.State.TIMED_WAITING)
     }
 
-    writeEpoch(writer, 0)
+    writers(0).write(Iterator())
     readEpochMarkerThread.join()
   }
 }

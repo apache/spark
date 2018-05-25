@@ -21,8 +21,10 @@ import org.apache.spark.{Partition, Partitioner, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochTracker}
 
 /**
+ * An RDD which continuously writes epochs from its child into a continuous shuffle.
  *
  * @param prev The RDD to write to the continuous shuffle.
  * @param outputPartitioner The partitioner on the reader side of the shuffle.
@@ -38,9 +40,15 @@ class ContinuousShuffleWriteRDD(
   override def getPartitions: Array[Partition] = prev.partitions
 
   override def compute(split: Partition, context: TaskContext): Iterator[Unit] = {
+    EpochTracker.initializeCurrentEpoch(
+      context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
     val writer: ContinuousShuffleWriter =
       new UnsafeRowWriter(split.index, outputPartitioner, endpoints.toArray)
-    writer.write(prev.compute(split, context))
+
+    while (!context.isInterrupted() && !context.isCompleted()) {
+      writer.write(prev.compute(split, context))
+      EpochTracker.incrementCurrentEpoch()
+    }
 
     Iterator()
   }
