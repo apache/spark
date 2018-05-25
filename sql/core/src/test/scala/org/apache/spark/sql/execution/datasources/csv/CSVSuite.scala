@@ -1512,4 +1512,36 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
     assert(exception.getMessage.contains("CSV header is not conform to the schema"))
   }
+
+  test("SPARK-23786: enforce inferred schema") {
+    val expectedSchema = new StructType().add("_c0", DoubleType).add("_c1", StringType)
+    val withHeader = spark.read
+      .option("inferSchema", true)
+      .option("enforceSchema", false)
+      .option("header", true)
+      .csv(Seq("_c0,_c1", "1.0,a").toDS())
+    assert(withHeader.schema == expectedSchema)
+    checkAnswer(withHeader, Seq(Row(1.0, "a")))
+
+    // Ignore the inferSchema flag if an user sets a schema
+    val schema = new StructType().add("colA", DoubleType).add("colB", StringType)
+    val ds = spark.read
+      .option("inferSchema", true)
+      .option("enforceSchema", false)
+      .option("header", true)
+      .schema(schema)
+      .csv(Seq("colA,colB", "1.0,a").toDS())
+    assert(ds.schema == schema)
+    checkAnswer(ds, Seq(Row(1.0, "a")))
+
+    val exception = intercept[IllegalArgumentException] {
+      spark.read
+        .option("inferSchema", true)
+        .option("enforceSchema", false)
+        .option("header", true)
+        .schema(schema)
+        .csv(Seq("col1,col2", "1.0,a").toDS())
+    }
+    assert(exception.getMessage.contains("CSV header is not conform to the schema"))
+  }
 }
