@@ -18,11 +18,9 @@
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
 import org.apache.spark.{Partition, Partitioner, TaskContext}
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.continuous.EpochTracker
 
 /**
  *
@@ -43,8 +41,6 @@ class ContinuousShuffleWriteRDD(
     val writer: ContinuousShuffleWriter =
       new UnsafeRowWriter(split.index, outputPartitioner, endpoints.toArray)
     writer.write(prev.compute(split, context))
-
-    EpochTracker.incrementCurrentEpoch()
 
     Iterator()
   }
