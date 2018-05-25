@@ -38,6 +38,9 @@ from pyspark.sql.types import to_arrow_type
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
 
+if sys.version >= '3':
+    basestring = str
+
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
@@ -110,7 +113,16 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
                 "Number of columns of the returned pandas.DataFrame "
                 "doesn't match specified schema. "
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
-        return [(result[field.name], to_arrow_type(field.dataType)) for field in return_type]
+        try:
+            # Assign result columns by schema name
+            return [(result[field.name], to_arrow_type(field.dataType)) for field in return_type]
+        except KeyError:
+            if all(not isinstance(name, basestring) for name in result.columns):
+                # Assign result columns by position if they are not named with strings
+                return [(result[result.columns[i]], to_arrow_type(field.dataType))
+                        for i, field in enumerate(return_type)]
+            else:
+                raise
 
     return wrapped
 
