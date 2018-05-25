@@ -22,14 +22,14 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 
 /**
- * A [[ContinuousShuffleWriter]] sending data to [[UnsafeRowReceiver]] instances.
+ * A [[ContinuousShuffleWriter]] sending data to [[RPCContinuousShuffleReader]] instances.
  *
- * @param writerId The partition ID of this writer.
+ * @param writerId          The partition ID of this writer.
  * @param outputPartitioner The partitioner on the reader side of the shuffle.
- * @param endpoints The [[UnsafeRowReceiver]] endpoints to write to. Indexed by partition ID within
- *                  outputPartitioner.
+ * @param endpoints         The [[RPCContinuousShuffleReader]] endpoints to write to. Indexed by
+ *                          partition ID within outputPartitioner.
  */
-class UnsafeRowWriter(
+class RPCContinuousShuffleWriter(
     writerId: Int,
     outputPartitioner: Partitioner,
     endpoints: Array[RpcEndpointRef]) extends ContinuousShuffleWriter {

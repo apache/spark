@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.{HashPartitioner, Partition, TaskContext, TaskContextImpl}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD, UnsafeRowWriter}
+import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD, RPCContinuousShuffleWriter}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -85,7 +85,8 @@ class ContinuousShuffleSuite extends StreamTest {
 
   test("one epoch") {
     val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val writer = new UnsafeRowWriter(0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+    val writer = new RPCContinuousShuffleWriter(
+      0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
 
     writer.write(Iterator(1, 2, 3))
 
@@ -94,7 +95,8 @@ class ContinuousShuffleSuite extends StreamTest {
 
   test("multiple epochs") {
     val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val writer = new UnsafeRowWriter(0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+    val writer = new RPCContinuousShuffleWriter(
+      0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
 
     writer.write(Iterator(1, 2, 3))
     writer.write(Iterator(4, 5, 6))
@@ -107,7 +109,8 @@ class ContinuousShuffleSuite extends StreamTest {
     val data = new MultipleEpochRDD(1, Array(), Array(1, 2), Array(), Array(), Array(3, 4), Array())
 
     val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val writer = new UnsafeRowWriter(0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+    val writer = new RPCContinuousShuffleWriter(
+      0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
 
     writer.write(Iterator())
     writer.write(Iterator(1, 2))
@@ -126,7 +129,8 @@ class ContinuousShuffleSuite extends StreamTest {
 
   test("blocks waiting for writer") {
     val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val writer = new UnsafeRowWriter(0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+    val writer = new RPCContinuousShuffleWriter(
+      0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
 
     val readerEpoch = reader.compute(reader.partitions(0), ctx)
 
@@ -152,7 +156,7 @@ class ContinuousShuffleSuite extends StreamTest {
     val reader = new ContinuousShuffleReadRDD(
       sparkContext, numPartitions = 1, numShuffleWriters = numWriterPartitions)
     val writers = (0 until 3).map { idx =>
-      new UnsafeRowWriter(idx, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+      new RPCContinuousShuffleWriter(idx, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
     }
 
     writers(0).write(Iterator(1, 4, 7))
@@ -176,7 +180,7 @@ class ContinuousShuffleSuite extends StreamTest {
     val reader = new ContinuousShuffleReadRDD(
       sparkContext, numPartitions = 1, numShuffleWriters = numWriterPartitions)
     val writers = (0 until 3).map { idx =>
-      new UnsafeRowWriter(idx, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+      new RPCContinuousShuffleWriter(idx, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
     }
 
     writers(1).write(Iterator())
