@@ -248,32 +248,32 @@ private[csv] object UnivocityParser {
    */
   def parseStream(
       inputStream: InputStream,
-      dropFirstRecord: Boolean,
+      shouldDropHeader: Boolean,
       parser: UnivocityParser,
       schema: StructType,
-      checkFirstRecord: Array[String] => Unit): Iterator[InternalRow] = {
+      checkHeader: Array[String] => Unit): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
       input => Seq(parser.convert(input)),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
-    convertStream(inputStream, dropFirstRecord, tokenizer, checkFirstRecord) { tokens =>
+    convertStream(inputStream, shouldDropHeader, tokenizer, checkHeader) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
 
   private def convertStream[T](
       inputStream: InputStream,
-      dropFirstRecord: Boolean,
+      shouldDropHeader: Boolean,
       tokenizer: CsvParser,
-      checkFirstRecord: Array[String] => Unit = _ => ())(
+      checkHeader: Array[String] => Unit = _ => ())(
       convert: Array[String] => T) = new Iterator[T] {
     tokenizer.beginParsing(inputStream)
     private var nextRecord = {
-      if (dropFirstRecord) {
+      if (shouldDropHeader) {
         val firstRecord = tokenizer.parseNext()
-        checkFirstRecord(firstRecord)
+        checkHeader(firstRecord)
       }
       tokenizer.parseNext()
     }
