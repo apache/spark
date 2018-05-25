@@ -154,6 +154,24 @@ private[spark] object Config extends Logging {
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
 
+  val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
+      .doc("Interval between polls against the Kubernetes API server to inspect the" +
+        " state of executors.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, s"API server polling interval must be a" +
+        s" positive time value.")
+      .createWithDefaultString("30s")
+
+  val KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.eventProcessingInterval")
+      .doc("Interval between successive inspection of executor events sent from the" +
+        " Kubernetes API.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, s"Event processing interval must be a positive" +
+        s" time value.")
+      .createWithDefaultString("1s")
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

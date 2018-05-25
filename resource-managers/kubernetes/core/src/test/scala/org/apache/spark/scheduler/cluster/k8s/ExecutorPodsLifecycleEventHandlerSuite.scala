@@ -29,13 +29,12 @@ import org.scalatest.BeforeAndAfter
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
 class ExecutorPodsLifecycleEventHandlerSuite extends SparkFunSuite with BeforeAndAfter {
-
-  private type Pods = MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
 
   private var namedExecutorPods: mutable.Map[String, PodResource[Pod, DoneablePod]] = _
 
@@ -43,10 +42,10 @@ class ExecutorPodsLifecycleEventHandlerSuite extends SparkFunSuite with BeforeAn
   private var kubernetesClient: KubernetesClient = _
 
   @Mock
-  private var podOperations: Pods = _
+  private var podOperations: PODS = _
 
   @Mock
-  private var driverPodOperations: PodResource[Pod, DoneablePod] = _
+  private var driverPodOperations: SINGLE_POD = _
 
   @Mock
   private var executorBuilder: KubernetesExecutorBuilder = _
@@ -65,7 +64,11 @@ class ExecutorPodsLifecycleEventHandlerSuite extends SparkFunSuite with BeforeAn
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(any(classOf[String]))).thenAnswer(namedPodsAnswer())
     eventHandlerUnderTest = new ExecutorPodsLifecycleEventHandler(
-      executorBuilder, kubernetesClient, eventQueue, removedExecutorsCache)
+      new SparkConf(),
+      executorBuilder,
+      kubernetesClient,
+      eventQueue,
+      removedExecutorsCache)
     eventHandlerUnderTest.start(schedulerBackend)
   }
 

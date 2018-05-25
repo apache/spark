@@ -23,12 +23,15 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsLifecycleEventHandler(
+    conf: SparkConf,
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     podsEventQueue: ExecutorPodsEventQueue,
@@ -43,8 +46,10 @@ private[spark] class ExecutorPodsLifecycleEventHandler(
 
   import ExecutorPodsLifecycleEventHandler._
 
+  private val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
+
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
-    podsEventQueue.addSubscriber(1000L) { updatedPods =>
+    podsEventQueue.addSubscriber(eventProcessingInterval) { updatedPods =>
       updatedPods.foreach { updatedPod =>
         processUpdatedPod(schedulerBackend, updatedPod)
       }

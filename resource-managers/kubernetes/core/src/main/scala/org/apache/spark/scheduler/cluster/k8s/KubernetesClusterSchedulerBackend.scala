@@ -36,7 +36,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     podAllocator: ExecutorPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleEventHandler,
     watchEvents: ExecutorPodsWatchEventSource,
-                                                        pollEvents: ExecutorPodsPollingEventSource)
+    pollEvents: ExecutorPodsPollingEventSource)
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
 
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
@@ -51,7 +51,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
-  // Allow removeExecutor to be accessible by KubernetesSchedulerEventHandler
+  // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     removeExecutor(executorId, reason)
   }

@@ -31,11 +31,10 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
 class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
-
-  private type Pods = MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
 
   private val driverPodName = "driver"
 
@@ -60,7 +59,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private var kubernetesClient: KubernetesClient = _
 
   @Mock
-  private var podOperations: Pods = _
+  private var podOperations: PODS = _
 
   @Mock
   private var driverPodOperations: PodResource[Pod, DoneablePod] = _

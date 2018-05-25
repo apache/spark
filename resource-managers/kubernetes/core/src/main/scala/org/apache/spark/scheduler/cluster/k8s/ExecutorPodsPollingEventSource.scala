@@ -21,18 +21,24 @@ import java.util.concurrent.{Future, ScheduledExecutorService, TimeUnit}
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
 private[spark] class ExecutorPodsPollingEventSource(
+    conf: SparkConf,
     kubernetesClient: KubernetesClient,
     eventQueue: ExecutorPodsEventQueue,
     pollingExecutor: ScheduledExecutorService) {
+
+  private val pollingInterval = conf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
+
   private var pollingFuture: Future[_] = _
 
   def start(applicationId: String): Unit = {
     require(pollingFuture == null, "Cannot start polling more than once.")
     pollingFuture = pollingExecutor.scheduleWithFixedDelay(
-      new PollRunnable(applicationId), 0L, 30L, TimeUnit.SECONDS)
+      new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
   }
 
   def stop(): Unit = {
@@ -40,6 +46,7 @@ private[spark] class ExecutorPodsPollingEventSource(
       pollingFuture.cancel(true)
       pollingFuture = null
     }
+    pollingExecutor.shutdown()
   }
 
   private class PollRunnable(applicationId: String) extends Runnable {

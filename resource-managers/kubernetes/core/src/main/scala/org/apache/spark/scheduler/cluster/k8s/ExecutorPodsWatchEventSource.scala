@@ -36,7 +36,7 @@ private[spark] class ExecutorPodsWatchEventSource(
     require(watchConnection == null, "Cannot start the watcher twice.")
     watchConnection = kubernetesClient.pods()
       .withLabel(SPARK_APP_ID_LABEL, applicationId)
-      .withLabel(SPARK_POD_EXECUTOR_ROLE)
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
       .watch(new ExecutorPodsWatcher())
   }
 
