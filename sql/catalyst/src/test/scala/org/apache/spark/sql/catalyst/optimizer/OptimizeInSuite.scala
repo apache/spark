@@ -179,13 +179,13 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: one element in list gets transformed to EqualTo.") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(UnresolvedAttribute("b"))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery)
     val correctAnswer =
       testRelation
-        .where(EqualTo(UnresolvedAttribute("a"), UnresolvedAttribute("b")))
+        .where(EqualTo(UnresolvedAttribute("a"), Literal(1)))
         .analyze
 
     comparePlans(optimized, correctAnswer)

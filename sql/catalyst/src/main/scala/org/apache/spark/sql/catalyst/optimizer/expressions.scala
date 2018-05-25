@@ -222,8 +222,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
         // When v is not nullable, the following expression will be optimized
         // to FalseLiteral which is tested in OptimizeInSuite.scala
         If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
-      case In(v, list) if list.length == 1 && !list.head.isInstanceOf[ListQuery] =>
-        EqualTo(v, list.head)
+      case In(v, Seq(elem @ Literal(_, _))) => EqualTo(v, elem)
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
         if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
