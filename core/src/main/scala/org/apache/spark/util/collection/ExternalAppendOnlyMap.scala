@@ -604,7 +604,6 @@ class ExternalAppendOnlyMap[K, V, C](
       upstream = Iterator.empty
     }
 
-    private[ExternalAppendOnlyMap]
     def toCompletionIterator: CompletionIterator[(K, C), SpillableIterator] = {
       CompletionIterator[(K, C), SpillableIterator](this, this.destroy )
     }
