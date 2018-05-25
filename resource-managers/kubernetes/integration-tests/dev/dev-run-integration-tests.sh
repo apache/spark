@@ -20,8 +20,6 @@ TEST_ROOT_DIR=$(git rev-parse --show-toplevel)/resource-managers/kubernetes/inte
 
 cd "${TEST_ROOT_DIR}"
 
-source ./include/util.sh
-
 DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 SPARK_TGZ="N/A"
