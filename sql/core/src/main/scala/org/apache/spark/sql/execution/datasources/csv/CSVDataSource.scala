@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.TaskContext
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -113,7 +114,7 @@ abstract class CSVDataSource extends Serializable {
   }
 }
 
-object CSVDataSource {
+object CSVDataSource extends Logging {
   def apply(options: CSVOptions): CSVDataSource = {
     if (options.multiLine) {
       MultiLineCSVDataSource
@@ -132,20 +133,21 @@ object CSVDataSource {
       fileName: String,
       enforceSchema: Boolean,
       caseSensitive: Boolean): Unit = {
-    if (!enforceSchema && columnNames != null) {
+    if (columnNames != null) {
       val fieldNames = schema.map(_.name).toIndexedSeq
       val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
+      var errorMessage: Option[String] = None
 
       if (headerLen == schemaSize) {
         var i = 0
-        while (i < headerLen) {
+        while (errorMessage.isEmpty && i < headerLen) {
           var (nameInSchema, nameInHeader) = (fieldNames(i), columnNames(i))
           if (!caseSensitive) {
             nameInSchema = nameInSchema.toLowerCase
             nameInHeader = nameInHeader.toLowerCase
           }
           if (nameInHeader != nameInSchema) {
-            throw new IllegalArgumentException(
+            errorMessage = Some(
               s"""|CSV header is not conform to the schema.
                   | Header: ${columnNames.mkString(", ")}
                   | Schema: ${fieldNames.mkString(", ")}
@@ -155,10 +157,18 @@ object CSVDataSource {
           i += 1
         }
       } else {
-        throw new IllegalArgumentException(
+        errorMessage = Some(
           s"""|Number of column in CSV header is not equal to number of fields in the schema:
               | Header length: $headerLen, schema size: $schemaSize
               |CSV file: $fileName""".stripMargin)
+      }
+
+      errorMessage.foreach { msg =>
+        if (enforceSchema) {
+          logWarning(msg)
+        } else {
+          throw new IllegalArgumentException(msg)
+        }
       }
     }
   }
