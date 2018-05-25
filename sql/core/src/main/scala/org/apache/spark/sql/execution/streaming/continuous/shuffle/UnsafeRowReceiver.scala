@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
-import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
+import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
+
+import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
@@ -27,10 +29,17 @@ import org.apache.spark.util.NextIterator
 
 /**
  * Messages for the UnsafeRowReceiver endpoint. Either an incoming row or an epoch marker.
+ *
+ * Each message comes tagged with writerId, identifying which writer the message is coming
+ * from. The receiver will only begin the next epoch once all writers have sent an epoch
+ * marker ending the current epoch.
  */
-private[shuffle] sealed trait UnsafeRowReceiverMessage extends Serializable
-private[shuffle] case class ReceiverRow(row: UnsafeRow) extends UnsafeRowReceiverMessage
-private[shuffle] case class ReceiverEpochMarker() extends UnsafeRowReceiverMessage
+private[shuffle] sealed trait UnsafeRowReceiverMessage extends Serializable {
+  def writerId: Int
+}
+private[shuffle] case class ReceiverRow(writerId: Int, row: UnsafeRow)
+  extends UnsafeRowReceiverMessage
+private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends UnsafeRowReceiverMessage
 
 /**
  * RPC endpoint for receiving rows into a continuous processing shuffle task. Continuous shuffle
@@ -41,11 +50,15 @@ private[shuffle] case class ReceiverEpochMarker() extends UnsafeRowReceiverMessa
  */
 private[shuffle] class UnsafeRowReceiver(
       queueSize: Int,
+      numShuffleWriters: Int,
+      epochIntervalMs: Long,
       override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with ContinuousShuffleReader with Logging {
   // Note that this queue will be drained from the main task thread and populated in the RPC
   // response thread.
-  private val queue = new ArrayBlockingQueue[UnsafeRowReceiverMessage](queueSize)
+  private val queues = Array.fill(numShuffleWriters) {
+    new ArrayBlockingQueue[UnsafeRowReceiverMessage](queueSize)
+  }
 
   // Exposed for testing to determine if the endpoint gets stopped on task end.
   private[shuffle] val stopped = new AtomicBoolean(false)
@@ -56,20 +69,70 @@ private[shuffle] class UnsafeRowReceiver(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case r: UnsafeRowReceiverMessage =>
-      queue.put(r)
+      queues(r.writerId).put(r)
       context.reply(())
   }
 
   override def read(): Iterator[UnsafeRow] = {
     new NextIterator[UnsafeRow] {
-      override def getNext(): UnsafeRow = queue.take() match {
-        case ReceiverRow(r) => r
-        case ReceiverEpochMarker() =>
-          finished = true
-          null
+      // An array of flags for whether each writer ID has gotten an epoch marker.
+      private val writerEpochMarkersReceived = Array.fill(numShuffleWriters)(false)
+
+      private val executor = Executors.newFixedThreadPool(numShuffleWriters)
+      private val completion = new ExecutorCompletionService[UnsafeRowReceiverMessage](executor)
+
+      private def completionTask(writerId: Int) = new Callable[UnsafeRowReceiverMessage] {
+        override def call(): UnsafeRowReceiverMessage = queues(writerId).take()
       }
 
-      override def close(): Unit = {}
+      // Initialize by submitting tasks to read the first row from each writer.
+      (0 until numShuffleWriters).foreach(writerId => completion.submit(completionTask(writerId)))
+
+      /**
+       * In each call to getNext(), we pull the next row available in the completion queue, and then
+       * submit another task to read the next row from the writer which returned it.
+       *
+       * When a writer sends an epoch marker, we note that it's finished and don't submit another
+       * task for it in this epoch. The iterator is over once all writers have sent an epoch marker.
+       */
+      override def getNext(): UnsafeRow = {
+        var nextRow: UnsafeRow = null
+        while (!finished && nextRow == null) {
+          completion.poll(epochIntervalMs, TimeUnit.MILLISECONDS) match {
+            case null =>
+              // Try again if the poll didn't wait long enough to get a real result.
+              // But we should be getting at least an epoch marker every checkpoint interval.
+              val writerIdsUncommitted = writerEpochMarkersReceived.zipWithIndex.collect {
+                case (flag, idx) if !flag => idx
+              }
+              logWarning(
+                s"Completion service failed to make progress after $epochIntervalMs ms. Waiting " +
+                  s"for writers $writerIdsUncommitted to send epoch markers.")
+
+            // The completion service guarantees this future will be available immediately.
+            case future => future.get() match {
+              case ReceiverRow(writerId, r) =>
+                // Start reading the next element in the queue we just took from.
+                completion.submit(completionTask(writerId))
+                nextRow = r
+              case ReceiverEpochMarker(writerId) =>
+                // Don't read any more from this queue. If all the writers have sent epoch markers,
+                // the epoch is over; otherwise we need to loop again to poll from the remaining
+                // writers.
+                writerEpochMarkersReceived(writerId) = true
+                if (writerEpochMarkersReceived.forall(_ == true)) {
+                  finished = true
+                }
+            }
+          }
+        }
+
+        nextRow
+      }
+
+      override def close(): Unit = {
+        executor.shutdownNow()
+      }
     }
   }
 }
