@@ -5055,12 +5055,12 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         )
 
         def positional_col_order(pdf):
-            # Create a DataFrame with positional columns
-            return pd.DataFrame(zip(pdf.id, pdf.v * 3, pdf.v))
+            # Create a DataFrame with positional columns, fix types to long
+            return pd.DataFrame(zip(pdf.id, pdf.v * 3, pdf.v), dtype='int64')
 
         positional_udf = pandas_udf(
             positional_col_order,
-            'id long, v int, u int',
+            'id long, u long, v long',
             PandasUDFType.GROUPED_MAP
         )
 
@@ -5077,7 +5077,9 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         # The UDF result uses positional columns from the pdf
         result = grouped_df.apply(positional_udf).sort('id', 'v') \
             .select('id', 'u', 'v').toPandas()
-        pd_result = grouped_pdf.apply(positional_udf)
+        pd_result = grouped_pdf.apply(positional_col_order)
+        pd_result.rename(columns={old: new for old, new in
+                                  zip(pd_result.columns, ['id', 'u', 'v'])}, inplace=True)
         expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected, result)
 
