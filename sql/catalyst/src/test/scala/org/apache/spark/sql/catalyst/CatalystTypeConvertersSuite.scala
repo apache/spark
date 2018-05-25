@@ -94,4 +94,49 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
     assert(CatalystTypeConverters.createToCatalystConverter(doubleArrayType)(doubleArray)
       == doubleGenericArray)
   }
+
+  test("converting a wrong value to the struct type") {
+    val structType = new StructType().add("f1", IntegerType)
+    val exception = intercept[IllegalArgumentException] {
+      CatalystTypeConverters.createToCatalystConverter(structType)("test")
+    }
+    assert(exception.getMessage.contains("The value (test) of the type "
+      + "(java.lang.String) cannot be converted to struct<f1:int>"))
+  }
+
+  test("converting a wrong value to the map type") {
+    val mapType = MapType(StringType, IntegerType, false)
+    val exception = intercept[IllegalArgumentException] {
+      CatalystTypeConverters.createToCatalystConverter(mapType)("test")
+    }
+    assert(exception.getMessage.contains("The value (test) of the type "
+      + "(java.lang.String) cannot be converted to a map type with key "
+      + "type (string) and value type (int)"))
+  }
+
+  test("converting a wrong value to the array type") {
+    val arrayType = ArrayType(IntegerType, true)
+    val exception = intercept[IllegalArgumentException] {
+      CatalystTypeConverters.createToCatalystConverter(arrayType)("test")
+    }
+    assert(exception.getMessage.contains("The value (test) of the type "
+      + "(java.lang.String) cannot be converted to an array of int"))
+  }
+
+  test("converting a wrong value to the decimal type") {
+    val decimalType = DecimalType(10, 0)
+    val exception = intercept[IllegalArgumentException] {
+      CatalystTypeConverters.createToCatalystConverter(decimalType)("test")
+    }
+    assert(exception.getMessage.contains("The value (test) of the type "
+      + "(java.lang.String) cannot be converted to decimal(10,0)"))
+  }
+
+  test("converting a wrong value to the string type") {
+    val exception = intercept[IllegalArgumentException] {
+      CatalystTypeConverters.createToCatalystConverter(StringType)(0.1)
+    }
+    assert(exception.getMessage.contains("The value (0.1) of the type "
+      + "(java.lang.Double) cannot be converted to the string type"))
+  }
 }
