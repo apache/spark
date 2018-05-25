@@ -395,7 +395,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
         // likely running on a beefy machine that can handle a large number of simultaneously
         // active consumers.
 
-        if (entry.getValue.inUse == false && this.size > capacity) {
+        if (!entry.getValue.inUse && this.size > capacity) {
           logWarning(
             s"KafkaConsumer cache hitting max capacity of $capacity, " +
               s"removing consumer for ${entry.getKey}")

@@ -1373,6 +1373,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
   }
 
+  test("SPARK-24329: skip lines with comments, and one or multiple whitespaces") {
+    val schema = new StructType().add("colA", StringType)
+    val ds = spark
+      .read
+      .schema(schema)
+      .option("multiLine", false)
+      .option("header", true)
+      .option("comment", "#")
+      .option("ignoreLeadingWhiteSpace", false)
+      .option("ignoreTrailingWhiteSpace", false)
+      .csv(testFile("test-data/comments-whitespaces.csv"))
+
+    checkAnswer(ds, Seq(Row(""" "a" """)))
+  }
+
   test("SPARK-24244: Select a subset of all columns") {
     withTempPath { path =>
       import collection.JavaConverters._
@@ -1393,10 +1408,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .csv(path.getCanonicalPath)
         .select('f15, 'f10, 'f5)
 
-      checkAnswer(
-        idf,
-        List(Row(15, 10, 5), Row(-15, -10, -5))
-      )
+      assert(idf.count() == 2)
+      checkAnswer(idf, List(Row(15, 10, 5), Row(-15, -10, -5)))
     }
   }
 

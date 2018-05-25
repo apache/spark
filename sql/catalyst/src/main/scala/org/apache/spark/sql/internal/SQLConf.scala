@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.util.Utils
 
@@ -394,7 +395,7 @@ object SQLConf {
     .doc("The output committer class used by Parquet. The specified class needs to be a " +
       "subclass of org.apache.hadoop.mapreduce.OutputCommitter. Typically, it's also a subclass " +
       "of org.apache.parquet.hadoop.ParquetOutputCommitter. If it is not, then metadata summaries" +
-      "will never be created, irrespective of the value of parquet.enable.summary-metadata")
+      "will never be created, irrespective of the value of parquet.summary.metadata.level")
     .internal()
     .stringConf
     .createWithDefault("org.apache.parquet.hadoop.ParquetOutputCommitter")
@@ -702,6 +703,17 @@ object SQLConf {
       " deactivating whole-stage codegen.")
     .intConf
     .createWithDefault(100)
+
+  val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
+    .doc("This config determines the fallback behavior of several codegen generators " +
+      "during tests. `FALLBACK` means trying codegen first and then fallbacking to " +
+      "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
+      "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that " +
+      "this config works only for tests.")
+    .internal()
+    .stringConf
+    .checkValues(CodegenObjectFactoryMode.values.map(_.toString))
+    .createWithDefault(CodegenObjectFactoryMode.FALLBACK.toString)
 
   val CODEGEN_FALLBACK = buildConf("spark.sql.codegen.fallback")
     .internal()
@@ -1658,6 +1670,8 @@ class SQLConf extends Serializable with Logging {
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+
+  def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
   /** ********************** SQLConf functionality methods ************ */
 
