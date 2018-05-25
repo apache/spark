@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.{HashPartitioner, Partition, TaskContext, TaskContextImpl}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD, ContinuousShuffleWriteRDD, UnsafeRowWriter}
+import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD, UnsafeRowWriter}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -77,10 +77,6 @@ class ContinuousShuffleSuite extends StreamTest {
 
   private def readRDDEndpoint(rdd: ContinuousShuffleReadRDD) = {
     rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
-  }
-
-  private def writeEpoch(rdd: ContinuousShuffleWriteRDD, partition: Int = 0) = {
-    rdd.compute(rdd.partitions(partition), ctx)
   }
 
   private def readEpoch(rdd: ContinuousShuffleReadRDD) = {
