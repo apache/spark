@@ -5056,7 +5056,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         def positional_col_order(pdf):
             # Create a DataFrame with positional columns, fix types to long
-            return pd.DataFrame(zip(pdf.id, pdf.v * 3, pdf.v), dtype='int64')
+            return pd.DataFrame(list(zip(pdf.id, pdf.v * 3, pdf.v)), dtype='int64')
 
         positional_udf = pandas_udf(
             positional_col_order,
