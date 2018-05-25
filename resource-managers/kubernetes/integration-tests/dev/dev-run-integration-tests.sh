@@ -16,10 +16,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+TEST_ROOT_DIR=$(git rev-parse --show-toplevel)/resource-managers/kubernetes/integration-tests
+
+cd "${TEST_ROOT_DIR}"
 
 source ./include/util.sh
 
-TEST_ROOT_DIR=$(git rev-parse --show-toplevel)/resource-managers/kubernetes/integration-tests
 BRANCH="master"
 SPARK_REPO="https://github.com/apache/spark"
 SPARK_REPO_LOCAL_DIR="$TEST_ROOT_DIR/target/spark"
@@ -76,12 +78,6 @@ while (( "$#" )); do
   esac
   shift
 done
-
-if [[ $SPARK_TGZ == "N/A" ]];
-then
-  echo "Cloning $SPARK_REPO into $SPARK_REPO_LOCAL_DIR and checking out $BRANCH."
-  clone_build_spark $SPARK_REPO $SPARK_REPO_LOCAL_DIR $BRANCH
-fi
 
 cd $TEST_ROOT_DIR
 
