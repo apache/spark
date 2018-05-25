@@ -23,21 +23,6 @@ You can download Minikube [here](https://github.com/kubernetes/minikube/releases
 
 Configuration of the integration test runtime is done through passing different arguments to the test script. The main useful options are outlined below.
 
-## Use a non-local cluster
-
-To use your own cluster running in the cloud, set the following:
-
-* `--deploy-mode cloud` to indicate that the test is connecting to a remote cluster instead of Minikube,
-* `--spark-master <master-url>` - set `<master-url>` to the externally accessible Kubernetes cluster URL,
-* `--image-repo <repo>` - set `<repo>` to a write-accessible Docker image repository that provides the images for your cluster. The framework assumes your local Docker client can push to this repository.
-
-Therefore the command looks like this:
-
-    dev/dev-run-integration-tests.sh \
-      --deploy-mode cloud \
-      --spark-master https://example.com:8443/apiserver \
-      --image-repo docker.example.com/spark-images
-
 ## Re-using Docker Images
 
 By default, the test framework will build new Docker images on every test execution. A unique image tag is generated,
@@ -50,28 +35,13 @@ where if you still want to use images that were built before by the test framewo
 
     dev/dev-run-integration-tests.sh --image-tag $(cat target/imageTag.txt)
 
-## Customizing the Spark Source Code to Test
+## Spark Distribution Under Test
 
-By default, the test framework will test the master branch of Spark from [here](https://github.com/apache/spark). You
-can specify the following options to test against different source versions of Spark:
-
-* `--spark-repo <repo>` - set `<repo>` to the git or http URI of the Spark git repository to clone
-* `--spark-branch <branch>` - set `<branch>` to the branch of the repository to build.
-
-
-An example:
-
-    dev/dev-run-integration-tests.sh \
-      --spark-repo https://github.com/apache-spark-on-k8s/spark \
-      --spark-branch new-feature
-
-Additionally, you can use a pre-built Spark distribution. In this case, the repository is not cloned at all, and no
-source code has to be compiled.
+The Spark code to test is handed to the integration test system via a tarball. Here is the option that is used to specify the tarball:
 
 * `--spark-tgz <path-to-tgz>` - set `<path-to-tgz>` to point to a tarball containing the Spark distribution to test.
 
-When the tests are cloning a repository and building it, the Spark distribution is placed in `target/spark/spark-<VERSION>.tgz`.
-Reuse this tarball to save a significant amount of time if you are iterating on the development of these integration tests.
+TODO: Don't require the packaging of the built Spark artifacts into this tarball, just read them out of the current tree.
 
 ## Customizing the Namespace and Service Account
 
