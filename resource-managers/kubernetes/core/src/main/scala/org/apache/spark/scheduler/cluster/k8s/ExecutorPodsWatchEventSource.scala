@@ -30,7 +30,7 @@ private[spark] class ExecutorPodsWatchEventSource(
     podsEventQueue: ExecutorPodsEventQueue,
     kubernetesClient: KubernetesClient) extends Logging {
 
-  private var watchConnection: Closeable = null
+  private var watchConnection: Closeable = _
 
   def start(applicationId: String): Unit = {
     require(watchConnection == null, "Cannot start the watcher twice.")
