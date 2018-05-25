@@ -2448,6 +2448,8 @@ def udf(f=None, returnType=StringType()):
 @since(2.3)
 def pandas_udf(f=None, returnType=None, functionType=None):
     """
+    .. note:: Experimental
+
     Creates a vectorized user defined function (UDF).
 
     :param f: user-defined function. A python function if used as a standalone function
