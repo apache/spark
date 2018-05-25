@@ -496,11 +496,15 @@ class HiveDDLSuite
     }
   }
 
-  def testDropPartition(dataType: DataType, value: Any): Unit = {
+  def testDropPartition(dataType: DataType, value1: Any, value2: Any): Unit = {
     withTable("tbl_x") {
       sql(s"CREATE TABLE tbl_x (a INT) PARTITIONED BY (p ${dataType.sql})")
-      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = $value)")
-      sql(s"ALTER TABLE tbl_x DROP PARTITION (p >= $value)")
+      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = $value1)")
+      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = $value2)")
+      sql(s"ALTER TABLE tbl_x DROP PARTITION (p >= $value2)")
+      checkAnswer(sql("SHOW PARTITIONS tbl_x"),
+        Row(s"p=$value1") :: Nil)
+      sql(s"ALTER TABLE tbl_x DROP PARTITION (p = $value1)")
       checkAnswer(sql("SHOW PARTITIONS tbl_x"), Nil)
     }
   }
@@ -571,15 +575,25 @@ class HiveDDLSuite
       sql("ALTER TABLE sales DROP PARTITION (quarter <= '4'), PARTITION (quarter <= '3')")
       checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
     }
-    testDropPartition(IntegerType, 1)
-    testDropPartition(BooleanType, true)
-    testDropPartition(StringType, "'true'")
-    testDropPartition(LongType, 1L)
-    testDropPartition(ShortType, 1.toShort)
-    testDropPartition(ByteType, 1.toByte)
-    testDropPartition(FloatType, 1.0F)
-    testDropPartition(DoubleType, 1.0)
-    testDropPartition(DecimalType(2, 1), Decimal(1.5))
+
+    withTable("tbl_x") {
+      sql(s"CREATE TABLE tbl_x (a INT) PARTITIONED BY (p STRING)")
+      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = 'false')")
+      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = 'true')")
+      sql(s"ALTER TABLE tbl_x DROP PARTITION (p >= 'true')")
+      checkAnswer(sql("SHOW PARTITIONS tbl_x"),
+        Row(s"p=false") :: Nil)
+      sql(s"ALTER TABLE tbl_x DROP PARTITION (p = 'false')")
+      checkAnswer(sql("SHOW PARTITIONS tbl_x"), Nil)
+    }
+    testDropPartition(IntegerType, 1, 2)
+    testDropPartition(BooleanType, false, true)
+    testDropPartition(LongType, 1L, 2L)
+    testDropPartition(ShortType, 1.toShort, 2.toShort)
+    testDropPartition(ByteType, 1.toByte, 2.toByte)
+    testDropPartition(FloatType, 1.0F, 2.0F)
+    testDropPartition(DoubleType, 1.0, 2.0)
+    testDropPartition(DecimalType(2, 1), Decimal(1.5), Decimal(2.5))
   }
 
   test("SPARK-14922, SPARK-17732: Error handling for drop partitions by filter") {

@@ -299,11 +299,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           throw new ParseException("Invalid partition filter specification", ctx)
       }
     }
-    if(parts.isEmpty) {
-      Seq.empty[Expression]
-    } else {
-      parts
-    }
+    parts
   }
 
   /**
