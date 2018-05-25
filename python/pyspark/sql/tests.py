@@ -5083,6 +5083,14 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected, result)
 
+        @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
+        def column_name_typo(pdf):
+            return pd.DataFrame({'iid': pdf.id, 'v': pdf.v})
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
+                grouped_df.apply(column_name_typo).collect()
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
