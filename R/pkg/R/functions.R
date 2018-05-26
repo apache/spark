@@ -189,6 +189,7 @@ NULL
 #'              the map or array of maps.
 #'          \item \code{from_json}: it is the column containing the JSON string.
 #'          }
+#' @param y Column to compute on.
 #' @param value A value to compute on.
 #'          \itemize{
 #'          \item \code{array_contains}: a value to be checked if contained in the column.
@@ -3051,6 +3052,7 @@ setMethod("array_position",
 #' \code{array_repeat}: Creates an array containing the left argument repeated the number of times
 #' given by the right argument.
 #'
+#' @param n Column determining the number of repetitions.
 #' @rdname column_collection_functions
 #' @aliases array_repeat array_repeat,Column-method
 #' @note array_repeat since 2.4.0
