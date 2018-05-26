@@ -2448,8 +2448,6 @@ def udf(f=None, returnType=StringType()):
 @since(2.3)
 def pandas_udf(f=None, returnType=None, functionType=None):
     """
-    .. note:: Experimental
-
     Creates a vectorized user defined function (UDF).
 
     :param f: user-defined function. A python function if used as a standalone function
@@ -2457,6 +2455,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
+
+    .. note:: Experimental
 
     The function type of the UDF can be one of the following:
 
