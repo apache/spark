@@ -523,6 +523,8 @@ case class JsonToStructs(
   // can generate incorrect files if values are missing in columns declared as non-nullable.
   val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
 
+  val unpackArray: Boolean = options.get("unpackArray").map(_.toBoolean).getOrElse(false)
+
   override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
@@ -548,6 +550,8 @@ case class JsonToStructs(
       forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
+    case ArrayType(_: StructType, _) if unpackArray =>
+      super.checkInputDataTypes()
     case _: StructType | _: ArrayType | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
@@ -557,6 +561,7 @@ case class JsonToStructs(
   @transient
   lazy val rowSchema = nullableSchema match {
     case st: StructType => st
+    case ArrayType(st: StructType, _) if unpackArray => st
     case at: ArrayType => at
     case mt: MapType => mt
   }
@@ -566,6 +571,8 @@ case class JsonToStructs(
   lazy val converter = nullableSchema match {
     case _: StructType =>
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
+    case ArrayType(_: StructType, _) if unpackArray =>
+      (rows: Seq[InternalRow]) => new GenericArrayData(rows)
     case _: ArrayType =>
       (rows: Seq[InternalRow]) => rows.head.getArray(0)
     case _: MapType =>
