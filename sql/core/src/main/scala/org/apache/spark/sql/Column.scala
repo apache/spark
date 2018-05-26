@@ -789,21 +789,21 @@ class Column(val expr: Expression) extends Logging {
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained
-   * by the provided Set.
+   * by the provided collection.
    *
    * @group expr_ops
    * @since 2.4.0
    */
-  def isinSet(values: scala.collection.Set[_]): Column = isin(values.toSeq: _*)
+  def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained
-   * by the provided Set.
+   * by the provided collection.
    *
    * @group java_expr_ops
    * @since 2.4.0
    */
-  def isinSet(values: java.util.Set[_]): Column = isinSet(values.asScala)
+  def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
 
   /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
