@@ -32,7 +32,6 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
-import org.apache.spark.network.server.StreamData;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -47,6 +46,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.server.StreamData;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.MapConfigProvider;

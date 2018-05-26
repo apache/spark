@@ -24,7 +24,6 @@ import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.Channel;
-import org.apache.spark.network.server.*;
 import org.junit.After;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -38,6 +37,7 @@ import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.sasl.SaslRpcHandler;
 import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
+import org.apache.spark.network.server.*;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;

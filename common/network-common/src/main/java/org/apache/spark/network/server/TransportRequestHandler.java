@@ -23,8 +23,6 @@ import java.nio.ByteBuffer;
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import org.apache.spark.network.protocol.*;
-import org.apache.spark.network.util.TransportFrameDecoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +30,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.util.TransportFrameDecoder;
 
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 

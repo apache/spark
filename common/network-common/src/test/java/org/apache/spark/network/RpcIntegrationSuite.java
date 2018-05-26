@@ -28,19 +28,19 @@ import com.google.common.collect.Sets;
 import com.google.common.io.Files;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NioManagedBuffer;
-import org.apache.spark.network.client.StreamCallback;
-import org.apache.spark.network.server.*;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.server.*;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -100,7 +100,7 @@ public class RpcIntegrationSuite {
     try {
       if (msg.startsWith("fail/")) {
         String[] parts = msg.split("/");
-        switch(parts[1]) {
+        switch (parts[1]) {
           case "no callback":
             // don't register anything here, check the rpc error response is appropriate
             break;
@@ -190,7 +190,7 @@ public class RpcIntegrationSuite {
     res.successMessages = Collections.synchronizedSet(new HashSet<String>());
     res.errorMessages = Collections.synchronizedSet(new HashSet<String>());
 
-    for (String stream: streams) {
+    for (String stream : streams) {
       int idx = stream.lastIndexOf('/');
       ManagedBuffer meta = new NioManagedBuffer(JavaUtils.stringToBytes(stream));
       String streamName = (idx == -1) ? stream : stream.substring(idx + 1);
@@ -217,6 +217,7 @@ public class RpcIntegrationSuite {
     final String streamId;
     final RpcResult res;
     final Semaphore sem;
+
     RpcStreamCallback(String streamId, RpcResult res, Semaphore sem) {
       this.streamId = streamId;
       this.res = res;
@@ -301,7 +302,7 @@ public class RpcIntegrationSuite {
 
   @Test
   public void sendRpcWithStreamOneAtATime() throws Exception {
-    for (String stream: StreamTestHelper.STREAMS) {
+    for (String stream : StreamTestHelper.STREAMS) {
       RpcResult res = sendRpcWithStream(stream);
       assertTrue("there were error messages!" + res.errorMessages, res.errorMessages.isEmpty());
       assertEquals(Sets.newHashSet(stream), res.successMessages);

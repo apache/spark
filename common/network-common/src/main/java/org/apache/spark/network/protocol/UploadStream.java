@@ -27,7 +27,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
- * An RPC with data that is sent outside of the frame, so it can be read in a stream.
+ * An RPC with data that is sent outside of the frame, so it can be read as a stream.
  */
 public final class UploadStream extends AbstractMessage implements RequestMessage {
   /** Used to link an RPC request with its response. */

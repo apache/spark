@@ -17,13 +17,13 @@
 
 package org.apache.spark.network.server;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.StreamInterceptor;
 import org.apache.spark.network.util.TransportFrameDecoder;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
 
 /**
  * A holder for streamed data sent along with an RPC message.
@@ -59,7 +59,6 @@ public class StreamData {
    *
    * If an exception is thrown from the callback, it will be propogated back to the sender as an rpc
    * failure.
-   * @param callback
    */
   public void registerStreamCallback(String streamId, StreamCallback callback) throws IOException {
     if (hasCallback) {

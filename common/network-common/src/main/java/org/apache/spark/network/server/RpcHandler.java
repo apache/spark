@@ -38,7 +38,7 @@ public abstract class RpcHandler {
    *
    * This method will not be called in parallel for a single TransportClient (i.e., channel).
    *
-   * The rpc *might* included a data stream in <code>streamData</code>(eg. for uploading a large
+   * The rpc *might* included a data stream in <code>streamData</code> (eg. for uploading a large
    * amount of data which should not be buffered in memory here).  Any errors while handling the
    * streamData will lead to failing this entire connection -- all other in-flight rpcs will fail.
    * If stream data is not null, you *must* call <code>streamData.registerStreamCallback</code>

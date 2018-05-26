@@ -32,12 +32,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
-import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.protocol.*;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
+import org.apache.spark.network.protocol.*;
 
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
@@ -139,26 +141,14 @@ public class TransportClient implements Closeable {
     StreamChunkId streamChunkId = new StreamChunkId(streamId, chunkIndex);
     handler.addFetchRequest(streamChunkId, callback);
 
-    channel.writeAndFlush(new ChunkFetchRequest(streamChunkId)).addListener(future -> {
-      if (future.isSuccess()) {
-        long timeTaken = System.currentTimeMillis() - startTime;
-        if (logger.isTraceEnabled()) {
-          logger.trace("Sending request {} to {} took {} ms", streamChunkId,
-            getRemoteAddress(channel), timeTaken);
+    channel.writeAndFlush(new ChunkFetchRequest(streamChunkId))
+      .addListener( new StdChannelListener(startTime, streamChunkId) {
+        @Override
+        void handleFailure(String errorMsg, Throwable cause) {
+          handler.removeFetchRequest(streamChunkId);
+          callback.onFailure(chunkIndex, new IOException(errorMsg, cause));
         }
-      } else {
-        String errorMsg = String.format("Failed to send request %s to %s: %s", streamChunkId,
-          getRemoteAddress(channel), future.cause());
-        logger.error(errorMsg, future.cause());
-        handler.removeFetchRequest(streamChunkId);
-        channel.close();
-        try {
-          callback.onFailure(chunkIndex, new IOException(errorMsg, future.cause()));
-        } catch (Exception e) {
-          logger.error("Uncaught exception in RPC response callback handler!", e);
-        }
-      }
-    });
+      });
   }
 
   /**
@@ -178,25 +168,13 @@ public class TransportClient implements Closeable {
     // when responses arrive.
     synchronized (this) {
       handler.addStreamCallback(streamId, callback);
-      channel.writeAndFlush(new StreamRequest(streamId)).addListener(future -> {
-        if (future.isSuccess()) {
-          long timeTaken = System.currentTimeMillis() - startTime;
-          if (logger.isTraceEnabled()) {
-            logger.trace("Sending request for {} to {} took {} ms", streamId,
-              getRemoteAddress(channel), timeTaken);
+      channel.writeAndFlush(new StreamRequest(streamId))
+        .addListener(new StdChannelListener(startTime, streamId) {
+          @Override
+          void handleFailure(String errorMsg, Throwable cause) throws Exception {
+            callback.onFailure(streamId, new IOException(errorMsg, cause));
           }
-        } else {
-          String errorMsg = String.format("Failed to send request for %s to %s: %s", streamId,
-            getRemoteAddress(channel), future.cause());
-          logger.error(errorMsg, future.cause());
-          channel.close();
-          try {
-            callback.onFailure(streamId, new IOException(errorMsg, future.cause()));
-          } catch (Exception e) {
-            logger.error("Uncaught exception in RPC response callback handler!", e);
-          }
-        }
-      });
+        });
     }
   }
 
@@ -218,26 +196,7 @@ public class TransportClient implements Closeable {
     handler.addRpcRequest(requestId, callback);
 
     channel.writeAndFlush(new RpcRequest(requestId, new NioManagedBuffer(message)))
-        .addListener(future -> {
-          if (future.isSuccess()) {
-            long timeTaken = System.currentTimeMillis() - startTime;
-            if (logger.isTraceEnabled()) {
-              logger.trace("Sending request {} to {} took {} ms", requestId,
-                getRemoteAddress(channel), timeTaken);
-            }
-          } else {
-            String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
-              getRemoteAddress(channel), future.cause());
-            logger.error(errorMsg, future.cause());
-            handler.removeRpcRequest(requestId);
-            channel.close();
-            try {
-              callback.onFailure(new IOException(errorMsg, future.cause()));
-            } catch (Exception e) {
-              logger.error("Uncaught exception in RPC response callback handler!", e);
-            }
-          }
-        });
+      .addListener(new RpcChannelListener(startTime, requestId, callback));
 
     return requestId;
   }
@@ -266,29 +225,62 @@ public class TransportClient implements Closeable {
     handler.addRpcRequest(requestId, callback);
 
     channel.writeAndFlush(new UploadStream(requestId, meta, data))
-        .addListener(future -> {
-          if (future.isSuccess()) {
-            long timeTaken = System.currentTimeMillis() - startTime;
-            if (logger.isTraceEnabled()) {
-              logger.trace("Sending request {} to {} took {} ms", requestId,
-                  getRemoteAddress(channel), timeTaken);
-            }
-          } else {
-            String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
-                getRemoteAddress(channel), future.cause());
-            logger.error(errorMsg, future.cause());
-            handler.removeRpcRequest(requestId);
-            channel.close();
-            try {
-              callback.onFailure(new IOException(errorMsg, future.cause()));
-            } catch (Exception e) {
-              logger.error("Uncaught exception in RPC response callback handler!", e);
-            }
-          }
-        });
+      .addListener(new RpcChannelListener(startTime, requestId, callback));
 
     return requestId;
   }
+
+  private class StdChannelListener
+      implements GenericFutureListener<Future<? super Void>> {
+    final long startTime;
+    final Object requestId;
+
+    StdChannelListener(long startTime, Object requestId) {
+      this.startTime = startTime;
+      this.requestId = requestId;
+    }
+
+    @Override
+    public void operationComplete(Future future) throws Exception {
+      if (future.isSuccess()) {
+        if (logger.isTraceEnabled()) {
+          long timeTaken = System.currentTimeMillis() - startTime;
+          logger.trace("Sending request {} to {} took {} ms", requestId,
+              getRemoteAddress(channel), timeTaken);
+        }
+      } else {
+        String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
+            getRemoteAddress(channel), future.cause());
+        logger.error(errorMsg, future.cause());
+        channel.close();
+        try {
+          handleFailure(errorMsg, future.cause());
+        } catch (Exception e) {
+          logger.error("Uncaught exception in RPC response callback handler!", e);
+        }
+      }
+    }
+
+    void handleFailure(String errorMsg, Throwable cause) throws Exception {}
+  }
+
+  class RpcChannelListener extends StdChannelListener {
+    final long rpcRequestId;
+    final RpcResponseCallback callback;
+
+    RpcChannelListener(long startTime, long rpcRequestId, RpcResponseCallback callback) {
+      super(startTime, "RPC " + rpcRequestId);
+      this.rpcRequestId = rpcRequestId;
+      this.callback = callback;
+    }
+
+    @Override
+    void handleFailure(String errorMsg, Throwable cause) {
+      handler.removeRpcRequest(rpcRequestId);
+      callback.onFailure(new IOException(errorMsg, cause));
+    }
+  }
+
 
   /**
    * Synchronously sends an opaque message to the RpcHandler on the server-side, waiting for up to
