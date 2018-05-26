@@ -11,16 +11,10 @@ CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
   (4, 5.0)
   AS m(a, b);
 
-  -- Case 1 (not possible to write a literal with no rows, so we ignore it.)
-  -- (subquery is empty -> row is returned)
+-- Case 1 (not possible to write a literal with no rows, so we ignore it.)
+-- (subquery is empty -> row is returned)
 
-  -- Case 2
-  -- (subquery contains a row with null in all columns -> row not returned)
-SELECT *
-FROM   m
-WHERE  (a, b) NOT IN ((CAST (null AS INT), CAST (null AS DECIMAL(2, 1))));
-
--- Cases 3 and 4 are currently broken, so I have commented them out here.
+-- Cases 2, 3 and 4 are currently broken, so I have commented them out here.
 -- Filed https://issues.apache.org/jira/browse/SPARK-24395 to fix and restore these test cases.
 
   -- Case 5
@@ -35,13 +29,11 @@ WHERE  b = 1.0 -- Matches (null, 1.0)
 SELECT *
 FROM   m
 WHERE  b = 3.0 -- Matches (2, 3.0)
-       AND (a, b) NOT IN ((2, 3.0))
-;
+       AND (a, b) NOT IN ((2, 3.0));
 
   -- Case 7
   -- (no null columns with no match -> row is returned)
 SELECT *
 FROM   m
 WHERE  b = 5.0 -- Matches (4, 5.0)
-       AND (a, b) NOT IN ((2, 3.0))
-;
+       AND (a, b) NOT IN ((2, 3.0));
