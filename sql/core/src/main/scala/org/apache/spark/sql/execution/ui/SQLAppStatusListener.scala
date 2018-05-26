@@ -166,8 +166,9 @@ class SQLAppStatusListener(
       .flatMap(_.taskMetrics.values().asScala)
       .flatMap { metrics => metrics.ids.zip(metrics.values) }
 
+    val metricIdKeys = metricIds.toSet
     val aggregatedMetrics = (metrics ++ exec.driverAccumUpdates.toSeq)
-      .filter { case (id, _) => metricIds.contains(id) }
+      .filter { case (id, _) => metricIdKeys.contains(id) }
       .groupBy(_._1)
       .map { case (id, values) =>
         id -> SQLMetrics.stringValue(metricTypes(id), values.map(_._2).toSeq)
