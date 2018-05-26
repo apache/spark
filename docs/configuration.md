@@ -912,8 +912,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>lz4</td>
   <td>
     The codec used to compress internal data such as RDD partitions, event log, broadcast variables
-    and shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
-    and <code>snappy</code>. You can also use fully qualified class names to specify the codec,
+    and shuffle outputs. By default, Spark provides four codecs: <code>lz4</code>, <code>lzf</code>,
+    <code>snappy</code>, and <code>zstd</code>. You can also use fully qualified class names to specify the codec,
     e.g.
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
