@@ -916,7 +916,6 @@ class SQLTests(ReusedSQLTestCase):
             cm.exception.java_exception.toString()
         )
 
-
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
         from pyspark.sql.column import _to_java_column
