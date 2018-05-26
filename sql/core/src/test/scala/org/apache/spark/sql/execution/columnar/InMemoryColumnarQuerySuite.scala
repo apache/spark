@@ -529,15 +529,4 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
-
-  test("SPARK-24373: avoid running Analyzer rules twice on RelationalGroupedDataset") {
-    val myUDF = udf((x: Long) => { x + 1 })
-    val df1 = spark.range(0, 1).toDF("s").select(myUDF($"s"))
-    df1.cache()
-    val countDf = df1.groupBy().count()
-    val cachedPlan = countDf.queryExecution.executedPlan.collect {
-      case plan: InMemoryTableScanExec => plan
-    }
-    assert(cachedPlan.nonEmpty)
-  }
 }

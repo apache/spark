@@ -433,7 +433,7 @@ class RelationalGroupedDataset protected[sql](
           df.exprEnc.schema,
           groupingAttributes,
           df.logicalPlan.output,
-          df.logicalPlan))
+          df.planWithBarrier))
   }
 
   /**
@@ -459,7 +459,7 @@ class RelationalGroupedDataset protected[sql](
       case other => Alias(other, other.toString)()
     }
     val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
-    val child = df.logicalPlan
+    val child = df.planWithBarrier
     val project = Project(groupingNamedExpressions ++ child.output, child)
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
     val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
