@@ -61,6 +61,7 @@ class JacksonParser(
     dt match {
       case st: StructType => makeStructRootConverter(st)
       case mt: MapType => makeMapRootConverter(mt)
+      case at: ArrayType => makeArrayRootConverter(at)
     }
   }
 
@@ -98,6 +99,13 @@ class JacksonParser(
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, mt) {
       case START_OBJECT => Seq(InternalRow(convertMap(parser, fieldConverter)))
+    }
+  }
+
+  private def makeArrayRootConverter(at: ArrayType): JsonParser => Seq[InternalRow] = {
+    val elemConverter = makeConverter(at.elementType)
+    (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, at) {
+      case START_ARRAY => Seq(InternalRow(convertArray(parser, elemConverter)))
     }
   }
 
