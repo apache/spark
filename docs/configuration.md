@@ -466,7 +466,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.sql.repl.eagerEval.showRows</code></td>
+  <td><code>spark.sql.repl.eagerEval.maxNumRows</code></td>
   <td>20</td>
   <td>
     Default number of rows in HTML table.

@@ -348,9 +348,9 @@ class DataFrame(object):
          name | Bob
         """
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20, vertical, False))
+            print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate), vertical, False))
+            print(self._jdf.showString(n, int(truncate), vertical))
 
     def _get_repl_config(self):
         """Return the configs for eager evaluation each time when __repr__ or
@@ -359,7 +359,7 @@ class DataFrame(object):
         eager_eval = self.sql_ctx.getConf(
             "spark.sql.repl.eagerEval.enabled", "false").lower() == "true"
         console_row = int(self.sql_ctx.getConf(
-            "spark.sql.repl.eagerEval.showRows", u"20"))
+            "spark.sql.repl.eagerEval.maxNumRows", u"20"))
         console_truncate = int(self.sql_ctx.getConf(
             "spark.sql.repl.eagerEval.truncate", u"20"))
         return (eager_eval, console_row, console_truncate)
@@ -367,22 +367,45 @@ class DataFrame(object):
     def __repr__(self):
         (eager_eval, console_row, console_truncate) = self._get_repl_config()
         if not self._support_repr_html and eager_eval:
+            vertical = False
             return self._jdf.showString(
-                console_row, console_truncate, False, False)
+                console_row, console_truncate, vertical)
         else:
             return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def _repr_html_(self):
         """Returns a dataframe with html code when you enabled eager evaluation
-        by 'spark.sql.repl.eagerEval.enabled', this only called by repr you're
+        by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you're
         using support eager evaluation with HTML.
         """
+        import cgi
         if not self._support_repr_html:
             self._support_repr_html = True
         (eager_eval, console_row, console_truncate) = self._get_repl_config()
         if eager_eval:
-            return self._jdf.showString(
-                console_row, console_truncate, False, True)
+            with SCCallSiteSync(self._sc) as css:
+                vertical = False
+                sock_info = self._jdf.getRowsToPython(
+                    console_row, console_truncate, vertical)
+            rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+            head = rows[0]
+            row_data = rows[1:]
+            has_more_data = len(row_data) > console_row
+            row_data = row_data[0:console_row]
+
+            html = "<table border='1'>\n<tr><th>"
+            # generate table head
+            html += "</th><th>".join(map(lambda x: cgi.escape(x), head)) + "</th></tr>\n"
+            # generate table rows
+            for row in row_data:
+                data = "<tr><td>" + "</td><td>".join(map(lambda x: cgi.escape(x), row)) + \
+                    "</td></tr>\n"
+                html += data
+            html += "</table>\n"
+            if has_more_data:
+                html += "only showing top %d %s\n" % (console_row,
+                    "row" if console_row == 1 else "rows")
+            return html
         else:
             return None
 

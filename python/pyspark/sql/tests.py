@@ -3074,49 +3074,35 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
-    def _get_content(self, content):
-        """
-        Strips leading spaces from content up to the first '|' in each line.
-        """
+    def test_repr_html(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)
-        return re.sub(pattern, '', content)
-
-    def test_repr_html(self):
         df = self.spark.createDataFrame([(1, "1"), (22222, "22222")], ("key", "value"))
         self.assertEquals(None, df._repr_html_())
         self.spark.conf.set("spark.sql.repl.eagerEval.enabled", "true")
         expected1 = """<table border='1'>
-            |<tr><th>  key</th>
-            |<th>value</th></tr>
-            |<tr><td>    1</td>
-            |<td>    1</td></tr>
-            |<tr><td>22222</td>
-            |<td>22222</td></tr>
+            |<tr><th>  key</th><th>value</th></tr>
+            |<tr><td>    1</td><td>    1</td></tr>
+            |<tr><td>22222</td><td>22222</td></tr>
             |</table>
             |"""
-        self.assertEquals(self._get_content(expected1), df._repr_html_())
+        self.assertEquals(re.sub(pattern, '', expected1), df._repr_html_())
         self.spark.conf.set("spark.sql.repl.eagerEval.truncate", 3)
         expected2 = """<table border='1'>
-            |<tr><th>key</th>
-            |<th>value</th></tr>
-            |<tr><td>  1</td>
-            |<td>    1</td></tr>
-            |<tr><td>222</td>
-            |<td>  222</td></tr>
+            |<tr><th>key</th><th>value</th></tr>
+            |<tr><td>  1</td><td>    1</td></tr>
+            |<tr><td>222</td><td>  222</td></tr>
             |</table>
             |"""
-        self.assertEquals(self._get_content(expected2), df._repr_html_())
-        self.spark.conf.set("spark.sql.repl.eagerEval.showRows", 1)
+        self.assertEquals(re.sub(pattern, '', expected2), df._repr_html_())
+        self.spark.conf.set("spark.sql.repl.eagerEval.maxNumRows", 1)
         expected3 = """<table border='1'>
-            |<tr><th>key</th>
-            |<th>value</th></tr>
-            |<tr><td>  1</td>
-            |<td>    1</td></tr>
+            |<tr><th>key</th><th>value</th></tr>
+            |<tr><td>  1</td><td>    1</td></tr>
             |</table>
             |only showing top 1 row
             |"""
-        self.assertEquals(self._get_content(expected3), df._repr_html_())
+        self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):

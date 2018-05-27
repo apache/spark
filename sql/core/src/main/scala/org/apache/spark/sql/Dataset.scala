@@ -234,7 +234,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Get rows represented in Sequence by specific truncate and vertical requirment.
+   * Get rows represented in Sequence by specific truncate and vertical requirement.
    *
    * @param numRows Number of rows to return
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
@@ -244,7 +244,7 @@ class Dataset[T] private[sql](
   private[sql] def getRows(
       numRows: Int,
       truncate: Int,
-      vertical: Boolean): (Seq[Seq[String]], Boolean) = {
+      vertical: Boolean): Seq[Seq[String]] = {
     val newDf = toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
       // Since binary types in top-level schema fields have a specific format to print,
@@ -255,9 +255,7 @@ class Dataset[T] private[sql](
         Column(col).cast(StringType)
       }
     }
-    val takeResult = newDf.select(castCols: _*).take(numRows + 1)
-    val hasMoreData = takeResult.length > numRows
-    val data = takeResult.take(numRows)
+    val data = newDf.select(castCols: _*).take(numRows + 1)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
@@ -301,7 +299,7 @@ class Dataset[T] private[sql](
         }
       }
     }
-    (rows, hasMoreData)
+    rows
   }
 
   /**
@@ -317,12 +315,15 @@ class Dataset[T] private[sql](
       truncate: Int = 20,
       vertical: Boolean = false): String = {
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
+    // Get rows represented by Seq[Seq[String]], we may get one more line if it has more data.
+    val rows = getRows(numRows, truncate, vertical)
+    val fieldNames = rows.head
+    val data = rows.tail
+
+    val hasMoreData = data.length > numRows
+    val dataRows = data.take(numRows)
 
     val sb = new StringBuilder
-    val (rows, hasMoreData) = getRows(numRows, truncate, vertical)
-    val fieldNames = rows.head
-    val dataRows = rows.tail
-
     if (!vertical) {
       // Create SeparateLine
       val sep: String = fieldNames.map(_.length).toArray
@@ -3224,6 +3225,18 @@ class Dataset[T] private[sql](
         plan.executeCollect().iterator.map(toJava))
       PythonRDD.serveIterator(iter, "serve-DataFrame")
     }
+  }
+
+  private[sql] def getRowsToPython(
+      numRows: Int,
+      truncate: Int,
+      vertical: Boolean): Array[Any] = {
+    EvaluatePython.registerPicklers()
+    val rows = getRows(numRows, truncate, vertical).map(_.toArray).toArray
+    val toJava: (Any) => Any = EvaluatePython.toJava(_, ArrayType(ArrayType(StringType)))
+    val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
+      rows.iterator.map(toJava))
+    PythonRDD.serveIterator(iter, "serve-GetRows")
   }
 
   /**
