@@ -1828,6 +1828,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
   - In version 2.3 and earlier, CSV rows are considered as malformed if at least one column value in the row is malformed. CSV parser dropped such rows in the DROPMALFORMED mode or outputs an error in the FAILFAST mode. Since Spark 2.4, CSV row is considered as malformed only when it contains malformed column values requested from CSV datasource, other values can be ignored. As an example, CSV file contains the "id,name" header and one row "1234". In Spark 2.4, selection of the id column consists of a row with one column value 1234 but in Spark 2.3 and earlier it is empty in the DROPMALFORMED mode. To restore the previous behavior, set `spark.sql.csv.parser.columnPruning.enabled` to `false`.
 
 ## Upgrading From Spark SQL 2.3.0 to 2.3.1 and Above
+
   - As of version 2.3.1 Arrow functionality, including `pandas_udf` and `toPandas()`/`createDataFrame()` with "spark.sql.execution.arrow.enabled=True," has been marked as experimental. These are still evolving and not currently recommended for use in production.
 
 ## Upgrading From Spark SQL 2.2 to 2.3
