@@ -3052,14 +3052,19 @@ setMethod("array_position",
 #' \code{array_repeat}: Creates an array containing the left argument repeated the number of times
 #' given by the right argument.
 #'
-#' @param n Column determining the number of repetitions.
+#' @param count Column or constant determining the number of repetitions.
 #' @rdname column_collection_functions
-#' @aliases array_repeat array_repeat,Column-method
+#' @aliases array_repeat array_repeat,Column,numericOrColumn-method
 #' @note array_repeat since 2.4.0
 setMethod("array_repeat",
-          signature(x = "Column", n = "Column"),
-          function(x, n) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "array_repeat", x@jc, n@jc)
+          signature(x = "Column", count = "numericOrColumn"),
+          function(x, count) {
+            if (class(count) == "Column") {
+                count <- count@jc
+            } else {
+                count <- as.integer(count)
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_repeat", x@jc, count)
             column(jc)
           })
 
@@ -3086,9 +3091,9 @@ setMethod("array_sort",
 #' @aliases arrays_overlap arrays_overlap,Column-method
 #' @note arrays_overlap since 2.4.0
 setMethod("arrays_overlap",
-          signature(y = "Column", x = "Column"),
-          function(y, x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "arrays_overlap", y@jc, x@jc)
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "arrays_overlap", x@jc, y@jc)
             column(jc)
           })
 

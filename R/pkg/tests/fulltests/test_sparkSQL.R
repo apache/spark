@@ -1508,6 +1508,9 @@ test_that("column functions", {
   result <- collect(select(df, array_repeat(df[[1]], df[[2]])))[[1]]
   expect_equal(result, list(list("a", "a", "a"), list("b", "b")))
 
+  result <- collect(select(df, array_repeat(df[[1]], 2L)))[[1]]
+  expect_equal(result, list(list("a", "a"), list("b", "b")))
+
   # Test arrays_overlap()
   df <- createDataFrame(list(list(list(1L, 2L), list(3L, 1L)),
                              list(list(1L, 2L), list(3L, 4L)),
