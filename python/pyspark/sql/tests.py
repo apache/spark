@@ -4931,30 +4931,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         expected4 = udf3.func((), pdf)
         self.assertPandasEqual(expected4, result4)
 
-    # Regression test for SPARK-24334
-    def test_memory_leak(self):
-        from pyspark.sql.functions import pandas_udf, col, PandasUDFType, array, lit, explode
-
-        # Have all data in a single executor thread so it can trigger the race condition easier
-        with self.sql_conf({'spark.sql.shuffle.partitions': 1}):
-            df = self.spark.range(0, 1000)
-            df = df.withColumn('id', array([lit(i) for i in range(0, 300)])) \
-                   .withColumn('id', explode(col('id'))) \
-                   .withColumn('v',  array([lit(i) for i in range(0, 1000)]))
-
-            @pandas_udf(df.schema, PandasUDFType.GROUPED_MAP)
-            def foo(pdf):
-                # Throw exception in the UDF
-                xxx
-                return pdf
-
-            result = df.groupby('id').apply(foo)
-
-            with QuietTest(self.sc):
-                with self.assertRaises(py4j.protocol.Py4JJavaError) as context:
-                    result.count()
-                self.assertTrue('Memory leaked' not in str(context.exception))
-
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,

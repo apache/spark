@@ -88,6 +88,9 @@ class ArrowPythonRunner(
             writer.writeBatch()
             arrowWriter.reset()
           }
+          // end writes footer to the output stream and doesn't clean any resources.
+          // It could throw exception if the output stream is closed, so it should be
+          // in the try block.
           writer.end()
         } {
           // If we close root and allocator in TaskCompletionListener, there could be a race
