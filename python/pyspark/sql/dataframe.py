@@ -403,8 +403,8 @@ class DataFrame(object):
                 html += data
             html += "</table>\n"
             if has_more_data:
-                html += "only showing top %d %s\n" % (console_row,
-                    "row" if console_row == 1 else "rows")
+                html += "only showing top %d %s\n" % (
+                    console_row, "row" if console_row == 1 else "rows")
             return html
         else:
             return None
