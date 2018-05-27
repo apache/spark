@@ -38,11 +38,10 @@ private[io] class ChunkedByteBufferFileRegion(
   private val chunks = chunkedByteBuffer.getChunks()
   private val cumLength = chunks.scanLeft(0L) { _ + _.remaining()}
   private val size = cumLength.last
-  // Chunk size in bytes
 
   protected def deallocate: Unit = {}
 
-  override def count(): Long = chunkedByteBuffer.size
+  override def count(): Long = size
 
   // this is the "start position" of the overall Data in the backing file, not our current position
   override def position(): Long = 0
@@ -73,7 +72,6 @@ private[io] class ChunkedByteBufferFileRegion(
     var keepGoing = true
     var written = 0L
     var currentChunk = chunks(currentChunkIdx)
-    var originalLimit = currentChunk.limit()
     while (keepGoing) {
       while (currentChunk.hasRemaining && keepGoing) {
         val ioSize = Math.min(currentChunk.remaining(), ioChunkSize)

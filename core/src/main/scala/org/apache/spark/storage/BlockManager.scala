@@ -661,7 +661,7 @@ private[spark] class BlockManager(
   def getRemoteBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
     // TODO if we change this method to return the ManagedBuffer, then getRemoteValues
     // could just use the inputStream on the temp file, rather than memory-mapping the file.
-    // Until then, replication can go cause the process to use too much memory and get killed
+    // Until then, replication can cause the process to use too much memory and get killed
     // by the OS / cluster manager (not a java OOM, since its a memory-mapped file) even though
     // we've read the data to disk.
     logDebug(s"Getting remote block $blockId")

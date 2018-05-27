@@ -44,7 +44,7 @@ class ChunkedByteBufferFileRegionSuite extends SparkFunSuite with MockitoSugar
     SparkEnv.set(null)
   }
 
-  private def generateChunkByteBuffer(nChunks: Int, perChunk: Int): ChunkedByteBuffer = {
+  private def generateChunkedByteBuffer(nChunks: Int, perChunk: Int): ChunkedByteBuffer = {
     val bytes = (0 until nChunks).map { chunkIdx =>
       val bb = ByteBuffer.allocate(perChunk)
       (0 until perChunk).foreach { idx =>
@@ -58,7 +58,7 @@ class ChunkedByteBufferFileRegionSuite extends SparkFunSuite with MockitoSugar
 
   test("transferTo can stop and resume correctly") {
     SparkEnv.get.conf.set(config.BUFFER_WRITE_CHUNK_SIZE, 9L)
-    val cbb = generateChunkByteBuffer(4, 10)
+    val cbb = generateChunkedByteBuffer(4, 10)
     val fileRegion = cbb.toNetty
 
     val targetChannel = new LimitedWritableByteChannel(40)
@@ -111,7 +111,7 @@ class ChunkedByteBufferFileRegionSuite extends SparkFunSuite with MockitoSugar
     val chunkSize = 1e4.toInt
     SparkEnv.get.conf.set(config.BUFFER_WRITE_CHUNK_SIZE, rng.nextInt(chunkSize).toLong)
 
-    val cbb = generateChunkByteBuffer(50, chunkSize)
+    val cbb = generateChunkedByteBuffer(50, chunkSize)
     val fileRegion = cbb.toNetty
     val transferLimit = 1e5.toInt
     val targetChannel = new LimitedWritableByteChannel(transferLimit)
@@ -134,7 +134,6 @@ class ChunkedByteBufferFileRegionSuite extends SparkFunSuite with MockitoSugar
     var pos = 0
 
     override def write(src: ByteBuffer): Int = {
-      val origSrcPos = src.position()
       val length = math.min(acceptNBytes, src.remaining())
       src.get(bytes, 0, length)
       acceptNBytes -= length
