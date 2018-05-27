@@ -264,7 +264,7 @@ public class TransportClient implements Closeable {
     void handleFailure(String errorMsg, Throwable cause) throws Exception {}
   }
 
-  class RpcChannelListener extends StdChannelListener {
+  private class RpcChannelListener extends StdChannelListener {
     final long rpcRequestId;
     final RpcResponseCallback callback;
 
