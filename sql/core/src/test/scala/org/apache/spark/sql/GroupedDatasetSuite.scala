@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.Assertion
-
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.AnalysisBarrier
@@ -32,7 +30,7 @@ class GroupedDatasetSuite extends QueryTest with SharedSQLContext {
   private val scalaUDF = udf((x: Long) => { x + 1 })
   private lazy val datasetWithUDF = spark.range(1).toDF("s").select($"s", scalaUDF($"s"))
 
-  private def assertContainsAnalysisBarrier(ds: Dataset[_], atLevel: Int = 1): Assertion = {
+  private def assertContainsAnalysisBarrier(ds: Dataset[_], atLevel: Int = 1): Unit = {
     assert(atLevel >= 0)
     var children = Seq(ds.queryExecution.logical)
     (1 to atLevel).foreach { _ =>
