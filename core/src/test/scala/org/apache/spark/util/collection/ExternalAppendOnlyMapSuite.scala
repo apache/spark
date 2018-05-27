@@ -24,6 +24,8 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.util.CompletionIterator
 
+import scala.ref.WeakReference
+
 class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
   import TestUtils.{assertNotSpilled, assertSpilled}
 
@@ -425,15 +427,9 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
 
     val it = map.iterator
     assert( it.isInstanceOf[CompletionIterator[_, _]])
-    val underlyingIt = map.readingIterator
-    assert( underlyingIt != null )
-    val underlyingMapIterator = underlyingIt.upstream
-    assert(underlyingMapIterator != null)
-    val underlyingMapIteratorClass = underlyingMapIterator.getClass
-    assert(underlyingMapIteratorClass.getEnclosingClass == classOf[AppendOnlyMap[_,_]])
 
-    val underlyingMap = map.currentMap
-    assert(underlyingMap != null)
+    val underlyingMapRef = WeakReference(map.currentMap)
+    assert(underlyingMapRef.get.nonEmpty)
 
     val first50Keys = for( _ <- 0 until 50) yield {
       val (k,vs) =  it.next
@@ -447,9 +443,8 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
     //these asserts basically try to show that we're no longer holding references to the underlying AppendOnlyMap
     //it'd be nice to use something like https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala#L69-89
     assert(map.currentMap == null)
-    assert(underlyingIt.upstream ne underlyingMapIterator)
-    assert(underlyingIt.upstream.getClass != underlyingMapIteratorClass)
-    assert(underlyingIt.upstream.getClass.getEnclosingClass != classOf[AppendOnlyMap[_,_]])
+    System.gc()
+    assert(underlyingMapRef.get.isEmpty)
 
     val next50Keys = for( _ <- 0 until 50) yield {
       val (k,vs) =  it.next
