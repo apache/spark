@@ -18,13 +18,14 @@
 package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
+import scala.ref.WeakReference
+
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.util.CompletionIterator
 
-import scala.ref.WeakReference
 
 class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
   import TestUtils.{assertNotSpilled, assertSpilled}
@@ -431,23 +432,24 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
     val underlyingMapRef = WeakReference(map.currentMap)
     assert(underlyingMapRef.get.nonEmpty)
 
-    val first50Keys = for( _ <- 0 until 50) yield {
-      val (k,vs) =  it.next
+    val first50Keys = for ( _ <- 0 until 50) yield {
+      val (k, vs) = it.next
       val sortedVs = vs.sorted
       assert(sortedVs.seq == (0 until 10).map(10 * k + _))
       k
     }
     assert( map.numSpills == 0 )
     map.spill(Long.MaxValue, null)
-    //assert( map.numSpills == 1)
-    //these asserts basically try to show that we're no longer holding references to the underlying AppendOnlyMap
-    //it'd be nice to use something like https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala#L69-89
+    // these asserts try to show that we're no longer holding references to the underlying map.
+    // it'd be nice to use something like
+    // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
+    // (lines 69-89)
     assert(map.currentMap == null)
     System.gc()
     assert(underlyingMapRef.get.isEmpty)
 
-    val next50Keys = for( _ <- 0 until 50) yield {
-      val (k,vs) =  it.next
+    val next50Keys = for ( _ <- 0 until 50) yield {
+      val (k, vs) = it.next
       val sortedVs = vs.sorted
       assert(sortedVs.seq == (0 until 10).map(10 * k + _))
       k
@@ -455,6 +457,50 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
     assert(!it.hasNext)
     val keys = (first50Keys ++ next50Keys).sorted
     assert(keys == (0 until 100))
+  }
+
+  test("drop all references to the underlying map once the iterator is exhausted") {
+    val size = 1000
+    val conf = createSparkConf(loadDefaults = true)
+    sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
+    val map = createExternalMap[Int]
+
+    map.insertAll((0 until size).iterator.map(i => (i / 10, i)))
+    assert(map.numSpills == 0, "map was not supposed to spill")
+
+    val it = map.iterator
+    assert( it.isInstanceOf[CompletionIterator[_, _]])
+    val underlyingIt = map.readingIterator
+    assert( underlyingIt != null )
+    val underlyingMapIterator = underlyingIt.upstream
+    assert(underlyingMapIterator != null)
+    val underlyingMapIteratorClass = underlyingMapIterator.getClass
+    assert(underlyingMapIteratorClass.getEnclosingClass == classOf[AppendOnlyMap[_, _]])
+
+    val underlyingMap = map.currentMap
+    assert(underlyingMap != null)
+
+    val keys = it.map{
+      case (k, vs) =>
+        val sortedVs = vs.sorted
+        assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+        k
+    }
+    .toList
+    .sorted
+
+    assert(it.isEmpty)
+    assert(keys == (0 until 100))
+
+    assert( map.numSpills == 0 )
+    // these asserts try to show that we're no longer holding references to the underlying map.
+    // it'd be nice to use something like
+    // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
+    // (lines 69-89)
+    assert(map.currentMap == null)
+    assert(underlyingIt.upstream ne underlyingMapIterator)
+    assert(underlyingIt.upstream.getClass != underlyingMapIteratorClass)
+    assert(underlyingIt.upstream.getClass.getEnclosingClass != classOf[AppendOnlyMap[_, _]])
   }
 
   test("external aggregation updates peak execution memory") {

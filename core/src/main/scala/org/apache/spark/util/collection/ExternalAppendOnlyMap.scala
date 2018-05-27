@@ -20,12 +20,12 @@ package org.apache.spark.util.collection
 import java.io._
 import java.util.Comparator
 
-import com.google.common.annotations.VisibleForTesting
-
 import scala.collection.BufferedIterator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+
 import com.google.common.io.ByteStreams
+
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -80,7 +80,10 @@ class ExternalAppendOnlyMap[K, V, C](
     this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager, TaskContext.get())
   }
 
-  @VisibleForTesting @volatile private[collection] var currentMap = new SizeTrackingAppendOnlyMap[K, C]
+  /**
+   * Exposed for testing
+   */
+  @volatile private[collection] var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
@@ -114,7 +117,10 @@ class ExternalAppendOnlyMap[K, V, C](
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
-  @VisibleForTesting @volatile private[collection] var readingIterator: SpillableIterator = null
+  /**
+   * Exposed for testing
+   */
+  @volatile private[collection] var readingIterator: SpillableIterator = null
 
   /**
    * Number of files this map has spilled so far.
@@ -568,12 +574,13 @@ class ExternalAppendOnlyMap[K, V, C](
     context.addTaskCompletionListener(context => cleanup())
   }
 
-  @VisibleForTesting private[collection] class SpillableIterator(var upstream: Iterator[(K, C)])
+  /**
+   * Exposed for testing
+   */
+  private[collection] class SpillableIterator(var upstream: Iterator[(K, C)])
     extends Iterator[(K, C)] {
 
     private val SPILL_LOCK = new Object()
-
-    private var nextUpstream: Iterator[(K, C)] = null
 
     private var cur: (K, C) = readNext()
 
@@ -585,17 +592,15 @@ class ExternalAppendOnlyMap[K, V, C](
       } else {
         logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
           s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
-        nextUpstream = spillMemoryIteratorToDisk(upstream)
+        val nextUpstream = spillMemoryIteratorToDisk(upstream)
+        assert(!upstream.hasNext)
         hasSpilled = true
+        upstream = nextUpstream
         true
       }
     }
 
     def readNext(): (K, C) = SPILL_LOCK.synchronized {
-      if (nextUpstream != null) {
-        upstream = nextUpstream
-        nextUpstream = null
-      }
       if (upstream.hasNext) {
         upstream.next()
       } else {
