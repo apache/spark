@@ -34,7 +34,8 @@ class ContinuousSuiteBase extends StreamTest {
     new SparkContext(
       "local[10]",
       "continuous-stream-test-sql-context",
-      sparkConf.set("spark.sql.testkey", "true")))
+      sparkConf.set("spark.sql.testkey", "true")
+        .set("spark.sql.streaming.minBatchesToRetain", "2")))
 
   protected def waitForRateSourceTriggers(query: StreamExecution, numTriggers: Int): Unit = {
     query match {
@@ -224,6 +225,40 @@ class ContinuousSuite extends ContinuousSuiteBase {
 
     val results = spark.read.table("noharness").collect()
     assert(Set(0, 1, 2, 3).map(Row(_)).subsetOf(results.toSet))
+  }
+
+  test("SPARK-24351: check offsetLog/commitLog retained in the checkpoint directory") {
+    withTempDir { checkpointDir =>
+      val input = ContinuousMemoryStream[Int]
+      val df = input.toDF().mapPartitions(iter => {
+        // Sleep the task thread for 300 ms to make sure epoch processing time 3 times
+        // longer than epoch creating interval. So the gap between last committed
+        // epoch and currentBatchId grows over time.
+        Thread.sleep(300)
+        iter.map(row => row.getInt(0) * 2)
+      })
+
+      testStream(df)(
+        StartStream(trigger = Trigger.Continuous(100),
+          checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(input, 1),
+        CheckAnswer(2),
+        // Make sure epoch 2 has been committed before the following validation.
+        AwaitEpoch(2),
+        StopStream,
+        AssertOnQuery(q => {
+          q.commitLog.getLatest() match {
+            case Some((latestEpochId, _)) =>
+              val commitLogValidateResult = q.commitLog.get(latestEpochId - 1).isDefined &&
+                q.commitLog.get(latestEpochId - 2).isEmpty
+              val offsetLogValidateResult = q.offsetLog.get(latestEpochId - 1).isDefined &&
+                q.offsetLog.get(latestEpochId - 2).isEmpty
+              commitLogValidateResult && offsetLogValidateResult
+            case None => false
+          }
+        })
+      )
+    }
   }
 }
 
