@@ -2412,20 +2412,53 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("SPARK-23772 ignore column of all null values or empty array during schema inference") {
      withTempPath { tempDir =>
       val path = tempDir.getAbsolutePath
+
+      // primitive types
       Seq(
-        """{"a":null, "b":[null, null], "c":null, "d":[[], [null]], "e":{}}""",
-        """{"a":null, "b":[null], "c":[], "d": [null, []], "e":{}}""",
-        """{"a":null, "b":[], "c":[], "d": null, "e":null}""")
-        .toDS().write.mode("overwrite").text(path)
-      val df = spark.read.format("json")
+        """{"a":null, "b":1, "c":3.0}""",
+        """{"a":null, "b":null, "c":"string"}""",
+        """{"a":null, "b":null, "c":null}""")
+        .toDS().write.text(path)
+      var df = spark.read.format("json")
         .option("dropFieldIfAllNull", true)
         .load(path)
-      val expectedSchema = new StructType()
-        .add("a", NullType).add("b", NullType).add("c", NullType).add("d", NullType)
-        .add("e", NullType)
+      var expectedSchema = new StructType()
+        .add("a", NullType).add("b", LongType).add("c", StringType)
       assert(df.schema === expectedSchema)
-      val nullRow = Row(null, null, null, null, null)
-      checkAnswer(df, nullRow :: nullRow :: nullRow :: Nil)
+      checkAnswer(df, Row(null, 1, "3.0") :: Row(null, null, "string") :: Row(null, null, null)
+        :: Nil)
+
+      // arrays
+      Seq(
+        """{"a":[2, 1], "b":[null, null], "c":null, "d":[[], [null]]}""",
+        """{"a":[null], "b":[null], "c":[], "d": [null, []]}""",
+        """{"a":null, "b":null, "c":[], "d": null}""")
+        .toDS().write.mode("overwrite").text(path)
+      df = spark.read.format("json")
+        .option("dropFieldIfAllNull", true)
+        .load(path)
+      expectedSchema = new StructType()
+        .add("a", ArrayType(LongType)).add("b", NullType).add("c", NullType).add("d", NullType)
+      assert(df.schema === expectedSchema)
+      checkAnswer(df, Row(Array(2, 1), null, null, null) :: Row(Array(null), null, null, null) ::
+        Row(null, null, null, null) :: Nil)
+
+      // structs
+      Seq(
+        """{"a": {"a1": 1, "a2":"string"}, "b":{}}""",
+        """{"a": {"a1": 2, "a2":null}, "b":{}}""",
+        """{"a": null, "b":null}""")
+        .toDS().write.mode("overwrite").text(path)
+      df = spark.read.format("json")
+        .option("dropFieldIfAllNull", true)
+        .load(path)
+      expectedSchema = new StructType()
+        .add("a", StructType(StructField("a1", LongType) :: StructField("a2", StringType)
+          :: Nil))
+        .add("b", NullType)
+      assert(df.schema === expectedSchema)
+      checkAnswer(df, Row(Row(1, "string"), null) :: Row(Row(2, null), null) ::
+        Row(null, null) :: Nil)
     }
   }
 }

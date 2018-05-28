@@ -79,7 +79,7 @@ class JacksonParser(
         val array = convertArray(parser, elementConverter)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
-        if (array == null || array.numElements() == 0) {
+        if (array.numElements() == 0) {
           Nil
         } else {
           array.toArray[InternalRow](schema).toSeq
@@ -234,6 +234,11 @@ class JacksonParser(
     case udt: UserDefinedType[_] =>
       makeConverter(udt.sqlType)
 
+    case _: NullType if options.dropFieldIfAllNull =>
+      (parser: JsonParser) => parseJsonToken[Null](parser, dataType) {
+        case _ => null
+      }
+
     case _ =>
       (parser: JsonParser) =>
         // Here, we pass empty `PartialFunction` so that this case can be
@@ -329,12 +334,8 @@ class JacksonParser(
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
       values += fieldConverter.apply(parser)
     }
-    // Canonicalize arrays; an array is null if all its elements are null
-    if (options.dropFieldIfAllNull && values.forall(_ == null)) {
-      null
-    } else {
-      new GenericArrayData(values.toArray)
-    }
+
+    new GenericArrayData(values.toArray)
   }
 
   /**
