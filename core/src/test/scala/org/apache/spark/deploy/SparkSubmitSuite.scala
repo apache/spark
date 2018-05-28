@@ -1116,7 +1116,7 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(args)
     val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, conf = Some(hadoopConf))
 
-    conf.get("spark.yarn.dist.pyFiles") should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
     conf.get("spark.submit.pyFiles") should (startWith("/"))
 
     // Verify "spark.submit.pyFiles"
@@ -1132,7 +1132,7 @@ class SparkSubmitSuite
     val appArgs1 = new SparkSubmitArguments(args1)
     val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1, conf = Some(hadoopConf))
 
-    conf1.get("spark.yarn.dist.pyFiles") should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf1.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
     conf1.get("spark.submit.pyFiles") should (startWith("/"))
   }
 }

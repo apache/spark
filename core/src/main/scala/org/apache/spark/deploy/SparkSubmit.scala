@@ -438,7 +438,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     if (localPyFiles != null) {
-        sparkConf.set("spark.submit.pyFiles", localPyFiles)
+      sparkConf.set("spark.submit.pyFiles", localPyFiles)
     }
 
     // In YARN mode for an R app, add the SparkR package archive and the R package
