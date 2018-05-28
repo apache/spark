@@ -552,6 +552,7 @@ class TaskContextTests(PySparkTestCase):
         prop2 = rdd.map(lambda x: TaskContext.get().getLocalProperty("otherkey")).collect()[0]
         self.assertTrue(prop2 is None)
 
+
 class RDDTests(ReusedPySparkTestCase):
 
     def test_range(self):
