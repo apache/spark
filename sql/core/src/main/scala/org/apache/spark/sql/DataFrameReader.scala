@@ -257,7 +257,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "fetchsize" can be used to control the
-   *                             number of rows per fetch.
+   *                             number of rows per fetch and "queryTimeout" can be used to wait
+   *                             for a Statement object to execute to the given number of seconds.
    * @since 1.4.0
    */
   def jdbc(
@@ -479,6 +480,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def csv(csvDataset: Dataset[String]): DataFrame = {
     val parsedOptions: CSVOptions = new CSVOptions(
       extraOptions.toMap,
+      sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     val filteredLines: Dataset[String] =
       CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)

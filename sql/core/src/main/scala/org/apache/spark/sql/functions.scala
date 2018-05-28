@@ -3493,6 +3493,13 @@ object functions {
   def map_values(e: Column): Column = withExpr { MapValues(e.expr) }
 
   /**
+   * Returns an unordered array of all entries in the given map.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
+
+  /**
    * Returns a map created from the given array of entries.
    * @group collection_funcs
    * @since 2.4.0

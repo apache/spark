@@ -405,6 +405,50 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("map_entries") {
+    val dummyFilter = (c: Column) => c.isNotNull || c.isNull
+
+    // Primitive-type elements
+    val idf = Seq(
+      Map[Int, Int](1 -> 100, 2 -> 200, 3 -> 300),
+      Map[Int, Int](),
+      null
+    ).toDF("m")
+    val iExpected = Seq(
+      Row(Seq(Row(1, 100), Row(2, 200), Row(3, 300))),
+      Row(Seq.empty),
+      Row(null)
+    )
+
+    checkAnswer(idf.select(map_entries('m)), iExpected)
+    checkAnswer(idf.selectExpr("map_entries(m)"), iExpected)
+    checkAnswer(idf.filter(dummyFilter('m)).select(map_entries('m)), iExpected)
+    checkAnswer(
+      spark.range(1).selectExpr("map_entries(map(1, null, 2, null))"),
+      Seq(Row(Seq(Row(1, null), Row(2, null)))))
+    checkAnswer(
+      spark.range(1).filter(dummyFilter('id)).selectExpr("map_entries(map(1, null, 2, null))"),
+      Seq(Row(Seq(Row(1, null), Row(2, null)))))
+
+    // Non-primitive-type elements
+    val sdf = Seq(
+      Map[String, String]("a" -> "f", "b" -> "o", "c" -> "o"),
+      Map[String, String]("a" -> null, "b" -> null),
+      Map[String, String](),
+      null
+    ).toDF("m")
+    val sExpected = Seq(
+      Row(Seq(Row("a", "f"), Row("b", "o"), Row("c", "o"))),
+      Row(Seq(Row("a", null), Row("b", null))),
+      Row(Seq.empty),
+      Row(null)
+    )
+
+    checkAnswer(sdf.select(map_entries('m)), sExpected)
+    checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
+    checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
+  }
+
   test("map_from_entries function") {
     def dummyFilter(c: Column): Column = c.isNull || c.isNotNull
     val oneRowDF = Seq(3215).toDF("i")
@@ -714,6 +758,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
       Seq(Row(1L), Row(1L))
     )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
+    }
+    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
   }
 
   test("element_at function") {
@@ -762,6 +811,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("element_at(a, -1)"),
       Seq(Row("3"), Row(""), Row(null))
     )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
+    }
+    assert(e.message.contains(
+      "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
   }
 
   test("concat function - arrays") {

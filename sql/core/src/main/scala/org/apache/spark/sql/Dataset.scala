@@ -196,7 +196,7 @@ class Dataset[T] private[sql](
   }
 
   // Wraps analyzed logical plans with an analysis barrier so we won't traverse/resolve it again.
-  @transient private val planWithBarrier = AnalysisBarrier(logicalPlan)
+  @transient private[sql] val planWithBarrier = AnalysisBarrier(logicalPlan)
 
   /**
    * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
@@ -1617,7 +1617,9 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def reduce(func: (T, T) => T): T = rdd.reduce(func)
+  def reduce(func: (T, T) => T): T = withNewRDDExecutionId {
+    rdd.reduce(func)
+  }
 
   /**
    * :: Experimental ::
