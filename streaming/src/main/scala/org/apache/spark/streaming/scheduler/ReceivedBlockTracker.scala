@@ -116,9 +116,7 @@ private[streaming] class ReceivedBlockTracker(
       }.toMap
       val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
       if (writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))) {
-        streamIds.foreach {
-          getReceivedBlockQueue(_).clear()
-        }
+        streamIds.foreach(getReceivedBlockQueue(_).clear())
         timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
         lastAllocatedBatchTime = batchTime
       } else {

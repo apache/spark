@@ -118,7 +118,7 @@ class ReceivedBlockTrackerSuite
   }
 
   test("block allocation to batch should not loose blocks from received queue") {
-    val tracker1 = createTracker(createSpyTracker = true)
+    val tracker1 = spy(createTracker())
     tracker1.isWriteAheadLogEnabled should be (true)
     tracker1.getUnallocatedBlocks(streamId) shouldEqual Seq.empty
 
@@ -131,13 +131,10 @@ class ReceivedBlockTrackerSuite
     // The blocks should stay in the received queue when WAL write failing
     doThrow(new RuntimeException("Not able to write BatchAllocationEvent"))
       .when(tracker1).writeToLog(any(classOf[BatchAllocationEvent]))
-    try {
+    val errMsg = intercept[RuntimeException] {
       tracker1.allocateBlocksToBatch(1)
-      assert(false)
-    } catch {
-      case _: RuntimeException =>
-        // Nothing to do here
     }
+    assert(errMsg.getMessage === "Not able to write BatchAllocationEvent")
     tracker1.getUnallocatedBlocks(streamId) shouldEqual blockInfos
     tracker1.getBlocksOfBatch(1) shouldEqual Map.empty
     tracker1.getBlocksOfBatchAndStream(1, streamId) shouldEqual Seq.empty
@@ -354,16 +351,12 @@ class ReceivedBlockTrackerSuite
    * want to control time by manually incrementing it to test log clean.
    */
   def createTracker(
-      createSpyTracker: Boolean = false,
       setCheckpointDir: Boolean = true,
       recoverFromWriteAheadLog: Boolean = false,
       clock: Clock = new SystemClock): ReceivedBlockTracker = {
     val cpDirOption = if (setCheckpointDir) Some(checkpointDirectory.toString) else None
     var tracker = new ReceivedBlockTracker(
       conf, hadoopConf, Seq(streamId), clock, recoverFromWriteAheadLog, cpDirOption)
-    if (createSpyTracker) {
-      tracker = spy(tracker)
-    }
     allReceivedBlockTrackers += tracker
     tracker
   }
