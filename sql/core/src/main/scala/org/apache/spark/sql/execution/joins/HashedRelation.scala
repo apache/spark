@@ -24,10 +24,12 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
-import org.apache.spark.memory.{MemoryConsumer, StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.memory.{MemoryConsumer, SparkOutOfMemoryError, StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -106,11 +108,20 @@ private[execution] object HashedRelation {
           1),
         0)
     }
-
-    if (key.length == 1 && key.head.dataType == LongType) {
-      LongHashedRelation(input, key, sizeEstimate, mm)
-    } else {
-      UnsafeHashedRelation(input, key, sizeEstimate, mm)
+    try {
+      if (key.length == 1 && key.head.dataType == LongType) {
+        LongHashedRelation(input, key, sizeEstimate, mm)
+      } else {
+        UnsafeHashedRelation(input, key, sizeEstimate, mm)
+      }
+    } catch {
+      case oe: SparkOutOfMemoryError =>
+        throw new SparkOutOfMemoryError(s"If this SparkOutOfMemoryError happens in Spark driver," +
+            s" it could because there's not enough memory to build and broadcast the table to " +
+            s"all worker nodes. As a workaround, you can either disable the broadcast by setting " +
+            s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the Spark driver " +
+            s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value")
+            .initCause(oe.getCause)
     }
   }
 }

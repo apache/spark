@@ -22,7 +22,6 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
-import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -30,7 +29,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPar
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
 /**
@@ -112,17 +110,10 @@ case class BroadcastExchangeExec(
           SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
           broadcasted
         } catch {
-          // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
-          // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
-          // will catch this exception and re-throw the wrapped fatal throwable.
-          case oe: OutOfMemoryError =>
-            throw new SparkFatalException(
-              new OutOfMemoryError(s"Not enough memory to build and broadcast the table to " +
-              s"all worker nodes. As a workaround, you can either disable broadcast by setting " +
-              s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark driver " +
-              s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value")
-              .initCause(oe.getCause))
           case e if !NonFatal(e) =>
+            // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
+            // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
+            // will catch this exception and re-throw the wrapped fatal throwable.
             throw new SparkFatalException(e)
         }
       }
