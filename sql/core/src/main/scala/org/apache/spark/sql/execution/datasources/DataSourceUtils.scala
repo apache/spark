@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.types._
 
@@ -27,9 +28,17 @@ object DataSourceUtils {
    * Verify if the schema is supported in datasource.
    */
   def verifySchema(format: FileFormat, schema: StructType): Unit = {
+    def throwUnsupportedException(dataType: DataType): Unit = {
+      throw new UnsupportedOperationException(
+        s"$format data source does not support ${dataType.simpleString} data type.")
+    }
+
     def verifyType(dataType: DataType): Unit = dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
            StringType | BinaryType | DateType | TimestampType | _: DecimalType =>
+
+      case _: StructType | _: ArrayType | _: MapType if format.isInstanceOf[CSVFileFormat] =>
+        throwUnsupportedException(dataType)
 
       case st: StructType => st.foreach { f => verifyType(f.dataType) }
 
@@ -44,9 +53,7 @@ object DataSourceUtils {
       // For JSON backward-compatibility
       case NullType if format.isInstanceOf[JsonFileFormat] =>
 
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"$format data source does not support ${dataType.simpleString} data type.")
+      case _ => throwUnsupportedException(dataType)
     }
 
     schema.foreach(field => verifyType(field.dataType))
