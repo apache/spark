@@ -578,6 +578,8 @@ class SparkSession(object):
         .. versionchanged:: 2.1
            Added verifySchema.
 
+        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
         [Row(_1=u'Alice', _2=1)]

@@ -212,6 +212,8 @@ class GroupedData(object):
         This function does not support partial aggregation, and requires shuffling all the data in
         the :class:`DataFrame`.
 
+        .. note:: Experimental
+
         :param udf: a grouped map user-defined function returned by
             :func:`pyspark.sql.functions.pandas_udf`.
 
