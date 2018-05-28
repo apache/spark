@@ -2065,9 +2065,9 @@ case class FormatNumber(x: Expression, d: Expression)
            """
         case StringType =>
           val lastDValue = ctx.addMutableState("String", "lastDValue", v => s"""$v = null;""")
-          val dValue = ctx.addMutableState("String", "dValue")
+          val dValue = ctx.freshName("dValue")
           s"""
-            $dValue = $d.toString();
+            String $dValue = $d.toString();
             if (!$dValue.equals($lastDValue)) {
               $lastDValue = $dValue;
               if ($dValue.isEmpty()) {
@@ -2077,11 +2077,6 @@ case class FormatNumber(x: Expression, d: Expression)
               }
             }
             ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
-           """
-        case NullType =>
-          s"""
-            ${ev.value} = null;
-            ${ev.isNull} = true;
            """
       }
     })
