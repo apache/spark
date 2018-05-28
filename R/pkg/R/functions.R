@@ -208,7 +208,7 @@ NULL
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
-#' head(select(tmp, array_position(tmp$v1, 21), array_repeat(21, 5L), array_sort(tmp$v1)))
+#' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
 #' head(select(tmp, flatten(tmp$v1), reverse(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
@@ -3049,10 +3049,10 @@ setMethod("array_position",
           })
 
 #' @details
-#' \code{array_repeat}: Creates an array containing the left argument repeated the number of times
-#' given by the right argument.
+#' \code{array_repeat}: Creates an array containing \code{x} repeated the number of times
+#' given by \code{count}.
 #'
-#' @param count Column or constant determining the number of repetitions.
+#' @param count a Column or constant determining the number of repetitions.
 #' @rdname column_collection_functions
 #' @aliases array_repeat array_repeat,Column,numericOrColumn-method
 #' @note array_repeat since 2.4.0
@@ -3060,9 +3060,9 @@ setMethod("array_repeat",
           signature(x = "Column", count = "numericOrColumn"),
           function(x, count) {
             if (class(count) == "Column") {
-                count <- count@jc
+              count <- count@jc
             } else {
-                count <- as.integer(count)
+              count <- as.integer(count)
             }
             jc <- callJStatic("org.apache.spark.sql.functions", "array_repeat", x@jc, count)
             column(jc)
