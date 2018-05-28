@@ -89,7 +89,7 @@ class OrcFileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    DataSourceUtils.verifySchema("ORC", dataSchema)
+    DataSourceUtils.verifySchema(this, dataSchema)
 
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
 
@@ -143,7 +143,7 @@ class OrcFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    DataSourceUtils.verifySchema("ORC", dataSchema)
+    DataSourceUtils.verifySchema(this, dataSchema)
 
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       OrcFilters.createFilter(dataSchema, filters).foreach { f =>

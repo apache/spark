@@ -72,7 +72,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    DataSourceUtils.verifySchema("ORC", dataSchema)
+    DataSourceUtils.verifySchema(this, dataSchema)
 
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
 
@@ -123,7 +123,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    DataSourceUtils.verifySchema("ORC", dataSchema)
+    DataSourceUtils.verifySchema(this, dataSchema)
 
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.types._
 
 
@@ -25,7 +26,7 @@ object DataSourceUtils {
   /**
    * Verify if the schema is supported in datasource.
    */
-  def verifySchema(format: String, schema: StructType): Unit = {
+  def verifySchema(format: FileFormat, schema: StructType): Unit = {
     def verifyType(dataType: DataType): Unit = dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
            StringType | BinaryType | DateType | TimestampType | _: DecimalType =>
@@ -40,8 +41,8 @@ object DataSourceUtils {
 
       case udt: UserDefinedType[_] => verifyType(udt.sqlType)
 
-      // For backward-compatibility
-      case NullType if format == "JSON" =>
+      // For JSON backward-compatibility
+      case NullType if format.isInstanceOf[JsonFileFormat] =>
 
       case _ =>
         throw new UnsupportedOperationException(

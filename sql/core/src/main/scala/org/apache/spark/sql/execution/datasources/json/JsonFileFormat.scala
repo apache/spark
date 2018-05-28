@@ -65,7 +65,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    DataSourceUtils.verifySchema("JSON", dataSchema)
+    DataSourceUtils.verifySchema(this, dataSchema)
 
     val conf = job.getConfiguration
     val parsedOptions = new JSONOptions(
@@ -98,7 +98,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    DataSourceUtils.verifySchema("JSON", dataSchema)
+    DataSourceUtils.verifySchema(this, dataSchema)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
