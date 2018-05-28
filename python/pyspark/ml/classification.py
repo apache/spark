@@ -1222,6 +1222,10 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     True
     >>> model.trees
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0),)],
+    ...              ["indexed", "features"])
+    >>> model.evaluateEachIteration(validation)
+    [0.25..., 0.23..., 0.21..., 0.19..., 0.18...]
 
     .. versionadded:: 1.4.0
     """
@@ -1318,6 +1322,17 @@ class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWrita
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
+
+    @since("2.4.0")
+    def evaluateEachIteration(self, dataset):
+        """
+        Method to compute error or loss for every iteration of gradient boosting.
+
+        :param dataset:
+            Test dataset to evaluate model on, where dataset is an
+            instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        return self._call_java("evaluateEachIteration", dataset)
 
 
 @inherit_doc
@@ -1543,12 +1558,12 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
                  solver="l-bfgs", initialWeights=None, probabilityCol="probability",
-                 rawPredicitionCol="rawPrediction"):
+                 rawPredictionCol="rawPrediction"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
                  solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
-                 rawPredicitionCol="rawPrediction")
+                 rawPredictionCol="rawPrediction")
         """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1562,12 +1577,12 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
                   solver="l-bfgs", initialWeights=None, probabilityCol="probability",
-                  rawPredicitionCol="rawPrediction"):
+                  rawPredictionCol="rawPrediction"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
                   solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
-                  rawPredicitionCol="rawPrediction"):
+                  rawPredictionCol="rawPrediction"):
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self._input_kwargs

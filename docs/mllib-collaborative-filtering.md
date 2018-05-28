@@ -31,7 +31,7 @@ following parameters:
 
 ### Explicit vs. implicit feedback
 
-The standard approach to matrix factorization based collaborative filtering treats 
+The standard approach to matrix factorization-based collaborative filtering treats
 the entries in the user-item matrix as *explicit* preferences given by the user to the item,
 for example, users giving ratings to movies.
 
@@ -60,7 +60,7 @@ best parameter learned from a sampled subset to the full dataset and expect simi
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-In the following example we load rating data. Each row consists of a user, a product and a rating.
+In the following example, we load rating data. Each row consists of a user, a product and a rating.
 We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS$) 
 method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.

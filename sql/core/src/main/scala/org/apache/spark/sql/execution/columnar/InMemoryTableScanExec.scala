@@ -78,10 +78,12 @@ case class InMemoryTableScanExec(
 
   private lazy val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
 
-  private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
+  private def createAndDecompressColumn(
+      cachedColumnarBatch: CachedBatch,
+      offHeapColumnVectorEnabled: Boolean): ColumnarBatch = {
     val rowCount = cachedColumnarBatch.numRows
     val taskContext = Option(TaskContext.get())
-    val columnVectors = if (!conf.offHeapColumnVectorEnabled || taskContext.isEmpty) {
+    val columnVectors = if (!offHeapColumnVectorEnabled || taskContext.isEmpty) {
       OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
     } else {
       OffHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
@@ -101,10 +103,13 @@ case class InMemoryTableScanExec(
 
   private lazy val inputRDD: RDD[InternalRow] = {
     val buffers = filteredCachedBatches()
+    val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     if (supportsBatch) {
       // HACK ALERT: This is actually an RDD[ColumnarBatch].
       // We're taking advantage of Scala's type erasure here to pass these batches along.
-      buffers.map(createAndDecompressColumn).asInstanceOf[RDD[InternalRow]]
+      buffers
+        .map(createAndDecompressColumn(_, offHeapColumnVectorEnabled))
+        .asInstanceOf[RDD[InternalRow]]
     } else {
       val numOutputRows = longMetric("numOutputRows")
 
@@ -154,7 +159,7 @@ case class InMemoryTableScanExec(
   private def updateAttribute(expr: Expression): Expression = {
     // attributes can be pruned so using relation's output.
     // E.g., relation.output is [id, item] but this scan's output can be [item] only.
-    val attrMap = AttributeMap(relation.child.output.zip(relation.output))
+    val attrMap = AttributeMap(relation.cachedPlan.output.zip(relation.output))
     expr.transform {
       case attr: Attribute => attrMap.getOrElse(attr, attr)
     }
@@ -163,16 +168,16 @@ case class InMemoryTableScanExec(
   // The cached version does not change the outputPartitioning of the original SparkPlan.
   // But the cached version could alias output, so we need to replace output.
   override def outputPartitioning: Partitioning = {
-    relation.child.outputPartitioning match {
+    relation.cachedPlan.outputPartitioning match {
       case h: HashPartitioning => updateAttribute(h).asInstanceOf[HashPartitioning]
-      case _ => relation.child.outputPartitioning
+      case _ => relation.cachedPlan.outputPartitioning
     }
   }
 
   // The cached version does not change the outputOrdering of the original SparkPlan.
   // But the cached version could alias output, so we need to replace output.
   override def outputOrdering: Seq[SortOrder] =
-    relation.child.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
+    relation.cachedPlan.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
 
   // Keeps relation's partition statistics because we don't serialize relation.
   private val stats = relation.partitionStatistics
@@ -252,7 +257,7 @@ case class InMemoryTableScanExec(
     // within the map Partitions closure.
     val schema = stats.schema
     val schemaIndex = schema.zipWithIndex
-    val buffers = relation.cachedColumnBuffers
+    val buffers = relation.cacheBuilder.cachedColumnBuffers
 
     buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
       val partitionFilter = newPredicate(

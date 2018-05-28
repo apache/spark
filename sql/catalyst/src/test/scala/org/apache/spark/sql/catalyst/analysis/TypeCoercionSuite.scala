@@ -429,6 +429,24 @@ class TypeCoercionSuite extends AnalysisTest {
         Some(StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType)))),
         isSymmetric = false)
     }
+
+    widenTest(
+      ArrayType(IntegerType, containsNull = true),
+      ArrayType(IntegerType, containsNull = false),
+      Some(ArrayType(IntegerType, containsNull = true)))
+
+    widenTest(
+      MapType(IntegerType, StringType, valueContainsNull = true),
+      MapType(IntegerType, StringType, valueContainsNull = false),
+      Some(MapType(IntegerType, StringType, valueContainsNull = true)))
+
+    widenTest(
+      new StructType()
+        .add("arr", ArrayType(IntegerType, containsNull = true), nullable = false),
+      new StructType()
+        .add("arr", ArrayType(IntegerType, containsNull = false), nullable = true),
+      Some(new StructType()
+        .add("arr", ArrayType(IntegerType, containsNull = true), nullable = true)))
   }
 
   test("wider common type for decimal and array") {
@@ -506,11 +524,11 @@ class TypeCoercionSuite extends AnalysisTest {
   test("cast NullType for expressions that implement ExpectsInputTypes") {
     import TypeCoercionSuite._
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       AnyTypeUnaryExpression(Literal.create(null, NullType)),
       AnyTypeUnaryExpression(Literal.create(null, NullType)))
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
   }
@@ -518,11 +536,11 @@ class TypeCoercionSuite extends AnalysisTest {
   test("cast NullType for binary operators") {
     import TypeCoercionSuite._
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)))
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       NumericTypeBinaryOperator(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
   }
@@ -539,6 +557,9 @@ class TypeCoercionSuite extends AnalysisTest {
     val floatLit = Literal.create(1.0f, FloatType)
     val timestampLit = Literal.create("2017-04-12", TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
+    val tsArrayLit = Literal(Array(new Timestamp(System.currentTimeMillis())))
+    val strArrayLit = Literal(Array("c"))
+    val intArrayLit = Literal(Array(1))
 
     ruleTest(rule,
       Coalesce(Seq(doubleLit, intLit, floatLit)),
@@ -572,6 +593,16 @@ class TypeCoercionSuite extends AnalysisTest {
       Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
       Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
         Cast(doubleLit, StringType), Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(timestampLit, intLit, stringLit)),
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType),
+        Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(tsArrayLit, intArrayLit, strArrayLit)),
+      Coalesce(Seq(Cast(tsArrayLit, ArrayType(StringType)),
+        Cast(intArrayLit, ArrayType(StringType)), Cast(strArrayLit, ArrayType(StringType)))))
   }
 
   test("CreateArray casts") {
@@ -792,7 +823,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("type coercion for CaseKeyWhen") {
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
     )
@@ -1244,7 +1275,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("SPARK-17117 null type coercion in divide") {
-    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
+    val rules = Seq(FunctionArgumentConversion, Division, new ImplicitTypeCasts(conf))
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))

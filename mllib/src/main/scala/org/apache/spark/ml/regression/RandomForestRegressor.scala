@@ -269,21 +269,21 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
     override def load(path: String): RandomForestRegressionModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName, false)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
       val trees: Array[DecisionTreeRegressionModel] = treesData.map { case (treeMetadata, root) =>
-        val tree =
-          new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
-        DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+        val tree = new DecisionTreeRegressionModel(treeMetadata.uid,
+          root.asInstanceOf[RegressionNode], numFeatures)
+        treeMetadata.getAndSetParams(tree)
         tree
       }
       require(numTrees == trees.length, s"RandomForestRegressionModel.load expected $numTrees" +
         s" trees based on metadata but found ${trees.length} trees.")
 
       val model = new RandomForestRegressionModel(metadata.uid, trees, numFeatures)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

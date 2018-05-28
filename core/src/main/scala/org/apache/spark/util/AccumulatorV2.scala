@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 
 private[spark] case class AccumulatorMetadata(
@@ -211,7 +212,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
 /**
  * An internal class used to track accumulators by Spark itself.
  */
-private[spark] object AccumulatorContext {
+private[spark] object AccumulatorContext extends Logging {
 
   /**
    * This global map holds the original accumulator objects that are created on the driver.
@@ -258,13 +259,16 @@ private[spark] object AccumulatorContext {
    * Returns the [[AccumulatorV2]] registered with the given ID, if any.
    */
   def get(id: Long): Option[AccumulatorV2[_, _]] = {
-    Option(originals.get(id)).map { ref =>
-      // Since we are storing weak references, we must check whether the underlying data is valid.
+    val ref = originals.get(id)
+    if (ref eq null) {
+      None
+    } else {
+      // Since we are storing weak references, warn when the underlying data is not valid.
       val acc = ref.get
       if (acc eq null) {
-        throw new IllegalStateException(s"Attempted to access garbage collected accumulator $id")
+        logWarning(s"Attempted to access garbage collected accumulator $id")
       }
-      acc
+      Option(acc)
     }
   }
 
@@ -486,7 +490,9 @@ class LegacyAccumulatorWrapper[R, T](
     param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
   private[spark] var _value = initialValue  // Current value on driver
 
-  override def isZero: Boolean = _value == param.zero(initialValue)
+  @transient private lazy val _zero = param.zero(initialValue)
+
+  override def isZero: Boolean = _value.asInstanceOf[AnyRef].eq(_zero.asInstanceOf[AnyRef])
 
   override def copy(): LegacyAccumulatorWrapper[R, T] = {
     val acc = new LegacyAccumulatorWrapper(initialValue, param)
@@ -495,7 +501,7 @@ class LegacyAccumulatorWrapper[R, T](
   }
 
   override def reset(): Unit = {
-    _value = param.zero(initialValue)
+    _value = _zero
   }
 
   override def add(v: T): Unit = _value = param.addAccumulator(_value, v)

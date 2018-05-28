@@ -17,15 +17,10 @@
 
 package org.apache.spark
 
-import java.lang.{Byte => JByte}
 import java.net.{Authenticator, PasswordAuthentication}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.security.{KeyStore, SecureRandom}
-import java.security.cert.X509Certificate
 import javax.net.ssl._
 
-import com.google.common.hash.HashCodes
-import com.google.common.io.Files
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
@@ -89,6 +84,7 @@ private[spark] class SecurityManager(
   setViewAclsGroups(sparkConf.get("spark.ui.view.acls.groups", ""));
   setModifyAclsGroups(sparkConf.get("spark.modify.acls.groups", ""));
 
+  private var secretKey: String = _
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
     "; users  with view permissions: " + viewAcls.toString() +
@@ -321,6 +317,12 @@ private[spark] class SecurityManager(
       val creds = UserGroupInformation.getCurrentUser().getCredentials()
       Option(creds.getSecretKey(SECRET_LOOKUP_KEY))
         .map { bytes => new String(bytes, UTF_8) }
+        // Secret key may not be found in current UGI's credentials.
+        // This happens when UGI is refreshed in the driver side by UGI's loginFromKeytab but not
+        // copy secret key from original UGI to the new one. This exists in ThriftServer's Hive
+        // logic. So as a workaround, storing secret key in a local variable to make it visible
+        // in different context.
+        .orElse(Option(secretKey))
         .orElse(Option(sparkConf.getenv(ENV_AUTH_SECRET)))
         .orElse(sparkConf.getOption(SPARK_AUTH_SECRET_CONF))
         .getOrElse {
@@ -358,14 +360,9 @@ private[spark] class SecurityManager(
         return
     }
 
-    val rnd = new SecureRandom()
-    val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
-    val secretBytes = new Array[Byte](length)
-    rnd.nextBytes(secretBytes)
-
+    secretKey = Utils.createSecret(sparkConf)
     val creds = new Credentials()
-    val secretStr = HashCodes.fromBytes(secretBytes).toString()
-    creds.addSecretKey(SECRET_LOOKUP_KEY, secretStr.getBytes(UTF_8))
+    creds.addSecretKey(SECRET_LOOKUP_KEY, secretKey.getBytes(UTF_8))
     UserGroupInformation.getCurrentUser().addCredentials(creds)
   }
 

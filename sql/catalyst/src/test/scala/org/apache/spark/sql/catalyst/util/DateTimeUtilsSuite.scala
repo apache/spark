@@ -490,24 +490,36 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c1.set(1997, 1, 28, 10, 30, 0)
     val c2 = Calendar.getInstance()
     c2.set(1996, 9, 30, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 3.94959677)
-    c2.set(2000, 1, 28, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === -36)
-    c2.set(2000, 1, 29, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === -36)
-    c2.set(1996, 2, 31, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 11)
+    assert(monthsBetween(
+      c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, true, c1.getTimeZone) === 3.94959677)
+    assert(monthsBetween(
+      c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, false, c1.getTimeZone)
+      === 3.9495967741935485)
+    Seq(true, false).foreach { roundOff =>
+      c2.set(2000, 1, 28, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === -36)
+      c2.set(2000, 1, 29, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === -36)
+      c2.set(1996, 2, 31, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === 11)
+    }
 
     val c3 = Calendar.getInstance(TimeZonePST)
     c3.set(2000, 1, 28, 16, 0, 0)
     val c4 = Calendar.getInstance(TimeZonePST)
     c4.set(1997, 1, 28, 16, 0, 0)
     assert(
-      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, TimeZonePST)
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, true, TimeZonePST)
       === 36.0)
     assert(
-      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, TimeZoneGMT)
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, true, TimeZoneGMT)
       === 35.90322581)
+    assert(
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, false, TimeZoneGMT)
+        === 35.903225806451616)
   }
 
   test("from UTC timestamp") {

@@ -27,6 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -34,87 +35,6 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-/**
- * An expression that concatenates multiple inputs into a single output.
- * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
- * If any input is null, concat returns null.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of str1, str2, ..., strN.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('Spark', 'SQL');
-       SparkSQL
-  """)
-case class Concat(children: Seq[Expression]) extends Expression {
-
-  private lazy val isBinaryMode: Boolean = dataType == BinaryType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.isEmpty) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      val childTypes = children.map(_.dataType)
-      if (childTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
-        return TypeCheckResult.TypeCheckFailure(
-          s"input to function $prettyName should have StringType or BinaryType, but it's " +
-            childTypes.map(_.simpleString).mkString("[", ", ", "]"))
-      }
-      TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
-    }
-  }
-
-  override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
-
-  override def nullable: Boolean = children.exists(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  override def eval(input: InternalRow): Any = {
-    if (isBinaryMode) {
-      val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
-      ByteArray.concat(inputs: _*)
-    } else {
-      val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-      UTF8String.concat(inputs : _*)
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evals = children.map(_.genCode(ctx))
-    val args = ctx.freshName("args")
-
-    val inputs = evals.zipWithIndex.map { case (eval, index) =>
-      s"""
-        ${eval.code}
-        if (!${eval.isNull}) {
-          $args[$index] = ${eval.value};
-        }
-      """
-    }
-
-    val (concatenator, initCode) = if (isBinaryMode) {
-      (classOf[ByteArray].getName, s"byte[][] $args = new byte[${evals.length}][];")
-    } else {
-      ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
-    }
-    val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = inputs,
-      funcName = "valueConcat",
-      extraArguments = (s"${CodeGenerator.javaType(dataType)}[]", args) :: Nil)
-    ev.copy(s"""
-      $initCode
-      $codes
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
-      boolean ${ev.isNull} = ${ev.value} == null;
-    """)
-  }
-
-  override def toString: String = s"concat(${children.mkString(", ")})"
-
-  override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
-}
 
 
 /**
@@ -186,7 +106,7 @@ case class ConcatWs(children: Seq[Expression])
           expressions = inputs,
           funcName = "valueConcatWs",
           extraArguments = ("UTF8String[]", args) :: Nil)
-      ev.copy(s"""
+      ev.copy(code"""
         UTF8String[] $args = new UTF8String[$numArgs];
         ${separator.code}
         $codes
@@ -230,7 +150,7 @@ case class ConcatWs(children: Seq[Expression])
         }
       }.unzip
 
-      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code))
+      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code.toString))
 
       val varargCounts = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargCount,
@@ -257,7 +177,7 @@ case class ConcatWs(children: Seq[Expression])
         foldFunctions = _.map(funcCall => s"$idxVararg = $funcCall;").mkString("\n"))
 
       ev.copy(
-        s"""
+        code"""
         $codes
         int $varargNum = ${children.count(_.dataType == StringType) - 1};
         int $idxVararg = 0;
@@ -369,7 +289,7 @@ case class Elt(children: Seq[Expression]) extends Expression {
       }.mkString)
 
     ev.copy(
-      s"""
+      code"""
          |${index.code}
          |final int $indexVal = ${index.value};
          |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
@@ -735,7 +655,7 @@ case class StringTrim(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -752,7 +672,7 @@ case class StringTrim(
         } else {
           ${ev.value} = ${srcString.value}.trim(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -835,7 +755,7 @@ case class StringTrimLeft(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -852,7 +772,7 @@ case class StringTrimLeft(
         } else {
           ${ev.value} = ${srcString.value}.trimLeft(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -937,7 +857,7 @@ case class StringTrimRight(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -954,7 +874,7 @@ case class StringTrimRight(
         } else {
           ${ev.value} = ${srcString.value}.trimRight(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code).mkString + s"""
+      ev.copy(evals.map(_.code) :+ code"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -1105,7 +1025,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     val substrGen = substr.genCode(ctx)
     val strGen = str.genCode(ctx)
     val startGen = start.genCode(ctx)
-    ev.copy(code = s"""
+    ev.copy(code = code"""
       int ${ev.value} = 0;
       boolean ${ev.isNull} = false;
       ${startGen.code}
@@ -1431,7 +1351,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val formatter = classOf[java.util.Formatter].getName
     val sb = ctx.freshName("sb")
     val stringBuffer = classOf[StringBuffer].getName
-    ev.copy(code = s"""
+    ev.copy(code = code"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -1501,26 +1421,6 @@ case class StringRepeat(str: Expression, times: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
-  }
-}
-
-/**
- * Returns the reversed given string.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(str) - Returns the reversed given string.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('Spark SQL');
-       LQS krapS
-  """)
-case class StringReverse(child: Expression) extends UnaryExpression with String2StringExpression {
-  override def convert(v: UTF8String): UTF8String = v.reverse()
-
-  override def prettyName: String = "reverse"
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"($c).reverse()")
   }
 }
 

@@ -374,7 +374,7 @@ replaced with one of the above namespaces.
     <td><code>${ns}.enabledAlgorithms</code></td>
     <td>None</td>
     <td>
-      A comma separated list of ciphers. The specified ciphers must be supported by JVM.
+      A comma-separated list of ciphers. The specified ciphers must be supported by JVM.
 
       <br />The reference list of protocols can be found in the "JSSE Cipher Suite Names" section
       of the Java security guide. The list for Java 8 can be found at
