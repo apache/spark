@@ -22,8 +22,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.collection.mutable.HashSet
 import scala.language.existentials
 
-import org.apache.xbean.asm5.{ClassReader, ClassVisitor, MethodVisitor}
-import org.apache.xbean.asm5.Opcodes._
+import org.apache.xbean.asm6.{ClassReader, ClassVisitor, MethodVisitor}
+import org.apache.xbean.asm6.Opcodes._
 
 import org.apache.spark.util.Utils
 

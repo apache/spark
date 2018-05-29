@@ -102,7 +102,7 @@
 
     <dependency>
       <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-asm5-shaded</artifactId>
+      <artifactId>xbean-asm6-shaded</artifactId>
     </dependency>
 
     <!-- Explicit listing of transitive deps that are shaded. Otherwise, odd compiler crashes. -->
@@ -166,7 +166,7 @@
       </plugin>
     </plugins>
   </build>
-  
+
   <profiles>
     <profile>
       <id>scala-2.12</id>
