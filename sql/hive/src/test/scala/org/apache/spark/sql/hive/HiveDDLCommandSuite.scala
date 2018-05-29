@@ -265,11 +265,14 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
       "func", Seq.empty, plans.table("e"), null)
 
     comparePlans(plan1,
-      p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
+      p.copy(child = p.child.where('f < 10).select(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+        output = Seq('key.string, 'value.string)))
     comparePlans(plan2,
-      p.copy(output = Seq('c.string, 'd.string)))
+      p.copy(child = p.child.select(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+        output = Seq('c.string, 'd.string)))
     comparePlans(plan3,
-      p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
+      p.copy(child = p.child.select(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+        output = Seq('c.int, 'd.decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {

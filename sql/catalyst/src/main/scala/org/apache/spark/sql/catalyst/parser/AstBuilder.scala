@@ -338,6 +338,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         // Add where.
         val withFilter = relation.optionalMap(where)(filter)
 
+        // Add project.
+        val namedExpressions = expressions.map {
+          case e: NamedExpression => e
+          case e: Expression => UnresolvedAlias(e)
+        }
+        val withProject = if (namedExpressions.nonEmpty) {
+          Project(namedExpressions, withFilter)
+        } else {
+          withFilter
+        }
+
         // Create the attributes.
         val (attributes, schemaLess) = if (colTypeList != null) {
           // Typed return columns.
@@ -358,7 +369,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           expressions,
           string(script),
           attributes,
-          withFilter,
+          withProject,
           withScriptIOSchema(
             ctx, inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess))
 
