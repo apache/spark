@@ -1000,11 +1000,11 @@ class Dataset[T] private[sql](
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
     val cond = plan.condition.map { _.transform {
-      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
+      case e @ catalyst.expressions.BinaryComparison(a: AttributeReference, b: AttributeReference)
           if a.sameRef(b) =>
-        catalyst.expressions.EqualTo(
+        e.withNewChildren(Seq(
           withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name))
+          withPlan(plan.right).resolve(b.name)))
     }}
 
     withPlan {
