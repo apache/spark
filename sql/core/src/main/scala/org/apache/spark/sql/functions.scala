@@ -1320,11 +1320,11 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-    * Computes the absolute value of a numeric value.
-    *
-    * @group math_funcs
-    * @since 1.3.0
-    */
+   * Computes the absolute value of a numeric value.
+   *
+   * @group math_funcs
+   * @since 1.3.0
+   */
   def abs(e: Column): Column = withExpr { Abs(e.expr) }
 
   /**
@@ -1507,11 +1507,11 @@ object functions {
   def bin(columnName: String): Column = bin(Column(columnName))
 
   /**
-    * Computes bitwise NOT (~) of a number.
-    *
-    * @group math_funcs
-    * @since 1.4.0
-    */
+   * Computes bitwise NOT (~) of a number.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
   def bitwiseNOT(e: Column): Column = withExpr { BitwiseNot(e.expr) }
 
   /**
@@ -1679,23 +1679,23 @@ object functions {
   def hex(column: Column): Column = withExpr { Hex(column.expr) }
 
   /**
-    * Return true iff the column is NaN.
-    *
-    * Both inputs should be floating point columns (DoubleType or FloatType).
-    *
-    * @group math_funcs
-    * @since 1.6.0
-    */
+   * Return true iff the column is NaN.
+   *
+   * Both inputs should be floating point columns (DoubleType or FloatType).
+   *
+   * @group math_funcs
+   * @since 1.6.0
+   */
   def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
 
   /**
-    * Returns col1 if it is not NaN, or col2 if col1 is NaN.
-    *
-    * Both inputs should be floating point columns (DoubleType or FloatType).
-    *
-    * @group math_funcs
-    * @since 1.5.0
-    */
+   * Returns col1 if it is not NaN, or col2 if col1 is NaN.
+   *
+   * Both inputs should be floating point columns (DoubleType or FloatType).
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
   def nanvl(col1: Column, col2: Column): Column = withExpr { NaNvl(col1.expr, col2.expr) }
 
   /**
