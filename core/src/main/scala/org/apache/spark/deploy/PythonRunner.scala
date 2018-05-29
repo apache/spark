@@ -168,7 +168,7 @@ object PythonRunner {
       // alone but its parent directory in PYTHONPATH. See SPARK-24384.
       if (pyFile.endsWith(".py")) {
         val source = new File(pyFile)
-        if (source.exists() && source.canRead) {
+        if (source.exists() && source.isFile && source.canRead) {
           Files.copy(source.toPath, new File(dest, source.getName).toPath)
           Some(dest.getAbsolutePath)
         } else {
