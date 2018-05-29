@@ -687,12 +687,4 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       }
     }
   }
-
-  test("SPARK-24369 multiple distinct aggregations having the same argument set") {
-    val df = sql(
-      s"""SELECT corr(DISTINCT x, y), corr(DISTINCT y, x), count(*)
-         |  FROM (VALUES (1, 1), (2, 2), (2, 2)) t(x, y)
-       """.stripMargin)
-    checkAnswer(df, Row(1.0, 1.0, 3))
-  }
 }
