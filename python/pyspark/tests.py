@@ -555,6 +555,7 @@ class TaskContextTests(PySparkTestCase):
         finally:
             self.sc.setLocalProperty("testkey", None)
 
+
 class RDDTests(ReusedPySparkTestCase):
 
     def test_range(self):
