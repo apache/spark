@@ -94,4 +94,4 @@ class TaskContext(object):
         """
         Get a local property set upstream in the driver, or None if it is missing.
         """
-        return self._localProperties[key]
+        return self._localProperties.get(key, default=None)
