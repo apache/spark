@@ -394,6 +394,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.filter($"b".isin("z", "y")),
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
 
+    // Auto casting should work with mixture of different types in collections
+    checkAnswer(df.filter($"a".isin(1.toShort, "2")),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isin("3", 2.toLong)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isin(3, "1")),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
     val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
 
     val e = intercept[AnalysisException] {
@@ -407,29 +415,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("isInCollection: Scala Collection") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
-    checkAnswer(df.filter($"a".isInCollection(Seq(1, 2))),
-      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".isInCollection(Seq(3, 2))),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    // Test with different types of collections
     checkAnswer(df.filter($"a".isInCollection(Seq(3, 1))),
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-
-    // Auto casting should work with mixture of different types in collections
-    checkAnswer(df.filter($"a".isInCollection(Seq(1.toShort, "2"))),
-      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".isInCollection(Seq("3", 2.toLong))),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".isInCollection(Seq(3, "1"))),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-
-    checkAnswer(df.filter($"b".isInCollection(Seq("y", "x"))),
-      df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x"))
-    checkAnswer(df.filter($"b".isInCollection(Seq("z", "x"))),
-      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
-    checkAnswer(df.filter($"b".isInCollection(Seq("z", "y"))),
-      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
-
-    // Test with different types of collections
     checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).toSet)),
       df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
     checkAnswer(df.filter($"a".isInCollection(Seq(3, 2).toArray)),
@@ -450,29 +438,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("isInCollection: Java Collection") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    // Test with different types of collections
     checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).asJava)),
       df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".isInCollection(Seq(3, 2).asJava)),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".isInCollection(Seq(3, 1).asJava)),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-
-    // Auto casting should work with mixture of different types in collections
-    checkAnswer(df.filter($"a".isInCollection(Seq(1.toShort, "2").asJava)),
-      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".isInCollection(Seq("3", 2.toLong).asJava)),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".isInCollection(Seq(3, "1").asJava)),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-
-    checkAnswer(df.filter($"b".isInCollection(Seq("y", "x").asJava)),
-      df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x"))
-    checkAnswer(df.filter($"b".isInCollection(Seq("z", "x").asJava)),
-      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
-    checkAnswer(df.filter($"b".isInCollection(Seq("z", "y").asJava)),
-      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
-
-    // Test with different types of collections
     checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).toSet.asJava)),
       df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
     checkAnswer(df.filter($"a".isInCollection(Seq(3, 1).toList.asJava)),
