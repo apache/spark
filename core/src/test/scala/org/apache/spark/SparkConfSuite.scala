@@ -342,7 +342,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   val defaultIllegalValue = "SomeIllegalValue"
-  val illegalArgumentTests : Map[String, (SparkConf, String) => Any] = Map(
+  val illegalValueTests : Map[String, (SparkConf, String) => Any] = Map(
     "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
     "getTimeAsSeconds with default" -> (_.getTimeAsSeconds(_, defaultIllegalValue)),
     "getTimeAsMs" -> (_.getTimeAsMs(_)),
@@ -362,7 +362,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     "getBoolean" -> (_.getBoolean(_, false))
   )
 
-  illegalArgumentTests.foreach { case (name, getValue) =>
+  illegalValueTests.foreach { case (name, getValue) =>
     test(s"SPARK-24337: $name throws an useful error message with key name") {
       val key = "SomeKey"
       val conf = new SparkConf()
