@@ -24,6 +24,8 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -59,12 +61,15 @@ public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
 
   private static final ObjectMapper mapper = new ObjectMapper();
+
   /**
    * This a common prefix to the key for each app registration we stick in leveldb, so they
    * are easy to find, since leveldb lets you search based on prefix.
    */
   private static final String APP_KEY_PREFIX = "AppExecShuffleInfo";
   private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
+
+  private static final Pattern MULTIPLE_SEPARATORS = Pattern.compile(File.separator + "{2,}");
 
   // Map containing all registered executors' metadata.
   @VisibleForTesting
@@ -259,7 +264,8 @@ public class ExternalShuffleBlockResolver {
     int hash = JavaUtils.nonNegativeHash(filename);
     String localDir = localDirs[hash % localDirs.length];
     int subDirId = (hash / localDirs.length) % subDirsPerLocalDir;
-    return new File(new File(localDir, String.format("%02x", subDirId)), filename);
+    return new File(createNormalizedInternedPathname(
+        localDir, String.format("%02x", subDirId), filename));
   }
 
   void close() {
@@ -270,6 +276,28 @@ public class ExternalShuffleBlockResolver {
         logger.error("Exception closing leveldb with registered executors", e);
       }
     }
+  }
+
+  /**
+   * This method is needed to avoid the situation when multiple File instances for the
+   * same pathname "foo/bar" are created, each with a separate copy of the "foo/bar" String.
+   * According to measurements, in some scenarios such duplicate strings may waste a lot
+   * of memory (~ 10% of the heap). To avoid that, we intern the pathname, and before that
+   * we make sure that it's in a normalized form (contains no "//", "///" etc.) Otherwise,
+   * the internal code in java.io.File would normalize it later, creating a new "foo/bar"
+   * String copy. Unfortunately, we cannot just reuse the normalization code that java.io.File
+   * uses, since it is in the package-private class java.io.FileSystem.
+   */
+  @VisibleForTesting
+  static String createNormalizedInternedPathname(String dir1, String dir2, String fname) {
+    String pathname = dir1 + File.separator + dir2 + File.separator + fname;
+    Matcher m = MULTIPLE_SEPARATORS.matcher(pathname);
+    pathname = m.replaceAll("/");
+    // A single trailing slash needs to be taken care of separately
+    if (pathname.length() > 1 && pathname.endsWith("/")) {
+      pathname = pathname.substring(0, pathname.length() - 1);
+    }
+    return pathname.intern();
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */
