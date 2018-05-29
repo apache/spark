@@ -267,7 +267,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * @throws java.util.NoSuchElementException If the time parameter is not set
    * @throws IllegalArgumentException If the value can't be interpreted as seconds
    */
-  def getTimeAsSeconds(key: String): Long = catchIllegalArgument(key) {
+  def getTimeAsSeconds(key: String): Long = catchIllegalValue(key) {
     Utils.timeStringAsSeconds(get(key))
   }
 
@@ -276,7 +276,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * suffix is provided then seconds are assumed.
    * @throws IllegalArgumentException If the value can't be interpreted as seconds
    */
-  def getTimeAsSeconds(key: String, defaultValue: String): Long = catchIllegalArgument(key) {
+  def getTimeAsSeconds(key: String, defaultValue: String): Long = catchIllegalValue(key) {
     Utils.timeStringAsSeconds(get(key, defaultValue))
   }
 
@@ -286,7 +286,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * @throws java.util.NoSuchElementException If the time parameter is not set
    * @throws IllegalArgumentException If the value can't be interpreted as milliseconds
    */
-  def getTimeAsMs(key: String): Long = catchIllegalArgument(key) {
+  def getTimeAsMs(key: String): Long = catchIllegalValue(key) {
     Utils.timeStringAsMs(get(key))
   }
 
@@ -295,7 +295,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * suffix is provided then milliseconds are assumed.
    * @throws IllegalArgumentException If the value can't be interpreted as milliseconds
    */
-  def getTimeAsMs(key: String, defaultValue: String): Long = catchIllegalArgument(key) {
+  def getTimeAsMs(key: String, defaultValue: String): Long = catchIllegalValue(key) {
     Utils.timeStringAsMs(get(key, defaultValue))
   }
 
@@ -305,7 +305,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * @throws java.util.NoSuchElementException If the size parameter is not set
    * @throws IllegalArgumentException If the value can't be interpreted as bytes
    */
-  def getSizeAsBytes(key: String): Long = catchIllegalArgument(key) {
+  def getSizeAsBytes(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsBytes(get(key))
   }
 
@@ -314,7 +314,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * suffix is provided then bytes are assumed.
    * @throws IllegalArgumentException If the value can't be interpreted as bytes
    */
-  def getSizeAsBytes(key: String, defaultValue: String): Long = catchIllegalArgument(key) {
+  def getSizeAsBytes(key: String, defaultValue: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsBytes(get(key, defaultValue))
   }
 
@@ -322,7 +322,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * Get a size parameter as bytes, falling back to a default if not set.
    * @throws IllegalArgumentException If the value can't be interpreted as bytes
    */
-  def getSizeAsBytes(key: String, defaultValue: Long): Long = catchIllegalArgument(key) {
+  def getSizeAsBytes(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
     Utils.byteStringAsBytes(get(key, defaultValue + "B"))
   }
 
@@ -332,7 +332,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * @throws java.util.NoSuchElementException If the size parameter is not set
    * @throws IllegalArgumentException If the value can't be interpreted as Kibibytes
    */
-  def getSizeAsKb(key: String): Long = catchIllegalArgument(key) {
+  def getSizeAsKb(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsKb(get(key))
   }
 
@@ -341,7 +341,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * suffix is provided then Kibibytes are assumed.
    * @throws IllegalArgumentException If the value can't be interpreted as Kibibytes
    */
-  def getSizeAsKb(key: String, defaultValue: String): Long = catchIllegalArgument(key) {
+  def getSizeAsKb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsKb(get(key, defaultValue))
   }
 
@@ -351,7 +351,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * @throws java.util.NoSuchElementException If the size parameter is not set
    * @throws IllegalArgumentException If the value can't be interpreted as Mebibytes
    */
-  def getSizeAsMb(key: String): Long = catchIllegalArgument(key) {
+  def getSizeAsMb(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsMb(get(key))
   }
 
@@ -360,7 +360,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * suffix is provided then Mebibytes are assumed.
    * @throws IllegalArgumentException If the value can't be interpreted as Mebibytes
    */
-  def getSizeAsMb(key: String, defaultValue: String): Long = catchIllegalArgument(key) {
+  def getSizeAsMb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsMb(get(key, defaultValue))
   }
 
@@ -370,7 +370,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * @throws java.util.NoSuchElementException If the size parameter is not set
    * @throws IllegalArgumentException If the value can't be interpreted as Gibibytes
    */
-  def getSizeAsGb(key: String): Long = catchIllegalArgument(key) {
+  def getSizeAsGb(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsGb(get(key))
   }
 
@@ -379,7 +379,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * suffix is provided then Gibibytes are assumed.
    * @throws IllegalArgumentException If the value can't be interpreted as Gibibytes
    */
-  def getSizeAsGb(key: String, defaultValue: String): Long = catchIllegalArgument(key) {
+  def getSizeAsGb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsGb(get(key, defaultValue))
   }
 
@@ -411,31 +411,31 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * Get a parameter as an integer, falling back to a default if not set
    * @throws IllegalArgumentException If the value can't be interpreted as an integer
    */
-  def getInt(key: String, defaultValue: Int): Int = catchIllegalArgument(key) {
+  def getInt(key: String, defaultValue: Int): Int = catchIllegalValue(key) {
     getOption(key).map(_.toInt).getOrElse(defaultValue)
   }
 
   /**
    * Get a parameter as a long, falling back to a default if not set
-   * @throws IllegalArgumentException If the value can't be interpreted as an long
+   * @throws IllegalArgumentException If the value can't be interpreted as a long
    */
-  def getLong(key: String, defaultValue: Long): Long = catchIllegalArgument(key) {
+  def getLong(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
     getOption(key).map(_.toLong).getOrElse(defaultValue)
   }
 
   /**
    * Get a parameter as a double, falling back to a default if not ste
-   * @throws IllegalArgumentException If the value can't be interpreted as an double
+   * @throws IllegalArgumentException If the value can't be interpreted as a double
    */
-  def getDouble(key: String, defaultValue: Double): Double = catchIllegalArgument(key) {
+  def getDouble(key: String, defaultValue: Double): Double = catchIllegalValue(key) {
     getOption(key).map(_.toDouble).getOrElse(defaultValue)
   }
 
   /**
    * Get a parameter as a boolean, falling back to a default if not set
-   * @throws IllegalArgumentException If the value can't be interpreted as an boolean
+   * @throws IllegalArgumentException If the value can't be interpreted as a boolean
    */
-  def getBoolean(key: String, defaultValue: Boolean): Boolean = catchIllegalArgument(key) {
+  def getBoolean(key: String, defaultValue: Boolean): Boolean = catchIllegalValue(key) {
     getOption(key).map(_.toBoolean).getOrElse(defaultValue)
   }
 
@@ -478,7 +478,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * any [[NumberFormatException]] or [[IllegalArgumentException]] and re-raises it with the
    * incorrectly configured key in the exception message.
    */
-  private def catchIllegalArgument[T](key: String)(getValue: => T): T = {
+  private def catchIllegalValue[T](key: String)(getValue: => T): T = {
     try {
       getValue
     } catch {
