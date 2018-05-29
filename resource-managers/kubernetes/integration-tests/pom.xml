@@ -32,7 +32,6 @@
     <extraScalaTestArgs></extraScalaTestArgs>
     <kubernetes-client.version>3.0.0</kubernetes-client.version>
     <scala-maven-plugin.version>3.2.2</scala-maven-plugin.version>
-    <scalatest.version>2.2.6</scalatest.version>
     <scalatest-maven-plugin.version>1.0</scalatest-maven-plugin.version>
     <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
     <spark.kubernetes.test.unpackSparkDir>${project.build.directory}/spark-dist-unpacked</spark.kubernetes.test.unpackSparkDir>
