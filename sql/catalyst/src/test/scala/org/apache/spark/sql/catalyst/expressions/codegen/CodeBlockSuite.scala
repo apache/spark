@@ -123,7 +123,7 @@ class CodeBlockSuite extends SparkFunSuite {
 
     // We want to replace all occurrences of `expr` with the variable `aliasedParam`.
     val aliasedCode = code.transformExprValues {
-      case SimpleExprValue("1 + 1", _) => aliasedParam
+      case SimpleExprValue("1 + 1", java.lang.Integer.TYPE) => aliasedParam
     }
     val expected =
       code"""
@@ -153,7 +153,7 @@ class CodeBlockSuite extends SparkFunSuite {
     val block = subBlocks.fold(EmptyBlock)(_ + _)
     val transformedBlock = block.transform {
       case b: Block => b.transformExprValues {
-        case SimpleExprValue("1 + 1", _) => aliasedParam
+        case SimpleExprValue("1 + 1", java.lang.Integer.TYPE) => aliasedParam
       }
     }.asInstanceOf[Blocks]
 
@@ -182,5 +182,6 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(transformedBlock.blocks(1).toString == expected2.toString)
     assert(transformedBlock.blocks(2).toString == expected3.toString)
     assert(transformedBlock.toString == (expected1 + expected2 + expected3).toString)
+    assert(transformedBlock.exprValues === Set(isNull, exprInFunc, aliasedParam))
   }
 }
