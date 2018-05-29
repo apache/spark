@@ -18,6 +18,7 @@
 package org.apache.spark.launcher;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -74,8 +75,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   @Test
   public void testCliKillAndStatus() throws Exception {
-    testCLIOpts(parser.STATUS);
-    testCLIOpts(parser.KILL_SUBMISSION);
+    List<String> params = Arrays.asList("driver-20160531171222-0000");
+    testCLIOpts(null, parser.STATUS, params);
+    testCLIOpts(null, parser.KILL_SUBMISSION, params);
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.STATUS, params);
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.KILL_SUBMISSION, params);
   }
 
   @Test
@@ -188,6 +192,13 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
         "\"%s\" \"foo\" \"%s\" \"bar\" \"--conf\" \"spark.r.shell.command=/usr/bin/R\" \"%s\"",
         parser.MASTER, parser.DEPLOY_MODE, SparkSubmitCommandBuilder.SPARKR_SHELL_RESOURCE),
       env.get("SPARKR_SUBMIT_ARGS"));
+  }
+
+  @Test
+  public void testExamplesRunnerNoMainClass() throws Exception {
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.HELP, null);
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.USAGE_ERROR, null);
+    testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.VERSION, null);
   }
 
   @Test
@@ -344,8 +355,15 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     return newCommandBuilder(args).buildCommand(env);
   }
 
-  private void testCLIOpts(String opt) throws Exception {
-    List<String> helpArgs = Arrays.asList(opt, "driver-20160531171222-0000");
+  private void testCLIOpts(String appResource, String opt, List<String> params) throws Exception {
+    List<String> helpArgs = new ArrayList<>();
+    if (appResource != null) {
+      helpArgs.add(appResource);
+    }
+    helpArgs.add(opt);
+    if (params != null) {
+      helpArgs.addAll(params);
+    }
     Map<String, String> env = new HashMap<>();
     List<String> cmd = buildCommand(helpArgs, env);
     assertTrue(opt + " should be contained in the final cmd.",

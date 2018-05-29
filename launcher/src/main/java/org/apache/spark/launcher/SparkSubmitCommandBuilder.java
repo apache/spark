@@ -91,6 +91,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   final List<String> userArgs;
   private final List<String> parsedArgs;
   private final boolean requiresAppResource;
+  private final boolean requiresMainClass;
   private final boolean isExample;
 
   /**
@@ -106,6 +107,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    */
   SparkSubmitCommandBuilder() {
     this.requiresAppResource = true;
+    this.requiresMainClass = false;
     this.isExample = false;
     this.parsedArgs = new ArrayList<>();
     this.userArgs = new ArrayList<>();
@@ -145,9 +147,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       OptionParser parser = new OptionParser(true);
       parser.parse(submitArgs);
       this.requiresAppResource = parser.requiresAppResource;
+      this.requiresMainClass = parser.requiresMainClass;
     } else {
       this.isExample = isExample;
       this.requiresAppResource = false;
+      this.requiresMainClass = false;
     }
   }
 
@@ -229,7 +233,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(join(",", pyFiles));
     }
 
-    if (isExample) {
+    if (isExample && requiresMainClass) {
       checkArgument(mainClass != null, "Missing example class name.");
     }
 
@@ -422,6 +426,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private class OptionParser extends SparkSubmitOptionParser {
 
     boolean requiresAppResource = true;
+    boolean requiresMainClass = true;
     private final boolean errorOnUnknownArgs;
 
     OptionParser(boolean errorOnUnknownArgs) {
@@ -471,16 +476,19 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         case KILL_SUBMISSION:
         case STATUS:
           requiresAppResource = false;
+          requiresMainClass = false;
           parsedArgs.add(opt);
           parsedArgs.add(value);
           break;
         case HELP:
         case USAGE_ERROR:
           requiresAppResource = false;
+          requiresMainClass = false;
           parsedArgs.add(opt);
           break;
         case VERSION:
           requiresAppResource = false;
+          requiresMainClass = false;
           parsedArgs.add(opt);
           break;
         default:
