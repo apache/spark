@@ -19,6 +19,14 @@ package org.apache.spark.repl
 
 import java.io.BufferedReader
 
+import scala.concurrent.Future
+import scala.reflect.classTag
+import scala.reflect.internal.util.ScalaClassLoader.savingContextLoader
+import scala.reflect.io.File
+import scala.tools.nsc.interpreter.StdReplTags.tagOfIMain
+import scala.tools.nsc.{GenericRunnerSettings, Properties}
+import scala.tools.nsc.interpreter.{AbstractOrMissingHandler, IMain, NamedParam, SimpleReader, SplashLoop, SplashReader, isReplDebug, isReplPower, replProps}
+
 // scalastyle:off println
 import scala.Predef.{println => _, _}
 // scalastyle:on println
@@ -73,11 +81,15 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     "import org.apache.spark.sql.functions._"
   )
 
-  def initializeSpark() {
-    intp.beQuietDuring {
-      savingReplayStack { // remove the commands from session history.
-        initializationCommands.foreach(processLine)
+  def initializeSpark(): Unit = {
+    if (!intp.reporter.hasErrors) {
+      // `savingReplayStack` removes the commands from session history.
+      savingReplayStack {
+        initializationCommands.foreach(intp quietRun _)
       }
+    } else {
+      throw new RuntimeException(s"Scala $versionString interpreter encountered " +
+        "errors during initialization")
     }
   }
 
@@ -101,16 +113,6 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   /** Available commands */
   override def commands: List[LoopCommand] = standardCommands
 
-  /**
-   * We override `loadFiles` because we need to initialize Spark *before* the REPL
-   * sees any files, so that the Spark context is visible in those files. This is a bit of a
-   * hack, but there isn't another hook available to us at this point.
-   */
-  override def loadFiles(settings: Settings): Unit = {
-    initializeSpark()
-    super.loadFiles(settings)
-  }
-
   override def resetCommand(line: String): Unit = {
     super.resetCommand(line)
     initializeSpark()
@@ -121,6 +123,121 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     initializeSpark()
     super.replay()
   }
+
+  override def process(settings: Settings): Boolean = savingContextLoader {
+
+    def newReader = in0.fold(chooseReader(settings))(r => SimpleReader(r, out, interactive = true))
+
+    /** Reader to use before interpreter is online. */
+    def preLoop = {
+      val sr = SplashReader(newReader) { r =>
+        in = r
+        in.postInit()
+      }
+      in = sr
+      SplashLoop(sr, prompt)
+    }
+
+    /* Actions to cram in parallel while collecting first user input at prompt.
+     * Run with output muted both from ILoop and from the intp reporter.
+     */
+    def loopPostInit(): Unit = mumly {
+      // Bind intp somewhere out of the regular namespace where
+      // we can get at it in generated code.
+      intp.quietBind(NamedParam[IMain]("$intp", intp)(tagOfIMain, classTag[IMain]))
+
+      // Auto-run code via some setting.
+      ( replProps.replAutorunCode.option
+        flatMap (f => File(f).safeSlurp())
+        foreach (intp quietRun _)
+        )
+      // power mode setup
+      if (isReplPower) {
+        replProps.power setValue true
+        unleashAndSetPhase()
+        asyncMessage(power.banner)
+      }
+      initializeSpark()
+      loadInitFiles()
+      // SI-7418 Now, and only now, can we enable TAB completion.
+      in.postInit()
+    }
+    def loadInitFiles(): Unit = settings match {
+      case settings: GenericRunnerSettings =>
+        for (f <- settings.loadfiles.value) {
+          loadCommand(f)
+          addReplay(s":load $f")
+        }
+        for (f <- settings.pastefiles.value) {
+          pasteCommand(f)
+          addReplay(s":paste $f")
+        }
+      case _ =>
+    }
+    // wait until after startup to enable noisy settings
+    def withSuppressedSettings[A](body: => A): A = {
+      val ss = this.settings
+      import ss._
+      val noisy = List(Xprint, Ytyperdebug)
+      val noisesome = noisy.exists(!_.isDefault)
+      val current = (Xprint.value, Ytyperdebug.value)
+      if (isReplDebug || !noisesome) body
+      else {
+        this.settings.Xprint.value = List.empty
+        this.settings.Ytyperdebug.value = false
+        try body
+        finally {
+          Xprint.value = current._1
+          Ytyperdebug.value = current._2
+          intp.global.printTypings = current._2
+        }
+      }
+    }
+    def startup(): String = withSuppressedSettings {
+      // while we go fire up the REPL
+      try {
+        // don't allow ancient sbt to hijack the reader
+        savingReader {
+          createInterpreter()
+        }
+        intp.initializeSynchronous()
+        globalFuture = Future successful true
+        if (intp.reporter.hasErrors) {
+          echo("Interpreter encountered errors during initialization!")
+          null
+        } else {
+          loopPostInit()
+          // starting
+          printWelcome()
+
+          // let them start typing
+          val splash = preLoop
+          splash.start()
+
+          val line = splash.line           // what they typed in while they were waiting
+          if (line == null) {              // they ^D
+            try out print Properties.shellInterruptedString
+            finally closeInterpreter()
+          }
+          line
+        }
+      } finally splash.stop()
+    }
+
+    this.settings = settings
+    startup() match {
+      case null => false
+      case line =>
+        try loop(line) match {
+          case LineResults.EOF => out print Properties.shellInterruptedString
+          case _ =>
+        }
+        catch AbstractOrMissingHandler()
+        finally closeInterpreter()
+        true
+    }
+  }
+
 
 }
 
