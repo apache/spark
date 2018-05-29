@@ -157,7 +157,17 @@ class UserDefinedFunction(object):
         spark = SparkSession.builder.getOrCreate()
         sc = spark.sparkContext
 
-        wrapped_func = _wrap_function(sc, fail_on_stopiteration(self.func), self.returnType)
+        func = fail_on_stopiteration(self.func)
+
+        # prevent inspect to fail
+        # e.g. inspect.getargspec(sum) raises
+        # TypeError: <built-in function sum> is not a Python function
+        try:
+            func._argspec = _get_argspec(self.func)
+        except TypeError:
+            pass
+
+        wrapped_func = _wrap_function(sc, func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt, self.evalType, self.deterministic)

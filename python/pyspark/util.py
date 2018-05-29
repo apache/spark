@@ -23,8 +23,6 @@ from py4j.protocol import Py4JJavaError
 
 __all__ = []
 
-WRAPPED_ARGSPEC_ATTR = '_wrapped_argspec'
-
 
 def _exception_message(excp):
     """Return the message from an exception as either a str or unicode object.  Supports both
@@ -57,8 +55,8 @@ def _get_argspec(f):
     """
     # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
     # See SPARK-23569.
-    if hasattr(f, WRAPPED_ARGSPEC_ATTR):
-        argspec = getattr(f, WRAPPED_ARGSPEC_ATTR)
+    if hasattr(f, '_argspec'):
+        argspec = f._argspec
     elif sys.version_info[0] < 3:
         argspec = inspect.getargspec(f)
     else:
@@ -106,16 +104,6 @@ def fail_on_stopiteration(f):
                 "Caught StopIteration thrown from user's code; failing the task",
                 exc
             )
-
-    # prevent inspect to fail
-    # e.g. inspect.getargspec(sum) raises
-    # TypeError: <built-in function sum> is not a Python function
-    try:
-        argspec = _get_argspec(f)
-    except TypeError:
-        pass
-    else:
-        setattr(wrapper, WRAPPED_ARGSPEC_ATTR, _get_argspec(f))
 
     return wrapper
 
