@@ -5035,9 +5035,18 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected4, result4)
 
     def test_column_order(self):
+        from collections import OrderedDict
         import pandas as pd
         from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        # Helper function to set column names from a list
+        def rename_pdf(pdf, names):
+            pdf.rename(columns={old: new for old, new in
+                                zip(pd_result.columns, names)}, inplace=True)
+
         df = self.data
+        grouped_df = df.groupby('id')
+        grouped_pdf = df.toPandas().groupby('id')
 
         # Function returns a pdf with required column names, but order could be arbitrary using dict
         def change_col_order(pdf):
@@ -5054,19 +5063,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             PandasUDFType.GROUPED_MAP
         )
 
-        def positional_col_order(pdf):
-            # Create a DataFrame with positional columns, fix types to long
-            return pd.DataFrame(list(zip(pdf.id, pdf.v * 3, pdf.v)), dtype='int64')
-
-        positional_udf = pandas_udf(
-            positional_col_order,
-            'id long, u long, v long',
-            PandasUDFType.GROUPED_MAP
-        )
-
-        grouped_df = df.groupby('id')
-        grouped_pdf = df.toPandas().groupby('id')
-
         # The UDF result should assign columns by name from the pdf
         result = grouped_df.apply(ordered_udf).sort('id', 'v')\
             .select('id', 'u', 'v').toPandas()
@@ -5074,12 +5070,40 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected, result)
 
+        # Function returns a pdf with positional columns, indexed by range
+        def range_col_order(pdf):
+            # Create a DataFrame with positional columns, fix types to long
+            return pd.DataFrame(list(zip(pdf.id, pdf.v * 3, pdf.v)), dtype='int64')
+
+        range_udf = pandas_udf(
+            range_col_order,
+            'id long, u long, v long',
+            PandasUDFType.GROUPED_MAP
+        )
+
         # The UDF result uses positional columns from the pdf
-        result = grouped_df.apply(positional_udf).sort('id', 'v') \
+        result = grouped_df.apply(range_udf).sort('id', 'v') \
             .select('id', 'u', 'v').toPandas()
-        pd_result = grouped_pdf.apply(positional_col_order)
-        pd_result.rename(columns={old: new for old, new in
-                                  zip(pd_result.columns, ['id', 'u', 'v'])}, inplace=True)
+        pd_result = grouped_pdf.apply(range_col_order)
+        rename_pdf(pd_result, ['id', 'u', 'v'])
+        expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
+        # Function returns a pdf with columns indexed with integers
+        def int_index(pdf):
+            return pd.DataFrame(OrderedDict([(0, pdf.id), (1, pdf.v * 4), (2, pdf.v)]))
+
+        int_index_udf = pandas_udf(
+            int_index,
+            'id long, u int, v int',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        # The UDF result should assign columns by position of integer index
+        result = grouped_df.apply(int_index_udf).sort('id', 'v') \
+            .select('id', 'u', 'v').toPandas()
+        pd_result = grouped_pdf.apply(int_index)
+        rename_pdf(pd_result, ['id', 'u', 'v'])
         expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
         self.assertPandasEqual(expected, result)
 
@@ -5087,9 +5111,15 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         def column_name_typo(pdf):
             return pd.DataFrame({'iid': pdf.id, 'v': pdf.v})
 
+        @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
+        def invalid_positional_types(pdf):
+            return pd.DataFrame([(u'a', 1.2)])
+
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
                 grouped_df.apply(column_name_typo).collect()
+            with self.assertRaisesRegexp(Exception, "No cast implemented"):
+                grouped_df.apply(invalid_positional_types).collect()
 
 
 @unittest.skipIf(
