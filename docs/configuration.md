@@ -208,7 +208,7 @@ of the most common options to set are:
     stored on disk. This should be on a fast, local disk in your system. It can also be a
     comma-separated list of multiple directories on different disks.
 
-    NOTE: In Spark 1.0 and later this will be overridden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
+    NOTE: In Spark 1.0 and later this will be overridden by SPARK_LOCAL_DIRS (Standalone), MESOS_SANDBOX (Mesos) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
 </tr>
@@ -328,6 +328,11 @@ Apart from these, the following properties are also available, and may be useful
     Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
     option. Spark properties should be set using a SparkConf object or the spark-defaults.conf file
     used with the spark-submit script. Maximum heap size settings can be set with spark.executor.memory.
+
+    The following symbols, if present will be interpolated: {{APP_ID}} will be replaced by
+    application ID and {{EXECUTOR_ID}} will be replaced by executor ID. For example, to enable
+    verbose gc logging to a file named for the executor ID of the app in /tmp, pass a 'value' of:
+    <code>-verbose:gc -Xloggc:/tmp/{{APP_ID}}-{{EXECUTOR_ID}}.gc</code>
   </td>
 </tr>
 <tr>
@@ -905,8 +910,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>lz4</td>
   <td>
     The codec used to compress internal data such as RDD partitions, event log, broadcast variables
-    and shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
-    and <code>snappy</code>. You can also use fully qualified class names to specify the codec,
+    and shuffle outputs. By default, Spark provides four codecs: <code>lz4</code>, <code>lzf</code>,
+    <code>snappy</code>, and <code>zstd</code>. You can also use fully qualified class names to specify the codec,
     e.g.
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
@@ -1753,6 +1758,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
     <code>spark.dynamicAllocation.initialExecutors</code>
+    <code>spark.dynamicAllocation.executorAllocationRatio</code>
   </td>
 </tr>
 <tr>
@@ -1795,6 +1801,23 @@ Apart from these, the following properties are also available, and may be useful
   <td>0</td>
   <td>
     Lower bound for the number of executors if dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.executorAllocationRatio</code></td>
+  <td>1</td>
+  <td>
+    By default, the dynamic allocation will request enough executors to maximize the
+    parallelism according to the number of tasks to process. While this minimizes the
+    latency of the job, with small tasks this setting can waste a lot of resources due to
+    executor allocation overhead, as some executor might not even do any work.
+    This setting allows to set a ratio that will be used to reduce the number of
+    executors w.r.t. full parallelism.
+    Defaults to 1.0 to give maximum parallelism.
+    0.5 will divide the target number of executors by 2
+    The target number of executors computed by the dynamicAllocation can still be overriden
+    by the <code>spark.dynamicAllocation.minExecutors</code> and
+    <code>spark.dynamicAllocation.maxExecutors</code> settings
   </td>
 </tr>
 <tr>

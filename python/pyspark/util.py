@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 
+import re
 import sys
 import inspect
 from py4j.protocol import Py4JJavaError
@@ -59,6 +60,33 @@ def _get_argspec(f):
     else:
         argspec = inspect.getfullargspec(f)
     return argspec
+
+
+class VersionUtils(object):
+    """
+    Provides utility method to determine Spark versions with given input string.
+    """
+    @staticmethod
+    def majorMinorVersion(sparkVersion):
+        """
+        Given a Spark version string, return the (major version number, minor version number).
+        E.g., for 2.0.1-SNAPSHOT, return (2, 0).
+
+        >>> sparkVersion = "2.4.0"
+        >>> VersionUtils.majorMinorVersion(sparkVersion)
+        (2, 4)
+        >>> sparkVersion = "2.3.0-SNAPSHOT"
+        >>> VersionUtils.majorMinorVersion(sparkVersion)
+        (2, 3)
+
+        """
+        m = re.search('^(\d+)\.(\d+)(\..*)?$', sparkVersion)
+        if m is not None:
+            return (int(m.group(1)), int(m.group(2)))
+        else:
+            raise ValueError("Spark tried to parse '%s' as a Spark" % sparkVersion +
+                             " version string, but it could not find the major and minor" +
+                             " version numbers.")
 
 
 if __name__ == "__main__":

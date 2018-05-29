@@ -339,7 +339,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         elasticNetParam = $(elasticNetParam), $(standardization), true,
         solverType = WeightedLeastSquares.Auto, maxIter = $(maxIter), tol = $(tol))
-      val model = optimizer.fit(instances)
+      val model = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
       // When it is trained by WeightedLeastSquares, training summary does not
       // attach returned model.
       val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
@@ -378,6 +378,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val yMean = ySummarizer.mean(0)
     val rawYStd = math.sqrt(ySummarizer.variance(0))
+
+    instr.logNumExamples(ySummarizer.count)
+    instr.logNamedValue(Instrumentation.loggerTags.meanOfLabels, yMean)
+    instr.logNamedValue(Instrumentation.loggerTags.varianceOfLabels, rawYStd)
+
     if (rawYStd == 0.0) {
       if ($(fitIntercept) || yMean == 0.0) {
         // If the rawYStd==0 and fitIntercept==true, then the intercept is yMean with
@@ -385,11 +390,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         // Also, if yMean==0 and rawYStd==0, all the coefficients are zero regardless of
         // the fitIntercept.
         if (yMean == 0.0) {
-          logWarning(s"Mean and standard deviation of the label are zero, so the coefficients " +
-            s"and the intercept will all be zero; as a result, training is not needed.")
+          instr.logWarning(s"Mean and standard deviation of the label are zero, so the " +
+            s"coefficients and the intercept will all be zero; as a result, training is not " +
+            s"needed.")
         } else {
-          logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
-            s"zeros and the intercept will be the mean of the label; as a result, " +
+          instr.logWarning(s"The standard deviation of the label is zero, so the coefficients " +
+            s"will be zeros and the intercept will be the mean of the label; as a result, " +
             s"training is not needed.")
         }
         if (handlePersistence) instances.unpersist()
@@ -415,7 +421,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
-        logWarning(s"The standard deviation of the label is zero. " +
+        instr.logWarning(s"The standard deviation of the label is zero. " +
           "Consider setting fitIntercept=true.")
       }
     }
@@ -430,7 +436,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
       featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
-      logWarning("Fitting LinearRegressionModel without intercept on dataset with " +
+      instr.logWarning("Fitting LinearRegressionModel without intercept on dataset with " +
         "constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero " +
         "columns. This behavior is the same as R glmnet but different from LIBSVM.")
     }
@@ -522,7 +528,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       }
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
-        logError(msg)
+        instr.logError(msg)
         throw new SparkException(msg)
       }
 
@@ -746,7 +752,7 @@ private class InternalLinearRegressionModelWriter
 
 /** A writer for LinearRegression that handles the "pmml" format */
 private class PMMLLinearRegressionModelWriter
-    extends MLWriterFormat with MLFormatRegister {
+  extends MLWriterFormat with MLFormatRegister {
 
   override def format(): String = "pmml"
 
@@ -799,7 +805,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
         new LinearRegressionModel(metadata.uid, coefficients, intercept, scale)
       }
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

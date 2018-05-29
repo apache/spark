@@ -15,21 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.sql.execution.datasources.csv
 
-import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
+import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 
-/**
- * A mix-in interface for {@link DataReaderFactory}. Continuous data reader factories can
- * implement this interface to provide creating {@link DataReader} with particular offset.
- */
-@InterfaceStability.Evolving
-public interface ContinuousDataReaderFactory<T> extends DataReaderFactory<T> {
-  /**
-   * Create a DataReader with particular offset as its startOffset.
-   *
-   * @param offset offset want to set as the DataReader's startOffset.
-   */
-  DataReader<T> createDataReaderWithOffset(PartitionOffset offset);
+private[csv] trait TestCsvData {
+  protected def spark: SparkSession
+
+  def sampledTestData: Dataset[String] = {
+    spark.range(0, 100, 1).map { index =>
+      val predefinedSample = Set[Long](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
+        57, 62, 68, 72)
+      if (predefinedSample.contains(index)) {
+        index.toString
+      } else {
+        (index.toDouble + 0.1).toString
+      }
+    }(Encoders.STRING)
+  }
 }

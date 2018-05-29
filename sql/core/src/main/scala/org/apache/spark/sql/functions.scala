@@ -283,6 +283,9 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -290,6 +293,9 @@ object functions {
 
   /**
    * Aggregate function: returns a list of objects with duplicates.
+   *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -299,6 +305,9 @@ object functions {
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -306,6 +315,9 @@ object functions {
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
+   *
+   * @note The function is non-deterministic because the order of collected results depends
+   * on order of rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -422,6 +434,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -434,6 +449,9 @@ object functions {
    *
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -448,6 +466,9 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -458,6 +479,9 @@ object functions {
    *
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -535,6 +559,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -547,6 +574,9 @@ object functions {
    *
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -561,6 +591,9 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -571,6 +604,9 @@ object functions {
    *
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on order of rows which
+   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -774,6 +810,7 @@ object functions {
    * @since 1.6.0
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -1172,7 +1209,7 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
-   * @note This is indeterministic when data partitions are not fixed.
+   * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1183,6 +1220,8 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
+   * @note The function is non-deterministic in general case.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1192,7 +1231,7 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
-   * @note This is indeterministic when data partitions are not fixed.
+   * @note The function is non-deterministic in general case.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1203,6 +1242,8 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
+   * @note The function is non-deterministic in general case.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1211,7 +1252,7 @@ object functions {
   /**
    * Partition ID.
    *
-   * @note This is indeterministic because it depends on data partitioning and task scheduling.
+   * @note This is non-deterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    * @since 1.6.0
@@ -2691,11 +2732,27 @@ object functions {
 
   /**
    * Returns number of months between dates `date1` and `date2`.
+   * If `date1` is later than `date2`, then the result is positive.
+   * If `date1` and `date2` are on the same day of month, or both are the last day of month,
+   * time of day will be ignored.
+   *
+   * Otherwise, the difference is calculated based on 31 days per month, and rounded to
+   * 8 digits.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def months_between(date1: Column, date2: Column): Column = withExpr {
-    MonthsBetween(date1.expr, date2.expr)
+    new MonthsBetween(date1.expr, date2.expr)
+  }
+
+  /**
+   * Returns number of months between dates `date1` and `date2`. If `roundOff` is set to true, the
+   * result is rounded off to 8 digits; it is not rounded otherwise.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def months_between(date1: Column, date2: Column, roundOff: Boolean): Column = withExpr {
+    MonthsBetween(date1.expr, date2.expr, lit(roundOff).expr)
   }
 
   /**
@@ -3029,6 +3086,46 @@ object functions {
   }
 
   /**
+   * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and both
+   * the arrays are non-empty and any of them contains a `null`, it returns `null`. It returns
+   * `false` otherwise.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def arrays_overlap(a1: Column, a2: Column): Column = withExpr {
+    ArraysOverlap(a1.expr, a2.expr)
+  }
+
+  /**
+   * Returns an array containing all the elements in `x` from index `start` (or starting from the
+   * end if `start` is negative) with the specified `length`.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def slice(x: Column, start: Int, length: Int): Column = withExpr {
+    Slice(x.expr, Literal(start), Literal(length))
+  }
+
+  /**
+   * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
+   * `nullReplacement`.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_join(column: Column, delimiter: String, nullReplacement: String): Column = withExpr {
+    ArrayJoin(column.expr, Literal(delimiter), Some(Literal(nullReplacement)))
+  }
+
+  /**
+   * Concatenates the elements of `column` using the `delimiter`.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_join(column: Column, delimiter: String): Column = withExpr {
+    ArrayJoin(column.expr, Literal(delimiter), None)
+  }
+
+  /**
    * Concatenates multiple input columns together into a single column.
    * The function works with strings, binary and compatible array columns.
    *
@@ -3062,6 +3159,15 @@ object functions {
   def element_at(column: Column, value: Any): Column = withExpr {
     ElementAt(column.expr, Literal(value))
   }
+
+  /**
+   * Sorts the input array in ascending order. The elements of the input array must be orderable.
+   * Null elements will be placed at the end of the returned array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
 
   /**
    * Creates a new row for each element in the given array or map column.
@@ -3136,9 +3242,9 @@ object functions {
     from_json(e, schema.asInstanceOf[DataType], options)
 
   /**
-   * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3149,7 +3255,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    JsonToStructs(schema, options, e.expr)
+    new JsonToStructs(schema, options, e.expr)
   }
 
   /**
@@ -3168,9 +3274,9 @@ object functions {
     from_json(e, schema, options.asScala.toMap)
 
   /**
-   * (Java-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3197,8 +3303,9 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON string into a `StructType` or `ArrayType` of `StructType`s
-   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   * Parses a column containing a JSON string into a `MapType` with `StringType` as keys type,
+   * `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3210,9 +3317,9 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * (Java-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
@@ -3227,9 +3334,9 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string as a json string, it could be a
@@ -3302,6 +3409,7 @@ object functions {
   /**
    * Sorts the input array for the given column in ascending order,
    * according to the natural ordering of the array elements.
+   * Null elements will be placed at the beginning of the returned array.
    *
    * @group collection_funcs
    * @since 1.5.0
@@ -3311,6 +3419,8 @@ object functions {
   /**
    * Sorts the input array for the given column in ascending or descending order,
    * according to the natural ordering of the array elements.
+   * Null elements will be placed at the beginning of the returned array in ascending order or
+   * at the end of the returned array in descending order.
    *
    * @group collection_funcs
    * @since 1.5.0
@@ -3341,6 +3451,34 @@ object functions {
   def reverse(e: Column): Column = withExpr { Reverse(e.expr) }
 
   /**
+   * Creates a single array from an array of arrays. If a structure of nested arrays is deeper than
+   * two levels, only one level of nesting is removed.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
+
+  /**
+   * Creates an array containing the left argument repeated the number of times given by the
+   * right argument.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_repeat(left: Column, right: Column): Column = withExpr {
+    ArrayRepeat(left.expr, right.expr)
+  }
+
+  /**
+   * Creates an array containing the left argument repeated the number of times given by the
+   * right argument.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
+
+  /**
    * Returns an unordered array containing the keys of the map.
    * @group collection_funcs
    * @since 2.3.0
@@ -3353,6 +3491,13 @@ object functions {
    * @since 2.3.0
    */
   def map_values(e: Column): Column = withExpr { MapValues(e.expr) }
+
+  /**
+   * Returns an unordered array of all entries in the given map.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
 
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number
