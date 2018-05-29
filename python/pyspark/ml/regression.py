@@ -632,7 +632,7 @@ class TreeEnsembleParams(DecisionTreeParams):
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
 
-        .. note:: Deprecated in 2.1.0 and will be removed in 3.0.0.
+        .. note:: Deprecated in 2.1.0 and will be removed in 2.4.0.
         """
         return self._set(featureSubsetStrategy=value)
 
