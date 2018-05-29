@@ -37,7 +37,7 @@ class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceWr
   override def createWriterFactory(): DataWriterFactory[Row] = writer.createWriterFactory()
 }
 
-class InternalRowMicroBatchWriter(batchId: Long, writer: StreamWriter)
+class InternalRowMicroBatchWriter(batchId: Long, val writer: StreamWriter)
   extends DataSourceWriter with SupportsWriteInternalRow {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(batchId, messages)
