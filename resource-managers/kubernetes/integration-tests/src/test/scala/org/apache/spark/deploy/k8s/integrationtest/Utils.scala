@@ -19,6 +19,8 @@ package org.apache.spark.deploy.k8s.integrationtest
 import java.io.Closeable
 import java.net.URI
 
+import org.apache.spark.internal.Logging
+
 object Utils extends Logging {
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {

@@ -21,6 +21,8 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
+import org.apache.spark.internal.Logging
+
 object ProcessUtils extends Logging {
   /**
    * executeProcess is used to run a command and return the output if it

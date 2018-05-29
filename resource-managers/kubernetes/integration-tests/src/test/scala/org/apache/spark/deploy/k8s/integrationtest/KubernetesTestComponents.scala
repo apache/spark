@@ -25,6 +25,8 @@ import scala.collection.mutable
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import org.scalatest.concurrent.Eventually
 
+import org.apache.spark.internal.Logging
+
 private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesClient) {
 
   val namespaceOption = Option(System.getProperty("spark.kubernetes.test.namespace"))
