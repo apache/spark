@@ -699,6 +699,12 @@ private[spark] class ExecutorAllocationManager(
         // This is needed in case the stage is aborted for any reason
         if (stageIdToNumTasks.isEmpty && stageIdToNumSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
+          if (executorIdToTaskIds.nonEmpty) {
+            log.warn(s"There are no running tasks," +
+              s" but ${executorIdToTaskIds.size} executors are not idle")
+            executorIdToTaskIds.keySet.foreach(allocationManager.onExecutorIdle)
+            executorIdToTaskIds.clear()
+          }
         }
       }
     }
