@@ -159,13 +159,13 @@ class UserDefinedFunction(object):
 
         func = fail_on_stopiteration(self.func)
 
-        # prevent inspect to fail
-        # e.g. inspect.getargspec(sum) raises
-        # TypeError: <built-in function sum> is not a Python function
-        try:
+        # for pandas UDFs the worker needs to know if the function takes
+        # one or two arguments, but the signature is lost when wrapping with
+        # fail_on_stopiteration, so we store it here
+        if self.evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
             func._argspec = _get_argspec(self.func)
-        except TypeError:
-            pass
 
         wrapped_func = _wrap_function(sc, func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
