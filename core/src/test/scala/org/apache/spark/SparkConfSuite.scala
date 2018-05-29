@@ -25,6 +25,7 @@ import scala.language.postfixOps
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
+import org.scalatest.Matchers
 
 import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.config._
@@ -32,7 +33,8 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
-class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
+class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties with
+  Matchers {
   test("Test byteString conversion") {
     val conf = new SparkConf()
     // Simply exercise the API, we don't need a complete conversion test since that's handled in
@@ -339,6 +341,38 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     }
   }
 
+  val defaultIllegalValue = "SomeIllegalValue"
+  val illegalArgumentTests : Map[String, (SparkConf, String) => Any] = Map(
+    "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
+    "getTimeAsSeconds with default" -> (_.getTimeAsSeconds(_, defaultIllegalValue)),
+    "getTimeAsMs" -> (_.getTimeAsMs(_)),
+    "getTimeAsMs with default" -> (_.getTimeAsMs(_, defaultIllegalValue)),
+    "getSizeAsBytes" -> (_.getSizeAsBytes(_)),
+    "getSizeAsBytes with default string" -> (_.getSizeAsBytes(_, defaultIllegalValue)),
+    "getSizeAsBytes with default long" -> (_.getSizeAsBytes(_, 0L)),
+    "getSizeAsKb" -> (_.getSizeAsKb(_)),
+    "getSizeAsKb with default" -> (_.getSizeAsKb(_, defaultIllegalValue)),
+    "getSizeAsMb" -> (_.getSizeAsMb(_)),
+    "getSizeAsMb with default" -> (_.getSizeAsMb(_, defaultIllegalValue)),
+    "getSizeAsGb" -> (_.getSizeAsGb(_)),
+    "getSizeAsGb with default" -> (_.getSizeAsGb(_, defaultIllegalValue)),
+    "getInt" -> (_.getInt(_, 0)),
+    "getLong" -> (_.getLong(_, 0L)),
+    "getDouble" -> (_.getDouble(_, 0.0)),
+    "getBoolean" -> (_.getBoolean(_, false))
+  )
+
+  illegalArgumentTests.foreach { case (name, getValue) =>
+    test(s"SPARK-24337: $name throws an useful error message with key name") {
+      val key = "SomeKey"
+      val conf = new SparkConf()
+      conf.set(key, "SomeInvalidValue")
+      val thrown = the [IllegalArgumentException] thrownBy {
+        getValue(conf, key)
+      }
+      thrown.getMessage should include (key)
+    }
+  }
 }
 
 class Class1 {}
