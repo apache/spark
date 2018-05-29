@@ -160,7 +160,7 @@ private[spark] object Config extends Logging {
         "state of executors.")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(interval => interval > 0, s"API server polling interval must be a" +
-        s" positive time value.")
+        " positive time value.")
       .createWithDefaultString("30s")
 
   val KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL =
@@ -169,7 +169,7 @@ private[spark] object Config extends Logging {
         " Kubernetes API.")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(interval => interval > 0, s"Event processing interval must be a positive" +
-        s" time value.")
+        " time value.")
       .createWithDefaultString("1s")
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =

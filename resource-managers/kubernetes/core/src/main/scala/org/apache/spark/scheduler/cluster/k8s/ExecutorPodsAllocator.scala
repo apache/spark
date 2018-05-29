@@ -114,7 +114,7 @@ private[spark] class ExecutorPodsAllocator(
         " executors. Not scaling up further.")
     } else if (pendingExecutors.nonEmpty) {
       logInfo(s"Still waiting for ${pendingExecutors.size} executors to begin running before" +
-        s" requesting for more executors.")
+        " requesting for more executors.")
     }
   }
 }

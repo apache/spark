@@ -70,6 +70,7 @@ private[spark] class ExecutorPodsLifecycleEventHandler(
               .delete()
           }
           removeExecutorFromSpark(schedulerBackend, updatedPod, execId)
+        case _ =>
       }
     }
   }
