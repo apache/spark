@@ -1032,14 +1032,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the absolute value.
-   *
-   * @group normal_funcs
-   * @since 1.3.0
-   */
-  def abs(e: Column): Column = withExpr { Abs(e.expr) }
-
-  /**
    * Creates a new array column. The input columns must all have the same data type.
    *
    * @group normal_funcs
@@ -1108,14 +1100,6 @@ object functions {
   def input_file_name(): Column = withExpr { InputFileName() }
 
   /**
-   * Return true iff the column is NaN.
-   *
-   * @group normal_funcs
-   * @since 1.6.0
-   */
-  def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
-
-  /**
    * Return true iff the column is null.
    *
    * @group normal_funcs
@@ -1163,16 +1147,6 @@ object functions {
    * @since 1.6.0
    */
   def monotonically_increasing_id(): Column = withExpr { MonotonicallyIncreasingID() }
-
-  /**
-   * Returns col1 if it is not NaN, or col2 if col1 is NaN.
-   *
-   * Both inputs should be floating point columns (DoubleType or FloatType).
-   *
-   * @group normal_funcs
-   * @since 1.5.0
-   */
-  def nanvl(col1: Column, col2: Column): Column = withExpr { NaNvl(col1.expr, col2.expr) }
 
   /**
    * Unary minus, i.e. negate the expression.
@@ -1325,14 +1299,6 @@ object functions {
   }
 
   /**
-   * Computes bitwise NOT.
-   *
-   * @group normal_funcs
-   * @since 1.4.0
-   */
-  def bitwiseNOT(e: Column): Column = withExpr { BitwiseNot(e.expr) }
-
-  /**
    * Parses the expression string into the column that it represents, similar to
    * [[Dataset#selectExpr]].
    * {{{
@@ -1352,6 +1318,14 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+    * Computes the absolute value of a numeric value.
+    *
+    * @group math_funcs
+    * @since 1.3.0
+    */
+  def abs(e: Column): Column = withExpr { Abs(e.expr) }
 
   /**
    * @return inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
@@ -1533,6 +1507,14 @@ object functions {
   def bin(columnName: String): Column = bin(Column(columnName))
 
   /**
+    * Computes bitwise NOT (~) of a number.
+    *
+    * @group math_funcs
+    * @since 1.4.0
+    */
+  def bitwiseNOT(e: Column): Column = withExpr { BitwiseNot(e.expr) }
+
+  /**
    * Computes the cube-root of the given value.
    *
    * @group math_funcs
@@ -1695,6 +1677,26 @@ object functions {
    * @since 1.5.0
    */
   def hex(column: Column): Column = withExpr { Hex(column.expr) }
+
+  /**
+    * Return true iff the column is NaN.
+    *
+    * Both inputs should be floating point columns (DoubleType or FloatType).
+    *
+    * @group math_funcs
+    * @since 1.6.0
+    */
+  def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
+
+  /**
+    * Returns col1 if it is not NaN, or col2 if col1 is NaN.
+    *
+    * Both inputs should be floating point columns (DoubleType or FloatType).
+    *
+    * @group math_funcs
+    * @since 1.5.0
+    */
+  def nanvl(col1: Column, col2: Column): Column = withExpr { NaNvl(col1.expr, col2.expr) }
 
   /**
    * Inverse of hex. Interprets each pair of characters as a hexadecimal number
