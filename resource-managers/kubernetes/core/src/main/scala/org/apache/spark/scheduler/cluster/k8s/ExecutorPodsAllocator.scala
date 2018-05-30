@@ -65,13 +65,13 @@ private[spark] class ExecutorPodsAllocator(
 
   def start(applicationId: String): Unit = {
     eventQueue.addSubscriber(podAllocationDelay) { updatedPods =>
-      processUpdatedPodEvents(applicationId, updatedPods)
+      processUpdatedPods(applicationId, updatedPods)
     }
   }
 
   def setTotalExpectedExecutors(total: Int): Unit = totalExpectedExecutors.set(total)
 
-  private def processUpdatedPodEvents(applicationId: String, updatedPods: Seq[Pod]): Unit = {
+  private def processUpdatedPods(applicationId: String, updatedPods: Seq[Pod]): Unit = {
     updatedPods.foreach { updatedPod =>
       val execId = updatedPod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong
       val phase = updatedPod.getStatus.getPhase.toLowerCase
@@ -109,11 +109,11 @@ private[spark] class ExecutorPodsAllocator(
         kubernetesClient.pods().create(podWithAttachedContainer)
         pendingExecutors += newExecutorId
       }
-    } else if (currentRunningExecutors == currentTotalExpectedExecutors) {
+    } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
       logDebug("Current number of running executors is equal to the number of requested" +
         " executors. Not scaling up further.")
     } else if (pendingExecutors.nonEmpty) {
-      logInfo(s"Still waiting for ${pendingExecutors.size} executors to begin running before" +
+      logDebug(s"Still waiting for ${pendingExecutors.size} executors to begin running before" +
         " requesting for more executors.")
     }
   }

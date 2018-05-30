@@ -59,19 +59,24 @@ private[spark] class ExecutorPodsLifecycleEventHandler(
       updatedPod.getStatus.getPhase.toLowerCase match {
         // TODO (SPARK-24135) - handle more classes of errors
         case "error" | "failed" | "succeeded" =>
-          // If deletion failed on a previous try, we can try again if resync informs us the pod
-          // is still around.
-          // Delete as best attempt - duplicate deletes will throw an exception but the end state
-          // of getting rid of the pod is what matters.
-          Utils.tryLogNonFatalError {
-            kubernetesClient
-              .pods()
-              .withName(updatedPod.getMetadata.getName)
-              .delete()
-          }
+          removeExecutorFromK8s(schedulerBackend, updatedPod, execId)
           removeExecutorFromSpark(schedulerBackend, updatedPod, execId)
         case _ =>
       }
+    }
+  }
+
+  private def removeExecutorFromK8s(
+      schedulerBackend: KubernetesClusterSchedulerBackend, updatedPod: Pod, execId: Long): Unit = {
+    // If deletion failed on a previous try, we can try again if resync informs us the pod
+    // is still around.
+    // Delete as best attempt - duplicate deletes will throw an exception but the end state
+    // of getting rid of the pod is what matters.
+    Utils.tryLogNonFatalError {
+      kubernetesClient
+        .pods()
+        .withName(updatedPod.getMetadata.getName)
+        .delete()
     }
   }
 
