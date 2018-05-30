@@ -463,7 +463,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def schema: StructType = queryExecution.analyzed.schema
+  def schema: StructType = StructType.removeMetadata(
+    Dataset.DATASET_ID, queryExecution.analyzed.schema).asInstanceOf[StructType]
 
   /**
    * Prints the schema to the console in a nice tree format.
