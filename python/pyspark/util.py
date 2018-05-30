@@ -45,6 +45,23 @@ def _exception_message(excp):
     return str(excp)
 
 
+def fail_on_stopiteration(f):
+    """
+    Wraps the input function to fail on 'StopIteration' by raising a 'RuntimeError'
+    prevents silent loss of data when 'f' is used in a for loop
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except StopIteration as exc:
+            raise RuntimeError(
+                "Caught StopIteration thrown from user's code; failing the task",
+                exc
+            )
+
+    return wrapper
+
+
 if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()

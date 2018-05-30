@@ -161,6 +161,37 @@ class MergerTests(unittest.TestCase):
             self.assertEqual(k, len(vs))
             self.assertEqual(list(range(k)), list(vs))
 
+    def test_stopiteration_is_raised(self):
+
+        def stopit(*args, **kwargs):
+            raise StopIteration()
+
+        def legit_create_combiner(x):
+            return [x]
+
+        def legit_merge_value(x, y):
+            return x.append(y) or x
+
+        def legit_merge_combiners(x, y):
+            return x.extend(y) or x
+
+        data = [(x % 2, x) for x in range(100)]
+
+        # wrong create combiner
+        m = ExternalMerger(Aggregator(stopit, legit_merge_value, legit_merge_combiners), 20)
+        with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
+            m.mergeValues(data)
+
+        # wrong merge value
+        m = ExternalMerger(Aggregator(legit_create_combiner, stopit, legit_merge_combiners), 20)
+        with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
+            m.mergeValues(data)
+
+        # wrong merge combiners
+        m = ExternalMerger(Aggregator(legit_create_combiner, legit_merge_value, stopit), 20)
+        with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
+            m.mergeCombiners(map(lambda x_y1: (x_y1[0], [x_y1[1]]), data))
+
 
 class SorterTests(unittest.TestCase):
     def test_in_memory_sort(self):
@@ -1238,6 +1269,28 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertEqual(x, y)
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
+
+    def test_stopiteration_in_client_code(self):
+
+        def stopit(*x):
+            raise StopIteration()
+
+        seq_rdd = self.sc.parallelize(range(10))
+        keyed_rdd = self.sc.parallelize((x % 2, x) for x in range(10))
+
+        self.assertRaises(Py4JJavaError, seq_rdd.map(stopit).collect)
+        self.assertRaises(Py4JJavaError, seq_rdd.filter(stopit).collect)
+        self.assertRaises(Py4JJavaError, seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
+        self.assertRaises(Py4JJavaError, seq_rdd.foreach, stopit)
+        self.assertRaises(Py4JJavaError, keyed_rdd.reduceByKeyLocally, stopit)
+        self.assertRaises(Py4JJavaError, seq_rdd.reduce, stopit)
+        self.assertRaises(Py4JJavaError, seq_rdd.fold, 0, stopit)
+
+        # the exception raised is non-deterministic
+        self.assertRaises((Py4JJavaError, RuntimeError),
+                          seq_rdd.aggregate, 0, stopit, lambda *x: 1)
+        self.assertRaises((Py4JJavaError, RuntimeError),
+                          seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
 
 class ProfilerTests(PySparkTestCase):
