@@ -263,16 +263,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
       "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
 
-    val moduleDir =
-      if (clientMode) {
-        // In client-mode, .py files added with --py-files are not visible in the driver.
-        // This is something that the launcher library would have to handle.
-        tempDir
-      } else {
-        val subdir = new File(tempDir, "pyModules")
-        subdir.mkdir()
-        subdir
-      }
+    val moduleDir = {
+      val subdir = new File(tempDir, "pyModules")
+      subdir.mkdir()
+      subdir
+    }
     val pyModule = new File(moduleDir, "mod1.py")
     Files.write(TEST_PYMODULE, pyModule, StandardCharsets.UTF_8)
 
