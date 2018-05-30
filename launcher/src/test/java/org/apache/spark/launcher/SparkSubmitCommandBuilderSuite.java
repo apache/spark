@@ -195,6 +195,16 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testExamplesRunnerNoArg() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(SparkSubmitCommandBuilder.RUN_EXAMPLE);
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+    assertTrue(
+      "org.apache.spark.deploy.SparkSubmit should be contained in the final cmd of empty input.",
+      cmd.contains("org.apache.spark.deploy.SparkSubmit"));
+  }
+
+  @Test
   public void testExamplesRunnerNoMainClass() throws Exception {
     testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.HELP, null);
     testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.USAGE_ERROR, null);
