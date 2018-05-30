@@ -422,7 +422,7 @@ private[scheduler] object BlacklistTracker extends Logging {
   def validateBlacklistConfs(conf: SparkConf): Unit = {
 
     def mustBePos(k: String, v: String): Unit = {
-      throw new IllegalArgumentException(s"$k was $v, but must be > 0.")
+      throw new IllegalArgumentException(s"$k should be greater than 0.")
     }
 
     Seq(

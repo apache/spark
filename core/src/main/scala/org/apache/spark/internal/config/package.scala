@@ -40,6 +40,7 @@ package object config {
   private[spark] val DRIVER_MEMORY = ConfigBuilder("spark.driver.memory")
     .doc("Amount of memory to use for the driver process, in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
+    .checkValue(_ > 0, "The driver memory must be greater than 0 MiB.")
     .createWithDefaultString("1g")
 
   private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.memoryOverhead")
@@ -87,6 +88,7 @@ package object config {
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
     .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
+    .checkValue(_ > 0, "The executor memory must be greater than 0 MiB.")
     .createWithDefaultString("1g")
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
@@ -114,17 +116,29 @@ package object config {
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
-  private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus").intConf.createWithDefault(1)
+  private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus")
+    .intConf
+    .checkValue(_ > 0,
+      "Number of cores to allocate for task event queue must be positive.")
+    .createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_MIN_EXECUTORS =
-    ConfigBuilder("spark.dynamicAllocation.minExecutors").intConf.createWithDefault(0)
+    ConfigBuilder("spark.dynamicAllocation.minExecutors")
+      .intConf
+      .checkValue(v => v >= 0,
+        "Lower bound for the number of executors should be greater than or equal to 0.")
+      .createWithDefault(0)
 
   private[spark] val DYN_ALLOCATION_INITIAL_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.initialExecutors")
       .fallbackConf(DYN_ALLOCATION_MIN_EXECUTORS)
 
   private[spark] val DYN_ALLOCATION_MAX_EXECUTORS =
-    ConfigBuilder("spark.dynamicAllocation.maxExecutors").intConf.createWithDefault(Int.MaxValue)
+    ConfigBuilder("spark.dynamicAllocation.maxExecutors")
+      .intConf
+      .checkValue(v => v >= 0,
+        "Upper bound for the number of executors should be greater than or equal to 0.")
+      .createWithDefault(Int.MaxValue)
 
   private[spark] val DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO =
     ConfigBuilder("spark.dynamicAllocation.executorAllocationRatio")
@@ -169,31 +183,43 @@ package object config {
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerExecutor")
       .intConf
+      .checkValue(_ > 0,
+        "spark.blacklist.task.maxTaskAttemptsPerExecutor should be greater than 0.")
       .createWithDefault(1)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
     ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerNode")
       .intConf
+      .checkValue(_ > 0,
+        "spark.blacklist.task.maxTaskAttemptsPerNode should be greater than 0.")
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC =
     ConfigBuilder("spark.blacklist.application.maxFailedTasksPerExecutor")
       .intConf
+      .checkValue(_ > 0,
+        "spark.blacklist.application.maxFailedTasksPerExecutor should be greater than 0.")
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
     ConfigBuilder("spark.blacklist.stage.maxFailedTasksPerExecutor")
       .intConf
+      .checkValue(_ > 0,
+        "spark.blacklist.stage.maxFailedTasksPerExecutor should be greater than 0.")
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
     ConfigBuilder("spark.blacklist.application.maxFailedExecutorsPerNode")
       .intConf
+      .checkValue(_ > 0,
+        "spark.blacklist.application.maxFailedExecutorsPerNode should be greater than 0.")
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
     ConfigBuilder("spark.blacklist.stage.maxFailedExecutorsPerNode")
       .intConf
+      .checkValue(_ > 0,
+        "spark.blacklist.stage.maxFailedExecutorsPerNode should be greater than 0.")
       .createWithDefault(2)
 
   private[spark] val BLACKLIST_TIMEOUT_CONF =
@@ -292,6 +318,9 @@ package object config {
   private[spark] val BLOCK_MANAGER_PORT = ConfigBuilder("spark.blockManager.port")
     .doc("Port to use for the block manager when a more specific setting is not provided.")
     .intConf
+    .checkValue(v => v == 0 || (1024 <= v && v < 65536),
+      "blockManager port should be between 1024 and 65535 (inclusive), " +
+      "or 0 for a random free port.")
     .createWithDefault(0)
 
   private[spark] val DRIVER_BLOCK_MANAGER_PORT = ConfigBuilder("spark.driver.blockManager.port")
@@ -400,6 +429,8 @@ package object config {
     ConfigBuilder("spark.shuffle.registration.timeout")
       .doc("Timeout in milliseconds for registration to the external shuffle service.")
       .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0,
+        "Timeout in milliseconds for registration event queue must be positive.")
       .createWithDefault(5000)
 
   private[spark] val SHUFFLE_REGISTRATION_MAX_ATTEMPTS =
@@ -429,6 +460,8 @@ package object config {
         "external shuffle service, this feature can only be worked when external shuffle" +
         "service is newer than Spark 2.2.")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0,
+        "Size of the request is above this threshold event queue must be positive.")
       .createWithDefault(Long.MaxValue)
 
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =

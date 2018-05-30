@@ -70,11 +70,11 @@ class ExecutorAllocationManagerSuite
 
     // Min < 0
     val conf1 = conf.clone().set("spark.dynamicAllocation.minExecutors", "-1")
-    intercept[SparkException] { contexts += new SparkContext(conf1) }
+    intercept[IllegalArgumentException] { contexts += new SparkContext(conf1) }
 
     // Max < 0
     val conf2 = conf.clone().set("spark.dynamicAllocation.maxExecutors", "-1")
-    intercept[SparkException] { contexts += new SparkContext(conf2) }
+    intercept[IllegalArgumentException] { contexts += new SparkContext(conf2) }
 
     // Both min and max, but min > max
     intercept[SparkException] { createSparkContext(2, 1) }
