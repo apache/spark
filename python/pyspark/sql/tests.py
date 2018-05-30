@@ -853,6 +853,22 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_stopiteration_in_udf(self):
+        # test for SPARK-23754
+        from pyspark.sql.functions import udf
+        from py4j.protocol import Py4JJavaError
+
+        def foo(x):
+            raise StopIteration()
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            self.spark.range(0, 1000).withColumn('v', udf(foo)('id')).show()
+
+        self.assertIn(
+            "Caught StopIteration thrown from user's code; failing the task",
+            cm.exception.java_exception.toString()
+        )
+
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
         from pyspark.sql.column import _to_java_column
