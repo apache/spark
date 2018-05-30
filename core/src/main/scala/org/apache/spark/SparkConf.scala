@@ -483,9 +483,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       getValue
     } catch {
       case e: NumberFormatException =>
+        // NumberFormatException doesn't have a constructor that takes a cause for some reason.
         throw new NumberFormatException(s"Illegal value for config key $key: ${e.getMessage}")
+            .initCause(e)
       case e: IllegalArgumentException =>
-        throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}")
+        throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
     }
   }
 

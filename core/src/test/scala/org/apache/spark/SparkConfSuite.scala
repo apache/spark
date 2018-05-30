@@ -366,7 +366,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       val key = "SomeKey"
       val conf = new SparkConf()
       conf.set(key, "SomeInvalidValue")
-      val thrown = intercept [IllegalArgumentException] {
+      val thrown = intercept[IllegalArgumentException] {
         getValue(conf, key)
       }
       assert(thrown.getMessage.contains(key))
