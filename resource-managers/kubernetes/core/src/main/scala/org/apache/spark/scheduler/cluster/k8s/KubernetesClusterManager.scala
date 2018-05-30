@@ -46,8 +46,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       sc: SparkContext,
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
-    val executorSecretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
-      sc.conf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
       KUBERNETES_MASTER_INTERNAL_URL,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),

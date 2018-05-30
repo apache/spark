@@ -25,9 +25,6 @@ private[spark] object Constants {
   val SPARK_POD_DRIVER_ROLE = "driver"
   val SPARK_POD_EXECUTOR_ROLE = "executor"
 
-  // Annotations
-  val SPARK_APP_NAME_ANNOTATION = "spark-app-name"
-
   // Credentials secrets
   val DRIVER_CREDENTIALS_SECRETS_BASE_DIR =
     "/mnt/secrets/spark-kubernetes-credentials"
@@ -50,17 +47,14 @@ private[spark] object Constants {
   val DEFAULT_BLOCKMANAGER_PORT = 7079
   val DRIVER_PORT_NAME = "driver-rpc-port"
   val BLOCK_MANAGER_PORT_NAME = "blockmanager"
-  val EXECUTOR_PORT_NAME = "executor"
 
   // Environment Variables
-  val ENV_EXECUTOR_PORT = "SPARK_EXECUTOR_PORT"
   val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
   val ENV_EXECUTOR_CORES = "SPARK_EXECUTOR_CORES"
   val ENV_EXECUTOR_MEMORY = "SPARK_EXECUTOR_MEMORY"
   val ENV_APPLICATION_ID = "SPARK_APPLICATION_ID"
   val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
   val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
-  val ENV_MOUNTED_CLASSPATH = "SPARK_MOUNTED_CLASSPATH"
   val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
