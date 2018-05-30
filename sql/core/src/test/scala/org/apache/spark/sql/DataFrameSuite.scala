@@ -862,7 +862,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           Row(id, name, age, salary)
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
-    assert(df("id") == person("id"))
+    assert(df("id").expr.semanticEquals(person("id").expr))
   }
 
   test("drop top level columns that contains dot") {

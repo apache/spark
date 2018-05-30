@@ -332,7 +332,10 @@ class Analyzer(
         gid: Expression): Expression = {
       expr transform {
         case e: GroupingID =>
-          if (e.groupByExprs.isEmpty || e.groupByExprs == groupByExprs) {
+          def sameExprs = e.groupByExprs.zip(groupByExprs).forall {
+            case (e1, e2) => e1.semanticEquals(e2)
+          }
+          if (e.groupByExprs.isEmpty || sameExprs) {
             Alias(gid, toPrettySQL(e))()
           } else {
             throw new AnalysisException(

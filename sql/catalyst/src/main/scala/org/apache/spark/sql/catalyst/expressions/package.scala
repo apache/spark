@@ -144,7 +144,15 @@ package object expressions  {
     }
 
     private def unique[T](m: Map[T, Seq[Attribute]]): Map[T, Seq[Attribute]] = {
-      m.mapValues(_.distinct).map(identity)
+      m.mapValues { allAttrs =>
+        val buffer = new scala.collection.mutable.ListBuffer[Attribute]
+        allAttrs.foreach { a =>
+          if (!buffer.exists(_.semanticEquals(a))) {
+            buffer += a
+          }
+        }
+        buffer
+      }.map(identity)
     }
 
     /** Map to use for direct case insensitive attribute lookups. */

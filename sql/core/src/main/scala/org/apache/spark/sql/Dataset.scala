@@ -240,7 +240,7 @@ class Dataset[T] private[sql](
 
   private[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
+      resolve(n.name)
     }
   }
 
@@ -2329,7 +2329,7 @@ class Dataset[T] private[sql](
     }
     val attrs = this.planWithBarrier.output
     val colsAfterDrop = attrs.filter { attr =>
-      attr != expression
+      !attr.semanticEquals(expression)
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }
