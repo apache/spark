@@ -351,8 +351,8 @@ case class FileSourceScanExec(
    * Create an RDD for bucketed reads.
    * The non-bucketed variant of this function is [[createNonBucketedReadRDD]].
    *
-   * The algorithm is pretty simple: each RDD partition being returned should include all the files
-   * with the same bucket id from all the given Hive partitions.
+   * The algorithm is pretty simple: each RDD partition being returned should be one of bucket file
+   * from the given Hive partitions.
    *
    * @param bucketSpec the bucketing spec.
    * @param readFile a function to read each (part of a) file.
@@ -365,20 +365,13 @@ case class FileSourceScanExec(
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
-    val bucketed =
-      selectedPartitions.flatMap { p =>
-        p.files.map { f =>
-          val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
-          PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
-        }
-      }.groupBy { f =>
-        BucketingUtils
-          .getBucketId(new Path(f.filePath).getName)
-          .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
+    val filePartitions = selectedPartitions.flatMap { p =>
+      p.files.map { f =>
+        val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
+        PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
       }
-
-    val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
+    }.zipWithIndex.map { case (file, index) =>
+      FilePartition(index, Seq(file))
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
