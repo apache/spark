@@ -290,13 +290,20 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-24385: Resolve ambiguity in self-joins with operators different from EqualsTo") {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
-      val df = spark.range(10)
-      // these should not throw any exception
+      val df = spark.range(2)
+
+      // These should not throw any exception.
       df.join(df, df("id") >= df("id")).queryExecution.optimizedPlan
       df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
       df.join(df, df("id") <= df("id")).queryExecution.optimizedPlan
       df.join(df, df("id") > df("id")).queryExecution.optimizedPlan
       df.join(df, df("id") < df("id")).queryExecution.optimizedPlan
+
+      // Check we properly resolve columns when datasets are different but they share a common
+      // lineage.
+      val df1 = df.groupBy("id").count()
+      val df2 = df.groupBy("id").sum("id")
+      checkAnswer(df1.join(df2, df2("id") < df1("id")), Seq(Row(1, 1, 0, 0)))
     }
   }
 }

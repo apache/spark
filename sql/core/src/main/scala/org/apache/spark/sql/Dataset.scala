@@ -74,6 +74,9 @@ private[sql] object Dataset {
     qe.assertAnalyzed()
     new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
   }
+
+  // String used as key in metadata of resolved attributes
+  private val DATASET_ID = "dataset.hash"
 }
 
 /**
@@ -217,11 +220,22 @@ class Dataset[T] private[sql](
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
   private[sql] def resolve(colName: String): NamedExpression = {
-    queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
-      .getOrElse {
+    val resolved = queryExecution.analyzed.resolveQuoted(colName,
+      sparkSession.sessionState.analyzer.resolver).getOrElse {
         throw new AnalysisException(
           s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
       }
+    // We introduce in the metadata a reference to the Dataset the attribute is coming from because
+    // it is useful to determine what this attribute is really referencing when performing
+    // self-joins (or joins between dataset with common lineage) and the join condition contains
+    // ambiguous references.
+    resolved match {
+      case a: AttributeReference =>
+        val mBuilder = new MetadataBuilder()
+        mBuilder.withMetadata(a.metadata).putLong(Dataset.DATASET_ID, this.hashCode().toLong)
+        a.withMetadata(mBuilder.build())
+      case other => other
+    }
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
@@ -1002,9 +1016,16 @@ class Dataset[T] private[sql](
     val cond = plan.condition.map { _.transform {
       case e @ catalyst.expressions.BinaryComparison(a: AttributeReference, b: AttributeReference)
           if a.sameRef(b) =>
-        e.withNewChildren(Seq(
-          withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name)))
+        val bReferencesThis = b.metadata.contains(Dataset.DATASET_ID) &&
+          b.metadata.getLong(Dataset.DATASET_ID) == hashCode()
+        val aReferencesRight = a.metadata.contains(Dataset.DATASET_ID) &&
+          a.metadata.getLong(Dataset.DATASET_ID) == right.hashCode()
+        val newChildren = if (bReferencesThis && aReferencesRight) {
+          Seq(withPlan(plan.right).resolve(a.name), withPlan(plan.left).resolve(b.name))
+        } else {
+          Seq(withPlan(plan.left).resolve(a.name), withPlan(plan.right).resolve(b.name))
+        }
+        e.withNewChildren(newChildren)
     }}
 
     withPlan {
