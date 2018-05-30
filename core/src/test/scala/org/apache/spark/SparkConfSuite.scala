@@ -25,7 +25,6 @@ import scala.language.postfixOps
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
-import org.scalatest.Matchers
 
 import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.config._
