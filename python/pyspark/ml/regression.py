@@ -1031,8 +1031,8 @@ class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaML
 
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
-                   JavaMLReadable, TreeRegressorParams):
+                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed,
+                   HasValidationIndicatorCol, JavaMLWritable, JavaMLReadable, TreeRegressorParams):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
@@ -1079,6 +1079,11 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     ...              ["label", "features"])
     >>> model.evaluateEachIteration(validation, "squared")
     [0.0, 0.0, 0.0, 0.0, 0.0]
+    >>> gbt = gbt.setValidationIndicatorCol("validationIndicator")
+    >>> gbt.getValidationIndicatorCol()
+    'validationIndicator'
+    >>> gbt.getValidationTol()
+    0.01
 
     .. versionadded:: 1.4.0
     """
@@ -1093,25 +1098,32 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                      "the contribution of each estimator.",
                      typeConverter=TypeConverters.toFloat)
 
+    validationTol = Param(Params._dummy(), "validationTol",
+                          "Threshold for stopping early when fit with validation is used. " +
+                          "If the error rate on the validation input changes by less than the " +
+                          "validationTol, then learning will stop early (before `maxIter`). " +
+                          "This parameter is ignored when fit without validation is used.",
+                          typeConverter=TypeConverters.toFloat)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
-                 impurity="variance", featureSubsetStrategy="all"):
+                 impurity="variance", featureSubsetStrategy="all", validationTol=0.01):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
-                 impurity="variance", featureSubsetStrategy="all")
+                 impurity="variance", featureSubsetStrategy="all", validationTol=0.01)
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
-                         impurity="variance", featureSubsetStrategy="all")
+                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1121,13 +1133,13 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
-                  impuriy="variance", featureSubsetStrategy="all"):
+                  impuriy="variance", featureSubsetStrategy="all", validationTol=0.01):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
-                  impurity="variance", featureSubsetStrategy="all")
+                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01)
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self._input_kwargs
@@ -1156,6 +1168,20 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
         return self._set(featureSubsetStrategy=value)
+
+    @since("2.4.0")
+    def setValidationTol(self, value):
+        """
+        Sets the value of :py:attr:`validationTol`.
+        """
+        return self._set(validationTol=value)
+
+    @since("2.4.0")
+    def getValidationTol(self):
+        """
+        Gets the value of validationTol or its default value.
+        """
+        return self.getOrDefault(self.validationTol)
 
 
 class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):

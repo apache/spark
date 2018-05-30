@@ -814,3 +814,25 @@ class HasDistanceMeasure(Params):
         """
         return self.getOrDefault(self.distanceMeasure)
 
+
+class HasValidationIndicatorCol(Params):
+    """
+    Mixin for param validationIndicatorCol: name of the column that indicates whether each row is for training or for validation. false indicates training; true indicates validation.
+    """
+
+    validationIndicatorCol = Param(Params._dummy(), "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. false indicates training; true indicates validation.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasValidationIndicatorCol, self).__init__()
+
+    def setValidationIndicatorCol(self, value):
+        """
+        Sets the value of :py:attr:`validationIndicatorCol`.
+        """
+        return self._set(validationIndicatorCol=value)
+
+    def getValidationIndicatorCol(self):
+        """
+        Gets the value of validationIndicatorCol or its default value.
+        """
+        return self.getOrDefault(self.validationIndicatorCol)
