@@ -93,6 +93,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
     Utils.tryLogNonFatalError {
       ThreadUtils.shutdown(requestExecutorsService)
     }
+
+    Utils.tryLogNonFatalError {
+      kubernetesClient.close()
+    }
   }
 
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future[Boolean] {
