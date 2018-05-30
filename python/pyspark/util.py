@@ -53,13 +53,16 @@ def _get_argspec(f):
     """
     Get argspec of a function. Supports both Python 2 and Python 3.
     """
-    # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-    # See SPARK-23569.
+
     if hasattr(f, '_argspec'):
+        # only used for pandas UDF: they wrap the user function, losing its signature
+        # workers need this signature, so UDF saves it here
         argspec = f._argspec
     elif sys.version_info[0] < 3:
         argspec = inspect.getargspec(f)
     else:
+        # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
+        # See SPARK-23569.
         argspec = inspect.getfullargspec(f)
     return argspec
 
