@@ -28,16 +28,16 @@ private[spark] trait IntegrationTestBackend {
 }
 
 private[spark] object IntegrationTestBackendFactory {
-  val DeployModeConfigKey = "spark.kubernetes.test.deployMode"
+  val deployModeConfigKey = "spark.kubernetes.test.deployMode"
 
   def getTestBackend: IntegrationTestBackend = {
-    val deployMode = Option(System.getProperty(DeployModeConfigKey))
+    val deployMode = Option(System.getProperty(deployModeConfigKey))
       .getOrElse("minikube")
     if (deployMode == "minikube") {
       MinikubeTestBackend
     } else {
       throw new IllegalArgumentException(
-        "Invalid " + DeployModeConfigKey + ": " + deployMode)
+        "Invalid " + deployModeConfigKey + ": " + deployMode)
     }
   }
 }
