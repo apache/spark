@@ -210,14 +210,13 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val i = ctx.freshName("i")
     val args = ctx.freshName("args")
 
-    val cases = arrayElementTypes.distinct.map { elementType =>
-      val getArrValsItem = CodeGenerator.getValue(s"$arrVals[$j]", elementType, i)
+    val getValueForType = arrayElementTypes.distinct.map { eleType =>
       s"""
-        |case "${elementType}":
-        |  $myobject[$j] = $getArrValsItem;
-        |  break;
+      |if ($storedArrTypes[$j] == "${eleType}") {
+      |  $myobject[$j] = ${CodeGenerator.getValue(s"$arrVals[$j]", eleType, i)};
+      |}
       """.stripMargin
-    }
+    }.mkString("\n")
 
     ev.copy(s"""
       |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
@@ -240,11 +239,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |      Object[] $myobject = new Object[$numberOfArrays];
       |      for (int $j = 0; $j < $numberOfArrays; $j ++) {
       |        if ($arrVals[$j] != null && $arrCardinality[$j] > $i && !$arrVals[$j].isNullAt($i)) {
-      |          switch ($storedArrTypes[$j]) {
-      |            ${cases.mkString("\n")}
-      |           default:
-      |             break;
-      |          }
+      |          $getValueForType
       |        } else {
       |          $myobject[$j] = null;
       |        }
