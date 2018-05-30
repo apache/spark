@@ -332,7 +332,7 @@ package object config {
   private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
     ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
       .booleanConf
-      .createOptional
+      .createWithDefault(false)
 
   private[spark] val YARN_BLACKLIST_MAX_NODE_BLACKLIST_RATIO =
     ConfigBuilder("spark.yarn.blacklist.maxNodeBlacklistRatio")

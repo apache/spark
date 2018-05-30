@@ -54,8 +54,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
   private val blacklistTimeoutMillis =
     sparkConf.get(BLACKLIST_TIMEOUT_CONF).getOrElse(Utils.timeStringAsMs(defaultTimeout))
 
-  private val launchBlacklistEnabled =
-    sparkConf.get(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED).getOrElse(false)
+  private val launchBlacklistEnabled = sparkConf.get(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED)
 
   private val maxFailuresPerHost = sparkConf.get(MAX_FAILED_EXEC_PER_NODE)
 
