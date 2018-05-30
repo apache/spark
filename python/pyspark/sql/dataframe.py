@@ -352,46 +352,54 @@ class DataFrame(object):
         else:
             print(self._jdf.showString(n, int(truncate), vertical))
 
-    def _get_repl_config(self):
-        """Return the configs for eager evaluation each time when __repr__ or
-        _repr_html_ called by user or notebook.
+    @property
+    def eagerEval(self):
+        """Returns true if the eager evaluation enabled.
         """
-        eager_eval = self.sql_ctx.getConf(
+        return self.sql_ctx.getConf(
             "spark.sql.repl.eagerEval.enabled", "false").lower() == "true"
-        console_row = int(self.sql_ctx.getConf(
-            "spark.sql.repl.eagerEval.maxNumRows", u"20"))
-        console_truncate = int(self.sql_ctx.getConf(
-            "spark.sql.repl.eagerEval.truncate", u"20"))
-        return (eager_eval, console_row, console_truncate)
+
+    @property
+    def maxNumRows(self):
+        """Returns the max row number for eager evaluation.
+        """
+        return int(self.sql_ctx.getConf(
+            "spark.sql.repl.eagerEval.maxNumRows", "20"))
+
+    @property
+    def truncate(self):
+        """Returns the truncate length for eager evaluation.
+        """
+        return int(self.sql_ctx.getConf(
+            "spark.sql.repl.eagerEval.truncate", "20"))
 
     def __repr__(self):
-        (eager_eval, console_row, console_truncate) = self._get_repl_config()
-        if not self._support_repr_html and eager_eval:
+        if not self._support_repr_html and self.eagerEval:
             vertical = False
             return self._jdf.showString(
-                console_row, console_truncate, vertical)
+                self.maxNumRows, self.truncate, vertical)
         else:
             return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def _repr_html_(self):
         """Returns a dataframe with html code when you enabled eager evaluation
-        by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you're
+        by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
         using support eager evaluation with HTML.
         """
         import cgi
         if not self._support_repr_html:
             self._support_repr_html = True
-        (eager_eval, console_row, console_truncate) = self._get_repl_config()
-        if eager_eval:
+        if self.eagerEval:
+            max_num_rows = self.maxNumRows
             with SCCallSiteSync(self._sc) as css:
                 vertical = False
                 sock_info = self._jdf.getRowsToPython(
-                    console_row, console_truncate, vertical)
+                    max_num_rows, self.truncate, vertical)
             rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
             head = rows[0]
             row_data = rows[1:]
-            has_more_data = len(row_data) > console_row
-            row_data = row_data[0:console_row]
+            has_more_data = len(row_data) > max_num_rows
+            row_data = row_data[0:max_num_rows]
 
             html = "<table border='1'>\n<tr><th>"
             # generate table head
@@ -404,7 +412,7 @@ class DataFrame(object):
             html += "</table>\n"
             if has_more_data:
                 html += "only showing top %d %s\n" % (
-                    console_row, "row" if console_row == 1 else "rows")
+                    max_num_rows, "row" if max_num_rows == 1 else "rows")
             return html
         else:
             return None

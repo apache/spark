@@ -239,7 +239,7 @@ class Dataset[T] private[sql](
    * @param numRows Number of rows to return
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
    *                   all cells will be aligned right.
-   * @param vertical If set to true, the rows to return don't need truncate.
+   * @param vertical If set to true, the rows to return do not need truncate.
    */
   private[sql] def getRows(
       numRows: Int,
@@ -289,8 +289,8 @@ class Dataset[T] private[sql](
         }
       }
 
-      rows = rows.map {
-        _.zipWithIndex.map { case (cell, i) =>
+      rows = rows.map { row =>
+        row.zipWithIndex.map { case (cell, i) =>
           if (truncate > 0) {
             StringUtils.leftPad(cell, colWidths(i))
           } else {
@@ -334,9 +334,7 @@ class Dataset[T] private[sql](
       sb.append(sep)
 
       // data
-      dataRows.foreach {
-        _.addString(sb, "|", "|", "|\n")
-      }
+      dataRows.foreach(_.addString(sb, "|", "|", "|\n"))
       sb.append(sep)
     } else {
       // Extended display mode enabled
@@ -3228,10 +3226,11 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def getRowsToPython(
-      numRows: Int,
+      _numRows: Int,
       truncate: Int,
       vertical: Boolean): Array[Any] = {
     EvaluatePython.registerPicklers()
+    val numRows = _numRows.max(0).min(Int.MaxValue - 1)
     val rows = getRows(numRows, truncate, vertical).map(_.toArray).toArray
     val toJava: (Any) => Any = EvaluatePython.toJava(_, ArrayType(ArrayType(StringType)))
     val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(

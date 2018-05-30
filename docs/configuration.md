@@ -460,7 +460,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.sql.repl.eagerEval.enabled</code></td>
   <td>false</td>
   <td>
-    Enable eager evaluation or not. If true and repl you're using supports eager evaluation,
+    Enable eager evaluation or not. If true and REPL you are using supports eager evaluation,
     dataframe will be ran automatically and html table will feedback the queries user have defined
     (see <a href="https://issues.apache.org/jira/browse/SPARK-24215">SPARK-24215</a> for more details).
   </td>
