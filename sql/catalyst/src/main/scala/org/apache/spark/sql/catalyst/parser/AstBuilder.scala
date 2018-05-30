@@ -293,10 +293,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case cmp @ BinaryComparison(UnresolvedAttribute(name :: Nil), constant: Literal) =>
           cmp
         case bc @ BinaryComparison(constant: Literal, _) =>
-          throw new ParseException("Literal " + constant
-            + " is supported only on the rigth-side.", ctx)
+          throw new ParseException(s"Literal $constant is supported only on the rigth-side.", ctx)
         case _ =>
-          throw new ParseException("Invalid partition filter specification", ctx)
+          throw new ParseException(
+            s"Invalid partition filter specification (${pVal.getText}).", ctx)
       }
     }
     parts
