@@ -33,8 +33,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
-class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties with
-  Matchers {
+class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
     val conf = new SparkConf()
     // Simply exercise the API, we don't need a complete conversion test since that's handled in
@@ -367,10 +366,10 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       val key = "SomeKey"
       val conf = new SparkConf()
       conf.set(key, "SomeInvalidValue")
-      val thrown = the [IllegalArgumentException] thrownBy {
+      val thrown = intercept [IllegalArgumentException] {
         getValue(conf, key)
       }
-      thrown.getMessage should include (key)
+      assert(thrown.getMessage.contains(key))
     }
   }
 }
