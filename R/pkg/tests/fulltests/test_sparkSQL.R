@@ -1479,7 +1479,7 @@ test_that("column functions", {
   df5 <- createDataFrame(list(list(a = "010101")))
   expect_equal(collect(select(df5, conv(df5$a, 2, 16)))[1, 1], "15")
 
-  # Test array_contains(), array_max(), array_min(), array_position() and element_at()
+  # Test array_contains(), array_max(), array_min(), array_position(), element_at() and reverse()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
   result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
   expect_equal(result, c(TRUE, FALSE))
@@ -1495,6 +1495,28 @@ test_that("column functions", {
 
   result <- collect(select(df, element_at(df[[1]], 1L)))[[1]]
   expect_equal(result, c(1, 6))
+
+  result <- collect(select(df, reverse(df[[1]])))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L), list(4L, 5L, 6L)))
+
+  df2 <- createDataFrame(list(list("abc")))
+  result <- collect(select(df2, reverse(df2[[1]])))[[1]]
+  expect_equal(result, "cba")
+
+  # Test array_repeat()
+  df <- createDataFrame(list(list("a", 3L), list("b", 2L)))
+  result <- collect(select(df, array_repeat(df[[1]], df[[2]])))[[1]]
+  expect_equal(result, list(list("a", "a", "a"), list("b", "b")))
+
+  result <- collect(select(df, array_repeat(df[[1]], 2L)))[[1]]
+  expect_equal(result, list(list("a", "a"), list("b", "b")))
+
+  # Test arrays_overlap()
+  df <- createDataFrame(list(list(list(1L, 2L), list(3L, 1L)),
+                             list(list(1L, 2L), list(3L, 4L)),
+                             list(list(1L, NA), list(3L, 4L))))
+  result <- collect(select(df, arrays_overlap(df[[1]], df[[2]])))[[1]]
+  expect_equal(result, c(TRUE, FALSE, NA))
 
   # Test array_sort() and sort_array()
   df <- createDataFrame(list(list(list(2L, 1L, 3L, NA)), list(list(NA, 6L, 5L, NA, 4L))))
@@ -1512,14 +1534,25 @@ test_that("column functions", {
   result <- collect(select(df, slice(df[[1]], 2L, 2L)))[[1]]
   expect_equal(result, list(list(2L, 3L), list(5L)))
 
-  # Test flattern
+  # Test concat()
+  df <- createDataFrame(list(list(list(1L, 2L, 3L), list(4L, 5L, 6L)),
+                        list(list(7L, 8L, 9L), list(10L, 11L, 12L))))
+  result <- collect(select(df, concat(df[[1]], df[[2]])))[[1]]
+  expect_equal(result, list(list(1L, 2L, 3L, 4L, 5L, 6L), list(7L, 8L, 9L, 10L, 11L, 12L)))
+
+  # Test flatten()
   df <- createDataFrame(list(list(list(list(1L, 2L), list(3L, 4L))),
                         list(list(list(5L, 6L), list(7L, 8L)))))
   result <- collect(select(df, flatten(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, 4L), list(5L, 6L, 7L, 8L)))
 
-  # Test map_keys(), map_values() and element_at()
+  # Test map_entries(), map_keys(), map_values() and element_at()
   df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
+  result <- collect(select(df, map_entries(df$map)))[[1]]
+  expected_entries <-  list(listToStruct(list(key = "x", value = 1)),
+                            listToStruct(list(key = "y", value = 2)))
+  expect_equal(result, list(expected_entries))
+
   result <- collect(select(df, map_keys(df$map)))[[1]]
   expect_equal(result, list(list("x", "y")))
 

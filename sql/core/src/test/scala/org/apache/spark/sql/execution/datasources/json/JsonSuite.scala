@@ -122,10 +122,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("Get compatible type") {
     def checkDataType(t1: DataType, t2: DataType, expected: DataType) {
-      var actual = compatibleType(t1, t2, conf.caseSensitiveAnalysis)
+      var actual = compatibleType(t1, t2)
       assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
-      actual = compatibleType(t2, t1, conf.caseSensitiveAnalysis)
+      actual = compatibleType(t2, t1)
       assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
     }

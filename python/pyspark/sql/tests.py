@@ -900,6 +900,22 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_stopiteration_in_udf(self):
+        # test for SPARK-23754
+        from pyspark.sql.functions import udf
+        from py4j.protocol import Py4JJavaError
+
+        def foo(x):
+            raise StopIteration()
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            self.spark.range(0, 1000).withColumn('v', udf(foo)('id')).show()
+
+        self.assertIn(
+            "Caught StopIteration thrown from user's code; failing the task",
+            cm.exception.java_exception.toString()
+        )
+
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
         from pyspark.sql.column import _to_java_column
@@ -4680,6 +4696,26 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected2, result2)
         self.assertPandasEqual(expected3, result3)
 
+    def test_array_type_correct(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
+
+        df = self.data.withColumn("arr", array(col("id"))).repartition(1, "id")
+
+        output_schema = StructType(
+            [StructField('id', LongType()),
+             StructField('v', IntegerType()),
+             StructField('arr', ArrayType(LongType()))])
+
+        udf = pandas_udf(
+            lambda pdf: pdf,
+            output_schema,
+            PandasUDFType.GROUPED_MAP
+        )
+
+        result = df.groupby('id').apply(udf).sort('id').toPandas()
+        expected = df.toPandas().groupby('id').apply(udf.func).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
     def test_register_grouped_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
@@ -5219,8 +5255,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         expected2 = df.groupby().agg(sum(df.v))
 
         # groupby one column and one sql expression
-        result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v))
-        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v))
+        result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v)).orderBy(df.id, df.v % 2)
+        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v)).orderBy(df.id, df.v % 2)
 
         # groupby one python UDF
         result4 = df.groupby(plus_one(df.id)).agg(sum_udf(df.v))

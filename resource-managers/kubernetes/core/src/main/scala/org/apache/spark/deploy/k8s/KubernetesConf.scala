@@ -57,6 +57,7 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleLabels: Map[String, String],
     roleAnnotations: Map[String, String],
     roleSecretNamesToMountPaths: Map[String, String],
+    roleSecretEnvNamesToKeyRefs: Map[String, String],
     roleEnvs: Map[String, String],
     sparkFiles: Seq[String]) {
 
@@ -150,6 +151,8 @@ private[spark] object KubernetesConf {
       sparkConf, KUBERNETES_DRIVER_ANNOTATION_PREFIX)
     val driverSecretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_SECRETS_PREFIX)
+    val driverSecretEnvNamesToKeyRefs = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX)
     val driverEnvs = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_ENV_PREFIX)
 
@@ -166,6 +169,7 @@ private[spark] object KubernetesConf {
       driverLabels,
       driverAnnotations,
       driverSecretNamesToMountPaths,
+      driverSecretEnvNamesToKeyRefs,
       driverEnvs,
       sparkFiles)
   }
@@ -194,8 +198,10 @@ private[spark] object KubernetesConf {
       executorCustomLabels
     val executorAnnotations = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
-    val executorSecrets = KubernetesUtils.parsePrefixedKeyValuePairs(
+    val executorMountSecrets = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
+    val executorEnvSecrets = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX)
     val executorEnv = sparkConf.getExecutorEnv.toMap
 
     KubernetesConf(
@@ -205,7 +211,8 @@ private[spark] object KubernetesConf {
       appId,
       executorLabels,
       executorAnnotations,
-      executorSecrets,
+      executorMountSecrets,
+      executorEnvSecrets,
       executorEnv,
       Seq.empty[String])
   }

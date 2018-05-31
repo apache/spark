@@ -40,6 +40,7 @@ class JavaDriverFeatureStepSuite extends SparkFunSuite {
       roleLabels = Map.empty,
       roleAnnotations = Map.empty,
       roleSecretNamesToMountPaths = Map.empty,
+      roleSecretEnvNamesToKeyRefs = Map.empty,
       roleEnvs = Map.empty,
       sparkFiles = Seq.empty[String])
 

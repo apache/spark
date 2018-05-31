@@ -260,14 +260,16 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("test for DROPMALFORMED parsing mode") {
-    Seq(false, true).foreach { multiLine =>
-      val cars = spark.read
-        .format("csv")
-        .option("multiLine", multiLine)
-        .options(Map("header" -> "true", "mode" -> "dropmalformed"))
-        .load(testFile(carsFile))
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false") {
+      Seq(false, true).foreach { multiLine =>
+        val cars = spark.read
+          .format("csv")
+          .option("multiLine", multiLine)
+          .options(Map("header" -> "true", "mode" -> "dropmalformed"))
+          .load(testFile(carsFile))
 
-      assert(cars.select("year").collect().size === 2)
+        assert(cars.select("year").collect().size === 2)
+      }
     }
   }
 
@@ -1321,5 +1323,91 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
     val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 1.0).csv(ds)
     assert(sampled.count() == ds.count())
+  }
+
+  test("SPARK-17916: An empty string should not be coerced to null when nullValue is passed.") {
+    val litNull: String = null
+    val df = Seq(
+      (1, "John Doe"),
+      (2, ""),
+      (3, "-"),
+      (4, litNull)
+    ).toDF("id", "name")
+
+    // Checks for new behavior where an empty string is not coerced to null when `nullValue` is
+    // set to anything but an empty string literal.
+    withTempPath { path =>
+      df.write
+        .option("nullValue", "-")
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .option("nullValue", "-")
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, ""),
+        (3, litNull),
+        (4, litNull)
+      ).toDF("id", "name")
+
+      checkAnswer(computed, expected)
+    }
+    // Keeps the old behavior where empty string us coerced to nullValue is not passed.
+    withTempPath { path =>
+      df.write
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, litNull),
+        (3, "-"),
+        (4, litNull)
+      ).toDF("id", "name")
+
+      checkAnswer(computed, expected)
+    }
+  }
+
+  test("SPARK-24329: skip lines with comments, and one or multiple whitespaces") {
+    val schema = new StructType().add("colA", StringType)
+    val ds = spark
+      .read
+      .schema(schema)
+      .option("multiLine", false)
+      .option("header", true)
+      .option("comment", "#")
+      .option("ignoreLeadingWhiteSpace", false)
+      .option("ignoreTrailingWhiteSpace", false)
+      .csv(testFile("test-data/comments-whitespaces.csv"))
+
+    checkAnswer(ds, Seq(Row(""" "a" """)))
+  }
+
+  test("SPARK-24244: Select a subset of all columns") {
+    withTempPath { path =>
+      import collection.JavaConverters._
+      val schema = new StructType()
+        .add("f1", IntegerType).add("f2", IntegerType).add("f3", IntegerType)
+        .add("f4", IntegerType).add("f5", IntegerType).add("f6", IntegerType)
+        .add("f7", IntegerType).add("f8", IntegerType).add("f9", IntegerType)
+        .add("f10", IntegerType).add("f11", IntegerType).add("f12", IntegerType)
+        .add("f13", IntegerType).add("f14", IntegerType).add("f15", IntegerType)
+
+      val odf = spark.createDataFrame(List(
+        Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+        Row(-1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15)
+      ).asJava, schema)
+      odf.write.csv(path.getCanonicalPath)
+      val idf = spark.read
+        .schema(schema)
+        .csv(path.getCanonicalPath)
+        .select('f15, 'f10, 'f5)
+
+      assert(idf.count() == 2)
+      checkAnswer(idf, List(Row(15, 10, 5), Row(-15, -10, -5)))
+    }
   }
 }

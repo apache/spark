@@ -72,6 +72,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
       Map.empty,
+      Map.empty,
       DRIVER_ENVS,
       Seq.empty[String])
 
@@ -140,6 +141,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
       Map.empty,
+      Map.empty,
       DRIVER_ENVS,
       Seq.empty[String])
     val pythonKubernetesConf = KubernetesConf(
@@ -153,6 +155,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       APP_ID,
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
+      Map.empty,
       Map.empty,
       DRIVER_ENVS,
       Seq.empty[String])
@@ -184,6 +187,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ANNOTATIONS,
       Map.empty,
       Map.empty,
+      DRIVER_ENVS,
       allFiles)
     val step = new BasicDriverFeatureStep(kubernetesConf)
     val additionalProperties = step.getAdditionalPodSystemProperties()

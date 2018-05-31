@@ -810,15 +810,15 @@ private[spark] object Utils extends Logging {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
       conf.getenv("SPARK_LOCAL_DIRS").split(",")
-    } else if (conf.getenv("MESOS_DIRECTORY") != null && !shuffleServiceEnabled) {
+    } else if (conf.getenv("MESOS_SANDBOX") != null && !shuffleServiceEnabled) {
       // Mesos already creates a directory per Mesos task. Spark should use that directory
       // instead so all temporary files are automatically cleaned up when the Mesos task ends.
       // Note that we don't want this if the shuffle service is enabled because we want to
       // continue to serve shuffle files after the executors that wrote them have already exited.
-      Array(conf.getenv("MESOS_DIRECTORY"))
+      Array(conf.getenv("MESOS_SANDBOX"))
     } else {
-      if (conf.getenv("MESOS_DIRECTORY") != null && shuffleServiceEnabled) {
-        logInfo("MESOS_DIRECTORY available but not using provided Mesos sandbox because " +
+      if (conf.getenv("MESOS_SANDBOX") != null && shuffleServiceEnabled) {
+        logInfo("MESOS_SANDBOX available but not using provided Mesos sandbox because " +
           "spark.shuffle.service.enabled is enabled.")
       }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user

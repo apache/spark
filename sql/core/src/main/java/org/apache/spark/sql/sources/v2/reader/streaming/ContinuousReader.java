@@ -35,8 +35,8 @@ import java.util.Optional;
 @InterfaceStability.Evolving
 public interface ContinuousReader extends BaseStreamingSource, DataSourceReader {
     /**
-     * Merge partitioned offsets coming from {@link ContinuousInputPartitionReader} instances for each
-     * partition to a single global offset.
+     * Merge partitioned offsets coming from {@link ContinuousInputPartitionReader} instances
+     * for each partition to a single global offset.
      */
     Offset mergeOffsets(PartitionOffset[] offsets);
 

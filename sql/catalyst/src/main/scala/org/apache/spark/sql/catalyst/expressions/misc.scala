@@ -21,6 +21,7 @@ import java.util.UUID
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -88,7 +89,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the value is null or false.
     val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
-    ExprCode(code = s"""${eval.code}
+    ExprCode(code = code"""${eval.code}
        |if (${eval.isNull} || !${eval.value}) {
        |  throw new RuntimeException($errMsgField);
        |}""".stripMargin, isNull = TrueLiteral,
@@ -151,7 +152,7 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
     ctx.addPartitionInitializationStatement(s"$randomGen = " +
       "new org.apache.spark.sql.catalyst.util.RandomUUIDGenerator(" +
       s"${randomSeed.get}L + partitionIndex);")
-    ev.copy(code = s"final UTF8String ${ev.value} = $randomGen.getNextUUIDUTF8String();",
+    ev.copy(code = code"final UTF8String ${ev.value} = $randomGen.getNextUUIDUTF8String();",
       isNull = FalseLiteral)
   }
 

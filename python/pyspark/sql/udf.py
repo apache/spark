@@ -25,7 +25,7 @@ from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string,\
     to_arrow_type, to_arrow_schema
-from pyspark.util import _get_argspec
+from pyspark.util import _get_argspec, fail_on_stopiteration
 
 __all__ = ["UDFRegistration"]
 
@@ -157,7 +157,17 @@ class UserDefinedFunction(object):
         spark = SparkSession.builder.getOrCreate()
         sc = spark.sparkContext
 
-        wrapped_func = _wrap_function(sc, self.func, self.returnType)
+        func = fail_on_stopiteration(self.func)
+
+        # for pandas UDFs the worker needs to know if the function takes
+        # one or two arguments, but the signature is lost when wrapping with
+        # fail_on_stopiteration, so we store it here
+        if self.evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
+            func._argspec = _get_argspec(self.func)
+
+        wrapped_func = _wrap_function(sc, func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt, self.evalType, self.deterministic)
