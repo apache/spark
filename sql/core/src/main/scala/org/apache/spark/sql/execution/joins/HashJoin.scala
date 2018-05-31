@@ -62,8 +62,9 @@ trait HashJoin {
   }
 
   protected lazy val (buildKeys, streamedKeys) = {
-    require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
-      "Join keys from two sides should have same types")
+    require(leftKeys.map(_.dataType).zip(rightKeys.map(_.dataType)).forall {
+      case (l, r) => BinaryOperator.sameType(l, r)
+    }, "Join keys from two sides should have same types")
     val lkeys = HashJoin.rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
     val rkeys = HashJoin.rewriteKeyExpr(rightKeys)
       .map(BindReferences.bindReference(_, right.output))
