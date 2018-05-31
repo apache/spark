@@ -53,7 +53,7 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
   @Since("2.4.0")
   val minSupport = new DoubleParam(this, "minSupport", "The minimal support level of the " +
     "sequential pattern. Sequential pattern that appears more than " +
-    "(minSupport * size-of-the-dataset)." +
+    "(minSupport * size-of-the-dataset)" +
     "times will be output.", ParamValidators.gtEq(0.0))
 
   /** @group getParam */

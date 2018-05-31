@@ -16,9 +16,9 @@
 #
 
 from pyspark import keyword_only, since
-from pyspark.ml.common import _java2py, _py2java
+from pyspark.sql import DataFrame
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, _jvm
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, _jvm
 from pyspark.ml.param.shared import *
 
 __all__ = ["FPGrowth", "FPGrowthModel"]
@@ -246,7 +246,7 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
         return FPGrowthModel(java_model)
 
 
-class PrefixSpan(object):
+class PrefixSpan(JavaParams):
     """
     .. note:: Experimental
 
@@ -254,35 +254,69 @@ class PrefixSpan(object):
     The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
     Efficiently by Prefix-Projected Pattern Growth
     (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
+    This class is not yet an Estimator/Transformer, use :py:func:`findFrequentSequentialPatterns`
+    method to run the PrefixSpan algorithm.
 
+    @see <a href="https://en.wikipedia.org/wiki/Sequential_Pattern_Mining">Sequential Pattern Mining
+    (Wikipedia)</a>
     .. versionadded:: 2.4.0
 
     """
-    @staticmethod
+
+    minSupport = Param(Params._dummy(), "minSupport", "The minimal support level of the " +
+                       "sequential pattern. Sequential pattern that appears more than " +
+                       "(minSupport * size-of-the-dataset) times will be output. Must be >= 0.",
+                       typeConverter=TypeConverters.toFloat)
+
+    maxPatternLength = Param(Params._dummy(), "maxPatternLength",
+                             "The maximal length of the sequential pattern. Must be > 0.",
+                             typeConverter=TypeConverters.toInt)
+
+    maxLocalProjDBSize = Param(Params._dummy(), "maxLocalProjDBSize",
+                               "The maximum number of items (including delimiters used in the " +
+                               "internal storage format) allowed in a projected database before " +
+                               "local processing. If a projected database exceeds this size, " +
+                               "another iteration of distributed prefix growth is run. " +
+                               "Must be > 0.",
+                               typeConverter=TypeConverters.toInt)
+
+    sequenceCol = Param(Params._dummy(), "sequenceCol", "The name of the sequence column in " +
+                        "dataset, rows with nulls in this column are ignored.",
+                        typeConverter=TypeConverters.toString)
+
+    @keyword_only
+    def __init__(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+                 sequenceCol="sequence"):
+        """
+        __init__(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
+                 sequenceCol="sequence")
+        """
+        super(PrefixSpan, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.PrefixSpan", self.uid)
+        self._setDefault(minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+                         sequenceCol="sequence")
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
     @since("2.4.0")
-    def findFrequentSequentialPatterns(dataset,
-                                       sequenceCol,
-                                       minSupport,
-                                       maxPatternLength,
-                                       maxLocalProjDBSize):
+    def setParams(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+                  sequenceCol="sequence"):
+        """
+        setParams(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
+                  sequenceCol="sequence")
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.4.0")
+    def findFrequentSequentialPatterns(self, dataset):
         """
         .. note:: Experimental
         Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
 
         :param dataset: A dataset or a dataframe containing a sequence column which is
                         `Seq[Seq[_]]` type.
-        :param sequenceCol: The name of the sequence column in dataset, rows with nulls in this
-                            column are ignored.
-        :param minSupport: The minimal support level of the sequential pattern, any pattern that
-                           appears more than (minSupport * size-of-the-dataset) times will be
-                           output (recommended value: `0.1`).
-        :param maxPatternLength: The maximal length of the sequential pattern
-                                 (recommended value: `10`).
-        :param maxLocalProjDBSize: The maximum number of items (including delimiters used in the
-                                   internal storage format) allowed in a projected database before
-                                   local processing. If a projected database exceeds this size,
-                                   another iteration of distributed prefix growth is run
-                                   (recommended value: `32000000`).
         :return: A `DataFrame` that contains columns of sequence and corresponding frequency.
                  The schema of it will be:
                   - `sequence: Seq[Seq[T]]` (T is the item type)
@@ -294,10 +328,9 @@ class PrefixSpan(object):
         ...                      Row(sequence=[[1], [3, 2], [1, 2]]),
         ...                      Row(sequence=[[1, 2], [5]]),
         ...                      Row(sequence=[[6]])]).toDF()
-        >>> PrefixSpan.findFrequentSequentialPatterns(df, "sequence", minSupport = 0.5,
-        ...                                           maxPatternLength = 5,
-        ...                                           maxLocalProjDBSize = 32000000)
-        ...                                           .sort("sequence").show(truncate=False)
+        >>> prefixSpan = PrefixSpan(minSupport=0.5, maxPatternLength=5,
+        ...                         maxLocalProjDBSize=32000000)
+        >>> prefixSpan.findFrequentSequentialPatterns(df).sort("sequence").show(truncate=False)
         +----------+----+
         |sequence  |freq|
         +----------+----+
@@ -308,11 +341,8 @@ class PrefixSpan(object):
         |[[3]]     |2   |
         +----------+----+
 
+        .. versionadded:: 2.4.0
         """
-        javaPrefixSpanObj = _jvm().org.apache.spark.ml.fpm.PrefixSpan
-        sc = SparkContext._active_spark_context
-        dataset = _py2java(sc, dataset)
-        res = javaPrefixSpanObj\
-            .findFrequentSequentialPatterns(dataset, sequenceCol, minSupport, maxPatternLength,
-                                            maxLocalProjDBSize)
-        return _java2py(sc, res)
+        self._transfer_params_to_java()
+        jdf = self._java_obj.findFrequentSequentialPatterns(dataset._jdf)
+        return DataFrame(jdf, dataset.sql_ctx)
