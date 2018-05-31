@@ -26,8 +26,8 @@ select from_json('{"a":1}', 'a INT', named_struct('mode', 'PERMISSIVE'));
 select from_json('{"a":1}', 'a INT', map('mode', 1));
 select from_json();
 -- from_json - schema in json format
-select from_json('{"a":1}', '{"type":"struct","fields":[{"name":"a","type":"integer"}]}');
-select from_json('{"a":1}', '{"type":"map", "keyType":"string", "valueType":"integer"}')
+select from_json('{"a":1}', '{"type":"struct","fields":[{"name":"a","type":"integer", "nullable":true}]}');
+select from_json('{"a":1}', '{"type":"map", "keyType":"string", "valueType":"integer","valueContainsNull":false}');
 
 -- json_tuple
 SELECT json_tuple('{"a" : 1, "b" : 2}', CAST(NULL AS STRING), 'b', CAST(NULL AS STRING), 'a');
