@@ -2550,8 +2550,10 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        +---+---+
 
        .. note:: If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-           recommended to explicitly index the columns by name to ensure the positions are correct.
-           For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])`.
+           recommended to explicitly index the columns by name to ensure the positions are correct,
+           or alternatively use an `OrderedDict`.
+           For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
+           `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 
