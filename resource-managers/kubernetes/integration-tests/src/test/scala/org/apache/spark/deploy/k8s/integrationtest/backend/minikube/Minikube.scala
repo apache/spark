@@ -22,7 +22,6 @@ import java.nio.file.Paths
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}
 
 import org.apache.spark.deploy.k8s.integrationtest.ProcessUtils
-
 import org.apache.spark.internal.Logging
 
 // TODO support windows
