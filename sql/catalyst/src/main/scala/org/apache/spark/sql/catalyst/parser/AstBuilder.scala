@@ -341,7 +341,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         // Add project.
         val namedExpressions = expressions.map {
           case e: NamedExpression => e
-          case e: _ => UnresolvedAlias(e)
+          case e: Expression => UnresolvedAlias(e)
         }
         val withProject = if (namedExpressions.nonEmpty) {
           Project(namedExpressions, withFilter)
