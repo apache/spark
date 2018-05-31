@@ -2461,6 +2461,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
 
+    .. note:: Experimental
+
     The function type of the UDF can be one of the following:
 
     1. SCALAR
