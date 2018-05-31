@@ -33,7 +33,6 @@ public class StreamData {
   private final TransportRequestHandler handler;
   private final TransportFrameDecoder frameDecoder;
   private final RpcResponseCallback rpcCallback;
-  private final ByteBuffer meta;
   private final long streamByteCount;
   private boolean hasCallback = false;
 
@@ -41,12 +40,10 @@ public class StreamData {
       TransportRequestHandler handler,
       TransportFrameDecoder frameDecoder,
       RpcResponseCallback rpcCallback,
-      ByteBuffer meta,
       long streamByteCount) {
     this.handler = handler;
     this.frameDecoder = frameDecoder;
     this.rpcCallback = rpcCallback;
-    this.meta = meta;
     this.streamByteCount = streamByteCount;
   }
 

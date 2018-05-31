@@ -218,7 +218,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
           channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
       ByteBuffer meta = req.meta.nioByteBuffer();
       StreamData streamData = new StreamData(TransportRequestHandler.this, frameDecoder,
-          callback, meta, req.bodyByteCount);
+          callback, req.bodyByteCount);
       rpcHandler.receive(reverseClient, meta, streamData, callback);
       if (!streamData.hasCallback()) {
         throw new RuntimeException("Destination did not register stream handler");

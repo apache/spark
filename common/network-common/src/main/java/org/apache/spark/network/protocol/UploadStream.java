@@ -85,7 +85,7 @@ public final class UploadStream extends AbstractMessage implements RequestMessag
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(requestId, body());
+    return Long.hashCode(requestId);
   }
 
   @Override
