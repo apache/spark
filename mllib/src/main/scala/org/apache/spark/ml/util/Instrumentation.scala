@@ -87,13 +87,6 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   /**
-   * Logs an debug message with a prefix that uniquely identifies the training session.
-   */
-  override def logDebug(msg: => String): Unit = {
-    super.logDebug(prefix + msg)
-  }
-
-  /**
    * Alias for logInfo, see above.
    */
   def log(msg: String): Unit = logInfo(msg)
