@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, FileOutputStream, StringWriter}
-import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
-import java.nio.file.{Files, Paths, StandardOpenOption}
+import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
@@ -2317,18 +2317,17 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("SPARK-23723: write json in UTF-16/32 with multiline off") {
     Seq("UTF-16", "UTF-32").foreach { encoding =>
       withTempPath { path =>
-        val ds = spark.createDataset(Seq(
-          ("a", 1), ("b", 2), ("c", 3))
-        ).repartition(2)
-        val e = intercept[IllegalArgumentException] {
-          ds.write
-            .option("encoding", encoding)
-            .option("multiline", "false")
-            .format("json").mode("overwrite")
-            .save(path.getCanonicalPath)
-        }.getMessage
-        assert(e.contains(
-          s"$encoding encoding in the blacklist is not allowed when multiLine is disabled"))
+        val ds = spark.createDataset(Seq(("a", 1))).repartition(1)
+        ds.write
+          .option("encoding", encoding)
+          .option("multiline", false)
+          .json(path.getCanonicalPath)
+        val jsonFiles = path.listFiles().filter(_.getName.endsWith("json"))
+        jsonFiles.foreach { jsonFile =>
+          val readback = Files.readAllBytes(jsonFile.toPath)
+          val expected = ("""{"_1":"a","_2":1}""" + "\n").getBytes(Charset.forName(encoding))
+          assert(readback === expected)
+        }
       }
     }
   }
