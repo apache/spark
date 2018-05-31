@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
-import scala.collection.mutable
-
 import org.apache.spark.{HashPartitioner, Partition, TaskContext, TaskContextImpl}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.continuous.shuffle._
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -56,7 +53,7 @@ class ContinuousShuffleSuite extends StreamTest {
       new GenericInternalRow(Array(UTF8String.fromString(value): Any)))
   }
 
-  private def send(endpoint: RpcEndpointRef, messages: UnsafeRowReceiverMessage*) = {
+  private def send(endpoint: RpcEndpointRef, messages: RPCContinuousShuffleMessage*) = {
     messages.foreach(endpoint.askSync[Unit](_))
   }
 
