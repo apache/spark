@@ -548,7 +548,7 @@ case class AlterTableDropPartitionCommand(
             }
             val dataType = table.partitionSchema.apply(attrName).dataType
             expr.withNewChildren(Seq(AttributeReference(attrName, dataType)(),
-              Cast(Literal(value.toString), dataType)))
+              Cast(Literal(value), dataType)))
           }.reduce(And)
 
           val partitions = catalog.listPartitionsByFilter(
