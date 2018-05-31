@@ -122,16 +122,7 @@ class ContinuousExecution(
             s"Batch $latestEpochId was committed without end epoch offsets!")
         }
         committedOffsets = nextOffsets.toStreamProgress(sources)
-
-        // Get to an epoch ID that has definitely never been sent to a sink before. Since sink
-        // commit happens between offset log write and commit log write, this means an epoch ID
-        // which is not in the offset log.
-        val (latestOffsetEpoch, _) = offsetLog.getLatest().getOrElse {
-          throw new IllegalStateException(
-            s"Offset log had no latest element. This shouldn't be possible because nextOffsets is" +
-              s"an element.")
-        }
-        currentBatchId = latestOffsetEpoch + 1
+        currentBatchId = latestEpochId + 1
 
         logDebug(s"Resuming at epoch $currentBatchId with committed offsets $committedOffsets")
         nextOffsets
@@ -364,6 +355,22 @@ class ContinuousExecution(
         awaitProgressLock.unlock()
       }
     }
+  }
+
+  /**
+   * Stops the query execution thread to terminate the query.
+   */
+  override def stop(): Unit = {
+    // Set the state to TERMINATED so that the batching thread knows that it was interrupted
+    // intentionally
+    state.set(TERMINATED)
+    if (queryExecutionThread.isAlive) {
+      // The query execution thread will clean itself up in the finally clause of runContinuous.
+      // We just need to interrupt the long running job.
+      queryExecutionThread.interrupt()
+      queryExecutionThread.join()
+    }
+    logInfo(s"Query $prettyIdString was stopped")
   }
 }
 

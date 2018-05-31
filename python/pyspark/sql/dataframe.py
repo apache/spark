@@ -463,8 +463,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+            sock_info = self._jdf.collectToPython()
+        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -477,8 +477,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.toPythonIterator()
-        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
+            sock_info = self._jdf.toPythonIterator()
+        return _load_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -1975,6 +1975,8 @@ class DataFrame(object):
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
+        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
@@ -2087,8 +2089,8 @@ class DataFrame(object):
         .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(port, ArrowSerializer()))
+            sock_info = self._jdf.collectAsArrowToPython()
+        return list(_load_from_socket(sock_info, ArrowSerializer()))
 
     ##########################################################################################
     # Pandas compatibility

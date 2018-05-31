@@ -685,6 +685,13 @@ class SQLTests(ReusedSQLTestCase):
                                             multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
 
+    def test_encoding_json(self):
+        people_array = self.spark.read\
+            .json("python/test_support/sql/people_array_utf16le.json",
+                  multiLine=True, encoding="UTF-16LE")
+        expected = [Row(age=30, name=u'Andy'), Row(age=19, name=u'Justin')]
+        self.assertEqual(people_array.collect(), expected)
+
     def test_linesep_json(self):
         df = self.spark.read.json("python/test_support/sql/people.json", lineSep=",")
         expected = [Row(_corrupt_record=None, name=u'Michael'),
@@ -892,6 +899,22 @@ class SQLTests(ReusedSQLTestCase):
         self.assertTrue(f.__doc__ in f_.__doc__)
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
+
+    def test_stopiteration_in_udf(self):
+        # test for SPARK-23754
+        from pyspark.sql.functions import udf
+        from py4j.protocol import Py4JJavaError
+
+        def foo(x):
+            raise StopIteration()
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            self.spark.range(0, 1000).withColumn('v', udf(foo)('id')).show()
+
+        self.assertIn(
+            "Caught StopIteration thrown from user's code; failing the task",
+            cm.exception.java_exception.toString()
+        )
 
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
@@ -3026,8 +3049,35 @@ class SQLTests(ReusedSQLTestCase):
             .json(rdd).schema
         self.assertEquals(schema, StructType([StructField("a", LongType(), True)]))
 
+    def test_csv_sampling_ratio(self):
+        rdd = self.spark.sparkContext.range(0, 100, 1, 1) \
+            .map(lambda x: '0.1' if x == 1 else str(x))
+        schema = self.spark.read.option('inferSchema', True)\
+            .csv(rdd, samplingRatio=0.5).schema
+        self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
+
+    @classmethod
+    def setUpClass(cls):
+        # get a SparkContext to check for availability of Hive
+        sc = SparkContext('local[4]', cls.__name__)
+        cls.hive_available = True
+        try:
+            sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        except py4j.protocol.Py4JError:
+            cls.hive_available = False
+        except TypeError:
+            cls.hive_available = False
+        finally:
+            # we don't need this SparkContext for the test
+            sc.stop()
+
+    def setUp(self):
+        super(HiveSparkSubmitTests, self).setUp()
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     def test_hivecontext(self):
         # This test checks that HiveContext is using Hive metastore (SPARK-16224).
@@ -3058,8 +3108,8 @@ class HiveSparkSubmitTests(SparkSubmitTests):
             |print(hive_context.sql("show databases").collect())
             """)
         proc = subprocess.Popen(
-            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]",
-             "--driver-class-path", hive_site_dir, script],
+            self.sparkSubmit + ["--master", "local-cluster[1,1,1024]",
+                                "--driver-class-path", hive_site_dir, script],
             stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -3096,23 +3146,28 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
         filename_pattern = (
             "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
             "TestQueryExecutionListener.class")
-        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
-            raise unittest.SkipTest(
+        cls.has_listener = bool(glob.glob(os.path.join(SPARK_HOME, filename_pattern)))
+
+        if cls.has_listener:
+            # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
+            cls.spark = SparkSession.builder \
+                .master("local[4]") \
+                .appName(cls.__name__) \
+                .config(
+                    "spark.sql.queryExecutionListeners",
+                    "org.apache.spark.sql.TestQueryExecutionListener") \
+                .getOrCreate()
+
+    def setUp(self):
+        if not self.has_listener:
+            raise self.skipTest(
                 "'org.apache.spark.sql.TestQueryExecutionListener' is not "
                 "available. Will skip the related tests.")
 
-        # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
-        cls.spark = SparkSession.builder \
-            .master("local[4]") \
-            .appName(cls.__name__) \
-            .config(
-                "spark.sql.queryExecutionListeners",
-                "org.apache.spark.sql.TestQueryExecutionListener") \
-            .getOrCreate()
-
     @classmethod
     def tearDownClass(cls):
-        cls.spark.stop()
+        if hasattr(cls, "spark"):
+            cls.spark.stop()
 
     def tearDown(self):
         self.spark._jvm.OnSuccessCall.clear()
@@ -3196,18 +3251,22 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
     def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        cls.hive_available = True
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
-            cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         except TypeError:
-            cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         os.unlink(cls.tempdir.name)
-        cls.spark = HiveContext._createForTesting(cls.sc)
-        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        cls.df = cls.sc.parallelize(cls.testData).toDF()
+        if cls.hive_available:
+            cls.spark = HiveContext._createForTesting(cls.sc)
+            cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+            cls.df = cls.sc.parallelize(cls.testData).toDF()
+
+    def setUp(self):
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     @classmethod
     def tearDownClass(cls):
@@ -4637,6 +4696,26 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected2, result2)
         self.assertPandasEqual(expected3, result3)
 
+    def test_array_type_correct(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
+
+        df = self.data.withColumn("arr", array(col("id"))).repartition(1, "id")
+
+        output_schema = StructType(
+            [StructField('id', LongType()),
+             StructField('v', IntegerType()),
+             StructField('arr', ArrayType(LongType()))])
+
+        udf = pandas_udf(
+            lambda pdf: pdf,
+            output_schema,
+            PandasUDFType.GROUPED_MAP
+        )
+
+        result = df.groupby('id').apply(udf).sort('id').toPandas()
+        expected = df.toPandas().groupby('id').apply(udf.func).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
     def test_register_grouped_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
@@ -5176,8 +5255,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         expected2 = df.groupby().agg(sum(df.v))
 
         # groupby one column and one sql expression
-        result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v))
-        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v))
+        result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v)).orderBy(df.id, df.v % 2)
+        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v)).orderBy(df.id, df.v % 2)
 
         # groupby one python UDF
         result4 = df.groupby(plus_one(df.id)).agg(sum_udf(df.v))
@@ -5316,6 +5395,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 if __name__ == "__main__":
     from pyspark.sql.tests import *
     if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
     else:
-        unittest.main()
+        unittest.main(verbosity=2)

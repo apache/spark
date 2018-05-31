@@ -449,4 +449,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(EqualNullSafe(Literal(null, DoubleType), Literal(-1.0d)), false)
     checkEvaluation(EqualNullSafe(Literal(-1.0d), Literal(null, DoubleType)), false)
   }
+
+  test("Interpreted Predicate should initialize nondeterministic expressions") {
+    val interpreted = InterpretedPredicate.create(LessThan(Rand(7), Literal(1.0)))
+    interpreted.initialize(0)
+    assert(interpreted.eval(new UnsafeRow()))
+  }
 }
