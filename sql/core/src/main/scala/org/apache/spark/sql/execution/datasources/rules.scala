@@ -61,7 +61,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case _: ClassNotFoundException => u
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
-          u.failAnalysis(e.getMessage)
+          u.failAnalysis(e.getMessage, e)
       }
   }
 }
@@ -117,6 +117,14 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
           s"`${specifiedProvider.getSimpleName}`.")
+      }
+      tableDesc.storage.locationUri match {
+        case Some(location) if location.getPath != existingTable.location.getPath =>
+          throw new AnalysisException(
+            s"The location of the existing table ${tableIdentWithDB.quotedString} is " +
+              s"`${existingTable.location}`. It doesn't match the specified location " +
+              s"`${tableDesc.location}`.")
+        case _ =>
       }
 
       if (query.schema.length != existingTable.schema.length) {

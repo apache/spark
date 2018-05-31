@@ -81,7 +81,7 @@ public class PlatformUtilSuite {
     MemoryAllocator.HEAP.free(block);
     Assert.assertNull(block.getBaseObject());
     Assert.assertEquals(0, block.getBaseOffset());
-    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
+    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.getPageNumber());
   }
 
   @Test
@@ -92,7 +92,7 @@ public class PlatformUtilSuite {
     MemoryAllocator.UNSAFE.free(block);
     Assert.assertNull(block.getBaseObject());
     Assert.assertEquals(0, block.getBaseOffset());
-    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
+    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.getPageNumber());
   }
 
   @Test(expected = AssertionError.class)
@@ -139,7 +139,8 @@ public class PlatformUtilSuite {
   @Test
   public void heapMemoryReuse() {
     MemoryAllocator heapMem = new HeapMemoryAllocator();
-    // The size is less than `HeapMemoryAllocator.POOLING_THRESHOLD_BYTES`,allocate new memory every time.
+    // The size is less than `HeapMemoryAllocator.POOLING_THRESHOLD_BYTES`,
+    // allocate new memory every time.
     MemoryBlock onheap1 = heapMem.allocate(513);
     Object obj1 = onheap1.getBaseObject();
     heapMem.free(onheap1);

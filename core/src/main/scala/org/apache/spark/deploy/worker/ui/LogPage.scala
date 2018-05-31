@@ -118,7 +118,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
         <script>{Unparsed(jsOnload)}</script>
       </div>
 
-    UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
+    UIUtils.basicSparkPage(request, content, logType + " log page for " + pageName)
   }
 
   /** Get the part of the log files given the offset and desired length of bytes */

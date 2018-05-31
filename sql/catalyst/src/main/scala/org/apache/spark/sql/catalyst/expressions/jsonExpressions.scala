@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -513,12 +514,16 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String],
+    forceNullableSchema: Boolean)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
-  override def nullable: Boolean = true
 
-  def this(schema: DataType, options: Map[String, String], child: Expression) =
-    this(schema, options, child, None)
+  // The JSON input data might be missing certain fields. We force the nullability
+  // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
+  // can generate incorrect files if values are missing in columns declared as non-nullable.
+  val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
+
+  override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression) =
@@ -526,35 +531,45 @@ case class JsonToStructs(
       schema = JsonExprUtils.validateSchemaLiteral(schema),
       options = Map.empty[String, String],
       child = child,
-      timeZoneId = None)
+      timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = JsonExprUtils.validateSchemaLiteral(schema),
       options = JsonExprUtils.convertToMapData(options),
       child = child,
-      timeZoneId = None)
+      timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
-  override def checkInputDataTypes(): TypeCheckResult = schema match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+  // Used in `org.apache.spark.sql.functions`
+  def this(schema: DataType, options: Map[String, String], child: Expression) =
+    this(schema, options, child, timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
+
+  override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
+    case _: StructType | ArrayType(_: StructType, _) | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
+      s"Input schema ${nullableSchema.simpleString} must be a struct or an array of structs.")
   }
 
   @transient
-  lazy val rowSchema = schema match {
+  lazy val rowSchema = nullableSchema match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
   }
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = schema match {
+  lazy val converter = nullableSchema match {
     case _: StructType =>
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
     case ArrayType(_: StructType, _) =>
       (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+    case _: MapType =>
+      (rows: Seq[InternalRow]) => rows.head.getMap(0)
   }
 
   @transient
@@ -563,7 +578,7 @@ case class JsonToStructs(
       rowSchema,
       new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
 
-  override def dataType: DataType = schema
+  override def dataType: DataType = nullableSchema
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -601,6 +616,11 @@ case class JsonToStructs(
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+
+  override def sql: String = schema match {
+    case _: MapType => "entries"
+    case _ => super.sql
+  }
 }
 
 /**

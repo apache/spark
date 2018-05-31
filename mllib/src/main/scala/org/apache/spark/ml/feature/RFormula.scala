@@ -278,6 +278,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
+      .setHandleInvalid($(handleInvalid))
     encoderStages += new VectorAttributeRewriter($(featuresCol), prefixesToRewrite.toMap)
     encoderStages += new ColumnPruner(tempColumns.toSet)
 
@@ -445,7 +446,7 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
 
       val model = new RFormulaModel(metadata.uid, resolvedRFormula, pipelineModel)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -509,7 +510,7 @@ private object ColumnPruner extends MLReadable[ColumnPruner] {
       val columnsToPrune = data.getAs[Seq[String]](0).toSet
       val pruner = new ColumnPruner(metadata.uid, columnsToPrune)
 
-      DefaultParamsReader.getAndSetParams(pruner, metadata)
+      metadata.getAndSetParams(pruner)
       pruner
     }
   }
@@ -601,7 +602,7 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
       val prefixesToRewrite = data.getAs[Map[String, String]](1)
       val rewriter = new VectorAttributeRewriter(metadata.uid, vectorCol, prefixesToRewrite)
 
-      DefaultParamsReader.getAndSetParams(rewriter, metadata)
+      metadata.getAndSetParams(rewriter)
       rewriter
     }
   }

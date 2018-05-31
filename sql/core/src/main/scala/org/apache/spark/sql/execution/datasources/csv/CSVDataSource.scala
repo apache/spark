@@ -161,7 +161,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       val firstRow = new CsvParser(parsedOptions.asParserSettings).parseLine(firstLine)
       val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
       val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
-      val tokenRDD = csv.rdd.mapPartitions { iter =>
+      val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
+      val tokenRDD = sampled.rdd.mapPartitions { iter =>
         val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
         val linesWithoutHeader =
           CSVUtils.filterHeaderLine(filteredLines, firstLine, parsedOptions)
@@ -184,7 +185,8 @@ object TextInputCSVDataSource extends CSVDataSource {
         DataSource.apply(
           sparkSession,
           paths = paths,
-          className = classOf[TextFileFormat].getName
+          className = classOf[TextFileFormat].getName,
+          options = options.parameters
         ).resolveRelation(checkFilesExist = false))
         .select("value").as[String](Encoders.STRING)
     } else {
@@ -235,7 +237,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
             parsedOptions.headerFlag,
             new CsvParser(parsedOptions.asParserSettings))
         }
-        CSVInferSchema.infer(tokenRDD, header, parsedOptions)
+        val sampled = CSVUtils.sample(tokenRDD, parsedOptions)
+        CSVInferSchema.infer(sampled, header, parsedOptions)
       case None =>
         // If the first row could not be read, just return the empty schema.
         StructType(Nil)
@@ -248,7 +251,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
       options: CSVOptions): RDD[PortableDataStream] = {
     val paths = inputPaths.map(_.getPath)
     val name = paths.mkString(",")
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
+    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
+      options.parameters))
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration
 
