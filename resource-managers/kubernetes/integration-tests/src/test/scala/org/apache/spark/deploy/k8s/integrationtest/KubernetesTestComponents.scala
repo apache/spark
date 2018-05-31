@@ -105,7 +105,7 @@ private[spark] object SparkAppLauncher extends Logging {
       sparkHomeDir: Path): Unit = {
     val sparkSubmitExecutable = sparkHomeDir.resolve(Paths.get("bin", "spark-submit"))
     logInfo(s"Launching a spark app with arguments $appArguments and conf $appConf")
-    val appArgsArray = 
+    val appArgsArray =
       if (appArguments.appArgs.length > 0) Array(appArguments.appArgs.mkString(" "))
       else Array[String]()
     val commandLine = (Array(sparkSubmitExecutable.toFile.getAbsolutePath,
