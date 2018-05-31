@@ -69,6 +69,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
       Map.empty,
+      Map.empty,
       DRIVER_ENVS)
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
@@ -137,6 +138,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       APP_ID,
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
+      Map.empty,
       Map.empty,
       Map.empty)
     val step = new BasicDriverFeatureStep(kubernetesConf)
