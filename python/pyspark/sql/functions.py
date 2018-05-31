@@ -2216,7 +2216,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        A grouped map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
        The returnType should be a :class:`StructType` describing the schema of the returned
        `pandas.DataFrame`.
-       The length of the returned `pandas.DataFrame` can be arbitrary.
+       The length of the returned `pandas.DataFrame` can be arbitrary and the columns must be
+       indexed so that the positions match the corresponding field in the schema.
 
        Grouped map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
 
@@ -2238,6 +2239,10 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  2|-0.2773500981126146|
        |  2| 1.1094003924504583|
        +---+-------------------+
+
+       .. note:: If returning a new `pandas.DataFrame` constructed with a dictionary, it is
+       recommended to explicitly index the columns by name to ensure the positions are correct.
+       For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])`.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 
