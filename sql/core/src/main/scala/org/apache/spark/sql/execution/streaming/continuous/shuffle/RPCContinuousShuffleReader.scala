@@ -26,18 +26,18 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.util.NextIterator
 
 /**
- * Messages for the UnsafeRowReceiver endpoint. Either an incoming row or an epoch marker.
+ * Messages for the RPCContinuousShuffleReader endpoint. Either an incoming row or an epoch marker.
  *
  * Each message comes tagged with writerId, identifying which writer the message is coming
  * from. The receiver will only begin the next epoch once all writers have sent an epoch
  * marker ending the current epoch.
  */
-private[shuffle] sealed trait UnsafeRowReceiverMessage extends Serializable {
+private[shuffle] sealed trait RPCContinuousShuffleMessage extends Serializable {
   def writerId: Int
 }
 private[shuffle] case class ReceiverRow(writerId: Int, row: UnsafeRow)
-  extends UnsafeRowReceiverMessage
-private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends UnsafeRowReceiverMessage
+  extends RPCContinuousShuffleMessage
+private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends RPCContinuousShuffleMessage
 
 /**
  * RPC endpoint for receiving rows into a continuous processing shuffle task. Continuous shuffle
@@ -55,7 +55,7 @@ private[shuffle] class RPCContinuousShuffleReader(
   // Note that this queue will be drained from the main task thread and populated in the RPC
   // response thread.
   private val queues = Array.fill(numShuffleWriters) {
-    new ArrayBlockingQueue[UnsafeRowReceiverMessage](queueSize)
+    new ArrayBlockingQueue[RPCContinuousShuffleMessage](queueSize)
   }
 
   // Exposed for testing to determine if the endpoint gets stopped on task end.
@@ -66,7 +66,7 @@ private[shuffle] class RPCContinuousShuffleReader(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case r: UnsafeRowReceiverMessage =>
+    case r: RPCContinuousShuffleMessage =>
       queues(r.writerId).put(r)
       context.reply(())
   }
@@ -77,10 +77,10 @@ private[shuffle] class RPCContinuousShuffleReader(
       private val writerEpochMarkersReceived = Array.fill(numShuffleWriters)(false)
 
       private val executor = Executors.newFixedThreadPool(numShuffleWriters)
-      private val completion = new ExecutorCompletionService[UnsafeRowReceiverMessage](executor)
+      private val completion = new ExecutorCompletionService[RPCContinuousShuffleMessage](executor)
 
-      private def completionTask(writerId: Int) = new Callable[UnsafeRowReceiverMessage] {
-        override def call(): UnsafeRowReceiverMessage = queues(writerId).take()
+      private def completionTask(writerId: Int) = new Callable[RPCContinuousShuffleMessage] {
+        override def call(): RPCContinuousShuffleMessage = queues(writerId).take()
       }
 
       // Initialize by submitting tasks to read the first row from each writer.

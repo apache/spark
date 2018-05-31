@@ -36,7 +36,7 @@ case class ContinuousShuffleReadPartition(
     val env = SparkEnv.get.rpcEnv
     val receiver = new RPCContinuousShuffleReader(
       queueSize, numShuffleWriters, epochIntervalMs, env)
-    val endpoint = env.setupEndpoint(s"UnsafeRowReceiver-${UUID.randomUUID()}", receiver)
+    val endpoint = env.setupEndpoint(s"RPCContinuousShuffleReader-${UUID.randomUUID()}", receiver)
 
     TaskContext.get().addTaskCompletionListener { ctx =>
       env.stop(endpoint)
