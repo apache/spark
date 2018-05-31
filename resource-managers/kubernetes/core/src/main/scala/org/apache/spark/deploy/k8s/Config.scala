@@ -183,9 +183,9 @@ private[spark] object Config extends Logging {
       .doubleConf
       .checkValue(mem_overhead => mem_overhead >= 0 && mem_overhead < 1,
         "Ensure that memory overhead is a double between 0 --> 1.0")
-      .createOptional
+      .createWithDefault(0.1)
 
-  val PYSPARK_PYTHON_VERSION =
+  val PYSPARK_MAJOR_PYTHON_VERSION =
     ConfigBuilder("spark.kubernetes.pyspark.pythonversion")
       .doc("This sets the python version. Either 2 or 3. (Python2 or Python3)")
       .stringConf

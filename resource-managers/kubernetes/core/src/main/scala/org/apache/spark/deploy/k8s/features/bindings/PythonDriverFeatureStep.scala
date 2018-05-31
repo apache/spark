@@ -31,10 +31,10 @@ private[spark] class PythonDriverFeatureStep(
     val roleConf = kubernetesConf.roleSpecificConf
     require(roleConf.mainAppResource.isDefined, "PySpark Main Resource must be defined")
     val maybePythonArgs = Option(roleConf.appArgs).filter(_.nonEmpty).map(
-      s =>
+      pyArgs =>
         new EnvVarBuilder()
           .withName(ENV_PYSPARK_ARGS)
-          .withValue(s.mkString(","))
+          .withValue(pyArgs.mkString(","))
           .build())
     val maybePythonFiles = kubernetesConf.pyFiles().map(
       // Dilineation by ":" is to append the PySpark Files to the PYTHONPATH
@@ -51,7 +51,7 @@ private[spark] class PythonDriverFeatureStep(
           .withValue(KubernetesUtils.resolveFileUri(kubernetesConf.pySparkMainResource().get))
         .build(),
           new EnvVarBuilder()
-          .withName(ENV_PYSPARK_PYTHON_VERSION)
+          .withName(ENV_PYSPARK_MAJOR_PYTHON_VERSION)
           .withValue(kubernetesConf.pySparkPythonVersion())
         .build())
     val pythonEnvs = envSeq ++

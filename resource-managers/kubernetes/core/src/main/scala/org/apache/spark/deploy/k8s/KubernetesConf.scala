@@ -67,8 +67,6 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     .map(str => str.split(",").toSeq)
     .getOrElse(Seq.empty[String])
 
-  def getRoleConf: T = roleSpecificConf
-
   def pyFiles(): Option[String] = sparkConf
     .get(KUBERNETES_PYSPARK_PY_FILES)
 
@@ -76,7 +74,7 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     .get(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE)
 
   def pySparkPythonVersion(): String = sparkConf
-      .get(PYSPARK_PYTHON_VERSION)
+      .get(PYSPARK_MAJOR_PYTHON_VERSION)
 
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
@@ -125,7 +123,7 @@ private[spark] object KubernetesConf {
             sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
           }
         // The function of this outer match is to account for multiple nonJVM
-        // bindings that will all have increased MEMORY_OVERHEAD
+        // bindings that will all have increased MEMORY_OVERHEAD_FACTOR to 0.4
         case nonJVM: NonJVMResource =>
           nonJVM match {
             case PythonMainAppResource(res) =>
@@ -134,7 +132,7 @@ private[spark] object KubernetesConf {
                 additionalFiles.appendAll(maybePyFiles.split(","))}
               sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
           }
-          sparkConfWithMainAppJar.setIfMissing(MEMORY_OVERHEAD_FACTOR, 0.4)
+          sparkConfWithMainAppJar.set(MEMORY_OVERHEAD_FACTOR, 0.4)
     }
 
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(

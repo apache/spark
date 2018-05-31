@@ -93,7 +93,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       maybePyFiles = None)
     assert(kubernetesConfWithoutMainJar.sparkConf.get("spark.jars").split(",")
       === Array("local:///opt/spark/jar1.jar"))
-    assert(kubernetesConfWithoutMainJar.sparkConf.get(MEMORY_OVERHEAD_FACTOR).isEmpty)
+    assert(kubernetesConfWithoutMainJar.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.1)
   }
 
   test("Creating driver conf with a python primary file") {
@@ -114,7 +114,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       Some(inputPyFiles.mkString(",")))
     assert(kubernetesConfWithMainResource.sparkConf.get("spark.jars").split(",")
       === Array("local:///opt/spark/jar1.jar"))
-    assert(kubernetesConfWithMainResource.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === Some(0.4))
+    assert(kubernetesConfWithMainResource.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.4)
     assert(kubernetesConfWithMainResource.sparkFiles
       === Array("local:///opt/spark/example4.py", mainResourceFile) ++ inputPyFiles)
   }
@@ -152,7 +152,7 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.roleAnnotations === CUSTOM_ANNOTATIONS)
     assert(conf.roleSecretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
     assert(conf.roleEnvs === CUSTOM_ENVS)
-    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === Some(0.3))
+    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
   }
 
   test("Basic executor translated fields.") {

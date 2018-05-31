@@ -122,11 +122,14 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   }
 
   test("Check appropriate entrypoint rerouting for various bindings") {
-    val sparkConf = new SparkConf()
+    val javaSparkConf = new SparkConf()
+      .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "4g")
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+    val pythonSparkConf = new SparkConf()
       .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "4g")
       .set(CONTAINER_IMAGE, "spark-driver:latest")
     val javaKubernetesConf = KubernetesConf(
-      sparkConf,
+      javaSparkConf,
       KubernetesDriverSpecificConf(
         Some(JavaMainAppResource("")),
         APP_NAME,
@@ -140,7 +143,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ENVS,
       Seq.empty[String])
     val pythonKubernetesConf = KubernetesConf(
-      sparkConf,
+      pythonSparkConf,
       KubernetesDriverSpecificConf(
         Some(PythonMainAppResource("")),
         APP_NAME,

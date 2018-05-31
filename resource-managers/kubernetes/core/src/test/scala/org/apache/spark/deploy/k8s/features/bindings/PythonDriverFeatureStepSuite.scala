@@ -26,7 +26,6 @@ import org.apache.spark.deploy.k8s.submit.PythonMainAppResource
 
 class PythonDriverFeatureStepSuite extends SparkFunSuite {
 
-
   test("Python Step modifies container correctly") {
     val expectedMainResource = "/main.py"
     val mainResource = "local:///main.py"
@@ -38,7 +37,7 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
       .set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, mainResource)
       .set(KUBERNETES_PYSPARK_PY_FILES, pyFiles.mkString(","))
       .set("spark.files", "local:///example.py")
-      .set(PYSPARK_PYTHON_VERSION, "2")
+      .set(PYSPARK_MAJOR_PYTHON_VERSION, "2")
     val kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
@@ -66,14 +65,14 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
     assert(envs(ENV_PYSPARK_PRIMARY) === expectedMainResource)
     assert(envs(ENV_PYSPARK_FILES) === expectedPySparkFiles)
     assert(envs(ENV_PYSPARK_ARGS) === "5 7")
-    assert(envs(ENV_PYSPARK_PYTHON_VERSION) === "2")
+    assert(envs(ENV_PYSPARK_MAJOR_PYTHON_VERSION) === "2")
   }
   test("Python Step testing empty pyfiles") {
     val mainResource = "local:///main.py"
     val baseDriverPod = SparkPod.initialPod()
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, mainResource)
-      .set(PYSPARK_PYTHON_VERSION, "3")
+      .set(PYSPARK_MAJOR_PYTHON_VERSION, "3")
     val kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
@@ -102,6 +101,6 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
       .asScala
       .map(env => (env.getName, env.getValue))
       .toMap
-    assert(envs(ENV_PYSPARK_PYTHON_VERSION) === "3")
+    assert(envs(ENV_PYSPARK_MAJOR_PYTHON_VERSION) === "3")
   }
 }

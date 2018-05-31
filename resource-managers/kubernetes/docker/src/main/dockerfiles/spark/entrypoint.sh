@@ -63,12 +63,12 @@ if [ -n "$PYSPARK_APP_ARGS" ]; then
 fi
 
 
-if [ "$PYSPARK_PYTHON_VERSION" == "2" ]; then
+if [ "$PYSPARK_MAJOR_PYTHON_VERSION" == "2" ]; then
     pyv="$(python -V 2>&1)"
     export PYTHON_VERSION="${pyv:7}"
     export PYSPARK_PYTHON="python"
     export PYSPARK_DRIVER_PYTHON="python"
-elif [ "$PYSPARK_PYTHON_VERSION" == "3" ]; then
+elif [ "$PYSPARK_MAJOR_PYTHON_VERSION" == "3" ]; then
     pyv3="$(python3 -V 2>&1)"
     export PYTHON_VERSION="${pyv3:7}"
     export PYSPARK_PYTHON="python3"
