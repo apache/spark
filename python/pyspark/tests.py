@@ -574,6 +574,20 @@ class TaskContextTests(PySparkTestCase):
         tc = TaskContext.get()
         self.assertTrue(tc is None)
 
+    def test_get_local_property(self):
+        """Verify that local properties set on the driver are available in TaskContext."""
+        key = "testkey"
+        value = "testvalue"
+        self.sc.setLocalProperty(key, value)
+        try:
+            rdd = self.sc.parallelize(range(1), 1)
+            prop1 = rdd.map(lambda x: TaskContext.get().getLocalProperty(key)).collect()[0]
+            self.assertEqual(prop1, value)
+            prop2 = rdd.map(lambda x: TaskContext.get().getLocalProperty("otherkey")).collect()[0]
+            self.assertTrue(prop2 is None)
+        finally:
+            self.sc.setLocalProperty(key, None)
+
 
 class RDDTests(ReusedPySparkTestCase):
 
