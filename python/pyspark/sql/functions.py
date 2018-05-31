@@ -152,12 +152,18 @@ _functions_2_4 = {
 _collect_list_doc = """
     Aggregate function: returns a list of objects with duplicates.
 
+    .. note:: The function is non-deterministic because the order of collected results depends
+        on order of rows which may be non-deterministic after a shuffle.
+
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
     >>> df2.agg(collect_list('age')).collect()
     [Row(collect_list(age)=[2, 5, 5])]
     """
 _collect_set_doc = """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
+
+    .. note:: The function is non-deterministic because the order of collected results depends
+        on order of rows which may be non-deterministic after a shuffle.
 
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
     >>> df2.agg(collect_set('age')).collect()
@@ -401,6 +407,9 @@ def first(col, ignorenulls=False):
 
     The function by default returns the first values it sees. It will return the first non-null
     value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+
+    .. note:: The function is non-deterministic because its results depends on order of rows which
+        may be non-deterministic after a shuffle.
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
@@ -489,6 +498,9 @@ def last(col, ignorenulls=False):
 
     The function by default returns the last values it sees. It will return the last non-null
     value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+
+    .. note:: The function is non-deterministic because its results depends on order of rows
+        which may be non-deterministic after a shuffle.
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)
@@ -503,6 +515,8 @@ def monotonically_increasing_id():
     The current implementation puts the partition ID in the upper 31 bits, and the record number
     within each partition in the lower 33 bits. The assumption is that the data frame has
     less than 1 billion partitions, and each partition has less than 8 billion records.
+
+    .. note:: The function is non-deterministic because its result depends on partition IDs.
 
     As an example, consider a :class:`DataFrame` with two partitions, each with 3 records.
     This expression would return the following IDs:
@@ -536,6 +550,8 @@ def rand(seed=None):
     """Generates a random column with independent and identically distributed (i.i.d.) samples
     from U[0.0, 1.0].
 
+    .. note:: The function is non-deterministic in general case.
+
     >>> df.withColumn('rand', rand(seed=42) * 3).collect()
     [Row(age=2, name=u'Alice', rand=1.1568609015300986),
      Row(age=5, name=u'Bob', rand=1.403379671529166)]
@@ -553,6 +569,8 @@ def rand(seed=None):
 def randn(seed=None):
     """Generates a column with independent and identically distributed (i.i.d.) samples from
     the standard normal distribution.
+
+    .. note:: The function is non-deterministic in general case.
 
     >>> df.withColumn('randn', randn(seed=42)).collect()
     [Row(age=2, name=u'Alice', randn=-0.7556247885860078),
@@ -1090,8 +1108,11 @@ def add_months(start, months):
 @since(1.5)
 def months_between(date1, date2, roundOff=True):
     """
-    Returns the number of months between date1 and date2.
-    Unless `roundOff` is set to `False`, the result is rounded off to 8 digits.
+    Returns number of months between dates date1 and date2.
+    If date1 is later than date2, then the result is positive.
+    If date1 and date2 are on the same day of month, or both are the last day of month,
+    returns an integer (time of day will be ignored).
+    The result is rounded off to 8 digits unless `roundOff` is set to `False`.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['date1', 'date2'])
     >>> df.select(months_between(df.date1, df.date2).alias('months')).collect()
@@ -1835,6 +1856,21 @@ def array_contains(col, value):
 
 
 @since(2.4)
+def arrays_overlap(a1, a2):
+    """
+    Collection function: returns true if the arrays contain any common non-null element; if not,
+    returns null if both the arrays are non-empty and any of them contains a null element; returns
+    false otherwise.
+
+    >>> df = spark.createDataFrame([(["a", "b"], ["b", "c"]), (["a"], ["b", "c"])], ['x', 'y'])
+    >>> df.select(arrays_overlap(df.x, df.y).alias("overlap")).collect()
+    [Row(overlap=True), Row(overlap=False)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
+
+
+@since(2.4)
 def slice(x, start, length):
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
@@ -2074,12 +2110,13 @@ def json_tuple(col, *fields):
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(2.1)
 def from_json(col, schema, options={}):
     """
-    Parses a column containing a JSON string into a :class:`StructType` or :class:`ArrayType`
-    of :class:`StructType`\\s with the specified schema. Returns `null`, in the case of an
-    unparseable string.
+    Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
+    as keys type, :class:`StructType` or :class:`ArrayType` of :class:`StructType`\\s with
+    the specified schema. Returns `null`, in the case of an unparseable string.
 
     :param col: string column in json format
     :param schema: a StructType or ArrayType of StructType to use when parsing the json column.
@@ -2096,6 +2133,9 @@ def from_json(col, schema, options={}):
     [Row(json=Row(a=1))]
     >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
     [Row(json=Row(a=1))]
+    >>> schema = MapType(StringType(), IntegerType())
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json={u'a': 1})]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
     >>> df = spark.createDataFrame(data, ("key", "value"))
@@ -2304,6 +2344,40 @@ def map_values(col):
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
+@since(2.4)
+def map_entries(col):
+    """
+    Collection function: Returns an unordered array of all entries in the given map.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_entries
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_entries("data").alias("entries")).show()
+    +----------------+
+    |         entries|
+    +----------------+
+    |[[1, a], [2, b]]|
+    +----------------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_entries(_to_java_column(col)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def array_repeat(col, count):
+    """
+    Collection function: creates an array containing a column repeated count times.
+
+    >>> df = spark.createDataFrame([('ab',)], ['data'])
+    >>> df.select(array_repeat(df.data, 3).alias('r')).collect()
+    [Row(r=[u'ab', u'ab', u'ab'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_repeat(_to_java_column(col), count))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 class PandasUDFType(object):
@@ -2381,6 +2455,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
+
+    .. note:: Experimental
 
     The function type of the UDF can be one of the following:
 

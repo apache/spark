@@ -23,6 +23,7 @@ import java.util.regex.{MatchResult, Pattern}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -123,7 +124,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -132,7 +133,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
           }
         """)
       } else {
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           boolean ${ev.isNull} = true;
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         """)
@@ -198,7 +199,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -207,7 +208,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
           }
         """)
       } else {
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           boolean ${ev.isNull} = true;
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         """)

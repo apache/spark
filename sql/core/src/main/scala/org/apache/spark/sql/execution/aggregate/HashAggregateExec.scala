@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -190,7 +191,7 @@ case class HashAggregateExec(
       val value = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue")
       // The initial expression should not access any column
       val ev = e.genCode(ctx)
-      val initVars = s"""
+      val initVars = code"""
          | $isNull = ${ev.isNull};
          | $value = ${ev.value};
        """.stripMargin
@@ -773,8 +774,8 @@ case class HashAggregateExec(
     val findOrInsertRegularHashMap: String =
       s"""
          |// generate grouping key
-         |${unsafeRowKeyCode.code.trim}
-         |${hashEval.code.trim}
+         |${unsafeRowKeyCode.code}
+         |${hashEval.code}
          |if ($checkFallbackForBytesToBytesMap) {
          |  // try to get the buffer from hash map
          |  $unsafeRowBuffer =

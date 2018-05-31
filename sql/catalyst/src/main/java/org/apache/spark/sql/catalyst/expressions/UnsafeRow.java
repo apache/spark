@@ -62,6 +62,8 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
  */
 public final class UnsafeRow extends InternalRow implements Externalizable, KryoSerializable {
 
+  public static final int WORD_SIZE = 8;
+
   //////////////////////////////////////////////////////////////////////////////
   // Static methods
   //////////////////////////////////////////////////////////////////////////////

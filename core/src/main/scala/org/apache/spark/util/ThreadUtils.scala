@@ -200,6 +200,8 @@ private[spark] object ThreadUtils {
       val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
       awaitable.result(atMost)(awaitPermission)
     } catch {
+      case e: SparkFatalException =>
+        throw e.throwable
       // TimeoutException is thrown in the current thread, so not need to warp the exception.
       case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
