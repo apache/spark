@@ -1759,7 +1759,7 @@ position matches the corresponding field in the schema.
 Note that when creating a new `pandas.DataFrame` using a dictionary, the actual position of the column
 can differ from the order that it was placed in the dictionary. It is recommended in this case to
 explicitly define the column order using the `columns` keyword, e.g.
-`pandas.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])`.
+`pandas.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])`, or alternatively use an `OrderedDict`.
 
 Note that all data for a group will be loaded into memory before the function is applied. This can
 lead to out of memory exceptons, especially if the group sizes are skewed. The configuration for
