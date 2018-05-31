@@ -2501,7 +2501,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        The returnType should be a :class:`StructType` describing the schema of the returned
        `pandas.DataFrame`.
        The length of the returned `pandas.DataFrame` can be arbitrary and the columns must be
-       indexed so that the positions match the corresponding field in the schema.
+       indexed so that their position matches the corresponding field in the schema.
 
        Grouped map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
 
