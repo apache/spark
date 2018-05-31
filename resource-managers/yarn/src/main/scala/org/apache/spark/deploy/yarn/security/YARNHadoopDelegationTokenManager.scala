@@ -45,7 +45,7 @@ private[yarn] class YARNHadoopDelegationTokenManager(
   // public for testing
   val credentialProviders = getCredentialProviders
   if (credentialProviders.keys.nonEmpty) {
-    logDebug(s"Using the following YARN-specific credential providers: " +
+    logDebug("Using the following YARN-specific credential providers: " +
       s"${credentialProviders.keys.mkString(", ")}.")
   }
 
