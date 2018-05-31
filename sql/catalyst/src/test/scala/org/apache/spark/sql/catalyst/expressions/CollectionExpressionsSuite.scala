@@ -593,19 +593,21 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayType(BinaryType))
     val nullBinary = Literal.create(null, BinaryType)
 
-    val dataToRemoved1 = Literal.create(Array[Byte](5, 6), BinaryType)
-    checkEvaluation(ArrayRemove(b0, dataToRemoved1),
+    val dataToRemove1 = Literal.create(Array[Byte](5, 6), BinaryType)
+    checkEvaluation(ArrayRemove(b0, dataToRemove1),
       Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](1, 2)))
     checkEvaluation(ArrayRemove(b0, nullBinary), null)
-    checkEvaluation(ArrayRemove(b1, dataToRemoved1), Seq[Array[Byte]](Array[Byte](2, 1), null))
-    checkEvaluation(ArrayRemove(b2, dataToRemoved1), Seq[Array[Byte]](null, Array[Byte](1, 2)))
+    checkEvaluation(ArrayRemove(b1, dataToRemove1), Seq[Array[Byte]](Array[Byte](2, 1), null))
+    checkEvaluation(ArrayRemove(b2, dataToRemove1), Seq[Array[Byte]](null, Array[Byte](1, 2)))
 
     val c0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))
     val c1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
       ArrayType(ArrayType(IntegerType)))
-    val dataToRemoved2 = Literal.create(Seq[Int](1, 2), ArrayType(IntegerType))
-    checkEvaluation(ArrayRemove(c0, dataToRemoved2), Seq[Seq[Int]](Seq[Int](3, 4)))
-    checkEvaluation(ArrayRemove(c1, dataToRemoved2), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
+    val c2 = Literal.create(Seq[Seq[Int]](null, Seq[Int](2, 1)), ArrayType(ArrayType(IntegerType)))
+    val dataToRemove2 = Literal.create(Seq[Int](1, 2), ArrayType(IntegerType))
+    checkEvaluation(ArrayRemove(c0, dataToRemove2), Seq[Seq[Int]](Seq[Int](3, 4)))
+    checkEvaluation(ArrayRemove(c1, dataToRemove2), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
+    checkEvaluation(ArrayRemove(c2, dataToRemove2), Seq[Seq[Int]](null, Seq[Int](2, 1)))
   }
 }

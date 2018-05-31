@@ -1898,8 +1898,13 @@ case class ArrayRemove(left: Expression, right: Expression)
 
   override def dataType: DataType = left.dataType
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
+  override def inputTypes: Seq[AbstractDataType] = {
+    val elementType = left.dataType match {
+      case t: ArrayType => t.elementType
+      case _ => AnyDataType
+    }
+    Seq(ArrayType, elementType)
+  }
 
   lazy val elementType: DataType = left.dataType.asInstanceOf[ArrayType].elementType
 
@@ -1907,12 +1912,10 @@ case class ArrayRemove(left: Expression, right: Expression)
     TypeUtils.getInterpretedOrdering(right.dataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!left.dataType.isInstanceOf[ArrayType]
-      || left.dataType.asInstanceOf[ArrayType].elementType != right.dataType) {
-      TypeCheckResult.TypeCheckFailure(
-        "Arguments must be an array followed by a value of same type as the array members")
-    } else {
-      TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+    super.checkInputDataTypes() match {
+      case f: TypeCheckResult.TypeCheckFailure => f
+      case TypeCheckResult.TypeCheckSuccess =>
+        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
     }
   }
 
@@ -1965,9 +1968,15 @@ case class ArrayRemove(left: Expression, right: Expression)
          |int $pos = 0;
          |Object[] $values = new Object[$newArraySize];
          |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-         |  if (!($isEqual)) {
-         |    $values[$pos] = $getValue;
+         |  if ($inputArray.isNullAt($i)) {
+         |    $values[$pos] = null;
          |    $pos = $pos + 1;
+         |  }
+         |  else {
+         |    if (!($isEqual)) {
+         |      $values[$pos] = $getValue;
+         |      $pos = $pos + 1;
+         |    }
          |  }
          |}
          |${ev.value} = new $arrayClass($values);

@@ -970,6 +970,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),
         Row(null, null, null))
     )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", "a")).toDF().selectExpr("array_remove(_1, _2)")
+    }
+    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
