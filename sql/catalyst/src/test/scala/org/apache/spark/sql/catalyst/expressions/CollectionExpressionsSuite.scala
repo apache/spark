@@ -158,8 +158,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       mutable.LinkedHashMap("a" -> "1", "b" -> "2"))
 
     // no map
-    checkEvaluation(MapConcat(Seq()),
-      Map())
+    checkEvaluation(MapConcat(Seq.empty),
+      Map.empty)
 
     // force split expressions for input in generated code
     checkEvaluation(MapConcat(Seq(m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0,
@@ -178,8 +178,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(MapConcat(Seq(m0, m1)).dataType.valueContainsNull == false)
     assert(MapConcat(Seq(m5, m6)).dataType.keyType == StringType)
     assert(MapConcat(Seq(m5, m6)).dataType.valueType == IntegerType)
-    assert(MapConcat(Seq()).dataType.keyType == StringType)
-    assert(MapConcat(Seq()).dataType.valueType == StringType)
+    assert(MapConcat(Seq.empty).dataType.keyType == StringType)
+    assert(MapConcat(Seq.empty).dataType.valueType == StringType)
     assert(MapConcat(Seq(m5, m6)).dataType.valueContainsNull)
     assert(MapConcat(Seq(m6, m5)).dataType.valueContainsNull)
     assert(MapConcat(Seq(m1, m2)).nullable == false)
