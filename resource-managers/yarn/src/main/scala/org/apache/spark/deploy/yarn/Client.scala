@@ -813,8 +813,14 @@ private[spark] class Client(
     if (pythonPath.nonEmpty) {
       val pythonPathStr = (sys.env.get("PYTHONPATH") ++ pythonPath)
         .mkString(ApplicationConstants.CLASS_PATH_SEPARATOR)
-      env("PYTHONPATH") = pythonPathStr
-      sparkConf.setExecutorEnv("PYTHONPATH", pythonPathStr)
+      val newValue =
+        if (env.contains("PYTHONPATH")) {
+          env("PYTHONPATH") + ApplicationConstants.CLASS_PATH_SEPARATOR  + pythonPathStr
+        } else {
+          pythonPathStr
+        }
+      env("PYTHONPATH") = newValue
+      sparkConf.setExecutorEnv("PYTHONPATH", newValue)
     }
 
     if (isClusterMode) {
