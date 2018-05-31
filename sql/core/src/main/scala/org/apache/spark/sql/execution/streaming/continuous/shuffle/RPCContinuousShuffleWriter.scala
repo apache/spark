@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
-import org.apache.spark.Partitioner
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Future
+
+import org.apache.spark.{Partitioner, TaskContext}
+
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 
@@ -43,12 +47,19 @@ class RPCContinuousShuffleWriter(
       s"not match endpoint count ${endpoints.length}")
   }
 
-  def write(epoch: Iterator[UnsafeRow]): Unit = {
+  def write(epoch: Iterator[UnsafeRow]): Future[Unit] = {
+    val futures = new ArrayBuffer[Future[Unit]]()
     while (epoch.hasNext) {
       val row = epoch.next()
-      endpoints(outputPartitioner.getPartition(row)).ask[Unit](ReceiverRow(writerId, row))
+      futures +=
+        endpoints(outputPartitioner.getPartition(row)).ask[Unit](ReceiverRow(writerId, row))
+
     }
 
-    endpoints.foreach(_.ask[Unit](ReceiverEpochMarker(writerId)))
+    futures.appendAll(endpoints.map {
+      e => e.ask[Unit](ReceiverEpochMarker(writerId))
+    })
+
+    Future.reduce(futures)(_, _ => ())
   }
 }
