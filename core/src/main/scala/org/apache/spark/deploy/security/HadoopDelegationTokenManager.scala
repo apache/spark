@@ -52,7 +52,7 @@ private[spark] class HadoopDelegationTokenManager(
 
   // Maintain all the registered delegation token providers
   private val delegationTokenProviders = getDelegationTokenProviders
-  logDebug(s"Using the following builtin delegation token providers: " +
+  logDebug("Using the following builtin delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
   /** Construct a [[HadoopDelegationTokenManager]] for the default Hadoop filesystem */
