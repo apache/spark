@@ -429,7 +429,11 @@ package object config {
         "external shuffle service, this feature can only be worked when external shuffle" +
         "service is newer than Spark 2.2.")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(Long.MaxValue)
+      // fetch-to-mem is guaranteed to fail if the message is bigger than 2 GB, so we might
+      // as well use fetch-to-disk in that case.  The message includes some metadata in addition
+      // to the block data itself (in particular UploadBlock has a lot of metadata), so we leave
+      // extra room.
+      .createWithDefault(Int.MaxValue - 500)
 
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
     ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
