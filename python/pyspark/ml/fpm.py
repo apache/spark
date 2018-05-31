@@ -315,11 +315,11 @@ class PrefixSpan(JavaParams):
         .. note:: Experimental
         Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
 
-        :param dataset: A dataset or a dataframe containing a sequence column which is
-                        `Seq[Seq[_]]` type.
+        :param dataset: A dataframe containing a sequence column which is
+                        `ArrayType(ArrayType(T))` type, T is the item type for the input dataset.
         :return: A `DataFrame` that contains columns of sequence and corresponding frequency.
                  The schema of it will be:
-                  - `sequence: Seq[Seq[T]]` (T is the item type)
+                  - `sequence: ArrayType(ArrayType(T))` (T is the item type)
                   - `freq: Long`
 
         >>> from pyspark.ml.fpm import PrefixSpan
@@ -328,8 +328,7 @@ class PrefixSpan(JavaParams):
         ...                      Row(sequence=[[1], [3, 2], [1, 2]]),
         ...                      Row(sequence=[[1, 2], [5]]),
         ...                      Row(sequence=[[6]])]).toDF()
-        >>> prefixSpan = PrefixSpan(minSupport=0.5, maxPatternLength=5,
-        ...                         maxLocalProjDBSize=32000000)
+        >>> prefixSpan = PrefixSpan(minSupport=0.5, maxPatternLength=5)
         >>> prefixSpan.findFrequentSequentialPatterns(df).sort("sequence").show(truncate=False)
         +----------+----+
         |sequence  |freq|
