@@ -152,6 +152,62 @@ class BasicExecutorFeatureStepSuite
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
+  test("single executor hostPath volume gets mounted") {
+    hostPathVolumeTest(1, false)
+  }
+
+  test("multiple executor hostPath volumes get mounted") {
+    hostPathVolumeTest(2, false)
+  }
+
+  test("single executor hostPath volume gets mounted w/ readOnly option") {
+    hostPathVolumeTest(1, true)
+  }
+
+  test("multiple executor hostPath volumes get mounted w/ readOnly option") {
+    hostPathVolumeTest(2, true)
+  }
+
+  private def hostPathVolumeTest(numVolumes: Int, readOnly: Boolean): Unit = {
+    val conf = baseConf.clone()
+    for (i <- 0 until numVolumes) {
+      conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.mount.path",
+        s"/opt/mount$i")
+      conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.options.path",
+        s"/tmp/mount$i")
+      if (readOnly) {
+        conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.mount.readOnly",
+          "true")
+      }
+    }
+    val step = new BasicExecutorFeatureStep(
+      KubernetesConf(
+        conf,
+        KubernetesExecutorSpecificConf("1", DRIVER_POD),
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        LABELS,
+        ANNOTATIONS,
+        Map.empty,
+        Map.empty))
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    assert(executor.container.getImage === EXECUTOR_IMAGE)
+    assert(executor.container.getVolumeMounts.size() === numVolumes)
+    assert(executor.pod.getSpec.getVolumes.size() === numVolumes)
+    for (i <- 0 until numVolumes) {
+      assert(executor.container.getVolumeMounts.asScala
+        .exists(v => (v.getName == s"hostPath-$i" && v.getMountPath == s"/opt/mount$i")))
+      assert(executor.pod.getSpec.getVolumes.asScala
+        .exists(v => (v.getName == s"hostPath-$i" && v.getHostPath.getPath == s"/tmp/mount$i")))
+      if (readOnly) {
+        assert(executor.container.getVolumeMounts.get(i).getReadOnly == true)
+      }
+    }
+
+    checkOwnerReferences(executor.pod, DRIVER_POD_UID)
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
