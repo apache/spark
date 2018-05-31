@@ -216,9 +216,6 @@ class Dataset[T] private[sql](
   // sqlContext must be val because a stable identifier is expected when you import implicits
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
-  // We set a minimum column width at '3' in showString
-  val minimumColWidth = 3
-
   private[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
       .getOrElse {
@@ -260,7 +257,7 @@ class Dataset[T] private[sql](
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
-    var rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
+    schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
@@ -276,30 +273,6 @@ class Dataset[T] private[sql](
         }
       }: Seq[String]
     }
-
-    if (!vertical) {
-      val numCols = schema.fieldNames.length
-      // Initialise the width of each column to a minimum value
-      val colWidths = Array.fill(numCols)(minimumColWidth)
-
-      // Compute the width of each column
-      for (row <- rows) {
-        for ((cell, i) <- row.zipWithIndex) {
-          colWidths(i) = math.max(colWidths(i), cell.length)
-        }
-      }
-
-      rows = rows.map { row =>
-        row.zipWithIndex.map { case (cell, i) =>
-          if (truncate > 0) {
-            StringUtils.leftPad(cell, colWidths(i))
-          } else {
-            StringUtils.rightPad(cell, colWidths(i))
-          }
-        }
-      }
-    }
-    rows
   }
 
   /**
@@ -316,28 +289,51 @@ class Dataset[T] private[sql](
       vertical: Boolean = false): String = {
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
     // Get rows represented by Seq[Seq[String]], we may get one more line if it has more data.
-    val rows = getRows(numRows, truncate, vertical)
-    val fieldNames = rows.head
-    val data = rows.tail
+    val tmpRows = getRows(numRows, truncate, vertical)
 
-    val hasMoreData = data.length > numRows
-    val dataRows = data.take(numRows)
+    val hasMoreData = tmpRows.length - 1 > numRows
+    val rows = tmpRows.take(numRows + 1)
 
     val sb = new StringBuilder
+    val numCols = schema.fieldNames.length
+    // We set a minimum column width at '3'
+    val minimumColWidth = 3
+
     if (!vertical) {
+      // Initialise the width of each column to a minimum value
+      val colWidths = Array.fill(numCols)(minimumColWidth)
+
+      // Compute the width of each column
+      for (row <- rows) {
+        for ((cell, i) <- row.zipWithIndex) {
+          colWidths(i) = math.max(colWidths(i), cell.length)
+        }
+      }
+
+      val paddedRows = rows.map { row =>
+        row.zipWithIndex.map { case (cell, i) =>
+          if (truncate > 0) {
+            StringUtils.leftPad(cell, colWidths(i))
+          } else {
+            StringUtils.rightPad(cell, colWidths(i))
+          }
+        }
+      }
+
       // Create SeparateLine
-      val sep: String = fieldNames.map(_.length).toArray
-        .map("-" * _).addString(sb, "+", "+", "+\n").toString()
+      val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
 
       // column names
-      fieldNames.addString(sb, "|", "|", "|\n")
+      paddedRows.head.addString(sb, "|", "|", "|\n")
       sb.append(sep)
 
       // data
-      dataRows.foreach(_.addString(sb, "|", "|", "|\n"))
+      paddedRows.tail.foreach(_.addString(sb, "|", "|", "|\n"))
       sb.append(sep)
     } else {
       // Extended display mode enabled
+      val fieldNames = rows.head
+      val dataRows = rows.tail
       // Compute the width of field name and data columns
       val fieldNameColWidth = fieldNames.foldLeft(minimumColWidth) { case (curMax, fieldName) =>
         math.max(curMax, fieldName.length)
@@ -362,7 +358,7 @@ class Dataset[T] private[sql](
     }
 
     // Print a footer
-    if (vertical && dataRows.isEmpty) {
+    if (vertical && rows.tail.isEmpty) {
       // In a vertical mode, print an empty row set explicitly
       sb.append("(0 rows)\n")
     } else if (hasMoreData) {

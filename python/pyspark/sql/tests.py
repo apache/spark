@@ -3081,8 +3081,8 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEquals(None, df._repr_html_())
         self.spark.conf.set("spark.sql.repl.eagerEval.enabled", "true")
         expected1 = """<table border='1'>
-            |<tr><th>  key</th><th>value</th></tr>
-            |<tr><td>    1</td><td>    1</td></tr>
+            |<tr><th>key</th><th>value</th></tr>
+            |<tr><td>1</td><td>1</td></tr>
             |<tr><td>22222</td><td>22222</td></tr>
             |</table>
             |"""
@@ -3090,15 +3090,15 @@ class SQLTests(ReusedSQLTestCase):
         self.spark.conf.set("spark.sql.repl.eagerEval.truncate", 3)
         expected2 = """<table border='1'>
             |<tr><th>key</th><th>value</th></tr>
-            |<tr><td>  1</td><td>    1</td></tr>
-            |<tr><td>222</td><td>  222</td></tr>
+            |<tr><td>1</td><td>1</td></tr>
+            |<tr><td>222</td><td>222</td></tr>
             |</table>
             |"""
         self.assertEquals(re.sub(pattern, '', expected2), df._repr_html_())
         self.spark.conf.set("spark.sql.repl.eagerEval.maxNumRows", 1)
         expected3 = """<table border='1'>
             |<tr><th>key</th><th>value</th></tr>
-            |<tr><td>  1</td><td>    1</td></tr>
+            |<tr><td>1</td><td>1</td></tr>
             |</table>
             |only showing top 1 row
             |"""
