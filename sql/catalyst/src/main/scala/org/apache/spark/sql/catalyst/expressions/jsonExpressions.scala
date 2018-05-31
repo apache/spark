@@ -523,8 +523,8 @@ case class JsonToStructs(
   // can generate incorrect files if values are missing in columns declared as non-nullable.
   val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
 
-  val caseInsensitiveOptions = CaseInsensitiveMap(options)
-  val unpackArray: Boolean = {
+  private val caseInsensitiveOptions = CaseInsensitiveMap(options)
+  private val unpackArray: Boolean = {
     caseInsensitiveOptions.get("unpackArray").map(_.toBoolean).getOrElse(false)
   }
 
