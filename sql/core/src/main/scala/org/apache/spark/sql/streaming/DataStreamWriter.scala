@@ -23,9 +23,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.python.PythonForeachWriter
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.sources.{ForeachWriterProvider, MemoryPlanV2, MemorySinkV2}
@@ -269,7 +272,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       query
     } else if (source == "foreach") {
       assertNotPartitioned("foreach")
-      val sink = new ForeachWriterProvider[T](foreachWriter)(ds.exprEnc)
+      val sink = ForeachWriterProvider[T](foreachWriter, ds.exprEnc)
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),

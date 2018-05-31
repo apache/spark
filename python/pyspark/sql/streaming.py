@@ -30,6 +30,7 @@ from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
 from pyspark.sql.utils import StreamingQueryException
+from abc import ABCMeta, abstractmethod
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
@@ -841,6 +842,87 @@ class DataStreamWriter(object):
                 interval)
 
         self._jwrite = self._jwrite.trigger(jTrigger)
+        return self
+
+    def foreach(self, f):
+
+        from pyspark.rdd import _wrap_function
+        from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+        from pyspark.taskcontext import TaskContext
+
+        if callable(f):
+            """
+            The provided object is a callable function that is supposed to be called on each row.
+            Construct a function that takes an iterator and calls the provided function on each row.
+            """
+            def func_without_process(_, iterator):
+                for x in iterator:
+                    f(x)
+                return iter([])
+
+            func = func_without_process
+
+        else:
+            """
+            The provided object is not a callable function. Then it is expected to have a
+            'process(row)' method, and optional 'open(partitionId, epochOrBatchId)' and
+            'close(error)' methods.
+            """
+
+            if not hasattr(f, 'process'):
+                raise Exception(
+                    "Provided object is neither callable nor does it have a 'process' method")
+
+            if not callable(getattr(f, 'process')):
+                raise Exception("Attribute 'process' in provided object is not callable")
+
+            open_exists = False
+            if hasattr(f, 'open'):
+                if not callable(getattr(f, 'open')):
+                    raise Exception("Attribute 'open' in provided object is not callable")
+                else:
+                    open_exists = True
+
+            close_exists = False
+            if hasattr(f, "close"):
+                if not callable(getattr(f, 'close')):
+                    raise Exception("Attribute 'close' in provided object is not callable")
+                else:
+                    close_exists = True
+
+            def func_with_open_process_close(partitionId, iterator):
+                version = TaskContext.get().getLocalProperty('streaming.sql.batchId')
+                if version:
+                    version = int(version)
+                else:
+                    raise Exception("Could not get batch id from TaskContext")
+
+                should_process = True
+                if open_exists:
+                    should_process = f.open(partitionId, version)
+
+                def call_close_if_needed(error):
+                    if open_exists and close_exists:
+                        f.close(error)
+                try:
+                    if should_process:
+                        for x in iterator:
+                            f.process(x)
+                except Exception as ex:
+                    call_close_if_needed(ex)
+                    raise ex
+
+                call_close_if_needed(None)
+                return iter([])
+
+            func = func_with_open_process_close
+
+        serializer = AutoBatchedSerializer(PickleSerializer())
+        wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
+        jForeachWriter = \
+            self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
+                wrapped_func, self._df._jdf.schema())
+        self._jwrite.foreach(jForeachWriter)
         return self
 
     @ignore_unicode_prefix
