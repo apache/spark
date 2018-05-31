@@ -81,10 +81,10 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 }
 
 object SQLMetrics {
-  private val SUM_METRIC = "sum"
-  private val SIZE_METRIC = "size"
-  private val TIMING_METRIC = "timing"
-  private val AVERAGE_METRIC = "average"
+  val SUM_METRIC = "sum"
+  val SIZE_METRIC = "size"
+  val TIMING_METRIC = "timing"
+  val AVERAGE_METRIC = "average"
 
   private val baseForAvgMetric: Int = 10
 

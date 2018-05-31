@@ -90,10 +90,20 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
+    // average metric is a bit tricky, so hard to aggregate: just exclude them to simplify issue
+    val avgExcludedCustomMetrics = stateStoreCustomMetrics
+      .filterNot(_._2.metricType == SQLMetrics.AVERAGE_METRIC)
+      .map(entry => entry._1 -> longMetric(entry._1).value)
+
+    val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
+      new java.util.HashMap(avgExcludedCustomMetrics.mapValues(long2Long).asJava)
+
     new StateOperatorProgress(
       numRowsTotal = longMetric("numTotalStateRows").value,
       numRowsUpdated = longMetric("numUpdatedStateRows").value,
-      memoryUsedBytes = longMetric("stateMemory").value)
+      memoryUsedBytes = longMetric("stateMemory").value,
+      javaConvertedCustomMetrics
+    )
   }
 
   /** Records the duration of running `body` for the next query progress update. */
@@ -107,14 +117,19 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     val storeMetrics = store.metrics
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
-    storeMetrics.customMetrics.foreach { case (metric, value) =>
-      longMetric(metric.name) += value
+    storeMetrics.customMetrics.foreach {
+      case (metric: StateStoreCustomAverageMetric, value) =>
+        longMetric(metric.name).set(value * 1.0d)
+
+      case (metric, value) => longMetric(metric.name) += value
     }
   }
 
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
     val provider = StateStoreProvider.create(sqlContext.conf.stateStoreProviderClass)
     provider.supportedCustomMetrics.map {
+      case StateStoreCustomAverageMetric(name, desc) =>
+        name -> SQLMetrics.createAverageMetric(sparkContext, desc)
       case StateStoreCustomSizeMetric(name, desc) =>
         name -> SQLMetrics.createSizeMetric(sparkContext, desc)
       case StateStoreCustomTimingMetric(name, desc) =>

@@ -231,7 +231,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("event ordering") {
     val listener = new EventCollector
     withListenerAdded(listener) {
-      for (i <- 1 to 100) {
+      for (i <- 1 to 50) {
         listener.reset()
         require(listener.startEvent === null)
         testStream(MemoryStream[Int].toDS)(

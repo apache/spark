@@ -164,7 +164,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     }
 
     override def metrics: StateStoreMetrics = {
-      StateStoreMetrics(mapToUpdate.size(), SizeEstimator.estimate(mapToUpdate), Map.empty)
+      StateStoreMetrics(mapToUpdate.size(), SizeEstimator.estimate(mapToUpdate),
+        getCustomMetricsForProvider())
     }
 
     /**
@@ -177,6 +178,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     override def toString(): String = {
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
+  }
+
+  def getCustomMetricsForProvider(): Map[StateStoreCustomMetric, Long] = synchronized {
+    Map(metricProviderLoaderMapSizeBytes -> SizeEstimator.estimate(loadedMaps),
+      metricProviderLoaderCountOfVersionsInMap -> loadedMaps.size)
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
@@ -224,7 +230,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
-    Nil
+    metricProviderLoaderMapSizeBytes :: metricProviderLoaderCountOfVersionsInMap :: Nil
   }
 
   override def toString(): String = {
@@ -244,6 +250,14 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
   private lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+
+  private lazy val metricProviderLoaderMapSizeBytes: StateStoreCustomSizeMetric =
+    StateStoreCustomSizeMetric("providerLoadedMapSizeBytes",
+      "estimated size of states cache in provider")
+
+  private lazy val metricProviderLoaderCountOfVersionsInMap: StateStoreCustomAverageMetric =
+    StateStoreCustomAverageMetric("providerLoadedMapCountOfVersions",
+      "count of versions in states cache in provider")
 
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 

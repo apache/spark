@@ -38,7 +38,8 @@ import org.apache.spark.annotation.InterfaceStability
 class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
-    val memoryUsedBytes: Long
+    val memoryUsedBytes: Long,
+    val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
   /** The compact JSON representation of this progress. */
@@ -48,12 +49,24 @@ class StateOperatorProgress private[sql](
   def prettyJson: String = pretty(render(jsonValue))
 
   private[sql] def copy(newNumRowsUpdated: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes)
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, customMetrics)
 
   private[sql] def jsonValue: JValue = {
-    ("numRowsTotal" -> JInt(numRowsTotal)) ~
-    ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
-    ("memoryUsedBytes" -> JInt(memoryUsedBytes))
+    def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
+      if (map.isEmpty) return JNothing
+      val keys = map.keySet.asScala.toSeq.sorted
+      keys.map { k => k -> valueToJValue(map.get(k)) : JObject }.reduce(_ ~ _)
+    }
+
+    val jsonVal = ("numRowsTotal" -> JInt(numRowsTotal)) ~
+      ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
+      ("memoryUsedBytes" -> JInt(memoryUsedBytes))
+
+    if (!customMetrics.isEmpty) {
+      jsonVal ~ ("customMetrics" -> safeMapToJValue[JLong](customMetrics, v => JInt(v.toLong)))
+    } else {
+      jsonVal
+    }
   }
 
   override def toString: String = prettyJson
