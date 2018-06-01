@@ -900,6 +900,47 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_stopiteration_in_udf(self):
+        return
+
+        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
+        from py4j.protocol import Py4JJavaError
+
+        def do_test(action, *args, **kwargs):
+            exc_message = "Caught StopIteration thrown from user's code; failing the task"
+            with self.assertRaisesRegexp(Py4JJavaError, exc_message) as cm:
+                action(*args, **kwargs)
+
+        def foo(x):
+            raise StopIteration()
+
+        def foofoo(x, y):
+            raise StopIteration()
+
+        df = self.spark.range(0, 100)
+
+        # plain udf (test for SPARK-23754)
+        do_test(df.withColumn('v', udf(foo)('id')).show)
+
+        # pandas scalar udf
+        do_test(df.withColumn(
+            'v', pandas_udf(foo, 'double', PandasUDFType.SCALAR)('id')
+        ).show)
+
+        # pandas grouped map
+        do_test(df.groupBy('id').apply(
+            pandas_udf(foo, df.schema, PandasUDFType.GROUPED_MAP)
+        ).show)
+
+        do_test(df.groupBy('id').apply(
+            pandas_udf(foofoo, df.schema, PandasUDFType.GROUPED_MAP)
+        ).show)
+
+        # pandas grouped agg
+        do_test(df.groupBy('id').agg(
+            pandas_udf(foo, 'double', PandasUDFType.GROUPED_AGG)('id')
+        ).show)
+
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
         from pyspark.sql.column import _to_java_column

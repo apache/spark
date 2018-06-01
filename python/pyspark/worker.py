@@ -35,7 +35,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type
-from pyspark.util import _get_argspec
+from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -92,10 +92,9 @@ def wrap_scalar_pandas_udf(f, return_type):
     return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 
-def wrap_grouped_map_pandas_udf(f, return_type):
+def wrap_grouped_map_pandas_udf(f, return_type, argspec):
     def wrapped(key_series, value_series):
         import pandas as pd
-        argspec = _get_argspec(f)
 
         if len(argspec.args) == 1:
             result = f(pd.concat(value_series, axis=1))
@@ -140,15 +139,20 @@ def read_single_udf(pickleSer, infile, eval_type):
         else:
             row_func = chain(row_func, f)
 
+    # make sure StopIteration's raised in the user code are not
+    # ignored, but re-raised as RuntimeError's
+    func = fail_on_stopiteration(row_func)
+
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        return arg_offsets, wrap_scalar_pandas_udf(row_func, return_type)
+        return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        return arg_offsets, wrap_grouped_map_pandas_udf(row_func, return_type)
+        argspec = _get_argspec(row_func)  # signature was lost when wrapping it
+        return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_grouped_agg_pandas_udf(row_func, return_type)
+        return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        return arg_offsets, wrap_udf(row_func, return_type)
+        return arg_offsets, wrap_udf(func, return_type)
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
