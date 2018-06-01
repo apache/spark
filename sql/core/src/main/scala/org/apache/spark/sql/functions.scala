@@ -1108,6 +1108,14 @@ object functions {
   def input_file_name(): Column = withExpr { InputFileName() }
 
   /**
+   * Return true iff the column is Infinity.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def isinf(e: Column): Column = withExpr { IsInf(e.expr) }
+
+  /**
    * Return true iff the column is NaN.
    *
    * @group normal_funcs

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types._
 
-class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+  class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def testAllTypes(testFunc: (Any, DataType) => Unit): Unit = {
     testFunc(false, BooleanType)
@@ -54,6 +54,16 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluateWithoutCodegen(AssertNotNull(Literal(null), Seq.empty[String]))
     }.getMessage
     assert(ex.contains("Null value appeared in non-nullable field"))
+  }
+
+  test("IsInf") {
+    checkEvaluation(IsInf(Literal(Double.PositiveInfinity)), true)
+    checkEvaluation(IsInf(Literal(Double.NegativeInfinity)), true)
+    checkEvaluation(IsInf(Literal(Float.PositiveInfinity)), true)
+    checkEvaluation(IsInf(Literal(Float.NegativeInfinity)), true)
+    checkEvaluation(IsInf(Literal.create(null, DoubleType)), false)
+    checkEvaluation(IsInf(Literal(Float.MaxValue)), false)
+    checkEvaluation(IsInf(Literal(5.5f)), false)
   }
 
   test("IsNaN") {

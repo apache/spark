@@ -908,6 +908,30 @@ setMethod("initcap",
           })
 
 #' @details
+#' \code{isinf}: Returns true if the column is Infinity.
+#' @rdname column_nonaggregate_functions
+#' @aliases isnan isnan,Column-method
+#' @note isinf since 2.0.0
+setMethod("isinf",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "isinf", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{isInf}: Returns true if the column is Infinity.
+#' @rdname column_nonaggregate_functions
+#' @aliases isnan isnan,Column-method
+#' @note isinf since 2.0.0
+setMethod("isInf",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "isinf", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{isnan}: Returns true if the column is NaN.
 #' @rdname column_nonaggregate_functions
 #' @aliases isnan isnan,Column-method
