@@ -160,7 +160,7 @@ class CSVOptions(
    * Forcibly apply the specified or inferred schema to datasource files.
    * If the option is enabled, headers of CSV files will be ignored.
    */
-  val enforceSchema = getBool("enforceSchema", true)
+  val enforceSchema = getBool("enforceSchema", default = true)
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()

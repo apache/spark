@@ -185,7 +185,11 @@ object CSVDataSource extends Logging {
       enforceSchema: Boolean,
       caseSensitive: Boolean): Unit = {
     if (!enforceSchema) {
-      checkHeaderColumnNames(schema, parser.parseLine(header), fileName, enforceSchema,
+      checkHeaderColumnNames(
+        schema,
+        parser.parseLine(header),
+        fileName,
+        enforceSchema,
         caseSensitive)
     }
   }
@@ -216,8 +220,13 @@ object TextInputCSVDataSource extends CSVDataSource {
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
-        CSVDataSource.checkHeader(header, parser.tokenizer, dataSchema, file.filePath,
-          parser.options.enforceSchema, caseSensitive)
+        CSVDataSource.checkHeader(
+          header,
+          parser.tokenizer,
+          dataSchema,
+          file.filePath,
+          parser.options.enforceSchema,
+          caseSensitive)
       }
     }
 
@@ -294,13 +303,20 @@ object MultiLineCSVDataSource extends CSVDataSource {
       dataSchema: StructType,
       caseSensitive: Boolean): Iterator[InternalRow] = {
     def checkHeader(header: Array[String]): Unit = {
-      CSVDataSource.checkHeaderColumnNames(dataSchema, header, file.filePath,
-        parser.options.enforceSchema, caseSensitive)
+      CSVDataSource.checkHeaderColumnNames(
+        dataSchema,
+        header,
+        file.filePath,
+        parser.options.enforceSchema,
+        caseSensitive)
     }
 
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
-      parser.options.headerFlag, parser, requiredSchema, checkHeader)
+      parser.options.headerFlag,
+      parser,
+      requiredSchema,
+      checkHeader)
   }
 
   override def infer(
