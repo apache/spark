@@ -3275,14 +3275,10 @@ object ArraySetLike {
       i += 1
     }
 
-    val numBytes = IntegerType.defaultSize.toLong * array.length
-    val unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes(array.length) +
-      ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
-    // Since UnsafeArrayData.fromPrimitiveArray() uses long[], max elements * 8 bytes can be used
-    if (unsafeArraySizeInBytes <= Integer.MAX_VALUE * 8) {
-      UnsafeArrayData.fromPrimitiveArray(array)
-    } else {
+    if (useGenericArrayData(LongType.defaultSize, array.length)) {
       new GenericArrayData(array)
+    } else {
+      UnsafeArrayData.fromPrimitiveArray(array)
     }
   }
 
@@ -3296,15 +3292,19 @@ object ArraySetLike {
       i += 1
     }
 
-    val numBytes = LongType.defaultSize.toLong * array.length
-    val unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes(array.length) +
-      ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
-    // Since UnsafeArrayData.fromPrimitiveArray() uses long[], max elements * 8 bytes can be used
-    if (unsafeArraySizeInBytes <= Integer.MAX_VALUE * 8) {
-      UnsafeArrayData.fromPrimitiveArray(array)
-    } else {
+    if (useGenericArrayData(LongType.defaultSize, array.length)) {
       new GenericArrayData(array)
+    } else {
+      UnsafeArrayData.fromPrimitiveArray(array)
     }
+  }
+
+  def useGenericArrayData(elementSize: Int, length: Int): Boolean = {
+    // Use the same calculation in UnsafeArrayData.fromPrimitiveArray()
+    val headerInBytes = UnsafeArrayData.calculateHeaderPortionInBytes(length)
+    val valueRegionInBytes = elementSize.toLong * length
+    val totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8
+    totalSizeInLongs > Integer.MAX_VALUE / 8
   }
 
   def arrayUnion(
