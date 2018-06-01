@@ -592,6 +592,7 @@ primaryExpression
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
+    | EXTRACT '(' field=(YEAR | QUARTER | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND) FROM source=valueExpression ')'           #extract
     ;
 
 constant
@@ -739,6 +740,7 @@ nonReserved
     | VIEW | REPLACE
     | IF
     | POSITION
+    | EXTRACT | YEAR | QUARTER | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
@@ -878,6 +880,15 @@ TRAILING: 'TRAILING';
 
 IF: 'IF';
 POSITION: 'POSITION';
+EXTRACT: 'EXTRACT';
+YEAR: 'YEAR';
+QUARTER: 'QUARTER';
+MONTH: 'MONTH';
+WEEK: 'WEEK';
+DAY: 'DAY';
+HOUR: 'HOUR';
+MINUTE: 'MINUTE';
+SECOND: 'SECOND';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
