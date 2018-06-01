@@ -1303,11 +1303,13 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaises(Py4JJavaError, seq_rdd.filter(stopit).collect)
         self.assertRaises(Py4JJavaError, seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
         self.assertRaises(Py4JJavaError, seq_rdd.foreach, stopit)
-        self.assertRaises(Py4JJavaError, keyed_rdd.reduceByKeyLocally, stopit)
         self.assertRaises(Py4JJavaError, seq_rdd.reduce, stopit)
         self.assertRaises(Py4JJavaError, seq_rdd.fold, 0, stopit)
+        self.assertRaises(Py4JJavaError, seq_rdd.foreach, stopit)
 
         # the exception raised is non-deterministic
+        self.assertRaises((Py4JJavaError, RuntimeError),
+                          keyed_rdd.reduceByKeyLocally, stopit)
         self.assertRaises((Py4JJavaError, RuntimeError),
                           seq_rdd.aggregate, 0, stopit, lambda *x: 1)
         self.assertRaises((Py4JJavaError, RuntimeError),

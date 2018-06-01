@@ -799,6 +799,8 @@ class RDD(object):
         >>> def f(x): print(x)
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreach(f)
         """
+        f = fail_on_stopiteration(f)
+
         def processPartition(iterator):
             for x in iterator:
                 f(x)
@@ -1636,7 +1638,6 @@ class RDD(object):
         >>> sorted(rdd.reduceByKey(add).collect())
         [('a', 2), ('b', 1)]
         """
-        func = fail_on_stopiteration(func)
         return self.combineByKey(lambda x: x, func, func, numPartitions, partitionFunc)
 
     def reduceByKeyLocally(self, func):
@@ -1652,6 +1653,8 @@ class RDD(object):
         >>> sorted(rdd.reduceByKeyLocally(add).items())
         [('a', 2), ('b', 1)]
         """
+        func = fail_on_stopiteration(func)
+
         def reducePartition(iterator):
             m = {}
             for k, v in iterator:

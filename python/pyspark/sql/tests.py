@@ -901,8 +901,6 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(return_type, f_.returnType)
 
     def test_stopiteration_in_udf(self):
-        return
-
         from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
         from py4j.protocol import Py4JJavaError
 
