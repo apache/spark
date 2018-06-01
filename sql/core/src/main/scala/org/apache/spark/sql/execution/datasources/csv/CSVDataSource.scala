@@ -193,14 +193,12 @@ object CSVDataSource extends Logging {
       fileName: String,
       enforceSchema: Boolean,
       caseSensitive: Boolean): Unit = {
-    if (!enforceSchema) {
-      checkHeaderColumnNames(
+    checkHeaderColumnNames(
         schema,
         parser.parseLine(header),
         fileName,
         enforceSchema,
         caseSensitive)
-    }
   }
 }
 

@@ -503,11 +503,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
-      if (!parsedOptions.enforceSchema) {
-        CSVDataSource.checkHeader(firstLine, new CsvParser(parsedOptions.asParserSettings),
-          actualSchema, csvDataset.getClass.getCanonicalName, parsedOptions.enforceSchema,
-          sparkSession.sessionState.conf.caseSensitiveAnalysis)
-      }
+      CSVDataSource.checkHeader(
+        firstLine,
+        new CsvParser(parsedOptions.asParserSettings),
+        actualSchema,
+        csvDataset.getClass.getCanonicalName,
+        parsedOptions.enforceSchema,
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
 

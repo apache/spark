@@ -28,6 +28,8 @@ import scala.collection.JavaConverters._
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.log4j.{AppenderSkeleton, LogManager}
+import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
@@ -1556,5 +1558,48 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .csv(Seq("col1,col2", "1.0,a").toDS())
     }
     assert(exception.getMessage.contains("CSV header does not conform to the schema"))
+  }
+
+  test("SPARK-23786: warning should be printed if CSV header doesn't conform to schema") {
+    class TestAppender extends AppenderSkeleton {
+      var events = new java.util.ArrayList[LoggingEvent]
+      override def close(): Unit = {}
+      override def requiresLayout: Boolean = false
+      protected def append(event: LoggingEvent): Unit = events.add(event)
+    }
+
+    val testAppender1 = new TestAppender
+    LogManager.getRootLogger.addAppender(testAppender1)
+    try {
+      val ds = Seq("columnA,columnB", "1.0,1000.0").toDS()
+      val ischema = new StructType().add("columnB", DoubleType).add("columnA", DoubleType)
+
+      spark.read.schema(ischema).option("header", true).option("enforceSchema", true).csv(ds)
+    } finally {
+      LogManager.getRootLogger.removeAppender(testAppender1)
+    }
+    assert(testAppender1.events.asScala
+      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+
+    val testAppender2 = new TestAppender
+    LogManager.getRootLogger.addAppender(testAppender2)
+    try {
+      withTempPath { path =>
+        val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
+        val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
+        odf.write.option("header", true).csv(path.getCanonicalPath)
+        val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
+        spark.read
+          .schema(ischema)
+          .option("header", true)
+          .option("enforceSchema", true)
+          .csv(path.getCanonicalPath)
+          .collect()
+      }
+    } finally {
+      LogManager.getRootLogger.removeAppender(testAppender2)
+    }
+    assert(testAppender2.events.asScala
+      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
 }
