@@ -19,12 +19,12 @@ import sys
 if sys.version > '3':
     basestring = str
 
-from pyspark import since, keyword_only
+from pyspark import since, keyword_only, SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
 __all__ = ['Binarizer',
@@ -34,6 +34,7 @@ __all__ = ['Binarizer',
            'CountVectorizer', 'CountVectorizerModel',
            'DCT',
            'ElementwiseProduct',
+           'FeatureHasher',
            'HashingTF',
            'IDF', 'IDFModel',
            'Imputer', 'ImputerModel',
@@ -44,6 +45,7 @@ __all__ = ['Binarizer',
            'NGram',
            'Normalizer',
            'OneHotEncoder',
+           'OneHotEncoderEstimator', 'OneHotEncoderModel',
            'PCA', 'PCAModel',
            'PolynomialExpansion',
            'QuantileDiscretizer',
@@ -56,6 +58,7 @@ __all__ = ['Binarizer',
            'Tokenizer',
            'VectorAssembler',
            'VectorIndexer', 'VectorIndexerModel',
+           'VectorSizeHint',
            'VectorSlicer',
            'Word2Vec', 'Word2VecModel']
 
@@ -400,8 +403,84 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
         return self.getOrDefault(self.splits)
 
 
+class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
+    """
+    Params for :py:attr:`CountVectorizer` and :py:attr:`CountVectorizerModel`.
+    """
+
+    minTF = Param(
+        Params._dummy(), "minTF", "Filter to ignore rare words in" +
+        " a document. For each document, terms with frequency/count less than the given" +
+        " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
+        " times the term must appear in the document); if this is a double in [0,1), then this " +
+        "specifies a fraction (out of the document's token count). Note that the parameter is " +
+        "only used in transform of CountVectorizerModel and does not affect fitting. Default 1.0",
+        typeConverter=TypeConverters.toFloat)
+    minDF = Param(
+        Params._dummy(), "minDF", "Specifies the minimum number of" +
+        " different documents a term must appear in to be included in the vocabulary." +
+        " If this is an integer >= 1, this specifies the number of documents the term must" +
+        " appear in; if this is a double in [0,1), then this specifies the fraction of documents." +
+        " Default 1.0", typeConverter=TypeConverters.toFloat)
+    maxDF = Param(
+        Params._dummy(), "maxDF", "Specifies the maximum number of" +
+        " different documents a term could appear in to be included in the vocabulary." +
+        " A term that appears more than the threshold will be ignored. If this is an" +
+        " integer >= 1, this specifies the maximum number of documents the term could appear in;" +
+        " if this is a double in [0,1), then this specifies the maximum" +
+        " fraction of documents the term could appear in." +
+        " Default (2^63) - 1", typeConverter=TypeConverters.toFloat)
+    vocabSize = Param(
+        Params._dummy(), "vocabSize", "max size of the vocabulary. Default 1 << 18.",
+        typeConverter=TypeConverters.toInt)
+    binary = Param(
+        Params._dummy(), "binary", "Binary toggle to control the output vector values." +
+        " If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful" +
+        " for discrete probabilistic models that model binary events rather than integer counts." +
+        " Default False", typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self, *args):
+        super(_CountVectorizerParams, self).__init__(*args)
+        self._setDefault(minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False)
+
+    @since("1.6.0")
+    def getMinTF(self):
+        """
+        Gets the value of minTF or its default value.
+        """
+        return self.getOrDefault(self.minTF)
+
+    @since("1.6.0")
+    def getMinDF(self):
+        """
+        Gets the value of minDF or its default value.
+        """
+        return self.getOrDefault(self.minDF)
+
+    @since("2.4.0")
+    def getMaxDF(self):
+        """
+        Gets the value of maxDF or its default value.
+        """
+        return self.getOrDefault(self.maxDF)
+
+    @since("1.6.0")
+    def getVocabSize(self):
+        """
+        Gets the value of vocabSize or its default value.
+        """
+        return self.getOrDefault(self.vocabSize)
+
+    @since("2.0.0")
+    def getBinary(self):
+        """
+        Gets the value of binary or its default value.
+        """
+        return self.getOrDefault(self.binary)
+
+
 @inherit_doc
-class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, JavaMLWritable):
     """
     Extracts a vocabulary from document collections and generates a :py:attr:`CountVectorizerModel`.
 
@@ -434,54 +513,40 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
     >>> loadedModel = CountVectorizerModel.load(modelPath)
     >>> loadedModel.vocabulary == model.vocabulary
     True
+    >>> fromVocabModel = CountVectorizerModel.from_vocabulary(["a", "b", "c"],
+    ...     inputCol="raw", outputCol="vectors")
+    >>> fromVocabModel.transform(df).show(truncate=False)
+    +-----+---------------+-------------------------+
+    |label|raw            |vectors                  |
+    +-----+---------------+-------------------------+
+    |0    |[a, b, c]      |(3,[0,1,2],[1.0,1.0,1.0])|
+    |1    |[a, b, b, c, a]|(3,[0,1,2],[2.0,2.0,1.0])|
+    +-----+---------------+-------------------------+
+    ...
 
     .. versionadded:: 1.6.0
     """
 
-    minTF = Param(
-        Params._dummy(), "minTF", "Filter to ignore rare words in" +
-        " a document. For each document, terms with frequency/count less than the given" +
-        " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
-        " times the term must appear in the document); if this is a double in [0,1), then this " +
-        "specifies a fraction (out of the document's token count). Note that the parameter is " +
-        "only used in transform of CountVectorizerModel and does not affect fitting. Default 1.0",
-        typeConverter=TypeConverters.toFloat)
-    minDF = Param(
-        Params._dummy(), "minDF", "Specifies the minimum number of" +
-        " different documents a term must appear in to be included in the vocabulary." +
-        " If this is an integer >= 1, this specifies the number of documents the term must" +
-        " appear in; if this is a double in [0,1), then this specifies the fraction of documents." +
-        " Default 1.0", typeConverter=TypeConverters.toFloat)
-    vocabSize = Param(
-        Params._dummy(), "vocabSize", "max size of the vocabulary. Default 1 << 18.",
-        typeConverter=TypeConverters.toInt)
-    binary = Param(
-        Params._dummy(), "binary", "Binary toggle to control the output vector values." +
-        " If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful" +
-        " for discrete probabilistic models that model binary events rather than integer counts." +
-        " Default False", typeConverter=TypeConverters.toBoolean)
-
     @keyword_only
-    def __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,
-                 outputCol=None):
+    def __init__(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,
+                 inputCol=None, outputCol=None):
         """
-        __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,\
-                 outputCol=None)
+        __init__(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,\
+                 inputCol=None,outputCol=None)
         """
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
                                             self.uid)
-        self._setDefault(minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
-    def setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,
-                  outputCol=None):
+    def setParams(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,
+                  inputCol=None, outputCol=None):
         """
-        setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,\
-                  outputCol=None)
+        setParams(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,\
+                  inputCol=None, outputCol=None)
         Set the params for the CountVectorizer
         """
         kwargs = self._input_kwargs
@@ -495,25 +560,18 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         return self._set(minTF=value)
 
     @since("1.6.0")
-    def getMinTF(self):
-        """
-        Gets the value of minTF or its default value.
-        """
-        return self.getOrDefault(self.minTF)
-
-    @since("1.6.0")
     def setMinDF(self, value):
         """
         Sets the value of :py:attr:`minDF`.
         """
         return self._set(minDF=value)
 
-    @since("1.6.0")
-    def getMinDF(self):
+    @since("2.4.0")
+    def setMaxDF(self, value):
         """
-        Gets the value of minDF or its default value.
+        Sets the value of :py:attr:`maxDF`.
         """
-        return self.getOrDefault(self.minDF)
+        return self._set(maxDF=value)
 
     @since("1.6.0")
     def setVocabSize(self, value):
@@ -522,13 +580,6 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         return self._set(vocabSize=value)
 
-    @since("1.6.0")
-    def getVocabSize(self):
-        """
-        Gets the value of vocabSize or its default value.
-        """
-        return self.getOrDefault(self.vocabSize)
-
     @since("2.0.0")
     def setBinary(self, value):
         """
@@ -536,23 +587,39 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         return self._set(binary=value)
 
-    @since("2.0.0")
-    def getBinary(self):
-        """
-        Gets the value of binary or its default value.
-        """
-        return self.getOrDefault(self.binary)
-
     def _create_model(self, java_model):
         return CountVectorizerModel(java_model)
 
 
-class CountVectorizerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+@inherit_doc
+class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`CountVectorizer`.
 
     .. versionadded:: 1.6.0
     """
+
+    @classmethod
+    @since("2.4.0")
+    def from_vocabulary(cls, vocabulary, inputCol, outputCol=None, minTF=None, binary=None):
+        """
+        Construct the model directly from a vocabulary list of strings,
+        requires an active SparkContext.
+        """
+        sc = SparkContext._active_spark_context
+        java_class = sc._gateway.jvm.java.lang.String
+        jvocab = CountVectorizerModel._new_java_array(vocabulary, java_class)
+        model = CountVectorizerModel._create_from_java_class(
+            "org.apache.spark.ml.feature.CountVectorizerModel", jvocab)
+        model.setInputCol(inputCol)
+        if outputCol is not None:
+            model.setOutputCol(outputCol)
+        if minTF is not None:
+            model.setMinTF(minTF)
+        if binary is not None:
+            model.setBinary(binary)
+        model._set(vocabSize=len(vocabulary))
+        return model
 
     @property
     @since("1.6.0")
@@ -561,6 +628,20 @@ class CountVectorizerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         An array of terms in the vocabulary.
         """
         return self._call_java("vocabulary")
+
+    @since("2.4.0")
+    def setMinTF(self, value):
+        """
+        Sets the value of :py:attr:`minTF`.
+        """
+        return self._set(minTF=value)
+
+    @since("2.4.0")
+    def setBinary(self, value):
+        """
+        Sets the value of :py:attr:`binary`.
+        """
+        return self._set(binary=value)
 
 
 @inherit_doc
@@ -694,6 +775,102 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         Gets the value of scalingVec or its default value.
         """
         return self.getOrDefault(self.scalingVec)
+
+
+@inherit_doc
+class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures, JavaMLReadable,
+                    JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Feature hashing projects a set of categorical or numerical features into a feature vector of
+    specified dimension (typically substantially smaller than that of the original feature
+    space). This is done using the hashing trick (https://en.wikipedia.org/wiki/Feature_hashing)
+    to map features to indices in the feature vector.
+
+    The FeatureHasher transformer operates on multiple columns. Each column may contain either
+    numeric or categorical features. Behavior and handling of column data types is as follows:
+
+    * Numeric columns:
+        For numeric features, the hash value of the column name is used to map the
+        feature value to its index in the feature vector. By default, numeric features
+        are not treated as categorical (even when they are integers). To treat them
+        as categorical, specify the relevant columns in `categoricalCols`.
+
+    * String columns:
+        For categorical features, the hash value of the string "column_name=value"
+        is used to map to the vector index, with an indicator value of `1.0`.
+        Thus, categorical features are "one-hot" encoded
+        (similarly to using :py:class:`OneHotEncoder` with `dropLast=false`).
+
+    * Boolean columns:
+        Boolean values are treated in the same way as string columns. That is,
+        boolean features are represented as "column_name=true" or "column_name=false",
+        with an indicator value of `1.0`.
+
+    Null (missing) values are ignored (implicitly zero in the resulting feature vector).
+
+    Since a simple modulo is used to transform the hash function to a vector index,
+    it is advisable to use a power of two as the `numFeatures` parameter;
+    otherwise the features will not be mapped evenly to the vector indices.
+
+    >>> data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]
+    >>> cols = ["real", "bool", "stringNum", "string"]
+    >>> df = spark.createDataFrame(data, cols)
+    >>> hasher = FeatureHasher(inputCols=cols, outputCol="features")
+    >>> hasher.transform(df).head().features
+    SparseVector(262144, {174475: 2.0, 247670: 1.0, 257907: 1.0, 262126: 1.0})
+    >>> hasher.setCategoricalCols(["real"]).transform(df).head().features
+    SparseVector(262144, {171257: 1.0, 247670: 1.0, 257907: 1.0, 262126: 1.0})
+    >>> hasherPath = temp_path + "/hasher"
+    >>> hasher.save(hasherPath)
+    >>> loadedHasher = FeatureHasher.load(hasherPath)
+    >>> loadedHasher.getNumFeatures() == hasher.getNumFeatures()
+    True
+    >>> loadedHasher.transform(df).head().features == hasher.transform(df).head().features
+    True
+
+    .. versionadded:: 2.3.0
+    """
+
+    categoricalCols = Param(Params._dummy(), "categoricalCols",
+                            "numeric columns to treat as categorical",
+                            typeConverter=TypeConverters.toListString)
+
+    @keyword_only
+    def __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None):
+        """
+        __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None)
+        """
+        super(FeatureHasher, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FeatureHasher", self.uid)
+        self._setDefault(numFeatures=1 << 18)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None):
+        """
+        setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None)
+        Sets params for this FeatureHasher.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.3.0")
+    def setCategoricalCols(self, value):
+        """
+        Sets the value of :py:attr:`categoricalCols`.
+        """
+        return self._set(categoricalCols=value)
+
+    @since("2.3.0")
+    def getCategoricalCols(self):
+        """
+        Gets the value of binary or its default value.
+        """
+        return self.getOrDefault(self.categoricalCols)
 
 
 @inherit_doc
@@ -1479,6 +1656,9 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     .. note:: This is different from scikit-learn's OneHotEncoder,
         which keeps all categories. The output vectors are sparse.
 
+    .. note:: Deprecated in 2.3.0. :py:class:`OneHotEncoderEstimator` will be renamed to
+        :py:class:`OneHotEncoder` and this :py:class:`OneHotEncoder` will be removed in 3.0.0.
+
     .. seealso::
 
        :py:class:`StringIndexer` for converting categorical values into
@@ -1541,6 +1721,118 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
         Gets the value of dropLast or its default value.
         """
         return self.getOrDefault(self.dropLast)
+
+
+@inherit_doc
+class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHandleInvalid,
+                             JavaMLReadable, JavaMLWritable):
+    """
+    A one-hot encoder that maps a column of category indices to a column of binary vectors, with
+    at most a single one-value per row that indicates the input category index.
+    For example with 5 categories, an input value of 2.0 would map to an output vector of
+    `[0.0, 0.0, 1.0, 0.0]`.
+    The last category is not included by default (configurable via `dropLast`),
+    because it makes the vector entries sum up to one, and hence linearly dependent.
+    So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
+
+    Note: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
+    The output vectors are sparse.
+
+    When `handleInvalid` is configured to 'keep', an extra "category" indicating invalid values is
+    added as last category. So when `dropLast` is true, invalid values are encoded as all-zeros
+    vector.
+
+    Note: When encoding multi-column by using `inputCols` and `outputCols` params, input/output
+    cols come in pairs, specified by the order in the arrays, and each pair is treated
+    independently.
+
+    See `StringIndexer` for converting categorical values into category indices
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
+    >>> ohe = OneHotEncoderEstimator(inputCols=["input"], outputCols=["output"])
+    >>> model = ohe.fit(df)
+    >>> model.transform(df).head().output
+    SparseVector(2, {0: 1.0})
+    >>> ohePath = temp_path + "/oheEstimator"
+    >>> ohe.save(ohePath)
+    >>> loadedOHE = OneHotEncoderEstimator.load(ohePath)
+    >>> loadedOHE.getInputCols() == ohe.getInputCols()
+    True
+    >>> modelPath = temp_path + "/ohe-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = OneHotEncoderModel.load(modelPath)
+    >>> loadedModel.categorySizes == model.categorySizes
+    True
+
+    .. versionadded:: 2.3.0
+    """
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data during " +
+                          "transform(). Options are 'keep' (invalid data presented as an extra " +
+                          "categorical feature) or error (throw an error). Note that this Param " +
+                          "is only used during transform; during fitting, invalid data will " +
+                          "result in an error.",
+                          typeConverter=TypeConverters.toString)
+
+    dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category",
+                     typeConverter=TypeConverters.toBoolean)
+
+    @keyword_only
+    def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
+        """
+        __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
+        """
+        super(OneHotEncoderEstimator, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.feature.OneHotEncoderEstimator", self.uid)
+        self._setDefault(handleInvalid="error", dropLast=True)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
+        """
+        setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
+        Sets params for this OneHotEncoderEstimator.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.3.0")
+    def setDropLast(self, value):
+        """
+        Sets the value of :py:attr:`dropLast`.
+        """
+        return self._set(dropLast=value)
+
+    @since("2.3.0")
+    def getDropLast(self):
+        """
+        Gets the value of dropLast or its default value.
+        """
+        return self.getOrDefault(self.dropLast)
+
+    def _create_model(self, java_model):
+        return OneHotEncoderModel(java_model)
+
+
+class OneHotEncoderModel(JavaModel, JavaMLReadable, JavaMLWritable):
+    """
+    Model fitted by :py:class:`OneHotEncoderEstimator`.
+
+    .. versionadded:: 2.3.0
+    """
+
+    @property
+    @since("2.3.0")
+    def categorySizes(self):
+        """
+        Original number of categories for each feature being encoded.
+        The array contains one value for each input column, in order.
+        """
+        return self._call_java("categorySizes")
 
 
 @inherit_doc
@@ -2050,9 +2342,38 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("mean")
 
 
+class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol):
+    """
+    Params for :py:attr:`StringIndexer` and :py:attr:`StringIndexerModel`.
+    """
+
+    stringOrderType = Param(Params._dummy(), "stringOrderType",
+                            "How to order labels of string column. The first label after " +
+                            "ordering is assigned an index of 0. Supported options: " +
+                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
+                            typeConverter=TypeConverters.toString)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
+                          "or NULL values) in features and label column of string type. " +
+                          "Options are 'skip' (filter out rows with invalid data), " +
+                          "error (throw an error), or 'keep' (put invalid data " +
+                          "in a special additional bucket, at index numLabels).",
+                          typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_StringIndexerParams, self).__init__(*args)
+        self._setDefault(handleInvalid="error", stringOrderType="frequencyDesc")
+
+    @since("2.3.0")
+    def getStringOrderType(self):
+        """
+        Gets the value of :py:attr:`stringOrderType` or its default value 'frequencyDesc'.
+        """
+        return self.getOrDefault(self.stringOrderType)
+
+
 @inherit_doc
-class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, JavaMLReadable,
-                    JavaMLWritable):
+class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLWritable):
     """
     A label indexer that maps a string column of labels to an ML column of label indices.
     If the input column is numeric, we cast it to string and index the string values.
@@ -2096,22 +2417,15 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 2.0), (1, 1.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 0.0)]
+    >>> fromlabelsModel = StringIndexerModel.from_labels(["a", "b", "c"],
+    ...     inputCol="label", outputCol="indexed", handleInvalid="error")
+    >>> result = fromlabelsModel.transform(stringIndDf)
+    >>> sorted(set([(i[0], i[1]) for i in result.select(result.id, result.indexed).collect()]),
+    ...     key=lambda x: x[0])
+    [(0, 0.0), (1, 1.0), (2, 2.0), (3, 0.0), (4, 0.0), (5, 2.0)]
 
     .. versionadded:: 1.4.0
     """
-
-    stringOrderType = Param(Params._dummy(), "stringOrderType",
-                            "How to order labels of string column. The first label after " +
-                            "ordering is assigned an index of 0. Supported options: " +
-                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
-                            typeConverter=TypeConverters.toString)
-
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
-                          "or NULL values) in features and label column of string type. " +
-                          "Options are 'skip' (filter out rows with invalid data), " +
-                          "error (throw an error), or 'keep' (put invalid data " +
-                          "in a special additional bucket, at index numLabels).",
-                          typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
@@ -2122,7 +2436,6 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
-        self._setDefault(handleInvalid="error", stringOrderType="frequencyDesc")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2148,20 +2461,32 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         """
         return self._set(stringOrderType=value)
 
-    @since("2.3.0")
-    def getStringOrderType(self):
-        """
-        Gets the value of :py:attr:`stringOrderType` or its default value 'frequencyDesc'.
-        """
-        return self.getOrDefault(self.stringOrderType)
 
-
-class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`StringIndexer`.
 
     .. versionadded:: 1.4.0
     """
+
+    @classmethod
+    @since("2.4.0")
+    def from_labels(cls, labels, inputCol, outputCol=None, handleInvalid=None):
+        """
+        Construct the model directly from an array of label strings,
+        requires an active SparkContext.
+        """
+        sc = SparkContext._active_spark_context
+        java_class = sc._gateway.jvm.java.lang.String
+        jlabels = StringIndexerModel._new_java_array(labels, java_class)
+        model = StringIndexerModel._create_from_java_class(
+            "org.apache.spark.ml.feature.StringIndexerModel", jlabels)
+        model.setInputCol(inputCol)
+        if outputCol is not None:
+            model.setOutputCol(outputCol)
+        if handleInvalid is not None:
+            model.setHandleInvalid(handleInvalid)
+        return model
 
     @property
     @since("1.5.0")
@@ -2170,6 +2495,13 @@ class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         Ordered list of labels, corresponding to indices to be assigned.
         """
         return self._call_java("labels")
+
+    @since("2.4.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
 
 @inherit_doc
@@ -2369,7 +2701,8 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
 
 
 @inherit_doc
-class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInvalid, JavaMLReadable,
+                      JavaMLWritable):
     """
     A feature transformer that merges multiple columns into a vector column.
 
@@ -2387,25 +2720,56 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadabl
     >>> loadedAssembler = VectorAssembler.load(vectorAssemblerPath)
     >>> loadedAssembler.transform(df).head().freqs == vecAssembler.transform(df).head().freqs
     True
+    >>> dfWithNullsAndNaNs = spark.createDataFrame(
+    ...    [(1.0, 2.0, None), (3.0, float("nan"), 4.0), (5.0, 6.0, 7.0)], ["a", "b", "c"])
+    >>> vecAssembler2 = VectorAssembler(inputCols=["a", "b", "c"], outputCol="features",
+    ...    handleInvalid="keep")
+    >>> vecAssembler2.transform(dfWithNullsAndNaNs).show()
+    +---+---+----+-------------+
+    |  a|  b|   c|     features|
+    +---+---+----+-------------+
+    |1.0|2.0|null|[1.0,2.0,NaN]|
+    |3.0|NaN| 4.0|[3.0,NaN,4.0]|
+    |5.0|6.0| 7.0|[5.0,6.0,7.0]|
+    +---+---+----+-------------+
+    ...
+    >>> vecAssembler2.setParams(handleInvalid="skip").transform(dfWithNullsAndNaNs).show()
+    +---+---+---+-------------+
+    |  a|  b|  c|     features|
+    +---+---+---+-------------+
+    |5.0|6.0|7.0|[5.0,6.0,7.0]|
+    +---+---+---+-------------+
+    ...
 
     .. versionadded:: 1.4.0
     """
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data (NULL " +
+                          "and NaN values). Options are 'skip' (filter out rows with invalid " +
+                          "data), 'error' (throw an error), or 'keep' (return relevant number " +
+                          "of NaN in the output). Column lengths are taken from the size of ML " +
+                          "Attribute Group, which can be set using `VectorSizeHint` in a " +
+                          "pipeline before `VectorAssembler`. Column lengths can also be " +
+                          "inferred from first rows of the data since it is safe to do so but " +
+                          "only in case of 'error' or 'skip').",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, inputCols=None, outputCol=None):
+    def __init__(self, inputCols=None, outputCol=None, handleInvalid="error"):
         """
-        __init__(self, inputCols=None, outputCol=None)
+        __init__(self, inputCols=None, outputCol=None, handleInvalid="error")
         """
         super(VectorAssembler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorAssembler", self.uid)
+        self._setDefault(handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, inputCols=None, outputCol=None):
+    def setParams(self, inputCols=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, inputCols=None, outputCol=None)
+        setParams(self, inputCols=None, outputCol=None, handleInvalid="error")
         Sets params for this VectorAssembler.
         """
         kwargs = self._input_kwargs
@@ -2413,7 +2777,8 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadabl
 
 
 @inherit_doc
-class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, JavaMLReadable,
+                    JavaMLWritable):
     """
     Class for indexing categorical feature columns in a dataset of `Vector`.
 
@@ -2448,7 +2813,6 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
         do not recompute.
       - Specify certain features to not index, either via a parameter or via existing metadata.
       - Add warning if a categorical feature has only 1 category.
-      - Add option for allowing unknown categories.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
@@ -2479,6 +2843,15 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     True
     >>> loadedModel.categoryMaps == model.categoryMaps
     True
+    >>> dfWithInvalid = spark.createDataFrame([(Vectors.dense([3.0, 1.0]),)], ["a"])
+    >>> indexer.getHandleInvalid()
+    'error'
+    >>> model3 = indexer.setHandleInvalid("skip").fit(df)
+    >>> model3.transform(dfWithInvalid).count()
+    0
+    >>> model4 = indexer.setParams(handleInvalid="keep", outputCol="indexed").fit(df)
+    >>> model4.transform(dfWithInvalid).head().indexed
+    DenseVector([2.0, 1.0])
 
     .. versionadded:: 1.4.0
     """
@@ -2488,22 +2861,29 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
                           "(>= 2). If a feature is found to have > maxCategories values, then " +
                           "it is declared continuous.", typeConverter=TypeConverters.toInt)
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data " +
+                          "(unseen labels or NULL values). Options are 'skip' (filter out " +
+                          "rows with invalid data), 'error' (throw an error), or 'keep' (put " +
+                          "invalid data in a special additional bucket, at index of the number " +
+                          "of categories of the feature).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, maxCategories=20, inputCol=None, outputCol=None):
+    def __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        __init__(self, maxCategories=20, inputCol=None, outputCol=None)
+        __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
         """
         super(VectorIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
-        self._setDefault(maxCategories=20)
+        self._setDefault(maxCategories=20, handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, maxCategories=20, inputCol=None, outputCol=None):
+    def setParams(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, maxCategories=20, inputCol=None, outputCol=None)
+        setParams(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
         Sets params for this VectorIndexer.
         """
         kwargs = self._input_kwargs
@@ -2674,6 +3054,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     |   c|[-0.3794820010662...|
     +----+--------------------+
     ...
+    >>> model.findSynonymsArray("a", 2)
+    [(u'b', 0.25053444504737854), (u'c', -0.6980510950088501)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
@@ -2849,6 +3231,19 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         if not isinstance(word, basestring):
             word = _convert_to_vector(word)
         return self._call_java("findSynonyms", word, num)
+
+    @since("2.3.0")
+    def findSynonymsArray(self, word, num):
+        """
+        Find "num" number of words closest in similarity to "word".
+        word can be a string or vector representation.
+        Returns an array with two fields word and similarity (which
+        gives the cosine similarity).
+        """
+        if not isinstance(word, basestring):
+            word = _convert_to_vector(word)
+        tuples = self._java_obj.findSynonymsArray(word, num)
+        return list(map(lambda st: (st._1(), st._2()), list(tuples)))
 
 
 @inherit_doc
@@ -3195,7 +3590,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
 
     selectorType = Param(Params._dummy(), "selectorType",
                          "The selector type of the ChisqSelector. " +
-                         "Supported options: numTopFeatures (default), percentile and fpr.",
+                         "Supported options: numTopFeatures (default), percentile, fpr, fdr, fwe.",
                          typeConverter=TypeConverters.toString)
 
     numTopFeatures = \
@@ -3358,6 +3753,84 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("selectedFeatures")
 
 
+@inherit_doc
+class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReadable,
+                     JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    A feature transformer that adds size information to the metadata of a vector column.
+    VectorAssembler needs size information for its input columns and cannot be used on streaming
+    dataframes without this metadata.
+
+    .. note:: VectorSizeHint modifies `inputCol` to include size metadata and does not have an
+        outputCol.
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml import Pipeline, PipelineModel
+    >>> data = [(Vectors.dense([1., 2., 3.]), 4.)]
+    >>> df = spark.createDataFrame(data, ["vector", "float"])
+    >>>
+    >>> sizeHint = VectorSizeHint(inputCol="vector", size=3, handleInvalid="skip")
+    >>> vecAssembler = VectorAssembler(inputCols=["vector", "float"], outputCol="assembled")
+    >>> pipeline = Pipeline(stages=[sizeHint, vecAssembler])
+    >>>
+    >>> pipelineModel = pipeline.fit(df)
+    >>> pipelineModel.transform(df).head().assembled
+    DenseVector([1.0, 2.0, 3.0, 4.0])
+    >>> vectorSizeHintPath = temp_path + "/vector-size-hint-pipeline"
+    >>> pipelineModel.save(vectorSizeHintPath)
+    >>> loadedPipeline = PipelineModel.load(vectorSizeHintPath)
+    >>> loaded = loadedPipeline.transform(df).head().assembled
+    >>> expected = pipelineModel.transform(df).head().assembled
+    >>> loaded == expected
+    True
+
+    .. versionadded:: 2.3.0
+    """
+
+    size = Param(Params._dummy(), "size", "Size of vectors in column.",
+                 typeConverter=TypeConverters.toInt)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid",
+                          "How to handle invalid vectors in inputCol. Invalid vectors include "
+                          "nulls and vectors with the wrong size. The options are `skip` (filter "
+                          "out rows with invalid vectors), `error` (throw an error) and "
+                          "`optimistic` (do not check the vector size, and keep all rows). "
+                          "`error` by default.",
+                          TypeConverters.toString)
+
+    @keyword_only
+    def __init__(self, inputCol=None, size=None, handleInvalid="error"):
+        """
+        __init__(self, inputCol=None, size=None, handleInvalid="error")
+        """
+        super(VectorSizeHint, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSizeHint", self.uid)
+        self._setDefault(handleInvalid="error")
+        self.setParams(**self._input_kwargs)
+
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, inputCol=None, size=None, handleInvalid="error"):
+        """
+        setParams(self, inputCol=None, size=None, handleInvalid="error")
+        Sets params for this VectorSizeHint.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.3.0")
+    def getSize(self):
+        """ Gets size param, the size of vectors in `inputCol`."""
+        self.getOrDefault(self.size)
+
+    @since("2.3.0")
+    def setSize(self, value):
+        """ Sets size param, the size of vectors in `inputCol`."""
+        self._set(size=value)
+
+
 if __name__ == "__main__":
     import doctest
     import tempfile
@@ -3394,4 +3867,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

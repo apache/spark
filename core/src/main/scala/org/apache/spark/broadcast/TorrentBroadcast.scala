@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
-import org.apache.spark.util.{ByteBufferInputStream, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
@@ -99,7 +99,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private def calcChecksum(block: ByteBuffer): Int = {
     val adler = new Adler32()
     if (block.hasArray) {
-      adler.update(block.array, block.arrayOffset + block.position, block.limit - block.position)
+      adler.update(block.array, block.arrayOffset + block.position(), block.limit()
+        - block.position())
     } else {
       val bytes = new Array[Byte](block.remaining())
       block.duplicate.get(bytes)
@@ -205,36 +206,50 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
     TorrentBroadcast.synchronized {
-      setConf(SparkEnv.get.conf)
-      val blockManager = SparkEnv.get.blockManager
-      blockManager.getLocalValues(broadcastId) match {
-        case Some(blockResult) =>
-          if (blockResult.data.hasNext) {
-            val x = blockResult.data.next().asInstanceOf[T]
-            releaseLock(broadcastId)
-            x
-          } else {
-            throw new SparkException(s"Failed to get locally stored broadcast data: $broadcastId")
-          }
-        case None =>
-          logInfo("Started reading broadcast variable " + id)
-          val startTimeMs = System.currentTimeMillis()
-          val blocks = readBlocks()
-          logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
+      val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
 
-          try {
-            val obj = TorrentBroadcast.unBlockifyObject[T](
-              blocks.map(_.toInputStream()), SparkEnv.get.serializer, compressionCodec)
-            // Store the merged copy in BlockManager so other tasks on this executor don't
-            // need to re-fetch it.
-            val storageLevel = StorageLevel.MEMORY_AND_DISK
-            if (!blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
-              throw new SparkException(s"Failed to store $broadcastId in BlockManager")
+      Option(broadcastCache.get(broadcastId)).map(_.asInstanceOf[T]).getOrElse {
+        setConf(SparkEnv.get.conf)
+        val blockManager = SparkEnv.get.blockManager
+        blockManager.getLocalValues(broadcastId) match {
+          case Some(blockResult) =>
+            if (blockResult.data.hasNext) {
+              val x = blockResult.data.next().asInstanceOf[T]
+              releaseLock(broadcastId)
+
+              if (x != null) {
+                broadcastCache.put(broadcastId, x)
+              }
+
+              x
+            } else {
+              throw new SparkException(s"Failed to get locally stored broadcast data: $broadcastId")
             }
-            obj
-          } finally {
-            blocks.foreach(_.dispose())
-          }
+          case None =>
+            logInfo("Started reading broadcast variable " + id)
+            val startTimeMs = System.currentTimeMillis()
+            val blocks = readBlocks()
+            logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
+
+            try {
+              val obj = TorrentBroadcast.unBlockifyObject[T](
+                blocks.map(_.toInputStream()), SparkEnv.get.serializer, compressionCodec)
+              // Store the merged copy in BlockManager so other tasks on this executor don't
+              // need to re-fetch it.
+              val storageLevel = StorageLevel.MEMORY_AND_DISK
+              if (!blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
+                throw new SparkException(s"Failed to store $broadcastId in BlockManager")
+              }
+
+              if (obj != null) {
+                broadcastCache.put(broadcastId, obj)
+              }
+
+              obj
+            } finally {
+              blocks.foreach(_.dispose())
+            }
+        }
       }
     }
   }

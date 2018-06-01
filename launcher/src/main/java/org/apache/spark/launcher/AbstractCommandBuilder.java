@@ -144,6 +144,7 @@ abstract class AbstractCommandBuilder {
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
       List<String> projects = Arrays.asList(
+        "common/kvstore",
         "common/network-common",
         "common/network-shuffle",
         "common/network-yarn",
@@ -230,21 +231,24 @@ abstract class AbstractCommandBuilder {
       return scala;
     }
     String sparkHome = getSparkHome();
-    //File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
+    File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
     File scala211 = new File(sparkHome, "launcher/target/scala-2.11");
-    //checkState(!scala210.isDirectory() || !scala211.isDirectory(),
-    //  "Presence of build for multiple Scala versions detected.\n" +
-    //  "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    //if (scala212.isDirectory()) {
-    //  return "2.12";
-    //} else {
-    checkState(scala211.isDirectory(), "Cannot find any build directories.");
-    return "2.11";
-    //}
+    checkState(!scala212.isDirectory() || !scala211.isDirectory(),
+      "Presence of build for multiple Scala versions detected.\n" +
+      "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
+    if (scala212.isDirectory()) {
+      return "2.12";
+    } else {
+      checkState(scala211.isDirectory(), "Cannot find any build directories.");
+      return "2.11";
+    }
   }
 
   String getSparkHome() {
     String path = getenv(ENV_SPARK_HOME);
+    if (path == null && "1".equals(getenv("SPARK_TESTING"))) {
+      path = System.getProperty("spark.test.home");
+    }
     checkState(path != null,
       "Spark home not found; set it explicitly or use the SPARK_HOME environment variable.");
     return path;
@@ -288,24 +292,14 @@ abstract class AbstractCommandBuilder {
     }
 
     if (propsFile.isFile()) {
-      FileInputStream fd = null;
-      try {
-        fd = new FileInputStream(propsFile);
-        props.load(new InputStreamReader(fd, StandardCharsets.UTF_8));
+      try (InputStreamReader isr = new InputStreamReader(
+          new FileInputStream(propsFile), StandardCharsets.UTF_8)) {
+        props.load(isr);
         for (Map.Entry<Object, Object> e : props.entrySet()) {
           e.setValue(e.getValue().toString().trim());
         }
-      } finally {
-        if (fd != null) {
-          try {
-            fd.close();
-          } catch (IOException e) {
-            // Ignore.
-          }
-        }
       }
     }
-
     return props;
   }
 

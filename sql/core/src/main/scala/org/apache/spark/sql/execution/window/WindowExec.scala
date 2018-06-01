@@ -25,7 +25,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
 /**
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
@@ -110,9 +112,11 @@ case class WindowExec(
    *
    * @param frame to evaluate. This can either be a Row or Range frame.
    * @param bound with respect to the row.
+   * @param timeZone the session local timezone for time related calculations.
    * @return a bound ordering object.
    */
-  private[this] def createBoundOrdering(frame: FrameType, bound: Expression): BoundOrdering = {
+  private[this] def createBoundOrdering(
+      frame: FrameType, bound: Expression, timeZone: String): BoundOrdering = {
     (frame, bound) match {
       case (RowFrame, CurrentRow) =>
         RowBoundOrdering(0)
@@ -139,7 +143,12 @@ case class WindowExec(
         }
 
         // Create the projection which returns the current 'value' modified by adding the offset.
-        val boundExpr = Add(expr, Cast(boundOffset, expr.dataType))
+        val boundExpr = (expr.dataType, boundOffset.dataType) match {
+          case (DateType, IntegerType) => DateAdd(expr, boundOffset)
+          case (TimestampType, CalendarIntervalType) =>
+            TimeAdd(expr, boundOffset, Some(timeZone))
+          case (a, b) if a== b => Add(expr, boundOffset)
+        }
         val bound = newMutableProjection(boundExpr :: Nil, child.output)
 
         // Construct the ordering. This is used to compare the result of current value projection
@@ -190,6 +199,7 @@ case class WindowExec(
 
     // Map the groups to a (unbound) expression and frame factory pair.
     var numExpressions = 0
+    val timeZone = conf.sessionLocalTimeZone
     framedFunctions.toSeq.map {
       case (key, (expressions, functionSeq)) =>
         val ordinal = numExpressions
@@ -230,7 +240,7 @@ case class WindowExec(
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
                 processor,
-                createBoundOrdering(frameType, upper))
+                createBoundOrdering(frameType, upper, timeZone))
             }
 
           // Shrinking Frame.
@@ -239,7 +249,7 @@ case class WindowExec(
               new UnboundedFollowingWindowFunctionFrame(
                 target,
                 processor,
-                createBoundOrdering(frameType, lower))
+                createBoundOrdering(frameType, lower, timeZone))
             }
 
           // Moving Frame.
@@ -248,8 +258,8 @@ case class WindowExec(
               new SlidingWindowFunctionFrame(
                 target,
                 processor,
-                createBoundOrdering(frameType, lower),
-                createBoundOrdering(frameType, upper))
+                createBoundOrdering(frameType, lower, timeZone),
+                createBoundOrdering(frameType, upper, timeZone))
             }
         }
 
@@ -285,6 +295,7 @@ case class WindowExec(
     // Unwrap the expressions and factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
+    val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
     val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
 
     // Start processing.
@@ -315,7 +326,8 @@ case class WindowExec(
         val inputFields = child.output.length
 
         val buffer: ExternalAppendOnlyUnsafeRowArray =
-          new ExternalAppendOnlyUnsafeRowArray(spillThreshold)
+          new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+
         var bufferIterator: Iterator[UnsafeRow] = _
 
         val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))

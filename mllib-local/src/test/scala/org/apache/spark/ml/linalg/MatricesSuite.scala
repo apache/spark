@@ -21,7 +21,7 @@ import java.util.Random
 
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
-import org.scalatest.mock.MockitoSugar._
+import org.scalatest.mockito.MockitoSugar._
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.ml.SparkMLFunSuite

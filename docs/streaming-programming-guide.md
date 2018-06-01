@@ -74,7 +74,7 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._ // not necessary since Spark 1.3
 
 // Create a local StreamingContext with two working thread and batch interval of 1 second.
-// The master requires 2 cores to prevent from a starvation scenario.
+// The master requires 2 cores to prevent a starvation scenario.
 
 val conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
 val ssc = new StreamingContext(conf, Seconds(1))
@@ -172,7 +172,7 @@ each line will be split into multiple words and the stream of words is represent
 `words` DStream. Note that we defined the transformation using a
 [FlatMapFunction](api/scala/index.html#org.apache.spark.api.java.function.FlatMapFunction) object.
 As we will discover along the way, there are a number of such convenience classes in the Java API
-that help define DStream transformations.
+that help defines DStream transformations.
 
 Next, we want to count these words.
 
@@ -401,14 +401,14 @@ some of the common ones are as follows.
 
 <table class="table">
 <tr><th>Source</th><th>Artifact</th></tr>
-<tr><td> Kafka </td><td> spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Kafka </td><td> spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Kinesis<br/></td><td>spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}} [Amazon Software License] </td></tr>
 <tr><td></td><td></td></tr>
 </table>
 
 For an up-to-date list, please refer to the
-[Maven repository](http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.spark%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22)
+[Maven repository](https://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.spark%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22)
 for the full list of supported sources and artifacts.
 
 ***
@@ -615,35 +615,113 @@ which creates a DStream from text
 data received over a TCP socket connection. Besides sockets, the StreamingContext API provides
 methods for creating DStreams from files as input sources.
 
-- **File Streams:** For reading data from files on any file system compatible with the HDFS API (that is, HDFS, S3, NFS, etc.), a DStream can be created as:
+#### File Streams
+{:.no_toc}
 
-    <div class="codetabs">
-    <div data-lang="scala" markdown="1">
-        streamingContext.fileStream[KeyClass, ValueClass, InputFormatClass](dataDirectory)
-    </div>
-    <div data-lang="java" markdown="1">
-		streamingContext.fileStream<KeyClass, ValueClass, InputFormatClass>(dataDirectory);
-    </div>
-    <div data-lang="python" markdown="1">
-		streamingContext.textFileStream(dataDirectory)
-    </div>
-    </div>
+For reading data from files on any file system compatible with the HDFS API (that is, HDFS, S3, NFS, etc.), a DStream can be created as
+via `StreamingContext.fileStream[KeyClass, ValueClass, InputFormatClass]`.
 
-	Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory (files written in nested directories not supported). Note that
+File streams do not require running a receiver so there is no need to allocate any cores for receiving file data.
 
-     + The files must have the same data format.
-     + The files must be created in the `dataDirectory` by atomically *moving* or *renaming* them into
-     the data directory.
-     + Once moved, the files must not be changed. So if the files are being continuously appended, the new data will not be read.
+For simple text files, the easiest method is `StreamingContext.textFileStream(dataDirectory)`.
 
-	For simple text files, there is an easier method `streamingContext.textFileStream(dataDirectory)`. And file streams do not require running a receiver, hence does not require allocating cores.
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
 
-	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
+{% highlight scala %}
+streamingContext.fileStream[KeyClass, ValueClass, InputFormatClass](dataDirectory)
+{% endhighlight %}
+For text files
 
-- **Streams based on Custom Receivers:** DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
+{% highlight scala %}
+streamingContext.textFileStream(dataDirectory)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+streamingContext.fileStream<KeyClass, ValueClass, InputFormatClass>(dataDirectory);
+{% endhighlight %}
+For text files
+
+{% highlight java %}
+streamingContext.textFileStream(dataDirectory);
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+`fileStream` is not available in the Python API; only `textFileStream` is available.
+{% highlight python %}
+streamingContext.textFileStream(dataDirectory)
+{% endhighlight %}
+</div>
+
+</div>
+
+##### How Directories are Monitored
+{:.no_toc}
+
+Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory.
+
+   * A simple directory can be monitored, such as `"hdfs://namenode:8040/logs/"`.
+     All files directly under such a path will be processed as they are discovered.
+   + A [POSIX glob pattern](http://pubs.opengroup.org/onlinepubs/009695399/utilities/xcu_chap02.html#tag_02_13_02) can be supplied, such as
+     `"hdfs://namenode:8040/logs/2017/*"`.
+     Here, the DStream will consist of all files in the directories
+     matching the pattern.
+     That is: it is a pattern of directories, not of files in directories.
+   + All files must be in the same data format.
+   * A file is considered part of a time period based on its modification time,
+     not its creation time.
+   + Once processed, changes to a file within the current window will not cause the file to be reread.
+     That is: *updates are ignored*.
+   + The more files under a directory, the longer it will take to
+     scan for changes — even if no files have been modified.
+   * If a wildcard is used to identify directories, such as `"hdfs://namenode:8040/logs/2016-*"`,
+     renaming an entire directory to match the path will add the directory to the list of
+     monitored directories. Only the files in the directory whose modification time is
+     within the current window will be included in the stream.
+   + Calling [`FileSystem.setTimes()`](https://hadoop.apache.org/docs/current/api/org/apache/hadoop/fs/FileSystem.html#setTimes-org.apache.hadoop.fs.Path-long-long-)
+     to fix the timestamp is a way to have the file picked up in a later window, even if its contents have not changed.
+
+
+##### Using Object Stores as a source of data
+{:.no_toc}
+
+"Full" Filesystems such as HDFS tend to set the modification time on their files as soon
+as the output stream is created.
+When a file is opened, even before data has been completely written,
+it may be included in the `DStream` - after which updates to the file within the same window
+will be ignored. That is: changes may be missed, and data omitted from the stream.
+
+To guarantee that changes are picked up in a window, write the file
+to an unmonitored directory, then, immediately after the output stream is closed,
+rename it into the destination directory.
+Provided the renamed file appears in the scanned destination directory during the window
+of its creation, the new data will be picked up.
+
+In contrast, Object Stores such as Amazon S3 and Azure Storage usually have slow rename operations, as the
+data is actually copied.
+Furthermore, renamed object may have the time of the `rename()` operation as its modification time, so
+may not be considered part of the window which the original create time implied they were.
+
+Careful testing is needed against the target object store to verify that the timestamp behavior
+of the store is consistent with that expected by Spark Streaming. It may be
+that writing directly into a destination directory is the appropriate strategy for
+streaming data via the chosen object store.
+
+For more details on this topic, consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable2/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
+
+#### Streams based on Custom Receivers
+{:.no_toc}
+
+DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
   Guide](streaming-custom-receivers.html) for more details.
 
-- **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
+#### Queue of RDDs as a Stream
+{:.no_toc}
+
+For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
 For more details on streams from sockets and files, see the API documentations of the relevant functions in
 [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) for
@@ -1383,7 +1461,7 @@ Note that the connections in the pool should be lazily created on demand and tim
 ***
 
 ## DataFrame and SQL Operations
-You can easily use [DataFrames and SQL](sql-programming-guide.html) operations on streaming data. You have to create a SparkSession using the SparkContext that the StreamingContext is using. Furthermore this has to done such that it can be restarted on driver failures. This is done by creating a lazily instantiated singleton instance of SparkSession. This is shown in the following example. It modifies the earlier [word count example](#a-quick-example) to generate word counts using DataFrames and SQL. Each RDD is converted to a DataFrame, registered as a temporary table and then queried using SQL.
+You can easily use [DataFrames and SQL](sql-programming-guide.html) operations on streaming data. You have to create a SparkSession using the SparkContext that the StreamingContext is using. Furthermore, this has to done such that it can be restarted on driver failures. This is done by creating a lazily instantiated singleton instance of SparkSession. This is shown in the following example. It modifies the earlier [word count example](#a-quick-example) to generate word counts using DataFrames and SQL. Each RDD is converted to a DataFrame, registered as a temporary table and then queried using SQL.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1899,7 +1977,7 @@ To run a Spark Streaming applications, you need to have the following.
   if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume),
   then you will have to package the extra artifact they link to, along with their dependencies,
   in the JAR that is used to deploy the application. For example, an application using `KafkaUtils`
-  will have to include `spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}` and all its
+  will have to include `spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}` and all its
   transitive dependencies in the application JAR.
 
 - *Configuring sufficient memory for the executors* - Since the received data must be stored in
@@ -1932,10 +2010,10 @@ To run a Spark Streaming applications, you need to have the following.
     + *Mesos* - [Marathon](https://github.com/mesosphere/marathon) has been used to achieve this
       with Mesos.
 
-- *Configuring write ahead logs* - Since Spark 1.2,
-  we have introduced _write ahead logs_ for achieving strong
+- *Configuring write-ahead logs* - Since Spark 1.2,
+  we have introduced _write-ahead logs_ for achieving strong
   fault-tolerance guarantees. If enabled,  all the data received from a receiver gets written into
-  a write ahead log in the configuration checkpoint directory. This prevents data loss on driver
+  a write-ahead log in the configuration checkpoint directory. This prevents data loss on driver
   recovery, thus ensuring zero data loss (discussed in detail in the
   [Fault-tolerance Semantics](#fault-tolerance-semantics) section). This can be enabled by setting
   the [configuration parameter](configuration.html#spark-streaming)
@@ -1943,15 +2021,15 @@ To run a Spark Streaming applications, you need to have the following.
   come at the cost of the receiving throughput of individual receivers. This can be corrected by
   running [more receivers in parallel](#level-of-parallelism-in-data-receiving)
   to increase aggregate throughput. Additionally, it is recommended that the replication of the
-  received data within Spark be disabled when the write ahead log is enabled as the log is already
+  received data within Spark be disabled when the write-ahead log is enabled as the log is already
   stored in a replicated storage system. This can be done by setting the storage level for the
   input stream to `StorageLevel.MEMORY_AND_DISK_SER`. While using S3 (or any file system that
-  does not support flushing) for _write ahead logs_, please remember to enable
+  does not support flushing) for _write-ahead logs_, please remember to enable
   `spark.streaming.driver.writeAheadLog.closeFileAfterWrite` and
   `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. See
   [Spark Streaming Configuration](configuration.html#spark-streaming) for more details.
-  Note that Spark will not encrypt data written to the write ahead log when I/O encryption is
-  enabled. If encryption of the write ahead log data is desired, it should be stored in a file
+  Note that Spark will not encrypt data written to the write-ahead log when I/O encryption is
+  enabled. If encryption of the write-ahead log data is desired, it should be stored in a file
   system that supports encryption natively.
 
 - *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
@@ -2206,9 +2284,9 @@ Having bigger blockinterval means bigger blocks. A high value of `spark.locality
 
 - Instead of relying on batchInterval and blockInterval, you can define the number of partitions by calling `inputDstream.repartition(n)`. This reshuffles the data in RDD randomly to create n number of partitions. Yes, for greater parallelism. Though comes at the cost of a shuffle. An RDD's processing is scheduled by driver's jobscheduler as a job. At a given point of time only one job is active. So, if one job is executing the other jobs are queued.
 
-- If you have two dstreams there will be two RDDs formed and there will be two jobs created which will be scheduled one after the another. To avoid this, you can union two dstreams. This will ensure that a single unionRDD is formed for the two RDDs of the dstreams. This unionRDD is then considered as a single job. However the partitioning of the RDDs is not impacted.
+- If you have two dstreams there will be two RDDs formed and there will be two jobs created which will be scheduled one after the another. To avoid this, you can union two dstreams. This will ensure that a single unionRDD is formed for the two RDDs of the dstreams. This unionRDD is then considered as a single job. However, the partitioning of the RDDs is not impacted.
 
-- If the batch processing time is more than batchinterval then obviously the receiver's memory will start filling up and will end up in throwing exceptions (most probably BlockNotFoundException). Currently there is  no way to pause the receiver. Using SparkConf configuration `spark.streaming.receiver.maxRate`, rate of receiver can be limited.
+- If the batch processing time is more than batchinterval then obviously the receiver's memory will start filling up and will end up in throwing exceptions (most probably BlockNotFoundException). Currently, there is  no way to pause the receiver. Using SparkConf configuration `spark.streaming.receiver.maxRate`, rate of receiver can be limited.
 
 
 ***************************************************************************************************
@@ -2310,7 +2388,7 @@ then besides these losses, all of the past data that was received and replicated
 lost. This will affect the results of the stateful transformations.
 
 To avoid this loss of past received data, Spark 1.2 introduced _write
-ahead logs_ which save the received data to fault-tolerant storage. With the [write ahead logs
+ahead logs_ which save the received data to fault-tolerant storage. With the [write-ahead logs
 enabled](#deploying-applications) and reliable receivers, there is zero data loss. In terms of semantics, it provides an at-least once guarantee. 
 
 The following table summarizes the semantics under failures:
@@ -2324,7 +2402,7 @@ The following table summarizes the semantics under failures:
   <tr>
     <td>
       <i>Spark 1.1 or earlier,</i> OR<br/>
-      <i>Spark 1.2 or later without write ahead logs</i>
+      <i>Spark 1.2 or later without write-ahead logs</i>
     </td>
     <td>
       Buffered data lost with unreliable receivers<br/>
@@ -2338,7 +2416,7 @@ The following table summarizes the semantics under failures:
     </td>
   </tr>
   <tr>
-    <td><i>Spark 1.2 or later with write ahead logs</i></td>
+    <td><i>Spark 1.2 or later with write-ahead logs</i></td>
     <td>
         Zero data loss with reliable receivers<br/>
         At-least once semantics

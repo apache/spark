@@ -213,7 +213,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
           assert(d.changePrecision(10, 0, mode))
           assert(d.toString === bd.setScale(0, mode).toString(), s"num: $sign$n, mode: $mode")
 
-          val copy = d.toPrecision(10, 0, mode).orNull
+          val copy = d.toPrecision(10, 0, mode)
           assert(copy !== null)
           assert(d.ne(copy))
           assert(d === copy)

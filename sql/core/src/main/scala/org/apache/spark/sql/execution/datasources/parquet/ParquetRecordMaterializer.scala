@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.TimeZone
+
 import org.apache.parquet.io.api.{GroupConverter, RecordMaterializer}
 import org.apache.parquet.schema.MessageType
 
@@ -31,11 +33,14 @@ import org.apache.spark.sql.types.StructType
  * @param schemaConverter A Parquet-Catalyst schema converter that helps initializing row converters
  */
 private[parquet] class ParquetRecordMaterializer(
-    parquetSchema: MessageType, catalystSchema: StructType, schemaConverter: ParquetSchemaConverter)
+    parquetSchema: MessageType,
+    catalystSchema: StructType,
+    schemaConverter: ParquetToSparkSchemaConverter,
+    convertTz: Option[TimeZone])
   extends RecordMaterializer[UnsafeRow] {
 
   private val rootConverter =
-    new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, NoopUpdater)
+    new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, convertTz, NoopUpdater)
 
   override def getCurrentRecord: UnsafeRow = rootConverter.currentRecord
 

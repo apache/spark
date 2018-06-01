@@ -126,4 +126,20 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
 
     checkLoad(df2, "jsonTable2")
   }
+
+  test("SPARK-23459: Improve error message when specified unknown column in partition columns") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val unknown = "unknownColumn"
+      val df = Seq(1L -> "a").toDF("i", "j")
+      val schemaCatalog = df.schema.catalogString
+      val e = intercept[AnalysisException] {
+        df.write
+          .format("parquet")
+          .partitionBy(unknown)
+          .save(path)
+      }.getMessage
+      assert(e.contains(s"Partition column `$unknown` not found in schema $schemaCatalog"))
+    }
+  }
 }

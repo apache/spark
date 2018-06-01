@@ -330,7 +330,7 @@ class Params(Identifiable):
         Tests whether this instance contains a param with a given
         (string) name.
         """
-        if isinstance(paramName, str):
+        if isinstance(paramName, basestring):
             p = getattr(self, paramName, None)
             return isinstance(p, Param)
         else:
@@ -384,6 +384,17 @@ class Params(Identifiable):
         that._defaultParamMap = {}
         return self._copyValues(that, extra)
 
+    def set(self, param, value):
+        """
+        Sets a parameter in the embedded param map.
+        """
+        self._shouldOwn(param)
+        try:
+            value = param.typeConverter(value)
+        except ValueError as e:
+            raise ValueError('Invalid param value given for param "%s". %s' % (param.name, e))
+        self._paramMap[param] = value
+
     def _shouldOwn(self, param):
         """
         Validates that the input param belongs to this Params instance.
@@ -402,7 +413,7 @@ class Params(Identifiable):
         if isinstance(param, Param):
             self._shouldOwn(param)
             return param
-        elif isinstance(param, str):
+        elif isinstance(param, basestring):
             return self.getParam(param)
         else:
             raise ValueError("Cannot resolve %r as a param." % param)

@@ -20,28 +20,24 @@
 #' S4 class that represents a BisectingKMeansModel
 #'
 #' @param jobj a Java object reference to the backing Scala BisectingKMeansModel
-#' @export
 #' @note BisectingKMeansModel since 2.2.0
 setClass("BisectingKMeansModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a GaussianMixtureModel
 #'
 #' @param jobj a Java object reference to the backing Scala GaussianMixtureModel
-#' @export
 #' @note GaussianMixtureModel since 2.1.0
 setClass("GaussianMixtureModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a KMeansModel
 #'
 #' @param jobj a Java object reference to the backing Scala KMeansModel
-#' @export
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
 #' S4 class that represents an LDAModel
 #'
 #' @param jobj a Java object reference to the backing Scala LDAWrapper
-#' @export
 #' @note LDAModel since 2.1.0
 setClass("LDAModel", representation(jobj = "jobj"))
 
@@ -60,15 +56,14 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @param maxIter maximum iteration number.
 #' @param seed the random seed.
 #' @param minDivisibleClusterSize The minimum number of points (if greater than or equal to 1.0)
-#'                                or the minimum proportion of points (if less than 1.0) of a divisible cluster.
-#'                                Note that it is an expert parameter. The default value should be good enough
-#'                                for most cases.
+#'                                or the minimum proportion of points (if less than 1.0) of a
+#'                                divisible cluster. Note that it is an expert parameter. The
+#'                                default value should be good enough for most cases.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.bisectingKmeans} returns a fitted bisecting k-means model.
 #' @rdname spark.bisectingKmeans
 #' @aliases spark.bisectingKmeans,SparkDataFrame,formula-method
 #' @name spark.bisectingKmeans
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -117,7 +112,6 @@ setMethod("spark.bisectingKmeans", signature(data = "SparkDataFrame", formula = 
 #'         (cluster centers of the transformed data; cluster is NULL if is.loaded is TRUE),
 #'         and \code{is.loaded} (whether the model is loaded from a saved file).
 #' @rdname spark.bisectingKmeans
-#' @export
 #' @note summary(BisectingKMeansModel) since 2.2.0
 setMethod("summary", signature(object = "BisectingKMeansModel"),
           function(object) {
@@ -144,7 +138,6 @@ setMethod("summary", signature(object = "BisectingKMeansModel"),
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns the predicted values based on a bisecting k-means model.
 #' @rdname spark.bisectingKmeans
-#' @export
 #' @note predict(BisectingKMeansModel) since 2.2.0
 setMethod("predict", signature(object = "BisectingKMeansModel"),
           function(object, newData) {
@@ -160,7 +153,6 @@ setMethod("predict", signature(object = "BisectingKMeansModel"),
 #'        or \code{"classes"} for assigned classes.
 #' @return \code{fitted} returns a SparkDataFrame containing fitted values.
 #' @rdname spark.bisectingKmeans
-#' @export
 #' @note fitted since 2.2.0
 setMethod("fitted", signature(object = "BisectingKMeansModel"),
           function(object, method = c("centers", "classes")) {
@@ -181,7 +173,6 @@ setMethod("fitted", signature(object = "BisectingKMeansModel"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.bisectingKmeans
-#' @export
 #' @note write.ml(BisectingKMeansModel, character) since 2.2.0
 setMethod("write.ml", signature(object = "BisectingKMeansModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -208,7 +199,6 @@ setMethod("write.ml", signature(object = "BisectingKMeansModel", path = "charact
 #' @rdname spark.gaussianMixture
 #' @name spark.gaussianMixture
 #' @seealso mixtools: \url{https://cran.r-project.org/package=mixtools}
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -251,7 +241,6 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
 #'         \code{sigma} (sigma), \code{loglik} (loglik), and \code{posterior} (posterior).
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
-#' @export
 #' @note summary(GaussianMixtureModel) since 2.1.0
 setMethod("summary", signature(object = "GaussianMixtureModel"),
           function(object) {
@@ -291,7 +280,6 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
 #'         "prediction".
 #' @aliases predict,GaussianMixtureModel,SparkDataFrame-method
 #' @rdname spark.gaussianMixture
-#' @export
 #' @note predict(GaussianMixtureModel) since 2.1.0
 setMethod("predict", signature(object = "GaussianMixtureModel"),
           function(object, newData) {
@@ -306,7 +294,6 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #'
 #' @aliases write.ml,GaussianMixtureModel,character-method
 #' @rdname spark.gaussianMixture
-#' @export
 #' @note write.ml(GaussianMixtureModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -325,17 +312,17 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 #'                Note that the response variable of formula is empty in spark.kmeans.
 #' @param k number of centers.
 #' @param maxIter maximum iteration number.
-#' @param initMode the initialization algorithm choosen to fit the model.
+#' @param initMode the initialization algorithm chosen to fit the model.
 #' @param seed the random seed for cluster initialization.
 #' @param initSteps the number of steps for the k-means|| initialization mode.
-#'                  This is an advanced setting, the default of 2 is almost always enough. Must be > 0.
+#'                  This is an advanced setting, the default of 2 is almost always enough.
+#'                  Must be > 0.
 #' @param tol convergence tolerance of iterations.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.kmeans} returns a fitted k-means model.
 #' @rdname spark.kmeans
 #' @aliases spark.kmeans,SparkDataFrame,formula-method
 #' @name spark.kmeans
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -384,7 +371,6 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
 #'         (the actual number of cluster centers. When using initMode = "random",
 #'         \code{clusterSize} may not equal to \code{k}).
 #' @rdname spark.kmeans
-#' @export
 #' @note summary(KMeansModel) since 2.0.0
 setMethod("summary", signature(object = "KMeansModel"),
           function(object) {
@@ -412,7 +398,6 @@ setMethod("summary", signature(object = "KMeansModel"),
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns the predicted values based on a k-means model.
 #' @rdname spark.kmeans
-#' @export
 #' @note predict(KMeansModel) since 2.0.0
 setMethod("predict", signature(object = "KMeansModel"),
           function(object, newData) {
@@ -430,7 +415,6 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{fitted} returns a SparkDataFrame containing fitted values.
 #' @rdname fitted
-#' @export
 #' @examples
 #' \dontrun{
 #' model <- spark.kmeans(trainingData, ~ ., 2)
@@ -457,7 +441,6 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.kmeans
-#' @export
 #' @note write.ml(KMeansModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -495,7 +478,6 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @rdname spark.lda
 #' @aliases spark.lda,SparkDataFrame-method
 #' @seealso topicmodels: \url{https://cran.r-project.org/package=topicmodels}
-#' @export
 #' @examples
 #' \dontrun{
 #' text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
@@ -548,8 +530,8 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
 #'         \item{\code{topics}}{top 10 terms and their weights of all topics}
 #'         \item{\code{vocabulary}}{whole terms of the training corpus, NULL if libsvm format file
 #'               used as training set}
-#'         \item{\code{trainingLogLikelihood}}{Log likelihood of the observed tokens in the training set,
-#'               given the current parameter estimates:
+#'         \item{\code{trainingLogLikelihood}}{Log likelihood of the observed tokens in the
+#'               training set, given the current parameter estimates:
 #'               log P(docs | topics, topic distributions for docs, Dirichlet hyperparameters)
 #'               It is only for distributed LDA model (i.e., optimizer = "em")}
 #'         \item{\code{logPrior}}{Log probability of the current parameter estimate:
@@ -557,7 +539,6 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
 #'               It is only for distributed LDA model (i.e., optimizer = "em")}
 #' @rdname spark.lda
 #' @aliases summary,LDAModel-method
-#' @export
 #' @note summary(LDAModel) since 2.1.0
 setMethod("summary", signature(object = "LDAModel"),
           function(object, maxTermsPerTopic) {
@@ -595,7 +576,6 @@ setMethod("summary", signature(object = "LDAModel"),
 #'         perplexity of the training data if missing argument "data".
 #' @rdname spark.lda
 #' @aliases spark.perplexity,LDAModel-method
-#' @export
 #' @note spark.perplexity(LDAModel) since 2.1.0
 setMethod("spark.perplexity", signature(object = "LDAModel", data = "SparkDataFrame"),
           function(object, data) {
@@ -610,7 +590,6 @@ setMethod("spark.perplexity", signature(object = "LDAModel", data = "SparkDataFr
 #'         vectors named "topicDistribution".
 #' @rdname spark.lda
 #' @aliases spark.posterior,LDAModel,SparkDataFrame-method
-#' @export
 #' @note spark.posterior(LDAModel) since 2.1.0
 setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkDataFrame"),
           function(object, newData) {
@@ -625,7 +604,6 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 #'
 #' @rdname spark.lda
 #' @aliases write.ml,LDAModel,character-method
-#' @export
 #' @seealso \link{read.ml}
 #' @note write.ml(LDAModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "LDAModel", path = "character"),

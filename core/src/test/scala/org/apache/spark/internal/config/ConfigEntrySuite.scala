@@ -288,4 +288,24 @@ class ConfigEntrySuite extends SparkFunSuite {
     conf.remove(testKey("b"))
     assert(conf.get(iConf) === 3)
   }
+
+  test("onCreate") {
+    var onCreateCalled = false
+    ConfigBuilder(testKey("oc1")).onCreate(_ => onCreateCalled = true).intConf.createWithDefault(1)
+    assert(onCreateCalled)
+
+    onCreateCalled = false
+    ConfigBuilder(testKey("oc2")).onCreate(_ => onCreateCalled = true).intConf.createOptional
+    assert(onCreateCalled)
+
+    onCreateCalled = false
+    ConfigBuilder(testKey("oc3")).onCreate(_ => onCreateCalled = true).intConf
+      .createWithDefaultString("1.0")
+    assert(onCreateCalled)
+
+    val fallback = ConfigBuilder(testKey("oc4")).intConf.createWithDefault(1)
+    onCreateCalled = false
+    ConfigBuilder(testKey("oc5")).onCreate(_ => onCreateCalled = true).fallbackConf(fallback)
+    assert(onCreateCalled)
+  }
 }

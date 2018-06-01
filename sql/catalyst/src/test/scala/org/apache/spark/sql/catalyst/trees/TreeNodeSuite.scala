@@ -22,22 +22,20 @@ import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.json4s.jackson.JsonMethods
-import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.types.{BooleanType, DoubleType, FloatType, IntegerType, Metadata, NullType, StringType, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 
@@ -480,7 +478,8 @@ class TreeNodeSuite extends SparkFunSuite {
         CatalogTableType.MANAGED,
         CatalogStorageFormat.empty,
         StructType(StructField("a", IntegerType, true) :: Nil),
-        createTime = 0L),
+        createTime = 0L,
+        createVersion = "2.x"),
 
       JObject(
         "product-class" -> classOf[CatalogTable].getName,
@@ -509,6 +508,7 @@ class TreeNodeSuite extends SparkFunSuite {
         "owner" -> "",
         "createTime" -> 0,
         "lastAccessTime" -> -1,
+        "createVersion" -> "2.x",
         "tracksPartitionsInCatalog" -> false,
         "properties" -> JNull,
         "unsupportedFeatures" -> List.empty[String],

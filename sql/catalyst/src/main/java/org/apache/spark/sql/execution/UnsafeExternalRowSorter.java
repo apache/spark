@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution;
 
 import java.io.IOException;
+import java.util.function.Supplier;
 
 import scala.collection.AbstractIterator;
 import scala.collection.Iterator;
@@ -27,6 +28,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.StructType;
@@ -55,22 +57,46 @@ public final class UnsafeExternalRowSorter {
 
     public static class Prefix {
       /** Key prefix value, or the null prefix value if isNull = true. **/
-      long value;
+      public long value;
 
       /** Whether the key is null. */
-      boolean isNull;
+      public boolean isNull;
     }
 
     /**
      * Computes prefix for the given row. For efficiency, the returned object may be reused in
      * further calls to a given PrefixComputer.
      */
-    abstract Prefix computePrefix(InternalRow row);
+    public abstract Prefix computePrefix(InternalRow row);
   }
 
-  public UnsafeExternalRowSorter(
+  public static UnsafeExternalRowSorter createWithRecordComparator(
+      StructType schema,
+      Supplier<RecordComparator> recordComparatorSupplier,
+      PrefixComparator prefixComparator,
+      PrefixComputer prefixComputer,
+      long pageSizeBytes,
+      boolean canUseRadixSort) throws IOException {
+    return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
+      prefixComputer, pageSizeBytes, canUseRadixSort);
+  }
+
+  public static UnsafeExternalRowSorter create(
       StructType schema,
       Ordering<InternalRow> ordering,
+      PrefixComparator prefixComparator,
+      PrefixComputer prefixComputer,
+      long pageSizeBytes,
+      boolean canUseRadixSort) throws IOException {
+    Supplier<RecordComparator> recordComparatorSupplier =
+      () -> new RowComparator(ordering, schema.length());
+    return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
+      prefixComputer, pageSizeBytes, canUseRadixSort);
+  }
+
+  private UnsafeExternalRowSorter(
+      StructType schema,
+      Supplier<RecordComparator> recordComparatorSupplier,
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer,
       long pageSizeBytes,
@@ -84,13 +110,13 @@ public final class UnsafeExternalRowSorter {
       sparkEnv.blockManager(),
       sparkEnv.serializerManager(),
       taskContext,
-      () -> new RowComparator(ordering, schema.length()),
+      recordComparatorSupplier,
       prefixComparator,
       sparkEnv.conf().getInt("spark.shuffle.sort.initialBufferSize",
                              DEFAULT_INITIAL_SORT_BUFFER_SIZE),
       pageSizeBytes,
-      SparkEnv.get().conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
-        UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
+      (int) SparkEnv.get().conf().get(
+        package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD()),
       canUseRadixSort
     );
   }
@@ -205,7 +231,13 @@ public final class UnsafeExternalRowSorter {
     }
 
     @Override
-    public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
+    public int compare(
+        Object baseObj1,
+        long baseOff1,
+        int baseLen1,
+        Object baseObj2,
+        long baseOff2,
+        int baseLen2) {
       // Note that since ordering doesn't need the total length of the record, we just pass 0
       // into the row.
       row1.pointTo(baseObj1, baseOff1, 0);

@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+"""
+An example for computing correlation matrix.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/correlation_example.py
+"""
 from __future__ import print_function
 
 # $example on$
@@ -23,11 +28,6 @@ from pyspark.ml.stat import Correlation
 # $example off$
 from pyspark.sql import SparkSession
 
-"""
-An example for computing correlation matrix.
-Run with:
-  bin/spark-submit examples/src/main/python/ml/correlation_example.py
-"""
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \

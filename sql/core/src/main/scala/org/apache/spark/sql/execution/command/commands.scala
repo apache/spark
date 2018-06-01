@@ -24,9 +24,9 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -37,19 +37,13 @@ import org.apache.spark.sql.types._
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
  * wrapped in `ExecutedCommand` during execution.
  */
-trait RunnableCommand extends logical.Command {
+trait RunnableCommand extends Command {
 
   // The map used to record the metrics of running the command. This will be passed to
   // `ExecutedCommand` during query planning.
   lazy val metrics: Map[String, SQLMetric] = Map.empty
 
-  def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
-    throw new NotImplementedError
-  }
-
-  def run(sparkSession: SparkSession): Seq[Row] = {
-    throw new NotImplementedError
-  }
+  def run(sparkSession: SparkSession): Seq[Row]
 }
 
 /**
@@ -57,9 +51,8 @@ trait RunnableCommand extends logical.Command {
  * saves the result to prevent multiple executions.
  *
  * @param cmd the `RunnableCommand` this operator will run.
- * @param children the children physical plans ran by the `RunnableCommand`.
  */
-case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) extends SparkPlan {
+case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 
   override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
 
@@ -74,19 +67,50 @@ case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) e
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val rows = if (children.isEmpty) {
-      cmd.run(sqlContext.sparkSession)
-    } else {
-      cmd.run(sqlContext.sparkSession, children)
-    }
-    rows.map(converter(_).asInstanceOf[InternalRow])
+    cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
-  override def innerChildren: Seq[QueryPlan[_]] = cmd.innerChildren
+  override protected def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 
-  override def nodeName: String = cmd.nodeName
+  override def nodeName: String = "Execute " + cmd.nodeName
+
+  override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
+
+  override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
+
+  override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  }
+}
+
+/**
+ * A physical operator that executes the run method of a `DataWritingCommand` and
+ * saves the result to prevent multiple executions.
+ *
+ * @param cmd the `DataWritingCommand` this operator will run.
+ * @param child the physical plan child ran by the `DataWritingCommand`.
+ */
+case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
+  extends SparkPlan {
+
+  override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
+
+  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val rows = cmd.run(sqlContext.sparkSession, child)
+
+    rows.map(converter(_).asInstanceOf[InternalRow])
+  }
+
+  override def children: Seq[SparkPlan] = child :: Nil
+
+  override def output: Seq[Attribute] = cmd.output
+
+  override def nodeName: String = "Execute " + cmd.nodeName
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 

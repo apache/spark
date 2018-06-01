@@ -140,7 +140,9 @@ case class Alias(child: Expression, name: String)(
 
   /** Just a simple passthrough for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    throw new IllegalStateException("Alias.doGenCode should not be called.")
+  }
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -164,7 +166,14 @@ case class Alias(child: Expression, name: String)(
     }
   }
 
-  override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
+  /** Used to signal the column used to calculate an eventTime watermark (e.g. a#1-T{delayMs}) */
+  private def delaySuffix = if (metadata.contains(EventTimeWatermark.delayKey)) {
+    s"-T${metadata.getLong(EventTimeWatermark.delayKey)}ms"
+  } else {
+    ""
+  }
+
+  override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix$delaySuffix"
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: explicitMetadata :: Nil

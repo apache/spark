@@ -41,8 +41,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    val parsedOptions =
-      new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val parsedOptions = new CSVOptions(
+      options,
+      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
     val csvDataSource = CSVDataSource(parsedOptions)
     csvDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
@@ -51,8 +53,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val parsedOptions =
-      new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val parsedOptions = new CSVOptions(
+      options,
+      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
 
     CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
@@ -64,7 +68,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       dataSchema: StructType): OutputWriterFactory = {
     CSVUtils.verifySchema(dataSchema)
     val conf = job.getConfiguration
-    val csvOptions = new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val csvOptions = new CSVOptions(
+      options,
+      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
     csvOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -97,6 +104,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     val parsedOptions = new CSVOptions(
       options,
+      sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
@@ -107,6 +115,20 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         throw new AnalysisException(
           "The field for corrupt records must be string type and nullable")
       }
+    }
+
+    if (requiredSchema.length == 1 &&
+      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      throw new AnalysisException(
+        "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
+          "referenced columns only include the internal corrupt record column\n" +
+          s"(named _corrupt_record by default). For example:\n" +
+          "spark.read.schema(schema).csv(file).filter($\"_corrupt_record\".isNotNull).count()\n" +
+          "and spark.read.schema(schema).csv(file).select(\"_corrupt_record\").show().\n" +
+          "Instead, you can cache or save the parsed results and then send the same query.\n" +
+          "For example, val df = spark.read.schema(schema).csv(file).cache() and then\n" +
+          "df.filter($\"_corrupt_record\".isNotNull).count()."
+      )
     }
 
     (file: PartitionedFile) => {

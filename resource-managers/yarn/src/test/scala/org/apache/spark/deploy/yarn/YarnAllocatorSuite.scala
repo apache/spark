@@ -28,9 +28,9 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.YarnAllocator._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
@@ -251,9 +251,53 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Finished", 0)
     }
     handler.updateResourceRequests()
-    handler.processCompletedContainers(statuses.toSeq)
+    handler.processCompletedContainers(statuses)
     handler.getNumExecutorsRunning should be (0)
     handler.getPendingAllocate.size should be (1)
+  }
+
+  test("kill same executor multiple times") {
+    val handler = createAllocator(2)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.getNumExecutorsRunning should be (2)
+    handler.getPendingAllocate.size should be (0)
+
+    val executorToKill = handler.executorIdToContainer.keys.head
+    handler.killExecutor(executorToKill)
+    handler.getNumExecutorsRunning should be (1)
+    handler.killExecutor(executorToKill)
+    handler.killExecutor(executorToKill)
+    handler.killExecutor(executorToKill)
+    handler.getNumExecutorsRunning should be (1)
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map.empty, Set.empty)
+    handler.updateResourceRequests()
+    handler.getPendingAllocate.size should be (1)
+  }
+
+  test("process same completed container multiple times") {
+    val handler = createAllocator(2)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.getNumExecutorsRunning should be (2)
+    handler.getPendingAllocate.size should be (0)
+
+    val statuses = Seq(container1, container1, container2).map { c =>
+      ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Finished", 0)
+    }
+    handler.processCompletedContainers(statuses)
+    handler.getNumExecutorsRunning should be (0)
+
   }
 
   test("lost executor removed from backend") {
@@ -272,7 +316,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Failed", -1)
     }
     handler.updateResourceRequests()
-    handler.processCompletedContainers(statuses.toSeq)
+    handler.processCompletedContainers(statuses)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
     handler.getPendingAllocate.size should be (2)

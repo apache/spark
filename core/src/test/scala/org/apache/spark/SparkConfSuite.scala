@@ -26,6 +26,7 @@ import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
 
+import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
@@ -248,6 +249,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set("spark.kryoserializer.buffer.mb", "1.1")
     assert(conf.getSizeAsKb("spark.kryoserializer.buffer") === 1100)
+
+    conf.set("spark.history.fs.cleaner.maxAge.seconds", "42")
+    assert(conf.get(MAX_LOG_AGE_S) === 42L)
+
+    conf.set("spark.scheduler.listenerbus.eventqueue.size", "84")
+    assert(conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY) === 84)
   }
 
   test("akka deprecated configs") {
@@ -322,6 +329,48 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.validateSettings()
   }
 
+  test("spark.network.timeout should bigger than spark.executor.heartbeatInterval") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+
+    conf.set("spark.network.timeout", "5s")
+    intercept[IllegalArgumentException] {
+      conf.validateSettings()
+    }
+  }
+
+  val defaultIllegalValue = "SomeIllegalValue"
+  val illegalValueTests : Map[String, (SparkConf, String) => Any] = Map(
+    "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
+    "getTimeAsSeconds with default" -> (_.getTimeAsSeconds(_, defaultIllegalValue)),
+    "getTimeAsMs" -> (_.getTimeAsMs(_)),
+    "getTimeAsMs with default" -> (_.getTimeAsMs(_, defaultIllegalValue)),
+    "getSizeAsBytes" -> (_.getSizeAsBytes(_)),
+    "getSizeAsBytes with default string" -> (_.getSizeAsBytes(_, defaultIllegalValue)),
+    "getSizeAsBytes with default long" -> (_.getSizeAsBytes(_, 0L)),
+    "getSizeAsKb" -> (_.getSizeAsKb(_)),
+    "getSizeAsKb with default" -> (_.getSizeAsKb(_, defaultIllegalValue)),
+    "getSizeAsMb" -> (_.getSizeAsMb(_)),
+    "getSizeAsMb with default" -> (_.getSizeAsMb(_, defaultIllegalValue)),
+    "getSizeAsGb" -> (_.getSizeAsGb(_)),
+    "getSizeAsGb with default" -> (_.getSizeAsGb(_, defaultIllegalValue)),
+    "getInt" -> (_.getInt(_, 0)),
+    "getLong" -> (_.getLong(_, 0L)),
+    "getDouble" -> (_.getDouble(_, 0.0)),
+    "getBoolean" -> (_.getBoolean(_, false))
+  )
+
+  illegalValueTests.foreach { case (name, getValue) =>
+    test(s"SPARK-24337: $name throws an useful error message with key name") {
+      val key = "SomeKey"
+      val conf = new SparkConf()
+      conf.set(key, "SomeInvalidValue")
+      val thrown = intercept[IllegalArgumentException] {
+        getValue(conf, key)
+      }
+      assert(thrown.getMessage.contains(key))
+    }
+  }
 }
 
 class Class1 {}

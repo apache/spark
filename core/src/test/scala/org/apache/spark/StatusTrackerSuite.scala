@@ -44,13 +44,13 @@ class StatusTrackerSuite extends SparkFunSuite with Matchers with LocalSparkCont
     stageIds.size should be(2)
 
     val firstStageInfo = eventually(timeout(10 seconds)) {
-      sc.statusTracker.getStageInfo(stageIds(0)).get
+      sc.statusTracker.getStageInfo(stageIds.min).get
     }
-    firstStageInfo.stageId() should be(stageIds(0))
+    firstStageInfo.stageId() should be(stageIds.min)
     firstStageInfo.currentAttemptId() should be(0)
     firstStageInfo.numTasks() should be(2)
     eventually(timeout(10 seconds)) {
-      val updatedFirstStageInfo = sc.statusTracker.getStageInfo(stageIds(0)).get
+      val updatedFirstStageInfo = sc.statusTracker.getStageInfo(stageIds.min).get
       updatedFirstStageInfo.numCompletedTasks() should be(2)
       updatedFirstStageInfo.numActiveTasks() should be(0)
       updatedFirstStageInfo.numFailedTasks() should be(0)

@@ -88,7 +88,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
         import spark.implicits._
 
-        Seq[Int]().toDS().toDF()
+        spark.internalCreateDataFrame(spark.sparkContext.emptyRDD, schema, isStreaming = true)
       }
 
       override def stop() {}
@@ -422,21 +422,6 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("ConsoleSink can be correctly loaded") {
-    LastOptions.clear()
-    val df = spark.readStream
-      .format("org.apache.spark.sql.streaming.test")
-      .load()
-
-    val sq = df.writeStream
-      .format("console")
-      .option("checkpointLocation", newMetadataDir)
-      .trigger(ProcessingTime(2.seconds))
-      .start()
-
-    sq.awaitTermination(2000L)
-  }
-
   test("prevent all column partitioning") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
@@ -448,16 +433,6 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
           .start(path)
       }
     }
-  }
-
-  test("ConsoleSink should not require checkpointLocation") {
-    LastOptions.clear()
-    val df = spark.readStream
-      .format("org.apache.spark.sql.streaming.test")
-      .load()
-
-    val sq = df.writeStream.format("console").start()
-    sq.stop()
   }
 
   private def testMemorySinkCheckpointRecovery(chkLoc: String, provideInWriter: Boolean): Unit = {

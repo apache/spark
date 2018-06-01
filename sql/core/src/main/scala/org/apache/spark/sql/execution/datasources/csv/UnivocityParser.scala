@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.InputStream
 import java.math.BigDecimal
-import java.text.NumberFormat
-import java.util.Locale
 
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -36,10 +34,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class UnivocityParser(
-    schema: StructType,
+    dataSchema: StructType,
     requiredSchema: StructType,
     val options: CSVOptions) extends Logging {
-  require(requiredSchema.toSet.subsetOf(schema.toSet),
+  require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
     "requiredSchema should be the subset of schema.")
 
   def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
@@ -47,9 +45,17 @@ class UnivocityParser(
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
-  private val tokenizer = new CsvParser(options.asParserSettings)
+  private val tokenizer = {
+    val parserSetting = options.asParserSettings
+    if (options.columnPruning && requiredSchema.length < dataSchema.length) {
+      val tokenIndexArr = requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f)))
+      parserSetting.selectIndexes(tokenIndexArr: _*)
+    }
+    new CsvParser(parserSetting)
+  }
+  private val schema = if (options.columnPruning) requiredSchema else dataSchema
 
-  private val row = new GenericInternalRow(requiredSchema.length)
+  private val row = new GenericInternalRow(schema.length)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -75,11 +81,8 @@ class UnivocityParser(
   // Each input token is placed in each output row's position by mapping these. In this case,
   //
   //   output row - ["A", 2]
-  private val valueConverters: Array[ValueConverter] =
+  private val valueConverters: Array[ValueConverter] = {
     schema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
-
-  private val tokenIndexArr: Array[Int] = {
-    requiredSchema.map(f => schema.indexOf(f)).toArray
   }
 
   /**
@@ -203,21 +206,25 @@ class UnivocityParser(
           case _: BadRecordException => None
         }
       }
+      // For records with less or more tokens than the schema, tries to return partial results
+      // if possible.
       throw BadRecordException(
         () => getCurrentInput,
-        getPartialResult,
+        () => getPartialResult(),
         new RuntimeException("Malformed CSV record"))
     } else {
       try {
         var i = 0
-        while (i < requiredSchema.length) {
-          val from = tokenIndexArr(i)
-          row(i) = valueConverters(from).apply(tokens(from))
+        while (i < schema.length) {
+          row(i) = valueConverters(i).apply(tokens(i))
           i += 1
         }
         row
       } catch {
         case NonFatal(e) =>
+          // For corrupted records with the number of tokens same as the schema,
+          // CSV reader doesn't support partial results. All fields other than the field
+          // configured by `columnNameOfCorruptRecord` are set to `null`.
           throw BadRecordException(() => getCurrentInput, () => None, e)
       }
     }

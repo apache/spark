@@ -19,7 +19,8 @@ import sys
 import os
 from collections import namedtuple
 
-ExpressionInfo = namedtuple("ExpressionInfo", "className usage name extended")
+ExpressionInfo = namedtuple(
+    "ExpressionInfo", "className name usage arguments examples note since")
 
 
 def _list_function_infos(jvm):
@@ -34,20 +35,21 @@ def _list_function_infos(jvm):
         name = jinfo.getName()
         usage = jinfo.getUsage()
         usage = usage.replace("_FUNC_", name) if usage is not None else usage
-        extended = jinfo.getExtended()
-        extended = extended.replace("_FUNC_", name) if extended is not None else extended
         infos.append(ExpressionInfo(
             className=jinfo.getClassName(),
-            usage=usage,
             name=name,
-            extended=extended))
+            usage=usage,
+            arguments=jinfo.getArguments().replace("_FUNC_", name),
+            examples=jinfo.getExamples().replace("_FUNC_", name),
+            note=jinfo.getNote(),
+            since=jinfo.getSince()))
     return sorted(infos, key=lambda i: i.name)
 
 
 def _make_pretty_usage(usage):
     """
-    Makes the usage description pretty and returns a formatted string.
-    Otherwise, returns None.
+    Makes the usage description pretty and returns a formatted string if `usage`
+    is not an empty string. Otherwise, returns None.
     """
 
     if usage is not None and usage.strip() != "":
@@ -55,32 +57,136 @@ def _make_pretty_usage(usage):
         return "%s\n\n" % usage
 
 
-def _make_pretty_extended(extended):
+def _make_pretty_arguments(arguments):
     """
-    Makes the extended description pretty and returns a formatted string.
-    Otherwise, returns None.
+    Makes the arguments description pretty and returns a formatted string if `arguments`
+    starts with the argument prefix. Otherwise, returns None.
+
+    Expected input:
+
+        Arguments:
+          * arg0 - ...
+              ...
+          * arg0 - ...
+              ...
+
+    Expected output:
+    **Arguments:**
+
+    * arg0 - ...
+        ...
+    * arg0 - ...
+        ...
+
     """
 
-    if extended is not None and extended.strip() != "":
-        extended = "\n".join(map(lambda u: u.strip(), extended.split("\n")))
-        return "```%s```\n\n" % extended
+    if arguments.startswith("\n    Arguments:"):
+        arguments = "\n".join(map(lambda u: u[6:], arguments.strip().split("\n")[1:]))
+        return "**Arguments:**\n\n%s\n\n" % arguments
+
+
+def _make_pretty_examples(examples):
+    """
+    Makes the examples description pretty and returns a formatted string if `examples`
+    starts with the example prefix. Otherwise, returns None.
+
+    Expected input:
+
+        Examples:
+          > SELECT ...;
+           ...
+          > SELECT ...;
+           ...
+
+    Expected output:
+    **Examples:**
+
+    ```
+    > SELECT ...;
+     ...
+    > SELECT ...;
+     ...
+    ```
+
+    """
+
+    if examples.startswith("\n    Examples:"):
+        examples = "\n".join(map(lambda u: u[6:], examples.strip().split("\n")[1:]))
+        return "**Examples:**\n\n```\n%s\n```\n\n" % examples
+
+
+def _make_pretty_note(note):
+    """
+    Makes the note description pretty and returns a formatted string if `note` is not
+    an empty string. Otherwise, returns None.
+
+    Expected input:
+
+        ...
+
+    Expected output:
+    **Note:**
+
+    ...
+
+    """
+
+    if note != "":
+        note = "\n".join(map(lambda n: n[4:], note.split("\n")))
+        return "**Note:**\n%s\n" % note
 
 
 def generate_sql_markdown(jvm, path):
     """
     Generates a markdown file after listing the function information. The output file
     is created in `path`.
+
+    Expected output:
+    ### NAME
+
+    USAGE
+
+    **Arguments:**
+
+    ARGUMENTS
+
+    **Examples:**
+
+    ```
+    EXAMPLES
+    ```
+
+    **Note:**
+
+    NOTE
+
+    **Since:** SINCE
+
+    <br/>
+
     """
 
     with open(path, 'w') as mdfile:
         for info in _list_function_infos(jvm):
-            mdfile.write("### %s\n\n" % info.name)
+            name = info.name
             usage = _make_pretty_usage(info.usage)
-            extended = _make_pretty_extended(info.extended)
+            arguments = _make_pretty_arguments(info.arguments)
+            examples = _make_pretty_examples(info.examples)
+            note = _make_pretty_note(info.note)
+            since = info.since
+
+            mdfile.write("### %s\n\n" % name)
             if usage is not None:
-                mdfile.write(usage)
-            if extended is not None:
-                mdfile.write(extended)
+                mdfile.write("%s\n\n" % usage.strip())
+            if arguments is not None:
+                mdfile.write(arguments)
+            if examples is not None:
+                mdfile.write(examples)
+            if note is not None:
+                mdfile.write(note)
+            if since is not None and since != "":
+                mdfile.write("**Since:** %s\n\n" % since.strip())
+            mdfile.write("<br/>\n\n")
 
 
 if __name__ == "__main__":

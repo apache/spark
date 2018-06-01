@@ -23,10 +23,10 @@ import java.util.concurrent._
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.flume.event.EventBuilder
 import org.apache.flume.Context
 import org.apache.flume.channel.MemoryChannel
 import org.apache.flume.conf.Configurables
+import org.apache.flume.event.EventBuilder
 
 import org.apache.spark.streaming.flume.sink.{SparkSink, SparkSinkConfig}
 

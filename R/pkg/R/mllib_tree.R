@@ -20,42 +20,36 @@
 #' S4 class that represents a GBTRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala GBTRegressionModel
-#' @export
 #' @note GBTRegressionModel since 2.1.0
 setClass("GBTRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a GBTClassificationModel
 #'
 #' @param jobj a Java object reference to the backing Scala GBTClassificationModel
-#' @export
 #' @note GBTClassificationModel since 2.1.0
 setClass("GBTClassificationModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a RandomForestRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala RandomForestRegressionModel
-#' @export
 #' @note RandomForestRegressionModel since 2.1.0
 setClass("RandomForestRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a RandomForestClassificationModel
 #'
 #' @param jobj a Java object reference to the backing Scala RandomForestClassificationModel
-#' @export
 #' @note RandomForestClassificationModel since 2.1.0
 setClass("RandomForestClassificationModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a DecisionTreeRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala DecisionTreeRegressionModel
-#' @export
 #' @note DecisionTreeRegressionModel since 2.3.0
 setClass("DecisionTreeRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a DecisionTreeClassificationModel
 #'
 #' @param jobj a Java object reference to the backing Scala DecisionTreeClassificationModel
-#' @export
 #' @note DecisionTreeClassificationModel since 2.3.0
 setClass("DecisionTreeClassificationModel", representation(jobj = "jobj"))
 
@@ -132,10 +126,12 @@ print.summary.decisionTree <- function(x) {
 #' Gradient Boosted Tree model, \code{predict} to make predictions on new data, and
 #' \code{write.ml}/\code{read.ml} to save/load fitted models.
 #' For more details, see
+# nolint start
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-regression}{
 #' GBT Regression} and
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-classifier}{
 #' GBT Classification}
+# nolint end
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
@@ -159,22 +155,24 @@ print.summary.decisionTree <- function(x) {
 #'                            >= 1.
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
-#'                      column of string type in classification model.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and
+#'                      label column of string type in classification model.
 #'                      Supported options: "skip" (filter out rows with invalid data),
-#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
-#'                                         bucket, at index numLabels). Default is "error".
+#'                                         "error" (throw an error), "keep" (put invalid data in
+#'                                         a special additional bucket, at index numLabels). Default
+#'                                         is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.gbt,SparkDataFrame,formula-method
 #' @return \code{spark.gbt} returns a fitted Gradient Boosted Tree model.
 #' @rdname spark.gbt
 #' @name spark.gbt
-#' @export
 #' @examples
 #' \dontrun{
 #' # fit a Gradient Boosted Tree Regression Model
@@ -256,7 +254,6 @@ setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
 #'         \code{numTrees} (number of trees), and \code{treeWeights} (tree weights).
 #' @rdname spark.gbt
 #' @aliases summary,GBTRegressionModel-method
-#' @export
 #' @note summary(GBTRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "GBTRegressionModel"),
           function(object) {
@@ -270,7 +267,6 @@ setMethod("summary", signature(object = "GBTRegressionModel"),
 #' @param x summary object of Gradient Boosted Tree regression model or classification model
 #'          returned by \code{summary}.
 #' @rdname spark.gbt
-#' @export
 #' @note print.summary.GBTRegressionModel since 2.1.0
 print.summary.GBTRegressionModel <- function(x, ...) {
   print.summary.treeEnsemble(x)
@@ -280,7 +276,6 @@ print.summary.GBTRegressionModel <- function(x, ...) {
 
 #' @rdname spark.gbt
 #' @aliases summary,GBTClassificationModel-method
-#' @export
 #' @note summary(GBTClassificationModel) since 2.1.0
 setMethod("summary", signature(object = "GBTClassificationModel"),
           function(object) {
@@ -292,7 +287,6 @@ setMethod("summary", signature(object = "GBTClassificationModel"),
 #  Prints the summary of Gradient Boosted Tree Classification Model
 
 #' @rdname spark.gbt
-#' @export
 #' @note print.summary.GBTClassificationModel since 2.1.0
 print.summary.GBTClassificationModel <- function(x, ...) {
   print.summary.treeEnsemble(x)
@@ -305,7 +299,6 @@ print.summary.GBTClassificationModel <- function(x, ...) {
 #'         "prediction".
 #' @rdname spark.gbt
 #' @aliases predict,GBTRegressionModel-method
-#' @export
 #' @note predict(GBTRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "GBTRegressionModel"),
           function(object, newData) {
@@ -314,7 +307,6 @@ setMethod("predict", signature(object = "GBTRegressionModel"),
 
 #' @rdname spark.gbt
 #' @aliases predict,GBTClassificationModel-method
-#' @export
 #' @note predict(GBTClassificationModel) since 2.1.0
 setMethod("predict", signature(object = "GBTClassificationModel"),
           function(object, newData) {
@@ -329,7 +321,6 @@ setMethod("predict", signature(object = "GBTClassificationModel"),
 #'                  which means throw exception if the output path exists.
 #' @aliases write.ml,GBTRegressionModel,character-method
 #' @rdname spark.gbt
-#' @export
 #' @note write.ml(GBTRegressionModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "GBTRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -338,7 +329,6 @@ setMethod("write.ml", signature(object = "GBTRegressionModel", path = "character
 
 #' @aliases write.ml,GBTClassificationModel,character-method
 #' @rdname spark.gbt
-#' @export
 #' @note write.ml(GBTClassificationModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "GBTClassificationModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -352,10 +342,12 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' model, \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
 #' save/load fitted models.
 #' For more details, see
+# nolint start
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-regression}{
 #' Random Forest Regression} and
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-classifier}{
 #' Random Forest Classification}
+# nolint end
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
@@ -377,22 +369,24 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' @param minInstancesPerNode Minimum number of instances each child must have after split.
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
-#'                      column of string type in classification model.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and
+#'                      label column of string type in classification model.
 #'                      Supported options: "skip" (filter out rows with invalid data),
-#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
-#'                                         bucket, at index numLabels). Default is "error".
+#'                                         "error" (throw an error), "keep" (put invalid data in
+#'                                         a special additional bucket, at index numLabels). Default
+#'                                         is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.randomForest,SparkDataFrame,formula-method
 #' @return \code{spark.randomForest} returns a fitted Random Forest model.
 #' @rdname spark.randomForest
 #' @name spark.randomForest
-#' @export
 #' @examples
 #' \dontrun{
 #' # fit a Random Forest Regression Model
@@ -470,7 +464,6 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
 #'         \code{numTrees} (number of trees), and \code{treeWeights} (tree weights).
 #' @rdname spark.randomForest
 #' @aliases summary,RandomForestRegressionModel-method
-#' @export
 #' @note summary(RandomForestRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "RandomForestRegressionModel"),
           function(object) {
@@ -484,7 +477,6 @@ setMethod("summary", signature(object = "RandomForestRegressionModel"),
 #' @param x summary object of Random Forest regression model or classification model
 #'          returned by \code{summary}.
 #' @rdname spark.randomForest
-#' @export
 #' @note print.summary.RandomForestRegressionModel since 2.1.0
 print.summary.RandomForestRegressionModel <- function(x, ...) {
   print.summary.treeEnsemble(x)
@@ -494,7 +486,6 @@ print.summary.RandomForestRegressionModel <- function(x, ...) {
 
 #' @rdname spark.randomForest
 #' @aliases summary,RandomForestClassificationModel-method
-#' @export
 #' @note summary(RandomForestClassificationModel) since 2.1.0
 setMethod("summary", signature(object = "RandomForestClassificationModel"),
           function(object) {
@@ -506,7 +497,6 @@ setMethod("summary", signature(object = "RandomForestClassificationModel"),
 #  Prints the summary of Random Forest Classification Model
 
 #' @rdname spark.randomForest
-#' @export
 #' @note print.summary.RandomForestClassificationModel since 2.1.0
 print.summary.RandomForestClassificationModel <- function(x, ...) {
   print.summary.treeEnsemble(x)
@@ -519,7 +509,6 @@ print.summary.RandomForestClassificationModel <- function(x, ...) {
 #'         "prediction".
 #' @rdname spark.randomForest
 #' @aliases predict,RandomForestRegressionModel-method
-#' @export
 #' @note predict(RandomForestRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "RandomForestRegressionModel"),
           function(object, newData) {
@@ -528,7 +517,6 @@ setMethod("predict", signature(object = "RandomForestRegressionModel"),
 
 #' @rdname spark.randomForest
 #' @aliases predict,RandomForestClassificationModel-method
-#' @export
 #' @note predict(RandomForestClassificationModel) since 2.1.0
 setMethod("predict", signature(object = "RandomForestClassificationModel"),
           function(object, newData) {
@@ -544,7 +532,6 @@ setMethod("predict", signature(object = "RandomForestClassificationModel"),
 #'
 #' @aliases write.ml,RandomForestRegressionModel,character-method
 #' @rdname spark.randomForest
-#' @export
 #' @note write.ml(RandomForestRegressionModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "RandomForestRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -553,7 +540,6 @@ setMethod("write.ml", signature(object = "RandomForestRegressionModel", path = "
 
 #' @aliases write.ml,RandomForestClassificationModel,character-method
 #' @rdname spark.randomForest
-#' @export
 #' @note write.ml(RandomForestClassificationModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "RandomForestClassificationModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -567,10 +553,12 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' model, \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
 #' save/load fitted models.
 #' For more details, see
+# nolint start
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-regression}{
 #' Decision Tree Regression} and
 #' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-classifier}{
 #' Decision Tree Classification}
+# nolint end
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
@@ -587,22 +575,24 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' @param minInstancesPerNode Minimum number of instances each child must have after split.
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
-#'                      column of string type in classification model.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and
+#'                      label column of string type in classification model.
 #'                      Supported options: "skip" (filter out rows with invalid data),
-#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
-#'                                         bucket, at index numLabels). Default is "error".
+#'                                         "error" (throw an error), "keep" (put invalid data in
+#'                                         a special additional bucket, at index numLabels). Default
+#'                                         is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.decisionTree,SparkDataFrame,formula-method
 #' @return \code{spark.decisionTree} returns a fitted Decision Tree model.
 #' @rdname spark.decisionTree
 #' @name spark.decisionTree
-#' @export
 #' @examples
 #' \dontrun{
 #' # fit a Decision Tree Regression Model
@@ -671,10 +661,10 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list of components includes \code{formula} (formula),
 #'         \code{numFeatures} (number of features), \code{features} (list of features),
-#'         \code{featureImportances} (feature importances), and \code{maxDepth} (max depth of trees).
+#'         \code{featureImportances} (feature importances), and \code{maxDepth} (max depth of
+#'         trees).
 #' @rdname spark.decisionTree
 #' @aliases summary,DecisionTreeRegressionModel-method
-#' @export
 #' @note summary(DecisionTreeRegressionModel) since 2.3.0
 setMethod("summary", signature(object = "DecisionTreeRegressionModel"),
           function(object) {
@@ -688,7 +678,6 @@ setMethod("summary", signature(object = "DecisionTreeRegressionModel"),
 #' @param x summary object of Decision Tree regression model or classification model
 #'          returned by \code{summary}.
 #' @rdname spark.decisionTree
-#' @export
 #' @note print.summary.DecisionTreeRegressionModel since 2.3.0
 print.summary.DecisionTreeRegressionModel <- function(x, ...) {
   print.summary.decisionTree(x)
@@ -698,7 +687,6 @@ print.summary.DecisionTreeRegressionModel <- function(x, ...) {
 
 #' @rdname spark.decisionTree
 #' @aliases summary,DecisionTreeClassificationModel-method
-#' @export
 #' @note summary(DecisionTreeClassificationModel) since 2.3.0
 setMethod("summary", signature(object = "DecisionTreeClassificationModel"),
           function(object) {
@@ -710,7 +698,6 @@ setMethod("summary", signature(object = "DecisionTreeClassificationModel"),
 #  Prints the summary of Decision Tree Classification Model
 
 #' @rdname spark.decisionTree
-#' @export
 #' @note print.summary.DecisionTreeClassificationModel since 2.3.0
 print.summary.DecisionTreeClassificationModel <- function(x, ...) {
   print.summary.decisionTree(x)
@@ -723,7 +710,6 @@ print.summary.DecisionTreeClassificationModel <- function(x, ...) {
 #'         "prediction".
 #' @rdname spark.decisionTree
 #' @aliases predict,DecisionTreeRegressionModel-method
-#' @export
 #' @note predict(DecisionTreeRegressionModel) since 2.3.0
 setMethod("predict", signature(object = "DecisionTreeRegressionModel"),
           function(object, newData) {
@@ -732,7 +718,6 @@ setMethod("predict", signature(object = "DecisionTreeRegressionModel"),
 
 #' @rdname spark.decisionTree
 #' @aliases predict,DecisionTreeClassificationModel-method
-#' @export
 #' @note predict(DecisionTreeClassificationModel) since 2.3.0
 setMethod("predict", signature(object = "DecisionTreeClassificationModel"),
           function(object, newData) {
@@ -748,7 +733,6 @@ setMethod("predict", signature(object = "DecisionTreeClassificationModel"),
 #'
 #' @aliases write.ml,DecisionTreeRegressionModel,character-method
 #' @rdname spark.decisionTree
-#' @export
 #' @note write.ml(DecisionTreeRegressionModel, character) since 2.3.0
 setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -757,7 +741,6 @@ setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "
 
 #' @aliases write.ml,DecisionTreeClassificationModel,character-method
 #' @rdname spark.decisionTree
-#' @export
 #' @note write.ml(DecisionTreeClassificationModel, character) since 2.3.0
 setMethod("write.ml", signature(object = "DecisionTreeClassificationModel", path = "character"),
           function(object, path, overwrite = FALSE) {

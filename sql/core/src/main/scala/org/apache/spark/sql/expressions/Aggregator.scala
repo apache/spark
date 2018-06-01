@@ -86,7 +86,7 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def bufferEncoder: Encoder[BUF]
 
   /**
-   * Specifies the `Encoder` for the final ouput value type.
+   * Specifies the `Encoder` for the final output value type.
    * @since 2.0.0
    */
   def outputEncoder: Encoder[OUT]

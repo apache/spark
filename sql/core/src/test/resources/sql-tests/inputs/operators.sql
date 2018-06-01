@@ -92,3 +92,7 @@ select abs(-3.13), abs('-2.19');
 
 -- positive/negative
 select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11);
+
+-- pmod
+select pmod(-7, 2), pmod(0, 2), pmod(7, 0), pmod(7, null), pmod(null, 2), pmod(null, null);
+select pmod(cast(3.13 as decimal), cast(0 as decimal)), pmod(cast(2 as smallint), cast(0 as smallint));

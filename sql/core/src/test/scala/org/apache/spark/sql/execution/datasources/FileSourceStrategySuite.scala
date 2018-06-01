@@ -401,7 +401,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           sparkSession = spark,
           rootPathsSpecified = Seq(new Path(tempDir)),
           parameters = Map.empty[String, String],
-          partitionSchema = None)
+          userSpecifiedSchema = None)
         // This should not fail.
         fileCatalog.listLeafFiles(Seq(new Path(tempDir)))
 
@@ -556,7 +556,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
     if (buckets > 0) {
       val bucketed = df.queryExecution.analyzed transform {
-        case l @ LogicalRelation(r: HadoopFsRelation, _, _) =>
+        case l @ LogicalRelation(r: HadoopFsRelation, _, _, _) =>
           l.copy(relation =
             r.copy(bucketSpec =
               Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))

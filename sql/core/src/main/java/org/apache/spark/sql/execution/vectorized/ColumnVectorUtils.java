@@ -20,14 +20,19 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.vectorized.ColumnarArray;
+import org.apache.spark.sql.vectorized.ColumnarBatch;
+import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -40,7 +45,7 @@ public class ColumnVectorUtils {
   /**
    * Populates the entire `col` with `row[fieldIdx]`
    */
-  public static void populate(ColumnVector col, InternalRow row, int fieldIdx) {
+  public static void populate(WritableColumnVector col, InternalRow row, int fieldIdx) {
     int capacity = col.capacity;
     DataType t = col.dataType();
 
@@ -83,8 +88,8 @@ public class ColumnVectorUtils {
         }
       } else if (t instanceof CalendarIntervalType) {
         CalendarInterval c = (CalendarInterval)row.get(fieldIdx, t);
-        col.getChildColumn(0).putInts(0, capacity, c.months);
-        col.getChildColumn(1).putLongs(0, capacity, c.microseconds);
+        col.getChild(0).putInts(0, capacity, c.months);
+        col.getChild(1).putLongs(0, capacity, c.microseconds);
       } else if (t instanceof DateType) {
         col.putInts(0, capacity, row.getInt(fieldIdx));
       } else if (t instanceof TimestampType) {
@@ -98,24 +103,28 @@ public class ColumnVectorUtils {
    * For example, an array of IntegerType will return an int[].
    * Throws exceptions for unhandled schemas.
    */
-  public static Object toPrimitiveJavaArray(ColumnVector.Array array) {
-    DataType dt = array.data.dataType();
-    if (dt instanceof IntegerType) {
-      int[] result = new int[array.length];
-      ColumnVector data = array.data;
-      for (int i = 0; i < result.length; i++) {
-        if (data.isNullAt(array.offset + i)) {
-          throw new RuntimeException("Cannot handle NULL values.");
-        }
-        result[i] = data.getInt(array.offset + i);
+  public static int[] toJavaIntArray(ColumnarArray array) {
+    for (int i = 0; i < array.numElements(); i++) {
+      if (array.isNullAt(i)) {
+        throw new RuntimeException("Cannot handle NULL values.");
       }
-      return result;
-    } else {
-      throw new UnsupportedOperationException();
     }
+    return array.toIntArray();
   }
 
-  private static void appendValue(ColumnVector dst, DataType t, Object o) {
+  public static Map<Integer, Integer> toJavaIntMap(ColumnarMap map) {
+    int[] keys = toJavaIntArray(map.keyArray());
+    int[] values = toJavaIntArray(map.valueArray());
+    assert keys.length == values.length;
+
+    Map<Integer, Integer> result = new HashMap<>();
+    for (int i = 0; i < keys.length; i++) {
+      result.put(keys[i], values[i]);
+    }
+    return result;
+  }
+
+  private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
     if (o == null) {
       if (t instanceof CalendarIntervalType) {
         dst.appendStruct(true);
@@ -124,19 +133,19 @@ public class ColumnVectorUtils {
       }
     } else {
       if (t == DataTypes.BooleanType) {
-        dst.appendBoolean(((Boolean)o).booleanValue());
+        dst.appendBoolean((Boolean) o);
       } else if (t == DataTypes.ByteType) {
-        dst.appendByte(((Byte) o).byteValue());
+        dst.appendByte((Byte) o);
       } else if (t == DataTypes.ShortType) {
-        dst.appendShort(((Short)o).shortValue());
+        dst.appendShort((Short) o);
       } else if (t == DataTypes.IntegerType) {
-        dst.appendInt(((Integer)o).intValue());
+        dst.appendInt((Integer) o);
       } else if (t == DataTypes.LongType) {
-        dst.appendLong(((Long)o).longValue());
+        dst.appendLong((Long) o);
       } else if (t == DataTypes.FloatType) {
-        dst.appendFloat(((Float)o).floatValue());
+        dst.appendFloat((Float) o);
       } else if (t == DataTypes.DoubleType) {
-        dst.appendDouble(((Double)o).doubleValue());
+        dst.appendDouble((Double) o);
       } else if (t == DataTypes.StringType) {
         byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
@@ -155,8 +164,8 @@ public class ColumnVectorUtils {
       } else if (t instanceof CalendarIntervalType) {
         CalendarInterval c = (CalendarInterval)o;
         dst.appendStruct(false);
-        dst.getChildColumn(0).appendInt(c.months);
-        dst.getChildColumn(1).appendLong(c.microseconds);
+        dst.getChild(0).appendInt(c.months);
+        dst.getChild(1).appendLong(c.microseconds);
       } else if (t instanceof DateType) {
         dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {
@@ -165,7 +174,7 @@ public class ColumnVectorUtils {
     }
   }
 
-  private static void appendValue(ColumnVector dst, DataType t, Row src, int fieldIdx) {
+  private static void appendValue(WritableColumnVector dst, DataType t, Row src, int fieldIdx) {
     if (t instanceof ArrayType) {
       ArrayType at = (ArrayType)t;
       if (src.isNullAt(fieldIdx)) {
@@ -185,7 +194,7 @@ public class ColumnVectorUtils {
         dst.appendStruct(false);
         Row c = src.getStruct(fieldIdx);
         for (int i = 0; i < st.fields().length; i++) {
-          appendValue(dst.getChildColumn(i), st.fields()[i].dataType(), c, i);
+          appendValue(dst.getChild(i), st.fields()[i].dataType(), c, i);
         }
       }
     } else {
@@ -198,15 +207,23 @@ public class ColumnVectorUtils {
    */
   public static ColumnarBatch toBatch(
       StructType schema, MemoryMode memMode, Iterator<Row> row) {
-    ColumnarBatch batch = ColumnarBatch.allocate(schema, memMode);
+    int capacity = 4 * 1024;
+    WritableColumnVector[] columnVectors;
+    if (memMode == MemoryMode.OFF_HEAP) {
+      columnVectors = OffHeapColumnVector.allocateColumns(capacity, schema);
+    } else {
+      columnVectors = OnHeapColumnVector.allocateColumns(capacity, schema);
+    }
+
     int n = 0;
     while (row.hasNext()) {
       Row r = row.next();
       for (int i = 0; i < schema.fields().length; i++) {
-        appendValue(batch.column(i), schema.fields()[i].dataType(), r, i);
+        appendValue(columnVectors[i], schema.fields()[i].dataType(), r, i);
       }
       n++;
     }
+    ColumnarBatch batch = new ColumnarBatch(columnVectors);
     batch.setNumRows(n);
     return batch;
   }

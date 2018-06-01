@@ -27,17 +27,20 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
 
 class CSVOptions(
-    @transient private val parameters: CaseInsensitiveMap[String],
+    @transient val parameters: CaseInsensitiveMap[String],
+    val columnPruning: Boolean,
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable {
 
   def this(
     parameters: Map[String, String],
+    columnPruning: Boolean,
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String = "") = {
       this(
         CaseInsensitiveMap(parameters),
+        columnPruning,
         defaultTimeZoneId,
         defaultColumnNameOfCorruptRecord)
   }
@@ -89,6 +92,14 @@ class CSVOptions(
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
+  val charToEscapeQuoteEscaping = parameters.get("charToEscapeQuoteEscaping") match {
+    case None => None
+    case Some(null) => None
+    case Some(value) if value.length == 0 => None
+    case Some(value) if value.length == 1 => Some(value.charAt(0))
+    case _ =>
+      throw new RuntimeException("charToEscapeQuoteEscaping cannot be more than one character")
+  }
   val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
@@ -142,17 +153,21 @@ class CSVOptions(
 
   val isCommentSet = this.comment != '\u0000'
 
+  val samplingRatio =
+    parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
+    charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
-    writerSettings.setEmptyValue(nullValue)
+    writerSettings.setEmptyValue("\"\"")
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
@@ -165,6 +180,7 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
+    charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
@@ -172,6 +188,7 @@ class CSVOptions(
     settings.setInputBufferSize(inputBufferSize)
     settings.setMaxColumns(maxColumns)
     settings.setNullValue(nullValue)
+    settings.setEmptyValue("")
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
     settings
