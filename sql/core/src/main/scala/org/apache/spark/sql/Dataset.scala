@@ -334,6 +334,7 @@ class Dataset[T] private[sql](
       // Extended display mode enabled
       val fieldNames = rows.head
       val dataRows = rows.tail
+
       // Compute the width of field name and data columns
       val fieldNameColWidth = fieldNames.foldLeft(minimumColWidth) { case (curMax, fieldName) =>
         math.max(curMax, fieldName.length)

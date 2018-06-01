@@ -78,6 +78,8 @@ class DataFrame(object):
         self.is_cached = False
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
+        # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
+        # by __repr__ and _repr_html_ while eager evaluation opened.
         self._support_repr_html = False
 
     @property
@@ -390,7 +392,7 @@ class DataFrame(object):
         if not self._support_repr_html:
             self._support_repr_html = True
         if self._eager_eval:
-            max_num_rows = self._max_num_rows
+            max_num_rows = max(self._max_num_rows, 0)
             with SCCallSiteSync(self._sc) as css:
                 vertical = False
                 sock_info = self._jdf.getRowsToPython(
