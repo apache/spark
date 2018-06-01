@@ -283,12 +283,12 @@ private[spark] object KubernetesSuite {
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
   val SPARK_PAGE_RANK_MAIN_CLASS: String = "org.apache.spark.examples.SparkPageRank"
 
-  //val CONTAINER_LOCAL_FILE_DOWNLOAD_PATH = "/var/spark-data/spark-files"
+  // val CONTAINER_LOCAL_FILE_DOWNLOAD_PATH = "/var/spark-data/spark-files"
 
-  //val REMOTE_PAGE_RANK_DATA_FILE =
-  //  "https://storage.googleapis.com/spark-k8s-integration-tests/files/pagerank_data.txt"
-  //val CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE =
-  //  s"$CONTAINER_LOCAL_FILE_DOWNLOAD_PATH/pagerank_data.txt"
+  // val REMOTE_PAGE_RANK_DATA_FILE =
+  //   "https://storage.googleapis.com/spark-k8s-integration-tests/files/pagerank_data.txt"
+  // val CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE =
+  //   s"$CONTAINER_LOCAL_FILE_DOWNLOAD_PATH/pagerank_data.txt"
 
   case object ShuffleNotReadyException extends Exception
 }
