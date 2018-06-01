@@ -907,8 +907,9 @@ class DataStreamWriter(object):
                 mode, then this guarantee does not hold and therefore should not be used for
                 deduplication.
 
-            * The ``close()`` method is will be called if `open()` method returns successfully
-                (irrespective of the return value), except if the JVM crashes in the middle.
+            * The ``close()`` method (if exists) is will be called if `open()` method exists and
+                returns successfully (irrespective of the return value), except if the Python
+                crashes in the middle.
 
         .. note:: Evolving.
 
@@ -946,7 +947,7 @@ class DataStreamWriter(object):
         else:
             """
             The provided object is not a callable function. Then it is expected to have a
-            'process(row)' method, and optional 'open(partitionId, epochOrBatchId)' and
+            'process(row)' method, and optional 'open(partition_id, epoch_id)' and
             'close(error)' methods.
             """
 
@@ -971,16 +972,16 @@ class DataStreamWriter(object):
                 else:
                     close_exists = True
 
-            def func_with_open_process_close(partitionId, iterator):
-                version = TaskContext.get().getLocalProperty('streaming.sql.batchId')
-                if version:
-                    version = int(version)
+            def func_with_open_process_close(partition_id, iterator):
+                epoch_id = TaskContext.get().getLocalProperty('streaming.sql.batchId')
+                if epoch_id:
+                    epoch_id = int(epoch_id)
                 else:
                     raise Exception("Could not get batch id from TaskContext")
 
                 should_process = True
                 if open_exists:
-                    should_process = f.open(partitionId, version)
+                    should_process = f.open(partition_id, epoch_id)
 
                 def call_close_if_needed(error):
                     if open_exists and close_exists:
