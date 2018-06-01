@@ -3263,8 +3263,6 @@ case class ArrayDistinct(child: Expression)
 }
 
 object ArraySetLike {
-  val kindUnion = 1
-
   private val MAX_ARRAY_LENGTH: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
   def toArrayDataInt(hs: OpenHashSet[Int]): ArrayData = {
@@ -3277,9 +3275,9 @@ object ArraySetLike {
       i += 1
     }
 
-    val numBytes = 4L * array.length
+    val numBytes = IntegerType.defaultSize.toLong * array.length
     val unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes(array.length) +
-      org.apache.spark.unsafe.array.ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
+      ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
     // Since UnsafeArrayData.fromPrimitiveArray() uses long[], max elements * 8 bytes can be used
     if (unsafeArraySizeInBytes <= Integer.MAX_VALUE * 8) {
       UnsafeArrayData.fromPrimitiveArray(array)
@@ -3298,9 +3296,9 @@ object ArraySetLike {
       i += 1
     }
 
-    val numBytes = 8L * array.length
+    val numBytes = LongType.defaultSize.toLong * array.length
     val unsafeArraySizeInBytes = UnsafeArrayData.calculateHeaderPortionInBytes(array.length) +
-      org.apache.spark.unsafe.array.ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
+      ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
     // Since UnsafeArrayData.fromPrimitiveArray() uses long[], max elements * 8 bytes can be used
     if (unsafeArraySizeInBytes <= Integer.MAX_VALUE * 8) {
       UnsafeArrayData.fromPrimitiveArray(array)
@@ -3356,7 +3354,7 @@ object ArraySetLike {
 }
 
 abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
-  def typeId: Int
+  def arraySetLikeOpName: String
 
   override def dataType: DataType = left.dataType
 
@@ -3373,10 +3371,10 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
   private def cn = left.dataType.asInstanceOf[ArrayType].containsNull ||
     right.dataType.asInstanceOf[ArrayType].containsNull
 
-  @transient private lazy val ordering: Ordering[Any] =
+  @transient protected lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(elementType)
 
-  @transient private lazy val elementTypeSupportEquals = elementType match {
+  @transient protected lazy val elementTypeSupportEquals = elementType match {
     case BinaryType => false
     case _: AtomicType => true
     case _ => false
@@ -3384,7 +3382,8 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
 
   def intEval(ary: ArrayData, hs2: OpenHashSet[Int]): OpenHashSet[Int]
   def longEval(ary: ArrayData, hs2: OpenHashSet[Long]): OpenHashSet[Long]
-  def genericEval(ary: ArrayData, hs2: OpenHashSet[Any], et: DataType): OpenHashSet[Any]
+  def genericEval(ary: ArrayData, hs2: OpenHashSet[Any]): OpenHashSet[Any]
+  def genericEvalContainsNull(ary1: ArrayData, ary2: ArrayData): ArrayData
   def codeGen(ctx: CodegenContext, hs2: String, hs: String, len: String, getter: String, i: String,
     postFix: String, newOpenHashSet: String): String
 
@@ -3396,38 +3395,33 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
       elementType match {
         case IntegerType =>
           // avoid boxing of primitive int array elements
-          val hs2 = new OpenHashSet[Int]
+          val hs = new OpenHashSet[Int]
           var i = 0
           while (i < ary2.numElements()) {
-            hs2.add(ary2.getInt(i))
+            hs.add(ary2.getInt(i))
             i += 1
           }
-          ArraySetLike.toArrayDataInt(intEval(ary1, hs2))
+          ArraySetLike.toArrayDataInt(intEval(ary1, hs))
         case LongType =>
           // avoid boxing of primitive long array elements
-          val hs2 = new OpenHashSet[Long]
+          val hs = new OpenHashSet[Long]
           var i = 0
           while (i < ary2.numElements()) {
-            hs2.add(ary2.getLong(i))
+            hs.add(ary2.getLong(i))
             i += 1
           }
-          ArraySetLike.toArrayDataLong(longEval(ary1, hs2))
+          ArraySetLike.toArrayDataLong(longEval(ary1, hs))
         case _ =>
-          val hs2 = new OpenHashSet[Any]
+          val hs = new OpenHashSet[Any]
           var i = 0
           while (i < ary2.numElements()) {
-            hs2.add(ary2.get(i, elementType))
+            hs.add(ary2.get(i, elementType))
             i += 1
           }
-          new GenericArrayData(genericEval(ary1, hs2, elementType).iterator.toArray)
+          new GenericArrayData(genericEval(ary1, hs).iterator.toArray)
       }
     } else {
-      if (typeId == ArraySetLike.kindUnion) {
-        ArraySetLike.arrayUnion(ary1, ary2, elementType,
-          if (elementTypeSupportEquals) null else ordering)
-      } else {
-        null
-      }
+      genericEvalContainsNull(ary1, ary2)
     }
   }
 
@@ -3488,15 +3482,10 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
            |}
          """.stripMargin
       } else {
-        val setOp = if (typeId == ArraySetLike.kindUnion) {
-          "Union"
-        } else {
-          ""
-        }
         val et = ctx.addReferenceObj("elementTypeUtil", elementType)
         val order = if (elementTypeSupportEquals) "null"
           else ctx.addReferenceObj("orderingUtil", ordering)
-        s"${ev.value} = $arraySetUtils$$.MODULE$$.array$setOp($ary1, $ary2, $et, $order);"
+        s"${ev.value} = $arraySetUtils$$.MODULE$$.$arraySetLikeOpName($ary1, $ary2, $et, $order);"
       }
     })
   }
@@ -3517,36 +3506,38 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
   """,
   since = "2.4.0")
 case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike {
-  override def typeId: Int = ArraySetLike.kindUnion
+  override def arraySetLikeOpName: String = "arrayUnion"
 
-  override def intEval(ary: ArrayData, hs2: OpenHashSet[Int]): OpenHashSet[Int] = {
+  override def intEval(ary: ArrayData, hs: OpenHashSet[Int]): OpenHashSet[Int] = {
     var i = 0
     while (i < ary.numElements()) {
-      hs2.add(ary.getInt(i))
+      hs.add(ary.getInt(i))
       i += 1
     }
-    hs2
+    hs
   }
 
-  override def longEval(ary: ArrayData, hs2: OpenHashSet[Long]): OpenHashSet[Long] = {
+  override def longEval(ary: ArrayData, hs: OpenHashSet[Long]): OpenHashSet[Long] = {
     var i = 0
     while (i < ary.numElements()) {
-      hs2.add(ary.getLong(i))
+      hs.add(ary.getLong(i))
       i += 1
     }
-    hs2
+    hs
   }
 
-  override def genericEval(
-      ary: ArrayData,
-      hs2: OpenHashSet[Any],
-      et: DataType): OpenHashSet[Any] = {
+  override def genericEval(ary: ArrayData, hs: OpenHashSet[Any]): OpenHashSet[Any] = {
     var i = 0
     while (i < ary.numElements()) {
-      hs2.add(ary.get(i, et))
+      hs.add(ary.get(i, elementType))
       i += 1
     }
-    hs2
+    hs
+  }
+
+  override def genericEvalContainsNull(ary1: ArrayData, ary2: ArrayData): ArrayData = {
+    ArraySetLike.arrayUnion(ary1, ary2, elementType,
+      if (elementTypeSupportEquals) null else ordering)
   }
 
   override def codeGen(
