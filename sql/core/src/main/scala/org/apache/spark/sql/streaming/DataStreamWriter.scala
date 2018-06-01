@@ -308,7 +308,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Sets the output of the streaming query to be processed using the provided writer object.
-   * object. See [[ForeachWriter]] for more details on the lifecycle and semantics.
+   * object. See [[org.apache.spark.sql.ForeachWriter]] for more details on the lifecycle and
+   * semantics.
    * @since 2.0.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
