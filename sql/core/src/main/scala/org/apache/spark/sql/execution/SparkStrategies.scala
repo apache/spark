@@ -386,7 +386,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           aggregateExpressions.partition(_.isDistinct)
         if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
-          // column sets. Our `RewriteDistinctAggregates` should take care this case.
+          // column sets. Our MultipleDistinctRewriter should take care this case.
           sys.error("You hit a query analyzer bug. Please report your query to " +
               "Spark user mailing list.")
         }
