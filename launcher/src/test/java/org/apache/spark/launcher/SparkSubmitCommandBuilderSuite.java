@@ -194,14 +194,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       env.get("SPARKR_SUBMIT_ARGS"));
   }
 
-  @Test
+  @Test(expected = IllegalArgumentException.class)
   public void testExamplesRunnerNoArg() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(SparkSubmitCommandBuilder.RUN_EXAMPLE);
     Map<String, String> env = new HashMap<>();
-    List<String> cmd = buildCommand(sparkSubmitArgs, env);
-    assertTrue(
-      "org.apache.spark.deploy.SparkSubmit should be contained in the final cmd of empty input.",
-      cmd.contains("org.apache.spark.deploy.SparkSubmit"));
+    buildCommand(sparkSubmitArgs, env);
   }
 
   @Test
@@ -366,16 +363,16 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   private void testCLIOpts(String appResource, String opt, List<String> params) throws Exception {
-    List<String> helpArgs = new ArrayList<>();
+    List<String> args = new ArrayList<>();
     if (appResource != null) {
-      helpArgs.add(appResource);
+      args.add(appResource);
     }
-    helpArgs.add(opt);
+    args.add(opt);
     if (params != null) {
-      helpArgs.addAll(params);
+      args.addAll(params);
     }
     Map<String, String> env = new HashMap<>();
-    List<String> cmd = buildCommand(helpArgs, env);
+    List<String> cmd = buildCommand(args, env);
     assertTrue(opt + " should be contained in the final cmd.",
       cmd.contains(opt));
   }

@@ -90,8 +90,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   final List<String> userArgs;
   private final List<String> parsedArgs;
-  private final boolean requiresAppResource;
-  private final boolean requiresMainClass;
+  // Special command means no appResource and no mainClass required
+  private final boolean isSpecialCommand;
   private final boolean isExample;
 
   /**
@@ -106,8 +106,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * spark-submit argument list to be modified after creation.
    */
   SparkSubmitCommandBuilder() {
-    this.requiresAppResource = true;
-    this.requiresMainClass = false;
+    this.isSpecialCommand = false;
     this.isExample = false;
     this.parsedArgs = new ArrayList<>();
     this.userArgs = new ArrayList<>();
@@ -141,31 +140,31 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         case RUN_EXAMPLE:
           isExample = true;
           submitArgs = args.subList(1, args.size());
+          if (submitArgs.isEmpty()) {
+            throw new IllegalArgumentException("Missing argument");
+          }
       }
 
       this.isExample = isExample;
       if (!submitArgs.isEmpty()) {
         OptionParser parser = new OptionParser(true);
         parser.parse(submitArgs);
-        this.requiresAppResource = parser.requiresAppResource;
-        this.requiresMainClass = parser.requiresMainClass;
+        this.isSpecialCommand = parser.isSpecialCommand;
       } else {
-        this.requiresAppResource = false;
-        this.requiresMainClass = false;
+        this.isSpecialCommand = true;
       }
     } else {
       this.isExample = isExample;
-      this.requiresAppResource = false;
-      this.requiresMainClass = false;
+      this.isSpecialCommand = true;
     }
   }
 
   @Override
   public List<String> buildCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
-    if (PYSPARK_SHELL.equals(appResource) && requiresAppResource) {
+    if (PYSPARK_SHELL.equals(appResource) && !isSpecialCommand) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL.equals(appResource) && requiresAppResource) {
+    } else if (SPARKR_SHELL.equals(appResource) && !isSpecialCommand) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -175,18 +174,18 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   List<String> buildSparkSubmitArgs() {
     List<String> args = new ArrayList<>();
     OptionParser parser = new OptionParser(false);
-    final boolean requiresAppResource;
+    final boolean isSpecialCommand;
 
     // If the user args array is not empty, we need to parse it to detect exactly what
     // the user is trying to run, so that checks below are correct.
     if (!userArgs.isEmpty()) {
       parser.parse(userArgs);
-      requiresAppResource = parser.requiresAppResource;
+      isSpecialCommand = parser.isSpecialCommand;
     } else {
-      requiresAppResource = this.requiresAppResource;
+      isSpecialCommand = this.isSpecialCommand;
     }
 
-    if (!allowsMixedArguments && requiresAppResource) {
+    if (!allowsMixedArguments && !isSpecialCommand) {
       checkArgument(appResource != null, "Missing application resource.");
     }
 
@@ -238,7 +237,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(join(",", pyFiles));
     }
 
-    if (isExample && requiresMainClass) {
+    if (isExample && !isSpecialCommand) {
       checkArgument(mainClass != null, "Missing example class name.");
     }
 
@@ -430,8 +429,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private class OptionParser extends SparkSubmitOptionParser {
 
-    boolean requiresAppResource = true;
-    boolean requiresMainClass = true;
+    boolean isSpecialCommand = false;
     private final boolean errorOnUnknownArgs;
 
     OptionParser(boolean errorOnUnknownArgs) {
@@ -480,20 +478,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           break;
         case KILL_SUBMISSION:
         case STATUS:
-          requiresAppResource = false;
-          requiresMainClass = false;
+          isSpecialCommand = true;
           parsedArgs.add(opt);
           parsedArgs.add(value);
           break;
         case HELP:
         case USAGE_ERROR:
-          requiresAppResource = false;
-          requiresMainClass = false;
-          parsedArgs.add(opt);
-          break;
         case VERSION:
-          requiresAppResource = false;
-          requiresMainClass = false;
+          isSpecialCommand = true;
           parsedArgs.add(opt);
           break;
         default:
