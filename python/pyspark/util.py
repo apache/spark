@@ -53,16 +53,11 @@ def _get_argspec(f):
     """
     Get argspec of a function. Supports both Python 2 and Python 3.
     """
-
-    if hasattr(f, '_argspec'):
-        # only used for pandas UDF: they wrap the user function, losing its signature
-        # workers need this signature, so UDF saves it here
-        argspec = f._argspec
-    elif sys.version_info[0] < 3:
+    # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
+    # See SPARK-23569.
+    if sys.version_info[0] < 3:
         argspec = inspect.getargspec(f)
     else:
-        # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-        # See SPARK-23569.
         argspec = inspect.getfullargspec(f)
     return argspec
 
@@ -92,23 +87,6 @@ class VersionUtils(object):
             raise ValueError("Spark tried to parse '%s' as a Spark" % sparkVersion +
                              " version string, but it could not find the major and minor" +
                              " version numbers.")
-
-
-def fail_on_stopiteration(f):
-    """
-    Wraps the input function to fail on 'StopIteration' by raising a 'RuntimeError'
-    prevents silent loss of data when 'f' is used in a for loop
-    """
-    def wrapper(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except StopIteration as exc:
-            raise RuntimeError(
-                "Caught StopIteration thrown from user's code; failing the task",
-                exc
-            )
-
-    return wrapper
 
 
 if __name__ == "__main__":
