@@ -28,7 +28,7 @@ object ExecutorLifecycleTestUtils {
   def failedExecutorWithoutDeletion(executorId: Int): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
-        .withPhase("error")
+        .withPhase("failed")
         .addNewContainerStatus()
           .withName("spark-executor")
           .withImage("k8s-spark")
@@ -63,8 +63,32 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
+  def succeededExecutor(executorId: Int): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId))
+      .editOrNewStatus()
+        .withPhase("succeeded")
+        .endStatus()
+      .build()
+  }
+
+  def deletedExecutor(executorId: Int): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId))
+      .editOrNewMetadata()
+        .withNewDeletionTimestamp("523012521")
+        .endMetadata()
+      .build()
+  }
+
+  def unknownExecutor(executorId: Int): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId))
+      .editOrNewStatus()
+        .withPhase("unknown")
+        .endStatus()
+      .build()
+  }
+
   def podWithAttachedContainerForId(executorId: Int): Pod = {
-    val sparkPod = executorPodWithId(executorId.toString)
+    val sparkPod = executorPodWithId(executorId)
     val podWithAttachedContainer = new PodBuilder(sparkPod.pod)
       .editOrNewSpec()
         .addToContainers(sparkPod.container)
@@ -73,13 +97,13 @@ object ExecutorLifecycleTestUtils {
     podWithAttachedContainer
   }
 
-  def executorPodWithId(executorId: String): SparkPod = {
+  def executorPodWithId(executorId: Int): SparkPod = {
     val pod = new PodBuilder()
       .withNewMetadata()
         .withName(s"spark-executor-$executorId")
         .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
         .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-        .addToLabels(SPARK_EXECUTOR_ID_LABEL, executorId)
+        .addToLabels(SPARK_EXECUTOR_ID_LABEL, executorId.toString)
         .endMetadata()
       .build()
     val container = new ContainerBuilder()

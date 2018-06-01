@@ -20,7 +20,11 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
-import org.jmock.lib.concurrent.{DeterministicExecutor, DeterministicScheduler}
+import org.jmock.lib.concurrent.DeterministicScheduler
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, when}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 import scala.collection.mutable
 
@@ -43,8 +47,8 @@ class ExecutorPodsEventQueueSuite extends SparkFunSuite with BeforeAndAfter {
   test("Subscribers get notified of events periodically.") {
     val receivedEvents1 = mutable.Buffer.empty[Pod]
     val receivedEvents2 = mutable.Buffer.empty[Pod]
-    eventQueueUnderTest.addSubscriber(1000) { receivedEvents1.appendAll(_) }
-    eventQueueUnderTest.addSubscriber(2000) { receivedEvents2.appendAll(_) }
+    eventQueueUnderTest.addSubscriber(1000, testBatchSubscriber(receivedEvents1))
+    eventQueueUnderTest.addSubscriber(2000, testBatchSubscriber(receivedEvents2))
 
     pushPodWithIndex(1)
     assert(receivedEvents1.isEmpty)
@@ -72,8 +76,8 @@ class ExecutorPodsEventQueueSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Even without sending events, initially receive an empty buffer.") {
-    val receivedInitialBuffer = new AtomicReference[Seq[Pod]](null)
-    eventQueueUnderTest.addSubscriber(1000) { receivedInitialBuffer.set }
+    val receivedInitialBuffer = new AtomicReference[Iterable[Pod]](null)
+    eventQueueUnderTest.addSubscriber(1000, testSetBufferSubscriber(receivedInitialBuffer))
     assert(receivedInitialBuffer.get == null)
     executeSubscriptionsExecutor.runUntilIdle()
     assert(receivedInitialBuffer.get != null)
@@ -92,4 +96,29 @@ class ExecutorPodsEventQueueSuite extends SparkFunSuite with BeforeAndAfter {
         .withName(s"pod-$index")
         .endMetadata()
       .build()
+
+  private def testBatchSubscriber(eventBuffer: mutable.Buffer[Pod]): ExecutorPodBatchSubscriber = {
+    val subscriber = mock(classOf[ExecutorPodBatchSubscriber])
+    when(subscriber.onNextBatch(any(classOf[Iterable[Pod]])))
+      .thenAnswer(new Answer[Unit] {
+        override def answer(invocationOnMock: InvocationOnMock): Unit = {
+          val pods = invocationOnMock.getArgumentAt(0, classOf[Iterable[Pod]])
+          eventBuffer ++= pods
+        }
+      })
+    subscriber
+  }
+
+  private def testSetBufferSubscriber(
+      eventBuffer: AtomicReference[Iterable[Pod]]): ExecutorPodBatchSubscriber = {
+    val subscriber = mock(classOf[ExecutorPodBatchSubscriber])
+    when(subscriber.onNextBatch(any(classOf[Iterable[Pod]])))
+      .thenAnswer(new Answer[Unit] {
+        override def answer(invocationOnMock: InvocationOnMock): Unit = {
+          val pods = invocationOnMock.getArgumentAt(0, classOf[Iterable[Pod]])
+          eventBuffer.set(pods)
+        }
+      })
+    subscriber
+  }
 }

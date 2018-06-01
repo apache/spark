@@ -43,31 +43,25 @@ private[spark] class ExecutorPodsLifecycleEventHandler(
   private val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
 
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
-    podsEventQueue.addSubscriber(eventProcessingInterval) { updatedPods =>
-      updatedPods.foreach { updatedPod =>
-        processUpdatedPod(schedulerBackend, updatedPod)
-      }
-    }
+    podsEventQueue.addSubscriber(
+      eventProcessingInterval,
+      new ExecutorPodBatchSubscriber(
+        processUpdatedPod(schedulerBackend),
+        () => {}))
   }
 
   private def processUpdatedPod(
-      schedulerBackend: KubernetesClusterSchedulerBackend, updatedPod: Pod) = {
-    val execId = updatedPod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong
-    if (isDeleted(updatedPod)) {
-      removeExecutorFromSpark(schedulerBackend, updatedPod, execId)
-    } else {
-      updatedPod.getStatus.getPhase.toLowerCase match {
-        // TODO (SPARK-24135) - handle more classes of errors
-        case "error" | "failed" | "succeeded" =>
-          removeExecutorFromK8s(schedulerBackend, updatedPod, execId)
-          removeExecutorFromSpark(schedulerBackend, updatedPod, execId)
-        case _ =>
-      }
-    }
+      schedulerBackend: KubernetesClusterSchedulerBackend)
+      : PartialFunction[ExecutorPodState, Unit] = {
+    case deleted @ PodDeleted(pod) =>
+      removeExecutorFromSpark(schedulerBackend, pod, deleted.execId())
+    case errorOrSucceeded @ (PodFailed(_) | PodSucceeded(_)) =>
+      removeExecutorFromK8s(errorOrSucceeded.pod)
+      removeExecutorFromSpark(schedulerBackend, errorOrSucceeded.pod, errorOrSucceeded.execId())
+    case _ =>
   }
 
-  private def removeExecutorFromK8s(
-      schedulerBackend: KubernetesClusterSchedulerBackend, updatedPod: Pod, execId: Long): Unit = {
+  private def removeExecutorFromK8s(updatedPod: Pod): Unit = {
     // If deletion failed on a previous try, we can try again if resync informs us the pod
     // is still around.
     // Delete as best attempt - duplicate deletes will throw an exception but the end state
@@ -82,11 +76,11 @@ private[spark] class ExecutorPodsLifecycleEventHandler(
 
   private def removeExecutorFromSpark(
       schedulerBackend: KubernetesClusterSchedulerBackend,
-      updatedPod: Pod,
+      pod: Pod,
       execId: Long): Unit = {
     if (removedExecutorsCache.getIfPresent(execId) == null) {
       removedExecutorsCache.put(execId, execId)
-      val exitReason = findExitReason(updatedPod, execId)
+      val exitReason = findExitReason(pod, execId)
       schedulerBackend.doRemoveExecutor(execId.toString, exitReason)
     }
   }

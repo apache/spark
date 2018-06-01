@@ -64,27 +64,26 @@ private[spark] class ExecutorPodsAllocator(
   private val runningExecutors = mutable.Set.empty[Long]
 
   def start(applicationId: String): Unit = {
-    eventQueue.addSubscriber(podAllocationDelay) { updatedPods =>
-      processUpdatedPods(applicationId, updatedPods)
-    }
+    eventQueue.addSubscriber(
+      podAllocationDelay,
+      new ExecutorPodBatchSubscriber(
+        processUpdatedPod(applicationId),
+        () => postProcessBatch(applicationId)))
   }
 
   def setTotalExpectedExecutors(total: Int): Unit = totalExpectedExecutors.set(total)
 
-  private def processUpdatedPods(applicationId: String, updatedPods: Seq[Pod]): Unit = {
-    updatedPods.foreach { updatedPod =>
-      val execId = updatedPod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong
-      val phase = updatedPod.getStatus.getPhase.toLowerCase
-      phase match {
-        case "running" =>
-          pendingExecutors -= execId
-          runningExecutors += execId
-        case "failed" | "succeeded" | "error" =>
-          pendingExecutors -= execId
-          runningExecutors -= execId
-      }
-    }
+  private def processUpdatedPod(applicationId: String): PartialFunction[ExecutorPodState, Unit] = {
+    case running @ PodRunning(_) =>
+      pendingExecutors -= running.execId()
+      runningExecutors += running.execId()
+    case completed @ (PodSucceeded(_) | PodDeleted(_) | PodFailed(_)) =>
+      pendingExecutors -= completed.execId()
+      runningExecutors -= completed.execId()
+    case _ =>
+  }
 
+  private def postProcessBatch(applicationId: String): Unit = {
     val currentRunningExecutors = runningExecutors.size
     val currentTotalExpectedExecutors = totalExpectedExecutors.get
     if (pendingExecutors.isEmpty && currentRunningExecutors < currentTotalExpectedExecutors) {

@@ -22,12 +22,12 @@ import scala.collection.mutable
 class DeterministicExecutorPodsEventQueue extends ExecutorPodsEventQueue {
 
   private val eventBuffer = mutable.Buffer.empty[Pod]
-  private val subscribers = mutable.Buffer.empty[(Seq[Pod]) => Unit]
+  private val subscribers = mutable.Buffer.empty[ExecutorPodBatchSubscriber]
 
-  override def addSubscriber
-      (processBatchIntervalMillis: Long)
-      (onNextBatch: (Seq[Pod]) => Unit): Unit = {
-    subscribers += onNextBatch
+  override def addSubscriber(
+      processBatchIntervalMillis: Long,
+      subscriber: ExecutorPodBatchSubscriber): Unit = {
+    subscribers += subscriber
   }
 
   override def stop(): Unit = {}
@@ -35,7 +35,9 @@ class DeterministicExecutorPodsEventQueue extends ExecutorPodsEventQueue {
   override def enqueue(updatedPod: Pod): Unit = eventBuffer += updatedPod
 
   def notifySubscribers(): Unit = {
-    subscribers.foreach { _(eventBuffer) }
+    subscribers.foreach { subscriber =>
+      subscriber.onNextBatch(eventBuffer)
+    }
     eventBuffer.clear()
   }
 }

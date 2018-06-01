@@ -37,7 +37,9 @@ private[spark] class ExecutorPodsEventQueueImpl(
   private val eventsObservable = PublishSubject.create[Pod]()
   private val observedDisposables = mutable.Buffer.empty[Disposable]
 
-  def addSubscriber(processBatchIntervalMillis: Long)(onNextBatch: Seq[Pod] => Unit): Unit = {
+  def addSubscriber(
+      processBatchIntervalMillis: Long,
+      subscriber: ExecutorPodBatchSubscriber): Unit = {
     observedDisposables += eventsObservable
       // Group events in the time window given by the caller. These buffers are then sent
       // to the caller's lambda at the given interval, with the pod updates that occurred
@@ -57,7 +59,7 @@ private[spark] class ExecutorPodsEventQueueImpl(
       .observeOn(Schedulers.from(executeSubscriptionsExecutor))
       .subscribe(toReactivexConsumer { (pods: java.util.List[Pod]) =>
         Utils.tryLogNonFatalError {
-          onNextBatch(pods.asScala)
+          subscriber.onNextBatch(pods.asScala)
         }
       })
   }

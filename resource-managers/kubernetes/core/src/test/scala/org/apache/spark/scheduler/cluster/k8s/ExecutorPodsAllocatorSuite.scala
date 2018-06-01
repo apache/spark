@@ -51,10 +51,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
 
-  private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
-
-  private var namedExecutorPods: mutable.Map[String, PodResource[Pod, DoneablePod]] = _
-
   @Mock
   private var kubernetesClient: KubernetesClient = _
 
@@ -132,7 +128,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       override def answer(invocation: InvocationOnMock): SparkPod = {
         val k8sConf = invocation.getArgumentAt(
           0, classOf[KubernetesConf[KubernetesExecutorSpecificConf]])
-        executorPodWithId(k8sConf.roleSpecificConf.executorId)
+        executorPodWithId(k8sConf.roleSpecificConf.executorId.toInt)
       }
     }
   }
