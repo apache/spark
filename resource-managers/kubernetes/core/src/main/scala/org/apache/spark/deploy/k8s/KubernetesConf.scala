@@ -133,7 +133,7 @@ private[spark] object KubernetesConf {
                 additionalFiles.appendAll(maybePyFiles.split(","))}
               sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
           }
-          sparkConfWithMainAppJar.set(MEMORY_OVERHEAD_FACTOR, 0.4)
+          sparkConfWithMainAppJar.setIfMissing(MEMORY_OVERHEAD_FACTOR, 0.4)
     }
 
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
