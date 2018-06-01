@@ -1210,23 +1210,34 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Extract expression.
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
-    ctx.field.getType match {
-      case SqlBaseParser.YEAR =>
-        Year(expression(ctx.source))
-      case SqlBaseParser.QUARTER =>
-        Quarter(expression(ctx.source))
-      case SqlBaseParser.MONTH =>
-        Month(expression(ctx.source))
-      case SqlBaseParser.WEEK =>
-        WeekOfYear(expression(ctx.source))
-      case SqlBaseParser.DAY =>
-        DayOfMonth(expression(ctx.source))
-      case SqlBaseParser.HOUR =>
-        Hour(expression(ctx.source))
-      case SqlBaseParser.MINUTE =>
-        Minute(expression(ctx.source))
-      case SqlBaseParser.SECOND =>
-        Second(expression(ctx.source))
+    val extractType = ctx.field.getText.toUpperCase(Locale.ROOT)
+    try {
+      extractType match {
+        case "YEAR" =>
+          Year(expression(ctx.source))
+        case "QUARTER" =>
+          Quarter(expression(ctx.source))
+        case "MONTH" =>
+          Month(expression(ctx.source))
+        case "WEEK" =>
+          WeekOfYear(expression(ctx.source))
+        case "DAY" =>
+          DayOfMonth(expression(ctx.source))
+        case "DOW" =>
+          DayOfWeek(expression(ctx.source))
+        case "HOUR" =>
+          Hour(expression(ctx.source))
+        case "MINUTE" =>
+          Minute(expression(ctx.source))
+        case "SECOND" =>
+          Second(expression(ctx.source))
+        case other =>
+          throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+      }
+    } catch {
+      case e: IllegalArgumentException =>
+        val message = Option(e.getMessage).getOrElse(s"Exception parsing $extractType")
+        throw new ParseException(message, ctx)
     }
   }
 

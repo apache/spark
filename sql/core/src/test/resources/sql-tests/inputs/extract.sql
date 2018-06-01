@@ -10,8 +10,12 @@ select extract(week from c) from t;
 
 select extract(day from c) from t;
 
+select extract(dow from c) from t;
+
 select extract(hour from c) from t;
 
 select extract(minute from c) from t;
 
 select extract(second from c) from t;
+
+select extract(not_supported from c) from t;

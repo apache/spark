@@ -52,7 +52,7 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "true", "truncate", "update", "user", "values", "with", "regexp", "rlike",
     "bigint", "binary", "boolean", "current_date", "current_timestamp", "date", "double", "float",
     "int", "smallint", "timestamp", "at", "position", "both", "leading", "trailing",
-    "extract", "year", "quarter", "month", "week", "day", "hour", "minute", "second")
+    "extract", "year", "quarter", "month", "week", "day", "dow", "hour", "minute", "second")
 
   val hiveStrictNonReservedKeyword = Seq("anti", "full", "inner", "left", "semi", "right",
     "natural", "union", "intersect", "except", "database", "on", "join", "cross", "select", "from",
