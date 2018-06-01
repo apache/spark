@@ -3069,7 +3069,7 @@ class SQLTests(ReusedSQLTestCase):
                 .csv(path, enforceSchema=False)
             self.assertRaisesRegexp(
                 Exception,
-                "CSV header is not conform to the schema",
+                "CSV header does not conform to the schema",
                 lambda: df.collect())
         finally:
             shutil.rmtree(path)
