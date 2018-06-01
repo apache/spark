@@ -430,6 +430,7 @@ object FunctionRegistry {
     expression[Concat]("concat"),
     expression[Flatten]("flatten"),
     expression[ArrayRepeat]("array_repeat"),
+    expression[ArrayRemove]("array_remove"),
     CreateStruct.registryEntry,
 
     // mask functions

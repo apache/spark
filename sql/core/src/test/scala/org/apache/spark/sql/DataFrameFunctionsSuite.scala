@@ -1110,6 +1110,35 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   }
 
+  test("array remove") {
+    val df = Seq(
+      (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", "")),
+      (Array.empty[Int], Array.empty[String], Array.empty[String]),
+      (null, null, null)
+    ).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(array_remove($"a", 2), array_remove($"b", "a"), array_remove($"c", "")),
+      Seq(
+        Row(Seq(1, 3), Seq("b", "c"), Seq.empty[String]),
+        Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),
+        Row(null, null, null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_remove(a, 2)", "array_remove(b, \"a\")",
+        "array_remove(c, \"\")"),
+      Seq(
+        Row(Seq(1, 3), Seq("b", "c"), Seq.empty[String]),
+        Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),
+        Row(null, null, null))
+    )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", "a")).toDF().selectExpr("array_remove(_1, _2)")
+    }
+    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
