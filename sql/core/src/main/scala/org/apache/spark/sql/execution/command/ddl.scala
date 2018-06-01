@@ -538,9 +538,9 @@ case class AlterTableDropPartitionCommand(
       val partitionSet = {
         if (partition._2.nonEmpty) {
           val parts = partition._2.map { expr =>
-            val (attrName, value) = expr match {
+            val (attrName, constant) = expr match {
               case BinaryComparison(UnresolvedAttribute(name :: Nil), constant: Literal) =>
-                (name, constant.value)
+                (name, constant)
             }
             if (!table.partitionColumnNames.exists(resolver(_, attrName))) {
               throw new AnalysisException(s"${attrName} is not a valid partition column " +
@@ -548,7 +548,7 @@ case class AlterTableDropPartitionCommand(
             }
             val dataType = table.partitionSchema.apply(attrName).dataType
             expr.withNewChildren(Seq(AttributeReference(attrName, dataType)(),
-              Cast(Literal(value), dataType)))
+              Cast(constant, dataType)))
           }.reduce(And)
 
           val partitions = catalog.listPartitionsByFilter(
