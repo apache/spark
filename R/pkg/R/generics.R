@@ -771,7 +771,15 @@ setGeneric("array_position", function(x, value) { standardGeneric("array_positio
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("arrays_overlap", function(x, y) { standardGeneric("arrays_overlap") })
 
 #' @rdname column_string_functions
 #' @name NULL
@@ -1033,6 +1041,10 @@ setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("map_entries", function(x) { standardGeneric("map_entries") })
 
 #' @rdname column_collection_functions
 #' @name NULL
