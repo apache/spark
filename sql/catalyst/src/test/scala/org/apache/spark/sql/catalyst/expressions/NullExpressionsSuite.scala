@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types._
 
-  class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def testAllTypes(testFunc: (Any, DataType) => Unit): Unit = {
     testFunc(false, BooleanType)
@@ -64,6 +64,8 @@ import org.apache.spark.sql.types._
     checkEvaluation(IsInf(Literal.create(null, DoubleType)), false)
     checkEvaluation(IsInf(Literal(Float.MaxValue)), false)
     checkEvaluation(IsInf(Literal(5.5f)), false)
+    checkEvaluation(IsInf(Literal(Float.NaN)), expected = false)
+    checkEvaluation(IsInf(Literal(Double.NaN)), expected = false)
   }
 
   test("IsNaN") {

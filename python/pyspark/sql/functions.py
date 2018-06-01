@@ -468,7 +468,7 @@ def input_file_name():
     return Column(sc._jvm.functions.input_file_name())
 
 
-@since(1.6)
+@since(2.4)
 def isinf(col):
     """An expression that returns true iff the column is NaN.
 

@@ -1111,7 +1111,7 @@ object functions {
    * Return true iff the column is Infinity.
    *
    * @group normal_funcs
-   * @since 1.6.0
+   * @since 2.4.0
    */
   def isinf(e: Column): Column = withExpr { IsInf(e.expr) }
 

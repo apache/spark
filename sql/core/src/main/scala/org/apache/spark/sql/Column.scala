@@ -561,7 +561,7 @@ class Column(val expr: Expression) extends Logging {
    * True if the current expression is NaN.
    *
    * @group expr_ops
-   * @since 1.5.0
+   * @since 2.4.0
    */
   def isInf: Column = withExpr { IsInf(expr) }
 

@@ -203,7 +203,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
  * Evaluates to `true` iff it's Infinity.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns True evaluates to infinite else returns False ",
+  usage = "_FUNC_(expr) - Returns True if expr evaluates to infinite else returns False ",
   examples = """
     Examples:
       > SELECT _FUNC_(1/0);
