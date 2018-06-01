@@ -1429,7 +1429,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(exception.getMessage.contains("CSV header is not conform to the schema"))
+        assert(exception.getMessage.contains("CSV header does not conform to the schema"))
 
         val shortSchema = new StructType().add("f1", DoubleType)
         val exceptionForShortSchema = intercept[SparkException] {
@@ -1471,7 +1471,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
             .collect()
         }
         assert(caseSensitiveException.getMessage.contains(
-          "CSV header is not conform to the schema"))
+          "CSV header does not conform to the schema"))
       }
     }
   }
@@ -1523,7 +1523,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       spark.read.schema(ischema).option("header", true).option("enforceSchema", false).csv(ds)
     }
 
-    assert(exception.getMessage.contains("CSV header is not conform to the schema"))
+    assert(exception.getMessage.contains("CSV header does not conform to the schema"))
   }
 
   test("SPARK-23786: enforce inferred schema") {
@@ -1555,6 +1555,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .schema(schema)
         .csv(Seq("col1,col2", "1.0,a").toDS())
     }
-    assert(exception.getMessage.contains("CSV header is not conform to the schema"))
+    assert(exception.getMessage.contains("CSV header does not conform to the schema"))
   }
 }

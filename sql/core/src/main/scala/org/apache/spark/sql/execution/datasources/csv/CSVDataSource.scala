@@ -148,7 +148,7 @@ object CSVDataSource extends Logging {
           }
           if (nameInHeader != nameInSchema) {
             errorMessage = Some(
-              s"""|CSV header is not conform to the schema.
+              s"""|CSV header does not conform to the schema.
                   | Header: ${columnNames.mkString(", ")}
                   | Schema: ${fieldNames.mkString(", ")}
                   |Expected: ${fieldNames(i)} but found: ${columnNames(i)}
