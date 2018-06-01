@@ -126,6 +126,15 @@ object CSVDataSource extends Logging {
   /**
    * Checks that column names in a CSV header and field names in the schema are the same
    * by taking into account case sensitivity.
+   *
+   * @param schema - provided (or inferred) schema to which CSV must conform.
+   * @param columnNames - names of CSV columns that must be checked against to the schema.
+   * @param fileName - name of CSV file that are currently checked. It is used in error messages.
+   * @param enforceSchema - if it is `true`, column names are ignored otherwise the CSV column
+   *                        names are checked for conformance to the schema. In the case if
+   *                        the column name don't conform to the schema, an exception is thrown.
+   * @param caseSensitive - if it is set to `false`, comparison of column names and schema field
+   *                        names is not case sensitive.
    */
   def checkHeaderColumnNames(
       schema: StructType,
