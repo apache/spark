@@ -51,7 +51,7 @@ struct<dayofmonth(CAST(c AS DATE)):int>
 
 
 -- !query 6
-select extract(dow from c) from t
+select extract(dayofweek from c) from t
 -- !query 6 schema
 struct<dayofweek(CAST(c AS DATE)):int>
 -- !query 6 output

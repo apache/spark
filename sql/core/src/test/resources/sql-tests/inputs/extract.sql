@@ -10,7 +10,7 @@ select extract(week from c) from t;
 
 select extract(day from c) from t;
 
-select extract(dow from c) from t;
+select extract(dayofweek from c) from t;
 
 select extract(hour from c) from t;
 
