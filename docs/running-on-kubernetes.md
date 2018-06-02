@@ -328,6 +328,13 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.container.image.pullSecrets</code></td>
+  <td><code></code></td>
+  <td>
+    Comma separated list of Kubernetes secrets used to pull images from private image registries.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.allocation.batch.size</code></td>
   <td><code>5</code></td>
   <td>
