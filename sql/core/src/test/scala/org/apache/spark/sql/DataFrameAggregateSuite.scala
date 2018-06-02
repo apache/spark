@@ -706,14 +706,10 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       testData2.groupBy('a).agg(max('b), sum('b).as("s"), count("*").over()).where('s === 3),
       Row(1, 2, 3, 3) :: Row(2, 2, 3, 3) :: Row(3, 2, 3, 3) :: Nil)
 
-    checkWindowError(
-      sql("SELECT MIN(AVG(b) OVER(PARTITION BY a)) FROM testData2"))
-    checkWindowError(
-      sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY a)) FROM testData2"))
-    checkWindowError(
-      sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a"))
-    checkWindowError(
-      sql("SELECT MAX(SUM(SUM(b)) OVER(ORDER BY a)) FROM testData2 GROUP BY a"))
+    checkWindowError(sql("SELECT MIN(AVG(b) OVER(PARTITION BY a)) FROM testData2"))
+    checkWindowError(sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY a)) FROM testData2"))
+    checkWindowError(sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a"))
+    checkWindowError(sql("SELECT MAX(SUM(SUM(b)) OVER(ORDER BY a)) FROM testData2 GROUP BY a"))
     checkWindowError(
       sql("SELECT MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a HAVING SUM(b) = 3"))
     checkAnswer(
