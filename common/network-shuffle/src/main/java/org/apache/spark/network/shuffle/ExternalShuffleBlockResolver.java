@@ -212,6 +212,26 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
+   * Removes all the non-shuffle files in any local directories associated with the finished
+   * executor.
+   */
+  public void executorRemoved(String executorId, String appId) {
+    logger.info("Clean up non-shuffle files associated with the finished executor {}", executorId);
+    AppExecId fullId = new AppExecId(appId, executorId);
+    final ExecutorShuffleInfo executor = executors.get(fullId);
+    if (executor == null) {
+      // Executor not registered, skip clean up of the local directories.
+      logger.info("Executor is not registered (appId={}, execId={})", appId, executorId);
+    } else {
+      logger.info("Cleaning up non-shuffle files in executor {}'s {} local dirs", fullId,
+              executor.localDirs.length);
+
+      // Execute the actual deletion in a different thread, as it may take some time.
+      directoryCleaner.execute(() -> deleteNonShuffleFiles(executor.localDirs));
+    }
+  }
+
+  /**
    * Synchronously deletes each directory one at a time.
    * Should be executed in its own thread, as this may take a long time.
    */
@@ -222,6 +242,29 @@ public class ExternalShuffleBlockResolver {
         logger.debug("Successfully cleaned up directory: {}", localDir);
       } catch (Exception e) {
         logger.error("Failed to delete directory: " + localDir, e);
+      }
+    }
+  }
+
+  /**
+   * Synchronously deletes non-shuffle files in each directory recursively.
+   * Should be executed in its own thread, as this may take a long time.
+   */
+  private void deleteNonShuffleFiles(String[] dirs) {
+    FilenameFilter filter = new FilenameFilter() {
+      @Override
+      public boolean accept(File dir, String name) {
+        // Don't delete shuffle data or shuffle index files.
+        return !name.endsWith(".index") && !name.endsWith(".data");
+      }
+    };
+
+    for (String localDir : dirs) {
+      try {
+        JavaUtils.deleteRecursively(new File(localDir), filter);
+        logger.debug("Successfully cleaned up non-shuffle files in directory: {}", localDir);
+      } catch (Exception e) {
+        logger.error("Failed to delete non-shuffle files in directory: " + localDir, e);
       }
     }
   }

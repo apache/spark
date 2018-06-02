@@ -20,23 +20,27 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
 
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
   private val SECRETS_STEP_TYPE = "mount-secrets"
+  private val ENV_SECRETS_STEP_TYPE = "env-secrets"
   private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
   private val mountSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
+  private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
   private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
 
   private val builderUnderTest = new KubernetesExecutorBuilder(
     _ => basicFeatureStep,
     _ => mountSecretsStep,
+    _ => envSecretsStep,
     _ => localDirsStep)
 
   test("Basic steps are consistently applied.") {
@@ -46,6 +50,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
         "executor-id", new PodBuilder().build()),
       "prefix",
       "appId",
+      Map.empty,
       Map.empty,
       Map.empty,
       Map.empty,
@@ -64,12 +69,14 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map("secret" -> "secretMountPath"),
+      Map("secret-name" -> "secret-key"),
       Map.empty)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
-      SECRETS_STEP_TYPE)
+      SECRETS_STEP_TYPE,
+      ENV_SECRETS_STEP_TYPE)
   }
 
   private def validateStepTypesApplied(resolvedPod: SparkPod, stepTypes: String*): Unit = {
