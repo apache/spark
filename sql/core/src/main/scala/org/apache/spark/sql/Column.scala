@@ -558,7 +558,7 @@ class Column(val expr: Expression) extends Logging {
   }
 
   /**
-   * True if the current expression is NaN.
+   * True if the current expression is Inf.
    *
    * @group expr_ops
    * @since 2.4.0

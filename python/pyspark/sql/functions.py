@@ -470,7 +470,7 @@ def input_file_name():
 
 @since(2.4)
 def isinf(col):
-    """An expression that returns true iff the column is NaN.
+    """An expression that returns true iff the column is Inf.
 
     >>> df = spark.createDataFrame([(1.0, float('inf')), (float('inf'), 2.0)], ("a", "b"))
     >>> df.select(isinf("a").alias("r1"), isinf(df.a).alias("r2")).collect()
