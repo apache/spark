@@ -26,7 +26,7 @@ import scala.concurrent.duration._
 
 import org.mockito.Matchers
 import org.mockito.Matchers._
-import org.mockito.Mockito.{mock, spy, verify, when}
+import org.mockito.Mockito.{doReturn, mock, spy, verify, when}
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.executor.TaskMetrics
@@ -35,7 +35,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{ManualClock, ThreadUtils}
+import org.apache.spark.util.{ManualClock, SystemClock, ThreadUtils}
 
 /**
  * A test suite for the heartbeating behavior between the driver and the executors.
@@ -150,6 +150,9 @@ class HeartbeatReceiverSuite
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     heartbeatReceiverClock.advance(executorTimeout)
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
+    val killThread = heartbeatReceiver.invokePrivate(_killExecutorThread())
+    killThread.shutdown() // needed for awaitTermination
+    killThread.awaitTermination(10L, TimeUnit.SECONDS)
     // Only the second executor should be expired as a dead host
     verify(scheduler).executorLost(Matchers.eq(executorId2), any())
     val trackedExecutors = getTrackedExecutors
@@ -205,6 +208,55 @@ class HeartbeatReceiverSuite
     // explicitly request new executors. For more detail, see SPARK-8119.
     assert(fakeClusterManager.getTargetNumExecutors === 2)
     assert(fakeClusterManager.getExecutorIdsToKill === Set(executorId1, executorId2))
+  }
+
+  test("expired host should not be offered again") {
+    scheduler = spy(new TaskSchedulerImpl(sc))
+    scheduler.setDAGScheduler(sc.dagScheduler)
+    when(sc.taskScheduler).thenReturn(scheduler)
+    doReturn(true).when(scheduler).executorHeartbeatReceived(any(), any(), any())
+
+    // Set up a fake backend and cluster manager to simulate killing executors
+    val rpcEnv = sc.env.rpcEnv
+    val fakeClusterManager = new FakeClusterManager(rpcEnv)
+    val fakeClusterManagerRef = rpcEnv.setupEndpoint("fake-cm", fakeClusterManager)
+    val fakeSchedulerBackend = new FakeSchedulerBackend(scheduler, rpcEnv, fakeClusterManagerRef)
+    when(sc.schedulerBackend).thenReturn(fakeSchedulerBackend)
+
+    fakeSchedulerBackend.start()
+    val dummyExecutorEndpoint1 = new FakeExecutorEndpoint(rpcEnv)
+    val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
+    fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 2, Map.empty))
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+    addExecutorAndVerify(executorId1)
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+
+    scheduler.initialize(fakeSchedulerBackend)
+    sc.requestTotalExecutors(0, 0, Map.empty)
+    val taskSet = FakeTask.createTaskSet(1)
+    scheduler.submitTasks(taskSet)
+    // make sure task starts to run
+    val interval = 1000
+    val clock = new SystemClock
+    val deadline = clock.getTimeMillis() + 3 * interval
+    while (!scheduler.runningTasksByExecutors.contains(executorId1)) {
+      assert(clock.getTimeMillis() < deadline, "Timed out waiting task to start running")
+      Thread.sleep(interval)
+    }
+    assert(scheduler.runningTasksByExecutors(executorId1) === 1)
+
+    // expire the executor
+    val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
+    heartbeatReceiverClock.advance(executorTimeout * 2)
+    heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
+    val killThread = heartbeatReceiver.invokePrivate(_killExecutorThread())
+    killThread.shutdown() // needed for awaitTermination
+    killThread.awaitTermination(10L, TimeUnit.SECONDS)
+
+    // the expired executor shouldn't be running tasks
+    assert(!scheduler.runningTasksByExecutors.contains(executorId1) ||
+      scheduler.runningTasksByExecutors(executorId1) === 0)
   }
 
   /** Manually send a heartbeat and return the response. */
