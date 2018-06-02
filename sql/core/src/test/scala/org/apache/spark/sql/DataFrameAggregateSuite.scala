@@ -699,14 +699,23 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkWindowError(testData2.select(min(avg('b).over(Window.partitionBy('a)))))
     checkWindowError(testData2.agg(sum('b), max(rank().over(Window.orderBy('a)))))
     checkWindowError(testData2.groupBy('a).agg(sum('b), max(rank().over(Window.orderBy('b)))))
-    checkWindowError(testData2.groupBy('a).agg(max(sum(sum('b)).over(Window.orderBy('b)))))
+    checkWindowError(testData2.groupBy('a).agg(max(sum(sum('b)).over(Window.orderBy('a)))))
+    checkWindowError(
+      testData2.groupBy('a).agg(sum('b).as("s"), max(count("*").over())).where('s === 3))
+    checkAnswer(
+      testData2.groupBy('a).agg(max('b), sum('b).as("s"), count("*").over()).where('s === 3),
+      Row(1, 2, 3, 3) :: Row(2, 2, 3, 3) :: Row(3, 2, 3, 3) :: Nil)
 
     checkWindowError(
+      sql("SELECT MIN(AVG(b) OVER(PARTITION BY a)) FROM testData2"))
+    checkWindowError(
+      sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY a)) FROM testData2"))
+    checkWindowError(
+      sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a"))
+    checkWindowError(
+      sql("SELECT MAX(SUM(SUM(b)) OVER(ORDER BY a)) FROM testData2 GROUP BY a"))
+    checkWindowError(
       sql("SELECT MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a HAVING SUM(b) = 3"))
-    checkWindowError(
-      sql("SELECT MAX(RANK() OVER(ORDER BY a)) FROM testData2"))
-    checkWindowError(
-      sql("SELECT MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a"))
     checkAnswer(
       sql("SELECT a, MAX(b), RANK() OVER(ORDER BY a) FROM testData2 GROUP BY a HAVING SUM(b) = 3"),
       Row(1, 2, 1) :: Row(2, 2, 2) :: Row(3, 2, 3) :: Nil)

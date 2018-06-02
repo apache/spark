@@ -1749,9 +1749,6 @@ class Analyzer(
 
     private def hasWindowFunction(expr: Expression): Boolean = {
       expr.find {
-        case AggregateExpression(aggFunc, _, _, _) if hasWindowFunction(aggFunc.children) =>
-          failAnalysis("It is not allowed to use a window function inside an aggregate function. " +
-          "Please use the inner window function in a sub-query.")
         case window: WindowExpression => true
         case _ => false
       }.isDefined
@@ -1832,6 +1829,10 @@ class Analyzer(
             val newAgg = ae.copy(aggregateFunction = newFunction)
             seenWindowAggregates += newAgg
             WindowExpression(newAgg, spec)
+
+          case AggregateExpression(aggFunc, _, _, _) if hasWindowFunction(aggFunc.children) =>
+            failAnalysis("It is not allowed to use a window function inside an aggregate " +
+              "function. Please use the inner window function in a sub-query.")
 
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
