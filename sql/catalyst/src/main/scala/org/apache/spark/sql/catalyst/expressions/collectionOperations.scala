@@ -347,10 +347,9 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     val length = arrayData.numElements()
     val numEntries = if (nullEntries) (0 until length).count(!arrayData.isNullAt(_)) else length
     val keyArray = new Array[AnyRef](numEntries)
-    val keySet = new OpenHashSet[AnyRef]()
     val valueArray = new Array[AnyRef](numEntries)
-    var i = 0;
-    var j = 0;
+    var i = 0
+    var j = 0
     while (i < length) {
       if (!arrayData.isNullAt(i)) {
         val entry = arrayData.getStruct(i, 2)
@@ -358,11 +357,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
         if (key == null) {
           throw new RuntimeException("The first field from a struct (key) can't be null.")
         }
-        if (keySet.contains(key)) {
-          throw new RuntimeException(
-            "The first field from a struct (key) can't produce duplicates.")
-        }
-        keySet.add(key)
         keyArray.update(j, key)
         val value = entry.get(1, dataType.valueType)
         valueArray.update(j, value)
@@ -373,26 +367,16 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     ArrayBasedMapData(keyArray, valueArray)
   }
 
-  private def getHashSetDetails(): (String, String) = dataType.keyType match {
-    case ByteType | ShortType | IntegerType => ("$mcI$sp", "Int")
-    case LongType => ("$mcJ$sp", "Long")
-    case _ => ("", "Object")
-  }
-
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val length = ctx.freshName("length")
       val numEntries = ctx.freshName("numEntries")
-      val keySet = ctx.freshName("keySet")
-      val hsClass = classOf[OpenHashSet[_]].getName
-      val tagPrefix = "scala.reflect.ClassTag$.MODULE$."
-      val (hsSuffix, tagSuffix) = getHashSetDetails()
       val isKeyPrimitive = CodeGenerator.isPrimitiveType(dataType.keyType)
       val isValuePrimitive = CodeGenerator.isPrimitiveType(dataType.valueType)
       val code = if (isKeyPrimitive && isValuePrimitive) {
-        genCodeForPrimitiveElements(ctx, c, ev.value, keySet, length, numEntries)
+        genCodeForPrimitiveElements(ctx, c, ev.value, length, numEntries)
       } else {
-        genCodeForAnyElements(ctx, c, ev.value, keySet, length, numEntries)
+        genCodeForAnyElements(ctx, c, ev.value, length, numEntries)
       }
       val numEntriesAssignment = if (nullEntries) {
         val idx = ctx.freshName("idx")
@@ -409,7 +393,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       s"""
          |final int $length = $c.numElements();
          |$numEntriesAssignment
-         |final $hsClass$hsSuffix $keySet = new $hsClass$hsSuffix($tagPrefix$tagSuffix());
          |$code
        """.stripMargin
     })
@@ -419,15 +402,12 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       ctx: CodegenContext,
       childVariable: String,
       length: String,
-      keySet: String,
       keyAssignment: (String, String) => String,
       valueAssignment: (String, String) => String): String = {
     val entry = ctx.freshName("entry")
-    val key = ctx.freshName("key")
     val i = ctx.freshName("idx")
     val j = ctx.freshName("idx")
 
-    val keyType = CodeGenerator.javaType(dataType.keyType)
     val nullEntryCheck = if (nullEntries) s"if ($childVariable.isNullAt($i)) continue;" else ""
     val nullKeyCheck = if (dataTypeDetails.get._2) {
       s"""
@@ -444,13 +424,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
        |  $nullEntryCheck
        |  InternalRow $entry = $childVariable.getStruct($i, 2);
        |  $nullKeyCheck
-       |  $keyType $key = ${CodeGenerator.getValue(entry, dataType.keyType, "0")};
-       |  if ($keySet.contains($key)) {
-       |    throw new RuntimeException(
-       |      "The first field from a struct (key) can't produce duplicates.");
-       |  }
-       |  $keySet.add($key);
-       |  ${keyAssignment(key, j)}
+       |  ${keyAssignment(CodeGenerator.getValue(entry, dataType.keyType, "0"), j)}
        |  ${valueAssignment(entry, j)}
        |  $j++;
        |}
@@ -461,7 +435,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       ctx: CodegenContext,
       childVariable: String,
       mapData: String,
-      keySet: String,
       length: String,
       numEntries: String): String = {
     val byteArraySize = ctx.freshName("byteArraySize")
@@ -500,7 +473,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       ctx,
       childVariable,
       length,
-      keySet,
       keyAssignment,
       valueAssignment
     )
@@ -510,7 +482,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
        |final long $valueSectionSize = $vByteSize;
        |final long $byteArraySize = 8 + $keySectionSize + $valueSectionSize;
        |if ($byteArraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  ${genCodeForAnyElements(ctx, childVariable, mapData, keySet, length, numEntries)}
+       |  ${genCodeForAnyElements(ctx, childVariable, mapData, length, numEntries)}
        |} else {
        |  final byte[] $data = new byte[(int)$byteArraySize];
        |  UnsafeMapData $unsafeMapData = new UnsafeMapData();
@@ -530,7 +502,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       ctx: CodegenContext,
       childVariable: String,
       mapData: String,
-      keySet: String,
       length: String,
       numEntries: String): String = {
     val keys = ctx.freshName("keys")
@@ -551,7 +522,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       ctx,
       childVariable,
       length,
-      keySet,
       keyAssignment,
       valueAssignment)
 

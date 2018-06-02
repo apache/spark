@@ -106,9 +106,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(ai1), Map(1 -> null, 2 -> 20, 3 -> null))
     checkEvaluation(MapFromEntries(ai2), Map.empty)
     checkEvaluation(MapFromEntries(ai3), null)
-    checkExceptionInExpression[RuntimeException](
-      MapFromEntries(ai4),
-      "The first field from a struct (key) can't produce duplicates.")
+    checkEvaluation(MapKeys(MapFromEntries(ai4)), Seq(1, 1))
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(ai5),
       "The first field from a struct (key) can't be null.")
@@ -131,9 +129,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(as1), Map("a" -> null, "b" -> "bb", "c" -> null))
     checkEvaluation(MapFromEntries(as2), Map.empty)
     checkEvaluation(MapFromEntries(as3), null)
-    checkExceptionInExpression[RuntimeException](
-      MapFromEntries(as4),
-      "The first field from a struct (key) can't produce duplicates.")
+    checkEvaluation(MapKeys(MapFromEntries(as4)), Seq("a", "a"))
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(as5),
       "The first field from a struct (key) can't be null.")
