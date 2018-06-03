@@ -237,8 +237,8 @@ case class IsInf(child: Expression) extends UnaryExpression
       case DoubleType | FloatType =>
         ev.copy(code = code"""
           ${eval.code}
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          ${ev.value} = !${eval.isNull} && Double.isInfinite(${eval.value});""",
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = \
+          !${eval.isNull} && Double.isInfinite(${eval.value});""",
           isNull = FalseLiteral)
     }
   }
@@ -279,8 +279,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
       case DoubleType | FloatType =>
         ev.copy(code = code"""
           ${eval.code}
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = \
-          ${eval.isNull} && Double.isNaN(${eval.value});""", isNull = FalseLiteral)
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = FalseLiteral)
     }
   }
 }
