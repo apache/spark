@@ -67,7 +67,7 @@ operators <- list(
   # we can not override `&&` and `||`, so use `&` and `|` instead
   "&" = "and", "|" = "or", "^" = "pow"
 )
-column_functions1 <- c("asc", "desc", "isNaN", "isNull", "isNotNull")
+column_functions1 <- c("asc", "desc", "isInf", "isNaN", "isNull", "isNotNull")
 column_functions2 <- c("like", "rlike", "getField", "getItem", "contains")
 
 createOperator <- function(op) {
