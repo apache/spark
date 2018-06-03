@@ -1527,6 +1527,11 @@ test_that("column functions", {
   expect_equal(result, "Hello#Beautiful#World!")
   result <- collect(select(df2, array_join(df2[[1]], "#")))[[1]]
   expect_equal(result, "Hello#World!")
+  df3 <- createDataFrame(list(list(list("Hello", NULL, "World!"))))
+  result <- collect(select(df3, array_join(df3[[1]], "#", "Beautiful")))[[1]]
+  expect_equal(result, "Hello#Beautiful#World!")
+  result <- collect(select(df3, array_join(df3[[1]], "#")))[[1]]
+  expect_equal(result, "Hello#World!")
 
   # Test array_sort() and sort_array()
   df <- createDataFrame(list(list(list(2L, 1L, 3L, NA)), list(list(NA, 6L, 5L, NA, 4L))))

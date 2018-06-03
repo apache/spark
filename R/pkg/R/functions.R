@@ -3022,8 +3022,7 @@ setMethod("array_join",
          function(x, delimiter, nullReplacement = NA) {
            jc <- if (is.na(nullReplacement)) {
              callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter)
-           }
-           else {
+           } else {
              callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter,
                          nullReplacement)
            }
