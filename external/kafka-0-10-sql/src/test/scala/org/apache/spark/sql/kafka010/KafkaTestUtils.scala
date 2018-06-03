@@ -32,7 +32,9 @@ import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils.ZkUtils
-import kafka.zk.{AdminZkClient, KafkaZkClient}
+import kafka.zk.KafkaZkClient
+import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, NewPartitions}
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
@@ -65,7 +67,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
 
   private var zkUtils: ZkUtils = _
   private var zkClient: KafkaZkClient = null
-  private var adminZkClient: AdminZkClient = null
+  private var adminClient: AdminClient = null
 
   // Kafka broker related configurations
   private val brokerHost = "localhost"
@@ -107,7 +109,6 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     zkPort = zookeeper.actualPort
     zkUtils = ZkUtils(zkSvr, zkSessionTimeout, zkConnectionTimeout, false)
     zkClient = KafkaZkClient(zkSvr, false, 6000, 10000, Int.MaxValue, Time.SYSTEM)
-    adminZkClient = new AdminZkClient(zkClient)
     zkReady = true
   }
 
@@ -126,6 +127,9 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     }, new SparkConf(), "KafkaBroker")
 
     brokerReady = true
+    val props = new Properties()
+    props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, "$brokerHost:$brokerPort")
+    adminClient = AdminClient.create(props)
   }
 
   /** setup the whole embedded servers, including Zookeeper and Kafka brokers */
@@ -215,8 +219,9 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
       collection.immutable.Set(topic)).map {
         case (topicPartition, replicas) => topicPartition.partition -> replicas
     }
-    adminZkClient.addPartitions(topic, existingAssignment, adminZkClient.getBrokerMetadatas(),
-        partitions)
+    val actuallyDoIt = new CreatePartitionsOptions().validateOnly(false)
+    adminClient.createPartitions(Map(topic ->
+      NewPartitions.increaseTo(partitions)).asJava, actuallyDoIt)
     // wait until metadata is propagated
     (0 until partitions).foreach { p =>
       waitUntilMetadataIsPropagated(topic, p)
