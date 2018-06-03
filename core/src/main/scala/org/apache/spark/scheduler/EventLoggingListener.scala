@@ -197,12 +197,9 @@ logInfo("spark.eventLog.logExecutorMetricsUpdates.enabled is " + shouldLogExecut
       executorMap.foreach {
        executorEntry => {
           for ((executorId, peakExecutorMetrics) <- executorEntry) {
-            val executorMetrics = new ExecutorMetrics(-1, peakExecutorMetrics.jvmUsedHeapMemory,
-              peakExecutorMetrics.jvmUsedNonHeapMemory, peakExecutorMetrics.onHeapExecutionMemory,
-              peakExecutorMetrics.offHeapExecutionMemory, peakExecutorMetrics.onHeapStorageMemory,
-              peakExecutorMetrics.offHeapStorageMemory, peakExecutorMetrics.onHeapUnifiedMemory,
-              peakExecutorMetrics.offHeapUnifiedMemory, peakExecutorMetrics.directMemory,
-              peakExecutorMetrics.mappedMemory)
+            val executorMetrics = new ExecutorMetrics(-1)
+            System.arraycopy(peakExecutorMetrics.metrics, 0, executorMetrics.metrics, 0,
+              peakExecutorMetrics.metrics.size)
             val executorUpdate = new SparkListenerExecutorMetricsUpdate(
               executorId, accumUpdates, Some(executorMetrics))
             logEvent(executorUpdate)
