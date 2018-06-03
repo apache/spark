@@ -29,7 +29,7 @@
   <artifactId>spark-sql-kafka-0-10_2.11</artifactId>
   <properties>
     <sbt.project.name>sql-kafka-0-10</sbt.project.name>
-    <kafka.version>0.10.0.1</kafka.version>
+    <kafka.version>2.0.0-SNAPSHOT</kafka.version>
   </properties>
   <packaging>jar</packaging>
   <name>Kafka 0.10 Source for Structured Streaming</name>
