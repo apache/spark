@@ -57,7 +57,7 @@ private[spark] class ExecutorPodsEventQueueImpl(
       // Force all triggered events - both the initial event above and the buffered ones in
       // the following time windows - to execute asynchronously to this call's thread.
       .observeOn(Schedulers.from(executeSubscriptionsExecutor))
-      .subscribe(toReactivexConsumer { (pods: java.util.List[Pod]) =>
+      .subscribe(toReactivexConsumer { pods: java.util.List[Pod] =>
         Utils.tryLogNonFatalError {
           subscriber.onNextBatch(pods.asScala)
         }
