@@ -402,7 +402,7 @@ class DataFrame(object):
             has_more_data = len(row_data) > max_num_rows
             row_data = row_data[:max_num_rows]
 
-            html = "<table border='1'>\n<tr><th>"
+            html = "<table border='1'>\n"
             # generate table head
             html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
             # generate table rows
