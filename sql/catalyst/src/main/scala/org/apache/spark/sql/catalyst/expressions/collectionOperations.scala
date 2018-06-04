@@ -195,8 +195,6 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
         |    $biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
         |  } else {
         |    $biggestCardinality = -1;
-        |    $arrVals[$index] = null;
-        |    $arrCardinality[$index] = 0;
         |  }
         |}
       """.stripMargin

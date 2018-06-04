@@ -350,7 +350,7 @@ def corr(col1, col2):
 
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
-    >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
+    >>> df = spark.createDataFrame(__builtin__.zip(a, b), ["a", "b"])
     >>> df.agg(corr("a", "b").alias('c')).collect()
     [Row(c=1.0)]
     """
@@ -364,7 +364,7 @@ def covar_pop(col1, col2):
 
     >>> a = [1] * 10
     >>> b = [1] * 10
-    >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
+    >>> df = spark.createDataFrame(__builtin__.zip(a, b), ["a", "b"])
     >>> df.agg(covar_pop("a", "b").alias('c')).collect()
     [Row(c=0.0)]
     """
