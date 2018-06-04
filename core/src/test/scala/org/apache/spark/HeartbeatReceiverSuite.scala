@@ -210,7 +210,7 @@ class HeartbeatReceiverSuite
     assert(fakeClusterManager.getExecutorIdsToKill === Set(executorId1, executorId2))
   }
 
-  test("expired host should not be offered again") {
+  test("expired executor should not be offered again (SPARK-24387)") {
     scheduler = spy(new TaskSchedulerImpl(sc))
     scheduler.setDAGScheduler(sc.dagScheduler)
     when(sc.taskScheduler).thenReturn(scheduler)
@@ -233,18 +233,17 @@ class HeartbeatReceiverSuite
     triggerHeartbeat(executorId1, executorShouldReregister = false)
 
     scheduler.initialize(fakeSchedulerBackend)
-    sc.requestTotalExecutors(0, 0, Map.empty)
+    sc.requestTotalExecutors(1, 0, Map.empty)
     val taskSet = FakeTask.createTaskSet(1)
     scheduler.submitTasks(taskSet)
     // make sure task starts to run
     val interval = 1000
     val clock = new SystemClock
     val deadline = clock.getTimeMillis() + 3 * interval
-    while (!scheduler.runningTasksByExecutors.contains(executorId1)) {
+    while (!scheduler.runningTasksByExecutors.exists(x => x._1 == executorId1 && x._2 == 1)) {
       assert(clock.getTimeMillis() < deadline, "Timed out waiting task to start running")
       Thread.sleep(interval)
     }
-    assert(scheduler.runningTasksByExecutors(executorId1) === 1)
 
     // expire the executor
     val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
@@ -255,8 +254,8 @@ class HeartbeatReceiverSuite
     killThread.awaitTermination(10L, TimeUnit.SECONDS)
 
     // the expired executor shouldn't be running tasks
-    assert(!scheduler.runningTasksByExecutors.contains(executorId1) ||
-      scheduler.runningTasksByExecutors(executorId1) === 0)
+    assert(!scheduler.runningTasksByExecutors.exists(x => x._1 == executorId1 && x._2 == 1))
+    scheduler.stop()
   }
 
   /** Manually send a heartbeat and return the response. */
