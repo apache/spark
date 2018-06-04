@@ -84,7 +84,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     result.select("id", "prediction").collect().foreach {
       case Row(id: Long, cluster: Integer) => predictions(cluster) += id
     }
-    assert(predictions.toSet == Set((1 until n1).toSet, (n1 until n).toSet))
+    assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
 
     val result2 = new PowerIterationClustering()
       .setK(2)
@@ -95,7 +95,30 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     result2.select("id", "prediction").collect().foreach {
       case Row(id: Long, cluster: Integer) => predictions2(cluster) += id
     }
-    assert(predictions2.toSet == Set((1 until n1).toSet, (n1 until n).toSet))
+    assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
+  }
+
+  test("power iteration clustering: random init mode") {
+
+    val data = spark.createDataFrame(Seq(
+      (0, Array(1), Array(0.9)),
+      (1, Array(2), Array(0.9)),
+      (2, Array(3), Array(0.9)),
+      (3, Array(4), Array(0.1)),
+      (4, Array(5), Array(0.9))
+    )).toDF("id", "neighbors", "similarities")
+
+    val result = new PowerIterationClustering()
+      .setK(2)
+      .setMaxIter(10)
+      .setInitMode("random")
+      .transform(data)
+
+    val predictions = Array.fill(2)(mutable.Set.empty[Long])
+    result.select("id", "prediction").collect().foreach {
+      case Row(id: Long, cluster: Integer) => predictions(cluster) += id
+    }
+    assert(predictions.toSet == Set((0 until 4).toSet, Set(4, 5)))
   }
 
   test("supported input types") {
