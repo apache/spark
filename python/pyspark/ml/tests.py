@@ -1911,6 +1911,53 @@ class KMeansTests(SparkSessionTestCase):
         self.assertTrue(result[4].prediction == result[5].prediction)
 
 
+class PowerIterationClustering(SparkSessionTestCase):
+
+    def test_power_iteration_clustering(self):
+        from pyspark.sql.types import ArrayType, DoubleType, LongType, StructField, StructType
+        from pyspark.ml.clustering import PowerIterationClustering
+        import math
+
+        def genCircle(r, n):
+            points = []
+            for i in range(0, n):
+                theta = 2.0 * math.pi * i / n
+                points.append((r * math.cos(theta), r * math.sin(theta)))
+            return points
+
+        def sim(x, y):
+            dist = (x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1])
+            return math.exp(-dist / 2.0)
+
+        r1 = 1.0
+        n1 = 10
+        r2 = 4.0
+        n2 = 40
+        n = n1 + n2
+        points = genCircle(r1, n1) + genCircle(r2, n2)
+        similarities = []
+        for i in range(1, n):
+            neighbor = []
+            weight = []
+            for j in range(i):
+                neighbor.append((long)(j))
+                weight.append(sim(points[i], points[j]))
+            similarities.append([(long)(i), neighbor, weight])
+        rdd = self.sc.parallelize(similarities, 2)
+        schema = StructType([StructField("id", LongType(), False),
+                            StructField("neighbors", ArrayType(LongType(), False), True),
+                            StructField("similarities", ArrayType(DoubleType(), False), True)])
+        df = self.spark.createDataFrame(rdd, schema)
+        pic = PowerIterationClustering()
+        result = pic.setK(2).setMaxIter(40).transform(df)
+        predictions = sorted(set([(i[0], i[1]) for i in result.select(result.id,
+                             result.prediction).collect()]), key=lambda x: x[0])
+        for i in range(0, 8):
+            self.assertEqual(predictions[i], (i+1, 1))
+        for i in range(9, 48):
+            self.assertEqual(predictions[i], (i+1, 0))
+
+
 class OneVsRestTests(SparkSessionTestCase):
 
     def test_copy(self):

@@ -97,13 +97,15 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   def getNeighborsCol: String = $(neighborsCol)
 
   /**
-   * Param for the name of the input column for neighbors in the adjacency list representation.
+   * Param for the name of the input column for non-negative weights (similarities) of edges
+   * between the vertex in `idCol` and each neighbor in `neighborsCol`.
    * Default: "similarities"
    * @group param
    */
   @Since("2.4.0")
   val similaritiesCol = new Param[String](this, "similaritiesCol",
-    "Name of the input column for neighbors in the adjacency list representation.",
+    "Name of the input column for non-negative weights (similarities) of edges between the " +
+    "vertex in `idCol` and each neighbor in `neighborsCol`.",
     (value: String) => value.nonEmpty)
 
   setDefault(similaritiesCol, "similarities")
