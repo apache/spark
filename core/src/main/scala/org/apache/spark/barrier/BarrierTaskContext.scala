@@ -37,6 +37,7 @@ class BarrierTaskContext(
     @transient private val metricsSystem: MetricsSystem,
     // The default value is only used in tests.
     override val taskMetrics: TaskMetrics = TaskMetrics.empty)
+  // TODO make this extends TaskContext
   extends TaskContextImpl(stageId, stageAttemptNumber, partitionId, taskAttemptId, attemptNumber,
       taskMemoryManager, localProperties, metricsSystem, taskMetrics)
     with Logging {
