@@ -1744,10 +1744,10 @@ class Analyzer(
    *    it into the plan tree.
    */
   object ExtractWindowExpressions extends Rule[LogicalPlan] {
-    private def hasWindowFunction(projectList: Seq[NamedExpression]): Boolean =
-      projectList.exists(hasWindowFunction)
+    private def hasWindowFunction(exprs: Seq[Expression]): Boolean =
+      exprs.exists(hasWindowFunction)
 
-    private def hasWindowFunction(expr: NamedExpression): Boolean = {
+    private def hasWindowFunction(expr: Expression): Boolean = {
       expr.find {
         case window: WindowExpression => true
         case _ => false
@@ -1829,6 +1829,10 @@ class Analyzer(
             val newAgg = ae.copy(aggregateFunction = newFunction)
             seenWindowAggregates += newAgg
             WindowExpression(newAgg, spec)
+
+          case AggregateExpression(aggFunc, _, _, _) if hasWindowFunction(aggFunc.children) =>
+            failAnalysis("It is not allowed to use a window function inside an aggregate " +
+              "function. Please use the inner window function in a sub-query.")
 
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
