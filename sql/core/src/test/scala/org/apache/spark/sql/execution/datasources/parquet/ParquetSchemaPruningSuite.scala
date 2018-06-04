@@ -43,15 +43,16 @@ class ParquetSchemaPruningSuite
     BriefContact(Name("Janet", "Jones"), "567 Maple Drive") ::
     BriefContact(Name("Jim", "Jones"), "6242 Ash Street") :: Nil
 
+  testStandardAndLegacyModes("prune a single field") {
+    withContacts {
+      val query = sql("select name.middle from contacts")
+      checkScanSchemata(query, "struct<name:struct<middle:string>>")
+      checkAnswer(query, Row("X.") :: Row("Y.") :: Row(null) :: Row(null) :: Nil)
+    }
+  }
+
   testStandardAndLegacyModes("partial schema intersection - select missing subfield") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      makeParquetFile(contacts, new File(path + "/contacts/p=1"))
-      makeParquetFile(briefContacts, new File(path + "/contacts/p=2"))
-
-      spark.read.parquet(path + "/contacts").createOrReplaceTempView("contacts")
-
+    withContacts {
       val query = sql("select name.middle, address from contacts where p=2")
       checkScanSchemata(query, "struct<name:struct<middle:string>,address:string>")
       checkAnswer(query,
@@ -61,14 +62,7 @@ class ParquetSchemaPruningSuite
   }
 
   testStandardAndLegacyModes("partial schema intersection - filter on subfield") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      makeParquetFile(contacts, new File(path + "/contacts/p=1"))
-      makeParquetFile(briefContacts, new File(path + "/contacts/p=2"))
-
-      spark.read.parquet(path + "/contacts").createOrReplaceTempView("contacts")
-
+    withContacts {
       val query =
         sql("select name.middle, name.first, pets, address from contacts where " +
           "name.first = 'Janet' and p=2")
@@ -80,14 +74,7 @@ class ParquetSchemaPruningSuite
   }
 
   testStandardAndLegacyModes("no unnecessary schema pruning") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      makeParquetFile(contacts, new File(path + "/contacts/p=1"))
-      makeParquetFile(briefContacts, new File(path + "/contacts/p=2"))
-
-      spark.read.parquet(path + "/contacts").createOrReplaceTempView("contacts")
-
+    withContacts {
       val query =
         sql("select name.last, name.middle, name.first, relatives[''].last, " +
           "relatives[''].middle, relatives[''].first, friends[0].last, friends[0].middle, " +
@@ -107,6 +94,15 @@ class ParquetSchemaPruningSuite
   }
 
   testStandardAndLegacyModes("empty schema intersection") {
+    withContacts {
+      val query = sql("select name.middle from contacts where p=2")
+      checkScanSchemata(query, "struct<name:struct<middle:string>>")
+      checkAnswer(query,
+        Row(null) :: Row(null) :: Nil)
+    }
+  }
+
+  private def withContacts(testThunk: => Unit) {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
@@ -115,10 +111,7 @@ class ParquetSchemaPruningSuite
 
       spark.read.parquet(path + "/contacts").createOrReplaceTempView("contacts")
 
-      val query = sql("select name.middle from contacts where p=2")
-      checkScanSchemata(query, "struct<name:struct<middle:string>>")
-      checkAnswer(query,
-        Row(null) :: Row(null) :: Nil)
+      testThunk
     }
   }
 }
