@@ -239,7 +239,8 @@ case class IsInf(child: Expression) extends UnaryExpression
           code = code"""
           ${eval.code}
           ${CodeGenerator
-            .javaType(dataType)} ${ev.value} = !${eval.isNull} && Double.isInfinite(${eval.value});""",
+            .javaType(
+              dataType)} ${ev.value} = !${eval.isNull} && Double.isInfinite(${eval.value});""",
           isNull = FalseLiteral
         )
     }
