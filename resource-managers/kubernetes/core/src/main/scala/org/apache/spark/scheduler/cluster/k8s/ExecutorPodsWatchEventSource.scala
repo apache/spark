@@ -27,8 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsWatchEventSource(
-    podsEventQueue: ExecutorPodsEventQueue,
-    kubernetesClient: KubernetesClient) extends Logging {
+    podsEventQueue: ExecutorPodsEventQueue, kubernetesClient: KubernetesClient) extends Logging {
 
   private var watchConnection: Closeable = _
 

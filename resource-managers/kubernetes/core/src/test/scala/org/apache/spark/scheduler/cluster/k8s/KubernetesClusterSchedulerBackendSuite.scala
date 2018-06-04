@@ -16,9 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodList}
-import io.fabric8.kubernetes.client.{KubernetesClient, Watch, Watcher}
-import io.fabric8.kubernetes.client.dsl.{FilterWatchListDeletable, MixedOperation, PodResource}
+import io.fabric8.kubernetes.client.KubernetesClient
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Matchers.{eq => mockitoEq}

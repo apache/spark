@@ -17,9 +17,9 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import com.google.common.cache.CacheBuilder
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodList}
+import io.fabric8.kubernetes.api.model.{DoneablePod, Pod}
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
+import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Matchers.any
 import org.mockito.Mockito.{mock, times, verify, when}
@@ -43,9 +43,6 @@ class ExecutorPodsLifecycleEventHandlerSuite extends SparkFunSuite with BeforeAn
 
   @Mock
   private var podOperations: PODS = _
-
-  @Mock
-  private var driverPodOperations: SINGLE_POD = _
 
   @Mock
   private var executorBuilder: KubernetesExecutorBuilder = _

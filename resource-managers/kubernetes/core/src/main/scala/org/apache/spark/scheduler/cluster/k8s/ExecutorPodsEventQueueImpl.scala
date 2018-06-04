@@ -30,8 +30,7 @@ import scala.collection.mutable
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class ExecutorPodsEventQueueImpl(
-    bufferEventsExecutor: ScheduledExecutorService,
-    executeSubscriptionsExecutor: ExecutorService)
+    bufferEventsExecutor: ScheduledExecutorService, executeSubscriptionsExecutor: ExecutorService)
   extends ExecutorPodsEventQueue {
 
   private val eventsObservable = PublishSubject.create[Pod]()
