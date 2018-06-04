@@ -126,15 +126,15 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   def logNamedValue(name: String, value: Array[String]): Unit = {
-    log(compact(render(name -> value.toSeq)))
+    log(compact(render(name -> compact(render(value.toSeq)))))
   }
 
   def logNamedValue(name: String, value: Array[Long]): Unit = {
-    log(compact(render(name -> value.toSeq)))
+    log(compact(render(name -> compact(render(value.toSeq)))))
   }
 
   def logNamedValue(name: String, value: Array[Double]): Unit = {
-    log(compact(render(name -> value.toSeq)))
+    log(compact(render(name -> compact(render(value.toSeq)))))
   }
 
 
