@@ -4091,29 +4091,30 @@ class PandasUDFTests(ReusedSQLTestCase):
             raise StopIteration()
 
         exc_message = "Caught StopIteration thrown from user's code; failing the task"
+        excs = (Py4JJavaError, RuntimeError)
         df = self.spark.range(0, 100)
 
         # plain udf (test for SPARK-23754)
-        self.assertRaisesRegexp(Py4JJavaError, exc_message, df.withColumn(
+        self.assertRaisesRegexp(excs, exc_message, df.withColumn(
             'v', udf(foo)('id')
         ).collect())
 
         # pandas scalar udf
-        self.assertRaisesRegexp(Py4JJavaError, exc_message, df.withColumn(
+        self.assertRaisesRegexp(excs, exc_message, df.withColumn(
             'v', pandas_udf(foo, 'double', PandasUDFType.SCALAR)('id')
         ).collect())
 
         # pandas grouped map
-        self.assertRaisesRegexp(Py4JJavaError, exc_message, df.groupBy('id').apply(
+        self.assertRaisesRegexp(excs, exc_message, df.groupBy('id').apply(
             pandas_udf(foo, df.schema, PandasUDFType.GROUPED_MAP)
         ).collect())
 
-        self.assertRaisesRegexp(Py4JJavaError, exc_message, df.groupBy('id').apply(
+        self.assertRaisesRegexp(excs, exc_message, df.groupBy('id').apply(
             pandas_udf(foofoo, df.schema, PandasUDFType.GROUPED_MAP)
         ).collect())
 
         # pandas grouped agg
-        self.assertRaisesRegexp(Py4JJavaError, exc_message, df.groupBy('id').agg(
+        self.assertRaisesRegexp(excs, exc_message, df.groupBy('id').agg(
             pandas_udf(foo, 'double', PandasUDFType.GROUPED_AGG)('id')
         ).collect())
 
