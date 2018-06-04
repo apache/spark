@@ -1053,7 +1053,7 @@ object SQLConf {
       .doc("When true, sort merge join detects children data partitioning to avoid shuffle, " +
         "it is helpful when join keys are a super-set of bucket keys")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
