@@ -178,236 +178,189 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private val testRelation = LocalRelation(schema.toAttributes)
 
-  test("should not match an attribute reference") {
+  test("SelectedField should not match an attribute reference") {
     assertResult(None)(unapplySelect("col1"))
     assertResult(None)(unapplySelect("col1 as foo"))
     assertResult(None)(unapplySelect("col2"))
   }
 
-  test("col2.field2, col2.field2[0] as foo") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field2", ArrayType(IntegerType, containsNull = false)) :: Nil))
-    testSelect("col2.field2", expected)
-    testSelect("col2.field2[0] as foo", expected)
+  info("For a relation with schema\n" + indent(schema.treeString))
+
+  testSelect("col2.field2", "col2.field2[0] as foo") {
+    StructField("col2", StructType(
+      StructField("field2", ArrayType(IntegerType, containsNull = false)) :: Nil))
   }
 
-  test("col2.field9, col2.field9['foo'] as foo") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field9", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil))
-    testSelect("col2.field9", expected)
-    testSelect("col2.field9['foo'] as foo", expected)
+  testSelect("col2.field9", "col2.field9['foo'] as foo") {
+    StructField("col2", StructType(
+      StructField("field9", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil))
   }
 
-  test("col2.field3.subfield3, col2.field3[0].subfield3 as foo, col2.field3.subfield3[0] as foo, col2.field3[0].subfield3[0] as foo") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field3", ArrayType(StructType(
-          StructField("subfield3", ArrayType(IntegerType)) :: Nil)), nullable = false) :: Nil))
-    testSelect("col2.field3.subfield3", expected)
-    testSelect("col2.field3[0].subfield3 as foo", expected)
-    testSelect("col2.field3.subfield3[0] as foo", expected)
-    testSelect("col2.field3[0].subfield3[0] as foo", expected)
+  testSelect("col2.field3.subfield3", "col2.field3[0].subfield3 as foo",
+      "col2.field3.subfield3[0] as foo", "col2.field3[0].subfield3[0] as foo") {
+    StructField("col2", StructType(
+      StructField("field3", ArrayType(StructType(
+        StructField("subfield3", ArrayType(IntegerType)) :: Nil)), nullable = false) :: Nil))
   }
 
-  test("col2.field3.subfield1") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field3", ArrayType(StructType(
-          StructField("subfield1", IntegerType) :: Nil)), nullable = false) :: Nil))
-    testSelect("col2.field3.subfield1", expected)
+  testSelect("col2.field3.subfield1") {
+    StructField("col2", StructType(
+      StructField("field3", ArrayType(StructType(
+        StructField("subfield1", IntegerType) :: Nil)), nullable = false) :: Nil))
   }
 
-  test("col2.field5.subfield1") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field5", ArrayType(StructType(
-          StructField("subfield1", StructType(
-            StructField("subsubfield1", IntegerType) ::
-            StructField("subsubfield2", IntegerType) :: Nil), nullable = false) :: Nil)), nullable = false) :: Nil))
-    testSelect("col2.field5.subfield1", expected)
+  testSelect("col2.field5.subfield1") {
+    StructField("col2", StructType(
+      StructField("field5", ArrayType(StructType(
+        StructField("subfield1", StructType(
+          StructField("subsubfield1", IntegerType) ::
+          StructField("subsubfield2", IntegerType) :: Nil), nullable = false) :: Nil)), nullable = false) :: Nil))
   }
 
-  test("col3.field1.subfield1") {
-    val expected =
-      StructField("col3", ArrayType(StructType(
-        StructField("field1", StructType(
-          StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil), containsNull = false), nullable = false)
-    testSelect("col3.field1.subfield1", expected)
+  testSelect("col3.field1.subfield1") {
+    StructField("col3", ArrayType(StructType(
+      StructField("field1", StructType(
+        StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil), containsNull = false), nullable = false)
   }
 
-  test("col3.field2['foo'] as foo") {
-    val expected =
-      StructField("col3", ArrayType(StructType(
-        StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil), containsNull = false), nullable = false)
-    testSelect("col3.field2['foo'] as foo", expected)
+  testSelect("col3.field2['foo'] as foo") {
+    StructField("col3", ArrayType(StructType(
+      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil), containsNull = false), nullable = false)
   }
 
-  test("col4['foo'].field1.subfield1 as foo") {
-    val expected =
-      StructField("col4", MapType(StringType, StructType(
-        StructField("field1", StructType(
-          StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil), valueContainsNull = false), nullable = false)
-    testSelect("col4['foo'].field1.subfield1 as foo", expected)
+  testSelect("col4['foo'].field1.subfield1 as foo") {
+    StructField("col4", MapType(StringType, StructType(
+      StructField("field1", StructType(
+        StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil), valueContainsNull = false), nullable = false)
   }
 
-  test("col4['foo'].field2['bar'] as foo") {
-    val expected =
-      StructField("col4", MapType(StringType, StructType(
-        StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil), valueContainsNull = false), nullable = false)
-    testSelect("col4['foo'].field2['bar'] as foo", expected)
+  testSelect("col4['foo'].field2['bar'] as foo") {
+    StructField("col4", MapType(StringType, StructType(
+      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil), valueContainsNull = false), nullable = false)
   }
 
-  test("col5[0]['foo'].field1.subfield1 as foo") {
-    val expected =
-      StructField("col5", ArrayType(MapType(StringType, StructType(
-        StructField("field1", StructType(
-          StructField("subfield1", IntegerType) :: Nil)) :: Nil), valueContainsNull = false)))
-    testSelect("col5[0]['foo'].field1.subfield1 as foo", expected)
+  testSelect("col5[0]['foo'].field1.subfield1 as foo") {
+    StructField("col5", ArrayType(MapType(StringType, StructType(
+      StructField("field1", StructType(
+        StructField("subfield1", IntegerType) :: Nil)) :: Nil), valueContainsNull = false)))
   }
 
-  test("col6['foo'][0].field1.subfield1 as foo") {
-    val expected =
-      StructField("col6", MapType(StringType, ArrayType(StructType(
-        StructField("field1", StructType(
-          StructField("subfield1", IntegerType) :: Nil)) :: Nil), containsNull = false)))
-    testSelect("col6['foo'][0].field1.subfield1 as foo", expected)
+  testSelect("col6['foo'][0].field1.subfield1 as foo") {
+    StructField("col6", MapType(StringType, ArrayType(StructType(
+      StructField("field1", StructType(
+        StructField("subfield1", IntegerType) :: Nil)) :: Nil), containsNull = false)))
   }
 
-  test("col2.field5.subfield1.subsubfield1") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field5", ArrayType(StructType(
-          StructField("subfield1", StructType(
-            StructField("subsubfield1", IntegerType) :: Nil), nullable = false) :: Nil)), nullable = false) :: Nil))
-    testSelect("col2.field5.subfield1.subsubfield1", expected)
+  testSelect("col2.field5.subfield1.subsubfield1") {
+    StructField("col2", StructType(
+      StructField("field5", ArrayType(StructType(
+        StructField("subfield1", StructType(
+          StructField("subsubfield1", IntegerType) :: Nil), nullable = false) :: Nil)), nullable = false) :: Nil))
   }
 
-  test("col2.field5.subfield2.subsubfield1.subsubsubfield1") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field5", ArrayType(StructType(
-          StructField("subfield2", StructType(
-            StructField("subsubfield1", StructType(
-              StructField("subsubsubfield1", StringType) :: Nil)) :: Nil)) :: Nil)), nullable = false) :: Nil))
-    testSelect("col2.field5.subfield2.subsubfield1.subsubsubfield1", expected)
+  testSelect("col2.field5.subfield2.subsubfield1.subsubsubfield1") {
+    StructField("col2", StructType(
+      StructField("field5", ArrayType(StructType(
+        StructField("subfield2", StructType(
+          StructField("subsubfield1", StructType(
+            StructField("subsubsubfield1", StringType) :: Nil)) :: Nil)) :: Nil)), nullable = false) :: Nil))
   }
 
-  test("col2.field4['foo'].subfield1 as foo") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field4", MapType(StringType, StructType(
-          StructField("subfield1", IntegerType) :: Nil), valueContainsNull = false)) :: Nil))
-    testSelect("col2.field4['foo'].subfield1 as foo", expected)
+  testSelect("col2.field4['foo'].subfield1 as foo") {
+    StructField("col2", StructType(
+      StructField("field4", MapType(StringType, StructType(
+        StructField("subfield1", IntegerType) :: Nil), valueContainsNull = false)) :: Nil))
   }
 
-  test("col2.field4['foo'].subfield2 as foo, col2.field4['foo'].subfield2[0] as foo") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field4", MapType(StringType, StructType(
-          StructField("subfield2", ArrayType(IntegerType, containsNull = false)) :: Nil), valueContainsNull = false)) :: Nil))
-    testSelect("col2.field4['foo'].subfield2 as foo", expected)
-    testSelect("col2.field4['foo'].subfield2[0] as foo", expected)
+  testSelect("col2.field4['foo'].subfield2 as foo", "col2.field4['foo'].subfield2[0] as foo") {
+    StructField("col2", StructType(
+      StructField("field4", MapType(StringType, StructType(
+        StructField("subfield2", ArrayType(IntegerType, containsNull = false)) :: Nil), valueContainsNull = false)) :: Nil))
   }
 
-  test("col2.field8['foo'][0].subfield1 as foo") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field8", MapType(StringType, ArrayType(StructType(
-          StructField("subfield1", IntegerType) :: Nil)), valueContainsNull = false)) :: Nil))
-    testSelect("col2.field8['foo'][0].subfield1 as foo", expected)
+  testSelect("col2.field8['foo'][0].subfield1 as foo") {
+    StructField("col2", StructType(
+      StructField("field8", MapType(StringType, ArrayType(StructType(
+        StructField("subfield1", IntegerType) :: Nil)), valueContainsNull = false)) :: Nil))
   }
 
-  test("col2.field1") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field1", IntegerType) :: Nil))
-    testSelect("col2.field1", expected)
+  testSelect("col2.field1") {
+    StructField("col2", StructType(
+      StructField("field1", IntegerType) :: Nil))
   }
 
-  test("col2.field6") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field6", StructType(
-          StructField("subfield1", StringType, nullable = false) ::
-          StructField("subfield2", StringType) :: Nil)) :: Nil))
-    testSelect("col2.field6", expected)
+  testSelect("col2.field6") {
+    StructField("col2", StructType(
+      StructField("field6", StructType(
+        StructField("subfield1", StringType, nullable = false) ::
+        StructField("subfield2", StringType) :: Nil)) :: Nil))
   }
 
-  test("col2.field7.subfield1") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field7", StructType(
-          StructField("subfield1", StructType(
-            StructField("subsubfield1", IntegerType) ::
-            StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) :: Nil))
-    testSelect("col2.field7.subfield1", expected)
+  testSelect("col2.field7.subfield1") {
+    StructField("col2", StructType(
+      StructField("field7", StructType(
+        StructField("subfield1", StructType(
+          StructField("subsubfield1", IntegerType) ::
+          StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) :: Nil))
   }
 
-  test("col2.field6.subfield1") {
-    val expected =
-      StructField("col2", StructType(
-        StructField("field6", StructType(
-          StructField("subfield1", StringType, nullable = false) :: Nil)) :: Nil))
-    testSelect("col2.field6.subfield1", expected)
+  testSelect("col2.field6.subfield1") {
+    StructField("col2", StructType(
+      StructField("field6", StructType(
+        StructField("subfield1", StringType, nullable = false) :: Nil)) :: Nil))
   }
 
-  test("col7.field1, col7[0].field1 as foo, col7.field1[0] as foo") {
-    val expected =
-      StructField("col7", ArrayType(StructType(
-        StructField("field1", IntegerType, nullable = false) :: Nil)))
-    testSelect("col7.field1", expected)
-    testSelect("col7[0].field1 as foo", expected)
-    testSelect("col7.field1[0] as foo", expected)
+  testSelect("col7.field1", "col7[0].field1 as foo", "col7.field1[0] as foo") {
+    StructField("col7", ArrayType(StructType(
+      StructField("field1", IntegerType, nullable = false) :: Nil)))
   }
 
-  test("col7.field2.subfield1") {
-    val expected =
-      StructField("col7", ArrayType(StructType(
-        StructField("field2", StructType(
-          StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil)))
-    testSelect("col7.field2.subfield1", expected)
+  testSelect("col7.field2.subfield1") {
+    StructField("col7", ArrayType(StructType(
+      StructField("field2", StructType(
+        StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil)))
   }
 
-  test("col7.field3.subfield1") {
-    val expected =
-      StructField("col7", ArrayType(StructType(
-        StructField("field3", ArrayType(StructType(
-          StructField("subfield1", IntegerType, nullable = false) :: Nil))) :: Nil)))
-    testSelect("col7.field3.subfield1", expected)
+  testSelect("col7.field3.subfield1") {
+    StructField("col7", ArrayType(StructType(
+      StructField("field3", ArrayType(StructType(
+        StructField("subfield1", IntegerType, nullable = false) :: Nil))) :: Nil)))
   }
 
-  test("col8.field1, col8[0].field1 as foo, col8.field1[0] as foo, col8[0].field1[0] as foo") {
-    val expected =
-      StructField("col8", ArrayType(StructType(
-        StructField("field1", ArrayType(IntegerType, containsNull = false), nullable = false) :: Nil)))
-    testSelect("col8.field1", expected)
-    testSelect("col8[0].field1 as foo", expected)
-    testSelect("col8.field1[0] as foo", expected)
-    testSelect("col8[0].field1[0] as foo", expected)
+  testSelect("col8.field1", "col8[0].field1 as foo", "col8.field1[0] as foo", "col8[0].field1[0] as foo") {
+    StructField("col8", ArrayType(StructType(
+      StructField("field1", ArrayType(IntegerType, containsNull = false), nullable = false) :: Nil)))
   }
 
-  def assertResult(expected: StructField)(actual: StructField)(expr: String): Unit = {
+  def assertResult(expected: StructField)(actual: StructField)(selectExpr: String): Unit = {
     try {
       super.assertResult(expected)(actual)
     } catch {
       case ex: TestFailedException =>
         // Print some helpful diagnostics in the case of failure
-        // scalastyle:off println
-        println("For " + expr)
-        println("Expected:")
-        println(StructType(expected :: Nil).treeString)
-        println("Actual:")
-        println(StructType(actual :: Nil).treeString)
-        println("expected.dataType.sameType(actual.dataType) = " +
-          expected.dataType.sameType(actual.dataType))
-        // scalastyle:on println
+        alert("Expected SELECT \"" + selectExpr + "\" to select the schema\n" +
+          indent(StructType(expected :: Nil).treeString) +
+          indent("but it actually selected\n") +
+          indent(StructType(actual :: Nil).treeString) +
+          indent("Note that expected.dataType.sameType(actual.dataType) = " +
+          expected.dataType.sameType(actual.dataType)))
         throw ex
     }
   }
 
-  private def testSelect(expr: String, expected: StructField) = {
+  // Test that the given SELECT expressions prune the test schema to the single-column schema
+  // defined by the given field
+  private def testSelect(selectExpr: String, otherSelectExprs: String*)(expected: StructField) {
+    val selectExprs = selectExpr +: otherSelectExprs
+    test(s"SELECT " + selectExprs.map(s => s""""$s"""").mkString(", ") + " should select the schema\n" +
+        indent(StructType(expected :: Nil).treeString)) {
+      for (selectExpr <- selectExprs) {
+        assertSelect(selectExpr, expected)
+      }
+    }
+  }
+
+  private def assertSelect(expr: String, expected: StructField) = {
     unapplySelect(expr) match {
       case Some(field) =>
         assertResult(expected)(field)(expr)
@@ -429,4 +382,6 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
     val analyzed = select.analyze
     SelectedField.unapply(analyzed.expressions.head)
   }
+
+  private def indent(string: String) = string.replaceAll("(?m)^", "   ")
 }
