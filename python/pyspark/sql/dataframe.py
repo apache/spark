@@ -393,24 +393,22 @@ class DataFrame(object):
             self._support_repr_html = True
         if self._eager_eval:
             max_num_rows = max(self._max_num_rows, 0)
-            with SCCallSiteSync(self._sc) as css:
-                vertical = False
-                sock_info = self._jdf.getRowsToPython(
-                    max_num_rows, self._truncate, vertical)
+            vertical = False
+            sock_info = self._jdf.getRowsToPython(
+                max_num_rows, self._truncate, vertical)
             rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
             head = rows[0]
             row_data = rows[1:]
             has_more_data = len(row_data) > max_num_rows
-            row_data = row_data[0:max_num_rows]
+            row_data = row_data[:max_num_rows]
 
             html = "<table border='1'>\n<tr><th>"
             # generate table head
-            html += "</th><th>".join(map(lambda x: cgi.escape(x), head)) + "</th></tr>\n"
+            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
             # generate table rows
             for row in row_data:
-                data = "<tr><td>" + "</td><td>".join(map(lambda x: cgi.escape(x), row)) + \
-                    "</td></tr>\n"
-                html += data
+                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
+                    map(lambda x: cgi.escape(x), row))
             html += "</table>\n"
             if has_more_data:
                 html += "only showing top %d %s\n" % (

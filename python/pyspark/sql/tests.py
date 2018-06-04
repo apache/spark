@@ -3079,30 +3079,30 @@ class SQLTests(ReusedSQLTestCase):
         pattern = re.compile(r'^ *\|', re.MULTILINE)
         df = self.spark.createDataFrame([(1, "1"), (22222, "22222")], ("key", "value"))
         self.assertEquals(None, df._repr_html_())
-        self.spark.conf.set("spark.sql.repl.eagerEval.enabled", "true")
-        expected1 = """<table border='1'>
-            |<tr><th>key</th><th>value</th></tr>
-            |<tr><td>1</td><td>1</td></tr>
-            |<tr><td>22222</td><td>22222</td></tr>
-            |</table>
-            |"""
-        self.assertEquals(re.sub(pattern, '', expected1), df._repr_html_())
-        self.spark.conf.set("spark.sql.repl.eagerEval.truncate", 3)
-        expected2 = """<table border='1'>
-            |<tr><th>key</th><th>value</th></tr>
-            |<tr><td>1</td><td>1</td></tr>
-            |<tr><td>222</td><td>222</td></tr>
-            |</table>
-            |"""
-        self.assertEquals(re.sub(pattern, '', expected2), df._repr_html_())
-        self.spark.conf.set("spark.sql.repl.eagerEval.maxNumRows", 1)
-        expected3 = """<table border='1'>
-            |<tr><th>key</th><th>value</th></tr>
-            |<tr><td>1</td><td>1</td></tr>
-            |</table>
-            |only showing top 1 row
-            |"""
-        self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
+            expected1 = """<table border='1'>
+                |<tr><th>key</th><th>value</th></tr>
+                |<tr><td>1</td><td>1</td></tr>
+                |<tr><td>22222</td><td>22222</td></tr>
+                |</table>
+                |"""
+            self.assertEquals(re.sub(pattern, '', expected1), df._repr_html_())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                expected2 = """<table border='1'>
+                    |<tr><th>key</th><th>value</th></tr>
+                    |<tr><td>1</td><td>1</td></tr>
+                    |<tr><td>222</td><td>222</td></tr>
+                    |</table>
+                    |"""
+                self.assertEquals(re.sub(pattern, '', expected2), df._repr_html_())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    expected3 = """<table border='1'>
+                        |<tr><th>key</th><th>value</th></tr>
+                        |<tr><td>1</td><td>1</td></tr>
+                        |</table>
+                        |only showing top 1 row
+                        |"""
+                    self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
