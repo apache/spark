@@ -168,7 +168,6 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val arrVals = ctx.freshName("arrVals")
     val arrCardinality = ctx.freshName("arrCardinality")
     val biggestCardinality = ctx.freshName("biggestCardinality")
-    val storedArrTypes = ctx.freshName("storedArrTypes")
     val returnNull = ctx.freshName("returnNull")
     val evals = children.map(_.genCode(ctx))
 
@@ -183,7 +182,6 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
         |  $arrCardinality[$index] = 0;
         |  $returnNull[0] = true;
         |}
-        |$storedArrTypes[$index] = "${arrayElementTypes(index)}";
         |$biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
       """.stripMargin
     }
@@ -201,7 +199,6 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       arguments =
         ("ArrayData[]", arrVals) ::
         ("int[]", arrCardinality) ::
-        ("String[]", storedArrTypes) ::
         ("int", biggestCardinality) ::
         ("boolean[]", returnNull) :: Nil)
 
@@ -210,46 +207,50 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val i = ctx.freshName("i")
     val args = ctx.freshName("args")
 
-    val getValueForType = arrayElementTypes.distinct.map { eleType =>
+    val getValueForType = arrayElementTypes.zipWithIndex.map { case (eleType, idx) =>
+      val g = CodeGenerator.getValue(s"$arrVals[$idx]", eleType, i)
       s"""
-      |if ($storedArrTypes[$j] == "${eleType}") {
-      |  $myobject[$j] = ${CodeGenerator.getValue(s"$arrVals[$j]", eleType, i)};
-      |}
+      |$myobject[$idx] = $i < $arrCardinality[$idx] && !$arrVals[$idx].isNullAt($i) ? $g : null;
       """.stripMargin
-    }.mkString("\n")
+    }
 
-    ev.copy(s"""
-      |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
-      |int[] $arrCardinality = new int[$numberOfArrays];
-      |int $biggestCardinality = 0;
-      |String[] $storedArrTypes = new String[$numberOfArrays];
-      |boolean[] $returnNull = new boolean[1];
-      |$returnNull[0] = false;
-      |$inputsSplitted
-      |${CodeGenerator.javaType(dataType)} ${ev.value};
-      |boolean ${ev.isNull} = $returnNull[0];
-      |if (${ev.isNull}) {
-      |  ${ev.value} = null;
-      |} else {
-      |  if ($numberOfArrays == 0) {
-      |    ${ev.value} = new $genericArrayData(new Object[0]);
-      |  } else {
-      |    Object[] $args = new Object[$biggestCardinality];
-      |    for (int $i = 0; $i < $biggestCardinality; $i ++) {
-      |      Object[] $myobject = new Object[$numberOfArrays];
-      |      for (int $j = 0; $j < $numberOfArrays; $j ++) {
-      |        if ($arrVals[$j] != null && $arrCardinality[$j] > $i && !$arrVals[$j].isNullAt($i)) {
-      |          $getValueForType
-      |        } else {
-      |          $myobject[$j] = null;
-      |        }
-      |      }
-      |      $args[$i] = new $genericInternalRow($myobject);
-      |    }
-      |    ${ev.value} = new $genericArrayData($args);
-      |  }
-      |}
-    """.stripMargin)
+    val getValueForTypeSplitted = ctx.splitExpressions(
+      expressions = getValueForType,
+      funcName = "extractValue",
+      arguments =
+        ("int", i) ::
+        ("Object[]", myobject) ::
+        ("int[]", arrCardinality) ::
+        ("ArrayData[]", arrVals) :: Nil)
+
+    if (numberOfArrays == 0) {
+      ev.copy(s"""
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = new $genericArrayData(new Object[0]);
+        |${ev.isNull} = true;
+      """.stripMargin)
+    } else {
+      ev.copy(s"""
+        |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
+        |int[] $arrCardinality = new int[$numberOfArrays];
+        |int $biggestCardinality = 0;
+        |boolean[] $returnNull = new boolean[1];
+        |$returnNull[0] = false;
+        |$inputsSplitted
+        |${CodeGenerator.javaType(dataType)} ${ev.value};
+        |boolean ${ev.isNull} = $returnNull[0];
+        |if (${ev.isNull}) {
+        |  ${ev.value} = null;
+        |} else {
+        |  Object[] $args = new Object[$biggestCardinality];
+        |  for (int $i = 0; $i < $biggestCardinality; $i ++) {
+        |    Object[] $myobject = new Object[$numberOfArrays];
+        |    $getValueForTypeSplitted
+        |    $args[$i] = new $genericInternalRow($myobject);
+        |  }
+        |  ${ev.value} = new $genericArrayData($args);
+        |}
+      """.stripMargin)
+    }
   }
 
   override def eval(input: InternalRow): Any = {
