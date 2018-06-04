@@ -3024,7 +3024,7 @@ setMethod("array_join",
              callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter)
            } else {
              callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter,
-                         nullReplacement)
+                         as.character(nullReplacement))
            }
            column(jc)
          })
