@@ -880,15 +880,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
-  test("select function over nested data") {
-    val data = (1 to 10).map(i => Tuple1((i, s"val_$i")))
-    withParquetTable(data, "t") {
-      checkAnswer(sql("SELECT isnotnull(_1._2) FROM t"), data.map {
-        case _ => Row(true)
-      })
-    }
-  }
-
   test("SPARK-24230: filter row group using dictionary") {
     withSQLConf(("parquet.filter.dictionary.enabled", "true")) {
       // create a table with values from 0, 2, ..., 18 that will be dictionary-encoded
