@@ -218,7 +218,10 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val getValueForType = arrayElementTypes.zipWithIndex.map { case (eleType, idx) =>
       val g = CodeGenerator.getValue(s"$arrVals[$idx]", eleType, i)
       s"""
-      |$myobject[$idx] = $i < $arrCardinality[$idx] && !$arrVals[$idx].isNullAt($i) ? $g : null;
+      |$myobject[$idx] = null;
+      |if ($i < $arrCardinality[$idx] && !$arrVals[$idx].isNullAt($i)) {
+      |  $myobject[$idx] = $g;
+      |}
       """.stripMargin
     }
 
@@ -243,7 +246,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |$splittedCode
       |boolean ${ev.isNull} = $biggestCardinality == -1;
       |if (${ev.isNull}) {
-      |  ${ev.value} = null;
+      |  ${ev.value} = new $genericArrayData(new Object[0]);
       |} else {
       |  Object[] $args = new Object[$biggestCardinality];
       |  for (int $i = 0; $i < $biggestCardinality; $i ++) {
