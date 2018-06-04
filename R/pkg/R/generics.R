@@ -699,9 +699,6 @@ setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 setGeneric("isInf", function(x) { standardGeneric("isInf") })
 
 #' @rdname columnfunctions
-setGeneric("isinf", function(x) { standardGeneric("isinf") })
-
-#' @rdname columnfunctions
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
 #' @rdname columnfunctions
@@ -996,6 +993,10 @@ setGeneric("input_file_name",
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("instr", function(y, x) { standardGeneric("instr") })
+
+#' @rdname column_nonaggregate_functions
+#' @name NULL
+setGeneric("isinf", function(x) { standardGeneric("isinf") })
 
 #' @rdname column_nonaggregate_functions
 #' @name NULL
