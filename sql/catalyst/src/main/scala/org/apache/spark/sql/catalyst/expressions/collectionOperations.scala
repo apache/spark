@@ -145,7 +145,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
   override def dataType: DataType = ArrayType(mountSchema)
 
-  override def nullable: Boolean = children.forall(_.nullable)
+  override def nullable: Boolean = children.exists(_.nullable)
 
   private lazy val arrayTypes = children.map(_.dataType.asInstanceOf[ArrayType])
 
@@ -168,7 +168,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
     ev.copy(code"""
       |${CodeGenerator.javaType(dataType)} ${ev.value} = new $genericArrayData(new Object[0]);
-      |${ev.isNull} = true;
+      |boolean ${ev.isNull} = false;
     """.stripMargin)
   }
 
@@ -185,23 +185,25 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val args = ctx.freshName("args")
 
     val evals = children.map(_.genCode(ctx))
-    val inputs = evals.zipWithIndex.map { case (eval, index) =>
+    val getValuesAndCardinalities = evals.zipWithIndex.map { case (eval, index) =>
       s"""
-        |${eval.code}
-        |if (!${eval.isNull} && $biggestCardinality != -1) {
-        |  $arrVals[$index] = ${eval.value};
-        |  $arrCardinality[$index] = ${eval.value}.numElements();
-        |  $biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
-        |} else {
-        |  $biggestCardinality = -1;
-        |  $arrVals[$index] = null;
-        |  $arrCardinality[$index] = 0;
+        |if ($biggestCardinality != -1) {
+        |  ${eval.code}
+        |  if (!${eval.isNull}) {
+        |    $arrVals[$index] = ${eval.value};
+        |    $arrCardinality[$index] = ${eval.value}.numElements();
+        |    $biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
+        |  } else {
+        |    $biggestCardinality = -1;
+        |    $arrVals[$index] = null;
+        |    $arrCardinality[$index] = 0;
+        |  }
         |}
       """.stripMargin
     }
 
-    val splittedCode = ctx.splitExpressions(
-      expressions = inputs,
+    val splittedGetValuesAndCardinalities = ctx.splitExpressions(
+      expressions = getValuesAndCardinalities,
       funcName = "getValuesAndCardinalities",
       returnType = "int",
       makeSplitFunction = body =>
@@ -238,16 +240,14 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
       |int[] $arrCardinality = new int[$numberOfArrays];
       |int $biggestCardinality = 0;
-      |${CodeGenerator.javaType(dataType)} ${ev.value};
+      |${CodeGenerator.javaType(dataType)} ${ev.value} = null;
     """.stripMargin
 
     ev.copy(code"""
       |$initVariables
-      |$splittedCode
+      |$splittedGetValuesAndCardinalities
       |boolean ${ev.isNull} = $biggestCardinality == -1;
-      |if (${ev.isNull}) {
-      |  ${ev.value} = new $genericArrayData(new Object[0]);
-      |} else {
+      |if (!${ev.isNull}) {
       |  Object[] $args = new Object[$biggestCardinality];
       |  for (int $i = 0; $i < $biggestCardinality; $i ++) {
       |    Object[] $myobject = new Object[$numberOfArrays];
