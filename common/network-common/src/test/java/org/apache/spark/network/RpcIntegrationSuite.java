@@ -104,8 +104,8 @@ public class RpcIntegrationSuite {
           case "no callback":
             // don't register anything here, check the rpc error response is appropriate
             break;
-          case "exception":
-            StreamCallback callback = new StreamCallback() {
+          case "exception-ondata":
+            StreamCallback onDataExcCallback = new StreamCallback() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
                 throw new IOException("failed to read stream data!");
@@ -119,7 +119,24 @@ public class RpcIntegrationSuite {
               public void onFailure(String streamId, Throwable cause) throws IOException {
               }
             };
-            streamData.registerStreamCallback(msg, callback);
+            streamData.registerStreamCallback(msg, onDataExcCallback);
+            break;
+          case "exception-oncomplete":
+            StreamCallback onCompleteExcCallback = new StreamCallback() {
+              @Override
+              public void onData(String streamId, ByteBuffer buf) throws IOException {
+              }
+
+              @Override
+              public void onComplete(String streamId) throws IOException {
+                throw new IOException("exception in onComplete");
+              }
+
+              @Override
+              public void onFailure(String streamId, Throwable cause) throws IOException {
+              }
+            };
+            streamData.registerStreamCallback(msg, onCompleteExcCallback);
             break;
           case "multiple":
             VerifyingStreamCallback streamCallback = new VerifyingStreamCallback(msg);
@@ -331,8 +348,16 @@ public class RpcIntegrationSuite {
     RpcResult multiCallbackResult = sendRpcWithStream("fail/multiple/smallBuffer", "smallBuffer");
     assertErrorAndClosed(multiCallbackResult, "Cannot register more than one stream callback");
 
-    RpcResult exceptionInCallbackResult = sendRpcWithStream("fail/exception/file", "smallBuffer");
+    RpcResult exceptionInCallbackResult =
+        sendRpcWithStream("fail/exception-ondata/smallBuffer", "smallBuffer");
     assertErrorAndClosed(exceptionInCallbackResult, "Destination failed while reading stream");
+
+    // OTOH, if there is a failure during onComplete, the channel should still be fine
+    RpcResult exceptionInOnComplete =
+        sendRpcWithStream("fail/exception-oncomplete/smallBuffer", "smallBuffer");
+    assertErrorsContain(exceptionInOnComplete.errorMessages,
+        Sets.newHashSet("Failure post-processing"));
+    assertEquals(Sets.newHashSet("smallBuffer"), exceptionInOnComplete.successMessages);
   }
 
   private void assertErrorsContain(Set<String> errors, Set<String> contains) {

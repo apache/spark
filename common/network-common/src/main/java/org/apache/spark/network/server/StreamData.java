@@ -55,7 +55,9 @@ public class StreamData {
    * Register callback to receive the streaming data.
    *
    * If an exception is thrown from the callback, it will be propogated back to the sender as an rpc
-   * failure.
+   * failure.  A failure during <code>onData</code> will fail the entire channel (as we don't know
+   * what to do with the other data on the channel).  A failure during <code>onComplete</code> will
+   * result in an rpc failure, but the channel will remain active.
    */
   public void registerStreamCallback(String streamId, StreamCallback callback) throws IOException {
     if (hasCallback) {
@@ -72,8 +74,15 @@ public class StreamData {
 
       @Override
       public void onComplete(String streamId) throws IOException {
-        callback.onComplete(streamId);
-        rpcCallback.onSuccess(ByteBuffer.allocate(0));
+        try {
+          callback.onComplete(streamId);
+          rpcCallback.onSuccess(ByteBuffer.allocate(0));
+        } catch (Exception ex) {
+          IOException ioExc = new IOException("Failure post-processing complete stream; failing " +
+              "this rpc and leaving channel active");
+          rpcCallback.onFailure(ioExc);
+          callback.onFailure(streamId, ioExc);
+        }
       }
 
       @Override

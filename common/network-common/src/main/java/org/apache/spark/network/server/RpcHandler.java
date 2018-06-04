@@ -39,9 +39,13 @@ public abstract class RpcHandler {
    * This method will not be called in parallel for a single TransportClient (i.e., channel).
    *
    * The rpc *might* included a data stream in <code>streamData</code> (eg. for uploading a large
-   * amount of data which should not be buffered in memory here).  Any errors while handling the
-   * streamData will lead to failing this entire connection -- all other in-flight rpcs will fail.
-   * If stream data is not null, you *must* call <code>streamData.registerStreamCallback</code>
+   * amount of data which should not be buffered in memory here).  An error while reading data from
+   * the stream ({@link org.apache.spark.network.client.StreamCallback#onData(String, ByteBuffer)})
+   * will fail the entire channel.  A failure in "post-processing" the stream in
+   * {@link org.apache.spark.network.client.StreamCallback#onComplete(String)} will result in an
+   * rpcFailure, but the channel will remain active.
+   *
+   * If streamData is not null, you *must* call <code>streamData.registerStreamCallback</code>
    * before this method returns.
    *
    * @param client A channel client which enables the handler to make requests back to the sender
