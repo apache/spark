@@ -20,9 +20,7 @@ import io.fabric8.kubernetes.api.model.Pod
 
 private[spark] trait ExecutorPodsEventQueue {
 
-  def addSubscriber
-      (processBatchIntervalMillis: Long,
-      subscriber: ExecutorPodBatchSubscriber): Unit
+  def addSubscriber(processBatchIntervalMillis: Long, subscriber: ExecutorPodBatchSubscriber): Unit
 
   def stop(): Unit
 
