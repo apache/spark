@@ -1487,8 +1487,9 @@ private object Client extends Logging {
   }
 
   /**
-   * Create a properly quoted library path string to be added as a prefix to the command executed by
-   * YARN. This is different from plain quoting due to YARN executing the command through "bash -c".
+   * Create a properly quoted and escaped library path string to be added as a prefix to the command
+   * executed by YARN. This is different from normal quoting / escaping due to YARN executing the
+   * command through "bash -c".
    */
   def createLibraryPathPrefix(libpath: String, conf: SparkConf): String = {
     val cmdPrefix = if (Utils.isWindows) {
