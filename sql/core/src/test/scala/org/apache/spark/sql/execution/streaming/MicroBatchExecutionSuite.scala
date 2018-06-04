@@ -24,7 +24,6 @@ import org.apache.spark.sql.streaming.StreamTest
 
 class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
 
-
   import testImplicits._
 
   after {
