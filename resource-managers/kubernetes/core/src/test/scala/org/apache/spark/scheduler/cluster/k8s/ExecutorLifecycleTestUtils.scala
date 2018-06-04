@@ -25,7 +25,7 @@ object ExecutorLifecycleTestUtils {
 
   val TEST_SPARK_APP_ID = "spark-app-id"
 
-  def failedExecutorWithoutDeletion(executorId: Int): Pod = {
+  def failedExecutorWithoutDeletion(executorId: Long): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("failed")
@@ -55,7 +55,7 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
-  def runningExecutor(executorId: Int): Pod = {
+  def runningExecutor(executorId: Long): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("running")
@@ -63,7 +63,7 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
-  def succeededExecutor(executorId: Int): Pod = {
+  def succeededExecutor(executorId: Long): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("succeeded")
@@ -71,7 +71,7 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
-  def deletedExecutor(executorId: Int): Pod = {
+  def deletedExecutor(executorId: Long): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewMetadata()
         .withNewDeletionTimestamp("523012521")
@@ -79,7 +79,7 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
-  def unknownExecutor(executorId: Int): Pod = {
+  def unknownExecutor(executorId: Long): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("unknown")
@@ -87,7 +87,7 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
-  def podWithAttachedContainerForId(executorId: Int): Pod = {
+  def podWithAttachedContainerForId(executorId: Long): Pod = {
     val sparkPod = executorPodWithId(executorId)
     val podWithAttachedContainer = new PodBuilder(sparkPod.pod)
       .editOrNewSpec()
@@ -97,7 +97,7 @@ object ExecutorLifecycleTestUtils {
     podWithAttachedContainer
   }
 
-  def executorPodWithId(executorId: Int): SparkPod = {
+  def executorPodWithId(executorId: Long): SparkPod = {
     val pod = new PodBuilder()
       .withNewMetadata()
         .withName(s"spark-executor-$executorId")
