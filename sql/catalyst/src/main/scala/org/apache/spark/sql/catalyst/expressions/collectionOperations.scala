@@ -161,34 +161,48 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     StructType(fields)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val numberOfArrays: Int = children.length
+  val numberOfArrays: Int = children.length
+
+  def emptyInputGenCode(ev: ExprCode): ExprCode = {
+    val genericArrayData = classOf[GenericArrayData].getName
+
+    ev.copy(code"""
+      |${CodeGenerator.javaType(dataType)} ${ev.value} = new $genericArrayData(new Object[0]);
+      |${ev.isNull} = true;
+    """.stripMargin)
+  }
+
+  def nonEmptyInputGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val genericArrayData = classOf[GenericArrayData].getName
     val genericInternalRow = classOf[GenericInternalRow].getName
     val arrVals = ctx.freshName("arrVals")
     val arrCardinality = ctx.freshName("arrCardinality")
     val biggestCardinality = ctx.freshName("biggestCardinality")
-    val returnNull = ctx.freshName("returnNull")
-    val evals = children.map(_.genCode(ctx))
 
+    val myobject = ctx.freshName("myobject")
+    val j = ctx.freshName("j")
+    val i = ctx.freshName("i")
+    val args = ctx.freshName("args")
+
+    val evals = children.map(_.genCode(ctx))
     val inputs = evals.zipWithIndex.map { case (eval, index) =>
       s"""
         |${eval.code}
-        |if (!${eval.isNull}) {
+        |if (!${eval.isNull} && $biggestCardinality != -1) {
         |  $arrVals[$index] = ${eval.value};
         |  $arrCardinality[$index] = ${eval.value}.numElements();
+        |  $biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
         |} else {
+        |  $biggestCardinality = -1;
         |  $arrVals[$index] = null;
         |  $arrCardinality[$index] = 0;
-        |  $returnNull[0] = true;
         |}
-        |$biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
       """.stripMargin
     }
 
-    val inputsSplitted = ctx.splitExpressions(
+    val splittedCode = ctx.splitExpressions(
       expressions = inputs,
-      funcName = "getInputAndCardinality",
+      funcName = "getValuesAndCardinalities",
       returnType = "int",
       makeSplitFunction = body =>
         s"""
@@ -199,13 +213,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       arguments =
         ("ArrayData[]", arrVals) ::
         ("int[]", arrCardinality) ::
-        ("int", biggestCardinality) ::
-        ("boolean[]", returnNull) :: Nil)
-
-    val myobject = ctx.freshName("myobject")
-    val j = ctx.freshName("j")
-    val i = ctx.freshName("i")
-    val args = ctx.freshName("args")
+        ("int", biggestCardinality) :: Nil)
 
     val getValueForType = arrayElementTypes.zipWithIndex.map { case (eleType, idx) =>
       val g = CodeGenerator.getValue(s"$arrVals[$idx]", eleType, i)
@@ -223,33 +231,36 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
         ("int[]", arrCardinality) ::
         ("ArrayData[]", arrVals) :: Nil)
 
+    val initVariables = s"""
+      |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
+      |int[] $arrCardinality = new int[$numberOfArrays];
+      |int $biggestCardinality = 0;
+      |${CodeGenerator.javaType(dataType)} ${ev.value};
+    """.stripMargin
+
+    ev.copy(code"""
+      |$initVariables
+      |$splittedCode
+      |boolean ${ev.isNull} = $biggestCardinality == -1;
+      |if (${ev.isNull}) {
+      |  ${ev.value} = null;
+      |} else {
+      |  Object[] $args = new Object[$biggestCardinality];
+      |  for (int $i = 0; $i < $biggestCardinality; $i ++) {
+      |    Object[] $myobject = new Object[$numberOfArrays];
+      |    $getValueForTypeSplitted
+      |    $args[$i] = new $genericInternalRow($myobject);
+      |  }
+      |  ${ev.value} = new $genericArrayData($args);
+      |}
+    """.stripMargin)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (numberOfArrays == 0) {
-      ev.copy(s"""
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = new $genericArrayData(new Object[0]);
-        |${ev.isNull} = true;
-      """.stripMargin)
+      emptyInputGenCode(ev)
     } else {
-      ev.copy(s"""
-        |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
-        |int[] $arrCardinality = new int[$numberOfArrays];
-        |int $biggestCardinality = 0;
-        |boolean[] $returnNull = new boolean[1];
-        |$returnNull[0] = false;
-        |$inputsSplitted
-        |${CodeGenerator.javaType(dataType)} ${ev.value};
-        |boolean ${ev.isNull} = $returnNull[0];
-        |if (${ev.isNull}) {
-        |  ${ev.value} = null;
-        |} else {
-        |  Object[] $args = new Object[$biggestCardinality];
-        |  for (int $i = 0; $i < $biggestCardinality; $i ++) {
-        |    Object[] $myobject = new Object[$numberOfArrays];
-        |    $getValueForTypeSplitted
-        |    $args[$i] = new $genericInternalRow($myobject);
-        |  }
-        |  ${ev.value} = new $genericArrayData($args);
-        |}
-      """.stripMargin)
+      nonEmptyInputGenCode(ctx, ev)
     }
   }
 
