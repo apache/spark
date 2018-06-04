@@ -96,7 +96,7 @@ case class SortMergeJoinExec(
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (!conf.sortMergeJoinExecChildrenPartitioningDetection) {
-      HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+      return HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
     }
 
     val leftPartitioning = left.outputPartitioning
