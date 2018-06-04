@@ -42,7 +42,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
   private def apply0(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
-          l @ LogicalRelation(hadoopFsRelation @ HadoopFsRelation(_, partitionSchema,
+          l @ LogicalRelation(hadoopFsRelation @ HadoopFsRelation(_, _,
             dataSchema, _, parquetFormat: ParquetFileFormat, _), _, _, _)) =>
         val projectionRootFields = projects.flatMap(getRootFields)
         val filterRootFields = filters.flatMap(getRootFields)
@@ -97,20 +97,13 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
                 prunedRelation
               }
 
-            val nonDataPartitionColumnNames =
-              partitionSchema.map(_.name).filterNot(dataSchemaFieldNames.contains).toSet
-
             // Construct the new projections of our [[Project]] by
             // rewriting the original projections
-            val newProjects = projects.map {
-              case project if (nonDataPartitionColumnNames.contains(project.name)) => project
-              case project =>
-                (project transformDown {
-                  case projectionOverSchema(expr) => expr
-                }).asInstanceOf[NamedExpression]
-            }
+            val newProjects = projects.map(_.transformDown {
+              case projectionOverSchema(expr) => expr
+            }).map { case expr: NamedExpression => expr }
 
-            logDebug("New projects:\n" + newProjects.map(_.treeString).mkString("\n"))
+            logDebug(s"New projects:\n${newProjects.map(_.treeString).mkString("\n")}")
             logDebug(s"Pruned data schema:\n${prunedDataSchema.treeString}")
 
             Project(newProjects, projectionChild)
