@@ -44,15 +44,15 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       case op @ PhysicalOperation(projects, filters,
           l @ LogicalRelation(hadoopFsRelation @ HadoopFsRelation(_, partitionSchema,
             dataSchema, _, parquetFormat: ParquetFileFormat, _), _, _, _)) =>
-        val projectionFields = projects.flatMap(getFields)
-        val filterFields = filters.flatMap(getFields)
-        val requestedFields = (projectionFields ++ filterFields).distinct
+        val projectionRootFields = projects.flatMap(getRootFields)
+        val filterRootFields = filters.flatMap(getRootFields)
+        val requestedRootFields = (projectionRootFields ++ filterRootFields).distinct
 
-        // If [[requestedFields]] includes a nested field, continue. Otherwise,
+        // If [[requestedRootFields]] includes a nested field, continue. Otherwise,
         // return [[op]]
-        if (requestedFields.exists { case (_, optAtt) => optAtt.isEmpty }) {
-          val prunedSchema = requestedFields
-            .map { case (field, _) => StructType(Array(field)) }
+        if (requestedRootFields.exists { case RootField(_, derivedFromAtt) => !derivedFromAtt }) {
+          val prunedSchema = requestedRootFields
+            .map { case RootField(field, _) => StructType(Array(field)) }
             .reduceLeft(_ merge _)
           val dataSchemaFieldNames = dataSchema.fieldNames.toSet
           val prunedDataSchema =
@@ -123,17 +123,17 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     }
 
   /**
-   * Gets the top-level (no-parent) [[StructField]]s for the given [[Expression]].
-   * When [[expr]] is an [[Attribute]], construct a field around it and return the
-   * attribute as the second component of the returned tuple.
+   * Gets the root (aka top-level, no-parent) [[StructField]]s for the given [[Expression]].
+   * When [[expr]] is an [[Attribute]], construct a field around it and indicate that that
+   * field was derived from an attribute.
    */
-  private def getFields(expr: Expression): Seq[(StructField, Option[Attribute])] = {
+  private def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case att: Attribute =>
-        (StructField(att.name, att.dataType, att.nullable), Some(att)) :: Nil
-      case SelectedField(field) => (field, None) :: Nil
+        RootField(StructField(att.name, att.dataType, att.nullable), true) :: Nil
+      case SelectedField(field) => RootField(field, false) :: Nil
       case _ =>
-        expr.children.flatMap(getFields)
+        expr.children.flatMap(getRootFields)
     }
   }
 
@@ -151,4 +151,10 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       case _ => 1
     }
   }
+
+  /**
+   * A "root" schema field (aka top-level, no-parent) and whether it was derived from
+   * an attribute or had a proper child.
+   */
+  private case class RootField(field: StructField, derivedFromAtt: Boolean)
 }
