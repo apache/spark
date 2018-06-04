@@ -64,8 +64,8 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsInf(Literal.create(null, DoubleType)), false)
     checkEvaluation(IsInf(Literal(Float.MaxValue)), false)
     checkEvaluation(IsInf(Literal(5.5f)), false)
-    checkEvaluation(IsInf(Literal(Float.NaN)), expected = false)
     checkEvaluation(IsInf(Literal(Double.NaN)), expected = false)
+    checkEvaluation(IsInf(Literal(Float.NaN)), expected = false)
   }
 
   test("IsNaN") {

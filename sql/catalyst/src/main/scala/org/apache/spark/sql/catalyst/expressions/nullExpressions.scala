@@ -235,11 +235,13 @@ case class IsInf(child: Expression) extends UnaryExpression
     val eval = child.genCode(ctx)
     child.dataType match {
       case DoubleType | FloatType =>
-        ev.copy(code = code"""
+        ev.copy(
+          code = code"""
           ${eval.code}
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = \
-          !${eval.isNull} && Double.isInfinite(${eval.value});""",
-          isNull = FalseLiteral)
+          ${CodeGenerator
+            .javaType(dataType)} ${ev.value} = !${eval.isNull} && Double.isInfinite(${eval.value});""",
+          isNull = FalseLiteral
+        )
     }
   }
 }
