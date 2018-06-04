@@ -28,6 +28,8 @@ case class LongOffset(offset: Long) extends OffsetV2 {
 
   def +(increment: Long): LongOffset = new LongOffset(offset + increment)
   def -(decrement: Long): LongOffset = new LongOffset(offset - decrement)
+  def <(that: LongOffset): Boolean = this.offset < that.offset
+  def >(that: LongOffset): Boolean = this.offset > that.offset
 }
 
 object LongOffset {

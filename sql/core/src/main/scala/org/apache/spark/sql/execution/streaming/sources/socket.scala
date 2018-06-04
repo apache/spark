@@ -117,6 +117,11 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
 
   override def setOffsetRange(start: Optional[Offset], end: Optional[Offset]): Unit = synchronized {
     startOffset = start.orElse(LongOffset(-1L))
+    val startOffsetLong = LongOffset.convert(startOffset).get
+    if (currentOffset < startOffsetLong) {
+      currentOffset = startOffsetLong
+      lastOffsetCommitted = startOffsetLong
+    }
     endOffset = end.orElse(currentOffset)
   }
 
