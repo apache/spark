@@ -220,9 +220,10 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val getValueForType = arrayElementTypes.zipWithIndex.map { case (eleType, idx) =>
       val g = CodeGenerator.getValue(s"$arrVals[$idx]", eleType, i)
       s"""
-      |$myobject[$idx] = null;
       |if ($i < $arrCardinality[$idx] && !$arrVals[$idx].isNullAt($i)) {
       |  $myobject[$idx] = $g;
+      |} else {
+      |  $myobject[$idx] = null;
       |}
       """.stripMargin
     }
