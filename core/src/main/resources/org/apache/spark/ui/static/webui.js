@@ -21,6 +21,19 @@ function setUIRoot(val) {
     uiRoot = val;
 }
 
+var changePageRefreshTimeout = (function (){
+    var refreshTimeout = null;
+    return function (timeout){
+        if (refreshTimeout){
+            clearTimeout(refreshTimeout);
+        }
+        window.localStorage.setItem("refreshSeconds", timeout);
+        if (timeout > 0){
+            refreshTimeout = setTimeout(window.location.reload.bind(window.location), timeout * 1000);
+        }
+    }
+})();
+
 function collapseTablePageLoad(name, table){
   if (window.localStorage.getItem(name) == "true") {
     // Set it to false so that the click function can revert it
@@ -83,4 +96,8 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-rdds','aggregated-rdds');
   collapseTablePageLoad('collapse-aggregated-activeBatches','aggregated-activeBatches');
   collapseTablePageLoad('collapse-aggregated-completedBatches','aggregated-completedBatches');
+
+  var refreshSeconds = window.localStorage.getItem("refreshSeconds") || 0;
+  $("#refreshSelect").val(refreshSeconds);
+  changePageRefreshTimeout(refreshSeconds);
 });

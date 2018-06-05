@@ -252,7 +252,19 @@ private[spark] object UIUtils extends Logging {
             <p class="navbar-text pull-right">
               <strong title={appName}>{shortAppName}</strong> application UI
             </p>
-            <ul class="nav">{header}</ul>
+            <ul class="nav">
+              {header}
+              <li class="select-wrapper">
+                <div>
+                  <select id="refreshSelect" onchange="changePageRefreshTimeout(this.value)">
+                    <option value="0">Do not refresh page</option>
+                    <option value="5">Refresh every 5 seconds</option>
+                    <option value="10">Refresh every 10 seconds</option>
+                    <option value="30">Refresh every 30 seconds</option>
+                  </select>
+                </div>
+              </li>
+            </ul>
           </div>
         </div>
         <div class="container-fluid">

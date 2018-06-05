@@ -29,6 +29,10 @@
   padding: 0;
 }
 
+.navbar .nav{
+  width: 100%;
+}
+
 .navbar .nav > li {
   height: 50px;
 }
@@ -36,6 +40,12 @@
 .navbar .nav > li a {
   height: 30px;
   line-height: 2;
+}
+
+.navbar .nav > li.select-wrapper{
+  float: right;
+  padding-top: 10px;
+  height: 40px;
 }
 
 .navbar-text {
