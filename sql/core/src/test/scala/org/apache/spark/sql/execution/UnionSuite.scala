@@ -39,14 +39,16 @@ class UnionSuite extends QueryTest with SharedSQLContext {
         .bucketBy(3, "key").sortBy("t1").saveAsTable("a2")
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        val df = sql("select key, count(*) from " +
-          "(select * from a1 union all select * from a2) z group by key")
-        val shuffles = df.queryExecution.executedPlan.collect {
-          case s: ShuffleExchangeExec => s
+        withSQLConf(SQLConf.UNION_IN_SAME_PARTITION.key -> "true") {
+          val df = sql("select key, count(*) from " +
+            "(select * from a1 union all select * from a2) z group by key")
+          val shuffles = df.queryExecution.executedPlan.collect {
+            case s: ShuffleExchangeExec => s
+          }
+          assert(shuffles.isEmpty)
+          checkAnswer(df.orderBy("key"), Row(0, 2) :: Row(1, 2) :: Row(2, 2) :: Row(3, 2) ::
+            Row(4, 2) :: Row(5, 2) :: Row(6, 2) :: Row(7, 2) :: Row(8, 2) :: Row(9, 2) :: Nil)
         }
-        assert(shuffles.isEmpty)
-        checkAnswer(df.orderBy("key"), Row(0, 2) :: Row(1, 2) :: Row(2, 2) :: Row(3, 2) ::
-          Row(4, 2) :: Row(5, 2) :: Row(6, 2) :: Row(7, 2) :: Row(8, 2) :: Row(9, 2) :: Nil)
       }
     }
   }

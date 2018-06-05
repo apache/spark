@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
@@ -570,53 +571,57 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
    * `outputPartitioning`. We can use first child's `outputPartitioning` only if partitioning
    * expressions have the same expressions and bounding same ordinal references.
    */
-  override def outputPartitioning: Partitioning = Try {
-    val reducedPartitioning: Partitioning = children.map { child =>
-      // Bounding partition expressions to children's outputs.
-      child.outputPartitioning match {
-        case HashPartitioning(expr, num) =>
-          val bound = expr.map(BindReferences.bindReference(_,
-            child.output.map(_.withNullability(true))))
-          HashPartitioning(bound, num)
+  override def outputPartitioning: Partitioning = if (SQLConf.get.unionInSamePartition) {
+    Try {
+      val reducedPartitioning: Partitioning = children.map { child =>
+        // Bounding partition expressions to children's outputs.
+        child.outputPartitioning match {
+          case HashPartitioning(expr, num) =>
+            val bound = expr.map(BindReferences.bindReference(_,
+              child.output.map(_.withNullability(true))))
+            HashPartitioning(bound, num)
+          case RangePartitioning(ordering, num) =>
+            val bound = ordering.map(BindReferences.bindReference(_,
+              child.output.map(_.withNullability(true))))
+            RangePartitioning(bound, num)
+          case o => o
+        }
+      }.reduceLeft((left: Partitioning, right: Partitioning) => (left, right) match {
+        case (SinglePartition, SinglePartition) => SinglePartition
+        case (HashPartitioning(exprs1, p1), HashPartitioning(exprs2, p2)) if p1 == p2 =>
+          val matched = exprs1.length == exprs2.length && exprs1.zip(exprs2).forall {
+            case (l, r) => l.semanticEquals(r)
+          }
+
+          if (matched) {
+            HashPartitioning(exprs1, p1)
+          } else {
+            super.outputPartitioning
+          }
+        case (RangePartitioning(ordering1, p1), RangePartitioning(ordering2, p2)) if p1 == p2 =>
+          val minSize = Seq(ordering1.size, ordering2.size).min
+          if (ordering1.take(minSize) == ordering2.take(minSize)) {
+            RangePartitioning(ordering1.take(minSize), p1)
+          } else {
+            super.outputPartitioning
+          }
+        case _ => super.outputPartitioning
+      })
+
+      reducedPartitioning match {
+        case HashPartitioning(_, _) => children.head.outputPartitioning
         case RangePartitioning(ordering, num) =>
-          val bound = ordering.map(BindReferences.bindReference(_,
-            child.output.map(_.withNullability(true))))
-          RangePartitioning(bound, num)
-        case o => o
+          val newOrdering = children.head.outputPartitioning
+            .asInstanceOf[RangePartitioning].ordering.take(ordering.size)
+          RangePartitioning(newOrdering, num)
+        case _ => reducedPartitioning
       }
-    }.reduceLeft((left: Partitioning, right: Partitioning) => (left, right) match {
-      case (SinglePartition, SinglePartition) => SinglePartition
-      case (HashPartitioning(exprs1, p1), HashPartitioning(exprs2, p2)) if p1 == p2 =>
-        val matched = exprs1.length == exprs2.length && exprs1.zip(exprs2).forall {
-          case (l, r) => l.semanticEquals(r)
-        }
-
-        if (matched) {
-          HashPartitioning(exprs1, p1)
-        } else {
-          super.outputPartitioning
-        }
-      case (RangePartitioning(ordering1, p1), RangePartitioning(ordering2, p2)) if p1 == p2 =>
-        val minSize = Seq(ordering1.size, ordering2.size).min
-        if (ordering1.take(minSize) == ordering2.take(minSize)) {
-          RangePartitioning(ordering1.take(minSize), p1)
-        } else {
-          super.outputPartitioning
-        }
-      case _ => super.outputPartitioning
-    })
-
-    reducedPartitioning match {
-      case HashPartitioning(_, _) => children.head.outputPartitioning
-      case RangePartitioning(ordering, num) =>
-        val newOrdering = children.head.outputPartitioning
-          .asInstanceOf[RangePartitioning].ordering.take(ordering.size)
-        RangePartitioning(newOrdering, num)
-      case _ => reducedPartitioning
-    }
-    // We can hit exception when bounding partitioning expressions. In that cases, simply
-    // use default `outputPartitioning`.
-  }.getOrElse(super.outputPartitioning)
+      // We can hit exception when bounding partitioning expressions. In that cases, simply
+      // use default `outputPartitioning`.
+    }.getOrElse(super.outputPartitioning)
+  } else {
+    super.outputPartitioning
+  }
 
   override def output: Seq[Attribute] =
     children.map(_.output).transpose.map(attrs =>

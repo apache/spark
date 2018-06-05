@@ -1099,6 +1099,17 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
+  val UNION_IN_SAME_PARTITION =
+    buildConf("spark.sql.unionInSamePartition")
+      .internal()
+      .doc("When true, Union operator will union children results in the same corresponding " +
+        "partitions if they have same partitioning. This eliminates unnecessary shuffle in later " +
+        "operators like aggregation. Note that because non-deterministic functions such as " +
+        "monotonically_increasing_id are depended on partition id. By doing this, the values of " +
+        "those functions would be different than before Union.")
+      .booleanConf
+      .createWithDefault(false)
+
   val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.cartesianProductExec.buffer.in.memory.threshold")
       .internal()
@@ -1622,6 +1633,8 @@ class SQLConf extends Serializable with Logging {
 
   def sortMergeJoinExecBufferSpillThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def unionInSamePartition: Boolean = getConf(UNION_IN_SAME_PARTITION)
 
   def cartesianProductExecBufferInMemoryThreshold: Int =
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
