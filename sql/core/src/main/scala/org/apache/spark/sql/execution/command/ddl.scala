@@ -500,7 +500,8 @@ case class AlterTableRenamePartitionCommand(
 }
 
 /**
- * Drop Partition in ALTER TABLE: to drop a particular partition for a table.
+ * Drop Partition in ALTER TABLE: to drop a particular partition
+ * or a set of partitions according to given expressions for a table.
  *
  * This removes the data and metadata for this partition.
  * The data is actually moved to the .Trash/Current directory if Trash is configured,
@@ -510,7 +511,8 @@ case class AlterTableRenamePartitionCommand(
  *
  * The syntax of this command is:
  * {{{
- *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
+ *   ALTER TABLE table DROP [IF EXISTS] PARTITION (spec1, expr1)
+ *     [, PARTITION (spec2, expr2), ...] [PURGE];
  * }}}
  */
 case class AlterTableDropPartitionCommand(
@@ -529,47 +531,18 @@ case class AlterTableDropPartitionCommand(
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
     val toDrop = partitions.flatMap { partition =>
-      val normalizedSpecs = PartitioningUtils.normalizePartitionSpec(
-            partition._1,
-            table.partitionColumnNames,
-            table.identifier.quotedString,
-            sparkSession.sessionState.conf.resolver)
-
-      val partitionSet = {
-        if (partition._2.nonEmpty) {
-          val parts = partition._2.map { expr =>
-            val (attrName, constant) = expr match {
-              case BinaryComparison(UnresolvedAttribute(name :: Nil), constant: Literal) =>
-                (name, constant)
-            }
-            if (!table.partitionColumnNames.exists(resolver(_, attrName))) {
-              throw new AnalysisException(s"${attrName} is not a valid partition column " +
-                s"in table ${table.identifier.quotedString}.")
-            }
-            val dataType = table.partitionSchema.apply(attrName).dataType
-            expr.withNewChildren(Seq(AttributeReference(attrName, dataType)(),
-              Cast(constant, dataType)))
-          }.reduce(And)
-
-          val partitions = catalog.listPartitionsByFilter(
-            table.identifier, Seq(parts)).map(_.spec)
-          if (partitions.isEmpty && !ifExists) {
-            throw new AnalysisException(s"There is no partition for ${parts.sql}")
-          }
-          partitions
-        } else {
-          Seq.empty[TablePartitionSpec]
-        }
-      }.distinct
-
-      if (normalizedSpecs.isEmpty && partitionSet.isEmpty) {
-        Seq.empty[TablePartitionSpec]
-      } else if (normalizedSpecs.isEmpty && !partitionSet.isEmpty) {
-        partitionSet
-      } else if (!normalizedSpecs.isEmpty && partitionSet.isEmpty) {
-        Seq(normalizedSpecs)
+      if (partition._1.isEmpty && !partition._2.isEmpty) {
+        // There are only expressions in this drop condition.
+        extractFromPartitionFilter(partition._2, catalog, table, resolver)
+      } else if (!partition._1.isEmpty && partition._2.isEmpty) {
+        // There are only partitionSpecs in this drop condition.
+        extractFromPartitionSpec(partition._1, table, resolver)
+      } else if (!partition._1.isEmpty && !partition._2.isEmpty) {
+        // This drop condition has both partitionSpecs and expressions.
+        extractFromPartitionFilter(partition._2, catalog, table, resolver).intersect(
+          extractFromPartitionSpec(partition._1, table, resolver))
       } else {
-        partitionSet.intersect(normalizedSpecs.toSeq)
+        Seq.empty[TablePartitionSpec]
       }
     }
 
@@ -582,6 +555,42 @@ case class AlterTableDropPartitionCommand(
     Seq.empty[Row]
   }
 
+  private def extractFromPartitionSpec(
+      specs: TablePartitionSpec,
+      table: CatalogTable,
+      resolver: Resolver): Seq[Map[String, String]] = {
+    Seq(PartitioningUtils.normalizePartitionSpec(
+      specs,
+      table.partitionColumnNames,
+      table.identifier.quotedString,
+      resolver))
+  }
+
+  private def extractFromPartitionFilter(
+      filters: Seq[Expression],
+      catalog: SessionCatalog,
+      table: CatalogTable,
+      resolver: Resolver): Seq[TablePartitionSpec] = {
+    val expressions = filters.map { expr =>
+      val (attrName, constant) = expr match {
+        case BinaryComparison(UnresolvedAttribute(name :: Nil), constant: Literal) =>
+          (name, constant)
+      }
+      if (!table.partitionColumnNames.exists(resolver(_, attrName))) {
+        throw new AnalysisException(s"${attrName} is not a valid partition column " +
+          s"in table ${table.identifier.quotedString}.")
+      }
+      val dataType = table.partitionSchema.apply(attrName).dataType
+      expr.withNewChildren(Seq(AttributeReference(attrName, dataType)(),
+        Cast(constant, dataType)))
+    }.reduce(And)
+    val parts = catalog.listPartitionsByFilter(
+      table.identifier, Seq(expressions)).map(_.spec)
+    if (parts.isEmpty && !ifExists) {
+      throw new AnalysisException(s"There is no partition for ${expressions.sql}")
+    }
+    parts
+  }
 }
 
 
