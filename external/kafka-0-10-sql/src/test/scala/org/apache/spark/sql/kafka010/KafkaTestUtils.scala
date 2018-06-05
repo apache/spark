@@ -103,10 +103,10 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   // Set up the Embedded Zookeeper server and get the proper Zookeeper port
   private def setupEmbeddedZookeeper(): Unit = {
     // Zookeeper server startup
-    val zkSvr = s"$zkHost:$zkPort";
-    zookeeper = new EmbeddedZookeeper(zkSvr)
+    zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
+    val zkSvr = s"$zkHost:$zkPort";
     zkUtils = ZkUtils(zkSvr, zkSessionTimeout, zkConnectionTimeout, false)
     zkClient = KafkaZkClient(zkSvr, false, 6000, 10000, Int.MaxValue, Time.SYSTEM)
     zkReady = true
@@ -122,7 +122,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
       brokerConf = new KafkaConfig(brokerConfiguration, doLog = false)
       server = new KafkaServer(brokerConf)
       server.startup()
-      brokerPort = server.boundPort(new ListenerName("l"))
+      brokerPort = server.boundPort(new ListenerName("CLIENT"))
       (server, brokerPort)
     }, new SparkConf(), "KafkaBroker")
 
