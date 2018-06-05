@@ -73,8 +73,6 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   val srcCol = new Param[String](this, "srcCol", "Name of the input column for source vertex IDs.",
     (value: String) => value.nonEmpty)
 
-  setDefault(srcCol, "src")
-
   /** @group getParam */
   @Since("2.4.0")
   def getSrcCol: String = getOrDefault(srcCol)
@@ -89,11 +87,11 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
     "Name of the input column for destination vertex IDs.",
     (value: String) => value.nonEmpty)
 
-  setDefault(dstCol, "dst")
-
   /** @group getParam */
   @Since("2.4.0")
   def getDstCol: String = $(dstCol)
+
+  setDefault(srcCol -> "src", dstCol -> "dst")
 }
 
 /**
@@ -148,6 +146,8 @@ class PowerIterationClustering private[clustering] (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
+   * Run the PIC algorithm and returns a cluster assignment for each input vertex.
+   *
    * @param dataset A dataset with columns src, dst, weight representing the affinity matrix,
    *                which is the matrix A in the PIC paper. Suppose the src column value is i,
    *                the dst column value is j, the weight column value is similarity s,,ij,,
@@ -183,14 +183,8 @@ class PowerIterationClustering private[clustering] (
       .setMaxIterations($(maxIter))
     val model = algorithm.run(rdd)
 
-    val assignmentsRDD: RDD[Row] = model.assignments.map { assignment =>
-      Row(assignment.id, assignment.cluster)
-    }
-    val assignmentsSchema = StructType(Seq(
-      StructField("id", LongType, nullable = false),
-      StructField("cluster", IntegerType, nullable = false)))
-
-    dataset.sparkSession.createDataFrame(assignmentsRDD, assignmentsSchema)
+    import dataset.sparkSession.implicits._
+    model.assignments.toDF
   }
 
   @Since("2.4.0")
