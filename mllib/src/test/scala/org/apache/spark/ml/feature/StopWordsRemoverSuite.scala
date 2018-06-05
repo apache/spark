@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -63,6 +65,56 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
     ).toDF("raw", "expected")
 
     testStopWordsRemover(remover, dataSet)
+  }
+
+  test("StopWordsRemover with localed input (case insensitive)") {
+    val stopWords = Array("milk", "cookie")
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered")
+      .setStopWords(stopWords)
+      .setLocale(new Locale("tr"))
+    val dataSet = Seq(
+      // scalastyle:off
+      (Seq("mİlk", "and", "nuts"), Seq("and", "nuts")),
+      // scalastyle:on
+      (Seq("cookIe", "and", "nuts"), Seq("cookIe", "and", "nuts")),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    ).toDF("raw", "expected")
+
+    testStopWordsRemover(remover, dataSet)
+  }
+
+  test("StopWordsRemover with localed input (case sensitive)") {
+    val stopWords = Array("milk", "cookie")
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered")
+      .setStopWords(stopWords)
+      .setCaseSensitive(true)
+      .setLocale(new Locale("tr"))
+    val dataSet = Seq(
+      // scalastyle:off
+      (Seq("mİlk", "and", "nuts"), Seq("mİlk", "and", "nuts")),
+      // scalastyle:on
+      (Seq("cookIe", "and", "nuts"), Seq("cookIe", "and", "nuts")),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    ).toDF("raw", "expected")
+
+    testStopWordsRemover(remover, dataSet)
+  }
+
+  test("StopWordsRemover with invalid locale") {
+    intercept[IllegalArgumentException] {
+      val stopWords = Array("test", "a", "an", "the")
+      val _ = new StopWordsRemover()
+        .setInputCol("raw")
+        .setOutputCol("filtered")
+        .setStopWords(stopWords)
+        .setLocale(new Locale("rt"))
+    }
   }
 
   test("StopWordsRemover case sensitive") {
