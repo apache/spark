@@ -17,25 +17,27 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import java.io.IOException
-import java.net.{ConnectException, InetSocketAddress, SocketException}
+import java.net.{InetSocketAddress, SocketException}
 import java.nio.ByteBuffer
-import java.nio.channels.{ServerSocketChannel, SocketChannel}
+import java.nio.channels.ServerSocketChannel
 import java.sql.Timestamp
 import java.util.Optional
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
+
 import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
-import org.apache.spark.sql.streaming.{StreamTest, StreamingQueryException}
+import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+
 
 class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
 
