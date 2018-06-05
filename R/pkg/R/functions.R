@@ -3013,7 +3013,7 @@ setMethod("array_contains",
 #' Null values are replaced with nullReplacement if set, otherwise they are ignored.
 #'
 #' @param delimiter a character string that is used to concatenate the elements of column.
-#' @param nullReplacement a character string that is used to replace the Null values.
+#' @param nullReplacement an optional character string that is used to replace the Null values.
 #' @rdname column_collection_functions
 #' @aliases array_join array_join,Column-method
 #' @note array_join since 2.4.0
