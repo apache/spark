@@ -350,7 +350,7 @@ def corr(col1, col2):
 
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
-    >>> df = spark.createDataFrame(__builtin__.zip(a, b), ["a", "b"])
+    >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
     >>> df.agg(corr("a", "b").alias('c')).collect()
     [Row(c=1.0)]
     """
@@ -364,7 +364,7 @@ def covar_pop(col1, col2):
 
     >>> a = [1] * 10
     >>> b = [1] * 10
-    >>> df = spark.createDataFrame(__builtin__.zip(a, b), ["a", "b"])
+    >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
     >>> df.agg(covar_pop("a", "b").alias('c')).collect()
     [Row(c=0.0)]
     """
@@ -2402,10 +2402,10 @@ def zip(*cols):
 
     :param cols: columns in input
 
-    >>> from pyspark.sql.functions import zip
+    >>> from pyspark.sql.functions import zip as spark_zip
     >>> df = spark.createDataFrame([(([1, 2, 3], [2, 3, 4]))], ['vals1', 'vals2'])
-    >>> df.select(zip(df.vals1, df.vals2).alias('zipped')).collect()
-    [Row(zipped=[1, 2]), Row(zipped=[2, 3]), Row(zipped=[3, 4])]
+    >>> df.select(spark_zip(df.vals1, df.vals2).alias('zipped')).collect()
+    [Row(zipped=[Row(vals1=1, vals2=2), Row(vals1=2, vals2=3), Row(vals1=3, vals2=4)])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.zip(_to_seq(sc, cols, _to_java_column)))

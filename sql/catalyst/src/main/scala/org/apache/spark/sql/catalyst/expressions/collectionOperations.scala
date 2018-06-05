@@ -156,16 +156,16 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       case ((expr: NamedExpression, elementType), _) =>
         StructField(expr.name, elementType, nullable = true)
       case ((_, elementType), idx) =>
-        StructField(s"$idx", elementType, nullable = true)
+        StructField(idx.toString, elementType, nullable = true)
     }
     StructType(fields)
   }
 
-  val numberOfArrays: Int = children.length
+  @transient lazy val numberOfArrays: Int = children.length
+
+  @transient lazy val genericArrayData = classOf[GenericArrayData].getName
 
   def emptyInputGenCode(ev: ExprCode): ExprCode = {
-    val genericArrayData = classOf[GenericArrayData].getName
-
     ev.copy(code"""
       |${CodeGenerator.javaType(dataType)} ${ev.value} = new $genericArrayData(new Object[0]);
       |boolean ${ev.isNull} = false;
@@ -173,13 +173,12 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
   }
 
   def nonEmptyInputGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val genericArrayData = classOf[GenericArrayData].getName
     val genericInternalRow = classOf[GenericInternalRow].getName
     val arrVals = ctx.freshName("arrVals")
     val arrCardinality = ctx.freshName("arrCardinality")
     val biggestCardinality = ctx.freshName("biggestCardinality")
 
-    val myobject = ctx.freshName("myobject")
+    val currentRow = ctx.freshName("currentRow")
     val j = ctx.freshName("j")
     val i = ctx.freshName("i")
     val args = ctx.freshName("args")
@@ -218,11 +217,11 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
     val getValueForType = arrayElementTypes.zipWithIndex.map { case (eleType, idx) =>
       val g = CodeGenerator.getValue(s"$arrVals[$idx]", eleType, i)
       s"""
-      |if ($i < $arrCardinality[$idx] && !$arrVals[$idx].isNullAt($i)) {
-      |  $myobject[$idx] = $g;
-      |} else {
-      |  $myobject[$idx] = null;
-      |}
+        |if ($i < $arrCardinality[$idx] && !$arrVals[$idx].isNullAt($i)) {
+        |  $currentRow[$idx] = $g;
+        |} else {
+        |  $currentRow[$idx] = null;
+        |}
       """.stripMargin
     }
 
@@ -231,7 +230,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       funcName = "extractValue",
       arguments =
         ("int", i) ::
-        ("Object[]", myobject) ::
+        ("Object[]", currentRow) ::
         ("int[]", arrCardinality) ::
         ("ArrayData[]", arrVals) :: Nil)
 
@@ -249,9 +248,9 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       |if (!${ev.isNull}) {
       |  Object[] $args = new Object[$biggestCardinality];
       |  for (int $i = 0; $i < $biggestCardinality; $i ++) {
-      |    Object[] $myobject = new Object[$numberOfArrays];
+      |    Object[] $currentRow = new Object[$numberOfArrays];
       |    $getValueForTypeSplitted
-      |    $args[$i] = new $genericInternalRow($myobject);
+      |    $args[$i] = new $genericInternalRow($currentRow);
       |  }
       |  ${ev.value} = new $genericArrayData($args);
       |}
