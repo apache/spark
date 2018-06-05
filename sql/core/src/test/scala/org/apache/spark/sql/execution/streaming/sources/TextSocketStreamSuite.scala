@@ -301,12 +301,12 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   }
 
   /**
-    * This class tries to mimic the behavior of netcat, so that we can ensure
-    * TextSocketStream supports netcat, which only accepts the first connection
-    * and exits the process when the first connection is closed.
-    *
-    * Please refer SPARK-24466 for more details.
-    */
+   * This class tries to mimic the behavior of netcat, so that we can ensure
+   * TextSocketStream supports netcat, which only accepts the first connection
+   * and exits the process when the first connection is closed.
+   *
+   * Please refer SPARK-24466 for more details.
+   */
   private class ServerThread extends Thread with Logging {
     private val serverSocketChannel = ServerSocketChannel.open()
     serverSocketChannel.bind(new InetSocketAddress(0))
