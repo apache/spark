@@ -62,7 +62,6 @@ class HiveClientSuite(version: String)
 
     client.createPartitions(
       "default", "test", partitions, ignoreIfExists = false)
-
     client
   }
 
@@ -82,7 +81,7 @@ class HiveClientSuite(version: String)
 
   test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {
     val client = init(false)
-    val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test0"),
+    val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
       Seq(attr("ds") === 20170101))
 
     assert(filteredPartitions.size == testPartitionCount)
