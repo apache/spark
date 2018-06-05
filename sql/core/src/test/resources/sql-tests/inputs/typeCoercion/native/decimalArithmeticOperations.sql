@@ -40,6 +40,7 @@ select 10.3000 * 3.0;
 select 10.30000 * 30.0;
 select 10.300000000000000000 * 3.000000000000000000;
 select 10.300000000000000000 * 3.0000000000000000000;
+select 2.35E10 * 1.0;
 
 -- arithmetic operations causing an overflow return NULL
 select (5e36 + 0.1) + 5e36;
@@ -67,6 +68,7 @@ select 10.3000 * 3.0;
 select 10.30000 * 30.0;
 select 10.300000000000000000 * 3.000000000000000000;
 select 10.300000000000000000 * 3.0000000000000000000;
+select 2.35E10 * 1.0;
 
 -- arithmetic operations causing an overflow return NULL
 select (5e36 + 0.1) + 5e36;
