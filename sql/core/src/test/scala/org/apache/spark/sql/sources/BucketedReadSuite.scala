@@ -22,6 +22,7 @@ import java.net.URI
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
@@ -88,10 +89,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   // To verify if the bucket pruning works, this function checks two conditions:
   //   1) Check if the pruned buckets (before filtering) are empty.
   //   2) Verify the final result is the same as the expected one
-  private def checkPrunedAnswers(bucketSpec: BucketSpec,
-                                 bucketValues: Seq[Integer],
-                                 filterCondition: Column,
-                                 originalDataFrame: DataFrame): Unit = {
+  private def checkPrunedAnswers(
+      bucketSpec: BucketSpec,
+      bucketValues: Seq[Integer],
+      filterCondition: Column,
+      originalDataFrame: DataFrame): Unit = {
     // This test verifies parts of the plan. Disable whole stage codegen.
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
@@ -163,6 +165,14 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           bucketSpec,
           bucketValues = Seq(j, j + 1, j + 2, j + 3),
           filterCondition = $"j".isin(j, j + 1, j + 2, j + 3),
+          df)
+
+        // Case 4: InSet
+        val inSetExpr = expressions.InSet($"j".expr, Set(j, j + 1, j + 2, j + 3).map(lit(_).expr))
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = Seq(j, j + 1, j + 2, j + 3),
+          filterCondition = Column(inSetExpr),
           df)
       }
     }

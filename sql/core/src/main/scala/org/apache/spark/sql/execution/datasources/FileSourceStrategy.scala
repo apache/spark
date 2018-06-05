@@ -60,33 +60,40 @@ object FileSourceStrategy extends Strategy with Logging {
     }
   }
 
-  private def getExpressionBuckets(expr: Expression,
-                                   bucketColumnName: String,
-                                   numBuckets: Int): BitSet = {
+  private def getExpressionBuckets(
+      expr: Expression,
+      bucketColumnName: String,
+      numBuckets: Int): BitSet = {
 
-    def getMatchedBucketBitSet(attr: Attribute, v: Any): BitSet = {
+    def getBucketNumber(attr: Attribute, v: Any): Int = {
+      BucketingUtils.getBucketIdFromValue(attr, numBuckets, v)
+    }
+
+    def getBucketSetFromIterable(attr: Attribute, iter: Iterable[Any]): BitSet = {
       val matchedBuckets = new BitSet(numBuckets)
-      matchedBuckets.set(BucketingUtils.getBucketIdFromValue(attr, numBuckets, v))
+      iter
+        .map(v => getBucketNumber(attr, v))
+        .foreach(bucketNum => matchedBuckets.set(bucketNum))
+      matchedBuckets
+    }
+
+    def getBucketSetFromValue(attr: Attribute, v: Any): BitSet = {
+      val matchedBuckets = new BitSet(numBuckets)
+      matchedBuckets.set(getBucketNumber(attr, v))
       matchedBuckets
     }
 
     expr match {
-      case expressions.EqualTo(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
-        getMatchedBucketBitSet(a, v)
-      case expressions.EqualTo(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
-        getMatchedBucketBitSet(a, v)
-      case expressions.EqualNullSafe(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
-        getMatchedBucketBitSet(a, v)
-      case expressions.EqualNullSafe(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
-        getMatchedBucketBitSet(a, v)
+      case expressions.Equality(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+        getBucketSetFromValue(a, v)
       case expressions.In(a: Attribute, list)
         if list.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
-        val valuesSet = list.map(e => e.eval(EmptyRow))
-        valuesSet
-          .map(v => getMatchedBucketBitSet(a, v))
-          .fold(new BitSet(numBuckets))(_ | _)
+        getBucketSetFromIterable(a, list.map(e => e.eval(EmptyRow)))
+      case expressions.InSet(a: Attribute, hset)
+        if hset.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
+        getBucketSetFromIterable(a, hset.map(e => expressions.Literal(e).eval(EmptyRow)))
       case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
-        getMatchedBucketBitSet(a, null)
+        getBucketSetFromValue(a, null)
       case expressions.And(left, right) =>
         getExpressionBuckets(left, bucketColumnName, numBuckets) &
           getExpressionBuckets(right, bucketColumnName, numBuckets)
@@ -100,9 +107,9 @@ object FileSourceStrategy extends Strategy with Logging {
     }
   }
 
-  private def getBuckets(normalizedFilters: Seq[Expression],
-                         bucketSpec: BucketSpec): Option[BitSet] = {
-
+  private def genBucketSet(
+      normalizedFilters: Seq[Expression],
+      bucketSpec: BucketSpec): Option[BitSet] = {
     if (normalizedFilters.isEmpty) {
       return None
     }
@@ -160,7 +167,7 @@ object FileSourceStrategy extends Strategy with Logging {
 
       val bucketSpec: Option[BucketSpec] = fsRelation.bucketSpec
       val bucketSet = if (shouldPruneBuckets(bucketSpec)) {
-        getBuckets(normalizedFilters, bucketSpec.get)
+        genBucketSet(normalizedFilters, bucketSpec.get)
       } else {
         None
       }
