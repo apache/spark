@@ -104,7 +104,7 @@ class TypedColumn[-T, U](
  *
  * {{{
  *   df("columnName")            // On a specific `df` DataFrame.
- *   col("columnName")           // A generic column no yet associated with a DataFrame.
+ *   col("columnName")           // A generic column not yet associated with a DataFrame.
  *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
