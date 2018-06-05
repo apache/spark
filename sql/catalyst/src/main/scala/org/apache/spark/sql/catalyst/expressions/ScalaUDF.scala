@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -48,6 +49,17 @@ case class ScalaUDF(
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression with UserDefinedExpression {
+
+  // The constructor for SPARK 2.1 and 2.2
+  def this(
+      function: AnyRef,
+      dataType: DataType,
+      children: Seq[Expression],
+      inputTypes: Seq[DataType],
+      udfName: Option[String]) = {
+    this(
+      function, dataType, children, inputTypes, udfName, nullable = true, udfDeterministic = true)
+  }
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
@@ -1007,24 +1019,25 @@ case class ScalaUDF(
     val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
     val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
     val resultConverter = s"$convertersTerm[${children.length}]"
+    val boxedType = CodeGenerator.boxedType(dataType)
     val callFunc =
       s"""
-         |${ctx.boxedType(dataType)} $resultTerm = null;
+         |$boxedType $resultTerm = null;
          |try {
-         |  $resultTerm = (${ctx.boxedType(dataType)})$resultConverter.apply($getFuncResult);
+         |  $resultTerm = ($boxedType)$resultConverter.apply($getFuncResult);
          |} catch (Exception e) {
          |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
          |}
        """.stripMargin
 
     ev.copy(code =
-      s"""
+      code"""
          |$evalCode
          |${initArgs.mkString("\n")}
          |$callFunc
          |
          |boolean ${ev.isNull} = $resultTerm == null;
-         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
          |}

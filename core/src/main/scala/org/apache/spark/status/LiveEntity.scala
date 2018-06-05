@@ -20,6 +20,7 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
 
 import com.google.common.collect.Interners
@@ -254,6 +255,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   var totalShuffleRead = 0L
   var totalShuffleWrite = 0L
   var isBlacklisted = false
+  var blacklistedInStages: Set[Int] = TreeSet()
 
   var executorLogs = Map[String, String]()
 
@@ -299,7 +301,8 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       Option(removeTime),
       Option(removeReason),
       executorLogs,
-      memoryMetrics)
+      memoryMetrics,
+      blacklistedInStages)
     new ExecutorSummaryWrapper(info)
   }
 
@@ -370,6 +373,8 @@ private class LiveStage extends LiveEntity {
   var metrics = createMetrics(default = 0L)
 
   val executorSummaries = new HashMap[String, LiveExecutorStageSummary]()
+
+  var blackListedExecutors = new HashSet[String]()
 
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false

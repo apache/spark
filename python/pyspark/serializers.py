@@ -68,6 +68,7 @@ else:
     xrange = range
 
 from pyspark import cloudpickle
+from pyspark.util import _exception_message
 
 
 __all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
@@ -249,6 +250,15 @@ class ArrowStreamPandasSerializer(Serializer):
         super(ArrowStreamPandasSerializer, self).__init__()
         self._timezone = timezone
 
+    def arrow_to_pandas(self, arrow_column):
+        from pyspark.sql.types import from_arrow_type, \
+            _check_series_convert_date, _check_series_localize_timestamps
+
+        s = arrow_column.to_pandas()
+        s = _check_series_convert_date(s, from_arrow_type(arrow_column.type))
+        s = _check_series_localize_timestamps(s, self._timezone)
+        return s
+
     def dump_stream(self, iterator, stream):
         """
         Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
@@ -271,16 +281,11 @@ class ArrowStreamPandasSerializer(Serializer):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
-        from pyspark.sql.types import from_arrow_schema, _check_dataframe_convert_date, \
-            _check_dataframe_localize_timestamps
         import pyarrow as pa
         reader = pa.open_stream(stream)
-        schema = from_arrow_schema(reader.schema)
+
         for batch in reader:
-            pdf = batch.to_pandas()
-            pdf = _check_dataframe_convert_date(pdf, schema)
-            pdf = _check_dataframe_localize_timestamps(pdf, self._timezone)
-            yield [c for _, c in pdf.iteritems()]
+            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"
@@ -565,7 +570,18 @@ class PickleSerializer(FramedSerializer):
 class CloudPickleSerializer(PickleSerializer):
 
     def dumps(self, obj):
-        return cloudpickle.dumps(obj, 2)
+        try:
+            return cloudpickle.dumps(obj, 2)
+        except pickle.PickleError:
+            raise
+        except Exception as e:
+            emsg = _exception_message(e)
+            if "'i' format requires" in emsg:
+                msg = "Object too large to serialize: %s" % emsg
+            else:
+                msg = "Could not serialize object: %s: %s" % (e.__class__.__name__, emsg)
+            cloudpickle.print_exec(sys.stderr)
+            raise pickle.PicklingError(msg)
 
 
 class MarshalSerializer(FramedSerializer):
@@ -699,4 +715,4 @@ if __name__ == '__main__':
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

@@ -49,6 +49,7 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   @Path("applications/{appId}")
   def application(): Class[OneApplicationResource] = classOf[OneApplicationResource]
 
+  @GET
   @Path("version")
   def version(): VersionInfo = new VersionInfo(org.apache.spark.SPARK_VERSION)
 
@@ -155,6 +156,14 @@ private[v1] class NotFoundException(msg: String) extends WebApplicationException
       .status(Response.Status.NOT_FOUND)
       .entity(ErrorWrapper(msg))
       .build()
+)
+
+private[v1] class ServiceUnavailable(msg: String) extends WebApplicationException(
+  new ServiceUnavailableException(msg),
+  Response
+    .status(Response.Status.SERVICE_UNAVAILABLE)
+    .entity(ErrorWrapper(msg))
+    .build()
 )
 
 private[v1] class BadParameterException(msg: String) extends WebApplicationException(

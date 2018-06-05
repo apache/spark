@@ -101,7 +101,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 5:
         print("Usage: recoverable_network_wordcount.py <hostname> <port> "
               "<checkpoint-directory> <output-file>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
     host, port, checkpoint, output = sys.argv[1:]
     ssc = StreamingContext.getOrCreate(checkpoint,
                                        lambda: createContext(host, int(port), output))

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import java.nio.charset.{Charset, StandardCharsets}
 import java.util.{Locale, TimeZone}
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.util._
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
 private[sql] class JSONOptions(
-    @transient private val parameters: CaseInsensitiveMap[String],
+    @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable  {
@@ -84,6 +85,46 @@ private[sql] class JSONOptions(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, Locale.US)
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
+
+  /**
+   * A string between two consecutive JSON records.
+   */
+  val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
+    require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
+    sep
+  }
+
+  /**
+   * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
+   * If the encoding is not specified (None), it will be detected automatically
+   * when the multiLine option is set to `true`.
+   */
+  val encoding: Option[String] = parameters.get("encoding")
+    .orElse(parameters.get("charset")).map { enc =>
+      // The following encodings are not supported in per-line mode (multiline is false)
+      // because they cause some problems in reading files with BOM which is supposed to
+      // present in the files with such encodings. After splitting input files by lines,
+      // only the first lines will have the BOM which leads to impossibility for reading
+      // the rest lines. Besides of that, the lineSep option must have the BOM in such
+      // encodings which can never present between lines.
+      val blacklist = Seq(Charset.forName("UTF-16"), Charset.forName("UTF-32"))
+      val isBlacklisted = blacklist.contains(Charset.forName(enc))
+      require(multiLine || !isBlacklisted,
+        s"""The $enc encoding in the blacklist is not allowed when multiLine is disabled.
+          |Blacklist: ${blacklist.mkString(", ")}""".stripMargin)
+
+      val isLineSepRequired =
+        multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
+
+      require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
+
+      enc
+  }
+
+  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
+    lineSep.getBytes(encoding.getOrElse("UTF-8"))
+  }
+  val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {

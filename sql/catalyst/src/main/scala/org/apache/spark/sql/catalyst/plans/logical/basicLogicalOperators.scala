@@ -43,11 +43,12 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
  * This node is inserted at the top of a subquery when it is optimized. This makes sure we can
  * recognize a subquery as such, and it allows us to write subquery aware transformations.
  */
-case class Subquery(child: LogicalPlan) extends UnaryNode {
+case class Subquery(child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
+case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
+    extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
@@ -125,7 +126,7 @@ case class Generate(
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
-  extends UnaryNode with PredicateHelper {
+  extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
@@ -469,6 +470,7 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
+  override def outputOrdering: Seq[SortOrder] = order
 }
 
 /** Factory for constructing new `Range` nodes. */
@@ -521,6 +523,15 @@ case class Range(
 
   override def computeStats(): Statistics = {
     Statistics(sizeInBytes = LongType.defaultSize * numElements)
+  }
+
+  override def outputOrdering: Seq[SortOrder] = {
+    val order = if (step > 0) {
+      Ascending
+    } else {
+      Descending
+    }
+    output.map(a => SortOrder(a, order))
   }
 }
 
@@ -675,17 +686,34 @@ case class GroupingSets(
   override lazy val resolved: Boolean = false
 }
 
+/**
+ * A constructor for creating a pivot, which will later be converted to a [[Project]]
+ * or an [[Aggregate]] during the query analysis.
+ *
+ * @param groupByExprsOpt A sequence of group by expressions. This field should be None if coming
+ *                        from SQL, in which group by expressions are not explicitly specified.
+ * @param pivotColumn     The pivot column.
+ * @param pivotValues     A sequence of values for the pivot column.
+ * @param aggregates      The aggregation expressions, each with or without an alias.
+ * @param child           Child operator
+ */
 case class Pivot(
-    groupByExprs: Seq[NamedExpression],
+    groupByExprsOpt: Option[Seq[NamedExpression]],
     pivotColumn: Expression,
     pivotValues: Seq[Literal],
     aggregates: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
-    case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
-    case _ => pivotValues.flatMap{ value =>
-      aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+  override lazy val resolved = false // Pivot will be replaced after being resolved.
+  override def output: Seq[Attribute] = {
+    val pivotAgg = aggregates match {
+      case agg :: Nil =>
+        pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
+      case _ =>
+        pivotValues.flatMap { value =>
+          aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+        }
     }
+    groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
 }
 
@@ -728,7 +756,7 @@ object Limit {
  *
  * See [[Limit]] for more information.
  */
-case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
@@ -744,7 +772,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
  *
  * See [[Limit]] for more information.
  */
-case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override def maxRowsPerPartition: Option[Long] = {
@@ -764,7 +792,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan)
-  extends UnaryNode {
+  extends OrderPreservingUnaryNode {
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 

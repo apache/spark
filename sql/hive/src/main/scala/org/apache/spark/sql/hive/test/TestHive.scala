@@ -35,6 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, ExternalCatalogWithListener}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
@@ -83,11 +84,11 @@ private[hive] class TestHiveSharedState(
     hiveClient: Option[HiveClient] = None)
   extends SharedState(sc) {
 
-  override lazy val externalCatalog: TestHiveExternalCatalog = {
-    new TestHiveExternalCatalog(
+  override lazy val externalCatalog: ExternalCatalogWithListener = {
+    new ExternalCatalogWithListener(new TestHiveExternalCatalog(
       sc.conf,
       sc.hadoopConfiguration,
-      hiveClient)
+      hiveClient))
   }
 }
 
@@ -175,6 +176,9 @@ private[hive] class TestHiveSparkSession(
       loadTestTables)
   }
 
+  SparkSession.setDefaultSession(this)
+  SparkSession.setActiveSession(this)
+
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
@@ -205,7 +209,9 @@ private[hive] class TestHiveSparkSession(
     new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
-  lazy val metadataHive: HiveClient = sharedState.externalCatalog.client.newSession()
+  lazy val metadataHive: HiveClient = {
+    sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.newSession()
+  }
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
@@ -518,8 +524,9 @@ private[hive] class TestHiveSparkSession(
       // an HDFS scratch dir: ${hive.exec.scratchdir}/<username> is created, with
       // ${hive.scratch.dir.permission}. To resolve the permission issue, the simplest way is to
       // delete it. Later, it will be re-created with the right permission.
-      val location = new Path(sc.hadoopConfiguration.get(ConfVars.SCRATCHDIR.varname))
-      val fs = location.getFileSystem(sc.hadoopConfiguration)
+      val hadoopConf = sessionState.newHadoopConf()
+      val location = new Path(hadoopConf.get(ConfVars.SCRATCHDIR.varname))
+      val fs = location.getFileSystem(hadoopConf)
       fs.delete(location, true)
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
@@ -530,8 +537,6 @@ private[hive] class TestHiveSparkSession(
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
       metadataHive.runSqlHive("set hive.table.parameters.default=")
-      metadataHive.runSqlHive("set datanucleus.cache.collections=true")
-      metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
       metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
