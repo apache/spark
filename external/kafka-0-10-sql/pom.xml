@@ -32,7 +32,7 @@
     <kafka.version>2.0.0-SNAPSHOT</kafka.version>
   </properties>
   <packaging>jar</packaging>
-  <name>Kafka 0.10 Source for Structured Streaming</name>
+  <name>Kafka 2.0.0 Source for Structured Streaming</name>
   <url>http://spark.apache.org/</url>
 
   <dependencies>
