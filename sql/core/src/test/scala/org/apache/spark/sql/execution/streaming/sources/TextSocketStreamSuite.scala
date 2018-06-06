@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
@@ -100,7 +101,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
       val ref = spark
       import ref.implicits._
 
@@ -129,7 +130,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
       val socket = spark
         .readStream
         .format("socket")
@@ -219,7 +220,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
       val ref = spark
       import ref.implicits._
 
@@ -250,7 +251,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
       val ref = spark
       import ref.implicits._
 
