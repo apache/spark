@@ -381,19 +381,17 @@ case class FileSourceScanExec(
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
-    val bucketed =
+    val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
         p.files.map { f =>
           val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
           PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
         }
+      }.groupBy { f =>
+        BucketingUtils
+          .getBucketId(new Path(f.filePath).getName)
+          .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
       }
-
-    val filesGroupedToBuckets = bucketed.groupBy { f =>
-      BucketingUtils
-        .getBucketId(new Path(f.filePath).getName)
-        .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
-    }
 
     val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
       val bucketSet = optionalBucketSet.get
