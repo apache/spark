@@ -2636,14 +2636,14 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         """
         return self.getOrDefault(self.caseSensitive)
 
-    @since("2.5.0")
+    @since("2.4.0")
     def setLocale(self, value):
         """
         Sets the value of :py:attr:`locale`.
         """
         return self._set(locale=value)
 
-    @since("2.5.0")
+    @since("2.4.0")
     def getLocale(self):
         """
         Gets the value of :py:attr:`locale`.

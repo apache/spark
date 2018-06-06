@@ -93,7 +93,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
    * @see `StopWordsRemover.loadDefaultStopWords()`
    * @group param
    */
-  @Since("2.5.0")
+  @Since("2.4.0")
   val locale: Param[Locale] = new Param[Locale](this, "locale",
     "Locale of the input. Ignored when caseSensitive is false.")
 
@@ -101,7 +101,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
    * @group setParam
    * @throws IllegalArgumentException if `value` is not an available locale.
    */
-  @Since("2.5.0")
+  @Since("2.4.0")
   def setLocale(value: Locale): this.type = {
     if (Locale.getAvailableLocales contains value) {
       set(locale, value)
@@ -111,7 +111,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   }
 
   /** @group getParam */
-  @Since("2.5.0")
+  @Since("2.4.0")
   def getLocale: Locale = $(locale)
 
   setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"),
