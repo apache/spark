@@ -38,4 +38,15 @@ class ZippedPartitionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(obtainedSizes.size == 6)
     assert(obtainedSizes.zip(expectedSizes).forall(x => x._1 == x._2))
   }
+
+  test("RDD.zipRDDs") {
+    val data1 = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val data2 = sc.makeRDD(Array(1, 2, 3, 4, 5, 6), 2)
+    val data3 = sc.makeRDD(Array(1, 2), 2)
+
+    val zippedRDD = data1.zipRDDs(Seq(data2, data3))
+    val obtained = zippedRDD.collect()
+    val expected = Array(1, 2, 1, 2, 3, 1, 3, 4, 4, 5, 6, 2)
+    assert(obtained.zip(expected).forall(x => x._1 == x._2))
+  }
 }
