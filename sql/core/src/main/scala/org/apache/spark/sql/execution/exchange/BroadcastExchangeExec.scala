@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.exchange
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.util.control.NonFatal
 import scala.util.Success
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast.Broadcast
