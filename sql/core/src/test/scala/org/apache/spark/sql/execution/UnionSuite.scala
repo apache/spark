@@ -21,7 +21,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.test.SharedSQLContext
 
 class UnionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
