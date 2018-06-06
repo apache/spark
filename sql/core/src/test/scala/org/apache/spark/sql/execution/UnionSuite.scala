@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -50,6 +51,40 @@ class UnionSuite extends QueryTest with SharedSQLContext {
             Row(4, 2) :: Row(5, 2) :: Row(6, 2) :: Row(7, 2) :: Row(8, 2) :: Row(9, 2) :: Nil)
         }
       }
+    }
+  }
+
+  private def testOutputPartitioning(df1: DataFrame, df2: DataFrame, expected: Partitioning) = {
+    val unionExec = df1.union(df2).queryExecution.executedPlan.collect {
+      case u: UnionExec => u
+    }.head
+    assert(unionExec.outputPartitioning == expected)
+  }
+
+  test("Union can use children's outputPartitioning if possibly") {
+    val N = 10
+    val df1 = spark.range(N).selectExpr("id as key1", "id % 2 as t1", "id % 3 as t2")
+    val df2 = spark.range(N).selectExpr("id as key2", "id % 2 as t3", "id % 3 as t4")
+
+    withSQLConf(SQLConf.UNION_IN_SAME_PARTITION.key -> "true") {
+      val dfShuffled1 = df1.repartition(5, $"key1")
+      val dfShuffled2 = df2.repartition(5, $"key2")
+      val expected1 = dfShuffled1.queryExecution.executedPlan.outputPartitioning
+      testOutputPartitioning(dfShuffled1, dfShuffled2, expected1)
+      val dfShuffled3 = df2.repartition(2, $"key2")
+      testOutputPartitioning(dfShuffled1, dfShuffled3, UnknownPartitioning(0))
+
+      val dfRangeShuffled1 = df1.repartitionByRange(5, $"key1")
+      val dfRangeShuffled2 = df2.repartitionByRange(5, $"key2")
+      val expected2 = dfRangeShuffled1.queryExecution.executedPlan.outputPartitioning
+      testOutputPartitioning(dfRangeShuffled1, dfRangeShuffled2, expected2)
+      val dfRangeShuffled3 = df2.repartitionByRange(2, $"key2")
+      testOutputPartitioning(dfRangeShuffled1, dfRangeShuffled3, UnknownPartitioning(0))
+      val dfRangeShuffled4 = df2.repartitionByRange(5, $"key2", $"t3")
+      testOutputPartitioning(dfRangeShuffled1, dfRangeShuffled4, expected2)
+
+      testOutputPartitioning(dfShuffled1, dfRangeShuffled2, UnknownPartitioning(0))
+      testOutputPartitioning(dfRangeShuffled1, dfShuffled2, UnknownPartitioning(0))
     }
   }
 }
