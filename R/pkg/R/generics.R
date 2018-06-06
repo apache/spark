@@ -759,6 +759,10 @@ setGeneric("array_contains", function(x, value) { standardGeneric("array_contain
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("array_join", function(x, delimiter, ...) { standardGeneric("array_join") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("array_max", function(x) { standardGeneric("array_max") })
 
 #' @rdname column_collection_functions
