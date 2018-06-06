@@ -389,25 +389,23 @@ case class FileSourceScanExec(
         }
       }
 
-    val prunedBucketed = if (optionalBucketSet.isDefined) {
-      val bucketSet = optionalBucketSet.get
-      bucketed.filter {
-        f => bucketSet.get(
-          BucketingUtils.getBucketId(new Path(f.filePath).getName)
-            .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}")))
-      }
-    } else {
-      bucketed
-    }
-
-    val filesGroupedToBuckets = prunedBucketed.groupBy { f =>
+    val filesGroupedToBuckets = bucketed.groupBy { f =>
       BucketingUtils
         .getBucketId(new Path(f.filePath).getName)
         .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
     }
 
+    val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
+      val bucketSet = optionalBucketSet.get
+      filesGroupedToBuckets.filter {
+        f => bucketSet.get(f._1)
+      }
+    } else {
+      filesGroupedToBuckets
+    }
+
     val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, filesGroupedToBuckets.getOrElse(bucketId, Nil))
+      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Nil))
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
