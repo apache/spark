@@ -46,7 +46,6 @@ public class JavaPowerIterationClusteringExample {
         SparkSession spark = SparkSession
                 .builder()
                 .appName("JavaPowerIterationClustering")
-                .master("local")
                 .getOrCreate();
 
         // $example on$
