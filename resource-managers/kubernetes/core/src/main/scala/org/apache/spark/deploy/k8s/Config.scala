@@ -104,6 +104,20 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_EXECUTOR_LIMIT_GPUS =
+    ConfigBuilder("spark.kubernetes.executor.limit.gpus")
+      .doc("Specify the gpu request for each executor pod")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_GPU_PROVIDER =
+    ConfigBuilder("spark.kubernetes.executor.gpu.provider")
+      .doc("Specify the gpu provider for each executor pod")
+      .stringConf
+      .createWithDefault("nvidia.com")
+
+
+
   val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")
       .doc("Name of the driver pod.")
