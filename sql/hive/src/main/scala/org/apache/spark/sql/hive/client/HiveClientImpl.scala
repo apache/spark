@@ -1022,7 +1022,7 @@ private[hive] object HiveClientImpl {
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull),
       createTime = apiPartition.getCreateTime.toLong * 1000,
-      lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000)
+      lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
       parameters = properties,
       stats = readHiveStats(properties))
   }
