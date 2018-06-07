@@ -28,6 +28,8 @@ import scala.annotation.tailrec
 
 import org.apache.spark.unsafe.types.UTF8String
 
+import scala.collection.mutable
+
 /**
  * Helper functions for converting between internal and external date and time representations.
  * Dates are exposed externally as java.sql.Date and are represented internally as the number of
@@ -109,6 +111,22 @@ object DateTimeUtils {
 
   def getTimeZone(timeZoneId: String): TimeZone = {
     computedTimeZones.computeIfAbsent(timeZoneId, computeTimeZone)
+  }
+
+  private val threadLocalComputedCalendarsMap =
+    new ThreadLocal[mutable.Map[TimeZone, Calendar]] {
+      override def initialValue(): mutable.Map[TimeZone, Calendar] = {
+        mutable.Map[TimeZone, Calendar]()
+      }
+    }
+
+  def getCalendar(timeZone: TimeZone): Calendar = {
+    val c = threadLocalComputedCalendarsMap.get()
+      .getOrElseUpdate(timeZone, {
+        Calendar.getInstance(timeZone)
+      })
+    c.setTimeInMillis(System.currentTimeMillis())
+    c
   }
 
   def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
@@ -438,10 +456,9 @@ object DateTimeUtils {
     if (tz.isDefined && rejectTzInString) return None
 
     val c = if (tz.isEmpty) {
-      Calendar.getInstance(timeZone)
+      getCalendar(timeZone)
     } else {
-      Calendar.getInstance(
-        getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+      getCalendar(getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
     }
     c.set(Calendar.MILLISECOND, 0)
 
@@ -1162,5 +1179,6 @@ object DateTimeUtils {
     threadLocalGmtCalendar.remove()
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
+    threadLocalComputedCalendarsMap.remove()
   }
 }
