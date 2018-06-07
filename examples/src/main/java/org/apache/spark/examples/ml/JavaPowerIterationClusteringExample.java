@@ -46,36 +46,37 @@ public class JavaPowerIterationClusteringExample {
         SparkSession spark = SparkSession
                 .builder()
                 .appName("JavaPowerIterationClustering")
+                .master("local")
                 .getOrCreate();
 
         // $example on$
         List<Row> data = Arrays.asList(
-                RowFactory.create(0L, Arrays.asList(1L, 2L, 4L), Arrays.asList(0.9, 0.9, 0.1)),
-                RowFactory.create(1L, Arrays.asList(0L, 2L), Arrays.asList(0.9, 0.9)),
-                RowFactory.create(2L, Arrays.asList(0L, 1L), Arrays.asList(0.9, 0.9)),
-                RowFactory.create(3L, Arrays.asList(4L), Arrays.asList(0.9)),
-                RowFactory.create(4L, Arrays.asList(3L, 0L), Arrays.asList(0.9, 0.1))
-
+                RowFactory.create(0L, 1L, 1.0),
+                RowFactory.create(0L, 2L, 1.0),
+                RowFactory.create(1L, 2L, 1.0),
+                RowFactory.create(3L, 4L, 1.0),
+                RowFactory.create(4L, 0L, 0.1)
         );
+
         StructType schema = new StructType(new StructField[]{
-                new StructField("id", DataTypes.LongType, false, Metadata.empty()),
-                new StructField("neighbors", DataTypes.createArrayType(DataTypes.LongType, false),
-                        false, Metadata.empty()),
-                new StructField("similarities", DataTypes.createArrayType(DataTypes.DoubleType, false),
-                        false, Metadata.empty())
+                new StructField("src", DataTypes.LongType, false, Metadata.empty()),
+                new StructField("dst", DataTypes.LongType,  false, Metadata.empty()),
+                new StructField("weight", DataTypes.DoubleType, false, Metadata.empty())
         });
 
         Dataset<Row> df = spark.createDataFrame(data, schema);
 
-        PowerIterationClustering pic = new PowerIterationClustering()
+        Dataset<Row> result = new PowerIterationClustering()
                 .setK(2)
-                .setMaxIter(10);
+                .setMaxIter(10)
+                .setInitMode("degree")
+                .setWeightCol("weight")
+                .assignClusters(df);
 
-        Dataset<Row> result = pic.transform(df);
 
         // Printing results
         System.out.println("Clustering results [id, cluster]");
-        for (Row row : result.select("id", "prediction").collectAsList()) {
+        for (Row row : result.select("id", "cluster").collectAsList()) {
             System.out.println("[" + row.get(0) + ", " + row.get(1) + "]");
         }
         // $example off$
