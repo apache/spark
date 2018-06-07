@@ -206,7 +206,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
    */
   private def checkRangeConditions(l : Expression, r : Expression,
       left : LogicalPlan, right : LogicalPlan,
-      joinKeys : Seq[(Expression, Expression)]):Option[Boolean] = {
+      joinKeys : Seq[(Expression, Expression)]): Option[Boolean] = {
     val (lattrs, rattrs) = (l.references.toSeq, r.references.toSeq)
     if (lattrs.size != 1 || rattrs.size != 1) {
       None
