@@ -2583,7 +2583,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
                           "comparison over the stop words", typeConverter=TypeConverters.toBoolean)
     locale = Param(Params._dummy(), "locale", "locale of the input. ignored when case sensitive is false",
-                      typeConverter=TypeConverters.toString)
+                   typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False, locale="en"):

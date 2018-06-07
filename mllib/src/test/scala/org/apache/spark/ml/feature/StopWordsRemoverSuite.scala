@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import java.util.Locale
-
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -73,7 +71,7 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords)
-      .setLocale(new Locale("tr"))
+      .setLocale("tr")  // Turkish alphabet: has no Q, W, X but has dotted and dotless 'I's.
     val dataSet = Seq(
       // scalastyle:off
       (Seq("mİlk", "and", "nuts"), Seq("and", "nuts")),
@@ -93,7 +91,7 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("filtered")
       .setStopWords(stopWords)
       .setCaseSensitive(true)
-      .setLocale(new Locale("tr"))
+      .setLocale("tr")  // Turkish alphabet: has no Q, W, X but has dotted and dotless 'I's.
     val dataSet = Seq(
       // scalastyle:off
       (Seq("mİlk", "and", "nuts"), Seq("mİlk", "and", "nuts")),
@@ -113,7 +111,7 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
         .setInputCol("raw")
         .setOutputCol("filtered")
         .setStopWords(stopWords)
-        .setLocale(new Locale("rt"))
+        .setLocale("rt")  // invalid locale
     }
   }
 
