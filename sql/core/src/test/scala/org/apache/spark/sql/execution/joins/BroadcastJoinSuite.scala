@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import scala.reflect.ClassTag
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.storage.BlockId
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
@@ -153,6 +154,23 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-22575: remove allocated blocks when they are not needed anymore") {
+    val blockManager = sparkContext.env.blockManager
+    def broadcastedBlockIds: Seq[BlockId] = {
+      blockManager.getMatchingBlockIds(blockId => {
+        blockId.isBroadcast && blockManager.getStatus(blockId).get.storageLevel.deserialized
+      }).distinct
+    }
+    def isHashedRelationPresent(blockIds: Seq[BlockId]): Boolean = {
+      val blockValues = blockIds.flatMap { id =>
+        val block = blockManager.getSingle[Any](id)
+        if (block.isDefined) {
+          blockManager.releaseLock(id)
+        }
+        block
+      }
+      blockValues.exists(_.isInstanceOf[HashedRelation])
+    }
+    val initialBlocks = broadcastedBlockIds
     val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df3 = df1.join(broadcast(df2), Seq("key"), "inner")
@@ -161,15 +179,11 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     }.size
     assert(numBroadCastHashJoin > 0)
     df3.collect()
+    val blocksBeforeDestroy = broadcastedBlockIds.toBuffer -- initialBlocks
+    assert(isHashedRelationPresent(blocksBeforeDestroy))
     df3.destroy()
-    val blockManager = sparkContext.env.blockManager
-    val blocks = blockManager.getMatchingBlockIds(blockId => {
-      blockId.isBroadcast && blockManager.getStatus(blockId).get.storageLevel.deserialized
-    }).distinct
-    val blockValues = blocks.flatMap { id =>
-      blockManager.getSingle[Any](id)
-    }
-    assert(!blockValues.exists(_.isInstanceOf[HashedRelation]))
+    val blocksAfterDestroy = broadcastedBlockIds.toBuffer -- initialBlocks
+    assert(!isHashedRelationPresent(blocksAfterDestroy))
   }
 
   test("broadcast hint isn't propagated after a join") {
