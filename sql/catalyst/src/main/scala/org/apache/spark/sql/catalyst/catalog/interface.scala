@@ -93,6 +93,8 @@ object CatalogStorageFormat {
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
  * @param parameters some parameters for the partition
+ * @param createTime creation time of the partition
+ * @param lastAccessTime last access time
  * @param stats optional statistics (number of rows, total size, etc.)
  */
 case class CatalogTablePartition(
