@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.joins
 import scala.reflect.ClassTag
 
 import org.apache.spark.AccumulatorSuite
-import org.apache.spark.storage.BlockId
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
@@ -30,6 +29,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{LongType, ShortType}
+import org.apache.spark.storage.BlockId
 
 /**
  * Test various broadcast join operators.
@@ -156,9 +156,9 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   test("SPARK-22575: remove allocated blocks when they are not needed anymore") {
     val blockManager = sparkContext.env.blockManager
     def broadcastedBlockIds: Seq[BlockId] = {
-      blockManager.getMatchingBlockIds(blockId => {
+      blockManager.getMatchingBlockIds { blockId =>
         blockId.isBroadcast && blockManager.getStatus(blockId).get.storageLevel.deserialized
-      }).distinct
+      }.distinct
     }
     def isHashedRelationPresent(blockIds: Seq[BlockId]): Boolean = {
       val blockValues = blockIds.flatMap { id =>
