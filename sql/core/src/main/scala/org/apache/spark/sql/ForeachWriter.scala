@@ -32,7 +32,7 @@ import org.apache.spark.annotation.InterfaceStability
  * <li>Any implementation of this class must be serializable because each task will get a fresh
  *     serialized-deserialized copy of the provided object. Hence, it is strongly recommended that
  *     any initialization for writing data (e.g. opening a connection or starting a transaction)
- *     be done open after the `open(...)` method has been called, which signifies that the task is
+ *     is done after the `open(...)` method has been called, which signifies that the task is
  *     ready to generate data.
  *
  * <li>The lifecycle of the methods are as follows.
@@ -59,7 +59,7 @@ import org.apache.spark.annotation.InterfaceStability
  *     continuous mode, then this guarantee does not hold and therefore should not be used for
  *     deduplication.
  *
- * <li>The `close()` method is will be called if `open()` method returns successfully (irrespective
+ * <li>The `close()` method will be called if `open()` method returns successfully (irrespective
  *     of the return value), except if the JVM crashes in the middle.
  * </ul>
  *
@@ -110,7 +110,8 @@ abstract class ForeachWriter[T] extends Serializable {
   // TODO: Move this to org.apache.spark.sql.util or consolidate this with batch API.
 
   /**
-   * Called when starting to process one partition of new data in the executor.
+   * Called when starting to process one partition of new data in the executor. See the class
+   * docs for more information on how to use the `partitionId` and `epochId`.
    *
    * @param partitionId the partition id.
    * @param epochId a unique id for data deduplication.

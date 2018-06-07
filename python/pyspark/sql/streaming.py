@@ -30,7 +30,6 @@ from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
 from pyspark.sql.utils import StreamingQueryException
-from abc import ABCMeta, abstractmethod
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
@@ -844,6 +843,7 @@ class DataStreamWriter(object):
         self._jwrite = self._jwrite.trigger(jTrigger)
         return self
 
+    @since(2.4)
     def foreach(self, f):
         """
         Sets the output of the streaming query to be processed using the provided writer ``f``.
@@ -876,9 +876,9 @@ class DataStreamWriter(object):
                 processing one partition of the data generated in a distributed manner.
 
             * This object must be serializable because each task will get a fresh
-                serialized-deserializedcopy of the provided object. Hence, it is strongly
+                serialized-deserialized copy of the provided object. Hence, it is strongly
                 recommended that any initialization for writing data (e.g. opening a
-                connection or starting a transaction) be done open after the `open(...)`
+                connection or starting a transaction) is done after the `open(...)`
                 method has been called, which signifies that the task is ready to generate data.
 
             * The lifecycle of the methods are as follows.
@@ -907,7 +907,7 @@ class DataStreamWriter(object):
                 mode, then this guarantee does not hold and therefore should not be used for
                 deduplication.
 
-            * The ``close()`` method (if exists) is will be called if `open()` method exists and
+            * The ``close()`` method (if exists) will be called if `open()` method exists and
                 returns successfully (irrespective of the return value), except if the Python
                 crashes in the middle.
 
@@ -933,10 +933,9 @@ class DataStreamWriter(object):
         from pyspark.taskcontext import TaskContext
 
         if callable(f):
-            """
-            The provided object is a callable function that is supposed to be called on each row.
-            Construct a function that takes an iterator and calls the provided function on each row.
-            """
+            # The provided object is a callable function that is supposed to be called on each row.
+            # Construct a function that takes an iterator and calls the provided function on each
+            # row.
             def func_without_process(_, iterator):
                 for x in iterator:
                     f(x)
@@ -945,32 +944,25 @@ class DataStreamWriter(object):
             func = func_without_process
 
         else:
-            """
-            The provided object is not a callable function. Then it is expected to have a
-            'process(row)' method, and optional 'open(partition_id, epoch_id)' and
-            'close(error)' methods.
-            """
+            # The provided object is not a callable function. Then it is expected to have a
+            # 'process(row)' method, and optional 'open(partition_id, epoch_id)' and
+            # 'close(error)' methods.
 
             if not hasattr(f, 'process'):
-                raise Exception(
-                    "Provided object is neither callable nor does it have a 'process' method")
+                raise Exception("Provided object does not have a 'process' method")
 
             if not callable(getattr(f, 'process')):
                 raise Exception("Attribute 'process' in provided object is not callable")
 
-            open_exists = False
-            if hasattr(f, 'open'):
-                if not callable(getattr(f, 'open')):
-                    raise Exception("Attribute 'open' in provided object is not callable")
-                else:
-                    open_exists = True
+            def doesMethodExist(method_name):
+                exists = hasattr(f, method_name)
+                if exists and not callable(getattr(f, method_name)):
+                    raise Exception(
+                        "Attribute '%s' in provided object is not callable" % method_name)
+                return exists
 
-            close_exists = False
-            if hasattr(f, "close"):
-                if not callable(getattr(f, 'close')):
-                    raise Exception("Attribute 'close' in provided object is not callable")
-                else:
-                    close_exists = True
+            open_exists = doesMethodExist('open')
+            close_exists = doesMethodExist('close')
 
             def func_with_open_process_close(partition_id, iterator):
                 epoch_id = TaskContext.get().getLocalProperty('streaming.sql.batchId')
@@ -979,22 +971,27 @@ class DataStreamWriter(object):
                 else:
                     raise Exception("Could not get batch id from TaskContext")
 
+                # Check if the data should be processed
                 should_process = True
                 if open_exists:
                     should_process = f.open(partition_id, epoch_id)
 
-                def call_close_if_needed(error):
-                    if open_exists and close_exists:
-                        f.close(error)
+                error = None
+
                 try:
                     if should_process:
                         for x in iterator:
                             f.process(x)
-                except Exception as ex:
-                    call_close_if_needed(ex)
-                    raise ex
 
-                call_close_if_needed(None)
+                except Exception as ex:
+                    error = ex
+
+                finally:
+                    if close_exists:
+                        f.close(error)
+                    if error:
+                        raise error
+
                 return iter([])
 
             func = func_with_open_process_close

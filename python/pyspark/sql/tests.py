@@ -1891,10 +1891,6 @@ class SQLTests(ReusedSQLTestCase):
 
         def __init__(self, spark):
             self.spark = spark
-            self.input_dir = tempfile.mkdtemp()
-            self.open_events_dir = tempfile.mkdtemp()
-            self.process_events_dir = tempfile.mkdtemp()
-            self.close_events_dir = tempfile.mkdtemp()
 
         def write_open_event(self, partitionId, epochId):
             self._write_event(
@@ -1920,15 +1916,40 @@ class SQLTests(ReusedSQLTestCase):
             return self._read_events(self.close_events_dir, 'error STRING')
 
         def run_streaming_query_on_writer(self, writer, num_files):
+            self._reset()
             try:
                 sdf = self.spark.readStream.format('text').load(self.input_dir)
                 sq = sdf.writeStream.foreach(writer).start()
                 for i in range(num_files):
                     self.write_input_file()
                     sq.processAllAvailable()
-                sq.stop()
             finally:
                 self.stop_all()
+
+        def assert_invalid_writer(self, writer, msg=None):
+            self._reset()
+            try:
+                sdf = self.spark.readStream.format('text').load(self.input_dir)
+                sq = sdf.writeStream.foreach(writer).start()
+                self.write_input_file()
+                sq.processAllAvailable()
+                self.fail("invalid writer %s did not fail the query" % str(writer))  # not expected
+            except Exception as e:
+                if msg:
+                    assert(msg in str(e), "%s not in %s" % (msg, str(e)))
+
+            finally:
+                self.stop_all()
+
+        def stop_all(self):
+            for q in self.spark._wrapped.streams.active:
+                q.stop()
+
+        def _reset(self):
+            self.input_dir = tempfile.mkdtemp()
+            self.open_events_dir = tempfile.mkdtemp()
+            self.process_events_dir = tempfile.mkdtemp()
+            self.close_events_dir = tempfile.mkdtemp()
 
         def _read_events(self, dir, json):
             rows = self.spark.read.schema(json).json(dir).collect()
@@ -1936,14 +1957,9 @@ class SQLTests(ReusedSQLTestCase):
             return dicts
 
         def _write_event(self, dir, event):
-            import random
-            file = open(os.path.join(dir, str(random.randint(0, 100000))), 'w')
-            file.write("%s\n" % str(event))
-            file.close()
-
-        def stop_all(self):
-            for q in self.spark._wrapped.streams.active:
-                q.stop()
+            import uuid
+            with open(os.path.join(dir, str(uuid.uuid4())), 'w') as f:
+                f.write("%s\n" % str(event))
 
         def __getstate__(self):
             return (self.open_events_dir, self.process_events_dir, self.close_events_dir)
@@ -1990,8 +2006,8 @@ class SQLTests(ReusedSQLTestCase):
         tester = self.ForeachWriterTester(self.spark)
 
         class ForeachWriter:
-            def open(self, partitionId, epochId):
-                tester.write_open_event(partitionId, epochId)
+            def open(self, partition_id, epoch_id):
+                tester.write_open_event(partition_id, epoch_id)
                 return False
 
             def process(self, row):
@@ -2003,10 +2019,55 @@ class SQLTests(ReusedSQLTestCase):
         tester.run_streaming_query_on_writer(ForeachWriter(), 2)
 
         self.assertEqual(len(tester.open_events()), 2)
+
         self.assertEqual(len(tester.process_events()), 0)   # no row was processed
+
         close_events = tester.close_events()
         self.assertEqual(len(close_events), 2)
         self.assertSetEqual(set([e['error'] for e in close_events]), {'None'})
+
+    def test_streaming_foreach_without_open_method(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def process(self, row):
+                tester.write_process_event(row)
+
+            def close(self, error):
+                tester.write_close_event(error)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+        self.assertEqual(len(tester.open_events()), 0)      # no open events
+        self.assertEqual(len(tester.process_events()), 2)
+        self.assertEqual(len(tester.close_events()), 2)
+
+    def test_streaming_foreach_without_close_method(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def open(self, partition_id, epoch_id):
+                tester.write_open_event(partition_id, epoch_id)
+                return True
+
+            def process(self, row):
+                tester.write_process_event(row)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+        self.assertEqual(len(tester.open_events()), 2)  # no open events
+        self.assertEqual(len(tester.process_events()), 2)
+        self.assertEqual(len(tester.close_events()), 0)
+
+    def test_streaming_foreach_without_open_and_close_methods(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def process(self, row):
+                tester.write_process_event(row)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+        self.assertEqual(len(tester.open_events()), 0)      # no open events
+        self.assertEqual(len(tester.process_events()), 2)
+        self.assertEqual(len(tester.close_events()), 0)
 
     def test_streaming_foreach_with_process_throwing_error(self):
         from pyspark.sql.utils import StreamingQueryException
@@ -2014,10 +2075,6 @@ class SQLTests(ReusedSQLTestCase):
         tester = self.ForeachWriterTester(self.spark)
 
         class ForeachWriter:
-            def open(self, partitionId, epochId):
-                tester.write_open_event(partitionId, epochId)
-                return True
-
             def process(self, row):
                 raise Exception("test error")
 
@@ -2025,24 +2082,70 @@ class SQLTests(ReusedSQLTestCase):
                 tester.write_close_event(error)
 
         try:
-            sdf = self.spark.readStream.format('text').load(tester.input_dir)
-            sq = sdf.writeStream.foreach(ForeachWriter()).start()
-            tester.write_input_file()
-            sq.processAllAvailable()
-            self.fail("bad writer should fail the query")   # this is not expected
+            tester.run_streaming_query_on_writer(ForeachWriter(), 1)
+            self.fail("bad writer did not fail the query")   # this is not expected
         except StreamingQueryException as e:
-            # self.assertTrue("test error" in e.desc)     # this is expected
+            # TODO: Verify whether original error message is inside the exception
             pass
-        finally:
-            tester.stop_all()
 
-        self.assertEqual(len(tester.open_events()), 1)
         self.assertEqual(len(tester.process_events()), 0)  # no row was processed
         close_events = tester.close_events()
         self.assertEqual(len(close_events), 1)
-        # self.assertTrue("test error" in e[0]['error'])
+        # TODO: Verify whether original error message is inside the exception
 
-    '''
+    def test_streaming_foreach_with_invalid_writers(self):
+
+        tester = self.ForeachWriterTester(self.spark)
+
+        def func_with_iterator_input(iter):
+            for x in iter:
+                print(x)
+
+        tester.assert_invalid_writer(func_with_iterator_input)
+
+        class WriterWithoutProcess:
+            def open(self, partition):
+                pass
+
+        tester.assert_invalid_writer(WriterWithoutProcess(), "does not have a 'process'")
+
+        class WriterWithNonCallableProcess():
+            process = True
+
+        tester.assert_invalid_writer(WriterWithNonCallableProcess(),
+                                     "'process' in provided object is not callable")
+
+        class WriterWithNoParamProcess():
+            def process(self):
+                pass
+
+        tester.assert_invalid_writer(WriterWithNoParamProcess())
+
+        # Abstract class for tests below
+        class WithProcess():
+            def process(self, row):
+                pass
+
+        class WriterWithNonCallableOpen(WithProcess):
+            open = True
+
+        tester.assert_invalid_writer(WriterWithNonCallableOpen(),
+                                     "'open' in provided object is not callable")
+
+        class WriterWithNoParamOpen(WithProcess):
+            def open(self):
+                pass
+
+        tester.assert_invalid_writer(WriterWithNoParamOpen())
+
+        class WriterWithNonCallableClose(WithProcess):
+            close = True
+
+        tester.assert_invalid_writer(WriterWithNonCallableClose(),
+                                     "'close' in provided object is not callable")
+
+
+'''
     def test_help_command(self):
         # Regression test for SPARK-5464
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])

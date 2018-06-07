@@ -73,7 +73,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 object PythonForeachWriter {
 
   /**
-   * A buffer that is designed for the sole purpose of buffering UnsafeRows in PythonForeahWriter.
+   * A buffer that is designed for the sole purpose of buffering UnsafeRows in PythonForeachWriter.
    * It is designed to be used with only 1 writer thread (i.e. JVM task thread) and only 1 reader
    * thread (i.e. PythonRunner writing thread that reads from the buffer and writes to the Python
    * worker stdin). Adds to the buffer are non-blocking, and reads through the buffer's iterator
