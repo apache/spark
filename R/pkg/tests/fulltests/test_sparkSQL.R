@@ -1444,9 +1444,21 @@ test_that("column functions", {
     trunc(c, "month") + trunc(c, "mon") + trunc(c, "mm")
   c24 <- date_trunc("hour", c) + date_trunc("minute", c) + date_trunc("week", c) +
     date_trunc("quarter", c) + current_date() + current_timestamp()
+  c25 <- isinf(c) + isInf(c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
+
+  # Test isInf and isinf on column values
+  l <- data.frame(x =  c(1L, Inf, 3L))
+  df <- createDataFrame(l)
+  expect_equal(collect(select(df, isinf(df$x)))[1,1], FALSE)
+  expect_equal(collect(select(df, isinf(df$x)))[2,1], TRUE)
+  expect_equal(collect(select(df, isinf(df$x)))[3,1], FALSE)
+
+  expect_equal(collect(select(df, isInf(df$x)))[1,1], FALSE)
+  expect_equal(collect(select(df, isInf(df$x)))[2,1], TRUE)
+  expect_equal(collect(select(df, isInf(df$x)))[3,1], FALSE)
 
   # Test if base::rank() is exposed
   expect_equal(class(rank())[[1]], "Column")
