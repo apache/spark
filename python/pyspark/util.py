@@ -53,33 +53,62 @@ def _get_argspec(f):
     """
     Get argspec of a function. Supports both Python 2 and Python 3.
     """
-    # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-    # See SPARK-23569.
-    if sys.version_info[0] < 3:
+
+    if hasattr(f, '_argspec'):
+        # only used for pandas UDF: they wrap the user function, losing its signature
+        # workers need this signature, so UDF saves it here
+        argspec = f._argspec
+    elif sys.version_info[0] < 3:
         argspec = inspect.getargspec(f)
     else:
+        # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
+        # See SPARK-23569.
         argspec = inspect.getfullargspec(f)
     return argspec
 
 
-def majorMinorVersion(version):
+class VersionUtils(object):
     """
-    Get major and minor version numbers for given Spark version string.
-
-    >>> version = "2.4.0"
-    >>> majorMinorVersion(version)
-    (2, 4)
-
-    >>> version = "abc"
-    >>> majorMinorVersion(version) is None
-    True
-
+    Provides utility method to determine Spark versions with given input string.
     """
-    m = re.search('^(\d+)\.(\d+)(\..*)?$', version)
-    if m is None:
-        return None
-    else:
-        return (int(m.group(1)), int(m.group(2)))
+    @staticmethod
+    def majorMinorVersion(sparkVersion):
+        """
+        Given a Spark version string, return the (major version number, minor version number).
+        E.g., for 2.0.1-SNAPSHOT, return (2, 0).
+
+        >>> sparkVersion = "2.4.0"
+        >>> VersionUtils.majorMinorVersion(sparkVersion)
+        (2, 4)
+        >>> sparkVersion = "2.3.0-SNAPSHOT"
+        >>> VersionUtils.majorMinorVersion(sparkVersion)
+        (2, 3)
+
+        """
+        m = re.search('^(\d+)\.(\d+)(\..*)?$', sparkVersion)
+        if m is not None:
+            return (int(m.group(1)), int(m.group(2)))
+        else:
+            raise ValueError("Spark tried to parse '%s' as a Spark" % sparkVersion +
+                             " version string, but it could not find the major and minor" +
+                             " version numbers.")
+
+
+def fail_on_stopiteration(f):
+    """
+    Wraps the input function to fail on 'StopIteration' by raising a 'RuntimeError'
+    prevents silent loss of data when 'f' is used in a for loop
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except StopIteration as exc:
+            raise RuntimeError(
+                "Caught StopIteration thrown from user's code; failing the task",
+                exc
+            )
+
+    return wrapper
 
 
 if __name__ == "__main__":

@@ -140,6 +140,12 @@ namespace as that of the driver and executor pods. For example, to mount a secre
 --conf spark.kubernetes.executor.secrets.spark-secret=/etc/secrets
 ```
 
+To use a secret through an environment variable use the following options to the `spark-submit` command:
+```
+--conf spark.kubernetes.driver.secretKeyRef.ENV_NAME=name:key
+--conf spark.kubernetes.executor.secretKeyRef.ENV_NAME=name:key
+```
+
 ## Introspection and Debugging
 
 These are the different ways in which you can investigate a running/completed Spark application, monitor progress, and
@@ -319,6 +325,13 @@ specific to Spark on Kubernetes.
   <td><code>IfNotPresent</code></td>
   <td>
     Container image pull policy used when pulling images within Kubernetes.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.container.image.pullSecrets</code></td>
+  <td><code></code></td>
+  <td>
+    Comma separated list of Kubernetes secrets used to pull images from private image registries.
   </td>
 </tr>
 <tr>
@@ -600,6 +613,22 @@ specific to Spark on Kubernetes.
   <td>
    Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the executor pod on the path specified in the value. For example,
    <code>spark.kubernetes.executor.secrets.spark-secret=/etc/secrets</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.secretKeyRef.[EnvName]</code></td>
+  <td>(none)</td>
+  <td>
+   Add as an environment variable to the driver container with name EnvName (case sensitive), the value referenced by key <code> key </code> in the data of the referenced <a href="https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables">Kubernetes Secret</a>. For example,
+   <code>spark.kubernetes.driver.secretKeyRef.ENV_VAR=spark-secret:key</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.secretKeyRef.[EnvName]</code></td>
+  <td>(none)</td>
+  <td>
+   Add as an environment variable to the executor container with name EnvName (case sensitive), the value referenced by key <code> key </code> in the data of the referenced <a href="https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables">Kubernetes Secret</a>. For example,
+   <code>spark.kubernetes.executor.secrets.ENV_VAR=spark-secret:key</code>.
   </td>
 </tr>
 </table>

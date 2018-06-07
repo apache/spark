@@ -900,6 +900,22 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_stopiteration_in_udf(self):
+        # test for SPARK-23754
+        from pyspark.sql.functions import udf
+        from py4j.protocol import Py4JJavaError
+
+        def foo(x):
+            raise StopIteration()
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            self.spark.range(0, 1000).withColumn('v', udf(foo)('id')).show()
+
+        self.assertIn(
+            "Caught StopIteration thrown from user's code; failing the task",
+            cm.exception.java_exception.toString()
+        )
+
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
         from pyspark.sql.column import _to_java_column
@@ -3040,6 +3056,54 @@ class SQLTests(ReusedSQLTestCase):
             .csv(rdd, samplingRatio=0.5).schema
         self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
 
+    def test_checking_csv_header(self):
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+        try:
+            self.spark.createDataFrame([[1, 1000], [2000, 2]])\
+                .toDF('f1', 'f2').write.option("header", "true").csv(path)
+            schema = StructType([
+                StructField('f2', IntegerType(), nullable=True),
+                StructField('f1', IntegerType(), nullable=True)])
+            df = self.spark.read.option('header', 'true').schema(schema)\
+                .csv(path, enforceSchema=False)
+            self.assertRaisesRegexp(
+                Exception,
+                "CSV header does not conform to the schema",
+                lambda: df.collect())
+        finally:
+            shutil.rmtree(path)
+
+    def test_repr_html(self):
+        import re
+        pattern = re.compile(r'^ *\|', re.MULTILINE)
+        df = self.spark.createDataFrame([(1, "1"), (22222, "22222")], ("key", "value"))
+        self.assertEquals(None, df._repr_html_())
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
+            expected1 = """<table border='1'>
+                |<tr><th>key</th><th>value</th></tr>
+                |<tr><td>1</td><td>1</td></tr>
+                |<tr><td>22222</td><td>22222</td></tr>
+                |</table>
+                |"""
+            self.assertEquals(re.sub(pattern, '', expected1), df._repr_html_())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                expected2 = """<table border='1'>
+                    |<tr><th>key</th><th>value</th></tr>
+                    |<tr><td>1</td><td>1</td></tr>
+                    |<tr><td>222</td><td>222</td></tr>
+                    |</table>
+                    |"""
+                self.assertEquals(re.sub(pattern, '', expected2), df._repr_html_())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    expected3 = """<table border='1'>
+                        |<tr><th>key</th><th>value</th></tr>
+                        |<tr><td>1</td><td>1</td></tr>
+                        |</table>
+                        |only showing top 1 row
+                        |"""
+                    self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
@@ -3092,8 +3156,8 @@ class HiveSparkSubmitTests(SparkSubmitTests):
             |print(hive_context.sql("show databases").collect())
             """)
         proc = subprocess.Popen(
-            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]",
-             "--driver-class-path", hive_site_dir, script],
+            self.sparkSubmit + ["--master", "local-cluster[1,1,1024]",
+                                "--driver-class-path", hive_site_dir, script],
             stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -4680,6 +4744,26 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected2, result2)
         self.assertPandasEqual(expected3, result3)
 
+    def test_array_type_correct(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
+
+        df = self.data.withColumn("arr", array(col("id"))).repartition(1, "id")
+
+        output_schema = StructType(
+            [StructField('id', LongType()),
+             StructField('v', IntegerType()),
+             StructField('arr', ArrayType(LongType()))])
+
+        udf = pandas_udf(
+            lambda pdf: pdf,
+            output_schema,
+            PandasUDFType.GROUPED_MAP
+        )
+
+        result = df.groupby('id').apply(udf).sort('id').toPandas()
+        expected = df.toPandas().groupby('id').apply(udf.func).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
     def test_register_grouped_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
@@ -5219,8 +5303,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         expected2 = df.groupby().agg(sum(df.v))
 
         # groupby one column and one sql expression
-        result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v))
-        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v))
+        result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v)).orderBy(df.id, df.v % 2)
+        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v)).orderBy(df.id, df.v % 2)
 
         # groupby one python UDF
         result4 = df.groupby(plus_one(df.id)).agg(sum_udf(df.v))

@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.features._
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -29,17 +29,28 @@ private[spark] class KubernetesDriverBuilder(
       new DriverServiceFeatureStep(_),
     provideSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountSecretsFeatureStep) =
-      new MountSecretsFeatureStep(_)) {
+      new MountSecretsFeatureStep(_),
+    provideEnvSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => EnvSecretsFeatureStep) =
+    new EnvSecretsFeatureStep(_),
+    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
+      => LocalDirsFeatureStep =
+      new LocalDirsFeatureStep(_)) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
     val baseFeatures = Seq(
       provideBasicStep(kubernetesConf),
       provideCredentialsStep(kubernetesConf),
-      provideServiceStep(kubernetesConf))
-    val allFeatures = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
+      provideServiceStep(kubernetesConf),
+      provideLocalDirsStep(kubernetesConf))
+    var allFeatures = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
       baseFeatures ++ Seq(provideSecretsStep(kubernetesConf))
     } else baseFeatures
+
+    allFeatures = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
+      allFeatures ++ Seq(provideEnvSecretsStep(kubernetesConf))
+    } else allFeatures
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {

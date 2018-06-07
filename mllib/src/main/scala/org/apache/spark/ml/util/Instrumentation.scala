@@ -59,6 +59,13 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   /**
+   * Logs a debug message with a prefix that uniquely identifies the training session.
+   */
+  override def logDebug(msg: => String): Unit = {
+    super.logDebug(prefix + msg)
+  }
+
+  /**
    * Logs a warning message with a prefix that uniquely identifies the training session.
    */
   override def logWarning(msg: => String): Unit = {
@@ -124,6 +131,19 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   def logNamedValue(name: String, value: Double): Unit = {
     log(compact(render(name -> value)))
   }
+
+  def logNamedValue(name: String, value: Array[String]): Unit = {
+    log(compact(render(name -> compact(render(value.toSeq)))))
+  }
+
+  def logNamedValue(name: String, value: Array[Long]): Unit = {
+    log(compact(render(name -> compact(render(value.toSeq)))))
+  }
+
+  def logNamedValue(name: String, value: Array[Double]): Unit = {
+    log(compact(render(name -> compact(render(value.toSeq)))))
+  }
+
 
   /**
    * Logs the successful completion of the training session.
