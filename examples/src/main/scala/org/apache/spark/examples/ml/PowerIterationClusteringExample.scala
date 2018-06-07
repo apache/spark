@@ -41,20 +41,21 @@ object PowerIterationClusteringExample {
 
      // $example on$
      val dataset = spark.createDataFrame(Seq(
-       (0L, Array(1L, 2L, 4L), Array(0.9, 0.9, 0.1)),
-       (1L, Array(0L, 2L), Array(0.9, 0.9)),
-       (2L, Array(0L, 1L), Array(0.9, 0.9)),
-       (3L, Array(4L), Array(0.9)),
-       (4L, Array(0L, 3L), Array(0.1, 0.9))
-     )).toDF("id", "neighbors", "similarities")
+       (0L, 1L, 1.0),
+       (0L, 2L, 1.0),
+       (1L, 2L, 1.0),
+       (3L, 4L, 1.0),
+       (4L, 0L, 0.1)
+     )).toDF("src", "dst", "weight")
 
      // Trains a PIC model.
      val model = new PowerIterationClustering().
        setK(2).
+       setMaxIter(20).
        setInitMode("degree").
-       setMaxIter(20)
+       setWeightCol("weight")
 
-     val prediction = model.transform(dataset).select("id", "prediction")
+     val prediction = model.assignClusters(dataset).select("id", "cluster")
 
      //  Shows the cluster assignment
      prediction.show()
