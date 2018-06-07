@@ -38,7 +38,6 @@ object KMeansExample {
     val spark = SparkSession
       .builder
       .appName(s"${this.getClass.getSimpleName}")
-      .master("local[*]")
       .getOrCreate()
 
     // $example on$
