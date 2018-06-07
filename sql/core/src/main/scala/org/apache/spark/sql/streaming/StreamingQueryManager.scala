@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
@@ -56,9 +57,17 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
 
-  sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
-    Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
-      sparkSession.sparkContext.conf).foreach(addListener)
+  try {
+    sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
+      Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
+        sparkSession.sparkContext.conf).foreach(listener => {
+        addListener(listener)
+        logInfo(s"Registered listener ${listener.getClass.getName}")
+      })
+    }
+  } catch {
+    case e: Exception =>
+      throw new SparkException(s"Exception when registering StreamingQueryListener", e)
   }
 
   /**
