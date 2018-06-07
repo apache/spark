@@ -910,6 +910,7 @@ setMethod("initcap",
 #' @details
 #' \code{isinf}: Returns true if the column is Infinity.
 #' @rdname column_nonaggregate_functions
+#' @aliases isinf isinf,Column-method
 #' @note isinf since 2.4.0
 setMethod("isinf",
           signature(x = "Column"),
