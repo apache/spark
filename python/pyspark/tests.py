@@ -1309,7 +1309,10 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaisesRegexp(Py4JJavaError, msg,
                                 seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
 
-        # the exception raised is non-deterministic
+        # these methods call the user function both in the driver and in the executor
+        # the exception raised is different according to where the StopIteration happens
+        # RuntimeError is raised if in the driver
+        # Py4JJavaError is raised if in the executor (wraps the RuntimeError raised in the worker)
         self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
                                 keyed_rdd.reduceByKeyLocally, stopit)
         self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,

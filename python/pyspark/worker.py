@@ -139,8 +139,8 @@ def read_single_udf(pickleSer, infile, eval_type):
         else:
             row_func = chain(row_func, f)
 
-    # make sure StopIteration's raised in the user code are not
-    # ignored, but re-raised as RuntimeError's
+    # make sure StopIteration's raised in the user code are not ignored
+    # when they are processed in a for loop, raise them as RuntimeError's instead
     func = fail_on_stopiteration(row_func)
 
     # the last returnType will be the return type of UDF
