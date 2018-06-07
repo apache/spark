@@ -1568,11 +1568,13 @@ class Analyzer(
       expr.find(_.isInstanceOf[Generator]).isDefined
     }
 
-    private def hasNestedGenerator(expr: NamedExpression): Boolean = expr match {
-      case UnresolvedAlias(_: Generator, _) => false
-      case Alias(_: Generator, _) => false
-      case MultiAlias(_: Generator, _) => false
-      case other => hasGenerator(other)
+    private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      CleanupAliases.trimNonTopLevelAliases(expr) match {
+        case UnresolvedAlias(_: Generator, _) => false
+        case Alias(_: Generator, _) => false
+        case MultiAlias(_: Generator, _) => false
+        case other => hasGenerator(other)
+      }
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
@@ -1613,24 +1615,26 @@ class Analyzer(
         // Holds the resolved generator, if one exists in the project list.
         var resolvedGenerator: Generate = null
 
-        val newProjectList = projectList.flatMap {
-          case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
-            // It's a sanity check, this should not happen as the previous case will throw
-            // exception earlier.
-            assert(resolvedGenerator == null, "More than one generator found in SELECT.")
+        val newProjectList = projectList
+          .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          .flatMap {
+            case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
+              // It's a sanity check, this should not happen as the previous case will throw
+              // exception earlier.
+              assert(resolvedGenerator == null, "More than one generator found in SELECT.")
 
-            resolvedGenerator =
-              Generate(
-                generator,
-                unrequiredChildIndex = Nil,
-                outer = outer,
-                qualifier = None,
-                generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
-                child)
+              resolvedGenerator =
+                Generate(
+                  generator,
+                  unrequiredChildIndex = Nil,
+                  outer = outer,
+                  qualifier = None,
+                  generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
+                  child)
 
-            resolvedGenerator.generatorOutput
-          case other => other :: Nil
-        }
+              resolvedGenerator.generatorOutput
+            case other => other :: Nil
+          }
 
         if (resolvedGenerator != null) {
           Project(newProjectList, resolvedGenerator)
