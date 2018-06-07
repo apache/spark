@@ -30,16 +30,9 @@ import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray.DefaultIn
 import org.apache.spark.storage.BlockManager
 
 /**
- * An append-only array for [[UnsafeRow]]s that strictly keeps content in an in-memory array
- * until [[numRowsInMemoryBufferThreshold]] is reached post which it will switch to a mode which
- * would flush to disk after [[numRowsSpillThreshold]] is met (or before if there is
- * excessive memory consumption). Setting these threshold involves following trade-offs:
- *
- * - If [[numRowsInMemoryBufferThreshold]] is too high, the in-memory array may occupy more memory
- *   than is available, resulting in OOM.
- * - If [[numRowsSpillThreshold]] is too low, data will be spilled frequently and lead to
- *   excessive disk writes. This may lead to a performance regression compared to the normal case
- *   of using an [[ArrayBuffer]] or [[Array]].
+ * A queue which implements a moving window used for sort-merge join inner range optimization.
+ * Unlike [[ExternalAppendOnlyUnsafeRowArray]] this class currently does not spill over to disk.
+ * In case [[numRowsInMemoryBufferThreshold]] is reached, only a warning will be logged.
  */
 private[sql] class InMemoryUnsafeRowQueue(
     taskMemoryManager: TaskMemoryManager,
@@ -119,11 +112,10 @@ private[sql] class InMemoryUnsafeRowQueue(
   }
 
   override def add(unsafeRow: UnsafeRow): Unit = {
-    if (numRows < numRowsInMemoryBufferThreshold) {
-      inMemoryQueue += unsafeRow.copy()
-    } else {
-      throw new RuntimeException(s"Reached spill threshold of $numRowsInMemoryBufferThreshold rows")
+    if (numRows >= numRowsInMemoryBufferThreshold) {
+      logWarning(s"Reached spill threshold of $numRowsInMemoryBufferThreshold rows")
     }
+    inMemoryQueue += unsafeRow.copy()
 
     numRows += 1
     modificationsCount += 1
@@ -178,5 +170,3 @@ private[sql] class InMemoryUnsafeRowQueue(
     }
   }
 }
-
-
