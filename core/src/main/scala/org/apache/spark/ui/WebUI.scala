@@ -101,12 +101,12 @@ private[spark] abstract class WebUI(
   }
 
   /**
-   * Add a handler for static content.
+   * Adds a handler for static content.
    *
    * @param resourceBase Root of where to find resources to serve.
    * @param path Path in UI where to mount the resources.
    */
-  def addStaticHandler(resourceBase: String, path: String): Unit = {
+  def addStaticHandler(resourceBase: String, path: String = "/static"): Unit = {
     attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
   }
 
