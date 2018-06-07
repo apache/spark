@@ -20,19 +20,10 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.clustering.PowerIterationClustering
-import org.apache.spark.sql.SparkSession
 // $example off$
-
- /**
-  * An example demonstrating power iteration clustering.
-  * Run with
-  * {{{
-  * bin/run-example ml.PowerIterationClusteringExample
-  * }}}
-  */
+import org.apache.spark.sql.SparkSession
 
 object PowerIterationClusteringExample {
-
    def main(args: Array[String]): Unit = {
      val spark = SparkSession
        .builder
@@ -48,7 +39,6 @@ object PowerIterationClusteringExample {
        (4L, 0L, 0.1)
      )).toDF("src", "dst", "weight")
 
-     // Trains a PIC model.
      val model = new PowerIterationClustering().
        setK(2).
        setMaxIter(20).
@@ -58,7 +48,7 @@ object PowerIterationClusteringExample {
      val prediction = model.assignClusters(dataset).select("id", "cluster")
 
      //  Shows the cluster assignment
-     prediction.show()
+     prediction.show(false)
      // $example off$
 
      spark.stop()
