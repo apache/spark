@@ -33,6 +33,6 @@ if __name__ == "__main__":
 
     from py_container_checks import version_check
     # Begin of Python container checks
-    version_check(sys.argv[1], 2 if sys.argv[1]=="python" else 3)
+    version_check(sys.argv[1], 2 if sys.argv[1] == "python" else 3)
 
     spark.stop()
