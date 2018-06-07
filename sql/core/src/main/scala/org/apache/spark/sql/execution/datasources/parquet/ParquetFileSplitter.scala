@@ -40,14 +40,14 @@ import org.apache.spark.util.ThreadUtils
 abstract class ParquetFileSplitter {
   def buildSplitter(filters: Seq[Filter]): (FileStatus => Seq[FileSplit])
 
-  def singleFileSplit(stat: FileStatus): Seq[FileSplit] = {
-    Seq(new FileSplit(stat.getPath, 0, stat.getLen, Array.empty))
+  def singleFileSplit(path: Path, length: Long): Seq[FileSplit] = {
+    Seq(new FileSplit(path, 0, length, Array.empty))
   }
 }
 
 object ParquetDefaultFileSplitter extends ParquetFileSplitter {
   override def buildSplitter(filters: Seq[Filter]): (FileStatus => Seq[FileSplit]) = {
-    stat => singleFileSplit(stat)
+    stat => singleFileSplit(stat.getPath, stat.getLen)
   }
 }
 
@@ -84,18 +84,20 @@ class ParquetMetadataFileSplitter(
       (applied, unapplied, filteredBlocks)
     }
 
+    // Group eligible splits by file Path.
     val eligible = applyParquetFilter(unapplied, filteredBlocks).map { bmd =>
       val blockPath = new Path(root, bmd.getPath)
       new FileSplit(blockPath, bmd.getStartingPos, bmd.getCompressedSize, Array.empty)
-    }
+    }.groupBy(_.getPath)
 
     val statFilter: (FileStatus => Seq[FileSplit]) = { stat =>
-      if (referencedFiles.contains(stat.getPath)) {
-        eligible.filter(_.getPath == stat.getPath)
+      val filePath = stat.getPath
+      if (referencedFiles.contains(filePath)) {
+        eligible.getOrElse(filePath, Nil)
       } else {
         log.warn(s"Found _metadata file for $root," +
-          s" but no entries for blocks in ${stat.getPath}. Retaining whole file.")
-        singleFileSplit(stat)
+          s" but no entries for blocks in ${filePath}. Retaining whole file.")
+        singleFileSplit(filePath, stat.getLen)
       }
     }
     statFilter
