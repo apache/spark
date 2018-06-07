@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
 import org.apache.spark.sql.sources.v2.StreamWriteSupport
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
@@ -54,6 +55,12 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
+
+  sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS)
+  .foreach { classNames =>
+    Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
+      sparkSession.sparkContext.conf).foreach(addListener)
+  }
 
   /**
    * Returns a list of active queries associated with this SQLContext
