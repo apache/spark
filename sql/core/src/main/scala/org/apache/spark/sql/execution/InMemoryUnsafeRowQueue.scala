@@ -80,7 +80,6 @@ private[sql] class InMemoryUnsafeRowQueue(
     null
   }
 
-//  private var spillableArray: UnsafeExternalSorter = _
   private var numRows = 0
 
   override def length: Int = numRows

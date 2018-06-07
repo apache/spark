@@ -142,7 +142,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         // which are not used in the equijoin expressions,
         // and which can be used for secondary sort optimizations.
         // rangePreds will contain the original expressions to be filtered out later.
-        val rangePreds: mutable.Set[Expression] = mutable.Set.empty
+        val rangePreds = mutable.Set.empty[Expression]
         var rangeConditions: Seq[BinaryComparison] =
           if (SQLConf.get.useSmjInnerRangeOptimization) {
             otherPredicates.flatMap {
@@ -172,12 +172,12 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 
         // Only using secondary join optimization when both lower and upper conditions
         // are specified (e.g. t1.a < t2.b + x and t1.a > t2.b - x)
-        if(rangeConditions.size != 2 ||
+        if (rangeConditions.size != 2 ||
             // Looking for one < and one > comparison:
-            rangeConditions.filter(x => x.isInstanceOf[LessThan] ||
-              x.isInstanceOf[LessThanOrEqual]).size == 0 ||
-            rangeConditions.filter(x => x.isInstanceOf[GreaterThan] ||
-              x.isInstanceOf[GreaterThanOrEqual]).size == 0 ||
+            rangeConditions.forall(x => !x.isInstanceOf[LessThan] &&
+              !x.isInstanceOf[LessThanOrEqual]) ||
+            rangeConditions.forall(x => !x.isInstanceOf[GreaterThan] &&
+              !x.isInstanceOf[GreaterThanOrEqual]) ||
             // Check if both comparisons reference the same columns:
             rangeConditions.flatMap(c => c.left.references.toSeq.distinct).distinct.size != 1 ||
             rangeConditions.flatMap(c => c.right.references.toSeq.distinct).distinct.size != 1) {
@@ -206,25 +206,22 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
    */
   private def checkRangeConditions(l : Expression, r : Expression,
       left : LogicalPlan, right : LogicalPlan,
-      joinKeys : Seq[(Expression, Expression)]) = {
+      joinKeys : Seq[(Expression, Expression)]):Option[Boolean] = {
     val (lattrs, rattrs) = (l.references.toSeq, r.references.toSeq)
-    if(lattrs.size != 1 || rattrs.size != 1) {
+    if (lattrs.size != 1 || rattrs.size != 1) {
       None
-    }
-    else if (canEvaluate(l, left) && canEvaluate(r, right)) {
+    } else if (canEvaluate(l, left) && canEvaluate(r, right)) {
       if (joinKeys.exists { case (ljk : Expression, rjk : Expression) =>
           ljk.references.toSeq.contains(lattrs(0)) && rjk.references.toSeq.contains(rattrs(0)) }) {
         None
       } else {
         Some(false)
       }
-    }
-    else if (canEvaluate(l, right) && canEvaluate(r, left)) {
+    } else if (canEvaluate(l, right) && canEvaluate(r, left)) {
       if (joinKeys.exists{ case (ljk : Expression, rjk : Expression) =>
         rjk.references.toSeq.contains(lattrs(0)) && ljk.references.toSeq.contains(rattrs(0)) }) {
         None
-      }
-      else {
+      } else {
         Some(true)
       }
     } else {
