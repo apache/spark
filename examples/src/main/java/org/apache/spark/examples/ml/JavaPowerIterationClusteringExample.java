@@ -72,7 +72,6 @@ public class JavaPowerIterationClusteringExample {
                 .setWeightCol("weight")
                 .assignClusters(df);
 
-
         // Printing results
         System.out.println("Clustering results [id, cluster]");
         for (Row row : result.select("id", "cluster").collectAsList()) {
