@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryStartedEvent, QueryTerminatedEvent, _}
+import org.apache.spark.sql.streaming.StreamingQueryListener._
 
 
 class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {

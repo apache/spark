@@ -56,8 +56,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
 
-  sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS)
-  .foreach { classNames =>
+  sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
     Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
       sparkSession.sparkContext.conf).foreach(addListener)
   }
