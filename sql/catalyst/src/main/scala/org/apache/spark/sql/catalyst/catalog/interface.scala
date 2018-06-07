@@ -100,7 +100,7 @@ case class CatalogTablePartition(
     storage: CatalogStorageFormat,
     parameters: Map[String, String] = Map.empty,
     createTime: Long = System.currentTimeMillis,
-    lastAccessTime: Long = -1) {
+    lastAccessTime: Long = -1,
     stats: Option[CatalogStatistics] = None) {
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
