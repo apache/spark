@@ -26,17 +26,15 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, Unsa
 import org.apache.spark.sql.types.{BinaryType, StringType}
 
 /**
- * A simple trait for writing out data in a single Spark task, without any concerns about how
+ * Writes out data in a single Spark task, without any concerns about how
  * to commit or abort tasks. Exceptions thrown by the implementation of this class will
  * automatically trigger task aborts.
  */
 private[kafka010] class KafkaWriteTask(
     producerConfiguration: ju.Map[String, Object],
     inputSchema: Seq[Attribute],
-    topic: Option[String]) {
+    topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
   // used to synchronize with Kafka callbacks
-  @volatile private var failedWrite: Exception = null
-  private val projection = createProjection
   private var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
 
   /**
@@ -46,23 +44,7 @@ private[kafka010] class KafkaWriteTask(
     producer = CachedKafkaProducer.getOrCreate(producerConfiguration)
     while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
-      val projectedRow = projection(currentRow)
-      val topic = projectedRow.getUTF8String(0)
-      val key = projectedRow.getBinary(1)
-      val value = projectedRow.getBinary(2)
-      if (topic == null) {
-        throw new NullPointerException(s"null topic present in the data. Use the " +
-        s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
-      }
-      val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
-      val callback = new Callback() {
-        override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
-          if (failedWrite == null && e != null) {
-            failedWrite = e
-          }
-        }
-      }
-      producer.send(record, callback)
+      sendRow(currentRow, producer)
     }
   }
 
@@ -74,8 +56,49 @@ private[kafka010] class KafkaWriteTask(
       producer = null
     }
   }
+}
 
-  private def createProjection: UnsafeProjection = {
+private[kafka010] abstract class KafkaRowWriter(
+    inputSchema: Seq[Attribute], topic: Option[String]) {
+
+  // used to synchronize with Kafka callbacks
+  @volatile protected var failedWrite: Exception = _
+  protected val projection = createProjection
+
+  private val callback = new Callback() {
+    override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
+      if (failedWrite == null && e != null) {
+        failedWrite = e
+      }
+    }
+  }
+
+  /**
+   * Send the specified row to the producer, with a callback that will save any exception
+   * to failedWrite. Note that send is asynchronous; subclasses must flush() their producer before
+   * assuming the row is in Kafka.
+   */
+  protected def sendRow(
+      row: InternalRow, producer: KafkaProducer[Array[Byte], Array[Byte]]): Unit = {
+    val projectedRow = projection(row)
+    val topic = projectedRow.getUTF8String(0)
+    val key = projectedRow.getBinary(1)
+    val value = projectedRow.getBinary(2)
+    if (topic == null) {
+      throw new NullPointerException(s"null topic present in the data. Use the " +
+        s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
+    }
+    val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
+    producer.send(record, callback)
+  }
+
+  protected def checkForErrors(): Unit = {
+    if (failedWrite != null) {
+      throw failedWrite
+    }
+  }
+
+  private def createProjection = {
     val topicExpression = topic.map(Literal(_)).orElse {
       inputSchema.find(_.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME)
     }.getOrElse {
@@ -111,12 +134,6 @@ private[kafka010] class KafkaWriteTask(
     UnsafeProjection.create(
       Seq(topicExpression, Cast(keyExpression, BinaryType),
         Cast(valueExpression, BinaryType)), inputSchema)
-  }
-
-  private def checkForErrors(): Unit = {
-    if (failedWrite != null) {
-      throw failedWrite
-    }
   }
 }
 

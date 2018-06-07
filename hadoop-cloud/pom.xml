@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.3.0-SNAPSHOT</version>
+    <version>2.4.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -38,7 +38,32 @@
     <sbt.project.name>hadoop-cloud</sbt.project.name>
   </properties>
 
+  <build>
+    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+  </build>
+
   <dependencies>
+    <!--used during compilation but not exported as transitive dependencies-->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>provided</scope>
+    </dependency>
     <!--
       the AWS module pulls in jackson; its transitive dependencies can create
       intra-jackson-module version problems.
@@ -147,7 +172,7 @@
 
     <profile>
       <id>hadoop-2.7</id>
-      <!-- Hadoop Azure is a new Jar with -->
+      <!-- 2.7+ adds the azure Jar to the set of dependencies -->
       <dependencies>
 
         <!--
@@ -176,6 +201,62 @@
               <artifactId>guava</artifactId>
             </exclusion>
           </exclusions>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <!--
+     Hadoop 3 simplifies the classpath, and adds a new committer base class which
+     enables store-specific committers.
+    -->
+    <profile>
+      <id>hadoop-3.1</id>
+      <dependencies>
+        <!--
+        There's now a hadoop-cloud-storage which transitively pulls in the store JARs,
+        but it still needs some selective exclusion across versions, especially 3.0.x.
+        -->
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-cloud-storage</artifactId>
+          <version>${hadoop.version}</version>
+          <scope>${hadoop.deps.scope}</scope>
+          <exclusions>
+            <exclusion>
+              <groupId>org.apache.hadoop</groupId>
+              <artifactId>hadoop-common</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.codehaus.jackson</groupId>
+              <artifactId>jackson-mapper-asl</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-core</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>com.google.guava</groupId>
+              <artifactId>guava</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+        <!--
+        The jetty declarations are made
+        (a) to keep that jetty-util-ajax version in sync with the rest of Spark.
+        (b) to minimise the effects which Spark's jetty shading has on the
+            availability of the jetty JARs on for hadoop-azure, which depends
+            on them.
+         -->
+        <dependency>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>jetty-util</artifactId>
+          <scope>${hadoop.deps.scope}</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>jetty-util-ajax</artifactId>
+          <version>${jetty.version}</version>
+          <scope>${hadoop.deps.scope}</scope>
         </dependency>
       </dependencies>
     </profile>

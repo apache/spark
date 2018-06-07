@@ -223,7 +223,7 @@ class UISuite extends SparkFunSuite {
     val targetUri = URI.create("http://localhost:4040")
     when(clientRequest.getScheme()).thenReturn("http")
     when(clientRequest.getHeader("host")).thenReturn("localhost:8080")
-    when(clientRequest.getPathInfo()).thenReturn("/proxy/worker-id")
+    when(clientRequest.getPathInfo()).thenReturn("/proxy/worker-id/jobs")
     var newHeader = JettyUtils.createProxyLocationHeader(headerValue, clientRequest, targetUri)
     assert(newHeader.toString() === "http://localhost:8080/proxy/worker-id/jobs")
     headerValue = "http://localhost:4041/jobs"

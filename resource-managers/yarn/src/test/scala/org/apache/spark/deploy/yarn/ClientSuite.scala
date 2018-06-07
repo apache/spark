@@ -24,7 +24,6 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
 
-import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
@@ -36,33 +35,17 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.Matchers.{eq => meq, _}
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
+import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
-class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
-  with ResetSystemProperties {
+class ClientSuite extends SparkFunSuite with Matchers {
 
   import Client._
 
   var oldSystemProperties: Properties = null
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    oldSystemProperties = SerializationUtils.clone(System.getProperties)
-    System.setProperty("SPARK_YARN_MODE", "true")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      System.setProperties(oldSystemProperties)
-      oldSystemProperties = null
-    } finally {
-      super.afterAll()
-    }
-  }
 
   test("default Yarn application classpath") {
     getDefaultYarnApplicationClasspath should be(Fixtures.knownDefYarnAppCP)
@@ -185,7 +168,6 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("configuration and args propagate through createApplicationSubmissionContext") {
-    val conf = new Configuration()
     // When parsing tags, duplicates and leading/trailing whitespace should be removed.
     // Spaces between non-comma strings should be preserved as single tags. Empty strings may or
     // may not be removed depending on the version of Hadoop being used.
@@ -200,7 +182,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
     val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
 
-    val client = new Client(args, conf, sparkConf)
+    val client = new Client(args, sparkConf)
     client.createApplicationSubmissionContext(
       new YarnClientApplication(getNewApplicationResponse, appContext),
       containerLaunchContext)
@@ -375,6 +357,39 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
+  private val matching = Seq(
+    ("files URI match test1", "file:///file1", "file:///file2"),
+    ("files URI match test2", "file:///c:file1", "file://c:file2"),
+    ("files URI match test3", "file://host/file1", "file://host/file2"),
+    ("wasb URI match test", "wasb://bucket1@user", "wasb://bucket1@user/"),
+    ("hdfs URI match test", "hdfs:/path1", "hdfs:/path1")
+  )
+
+  matching.foreach { t =>
+      test(t._1) {
+        assert(Client.compareUri(new URI(t._2), new URI(t._3)),
+          s"No match between ${t._2} and ${t._3}")
+      }
+  }
+
+  private val unmatching = Seq(
+    ("files URI unmatch test1", "file:///file1", "file://host/file2"),
+    ("files URI unmatch test2", "file://host/file1", "file:///file2"),
+    ("files URI unmatch test3", "file://host/file1", "file://host2/file2"),
+    ("wasb URI unmatch test1", "wasb://bucket1@user", "wasb://bucket2@user/"),
+    ("wasb URI unmatch test2", "wasb://bucket1@user", "wasb://bucket1@user2/"),
+    ("s3 URI unmatch test", "s3a://user@pass:bucket1/", "s3a://user2@pass2:bucket1/"),
+    ("hdfs URI unmatch test1", "hdfs://namenode1/path1", "hdfs://namenode1:8080/path2"),
+    ("hdfs URI unmatch test2", "hdfs://namenode1:8020/path1", "hdfs://namenode1:8080/path2")
+  )
+
+  unmatching.foreach { t =>
+      test(t._1) {
+        assert(!Client.compareUri(new URI(t._2), new URI(t._3)),
+          s"match between ${t._2} and ${t._3}")
+      }
+  }
+
   object Fixtures {
 
     val knownDefYarnAppCP: Seq[String] =
@@ -407,15 +422,14 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   private def createClient(
       sparkConf: SparkConf,
-      conf: Configuration = new Configuration(),
       args: Array[String] = Array()): Client = {
     val clientArgs = new ClientArguments(args)
-    spy(new Client(clientArgs, conf, sparkConf))
+    spy(new Client(clientArgs, sparkConf))
   }
 
   private def classpath(client: Client): Array[String] = {
     val env = new MutableHashMap[String, String]()
-    populateClasspath(null, client.hadoopConf, client.sparkConf, env)
+    populateClasspath(null, new Configuration(), client.sparkConf, env)
     classpath(env)
   }
 

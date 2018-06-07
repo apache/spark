@@ -50,6 +50,7 @@ import org.apache.spark.util.PeriodicCheckpointer
  * {{{
  *  val (graph1, graph2, graph3, ...) = ...
  *  val cp = new PeriodicGraphCheckpointer(2, sc)
+ *  cp.updateGraph(graph1)
  *  graph1.vertices.count(); graph1.edges.count()
  *  // persisted: graph1
  *  cp.updateGraph(graph2)

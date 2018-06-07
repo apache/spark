@@ -68,6 +68,7 @@ else:
     xrange = range
 
 from pyspark import cloudpickle
+from pyspark.util import _exception_message
 
 
 __all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
@@ -79,6 +80,7 @@ class SpecialLengths(object):
     TIMING_DATA = -3
     END_OF_STREAM = -4
     NULL = -5
+    START_ARROW_STREAM = -6
 
 
 class Serializer(object):
@@ -97,7 +99,7 @@ class Serializer(object):
 
     def _load_stream_without_unbatching(self, stream):
         """
-        Return an iterator of deserialized batches (lists) of objects from the input stream.
+        Return an iterator of deserialized batches (iterable) of objects from the input stream.
         if the serializer does not operate on batches the default implementation returns an
         iterator of single element lists.
         """
@@ -184,11 +186,17 @@ class FramedSerializer(Serializer):
 
 class ArrowSerializer(FramedSerializer):
     """
-    Serializes an Arrow stream.
+    Serializes bytes as Arrow data with the Arrow file format.
     """
 
-    def dumps(self, obj):
-        raise NotImplementedError
+    def dumps(self, batch):
+        import pyarrow as pa
+        import io
+        sink = io.BytesIO()
+        writer = pa.RecordBatchFileWriter(sink, batch.schema)
+        writer.write_batch(batch)
+        writer.close()
+        return sink.getvalue()
 
     def loads(self, obj):
         import pyarrow as pa
@@ -197,6 +205,90 @@ class ArrowSerializer(FramedSerializer):
 
     def __repr__(self):
         return "ArrowSerializer"
+
+
+def _create_batch(series, timezone):
+    """
+    Create an Arrow record batch from the given pandas.Series or list of Series, with optional type.
+
+    :param series: A single pandas.Series, list of Series, or list of (series, arrow_type)
+    :param timezone: A timezone to respect when handling timestamp values
+    :return: Arrow RecordBatch
+    """
+
+    from pyspark.sql.types import _check_series_convert_timestamps_internal
+    import pyarrow as pa
+    # Make input conform to [(series1, type1), (series2, type2), ...]
+    if not isinstance(series, (list, tuple)) or \
+            (len(series) == 2 and isinstance(series[1], pa.DataType)):
+        series = [series]
+    series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
+
+    def create_array(s, t):
+        mask = s.isnull()
+        # Ensure timestamp series are in expected form for Spark internal representation
+        if t is not None and pa.types.is_timestamp(t):
+            s = _check_series_convert_timestamps_internal(s.fillna(0), timezone)
+            # TODO: need cast after Arrow conversion, ns values cause error with pandas 0.19.2
+            return pa.Array.from_pandas(s, mask=mask).cast(t, safe=False)
+        elif t is not None and pa.types.is_string(t) and sys.version < '3':
+            # TODO: need decode before converting to Arrow in Python 2
+            return pa.Array.from_pandas(s.apply(
+                lambda v: v.decode("utf-8") if isinstance(v, str) else v), mask=mask, type=t)
+        return pa.Array.from_pandas(s, mask=mask, type=t)
+
+    arrs = [create_array(s, t) for s, t in series]
+    return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
+
+
+class ArrowStreamPandasSerializer(Serializer):
+    """
+    Serializes Pandas.Series as Arrow data with Arrow streaming format.
+    """
+
+    def __init__(self, timezone):
+        super(ArrowStreamPandasSerializer, self).__init__()
+        self._timezone = timezone
+
+    def arrow_to_pandas(self, arrow_column):
+        from pyspark.sql.types import from_arrow_type, \
+            _check_series_convert_date, _check_series_localize_timestamps
+
+        s = arrow_column.to_pandas()
+        s = _check_series_convert_date(s, from_arrow_type(arrow_column.type))
+        s = _check_series_localize_timestamps(s, self._timezone)
+        return s
+
+    def dump_stream(self, iterator, stream):
+        """
+        Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
+        a list of series accompanied by an optional pyarrow type to coerce the data to.
+        """
+        import pyarrow as pa
+        writer = None
+        try:
+            for series in iterator:
+                batch = _create_batch(series, self._timezone)
+                if writer is None:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                writer.write_batch(batch)
+        finally:
+            if writer is not None:
+                writer.close()
+
+    def load_stream(self, stream):
+        """
+        Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
+        """
+        import pyarrow as pa
+        reader = pa.open_stream(stream)
+
+        for batch in reader:
+            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
+
+    def __repr__(self):
+        return "ArrowStreamPandasSerializer"
 
 
 class BatchedSerializer(Serializer):
@@ -343,6 +435,10 @@ class PairDeserializer(Serializer):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
         for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+            # For double-zipped RDDs, the batches can be iterators from other PairDeserializer,
+            # instead of lists. We need to convert them to lists if needed.
+            key_batch = key_batch if hasattr(key_batch, '__len__') else list(key_batch)
+            val_batch = val_batch if hasattr(val_batch, '__len__') else list(val_batch)
             if len(key_batch) != len(val_batch):
                 raise ValueError("Can not deserialize PairRDD with different number of items"
                                  " in batches: (%d, %d)" % (len(key_batch), len(val_batch)))
@@ -474,7 +570,18 @@ class PickleSerializer(FramedSerializer):
 class CloudPickleSerializer(PickleSerializer):
 
     def dumps(self, obj):
-        return cloudpickle.dumps(obj, 2)
+        try:
+            return cloudpickle.dumps(obj, 2)
+        except pickle.PickleError:
+            raise
+        except Exception as e:
+            emsg = _exception_message(e)
+            if "'i' format requires" in emsg:
+                msg = "Object too large to serialize: %s" % emsg
+            else:
+                msg = "Could not serialize object: %s: %s" % (e.__class__.__name__, emsg)
+            cloudpickle.print_exec(sys.stderr)
+            raise pickle.PicklingError(msg)
 
 
 class MarshalSerializer(FramedSerializer):
@@ -608,4 +715,4 @@ if __name__ == '__main__':
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

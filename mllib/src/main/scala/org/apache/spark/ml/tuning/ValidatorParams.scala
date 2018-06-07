@@ -150,20 +150,14 @@ private[ml] object ValidatorParams {
       }.toSeq
     ))
 
-    val validatorSpecificParams = instance match {
-      case cv: CrossValidatorParams =>
-        List("numFolds" -> parse(cv.numFolds.jsonEncode(cv.getNumFolds)))
-      case tvs: TrainValidationSplitParams =>
-        List("trainRatio" -> parse(tvs.trainRatio.jsonEncode(tvs.getTrainRatio)))
-      case _ =>
-        // This should not happen.
-        throw new NotImplementedError("ValidatorParams.saveImpl does not handle type: " +
-          instance.getClass.getCanonicalName)
-    }
-
-    val jsonParams = validatorSpecificParams ++ List(
-      "estimatorParamMaps" -> parse(estimatorParamMapsJson),
-      "seed" -> parse(instance.seed.jsonEncode(instance.getSeed)))
+    val params = instance.extractParamMap().toSeq
+    val skipParams = List("estimator", "evaluator", "estimatorParamMaps")
+    val jsonParams = render(params
+      .filter { case ParamPair(p, v) => !skipParams.contains(p.name)}
+      .map { case ParamPair(p, v) =>
+        p.name -> parse(p.jsonEncode(v))
+      }.toList ++ List("estimatorParamMaps" -> parse(estimatorParamMapsJson))
+    )
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 

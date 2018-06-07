@@ -66,7 +66,6 @@ class RPackageUtilsSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    System.setProperty("spark.testing", "true")
     lineBuffer.clear()
   }
 
@@ -137,9 +136,10 @@ class RPackageUtilsSuite
     IvyTestUtils.withRepository(main, None, None) { repo =>
       val jar = IvyTestUtils.packJar(new File(new URI(repo)), dep1, Nil,
         useIvyLayout = false, withR = false, None)
-      val jarFile = new JarFile(jar)
-      assert(jarFile.getManifest == null, "jar file should have null manifest")
-      assert(!RPackageUtils.checkManifestForR(jarFile), "null manifest should return false")
+      Utils.tryWithResource(new JarFile(jar)) { jarFile =>
+        assert(jarFile.getManifest == null, "jar file should have null manifest")
+        assert(!RPackageUtils.checkManifestForR(jarFile), "null manifest should return false")
+      }
     }
   }
 

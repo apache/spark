@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -87,6 +88,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
     visitSparkDataType(ctx.dataType)
+  }
+
+  override def visitSingleTableSchema(ctx: SingleTableSchemaContext): StructType = {
+    withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
   /* ********************************************************************************************
@@ -174,11 +179,64 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Add an INSERT INTO [TABLE]/INSERT OVERWRITE TABLE operation to the logical plan.
+   * Parameters used for writing query to a table:
+   *   (tableIdentifier, partitionKeys, exists).
+   */
+  type InsertTableParams = (TableIdentifier, Map[String, Option[String]], Boolean)
+
+  /**
+   * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
+   */
+  type InsertDirParams = (Boolean, CatalogStorageFormat, Option[String])
+
+  /**
+   * Add an
+   * {{{
+   *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]?
+   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec]
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
+   * }}}
+   * operation to logical plan
    */
   private def withInsertInto(
       ctx: InsertIntoContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    ctx match {
+      case table: InsertIntoTableContext =>
+        val (tableIdent, partitionKeys, exists) = visitInsertIntoTable(table)
+        InsertIntoTable(UnresolvedRelation(tableIdent), partitionKeys, query, false, exists)
+      case table: InsertOverwriteTableContext =>
+        val (tableIdent, partitionKeys, exists) = visitInsertOverwriteTable(table)
+        InsertIntoTable(UnresolvedRelation(tableIdent), partitionKeys, query, true, exists)
+      case dir: InsertOverwriteDirContext =>
+        val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
+        InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
+      case hiveDir: InsertOverwriteHiveDirContext =>
+        val (isLocal, storage, provider) = visitInsertOverwriteHiveDir(hiveDir)
+        InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
+      case _ =>
+        throw new ParseException("Invalid InsertIntoContext", ctx)
+    }
+  }
+
+  /**
+   * Add an INSERT INTO TABLE operation to the logical plan.
+   */
+  override def visitInsertIntoTable(
+      ctx: InsertIntoTableContext): InsertTableParams = withOrigin(ctx) {
+    val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
+
+    (tableIdent, partitionKeys, false)
+  }
+
+  /**
+   * Add an INSERT OVERWRITE TABLE operation to the logical plan.
+   */
+  override def visitInsertOverwriteTable(
+      ctx: InsertOverwriteTableContext): InsertTableParams = withOrigin(ctx) {
+    assert(ctx.OVERWRITE() != null)
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
@@ -188,12 +246,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
 
-    InsertIntoTable(
-      UnresolvedRelation(tableIdent),
-      partitionKeys,
-      query,
-      ctx.OVERWRITE != null,
-      ctx.EXISTS != null)
+    (tableIdent, partitionKeys, ctx.EXISTS() != null)
+  }
+
+  /**
+   * Write to a directory, returning a [[InsertIntoDir]] logical plan.
+   */
+  override def visitInsertOverwriteDir(
+      ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
+    throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
+  }
+
+  /**
+   * Write to a directory, returning a [[InsertIntoDir]] logical plan.
+   */
+  override def visitInsertOverwriteHiveDir(
+      ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
+    throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
   }
 
   /**
@@ -434,7 +503,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       val join = right.optionalMap(left)(Join(_, _, Inner, None))
       withJoinRelations(join, relation)
     }
-    ctx.lateralView.asScala.foldLeft(from)(withGenerate)
+    if (ctx.pivotClause() != null) {
+      if (!ctx.lateralView.isEmpty) {
+        throw new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
+      }
+      withPivot(ctx.pivotClause, from)
+    } else {
+      ctx.lateralView.asScala.foldLeft(from)(withGenerate)
+    }
   }
 
   /**
@@ -546,6 +622,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Add a [[Pivot]] to a logical plan.
+   */
+  private def withPivot(
+      ctx: PivotClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val aggregates = Option(ctx.aggregates).toSeq
+      .flatMap(_.namedExpression.asScala)
+      .map(typedVisit[Expression])
+    val pivotColumn = UnresolvedAttribute.quoted(ctx.pivotColumn.getText)
+    val pivotValues = ctx.pivotValues.asScala.map(typedVisit[Expression]).map(Literal.apply)
+    Pivot(None, pivotColumn, pivotValues, aggregates, query)
+  }
+
+  /**
    * Add a [[Generate]] (Lateral View) to a logical plan.
    */
   private def withGenerate(
@@ -554,7 +644,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val expressions = expressionList(ctx.expression)
     Generate(
       UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions),
-      join = true,
+      unrequiredChildIndex = Nil,
       outer = ctx.OUTER != null,
       Some(ctx.tblName.getText.toLowerCase),
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),
@@ -630,20 +720,30 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)
     }
 
-    ctx.sampleType.getType match {
-      case SqlBaseParser.ROWS =>
+    if (ctx.sampleMethod() == null) {
+      throw new ParseException("TABLESAMPLE does not accept empty inputs.", ctx)
+    }
+
+    ctx.sampleMethod() match {
+      case ctx: SampleByRowsContext =>
         Limit(expression(ctx.expression), query)
 
-      case SqlBaseParser.PERCENTLIT =>
+      case ctx: SampleByPercentileContext =>
         val fraction = ctx.percentage.getText.toDouble
         val sign = if (ctx.negativeSign == null) 1 else -1
         sample(sign * fraction / 100.0d)
 
-      case SqlBaseParser.BYTELENGTH_LITERAL =>
-        throw new ParseException(
-          "TABLESAMPLE(byteLengthLiteral) is not supported", ctx)
+      case ctx: SampleByBytesContext =>
+        val bytesStr = ctx.bytes.getText
+        if (bytesStr.matches("[0-9]+[bBkKmMgG]")) {
+          throw new ParseException("TABLESAMPLE(byteLengthLiteral) is not supported", ctx)
+        } else {
+          throw new ParseException(
+            bytesStr + " is not a valid byte length literal, " +
+              "expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')", ctx)
+        }
 
-      case SqlBaseParser.BUCKET if ctx.ON != null =>
+      case ctx: SampleByBucketContext if ctx.ON() != null =>
         if (ctx.identifier != null) {
           throw new ParseException(
             "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported", ctx)
@@ -652,7 +752,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
             "TABLESAMPLE(BUCKET x OUT OF y ON function) is not supported", ctx)
         }
 
-      case SqlBaseParser.BUCKET =>
+      case ctx: SampleByBucketContext =>
         sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)
     }
   }
@@ -1107,9 +1207,57 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a Extract expression.
+   */
+  override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
+    ctx.field.getText.toUpperCase(Locale.ROOT) match {
+      case "YEAR" =>
+        Year(expression(ctx.source))
+      case "QUARTER" =>
+        Quarter(expression(ctx.source))
+      case "MONTH" =>
+        Month(expression(ctx.source))
+      case "WEEK" =>
+        WeekOfYear(expression(ctx.source))
+      case "DAY" =>
+        DayOfMonth(expression(ctx.source))
+      case "DAYOFWEEK" =>
+        DayOfWeek(expression(ctx.source))
+      case "HOUR" =>
+        Hour(expression(ctx.source))
+      case "MINUTE" =>
+        Minute(expression(ctx.source))
+      case "SECOND" =>
+        Second(expression(ctx.source))
+      case other =>
+        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+    }
+  }
+
+  /**
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
+    def replaceFunctions(
+        funcID: FunctionIdentifier,
+        ctx: FunctionCallContext): FunctionIdentifier = {
+      val opt = ctx.trimOption
+      if (opt != null) {
+        if (ctx.qualifiedName.getText.toLowerCase(Locale.ROOT) != "trim") {
+          throw new ParseException(s"The specified function ${ctx.qualifiedName.getText} " +
+            s"doesn't support with option ${opt.getText}.", ctx)
+        }
+        opt.getType match {
+          case SqlBaseParser.BOTH => funcID
+          case SqlBaseParser.LEADING => funcID.copy(funcName = "ltrim")
+          case SqlBaseParser.TRAILING => funcID.copy(funcName = "rtrim")
+          case _ => throw new ParseException("Function trim doesn't support with " +
+            s"type ${opt.getType}. Please use BOTH, LEADING or Trailing as trim type", ctx)
+        }
+      } else {
+        funcID
+      }
+    }
     // Create the function call.
     val name = ctx.qualifiedName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
@@ -1121,7 +1269,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case expressions =>
         expressions
     }
-    val function = UnresolvedFunction(visitFunctionName(ctx.qualifiedName), arguments, isDistinct)
+    val funcId = replaceFunctions(visitFunctionName(ctx.qualifiedName), ctx)
+    val function = UnresolvedFunction(funcId, arguments, isDistinct)
+
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1130,19 +1280,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case spec: WindowDefContext =>
         WindowExpression(function, visitWindowDef(spec))
       case _ => function
-    }
-  }
-
-  /**
-   * Create a current timestamp/date expression. These are different from regular function because
-   * they do not require the user to specify braces when calling them.
-   */
-  override def visitTimeFunctionCall(ctx: TimeFunctionCallContext): Expression = withOrigin(ctx) {
-    ctx.name.getType match {
-      case SqlBaseParser.CURRENT_DATE =>
-        CurrentDate()
-      case SqlBaseParser.CURRENT_TIMESTAMP =>
-        CurrentTimestamp()
     }
   }
 

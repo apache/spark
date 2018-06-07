@@ -28,6 +28,7 @@ import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.{SparkContext, SparkException, TaskState}
+import org.apache.spark.deploy.mesos.config
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -110,7 +111,9 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").map {
+      Utils.substituteAppNExecIds(_, appId, execId)
+    }.getOrElse("")
 
     val prefixEnv = sc.conf.getOption("spark.executor.extraLibraryPath").map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
@@ -159,7 +162,8 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
 
-    executorInfo.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
+    executorInfo.setContainer(
+      MesosSchedulerBackendUtil.buildContainerInfo(sc.conf))
     (executorInfo.build(), resourcesAfterMem.asJava)
   }
 

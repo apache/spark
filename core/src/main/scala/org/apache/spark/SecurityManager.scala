@@ -17,19 +17,16 @@
 
 package org.apache.spark
 
-import java.lang.{Byte => JByte}
 import java.net.{Authenticator, PasswordAuthentication}
-import java.security.{KeyStore, SecureRandom}
-import java.security.cert.X509Certificate
+import java.nio.charset.StandardCharsets.UTF_8
 import javax.net.ssl._
 
-import com.google.common.hash.HashCodes
-import com.google.common.io.Files
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.sasl.SecretKeyHolder
 import org.apache.spark.util.Utils
 
@@ -40,148 +37,10 @@ import org.apache.spark.util.Utils
  * should access it from that. There are some cases where the SparkEnv hasn't been
  * initialized yet and this class must be instantiated directly.
  *
- * Spark currently supports authentication via a shared secret.
- * Authentication can be configured to be on via the 'spark.authenticate' configuration
- * parameter. This parameter controls whether the Spark communication protocols do
- * authentication using the shared secret. This authentication is a basic handshake to
- * make sure both sides have the same shared secret and are allowed to communicate.
- * If the shared secret is not identical they will not be allowed to communicate.
- *
- * The Spark UI can also be secured by using javax servlet filters. A user may want to
- * secure the UI if it has data that other users should not be allowed to see. The javax
- * servlet filter specified by the user can authenticate the user and then once the user
- * is logged in, Spark can compare that user versus the view acls to make sure they are
- * authorized to view the UI. The configs 'spark.acls.enable', 'spark.ui.view.acls' and
- * 'spark.ui.view.acls.groups' control the behavior of the acls. Note that the person who
- * started the application always has view access to the UI.
- *
- * Spark has a set of individual and group modify acls (`spark.modify.acls`) and
- * (`spark.modify.acls.groups`) that controls which users and groups have permission to
- * modify a single application. This would include things like killing the application.
- * By default the person who started the application has modify access. For modify access
- * through the UI, you must have a filter that does authentication in place for the modify
- * acls to work properly.
- *
- * Spark also has a set of individual and group admin acls (`spark.admin.acls`) and
- * (`spark.admin.acls.groups`) which is a set of users/administrators and admin groups
- * who always have permission to view or modify the Spark application.
- *
- * Starting from version 1.3, Spark has partial support for encrypted connections with SSL.
- *
- * At this point spark has multiple communication protocols that need to be secured and
- * different underlying mechanisms are used depending on the protocol:
- *
- *  - HTTP for broadcast and file server (via HttpServer) ->  Spark currently uses Jetty
- *            for the HttpServer. Jetty supports multiple authentication mechanisms -
- *            Basic, Digest, Form, Spnego, etc. It also supports multiple different login
- *            services - Hash, JAAS, Spnego, JDBC, etc.  Spark currently uses the HashLoginService
- *            to authenticate using DIGEST-MD5 via a single user and the shared secret.
- *            Since we are using DIGEST-MD5, the shared secret is not passed on the wire
- *            in plaintext.
- *
- *            We currently support SSL (https) for this communication protocol (see the details
- *            below).
- *
- *            The Spark HttpServer installs the HashLoginServer and configures it to DIGEST-MD5.
- *            Any clients must specify the user and password. There is a default
- *            Authenticator installed in the SecurityManager to how it does the authentication
- *            and in this case gets the user name and password from the request.
- *
- *  - BlockTransferService -> The Spark BlockTransferServices uses java nio to asynchronously
- *            exchange messages.  For this we use the Java SASL
- *            (Simple Authentication and Security Layer) API and again use DIGEST-MD5
- *            as the authentication mechanism. This means the shared secret is not passed
- *            over the wire in plaintext.
- *            Note that SASL is pluggable as to what mechanism it uses.  We currently use
- *            DIGEST-MD5 but this could be changed to use Kerberos or other in the future.
- *            Spark currently supports "auth" for the quality of protection, which means
- *            the connection does not support integrity or privacy protection (encryption)
- *            after authentication. SASL also supports "auth-int" and "auth-conf" which
- *            SPARK could support in the future to allow the user to specify the quality
- *            of protection they want. If we support those, the messages will also have to
- *            be wrapped and unwrapped via the SaslServer/SaslClient.wrap/unwrap API's.
- *
- *            Since the NioBlockTransferService does asynchronous messages passing, the SASL
- *            authentication is a bit more complex. A ConnectionManager can be both a client
- *            and a Server, so for a particular connection it has to determine what to do.
- *            A ConnectionId was added to be able to track connections and is used to
- *            match up incoming messages with connections waiting for authentication.
- *            The ConnectionManager tracks all the sendingConnections using the ConnectionId,
- *            waits for the response from the server, and does the handshake before sending
- *            the real message.
- *
- *            The NettyBlockTransferService ensures that SASL authentication is performed
- *            synchronously prior to any other communication on a connection. This is done in
- *            SaslClientBootstrap on the client side and SaslRpcHandler on the server side.
- *
- *  - HTTP for the Spark UI -> the UI was changed to use servlets so that javax servlet filters
- *            can be used. Yarn requires a specific AmIpFilter be installed for security to work
- *            properly. For non-Yarn deployments, users can write a filter to go through their
- *            organization's normal login service. If an authentication filter is in place then the
- *            SparkUI can be configured to check the logged in user against the list of users who
- *            have view acls to see if that user is authorized.
- *            The filters can also be used for many different purposes. For instance filters
- *            could be used for logging, encryption, or compression.
- *
- *  The exact mechanisms used to generate/distribute the shared secret are deployment-specific.
- *
- *  For YARN deployments, the secret is automatically generated. The secret is placed in the Hadoop
- *  UGI which gets passed around via the Hadoop RPC mechanism. Hadoop RPC can be configured to
- *  support different levels of protection. See the Hadoop documentation for more details. Each
- *  Spark application on YARN gets a different shared secret.
- *
- *  On YARN, the Spark UI gets configured to use the Hadoop YARN AmIpFilter which requires the user
- *  to go through the ResourceManager Proxy. That proxy is there to reduce the possibility of web
- *  based attacks through YARN. Hadoop can be configured to use filters to do authentication. That
- *  authentication then happens via the ResourceManager Proxy and Spark will use that to do
- *  authorization against the view acls.
- *
- *  For other Spark deployments, the shared secret must be specified via the
- *  spark.authenticate.secret config.
- *  All the nodes (Master and Workers) and the applications need to have the same shared secret.
- *  This again is not ideal as one user could potentially affect another users application.
- *  This should be enhanced in the future to provide better protection.
- *  If the UI needs to be secure, the user needs to install a javax servlet filter to do the
- *  authentication. Spark will then use that user to compare against the view acls to do
- *  authorization. If not filter is in place the user is generally null and no authorization
- *  can take place.
- *
- *  When authentication is being used, encryption can also be enabled by setting the option
- *  spark.authenticate.enableSaslEncryption to true. This is only supported by communication
- *  channels that use the network-common library, and can be used as an alternative to SSL in those
- *  cases.
- *
- *  SSL can be used for encryption for certain communication channels. The user can configure the
- *  default SSL settings which will be used for all the supported communication protocols unless
- *  they are overwritten by protocol specific settings. This way the user can easily provide the
- *  common settings for all the protocols without disabling the ability to configure each one
- *  individually.
- *
- *  All the SSL settings like `spark.ssl.xxx` where `xxx` is a particular configuration property,
- *  denote the global configuration for all the supported protocols. In order to override the global
- *  configuration for the particular protocol, the properties must be overwritten in the
- *  protocol-specific namespace. Use `spark.ssl.yyy.xxx` settings to overwrite the global
- *  configuration for particular protocol denoted by `yyy`. Currently `yyy` can be only`fs` for
- *  broadcast and file server.
- *
- *  Refer to [[org.apache.spark.SSLOptions]] documentation for the list of
- *  options that can be specified.
- *
- *  SecurityManager initializes SSLOptions objects for different protocols separately. SSLOptions
- *  object parses Spark configuration at a given namespace and builds the common representation
- *  of SSL settings. SSLOptions is then used to provide protocol-specific SSLContextFactory for
- *  Jetty.
- *
- *  SSL must be configured on each node and configured for each component involved in
- *  communication using the particular protocol. In YARN clusters, the key-store can be prepared on
- *  the client side then distributed and used by the executors as the part of the application
- *  (YARN allows the user to deploy files before the application is started).
- *  In standalone deployment, the user needs to provide key-stores and configuration
- *  options for master and workers. In this mode, the user may allow the executors to use the SSL
- *  settings inherited from the worker which spawned that executor. It can be accomplished by
- *  setting `spark.ssl.useNodeLocalConf` to `true`.
+ * This class implements all of the configuration related to security features described
+ * in the "Security" document. Please refer to that document for specific features implemented
+ * here.
  */
-
 private[spark] class SecurityManager(
     sparkConf: SparkConf,
     val ioEncryptionKey: Option[Array[Byte]] = None)
@@ -225,7 +84,7 @@ private[spark] class SecurityManager(
   setViewAclsGroups(sparkConf.get("spark.ui.view.acls.groups", ""));
   setModifyAclsGroups(sparkConf.get("spark.modify.acls.groups", ""));
 
-  private val secretKey = generateSecretKey()
+  private var secretKey: String = _
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
     "; users  with view permissions: " + viewAcls.toString() +
@@ -254,51 +113,6 @@ private[spark] class SecurityManager(
 
   // the default SSL configuration - it will be used by all communication layers unless overwritten
   private val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
-
-  // SSL configuration for the file server. This is used by Utils.setupSecureURLConnection().
-  val fileServerSSLOptions = getSSLOptions("fs")
-  val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
-    val trustStoreManagers =
-      for (trustStore <- fileServerSSLOptions.trustStore) yield {
-        val input = Files.asByteSource(fileServerSSLOptions.trustStore.get).openStream()
-
-        try {
-          val ks = KeyStore.getInstance(KeyStore.getDefaultType)
-          ks.load(input, fileServerSSLOptions.trustStorePassword.get.toCharArray)
-
-          val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
-          tmf.init(ks)
-          tmf.getTrustManagers
-        } finally {
-          input.close()
-        }
-      }
-
-    lazy val credulousTrustStoreManagers = Array({
-      logWarning("Using 'accept-all' trust manager for SSL connections.")
-      new X509TrustManager {
-        override def getAcceptedIssuers: Array[X509Certificate] = null
-
-        override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String) {}
-
-        override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String) {}
-      }: TrustManager
-    })
-
-    require(fileServerSSLOptions.protocol.isDefined,
-      "spark.ssl.protocol is required when enabling SSL connections.")
-
-    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.get)
-    sslContext.init(null, trustStoreManagers.getOrElse(credulousTrustStoreManagers), null)
-
-    val hostVerifier = new HostnameVerifier {
-      override def verify(s: String, sslSession: SSLSession): Boolean = true
-    }
-
-    (Some(sslContext.getSocketFactory), Some(hostVerifier))
-  } else {
-    (None, None)
-  }
 
   def getSSLOptions(module: String): SSLOptions = {
     val opts = SSLOptions.parse(sparkConf, s"spark.ssl.$module", Some(defaultSSLOptions))
@@ -417,50 +231,6 @@ private[spark] class SecurityManager(
   def getIOEncryptionKey(): Option[Array[Byte]] = ioEncryptionKey
 
   /**
-   * Generates or looks up the secret key.
-   *
-   * The way the key is stored depends on the Spark deployment mode. Yarn
-   * uses the Hadoop UGI.
-   *
-   * For non-Yarn deployments, If the config variable is not set
-   * we throw an exception.
-   */
-  private def generateSecretKey(): String = {
-    if (!isAuthenticationEnabled) {
-      null
-    } else if (SparkHadoopUtil.get.isYarnMode) {
-      // In YARN mode, the secure cookie will be created by the driver and stashed in the
-      // user's credentials, where executors can get it. The check for an array of size 0
-      // is because of the test code in YarnSparkHadoopUtilSuite.
-      val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(SECRET_LOOKUP_KEY)
-      if (secretKey == null || secretKey.length == 0) {
-        logDebug("generateSecretKey: yarn mode, secret key from credentials is null")
-        val rnd = new SecureRandom()
-        val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
-        val secret = new Array[Byte](length)
-        rnd.nextBytes(secret)
-
-        val cookie = HashCodes.fromBytes(secret).toString()
-        SparkHadoopUtil.get.addSecretKeyToUserCredentials(SECRET_LOOKUP_KEY, cookie)
-        cookie
-      } else {
-        new Text(secretKey).toString
-      }
-    } else {
-      // user must have set spark.authenticate.secret config
-      // For Master/Worker, auth secret is in conf; for Executors, it is in env variable
-      Option(sparkConf.getenv(SecurityManager.ENV_AUTH_SECRET))
-        .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
-        case Some(value) => value
-        case None =>
-          throw new IllegalArgumentException(
-            "Error: a secret key must be specified via the " +
-              SecurityManager.SPARK_AUTH_SECRET_CONF + " config")
-      }
-    }
-  }
-
-  /**
    * Check to see if Acls for the UI are enabled
    * @return true if UI authentication is enabled, otherwise false
    */
@@ -542,7 +312,59 @@ private[spark] class SecurityManager(
    * Gets the secret key.
    * @return the secret key as a String if authentication is enabled, otherwise returns null
    */
-  def getSecretKey(): String = secretKey
+  def getSecretKey(): String = {
+    if (isAuthenticationEnabled) {
+      val creds = UserGroupInformation.getCurrentUser().getCredentials()
+      Option(creds.getSecretKey(SECRET_LOOKUP_KEY))
+        .map { bytes => new String(bytes, UTF_8) }
+        // Secret key may not be found in current UGI's credentials.
+        // This happens when UGI is refreshed in the driver side by UGI's loginFromKeytab but not
+        // copy secret key from original UGI to the new one. This exists in ThriftServer's Hive
+        // logic. So as a workaround, storing secret key in a local variable to make it visible
+        // in different context.
+        .orElse(Option(secretKey))
+        .orElse(Option(sparkConf.getenv(ENV_AUTH_SECRET)))
+        .orElse(sparkConf.getOption(SPARK_AUTH_SECRET_CONF))
+        .getOrElse {
+          throw new IllegalArgumentException(
+            s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config")
+        }
+    } else {
+      null
+    }
+  }
+
+  /**
+   * Initialize the authentication secret.
+   *
+   * If authentication is disabled, do nothing.
+   *
+   * In YARN and local mode, generate a new secret and store it in the current user's credentials.
+   *
+   * In other modes, assert that the auth secret is set in the configuration.
+   */
+  def initializeAuth(): Unit = {
+    import SparkMasterRegex._
+
+    if (!sparkConf.get(NETWORK_AUTH_ENABLED)) {
+      return
+    }
+
+    val master = sparkConf.get(SparkLauncher.SPARK_MASTER, "")
+    master match {
+      case "yarn" | "local" | LOCAL_N_REGEX(_) | LOCAL_N_FAILURES_REGEX(_, _) =>
+        // Secret generation allowed here
+      case _ =>
+        require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
+          s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
+        return
+    }
+
+    secretKey = Utils.createSecret(sparkConf)
+    val creds = new Credentials()
+    creds.addSecretKey(SECRET_LOOKUP_KEY, secretKey.getBytes(UTF_8))
+    UserGroupInformation.getCurrentUser().addCredentials(creds)
+  }
 
   // Default SecurityManager only has a single secret key, so ignore appId.
   override def getSaslUser(appId: String): String = getSaslUser()
@@ -551,13 +373,12 @@ private[spark] class SecurityManager(
 
 private[spark] object SecurityManager {
 
-  val SPARK_AUTH_CONF: String = "spark.authenticate"
-  val SPARK_AUTH_SECRET_CONF: String = "spark.authenticate.secret"
+  val SPARK_AUTH_CONF = NETWORK_AUTH_ENABLED.key
+  val SPARK_AUTH_SECRET_CONF = "spark.authenticate.secret"
   // This is used to set auth secret to an executor's env variable. It should have the same
   // value as SPARK_AUTH_SECRET_CONF set in SparkConf
   val ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET"
 
   // key used to store the spark secret in the Hadoop UGI
-  val SECRET_LOOKUP_KEY = "sparkCookie"
-
+  val SECRET_LOOKUP_KEY = new Text("sparkCookie")
 }

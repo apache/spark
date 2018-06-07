@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.function.Supplier
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
@@ -49,7 +50,8 @@ private[deploy] class Worker(
     endpointName: String,
     workDirPath: String = null,
     val conf: SparkConf,
-    val securityMgr: SecurityManager)
+    val securityMgr: SecurityManager,
+    externalShuffleServiceSupplier: Supplier[ExternalShuffleService] = null)
   extends ThreadSafeRpcEndpoint with Logging {
 
   private val host = rpcEnv.address.host
@@ -97,6 +99,10 @@ private[deploy] class Worker(
   private val APP_DATA_RETENTION_SECONDS =
     conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
+  // Whether or not cleanup the non-shuffle files on executor exits.
+  private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
+    conf.getBoolean("spark.storage.cleanupFilesAfterExecutorExit", true)
+
   private val testing: Boolean = sys.props.contains("spark.testing")
   private var master: Option[RpcEndpointRef] = None
 
@@ -142,7 +148,11 @@ private[deploy] class Worker(
     WorkerWebUI.DEFAULT_RETAINED_DRIVERS)
 
   // The shuffle service is not actually started unless configured.
-  private val shuffleService = new ExternalShuffleService(conf, securityMgr)
+  private val shuffleService = if (externalShuffleServiceSupplier != null) {
+    externalShuffleServiceSupplier.get()
+  } else {
+    new ExternalShuffleService(conf, securityMgr)
+  }
 
   private val publicAddress = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
@@ -154,6 +164,8 @@ private[deploy] class Worker(
 
   private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   private val workerSource = new WorkerSource(this)
+
+  val reverseProxy = conf.getBoolean("spark.ui.reverseProxy", false)
 
   private var registerMasterFutures: Array[JFuture[_]] = null
   private var registrationRetryTimer: Option[JScheduledFuture[_]] = None
@@ -197,7 +209,7 @@ private[deploy] class Worker(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    shuffleService.startIfEnabled()
+    startExternalShuffleService()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
@@ -225,7 +237,7 @@ private[deploy] class Worker(
     masterAddressToConnect = Some(masterAddress)
     master = Some(masterRef)
     connected = true
-    if (conf.getBoolean("spark.ui.reverseProxy", false)) {
+    if (reverseProxy) {
       logInfo(s"WorkerWebUI is available at $activeMasterWebUiUrl/proxy/$workerId")
     }
     // Cancel any outstanding re-registration attempts because we found a new master
@@ -365,6 +377,16 @@ private[deploy] class Worker(
     }
   }
 
+  private def startExternalShuffleService() {
+    try {
+      shuffleService.startIfEnabled()
+    } catch {
+      case e: Exception =>
+        logError("Failed to start external shuffle service", e)
+        System.exit(1)
+    }
+  }
+
   private def sendRegisterMessageToMaster(masterEndpoint: RpcEndpointRef): Unit = {
     masterEndpoint.send(RegisterWorker(
       workerId,
@@ -429,7 +451,7 @@ private[deploy] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
       // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
-      val appIds = executors.values.map(_.appId).toSet
+      val appIds = (executors.values.map(_.appId) ++ drivers.values.map(_.driverId)).toSet
       val cleanupFuture = concurrent.Future {
         val appDirs = workDir.listFiles()
         if (appDirs == null) {
@@ -448,10 +470,9 @@ private[deploy] class Worker(
         }
       }(cleanupThreadExecutor)
 
-      cleanupFuture.onFailure {
-        case e: Throwable =>
-          logError("App dir cleanup failed: " + e.getMessage, e)
-      }(cleanupThreadExecutor)
+      cleanupFuture.failed.foreach(e =>
+        logError("App dir cleanup failed: " + e.getMessage, e)
+      )(cleanupThreadExecutor)
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
@@ -620,10 +641,9 @@ private[deploy] class Worker(
           dirList.foreach { dir =>
             Utils.deleteRecursively(new File(dir))
           }
-        }(cleanupThreadExecutor).onFailure {
-          case e: Throwable =>
-            logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
-        }(cleanupThreadExecutor)
+        }(cleanupThreadExecutor).failed.foreach(e =>
+          logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
+        )(cleanupThreadExecutor)
       }
       shuffleService.applicationRemoved(id)
     }
@@ -722,6 +742,9 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
+          if (CLEANUP_NON_SHUFFLE_FILES_ENABLED) {
+            shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
+          }
         case None =>
           logInfo("Unknown Executor " + fullId + " finished with state " + state +
             message.map(" message " + _).getOrElse("") +

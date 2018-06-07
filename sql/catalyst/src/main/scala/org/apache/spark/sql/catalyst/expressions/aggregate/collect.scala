@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import scala.collection.generic.Growable
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /**
@@ -44,7 +44,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
   // actual order of input rows.
-  override def deterministic: Boolean = false
+  override lazy val deterministic: Boolean = false
 
   override def update(buffer: T, input: InternalRow): T = {
     val value = child.eval(input)

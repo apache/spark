@@ -18,12 +18,14 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.columnar._
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
 
 
@@ -61,6 +63,101 @@ private[columnar] case object PassThrough extends CompressionScheme {
     }
 
     override def hasNext: Boolean = buffer.hasRemaining
+
+    private def putBooleans(
+        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+      for (i <- 0 until len) {
+        columnVector.putBoolean(pos + i, (buffer.get(bufferPos + i) != 0))
+      }
+    }
+
+    private def putBytes(
+        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+      columnVector.putBytes(pos, len, buffer.array, bufferPos)
+    }
+
+    private def putShorts(
+        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+      columnVector.putShorts(pos, len, buffer.array, bufferPos)
+    }
+
+    private def putInts(
+        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+      columnVector.putInts(pos, len, buffer.array, bufferPos)
+    }
+
+    private def putLongs(
+        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+      columnVector.putLongs(pos, len, buffer.array, bufferPos)
+    }
+
+    private def putFloats(
+        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+      columnVector.putFloats(pos, len, buffer.array, bufferPos)
+    }
+
+    private def putDoubles(
+        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+      columnVector.putDoubles(pos, len, buffer.array, bufferPos)
+    }
+
+    private def decompress0(
+        columnVector: WritableColumnVector,
+        capacity: Int,
+        unitSize: Int,
+        putFunction: (WritableColumnVector, Int, Int, Int) => Unit): Unit = {
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else capacity
+      var pos = 0
+      var seenNulls = 0
+      var bufferPos = buffer.position()
+      while (pos < capacity) {
+        if (pos != nextNullIndex) {
+          val len = nextNullIndex - pos
+          assert(len * unitSize.toLong < Int.MaxValue)
+          putFunction(columnVector, pos, bufferPos, len)
+          bufferPos += len * unitSize
+          pos += len
+        } else {
+          seenNulls += 1
+          nextNullIndex = if (seenNulls < nullCount) {
+            ByteBufferHelper.getInt(nullsBuffer)
+          } else {
+            capacity
+          }
+          columnVector.putNull(pos)
+          pos += 1
+        }
+      }
+    }
+
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
+      columnType.dataType match {
+        case _: BooleanType =>
+          val unitSize = 1
+          decompress0(columnVector, capacity, unitSize, putBooleans)
+        case _: ByteType =>
+          val unitSize = 1
+          decompress0(columnVector, capacity, unitSize, putBytes)
+        case _: ShortType =>
+          val unitSize = 2
+          decompress0(columnVector, capacity, unitSize, putShorts)
+        case _: IntegerType =>
+          val unitSize = 4
+          decompress0(columnVector, capacity, unitSize, putInts)
+        case _: LongType =>
+          val unitSize = 8
+          decompress0(columnVector, capacity, unitSize, putLongs)
+        case _: FloatType =>
+          val unitSize = 4
+          decompress0(columnVector, capacity, unitSize, putFloats)
+        case _: DoubleType =>
+          val unitSize = 8
+          decompress0(columnVector, capacity, unitSize, putDoubles)
+      }
+    }
   }
 }
 
@@ -169,6 +266,94 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
     }
 
     override def hasNext: Boolean = valueCount < run || buffer.hasRemaining
+
+    private def putBoolean(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putBoolean(pos, value == 1)
+    }
+
+    private def getByte(buffer: ByteBuffer): Long = {
+      buffer.get().toLong
+    }
+
+    private def putByte(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putByte(pos, value.toByte)
+    }
+
+    private def getShort(buffer: ByteBuffer): Long = {
+      buffer.getShort().toLong
+    }
+
+    private def putShort(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putShort(pos, value.toShort)
+    }
+
+    private def getInt(buffer: ByteBuffer): Long = {
+      buffer.getInt().toLong
+    }
+
+    private def putInt(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putInt(pos, value.toInt)
+    }
+
+    private def getLong(buffer: ByteBuffer): Long = {
+      buffer.getLong()
+    }
+
+    private def putLong(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putLong(pos, value)
+    }
+
+    private def decompress0(
+        columnVector: WritableColumnVector,
+        capacity: Int,
+        getFunction: (ByteBuffer) => Long,
+        putFunction: (WritableColumnVector, Int, Long) => Unit): Unit = {
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+      var runLocal = 0
+      var valueCountLocal = 0
+      var currentValueLocal: Long = 0
+
+      while (valueCountLocal < runLocal || (pos < capacity)) {
+        if (pos != nextNullIndex) {
+          if (valueCountLocal == runLocal) {
+            currentValueLocal = getFunction(buffer)
+            runLocal = ByteBufferHelper.getInt(buffer)
+            valueCountLocal = 1
+          } else {
+            valueCountLocal += 1
+          }
+          putFunction(columnVector, pos, currentValueLocal)
+        } else {
+          seenNulls += 1
+          if (seenNulls < nullCount) {
+            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+          }
+          columnVector.putNull(pos)
+        }
+        pos += 1
+      }
+    }
+
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
+      columnType.dataType match {
+        case _: BooleanType =>
+          decompress0(columnVector, capacity, getByte, putBoolean)
+        case _: ByteType =>
+          decompress0(columnVector, capacity, getByte, putByte)
+        case _: ShortType =>
+          decompress0(columnVector, capacity, getShort, putShort)
+        case _: IntegerType =>
+          decompress0(columnVector, capacity, getInt, putInt)
+        case _: LongType =>
+          decompress0(columnVector, capacity, getLong, putLong)
+        case _ => throw new IllegalStateException("Not supported type in RunLengthEncoding.")
+      }
+    }
   }
 }
 
@@ -266,11 +451,32 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
   }
 
   class Decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
-    extends compression.Decoder[T] {
+      extends compression.Decoder[T] {
+    val elementNum = ByteBufferHelper.getInt(buffer)
+    private val dictionary: Array[Any] = new Array[Any](elementNum)
+    private var intDictionary: Array[Int] = null
+    private var longDictionary: Array[Long] = null
 
-    private val dictionary: Array[Any] = {
-      val elementNum = ByteBufferHelper.getInt(buffer)
-      Array.fill[Any](elementNum)(columnType.extract(buffer).asInstanceOf[Any])
+    columnType.dataType match {
+      case _: IntegerType =>
+        intDictionary = new Array[Int](elementNum)
+        for (i <- 0 until elementNum) {
+          val v = columnType.extract(buffer).asInstanceOf[Int]
+          intDictionary(i) = v
+          dictionary(i) = v
+        }
+      case _: LongType =>
+        longDictionary = new Array[Long](elementNum)
+        for (i <- 0 until elementNum) {
+          val v = columnType.extract(buffer).asInstanceOf[Long]
+          longDictionary(i) = v
+          dictionary(i) = v
+        }
+      case _: StringType =>
+        for (i <- 0 until elementNum) {
+          val v = columnType.extract(buffer).asInstanceOf[Any]
+          dictionary(i) = v
+        }
     }
 
     override def next(row: InternalRow, ordinal: Int): Unit = {
@@ -278,6 +484,46 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     }
 
     override def hasNext: Boolean = buffer.hasRemaining
+
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+      columnType.dataType match {
+        case _: IntegerType =>
+          val dictionaryIds = columnVector.reserveDictionaryIds(capacity)
+          columnVector.setDictionary(new ColumnDictionary(intDictionary))
+          while (pos < capacity) {
+            if (pos != nextNullIndex) {
+              dictionaryIds.putInt(pos, buffer.getShort())
+            } else {
+              seenNulls += 1
+              if (seenNulls < nullCount) nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+              columnVector.putNull(pos)
+            }
+            pos += 1
+          }
+        case _: LongType =>
+          val dictionaryIds = columnVector.reserveDictionaryIds(capacity)
+          columnVector.setDictionary(new ColumnDictionary(longDictionary))
+          while (pos < capacity) {
+            if (pos != nextNullIndex) {
+              dictionaryIds.putInt(pos, buffer.getShort())
+            } else {
+              seenNulls += 1
+              if (seenNulls < nullCount) {
+                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+              }
+              columnVector.putNull(pos)
+            }
+            pos += 1
+          }
+        case _ => throw new IllegalStateException("Not supported type in DictionaryEncoding.")
+      }
+    }
   }
 }
 
@@ -368,6 +614,38 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
     }
 
     override def hasNext: Boolean = visited < count
+
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
+      val countLocal = count
+      var currentWordLocal: Long = 0
+      var visitedLocal: Int = 0
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+
+      while (visitedLocal < countLocal) {
+        if (pos != nextNullIndex) {
+          val bit = visitedLocal % BITS_PER_LONG
+
+          visitedLocal += 1
+          if (bit == 0) {
+            currentWordLocal = ByteBufferHelper.getLong(buffer)
+          }
+
+          columnVector.putBoolean(pos, ((currentWordLocal >> bit) & 1) != 0)
+        } else {
+          seenNulls += 1
+          if (seenNulls < nullCount) {
+            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+          }
+          columnVector.putNull(pos)
+        }
+        pos += 1
+      }
+    }
   }
 }
 
@@ -448,6 +726,32 @@ private[columnar] case object IntDelta extends CompressionScheme {
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getInt(buffer)
       row.setInt(ordinal, prev)
     }
+
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
+      var prevLocal: Int = 0
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+
+      while (pos < capacity) {
+        if (pos != nextNullIndex) {
+          val delta = buffer.get
+          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta } else
+          { ByteBufferHelper.getInt(buffer) }
+          columnVector.putInt(pos, prevLocal)
+        } else {
+          seenNulls += 1
+          if (seenNulls < nullCount) {
+            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+          }
+          columnVector.putNull(pos)
+        }
+        pos += 1
+      }
+    }
   }
 }
 
@@ -527,6 +831,32 @@ private[columnar] case object LongDelta extends CompressionScheme {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getLong(buffer)
       row.setLong(ordinal, prev)
+    }
+
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
+      var prevLocal: Long = 0
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+
+      while (pos < capacity) {
+        if (pos != nextNullIndex) {
+          val delta = buffer.get()
+          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta } else
+          { ByteBufferHelper.getLong(buffer) }
+          columnVector.putLong(pos, prevLocal)
+        } else {
+          seenNulls += 1
+          if (seenNulls < nullCount) {
+            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+          }
+          columnVector.putNull(pos)
+        }
+        pos += 1
+      }
     }
   }
 }

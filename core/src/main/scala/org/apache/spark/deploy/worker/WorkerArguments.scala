@@ -21,8 +21,8 @@ import java.lang.management.ManagementFactory
 
 import scala.annotation.tailrec
 
-import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 import org.apache.spark.SparkConf
+import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 /**
  * Command-line parser for the worker.

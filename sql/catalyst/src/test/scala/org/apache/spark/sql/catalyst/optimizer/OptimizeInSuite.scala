@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Unresol
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD
 import org.apache.spark.sql.types._
@@ -169,10 +169,26 @@ class OptimizeInSuite extends PlanTest {
       val optimizedPlan = OptimizeIn(plan)
       optimizedPlan match {
         case Filter(cond, _)
-          if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].getSet().size == 3 =>
+          if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].set.size == 3 =>
         // pass
         case _ => fail("Unexpected result for OptimizedIn")
       }
     }
+  }
+
+  test("OptimizedIn test: In empty list gets transformed to FalseLiteral " +
+    "when value is not nullable") {
+    val originalQuery =
+      testRelation
+        .where(In(Literal("a"), Nil))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      testRelation
+        .where(Literal(false))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }

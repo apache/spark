@@ -23,8 +23,8 @@ import scala.xml.Node
 
 import org.apache.mesos.Protos.TaskStatus
 
-import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterSubmissionState
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
@@ -62,7 +62,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
           {retryTable}
         </div>
       </div>;
-    UIUtils.basicSparkPage(content, "Spark Drivers for Mesos cluster")
+    UIUtils.basicSparkPage(request, content, "Spark Drivers for Mesos cluster")
   }
 
   private def queuedRow(submission: MesosDriverDescription): Seq[Node] = {

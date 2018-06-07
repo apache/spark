@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -46,7 +50,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
 
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
-      assert(sizes.head === BigInt(96),
+      assert(sizes.head === BigInt(128),
         s"expected exact size 96 for table 'test', got: ${sizes.head}")
     }
   }
@@ -85,13 +89,25 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyze empty table") {
     val table = "emptyTable"
     withTable(table) {
-      sql(s"CREATE TABLE $table (key STRING, value STRING) USING PARQUET")
+      val df = Seq.empty[Int].toDF("key")
+      df.write.format("json").saveAsTable(table)
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS noscan")
       val fetchedStats1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
       assert(fetchedStats1.get.sizeInBytes == 0)
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
       val fetchedStats2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
       assert(fetchedStats2.get.sizeInBytes == 0)
+
+      val expectedColStat =
+        "key" -> CatalogColumnStat(Some(0), None, None, Some(0),
+          Some(IntegerType.defaultSize), Some(IntegerType.defaultSize))
+
+      // There won't be histogram for empty column.
+      Seq("true", "false").foreach { histogramEnabled =>
+        withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
+          checkColStats(df, mutable.LinkedHashMap(expectedColStat))
+        }
+      }
     }
   }
 
@@ -142,10 +158,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("column stats round trip serialization") {
     // Make sure we serialize and then deserialize and we will get the result data
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-    stats.zip(df.schema).foreach { case ((k, v), field) =>
-      withClue(s"column $k with type ${field.dataType}") {
-        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
-        assert(roundtrip == Some(v))
+    Seq(stats, statsWithHgms).foreach { s =>
+      s.zip(df.schema).foreach { case ((k, v), field) =>
+        withClue(s"column $k with type ${field.dataType}") {
+          val roundtrip = CatalogColumnStat.fromMap("table_is_foo", field.name, v.toMap(k))
+          assert(roundtrip == Some(v))
+        }
       }
     }
   }
@@ -155,6 +173,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     assert(stats.size == data.head.productArity - 1)
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
     checkColStats(df, stats)
+
+    // test column stats with histograms
+    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
+      checkColStats(df, statsWithHgms)
+    }
   }
 
   test("column stats collection for null columns") {
@@ -169,9 +192,16 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }.mkString(", "))
 
     val expectedColStats = dataTypes.map { case (tpe, idx) =>
-      (s"col$idx", ColumnStat(0, None, None, 1, tpe.defaultSize.toLong, tpe.defaultSize.toLong))
+      (s"col$idx", CatalogColumnStat(Some(0), None, None, Some(1),
+        Some(tpe.defaultSize.toLong), Some(tpe.defaultSize.toLong)))
     }
-    checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+
+    // There won't be histograms for null columns.
+    Seq("true", "false").foreach { histogramEnabled =>
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
+        checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+      }
+    }
   }
 
   test("number format in statistics") {
@@ -215,8 +245,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
+    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier(table)))
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
           // analyze to get initial stats
@@ -242,6 +273,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
               assert(fetched3.get.sizeInBytes == fetched1.get.sizeInBytes)
             } else {
               checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+              // SPARK-19724: clean up the previous table location.
+              waitForTasksToFinish()
+              Utils.deleteRecursively(tableLoc)
             }
           }
         }
@@ -252,7 +286,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("change stats after insert command for datasource table") {
     val table = "change_stats_insert_datasource_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
           // analyze to get initial stats
@@ -260,6 +294,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
           assert(fetched1.get.sizeInBytes == 0)
           assert(fetched1.get.colStats.size == 2)
+
+          // table lookup will make the table cached
+          spark.table(table)
+          assert(isTableInCatalogCache(table))
 
           // insert into command
           sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
@@ -270,9 +308,106 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           } else {
             checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
           }
+
+          // check that tableRelationCache inside the catalog was invalidated after insert
+          assert(!isTableInCatalogCache(table))
         }
       }
     }
   }
 
+  test("invalidation of tableRelationCache after inserts") {
+    val table = "invalidate_catalog_cache_table"
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+        withTable(table) {
+          spark.range(100).write.saveAsTable(table)
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+          spark.table(table)
+          val initialSizeInBytes = getTableFromCatalogCache(table).stats.sizeInBytes
+          spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
+          spark.table(table)
+          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
+        }
+      }
+    }
+  }
+
+  test("invalidation of tableRelationCache after table truncation") {
+    val table = "invalidate_catalog_cache_table"
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+        withTable(table) {
+          spark.range(100).write.saveAsTable(table)
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+          spark.table(table)
+          sql(s"TRUNCATE TABLE $table")
+          spark.table(table)
+          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
+        }
+      }
+    }
+  }
+
+  test("invalidation of tableRelationCache after alter table add partition") {
+    val table = "invalidate_catalog_cache_table"
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+        withTempDir { dir =>
+          withTable(table) {
+            val path = dir.getCanonicalPath
+            sql(s"""
+              |CREATE TABLE $table (col1 int, col2 int)
+              |USING PARQUET
+              |PARTITIONED BY (col2)
+              |LOCATION '${dir.toURI}'""".stripMargin)
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+            spark.table(table)
+            assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
+            spark.catalog.recoverPartitions(table)
+            val df = Seq((1, 2), (1, 2)).toDF("col2", "col1")
+            df.write.parquet(s"$path/col2=1")
+            sql(s"ALTER TABLE $table ADD PARTITION (col2=1) LOCATION '${dir.toURI}'")
+            spark.table(table)
+            val cachedTable = getTableFromCatalogCache(table)
+            val cachedTableSizeInBytes = cachedTable.stats.sizeInBytes
+            val defaultSizeInBytes = conf.defaultSizeInBytes
+            if (autoUpdate) {
+              assert(cachedTableSizeInBytes != defaultSizeInBytes && cachedTableSizeInBytes > 0)
+            } else {
+              assert(cachedTableSizeInBytes == defaultSizeInBytes)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("Simple queries must be working, if CBO is turned on") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("TBL1", "TBL") {
+        import org.apache.spark.sql.functions._
+        val df = spark.range(1000L).select('id,
+          'id * 2 as "FLD1",
+          'id * 12 as "FLD2",
+          lit("aaa") + 'id as "fld3")
+        df.write
+          .mode(SaveMode.Overwrite)
+          .bucketBy(10, "id", "FLD1", "FLD2")
+          .sortBy("id", "FLD1", "FLD2")
+          .saveAsTable("TBL")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS ")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
+        val df2 = spark.sql(
+          """
+             |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
+             |FROM tbl t1
+             |JOIN tbl t2 on t1.id=t2.id
+             |WHERE  t1.fld3 IN (-123.23,321.23)
+          """.stripMargin)
+        df2.createTempView("TBL2")
+        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
+      }
+    }
+  }
 }

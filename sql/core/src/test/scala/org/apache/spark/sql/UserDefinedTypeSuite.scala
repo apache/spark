@@ -21,7 +21,7 @@ import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
@@ -44,6 +44,8 @@ object UDT {
       case v: MyDenseVector => java.util.Arrays.equals(this.data, v.data)
       case _ => false
     }
+
+    override def toString: String = data.mkString("(", ", ", ")")
   }
 
   private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
@@ -143,7 +145,8 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
 }
 
-class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest {
+class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest
+    with ExpressionEvalHelper {
   import testImplicits._
 
   private lazy val pointsRDD = Seq(
@@ -203,12 +206,12 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
 
   // Tests to make sure that all operators correctly convert types on the way out.
   test("Local UDTs") {
-    val df = Seq((1, new UDT.MyDenseVector(Array(0.1, 1.0)))).toDF("int", "vec")
-    df.collect()(0).getAs[UDT.MyDenseVector](1)
-    df.take(1)(0).getAs[UDT.MyDenseVector](1)
-    df.limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[UDT.MyDenseVector](0)
-    df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0)
-      .getAs[UDT.MyDenseVector](0)
+    val vec = new UDT.MyDenseVector(Array(0.1, 1.0))
+    val df = Seq((1, vec)).toDF("int", "vec")
+    assert(vec === df.collect()(0).getAs[UDT.MyDenseVector](1))
+    assert(vec === df.take(1)(0).getAs[UDT.MyDenseVector](1))
+    checkAnswer(df.limit(1).groupBy('int).agg(first('vec)), Row(1, vec))
+    checkAnswer(df.orderBy('int).limit(1).groupBy('int).agg(first('vec)), Row(1, vec))
   }
 
   test("UDTs with JSON") {
@@ -303,5 +306,13 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     checkAnswer(
       pointsRDD.except(pointsRDD2),
       Seq(Row(0.0, new UDT.MyDenseVector(Array(0.2, 2.0)))))
+  }
+
+  test("SPARK-23054 Cast UserDefinedType to string") {
+    val udt = new UDT.MyDenseVectorUDT()
+    val vector = new UDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))
+    val data = udt.serialize(vector)
+    val ret = Cast(Literal(data, udt), StringType, None)
+    checkEvaluation(ret, "(1.0, 3.0, 5.0, 7.0, 9.0)")
   }
 }

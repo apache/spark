@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util.UUID
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.TaskContext

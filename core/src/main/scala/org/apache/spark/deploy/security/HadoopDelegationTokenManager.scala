@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
  *
  * Also, each HadoopDelegationTokenProvider is controlled by
  * spark.security.credentials.{service}.enabled, and will not be loaded if this config is set to
- * false.  For example, Hive's delegation token provider [[HiveDelegationTokenProvider]] can be
+ * false. For example, Hive's delegation token provider [[HiveDelegationTokenProvider]] can be
  * enabled/disabled by the configuration spark.security.credentials.hive.enabled.
  *
  * @param sparkConf Spark configuration
@@ -52,19 +52,38 @@ private[spark] class HadoopDelegationTokenManager(
 
   // Maintain all the registered delegation token providers
   private val delegationTokenProviders = getDelegationTokenProviders
-  logDebug(s"Using the following delegation token providers: " +
+  logDebug("Using the following builtin delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
+  /** Construct a [[HadoopDelegationTokenManager]] for the default Hadoop filesystem */
+  def this(sparkConf: SparkConf, hadoopConf: Configuration) = {
+    this(
+      sparkConf,
+      hadoopConf,
+      hadoopConf => Set(FileSystem.get(hadoopConf).getHomeDirectory.getFileSystem(hadoopConf)))
+  }
+
   private def getDelegationTokenProviders: Map[String, HadoopDelegationTokenProvider] = {
-    val providers = List(new HadoopFSDelegationTokenProvider(fileSystems),
-      new HiveDelegationTokenProvider,
-      new HBaseDelegationTokenProvider)
+    val providers = Seq(new HadoopFSDelegationTokenProvider(fileSystems)) ++
+      safeCreateProvider(new HiveDelegationTokenProvider) ++
+      safeCreateProvider(new HBaseDelegationTokenProvider)
 
     // Filter out providers for which spark.security.credentials.{service}.enabled is false.
     providers
       .filter { p => isServiceEnabled(p.serviceName) }
       .map { p => (p.serviceName, p) }
       .toMap
+  }
+
+  private def safeCreateProvider(
+      createFn: => HadoopDelegationTokenProvider): Option[HadoopDelegationTokenProvider] = {
+    try {
+      Some(createFn)
+    } catch {
+      case t: Throwable =>
+        logDebug(s"Failed to load built in provider.", t)
+        None
+    }
   }
 
   def isServiceEnabled(serviceName: String): Boolean = {
@@ -101,14 +120,16 @@ private[spark] class HadoopDelegationTokenManager(
    * Writes delegation tokens to creds.  Delegation tokens are fetched from all registered
    * providers.
    *
+   * @param hadoopConf hadoop Configuration
+   * @param creds Credentials that will be updated in place (overwritten)
    * @return Time after which the fetched delegation tokens should be renewed.
    */
   def obtainDelegationTokens(
       hadoopConf: Configuration,
       creds: Credentials): Long = {
     delegationTokenProviders.values.flatMap { provider =>
-      if (provider.delegationTokensRequired(hadoopConf)) {
-        provider.obtainDelegationTokens(hadoopConf, creds)
+      if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
+        provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")
@@ -117,3 +138,4 @@ private[spark] class HadoopDelegationTokenManager(
     }.foldLeft(Long.MaxValue)(math.min)
   }
 }
+

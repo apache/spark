@@ -70,9 +70,9 @@ case class WindowSpecDefinition(
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           !isValidFrameType(f.valueBoundary.head.dataType) =>
         TypeCheckFailure(
-          s"The data type '${orderSpec.head.dataType}' used in the order specification does " +
-            s"not match the data type '${f.valueBoundary.head.dataType}' which is used in the " +
-            "range frame.")
+          s"The data type '${orderSpec.head.dataType.simpleString}' used in the order " +
+            "specification does not match the data type " +
+            s"'${f.valueBoundary.head.dataType.simpleString}' which is used in the range frame.")
       case _ => TypeCheckSuccess
     }
   }
@@ -251,8 +251,8 @@ case class SpecifiedWindowFrame(
       TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
       TypeCheckFailure(
-        s"The data type of the $location bound '${e.dataType} does not match " +
-          s"the expected data type '${frameType.inputType}'.")
+        s"The data type of the $location bound '${e.dataType.simpleString}' does not match " +
+          s"the expected data type '${frameType.inputType.simpleString}'.")
     case _ => TypeCheckSuccess
   }
 
@@ -261,27 +261,6 @@ case class SpecifiedWindowFrame(
       case (UnboundedFollowing, _) => false
       case (_, UnboundedPreceding) => false
       case _ => true
-    }
-  }
-}
-
-object SpecifiedWindowFrame {
-  /**
-   * @param hasOrderSpecification If the window spec has order by expressions.
-   * @param acceptWindowFrame If the window function accepts user-specified frame.
-   * @return the default window frame.
-   */
-  def defaultWindowFrame(
-      hasOrderSpecification: Boolean,
-      acceptWindowFrame: Boolean): SpecifiedWindowFrame = {
-    if (hasOrderSpecification && acceptWindowFrame) {
-      // If order spec is defined and the window function supports user specified window frames,
-      // the default frame is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
-      SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
-    } else {
-      // Otherwise, the default frame is
-      // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING.
-      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
     }
   }
 }
@@ -363,7 +342,10 @@ abstract class OffsetWindowFunction
   override lazy val frame: WindowFrame = {
     val boundary = direction match {
       case Ascending => offset
-      case Descending => UnaryMinus(offset)
+      case Descending => UnaryMinus(offset) match {
+          case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+          case o => o
+      }
     }
     SpecifiedWindowFrame(RowFrame, boundary, boundary)
   }

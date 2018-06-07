@@ -204,7 +204,7 @@ def run_scala_style_checks():
 
 def run_java_style_checks():
     set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-java")])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle")])
 
 
 def run_python_style_checks():
@@ -253,9 +253,9 @@ def kill_zinc_on_port(zinc_port):
     """
     Kill the Zinc process running on the given port, if one exists.
     """
-    cmd = ("/usr/sbin/lsof -P |grep %s | grep LISTEN "
-           "| awk '{ print $2; }' | xargs kill") % zinc_port
-    subprocess.check_call(cmd, shell=True)
+    cmd = "%s -P |grep %s | grep LISTEN | awk '{ print $2; }' | xargs kill"
+    lsof_exe = which("lsof")
+    subprocess.check_call(cmd % (lsof_exe if lsof_exe else "/usr/sbin/lsof", zinc_port), shell=True)
 
 
 def exec_maven(mvn_args=()):
@@ -276,9 +276,9 @@ def exec_sbt(sbt_args=()):
 
     sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
 
-    sbt_output_filter = re.compile("^.*[info].*Resolving" + "|" +
-                                   "^.*[warn].*Merging" + "|" +
-                                   "^.*[info].*Including")
+    sbt_output_filter = re.compile(b"^.*[info].*Resolving" + b"|" +
+                                   b"^.*[warn].*Merging" + b"|" +
+                                   b"^.*[info].*Including")
 
     # NOTE: echo "q" is needed because sbt on encountering a build file
     # with failure (either resolution or compilation) prompts the user for
@@ -289,7 +289,7 @@ def exec_sbt(sbt_args=()):
                                 stdin=echo_proc.stdout,
                                 stdout=subprocess.PIPE)
     echo_proc.wait()
-    for line in iter(sbt_proc.stdout.readline, ''):
+    for line in iter(sbt_proc.stdout.readline, b''):
         if not sbt_output_filter.match(line):
             print(line, end='')
     retcode = sbt_proc.wait()
@@ -574,11 +574,16 @@ def main():
                                 or f.endswith("checkstyle.xml")
                                 or f.endswith("checkstyle-suppressions.xml")
                                 for f in changed_files):
-        # run_java_style_checks()
-        pass
-    if not changed_files or any(f.endswith(".py") for f in changed_files):
+        run_java_style_checks()
+    if not changed_files or any(f.endswith("lint-python")
+                                or f.endswith("tox.ini")
+                                or f.endswith(".py")
+                                for f in changed_files):
         run_python_style_checks()
-    if not changed_files or any(f.endswith(".R") for f in changed_files):
+    if not changed_files or any(f.endswith(".R")
+                                or f.endswith("lint-r")
+                                or f.endswith(".lintr")
+                                for f in changed_files):
         run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
@@ -615,7 +620,7 @@ def _test():
     import doctest
     failure_count = doctest.testmod()[0]
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()
