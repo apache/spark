@@ -73,13 +73,28 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     "import org.apache.spark.sql.functions._"
   )
 
-  def initializeSpark(): Unit = savingReplayStack {
-    // `savingReplayStack` removes the commands from session history.
-    initializationCommands.foreach(intp quietRun _)
+  def initializeSpark(): Unit = {
+    if (!intp.reporter.hasErrors) {
+      // `savingReplayStack` removes the commands from session history.
+      savingReplayStack {
+        initializationCommands.foreach(intp quietRun _)
+      }
+    } else {
+      throw new RuntimeException(s"Scala $versionString interpreter encountered " +
+        "errors during initialization")
+    }
   }
 
   /** Print a welcome message */
   override def printWelcome() {
+    // Before Scala 2.11.9, `printWelcome()` will be the last thing to be called,
+    // so Scala REPL and Spark will be initialized before `printWelcome()`.
+    // After Scala 2.11.9, `printWelcome()` will be the first thing to be called,
+    // as a result, Scala REPL and Spark will be initialized in `printWelcome()`.
+    if (!isInitializeComplete) {
+      intp.initializeSynchronous()
+    }
+
     import org.apache.spark.SPARK_VERSION
     echo("""Welcome to
       ____              __

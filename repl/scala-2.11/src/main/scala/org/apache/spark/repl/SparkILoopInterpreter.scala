@@ -22,7 +22,7 @@ import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter._
 
 class SparkILoopInterpreter(settings: Settings, out: JPrintWriter, initializeSpark: () => Unit)
-  extends IMain(settings, out) { self =>
+    extends IMain(settings, out) { self =>
 
   /**
    * We override `initializeSynchronous` to initialize Spark *after* `intp` is properly initialized
@@ -34,8 +34,10 @@ class SparkILoopInterpreter(settings: Settings, out: JPrintWriter, initializeSpa
    * See the discussion in Scala community https://github.com/scala/bug/issues/10913 for detail.
    */
   override def initializeSynchronous(): Unit = {
-    super.initializeSynchronous()
-    initializeSpark()
+    if (!isInitializeComplete) {
+      super.initializeSynchronous()
+      initializeSpark()
+    }
   }
 
   override lazy val memberHandlers = new {
