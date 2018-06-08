@@ -1569,11 +1569,30 @@ class Analyzer(
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
-      CleanupAliases.trimNonTopLevelAliases(expr) match {
+      trimNonTopLevelAliases(expr) match {
         case UnresolvedAlias(_: Generator, _) => false
         case Alias(_: Generator, _) => false
         case MultiAlias(_: Generator, _) => false
         case other => hasGenerator(other)
+      }
+    }
+
+    def trimNonTopLevelAliases(e: Expression): Expression = e match {
+      case a: UnresolvedAlias =>
+        a.copy(child = trimAliases(a.child))
+      case a: Alias =>
+        a.copy(child = trimAliases(a.child))(
+          exprId = a.exprId,
+          qualifier = a.qualifier,
+          explicitMetadata = Some(a.metadata))
+      case a: MultiAlias =>
+        a.copy(child = trimAliases(a.child))
+      case other => trimAliases(other)
+    }
+
+    private def trimAliases(e: Expression): Expression = {
+      e.transformDown {
+        case expr: NamedExpression => trimAlias(expr)
       }
     }
 
@@ -1616,7 +1635,7 @@ class Analyzer(
         var resolvedGenerator: Generate = null
 
         val newProjectList = projectList
-          .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          .map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
           .flatMap {
             case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
               // It's a sanity check, this should not happen as the previous case will throw
