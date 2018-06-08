@@ -153,7 +153,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
   private lazy val arrayElementTypes = arrayTypes.map(_.elementType)
 
-  private lazy val mountSchema: StructType = {
+  @transient private lazy val mountSchema: StructType = {
     val fields = children.zip(arrayElementTypes).zipWithIndex.map {
       case ((expr: NamedExpression, elementType), _) =>
         StructField(expr.name, elementType, nullable = true)
