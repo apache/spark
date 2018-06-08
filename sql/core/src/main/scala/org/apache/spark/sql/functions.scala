@@ -1078,7 +1078,7 @@ object functions {
    * @since 2.4
    */
   def map_from_arrays(keys: Column, values: Column): Column = withExpr {
-    CreateMapFromArrays(keys.expr, values.expr)
+    MapFromArrays(keys.expr, values.expr)
   }
 
   /**

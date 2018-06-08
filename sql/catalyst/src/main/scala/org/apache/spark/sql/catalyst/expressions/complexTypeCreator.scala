@@ -248,19 +248,10 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
       > SELECT _FUNC_([1.0, 3.0], ['2', '4']);
        {1.0:"2",3.0:"4"}
   """, since = "2.4.0")
-case class CreateMapFromArrays(left: Expression, right: Expression)
+case class MapFromArrays(left: Expression, right: Expression)
     extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (ArrayType(_, _), ArrayType(_, _)) =>
-        TypeCheckResult.TypeCheckSuccess
-      case _ =>
-        TypeCheckResult.TypeCheckFailure("The given two arguments should be an array")
-    }
-  }
 
   override def dataType: DataType = {
     MapType(
@@ -268,8 +259,6 @@ case class CreateMapFromArrays(left: Expression, right: Expression)
       valueType = right.dataType.asInstanceOf[ArrayType].elementType,
       valueContainsNull = right.dataType.asInstanceOf[ArrayType].containsNull)
   }
-
-  override def nullable: Boolean = left.nullable || right.nullable
 
   override def nullSafeEval(keyArray: Any, valueArray: Any): Any = {
     val keyArrayData = keyArray.asInstanceOf[ArrayData]
@@ -279,8 +268,12 @@ case class CreateMapFromArrays(left: Expression, right: Expression)
     }
     val leftArrayType = left.dataType.asInstanceOf[ArrayType]
     if (leftArrayType.containsNull) {
-      if (keyArrayData.toArray(leftArrayType.elementType).contains(null)) {
-        throw new RuntimeException("Cannot use null as map key!")
+      var i = 0
+      while (i < keyArrayData.numElements) {
+        if (keyArrayData.isNullAt(i)) {
+          throw new RuntimeException("Cannot use null as map key!")
+        }
+        i += 1
       }
     }
     new ArrayBasedMapData(keyArrayData.copy(), valueArrayData.copy())
@@ -291,13 +284,10 @@ case class CreateMapFromArrays(left: Expression, right: Expression)
       val arrayBasedMapData = classOf[ArrayBasedMapData].getName
       val leftArrayType = left.dataType.asInstanceOf[ArrayType]
       val keyArrayElemNullCheck = if (!leftArrayType.containsNull) "" else {
-        val leftArrayTypeTerm = ctx.addReferenceObj("leftArrayType", leftArrayType.elementType)
-        val array = ctx.freshName("array")
         val i = ctx.freshName("i")
         s"""
-           |Object[] $array = $keyArrayData.toObjectArray($leftArrayTypeTerm);
-           |for (int $i = 0; $i < $array.length; $i++) {
-           |  if ($array[$i] == null) {
+           |for (int $i = 0; $i < $keyArrayData.numElements(); $i++) {
+           |  if ($keyArrayData.isNullAt($i)) {
            |    throw new RuntimeException("Cannot use null as map key!");
            |  }
            |}

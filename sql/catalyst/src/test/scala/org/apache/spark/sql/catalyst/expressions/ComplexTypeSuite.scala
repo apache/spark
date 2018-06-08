@@ -186,7 +186,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("CreateMapFromArrays") {
+  test("MapFromArrays") {
     def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
       // catalyst map is order-sensitive, so we create ListMap here to preserve the elements order.
       scala.collection.immutable.ListMap(keys.zip(values): _*)
@@ -209,24 +209,24 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nullArray = Literal.create(null, ArrayType(StringType, false))
 
-    checkEvaluation(CreateMapFromArrays(intArray, longArray), createMap(intSeq, longSeq))
-    checkEvaluation(CreateMapFromArrays(intArray, strArray), createMap(intSeq, strSeq))
-    checkEvaluation(CreateMapFromArrays(integerArray, strArray), createMap(integerSeq, strSeq))
+    checkEvaluation(MapFromArrays(intArray, longArray), createMap(intSeq, longSeq))
+    checkEvaluation(MapFromArrays(intArray, strArray), createMap(intSeq, strSeq))
+    checkEvaluation(MapFromArrays(integerArray, strArray), createMap(integerSeq, strSeq))
 
     checkEvaluation(
-      CreateMapFromArrays(strArray, intwithNullArray), createMap(strSeq, intWithNullSeq))
+      MapFromArrays(strArray, intwithNullArray), createMap(strSeq, intWithNullSeq))
     checkEvaluation(
-      CreateMapFromArrays(strArray, longwithNullArray), createMap(strSeq, longWithNullSeq))
+      MapFromArrays(strArray, longwithNullArray), createMap(strSeq, longWithNullSeq))
     checkEvaluation(
-      CreateMapFromArrays(strArray, longwithNullArray), createMap(strSeq, longWithNullSeq))
-    checkEvaluation(CreateMapFromArrays(nullArray, nullArray), null)
+      MapFromArrays(strArray, longwithNullArray), createMap(strSeq, longWithNullSeq))
+    checkEvaluation(MapFromArrays(nullArray, nullArray), null)
 
     intercept[RuntimeException] {
-      checkEvaluation(CreateMapFromArrays(intwithNullArray, strArray), null)
+      checkEvaluation(MapFromArrays(intwithNullArray, strArray), null)
     }
     intercept[RuntimeException] {
       checkEvaluation(
-        CreateMapFromArrays(intArray, Literal.create(Seq(1), ArrayType(IntegerType))), null)
+        MapFromArrays(intArray, Literal.create(Seq(1), ArrayType(IntegerType))), null)
     }
   }
 
