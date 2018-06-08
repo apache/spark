@@ -67,12 +67,7 @@ private[spark] class ExecutorPodsAllocator(
   def setTotalExpectedExecutors(total: Int): Unit = totalExpectedExecutors.set(total)
 
   private def processSnapshot(applicationId: String, snapshot: ExecutorPodsSnapshot): Unit = {
-    snapshot.executorPods.filter {
-      case (_, PodPending(_)) | (_, PodUnknown(_)) => false
-      case _ => true
-    }.keys.foreach {
-      newlyCreatedExecutors -= _
-    }
+    snapshot.executorPods.keys.foreach { newlyCreatedExecutors -= _ }
 
     // For all executors we've created against the API but have not seen in a snapshot
     // yet - check the current time. If the current time has exceeded some threshold,

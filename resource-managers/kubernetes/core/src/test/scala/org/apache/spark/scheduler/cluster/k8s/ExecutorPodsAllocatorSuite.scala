@@ -131,7 +131,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
   }
 
-  test("When an executor is requested but the API does not report it in 1 minute, retry" +
+  test("When an executor is requested but the API does not report it in a reasonable time, retry" +
     " requesting that executor.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(1)
     snapshotsStore.replaceSnapshot(Seq.empty[Pod])
