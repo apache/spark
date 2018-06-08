@@ -22,9 +22,7 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
-from pyspark.sql.functions import col, lit
-from pyspark.sql.types import DoubleType, LongType
-from pyspark.mllib.clustering import PowerIterationClustering as MLlibPowerIterationClustering
+from pyspark.sql import DataFrame
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
            'KMeans', 'KMeansModel',
@@ -1176,7 +1174,7 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     .. seealso:: `Wikipedia on Spectral clustering \
     <http://en.wikipedia.org/wiki/Spectral_clustering>`_
 
-    >>> from pyspark.sql.types import StructField, StructType
+    >>> from pyspark.sql.types import DoubleType, LongType, StructField, StructType
     >>> import math
     >>> def genCircle(r, n):
     ...     points = []
@@ -1348,25 +1346,12 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
 
         :return: A dataset that contains columns of vertex id and the corresponding cluster for
                  the id. The schema of it will be:
-                   - id: Long
-                   - cluster: Int
+                  - id: Long
+                  - cluster: Int
         """
-        weightCol = None
-        w = None
-        if (self.isDefined(self.weightCol)):
-            weightCol = self.getWeightCol()
-        if (weightCol is None or len(weightCol) == 0):
-            w = lit(1.0)
-        else:
-            w = col(weightCol).cast(DoubleType())
-        srcCol = self.getSrcCol()
-        dstCol = self.getDstCol()
-        df = dataset.select(col(srcCol).cast(LongType()), col(dstCol).cast(LongType()), w)
-        data = df.rdd.map(lambda x: (x[0], x[1], x[2]))
-        algorithm = MLlibPowerIterationClustering()
-        model = MLlibPowerIterationClustering.train(data, self.getK(), self.getMaxIter(),
-                                                    self.getInitMode())
-        return model.assignments().toDF()
+        self._transfer_params_to_java()
+        jdf = self._java_obj.assignClusters(dataset._jdf)
+        return DataFrame(jdf, dataset.sql_ctx)
 
 
 if __name__ == "__main__":
