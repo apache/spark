@@ -15,17 +15,18 @@
 # limitations under the License.
 #
 
-"""
-DataFrame-based machine learning APIs to let users quickly assemble and configure practical
-machine learning pipelines.
-"""
-from pyspark.ml.base import Estimator, Model, Transformer, UnaryTransformer
-from pyspark.ml.pipeline import Pipeline, PipelineModel
-from pyspark.ml import classification, clustering, evaluation, feature, fpm, \
-    image, pipeline, recommendation, regression, stat, tuning, util, linalg, param
+import os
+import sys
 
-__all__ = [
-    "Transformer", "UnaryTransformer", "Estimator", "Model", "Pipeline", "PipelineModel",
-    "classification", "clustering", "evaluation", "feature", "fpm", "image",
-    "recommendation", "regression", "stat", "tuning", "util", "linalg", "param",
-]
+
+def version_check(python_env, major_python_version):
+    """
+        These are various tests to test the Python container image.
+        This file will be distributed via --py-files in the e2e tests.
+    """
+    env_version = os.environ.get('PYSPARK_PYTHON')
+    print("Python runtime version check is: " +
+          str(sys.version_info[0] == major_python_version))
+
+    print("Python environment version check is: " +
+          str(env_version == python_env))
