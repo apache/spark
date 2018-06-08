@@ -1344,10 +1344,11 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
           either (i, j, s,,ij,,) or (j, i, s,,ji,,) in the input. Rows with i = j are
           ignored, because we assume s,,ij,, = 0.0.
 
-        :return: A dataset that contains columns of vertex id and the corresponding cluster for
-                 the id. The schema of it will be:
-                  - id: Long
-                  - cluster: Int
+        :return:
+          A dataset that contains columns of vertex id and the corresponding cluster for
+          the id. The schema of it will be:
+          - id: Long
+          - cluster: Int
         """
         self._transfer_params_to_java()
         jdf = self._java_obj.assignClusters(dataset._jdf)
