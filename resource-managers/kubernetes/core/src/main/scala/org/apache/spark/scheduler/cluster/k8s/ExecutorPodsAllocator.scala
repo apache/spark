@@ -83,9 +83,9 @@ private[spark] class ExecutorPodsAllocator(
     (newlyCreatedExecutors.keySet -- snapshot.executorPods.keySet).foreach { execId =>
       if (clock.getTimeMillis() - newlyCreatedExecutors(execId) > podCreationTimeout) {
         logWarning(s"Executor with id $execId was not detected in the Kubernetes" +
-          " cluster after 1 minute despite the fact that a previous allocation attempt" +
-          " tried to create it. The executor may have been deleted but the application" +
-          " missed the deletion event.")
+          s" cluster after $podCreationTimeout milliseconds despite the fact that a" +
+          " previous allocation attempt tried to create it. The executor may have been" +
+          "deleted but the application missed the deletion event.")
         Utils.tryLogNonFatalError {
           kubernetesClient
             .pods()
