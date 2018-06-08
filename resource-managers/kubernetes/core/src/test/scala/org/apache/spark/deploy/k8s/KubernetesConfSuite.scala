@@ -122,6 +122,23 @@ class KubernetesConfSuite extends SparkFunSuite {
       === Array("local:///opt/spark/example4.py", mainResourceFile) ++ inputPyFiles)
   }
 
+  test("Testing explicit setting of memory overhead on non-JVM tasks") {
+    val sparkConf = new SparkConf(false)
+      .set(MEMORY_OVERHEAD_FACTOR, 0.3)
+
+    val mainResourceFile = "local:///opt/spark/main.py"
+    val mainAppResource = Some(PythonMainAppResource(mainResourceFile))
+    val conf = KubernetesConf.createDriverConf(
+      sparkConf,
+      APP_NAME,
+      RESOURCE_NAME_PREFIX,
+      APP_ID,
+      mainAppResource,
+      MAIN_CLASS,
+      APP_ARGS,
+      None)
+    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
+  }
 
   test("Resolve driver labels, annotations, secret mount paths, envs, and memory overhead") {
     val sparkConf = new SparkConf(false)
