@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.time.{Duration => JDuration}
 import java.{util => ju}
+import java.time.{Duration => JDuration}
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.collection.JavaConverters._
