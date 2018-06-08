@@ -290,5 +290,5 @@ private[spark] object KubernetesSuite {
   // val CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE =
   //   s"$CONTAINER_LOCAL_FILE_DOWNLOAD_PATH/pagerank_data.txt"
 
-  case object ShuffleNotReadyException extends Exception
+  // case object ShuffleNotReadyException extends Exception
 }
