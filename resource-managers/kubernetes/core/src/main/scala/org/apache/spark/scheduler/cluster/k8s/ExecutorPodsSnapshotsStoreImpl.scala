@@ -45,7 +45,7 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(
 
   override def addSubscriber(
       processBatchIntervalMillis: Long)
-      (subscriber: ExecutorPodsSnapshot => Unit): Unit = {
+      (onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit): Unit = {
     observedDisposables += snapshotsObservable
       // Group events in the time window given by the caller. These buffers are then sent
       // to the caller's lambda at the given interval, with the pod updates that occurred
@@ -65,7 +65,7 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(
       .observeOn(Schedulers.from(executeSubscriptionsExecutor))
       .subscribe(toReactivexConsumer { snapshots: java.util.List[ExecutorPodsSnapshot] =>
         Utils.tryLogNonFatalError {
-          snapshots.asScala.foreach(subscriber)
+          onNewSnapshots(snapshots.asScala)
         }
       })
   }

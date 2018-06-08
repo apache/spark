@@ -22,24 +22,23 @@ import scala.collection.mutable
 class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore {
 
   private val snapshotsBuffer = mutable.Buffer.empty[ExecutorPodsSnapshot]
-  private val subscribers = mutable.Buffer.empty[ExecutorPodsSnapshot => Unit]
+  private val subscribers = mutable.Buffer.empty[Seq[ExecutorPodsSnapshot] => Unit]
 
   private var currentSnapshot = ExecutorPodsSnapshot()
 
   override def addSubscriber
       (processBatchIntervalMillis: Long)
-      (subscriber: ExecutorPodsSnapshot => Unit): Unit = {
-    subscribers += subscriber
+      (onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit): Unit = {
+    subscribers += onNewSnapshots
   }
 
   override def stop(): Unit = {}
 
   def notifySubscribers(): Unit = {
-    subscribers.foreach { subscriber =>
-      snapshotsBuffer.foreach(subscriber)
-    }
+    subscribers.foreach(_(snapshotsBuffer))
     snapshotsBuffer.clear()
   }
+
   override def updatePod(updatedPod: Pod): Unit = {
     currentSnapshot = currentSnapshot.withUpdate(updatedPod)
     snapshotsBuffer += currentSnapshot

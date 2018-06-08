@@ -45,10 +45,10 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
     val receivedSnapshots1 = mutable.Buffer.empty[ExecutorPodsSnapshot]
     val receivedSnapshots2 = mutable.Buffer.empty[ExecutorPodsSnapshot]
     eventQueueUnderTest.addSubscriber(1000) {
-      receivedSnapshots1 += _
+      receivedSnapshots1 ++= _
     }
     eventQueueUnderTest.addSubscriber(2000) {
-      receivedSnapshots2 += _
+      receivedSnapshots2 ++= _
     }
 
     pushPodWithIndex(1)
@@ -101,19 +101,19 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
   }
 
   test("Even without sending events, initially receive an empty buffer.") {
-    val receivedInitialSnapshot = new AtomicReference[ExecutorPodsSnapshot](null)
+    val receivedInitialSnapshot = new AtomicReference[Seq[ExecutorPodsSnapshot]](null)
     eventQueueUnderTest.addSubscriber(1000) {
       receivedInitialSnapshot.set
     }
     assert(receivedInitialSnapshot.get == null)
     executeSubscriptionsExecutor.runUntilIdle()
-    assert(receivedInitialSnapshot.get === ExecutorPodsSnapshot())
+    assert(receivedInitialSnapshot.get === Seq(ExecutorPodsSnapshot()))
   }
 
   test("Replacing the snapshot passes the new snapshot to subscribers.") {
     val receivedSnapshots = mutable.Buffer.empty[ExecutorPodsSnapshot]
     eventQueueUnderTest.addSubscriber(1000) {
-      receivedSnapshots += _
+      receivedSnapshots ++= _
     }
     eventQueueUnderTest.updatePod(podWithIndex(1))
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)

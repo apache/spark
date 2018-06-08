@@ -60,23 +60,22 @@ private[spark] class ExecutorPodsAllocator(
 
   def start(applicationId: String): Unit = {
     snapshotsStore.addSubscriber(podAllocationDelay) {
-      processSnapshot(applicationId, _)
+      onNewSnapshots(applicationId, _)
     }
   }
 
   def setTotalExpectedExecutors(total: Int): Unit = totalExpectedExecutors.set(total)
 
-  private def processSnapshot(applicationId: String, snapshot: ExecutorPodsSnapshot): Unit = {
-    snapshot.executorPods.keys.foreach { newlyCreatedExecutors -= _ }
-
+  private def onNewSnapshots(applicationId: String, snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
+    newlyCreatedExecutors --= snapshots.flatMap(_.executorPods.keys)
     // For all executors we've created against the API but have not seen in a snapshot
     // yet - check the current time. If the current time has exceeded some threshold,
     // assume that the pod was either never created (the API server never properly
     // handled the creation request), or the API server created the pod but we missed
     // both the creation and deletion events. In either case, delete the missing pod
     // if possible, and mark such a pod to be rescheduled below.
-    (newlyCreatedExecutors.keySet -- snapshot.executorPods.keySet).foreach { execId =>
-      if (clock.getTimeMillis() - newlyCreatedExecutors(execId) > podCreationTimeout) {
+    newlyCreatedExecutors.foreach { case (execId, timeCreated) =>
+      if (clock.getTimeMillis() - timeCreated > podCreationTimeout) {
         logWarning(s"Executor with id $execId was not detected in the Kubernetes" +
           s" cluster after $podCreationTimeout milliseconds despite the fact that a" +
           " previous allocation attempt tried to create it. The executor may have been" +
@@ -91,44 +90,52 @@ private[spark] class ExecutorPodsAllocator(
       }
     }
 
-    val currentRunningExecutors = snapshot.executorPods.values.count {
-      case PodRunning(_) => true
-      case _ => false
-    }
-    val currentPendingExecutors = snapshot.executorPods.values.count {
-      case PodPending(_) => true
-      case _ => false
-    }
-    val currentTotalExpectedExecutors = totalExpectedExecutors.get
-    if (newlyCreatedExecutors.isEmpty
-      && currentPendingExecutors == 0
-      && currentRunningExecutors < currentTotalExpectedExecutors) {
-      val numExecutorsToAllocate = math.min(
-        currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
-      logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
-      for ( _ <- 0 until numExecutorsToAllocate) {
-        val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
-        val executorConf = KubernetesConf.createExecutorConf(
-          conf,
-          newExecutorId.toString,
-          applicationId,
-          driverPod)
-        val executorPod = executorBuilder.buildFromFeatures(executorConf)
-        val podWithAttachedContainer = new PodBuilder(executorPod.pod)
-          .editOrNewSpec()
-          .addToContainers(executorPod.container)
-          .endSpec()
-          .build()
-        kubernetesClient.pods().create(podWithAttachedContainer)
-        newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
+    if (snapshots.nonEmpty) {
+      // Only need to examine the cluster as of the latest snapshot, the "current" state, to see if
+      // we need to allocate more executors or not.
+      val latestSnapshot = snapshots.last
+      val currentRunningExecutors = latestSnapshot.executorPods.values.count {
+        case PodRunning(_) => true
+        case _ => false
       }
-    } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
-      // TODO handle edge cases if we end up with more running executors than expected.
-      logDebug("Current number of running executors is equal to the number of requested" +
-        " executors. Not scaling up further.")
-    } else if (newlyCreatedExecutors.nonEmpty || currentPendingExecutors != 0) {
-      logDebug(s"Still waiting for ${newlyCreatedExecutors.size + currentPendingExecutors}" +
-        s" executors to begin running before requesting for more executors.")
+      val currentPendingExecutors = latestSnapshot.executorPods.values.count {
+        case PodPending(_) => true
+        case _ => false
+      }
+      val currentTotalExpectedExecutors = totalExpectedExecutors.get
+      if (newlyCreatedExecutors.isEmpty
+        && currentPendingExecutors == 0
+        && currentRunningExecutors < currentTotalExpectedExecutors) {
+        val numExecutorsToAllocate = math.min(
+          currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
+        logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
+        for ( _ <- 0 until numExecutorsToAllocate) {
+          val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
+          val executorConf = KubernetesConf.createExecutorConf(
+            conf,
+            newExecutorId.toString,
+            applicationId,
+            driverPod)
+          val executorPod = executorBuilder.buildFromFeatures(executorConf)
+          val podWithAttachedContainer = new PodBuilder(executorPod.pod)
+            .editOrNewSpec()
+            .addToContainers(executorPod.container)
+            .endSpec()
+            .build()
+          kubernetesClient.pods().create(podWithAttachedContainer)
+          newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
+        }
+      } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
+        // TODO handle edge cases if we end up with more running executors than expected.
+        logDebug("Current number of running executors is equal to the number of requested" +
+          " executors. Not scaling up further.")
+      } else if (newlyCreatedExecutors.nonEmpty || currentPendingExecutors != 0) {
+        logDebug(s"Still waiting for ${newlyCreatedExecutors.size + currentPendingExecutors}" +
+          s" executors to begin running before requesting for more executors. # of executors in" +
+          s" pending status in the cluster: $currentPendingExecutors. # of executors that we have" +
+          s" created but we have not observed as being present in the cluster yet:" +
+          s" ${newlyCreatedExecutors.size}.")
+      }
     }
   }
 }
