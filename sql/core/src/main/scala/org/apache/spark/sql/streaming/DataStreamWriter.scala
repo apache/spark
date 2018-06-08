@@ -281,6 +281,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         trigger = trigger)
     } else if (source == "foreachBatch") {
       assertNotPartitioned("foreach")
+      if (trigger.isInstanceOf[ContinuousTrigger]) {
+        throw new AnalysisException(s"'foreachBatch' is not supported with continuous trigger")
+      }
       val sink = new ForeachBatchSink[T](foreachBatchWriter, ds.exprEnc)
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),

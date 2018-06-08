@@ -24,12 +24,14 @@ if sys.version >= '3':
 else:
     intlike = (int, long)
 
+from py4j.java_gateway import java_import
+
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
-from pyspark.sql.utils import StreamingQueryException
+from pyspark.sql.utils import ForeachBatchFunction, StreamingQueryException
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
@@ -841,6 +843,20 @@ class DataStreamWriter(object):
                 interval)
 
         self._jwrite = self._jwrite.trigger(jTrigger)
+        return self
+
+    def foreachBatch(self, func):
+        """
+        :param func:
+        :return:
+        """
+        from pyspark.java_gateway import ensure_callback_server_started
+        gw = self._spark._sc._gateway
+        java_import(gw.jvm, "org.apache.spark.sql.execution.streaming.sources.*")
+
+        wrapped_func = ForeachBatchFunction(self._spark, func)
+        gw.jvm.PythonForeachBatchHelper.callForeachBatch(self._jwrite, wrapped_func)
+        ensure_callback_server_started(gw)
         return self
 
     @ignore_unicode_prefix

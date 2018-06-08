@@ -62,6 +62,7 @@ def capture_sql_exception(f):
         try:
             return f(*a, **kw)
         except py4j.protocol.Py4JJavaError as e:
+            print(str(e))
             s = e.java_exception.toString()
             stackTrace = '\n\t at '.join(map(lambda x: x.toString(),
                                              e.java_exception.getStackTrace()))
@@ -150,3 +151,25 @@ def require_minimum_pyarrow_version():
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
         raise ImportError("PyArrow >= %s must be installed; however, "
                           "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
+
+class ForeachBatchFunction(object):
+    """
+    This is the Python implementation of Java interface 'ForeachBatchFunction'. This wraps
+    the user-defined 'foreachBatch' function such that it can be called from the JVM when
+    the query is active.
+    """
+
+    def __init__(self, sql_ctx, func):
+        self.sql_ctx = sql_ctx
+        self.func = func
+
+    def call(self, jdf, batch_id):
+        from pyspark.sql.dataframe import DataFrame
+        try:
+            self.func(DataFrame(jdf, self.sql_ctx), batch_id)
+        except Exception as e:
+            self.error = e
+            raise e
+
+    class Java:
+        implements = ['org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction']

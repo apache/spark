@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import org.apache.spark.api.python.PythonException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.sql.streaming.DataStreamWriter
 
 class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: ExpressionEncoder[T])
   extends Sink {
@@ -35,3 +37,22 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
 
   override def toString(): String = "ForeachBatchSink"
 }
+
+
+/**
+ * Interface that is meant to be extended by Python classes via Py4J.
+ * Py4J allows Python classes to implement Java interfaces so that the JVM can call back
+ * Python objects. In this case, this allows the user-defined Python `foreachBatch` function
+ * to be called from JVM when the query is active.
+ * */
+trait PythonForeachBatchFunction {
+  /** Call the Python implementation of this function */
+  def call(batchDF: DataFrame, batchId: Long): Unit
+}
+
+object PythonForeachBatchHelper {
+  def callForeachBatch(dsw: DataStreamWriter[Row], pythonFunc: PythonForeachBatchFunction): Unit = {
+    dsw.foreachBatch(pythonFunc.call)
+  }
+}
+
