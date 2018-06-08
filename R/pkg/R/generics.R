@@ -996,10 +996,6 @@ setGeneric("instr", function(y, x) { standardGeneric("instr") })
 
 #' @rdname column_nonaggregate_functions
 #' @name NULL
-setGeneric("isinf", function(x) { standardGeneric("isinf") })
-
-#' @rdname column_nonaggregate_functions
-#' @name NULL
 setGeneric("isnan", function(x) { standardGeneric("isnan") })
 
 #' @rdname column_aggregate_functions
