@@ -5577,7 +5577,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
         result1 = df.withColumn('mean_v', self.pandas_agg_mean_udf(df['v']).over(w)) \
                     .withColumn('max_v', self.pandas_agg_max_udf(df['v']).over(w)) \
-                    .withColumn('min_w', self.pandas_agg_min_udf(df['w']).over(w)) \
+                    .withColumn('min_w', self.pandas_agg_min_udf(df['w']).over(w))
 
         expected1 = df.withColumn('mean_v', mean(df['v']).over(w)) \
                       .withColumn('max_v', max(df['v']).over(w)) \

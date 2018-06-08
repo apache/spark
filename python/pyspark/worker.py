@@ -129,6 +129,10 @@ def wrap_grouped_agg_pandas_udf(f, return_type):
 
 
 def wrap_window_agg_pandas_udf(f, return_type):
+    # This is similar to grouped_agg_pandas_udf, the only difference
+    # is that window_agg_pandas_udf needs to repeat the return value
+    # to match window length, where grouped_agg_pandas_udf just returns
+    # the scalar value.
     arrow_return_type = to_arrow_type(return_type)
 
     def wrapped(*series):

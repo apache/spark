@@ -279,7 +279,7 @@ object PhysicalAggregation {
  */
 object PhysicalWindow {
   // windowFunctionType, windowExpression, partitionSpec, orderSpec, child
-  type ReturnType =
+  private type ReturnType =
     (WindowFunctionType, Seq[NamedExpression], Seq[Expression], Seq[SortOrder], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {

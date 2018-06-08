@@ -116,7 +116,7 @@ trait CheckAnalysis extends PredicateHelper {
           case _ @ WindowExpression(_: PythonUDF,
             WindowSpecDefinition(_, _, frame: SpecifiedWindowFrame))
               if !frame.isUnbounded =>
-            failAnalysis(s"Only unbounded window frame is supported with Pandas UDFs.")
+            failAnalysis("Only unbounded window frame is supported with Pandas UDFs.")
 
           case w @ WindowExpression(e, s) =>
             // Only allow window functions with an aggregate expression or an offset window

@@ -439,6 +439,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child) =>
         execution.python.WindowInPandasExec(
           windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+
       case _ => Nil
     }
   }

@@ -313,7 +313,7 @@ object WindowFunctionType {
       case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
     }
 
-    // Normally a window expression would either have either a SQL window function, a SQL
+    // Normally a window expression would either have a SQL window function, a SQL
     // aggregate function or a python window UDF. However, sometimes the optimizer will replace
     // the window function if the value of the window function can be predetermined.
     // For example, for query:
