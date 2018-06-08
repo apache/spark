@@ -242,7 +242,7 @@ The text of each license is also included at licenses/LICENSE-[project].txt.
      (BSD licence) ANTLR ST4 4.0.4 (org.antlr:ST4:4.0.4 - http://www.stringtemplate.org)
      (BSD licence) ANTLR StringTemplate (org.antlr:stringtemplate:3.2.1 - http://www.stringtemplate.org)
      (BSD License) Javolution (javolution:javolution:5.5.1 - http://javolution.org)
-     (BSD) JLine (jline:jline:0.9.94 - http://jline.sourceforge.net)
+     (BSD) JLine (jline:jline:2.14.3 - https://github.com/jline/jline2)
      (BSD) ParaNamer Core (com.thoughtworks.paranamer:paranamer:2.3 - http://paranamer.codehaus.org/paranamer)
      (BSD) ParaNamer Core (com.thoughtworks.paranamer:paranamer:2.6 - http://paranamer.codehaus.org/paranamer)
      (BSD 3 Clause) Scala (http://www.scala-lang.org/download/#License)
