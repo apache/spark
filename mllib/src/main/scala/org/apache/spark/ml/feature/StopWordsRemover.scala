@@ -121,7 +121,8 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
-      val toLower = (s: String) => if (s != null) s.toLowerCase(new Locale($(locale))) else s
+      val lc = new Locale($(locale))
+      val toLower = (s: String) => if (s != null) s.toLowerCase(lc) else s
       val lowerStopWords = $(stopWords).map(toLower(_)).toSet
       udf { terms: Seq[String] =>
         terms.filter(s => !lowerStopWords.contains(toLower(s)))
