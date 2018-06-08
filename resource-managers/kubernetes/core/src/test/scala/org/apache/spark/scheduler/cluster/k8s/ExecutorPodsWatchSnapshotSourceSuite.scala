@@ -28,7 +28,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
-class ExecutorPodsWatchEventSourceSuite extends SparkFunSuite with BeforeAndAfter {
+class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndAfter {
 
   @Mock
   private var eventQueue: ExecutorPodsSnapshotsStore = _
@@ -50,7 +50,7 @@ class ExecutorPodsWatchEventSourceSuite extends SparkFunSuite with BeforeAndAfte
 
   private var watch: ArgumentCaptor[Watcher[Pod]] = _
 
-  private var watchEventSourceUnderTest: ExecutorPodsWatchEventSource = _
+  private var watchSourceUnderTest: ExecutorPodsWatchSnapshotSource = _
 
   before {
     MockitoAnnotations.initMocks(this)
@@ -61,12 +61,12 @@ class ExecutorPodsWatchEventSourceSuite extends SparkFunSuite with BeforeAndAfte
     when(appIdLabeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(executorRoleLabeledPods)
     when(executorRoleLabeledPods.watch(watch.capture())).thenReturn(watchConnection)
-    watchEventSourceUnderTest = new ExecutorPodsWatchEventSource(
+    watchSourceUnderTest = new ExecutorPodsWatchSnapshotSource(
       eventQueue, kubernetesClient)
-    watchEventSourceUnderTest.start(TEST_SPARK_APP_ID)
+    watchSourceUnderTest.start(TEST_SPARK_APP_ID)
   }
 
-  test("Watch events should be pushed to the queue.") {
+  test("Watch events should be pushed to the snapshots store as snapshot updates.") {
     watch.getValue.eventReceived(Action.ADDED, runningExecutor(1))
     watch.getValue.eventReceived(Action.MODIFIED, runningExecutor(2))
     verify(eventQueue).updatePod(runningExecutor(1))

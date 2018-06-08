@@ -69,10 +69,10 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var lifecycleEventHandler: ExecutorPodsLifecycleManager = _
 
   @Mock
-  private var watchEvents: ExecutorPodsWatchEventSource = _
+  private var watchEvents: ExecutorPodsWatchSnapshotSource = _
 
   @Mock
-  private var pollEvents: ExecutorPodsPollingEventSource = _
+  private var pollEvents: ExecutorPodsPollingSnapshotSource = _
 
   private var driverEndpoint: ArgumentCaptor[RpcEndpoint] = _
   private var schedulerBackendUnderTest: KubernetesClusterSchedulerBackend = _

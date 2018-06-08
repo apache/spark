@@ -80,13 +80,13 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val executorPodsAllocator = new ExecutorPodsAllocator(
       sc.conf, new KubernetesExecutorBuilder(), kubernetesClient, snapshotsStore, new SystemClock())
 
-    val podsWatchEventSource = new ExecutorPodsWatchEventSource(
+    val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
       snapshotsStore,
       kubernetesClient)
 
     val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
       "kubernetes-executor-pod-polling-sync")
-    val podsPollingEventSource = new ExecutorPodsPollingEventSource(
+    val podsPollingEventSource = new ExecutorPodsPollingSnapshotSource(
       sc.conf, kubernetesClient, snapshotsStore, eventsPollingExecutor)
 
     new KubernetesClusterSchedulerBackend(

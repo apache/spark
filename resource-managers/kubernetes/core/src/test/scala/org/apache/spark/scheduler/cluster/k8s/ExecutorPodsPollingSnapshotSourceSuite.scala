@@ -31,7 +31,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
-class ExecutorPodsPollingEventSourceSuite extends SparkFunSuite with BeforeAndAfter {
+class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val sparkConf = new SparkConf
 
@@ -53,12 +53,12 @@ class ExecutorPodsPollingEventSourceSuite extends SparkFunSuite with BeforeAndAf
   private var eventQueue: ExecutorPodsSnapshotsStore = _
 
   private var pollingExecutor: DeterministicScheduler = _
-  private var pollingSourceUnderTest: ExecutorPodsPollingEventSource = _
+  private var pollingSourceUnderTest: ExecutorPodsPollingSnapshotSource = _
 
   before {
     MockitoAnnotations.initMocks(this)
     pollingExecutor = new DeterministicScheduler()
-    pollingSourceUnderTest = new ExecutorPodsPollingEventSource(
+    pollingSourceUnderTest = new ExecutorPodsPollingSnapshotSource(
       sparkConf,
       kubernetesClient,
       eventQueue,

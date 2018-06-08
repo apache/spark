@@ -26,7 +26,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.ThreadUtils
 
-private[spark] class ExecutorPodsPollingEventSource(
+private[spark] class ExecutorPodsPollingSnapshotSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,

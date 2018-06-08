@@ -26,7 +26,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[spark] class ExecutorPodsWatchEventSource(
+private[spark] class ExecutorPodsWatchSnapshotSource(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     kubernetesClient: KubernetesClient) extends Logging {
 
