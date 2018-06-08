@@ -2582,13 +2582,15 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
                       typeConverter=TypeConverters.toListString)
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
                           "comparison over the stop words", typeConverter=TypeConverters.toBoolean)
-    locale = Param(Params._dummy(), "locale", "locale of the input. ignored when case sensitive is true",
-                   typeConverter=TypeConverters.toString)
+    locale = Param(Params._dummy(), "locale", "locale of the input. ignored when case sensitive " +
+                   "is true", typeConverter=TypeConverters.toString)
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False, locale=None):
+    def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
+                 locale=None):
         """
-        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, locale=None)
+        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false,
+        locale=None)
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
@@ -2600,9 +2602,11 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
 
     @keyword_only
     @since("1.6.0")
-    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False, locale=None):
+    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
+                  locale=None):
         """
-        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, locale=None)
+        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false,
+        locale=None)
         Sets params for this StopWordRemover.
         """
         kwargs = self._input_kwargs

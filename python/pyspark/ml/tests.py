@@ -683,7 +683,7 @@ class FeatureTests(SparkSessionTestCase):
         self.assertEqual(transformedDF.head().output, [])
         # with locale
         stopwords = ["BELKİ"]
-        dataset = sqlContext.createDataFrame([Row(input=["belki"])])
+        dataset = self.spark.createDataFrame([Row(input=["belki"])])
         stopWordRemover.setStopWords(stopwords).setLocale("tr")
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
