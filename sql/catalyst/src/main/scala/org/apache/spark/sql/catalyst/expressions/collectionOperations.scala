@@ -129,8 +129,10 @@ case class MapKeys(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = """_FUNC_(a1, a2, ...) - Returns a merged array containing in the N-th position the
-  N-th value of each array given.""",
+  usage = """
+    _FUNC_(a1, a2, ...) - Returns a merged array containing in the N-th position the
+    N-th value of each array given.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(2, 3, 4));
@@ -151,7 +153,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
 
   private lazy val arrayElementTypes = arrayTypes.map(_.elementType)
 
-  def mountSchema: StructType = {
+  private lazy val mountSchema: StructType = {
     val fields = children.zip(arrayElementTypes).zipWithIndex.map {
       case ((expr: NamedExpression, elementType), _) =>
         StructField(expr.name, elementType, nullable = true)

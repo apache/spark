@@ -2397,8 +2397,8 @@ def array_repeat(col, count):
 @since(2.4)
 def zip(*cols):
     """
-    Collection function: Merge two columns into one, such that the M-th element of the N-th
-    argument will be the N-th field of the M-th output element.
+    Collection function: Returns a merged array containing in the N-th position the
+    N-th value of each array given.
 
     :param cols: columns in input
 

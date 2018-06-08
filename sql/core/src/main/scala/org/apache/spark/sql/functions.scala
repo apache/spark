@@ -3509,8 +3509,8 @@ object functions {
   def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
 
   /**
-   * Merge multiple columns into a resulting one.
-   *
+   * Returns a merged array containing in the N-th position the N-th value
+   * of each array given.
    * @group collection_funcs
    * @since 2.4.0
    */
