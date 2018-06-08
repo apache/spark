@@ -22,7 +22,7 @@ import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter._
 
 class SparkILoopInterpreter(settings: Settings, out: JPrintWriter, initializeSpark: () => Unit)
-    extends IMain(settings, out) { self =>
+  extends IMain(settings, out) { self =>
 
   /**
    * We override `initializeSynchronous` to initialize Spark *after* `intp` is properly initialized
