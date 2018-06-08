@@ -67,7 +67,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     }
   } catch {
     case e: Exception =>
-      throw new SparkException(s"Exception when registering StreamingQueryListener", e)
+      throw new SparkException("Exception when registering StreamingQueryListener", e)
   }
 
   /**
