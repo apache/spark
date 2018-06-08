@@ -85,7 +85,7 @@ private[spark] class ExecutorPodsAllocator(
         logWarning(s"Executor with id $execId was not detected in the Kubernetes" +
           s" cluster after $podCreationTimeout milliseconds despite the fact that a" +
           " previous allocation attempt tried to create it. The executor may have been" +
-          "deleted but the application missed the deletion event.")
+          " deleted but the application missed the deletion event.")
         Utils.tryLogNonFatalError {
           kubernetesClient
             .pods()
