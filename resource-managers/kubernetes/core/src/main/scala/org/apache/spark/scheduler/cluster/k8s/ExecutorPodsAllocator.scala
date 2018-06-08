@@ -54,8 +54,6 @@ private[spark] class ExecutorPodsAllocator(
     .withName(kubernetesDriverPodName)
     .get()
 
-  // Use sets of ids instead of counters to be able to handle duplicate events.
-
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
   // snapshot yet. Mapped to the timestamp when they were created.
   private val newlyCreatedExecutors = mutable.Map.empty[Long, Long]
