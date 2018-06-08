@@ -22,6 +22,8 @@ import sys
 
 from py4j.java_gateway import is_instance_of
 
+from py4j.java_gateway import is_instance_of
+
 from pyspark import SparkContext, RDD
 
 
