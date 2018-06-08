@@ -19,25 +19,34 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.api.model.Pod
 import scala.collection.mutable
 
-class DeterministicExecutorPodsEventQueue extends ExecutorPodsEventQueue {
+class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore {
 
-  private val eventBuffer = mutable.Buffer.empty[Pod]
-  private val subscribers = mutable.Buffer.empty[ExecutorPodBatchSubscriber]
+  private val snapshotsBuffer = mutable.Buffer.empty[ExecutorPodsSnapshot]
+  private val subscribers = mutable.Buffer.empty[ExecutorPodsSnapshot => Unit]
 
-  override def addSubscriber(
-      processBatchIntervalMillis: Long,
-      subscriber: ExecutorPodBatchSubscriber): Unit = {
+  private var currentSnapshot = ExecutorPodsSnapshot()
+
+  override def addSubscriber
+      (processBatchIntervalMillis: Long)
+      (subscriber: ExecutorPodsSnapshot => Unit): Unit = {
     subscribers += subscriber
   }
 
   override def stop(): Unit = {}
 
-  override def enqueue(updatedPod: Pod): Unit = eventBuffer += updatedPod
-
   def notifySubscribers(): Unit = {
     subscribers.foreach { subscriber =>
-      subscriber.onNextBatch(eventBuffer)
+      snapshotsBuffer.foreach(subscriber)
     }
-    eventBuffer.clear()
+    snapshotsBuffer.clear()
+  }
+  override def updatePod(updatedPod: Pod): Unit = {
+    currentSnapshot = currentSnapshot.withUpdate(updatedPod)
+    snapshotsBuffer += currentSnapshot
+  }
+
+  override def replaceSnapshot(newSnapshot: Seq[Pod]): Unit = {
+    currentSnapshot = ExecutorPodsSnapshot(newSnapshot)
+    snapshotsBuffer += currentSnapshot
   }
 }

@@ -29,7 +29,7 @@ import org.apache.spark.util.ThreadUtils
 private[spark] class ExecutorPodsPollingEventSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
-    eventQueue: ExecutorPodsEventQueue,
+    snapshotsStore: ExecutorPodsSnapshotsStore,
     pollingExecutor: ScheduledExecutorService) {
 
   private val pollingInterval = conf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
@@ -52,14 +52,13 @@ private[spark] class ExecutorPodsPollingEventSource(
 
   private class PollRunnable(applicationId: String) extends Runnable {
     override def run(): Unit = {
-      kubernetesClient
+      snapshotsStore.replaceSnapshot(kubernetesClient
         .pods()
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .list()
         .getItems
-        .asScala
-        .foreach(eventQueue.enqueue)
+        .asScala)
     }
   }
 

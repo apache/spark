@@ -18,16 +18,8 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import io.fabric8.kubernetes.api.model.Pod
 
-import org.apache.spark.deploy.k8s.Constants._
-
 sealed trait ExecutorPodState {
   def pod: Pod
-
-  final def execId(): Long = pod
-    .getMetadata
-    .getLabels
-    .get(SPARK_EXECUTOR_ID_LABEL)
-    .toLong
 }
 
 case class PodRunning(pod: Pod) extends ExecutorPodState
@@ -37,5 +29,7 @@ case class PodSucceeded(pod: Pod) extends ExecutorPodState
 case class PodFailed(pod: Pod) extends ExecutorPodState
 
 case class PodDeleted(pod: Pod) extends ExecutorPodState
+
+case class PodPending(pod: Pod) extends ExecutorPodState
 
 case class PodUnknown(pod: Pod) extends ExecutorPodState

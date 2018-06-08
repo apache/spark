@@ -18,20 +18,23 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
-import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.{Clock, Utils}
 
 private[spark] class ExecutorPodsAllocator(
     conf: SparkConf,
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
-    eventQueue: ExecutorPodsEventQueue) extends Logging {
+    snapshotsStore: ExecutorPodsSnapshotsStore,
+    clock: Clock) extends Logging {
 
   private val EXECUTOR_ID_COUNTER = new AtomicLong(0L)
 
@@ -40,6 +43,8 @@ private[spark] class ExecutorPodsAllocator(
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
 
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
+
+  private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000)
 
   private val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
@@ -51,46 +56,64 @@ private[spark] class ExecutorPodsAllocator(
 
   // Use sets of ids instead of counters to be able to handle duplicate events.
 
-  // Executor IDs that have been requested from Kubernetes but are not running yet.
-  private val pendingExecutors = mutable.Set.empty[Long]
-
-  // We could use CoarseGrainedSchedulerBackend#totalRegisteredExecutors here for tallying the
-  // executors that are running. But, here we choose instead to maintain all state within this
-  // class from the persecptive of the k8s API. Therefore whether or not this scheduler loop
-  // believes an executor is running is dictated by the K8s API rather than Spark's RPC events.
-  // We may need to consider where these perspectives may differ and which perspective should
-  // take precedence.
-  private val runningExecutors = mutable.Set.empty[Long]
+  // Executor IDs that have been requested from Kubernetes but have not been detected in any
+  // snapshot yet. Mapped to the timestamp when they were created.
+  private val newlyCreatedExecutors = mutable.Map.empty[Long, Long]
 
   def start(applicationId: String): Unit = {
-    eventQueue.addSubscriber(
-      podAllocationDelay,
-      new ExecutorPodBatchSubscriber(
-        processUpdatedPod(applicationId),
-        () => postProcessBatch(applicationId)))
+    snapshotsStore.addSubscriber(podAllocationDelay) {
+      processSnapshot(applicationId, _)
+    }
   }
 
   def setTotalExpectedExecutors(total: Int): Unit = totalExpectedExecutors.set(total)
 
-  private def processUpdatedPod(applicationId: String): PartialFunction[ExecutorPodState, Unit] = {
-    case running @ PodRunning(_) =>
-      pendingExecutors -= running.execId()
-      runningExecutors += running.execId()
-    case completed @ (PodSucceeded(_) | PodDeleted(_) | PodFailed(_)) =>
-      pendingExecutors -= completed.execId()
-      runningExecutors -= completed.execId()
-    case _ =>
-  }
+  private def processSnapshot(applicationId: String, snapshot: ExecutorPodsSnapshot): Unit = {
+    snapshot.executorPods.filter {
+      case (_, PodPending(_)) | (_, PodUnknown(_)) => false
+      case _ => true
+    }.keys.foreach {
+      newlyCreatedExecutors -= _
+    }
 
-  private def postProcessBatch(applicationId: String): Unit = {
-    val currentRunningExecutors = runningExecutors.size
+    // For all executors we've created against the API but have not seen in a snapshot
+    // yet - check the current time. If the current time has exceeded some threshold,
+    // assume that the pod was either never created (the API server never properly
+    // handled the creation request), or the API server created the pod but we missed
+    // both the creation and deletion events. In either case, delete the missing pod
+    // if possible, and mark such a pod to be rescheduled below.
+    (newlyCreatedExecutors.keySet -- snapshot.executorPods.keySet).foreach { execId =>
+      // Wait for 1 minute
+      if (clock.getTimeMillis() - newlyCreatedExecutors(execId) > podCreationTimeout) {
+        logWarning(s"Executor with id $execId was not detected in the Kubernetes" +
+          " cluster after 1 minute despite the fact that a previous allocation attempt" +
+          " tried to create it. The executor may have been deleted but the application" +
+          " missed the deletion event.")
+        Utils.tryLogNonFatalError {
+          kubernetesClient
+            .pods()
+            .withLabel(SPARK_EXECUTOR_ID_LABEL, execId.toString)
+            .delete()
+        }
+        newlyCreatedExecutors -= execId
+      }
+    }
+
+    val currentRunningExecutors = snapshot.executorPods.values.count {
+      case PodRunning(_) => true
+      case _ => false
+    }
+    val currentPendingExecutors = snapshot.executorPods.values.count {
+      case PodPending(_) => true
+      case _ => false
+    }
     val currentTotalExpectedExecutors = totalExpectedExecutors.get
-    if (pendingExecutors.isEmpty && currentRunningExecutors < currentTotalExpectedExecutors) {
+    if (newlyCreatedExecutors.isEmpty
+      && currentPendingExecutors == 0
+      && currentRunningExecutors < currentTotalExpectedExecutors) {
       val numExecutorsToAllocate = math.min(
         currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
       logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
-      val newExecutorIds = mutable.Buffer.empty[Long]
-      val podsToAllocate = mutable.Buffer.empty[Pod]
       for ( _ <- 0 until numExecutorsToAllocate) {
         val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
         val executorConf = KubernetesConf.createExecutorConf(
@@ -105,14 +128,15 @@ private[spark] class ExecutorPodsAllocator(
           .endSpec()
           .build()
         kubernetesClient.pods().create(podWithAttachedContainer)
-        pendingExecutors += newExecutorId
+        newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
       }
     } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
+      // TODO handle edge cases if we end up with more running executors than expected.
       logDebug("Current number of running executors is equal to the number of requested" +
         " executors. Not scaling up further.")
-    } else if (pendingExecutors.nonEmpty) {
-      logDebug(s"Still waiting for ${pendingExecutors.size} executors to begin running before" +
-        " requesting for more executors.")
+    } else if (newlyCreatedExecutors.nonEmpty || currentPendingExecutors != 0) {
+      logDebug(s"Still waiting for ${newlyCreatedExecutors.size + currentPendingExecutors}" +
+        s" executors to begin running before requesting for more executors.")
     }
   }
 }

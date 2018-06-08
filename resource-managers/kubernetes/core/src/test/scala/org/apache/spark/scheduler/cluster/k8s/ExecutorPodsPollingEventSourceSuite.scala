@@ -50,7 +50,7 @@ class ExecutorPodsPollingEventSourceSuite extends SparkFunSuite with BeforeAndAf
   private var executorRoleLabeledPods: LABELED_PODS = _
 
   @Mock
-  private var eventQueue: ExecutorPodsEventQueue = _
+  private var eventQueue: ExecutorPodsSnapshotsStore = _
 
   private var pollingExecutor: DeterministicScheduler = _
   private var pollingSourceUnderTest: ExecutorPodsPollingEventSource = _
@@ -79,8 +79,7 @@ class ExecutorPodsPollingEventSourceSuite extends SparkFunSuite with BeforeAndAf
           runningExecutor(2))
         .build())
     pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
-    verify(eventQueue).enqueue(runningExecutor(1))
-    verify(eventQueue).enqueue(runningExecutor(2))
+    verify(eventQueue).replaceSnapshot(Seq(runningExecutor(1), runningExecutor(2)))
 
   }
 }

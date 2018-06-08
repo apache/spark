@@ -32,9 +32,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     rpcEnv: RpcEnv,
     kubernetesClient: KubernetesClient,
     requestExecutorsService: ExecutorService,
-    eventQueue: ExecutorPodsEventQueue,
+    snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: ExecutorPodsAllocator,
-    lifecycleEventHandler: ExecutorPodsLifecycleEventHandler,
+    lifecycleEventHandler: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchEventSource,
     pollEvents: ExecutorPodsPollingEventSource)
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
@@ -71,7 +71,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     super.stop()
 
     Utils.tryLogNonFatalError {
-      eventQueue.stop()
+      snapshotsStore.stop()
     }
 
     Utils.tryLogNonFatalError {
@@ -105,6 +105,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= initialExecutors * minRegisteredRatio
+  }
+
+  override def getExecutorIds(): Seq[String] = synchronized {
+    super.getExecutorIds()
   }
 
   override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = Future[Boolean] {

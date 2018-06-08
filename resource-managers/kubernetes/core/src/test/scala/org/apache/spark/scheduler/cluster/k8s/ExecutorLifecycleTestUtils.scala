@@ -55,6 +55,14 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
+  def pendingExecutor(executorId: Long): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId))
+      .editOrNewStatus()
+        .withPhase("pending")
+        .endStatus()
+      .build()
+  }
+
   def runningExecutor(executorId: Long): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()

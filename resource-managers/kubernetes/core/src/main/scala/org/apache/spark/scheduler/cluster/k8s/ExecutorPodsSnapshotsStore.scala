@@ -18,12 +18,15 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import io.fabric8.kubernetes.api.model.Pod
 
-private[spark] trait ExecutorPodsEventQueue {
+private[spark] trait ExecutorPodsSnapshotsStore {
 
-  def addSubscriber(processBatchIntervalMillis: Long, subscriber: ExecutorPodBatchSubscriber): Unit
+  def addSubscriber
+      (processBatchIntervalMillis: Long)
+      (onNextSnapshot: ExecutorPodsSnapshot => Unit)
 
   def stop(): Unit
 
-  def enqueue(updatedPod: Pod): Unit
+  def updatePod(updatedPod: Pod): Unit
 
+  def replaceSnapshot(newSnapshot: Seq[Pod]): Unit
 }

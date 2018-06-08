@@ -32,6 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
+import org.apache.spark.util.ManualClock
 
 class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -49,6 +50,10 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private val conf = new SparkConf().set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
+  private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
+  private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000L)
+
+  private var waitForExecutorPodsClock: ManualClock = _
 
   @Mock
   private var kubernetesClient: KubernetesClient = _
@@ -57,12 +62,15 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private var podOperations: PODS = _
 
   @Mock
+  private var labeledPods: LABELED_PODS = _
+
+  @Mock
   private var driverPodOperations: PodResource[Pod, DoneablePod] = _
 
   @Mock
   private var executorBuilder: KubernetesExecutorBuilder = _
 
-  private var eventQueue: DeterministicExecutorPodsEventQueue = _
+  private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
 
   private var podsAllocatorUnderTest: ExecutorPodsAllocator = _
 
@@ -73,53 +81,67 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(driverPodOperations.get).thenReturn(driverPod)
     when(executorBuilder.buildFromFeatures(kubernetesConfWithCorrectFields()))
       .thenAnswer(executorPodAnswer())
-    eventQueue = new DeterministicExecutorPodsEventQueue()
+    snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
+    waitForExecutorPodsClock = new ManualClock(0L)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
-      conf, executorBuilder, kubernetesClient, eventQueue)
+      conf, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID)
   }
 
   test("Initially request executors in batches. Do not request another batch if the" +
     " first has not finished.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
-    eventQueue.notifySubscribers()
+    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
+    snapshotsStore.notifySubscribers()
     for (nextId <- 1 to podAllocationSize) {
-      verify(podOperations).create(
-        podWithAttachedContainerForId(nextId))
+      verify(podOperations).create(podWithAttachedContainerForId(nextId))
     }
-    verify(podOperations, never()).create(
-      podWithAttachedContainerForId(podAllocationSize + 1))
+    verify(podOperations, never()).create(podWithAttachedContainerForId(podAllocationSize + 1))
   }
 
   test("Request executors in batches. Allow another batch to be requested if" +
     " all pending executors start running.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
-    eventQueue.notifySubscribers()
+    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
+    snapshotsStore.notifySubscribers()
     for (execId <- 1 until podAllocationSize) {
-      eventQueue.enqueue(runningExecutor(execId))
+      snapshotsStore.updatePod(runningExecutor(execId))
     }
-    eventQueue.notifySubscribers()
-    verify(podOperations, never()).create(
-      podWithAttachedContainerForId(podAllocationSize + 1))
-    eventQueue.enqueue(
-      runningExecutor(podAllocationSize))
-    eventQueue.notifySubscribers()
+    snapshotsStore.notifySubscribers()
+    verify(podOperations, never()).create(podWithAttachedContainerForId(podAllocationSize + 1))
+    snapshotsStore.updatePod(runningExecutor(podAllocationSize))
+    snapshotsStore.notifySubscribers()
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
-    eventQueue.notifySubscribers()
+    snapshotsStore.updatePod(runningExecutor(podAllocationSize))
+    snapshotsStore.notifySubscribers()
     verify(podOperations, times(podAllocationSize + 1)).create(any(classOf[Pod]))
   }
 
   test("When a current batch reaches error states immediately, re-request" +
     " them on the next batch.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize)
-    eventQueue.notifySubscribers()
+    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
+    snapshotsStore.notifySubscribers()
     for (execId <- 1 until podAllocationSize) {
-      eventQueue.enqueue(runningExecutor(execId))
+      snapshotsStore.updatePod(runningExecutor(execId))
     }
     val failedPod = failedExecutorWithoutDeletion(podAllocationSize)
-    eventQueue.enqueue(failedPod)
-    eventQueue.notifySubscribers()
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
+  }
+
+  test("When an executor is requested but the API does not report it in 1 minute, retry" +
+    " requesting that executor.") {
+    podsAllocatorUnderTest.setTotalExpectedExecutors(1)
+    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
+    snapshotsStore.notifySubscribers()
+    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
+    waitForExecutorPodsClock.setTime(podCreationTimeout + 1)
+    when(podOperations.withLabel(SPARK_EXECUTOR_ID_LABEL, "1")).thenReturn(labeledPods)
+    snapshotsStore.notifySubscribers()
+    verify(labeledPods).delete()
+    verify(podOperations).create(podWithAttachedContainerForId(2))
   }
 
   private def executorPodAnswer(): Answer[SparkPod] = {

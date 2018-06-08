@@ -24,22 +24,29 @@ import io.reactivex.disposables.Disposable
 import io.reactivex.functions.Consumer
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
+import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[spark] class ExecutorPodsEventQueueImpl(
-    bufferEventsExecutor: ScheduledExecutorService, executeSubscriptionsExecutor: ExecutorService)
-  extends ExecutorPodsEventQueue {
+private[spark] class ExecutorPodsSnapshotsStoreImpl(
+    bufferSnapshotsExecutor: ScheduledExecutorService,
+    executeSubscriptionsExecutor: ExecutorService)
+  extends ExecutorPodsSnapshotsStore {
 
-  private val eventsObservable = PublishSubject.create[Pod]()
+  private val SNAPSHOT_LOCK = new Object()
+
+  private val snapshotsObservable = PublishSubject.create[ExecutorPodsSnapshot]()
   private val observedDisposables = mutable.Buffer.empty[Disposable]
 
-  def addSubscriber(
-      processBatchIntervalMillis: Long,
-      subscriber: ExecutorPodBatchSubscriber): Unit = {
-    observedDisposables += eventsObservable
+  @GuardedBy("SNAPSHOT_LOCK")
+  private var currentSnapshot = ExecutorPodsSnapshot()
+
+  override def addSubscriber(
+      processBatchIntervalMillis: Long)
+      (subscriber: ExecutorPodsSnapshot => Unit): Unit = {
+    observedDisposables += snapshotsObservable
       // Group events in the time window given by the caller. These buffers are then sent
       // to the caller's lambda at the given interval, with the pod updates that occurred
       // in that given interval.
@@ -48,29 +55,37 @@ private[spark] class ExecutorPodsEventQueueImpl(
         TimeUnit.MILLISECONDS,
         // For testing - specifically use the given scheduled executor service to trigger
         // buffer boundaries. Allows us to inject a deterministic scheduler here.
-        Schedulers.from(bufferEventsExecutor))
+        Schedulers.from(bufferSnapshotsExecutor))
       // Trigger an event cycle immediately. Not strictly required to be fully correct, but
       // in particular the pod allocator should try to request executors immediately instead
       // of waiting for one pod allocation delay.
-      .startWith(Lists.newArrayList[Pod]())
+      .startWith(Lists.newArrayList(ExecutorPodsSnapshot()))
       // Force all triggered events - both the initial event above and the buffered ones in
       // the following time windows - to execute asynchronously to this call's thread.
       .observeOn(Schedulers.from(executeSubscriptionsExecutor))
-      .subscribe(toReactivexConsumer { pods: java.util.List[Pod] =>
+      .subscribe(toReactivexConsumer { snapshots: java.util.List[ExecutorPodsSnapshot] =>
         Utils.tryLogNonFatalError {
-          subscriber.onNextBatch(pods.asScala)
+          snapshots.asScala.foreach(subscriber)
         }
       })
   }
 
-  def stop(): Unit = {
+  override def stop(): Unit = {
     observedDisposables.foreach(_.dispose())
-    eventsObservable.onComplete()
-    ThreadUtils.shutdown(bufferEventsExecutor)
+    snapshotsObservable.onComplete()
+    ThreadUtils.shutdown(bufferSnapshotsExecutor)
     ThreadUtils.shutdown(executeSubscriptionsExecutor)
   }
 
-  def enqueue(updatedPod: Pod): Unit = eventsObservable.onNext(updatedPod)
+  override def updatePod(updatedPod: Pod): Unit = SNAPSHOT_LOCK.synchronized {
+    currentSnapshot = currentSnapshot.withUpdate(updatedPod)
+    snapshotsObservable.onNext(currentSnapshot)
+  }
+
+  override def replaceSnapshot(newSnapshot: Seq[Pod]): Unit = SNAPSHOT_LOCK.synchronized {
+    currentSnapshot = ExecutorPodsSnapshot(newSnapshot)
+    snapshotsObservable.onNext(currentSnapshot)
+  }
 
   private def toReactivexConsumer[T](consumer: T => Unit): Consumer[T] = {
     new Consumer[T] {

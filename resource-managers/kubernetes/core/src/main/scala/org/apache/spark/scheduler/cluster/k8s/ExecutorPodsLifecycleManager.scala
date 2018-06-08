@@ -20,44 +20,67 @@ import com.google.common.cache.Cache
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
-private[spark] class ExecutorPodsLifecycleEventHandler(
+private[spark] class ExecutorPodsLifecycleManager(
     conf: SparkConf,
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
-    podsEventQueue: ExecutorPodsEventQueue,
+    snapshotsStore: ExecutorPodsSnapshotsStore,
     // Use a best-effort to track which executors have been removed already. It's not generally
     // job-breaking if we remove executors more than once but it's ideal if we make an attempt
     // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
     // bounds.
     removedExecutorsCache: Cache[java.lang.Long, java.lang.Long]) {
 
-  import ExecutorPodsLifecycleEventHandler._
+  import ExecutorPodsLifecycleManager._
 
   private val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
 
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
-    podsEventQueue.addSubscriber(
-      eventProcessingInterval,
-      new ExecutorPodBatchSubscriber(
-        processUpdatedPod(schedulerBackend),
-        () => {}))
+    snapshotsStore.addSubscriber(eventProcessingInterval) {
+      onNextSnapshot(schedulerBackend, _)
+    }
   }
 
-  private def processUpdatedPod(
-      schedulerBackend: KubernetesClusterSchedulerBackend)
-      : PartialFunction[ExecutorPodState, Unit] = {
-    case deleted @ PodDeleted(pod) =>
-      removeExecutorFromSpark(schedulerBackend, pod, deleted.execId())
-    case errorOrSucceeded @ (PodFailed(_) | PodSucceeded(_)) =>
-      removeExecutorFromK8s(errorOrSucceeded.pod)
-      removeExecutorFromSpark(schedulerBackend, errorOrSucceeded.pod, errorOrSucceeded.execId())
-    case _ =>
+  private def onNextSnapshot(
+      schedulerBackend: KubernetesClusterSchedulerBackend,
+      snapshot: ExecutorPodsSnapshot): Unit = {
+    val execIdsRemovedInThisRound = mutable.HashSet.empty[Long]
+    snapshot.executorPods.foreach { case (execId, state) =>
+      state match {
+        case PodDeleted(pod) =>
+          removeExecutorFromSpark(schedulerBackend, pod, execId)
+          execIdsRemovedInThisRound += execId
+        case errorOrSucceeded @ (PodFailed(_) | PodSucceeded(_)) =>
+          removeExecutorFromK8s(errorOrSucceeded.pod)
+          removeExecutorFromSpark(schedulerBackend, errorOrSucceeded.pod, execId)
+          execIdsRemovedInThisRound += execId
+        case _ =>
+      }
+    }
+
+    // Reconcile the case where Spark claims to know about an executor but the corresponding pod
+    // is missing from the cluster. This would occur if we miss a deletion event and the pod
+    // transitions immediately from running io absent.
+    (schedulerBackend.getExecutorIds().map(_.toLong).toSet
+      -- snapshot.executorPods.keySet
+      -- execIdsRemovedInThisRound).foreach { missingExecutorId =>
+      if (removedExecutorsCache.getIfPresent(missingExecutorId) == null) {
+        val exitReason = ExecutorExited(
+          UNKNOWN_EXIT_CODE,
+          exitCausedByApp = false,
+          s"The executor with ID $missingExecutorId was not found in the cluster but we didn't" +
+            s" get a reason why. Marking the executor as failed. The executor may have been" +
+            s" deleted but the driver missed the deletion event.")
+        schedulerBackend.doRemoveExecutor(missingExecutorId.toString, exitReason)
+      }
+    }
   }
 
   private def removeExecutorFromK8s(updatedPod: Pod): Unit = {
@@ -117,7 +140,7 @@ private[spark] class ExecutorPodsLifecycleEventHandler(
   }
 }
 
-private object ExecutorPodsLifecycleEventHandler {
+private object ExecutorPodsLifecycleManager {
   val UNKNOWN_EXIT_CODE = -1
 }
 
