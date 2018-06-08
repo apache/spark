@@ -249,7 +249,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
        {1.0:"2",3.0:"4"}
   """, since = "2.4.0")
 case class MapFromArrays(left: Expression, right: Expression)
-    extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
@@ -303,7 +303,7 @@ case class MapFromArrays(left: Expression, right: Expression)
     })
   }
 
-  override def prettyName: String = "create_map_from_arrays"
+  override def prettyName: String = "map_from_arrays"
 }
 
 /**
