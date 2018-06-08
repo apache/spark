@@ -1964,6 +1964,22 @@ def element_at(col, extraction):
     return Column(sc._jvm.functions.element_at(_to_java_column(col), extraction))
 
 
+@since(2.4)
+def array_remove(col, element):
+    """
+    Collection function: Remove all elements that equal to element from the given array.
+
+    :param col: name of column containing array
+    :param element: element to be removed from the array
+
+    >>> df = spark.createDataFrame([([1, 2, 3, 1, 1],), ([],)], ['data'])
+    >>> df.select(array_remove(df.data, 1)).collect()
+    [Row(array_remove(data, 1)=[2, 3]), Row(array_remove(data, 1)=[])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_remove(_to_java_column(col), element))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
@@ -2344,6 +2360,26 @@ def map_values(col):
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
+@since(2.4)
+def map_entries(col):
+    """
+    Collection function: Returns an unordered array of all entries in the given map.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_entries
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_entries("data").alias("entries")).show()
+    +----------------+
+    |         entries|
+    +----------------+
+    |[[1, a], [2, b]]|
+    +----------------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_entries(_to_java_column(col)))
+
+
 @ignore_unicode_prefix
 @since(2.4)
 def array_repeat(col, count):
@@ -2436,6 +2472,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
 
+    .. note:: Experimental
+
     The function type of the UDF can be one of the following:
 
     1. SCALAR
@@ -2478,7 +2516,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        A grouped map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
        The returnType should be a :class:`StructType` describing the schema of the returned
        `pandas.DataFrame`.
-       The length of the returned `pandas.DataFrame` can be arbitrary.
+       The length of the returned `pandas.DataFrame` can be arbitrary and the columns must be
+       indexed so that their position matches the corresponding field in the schema.
 
        Grouped map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
 
@@ -2525,6 +2564,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  1|1.5|
        |  2|6.0|
        +---+---+
+
+       .. note:: If returning a new `pandas.DataFrame` constructed with a dictionary, it is
+           recommended to explicitly index the columns by name to ensure the positions are correct,
+           or alternatively use an `OrderedDict`.
+           For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
+           `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 

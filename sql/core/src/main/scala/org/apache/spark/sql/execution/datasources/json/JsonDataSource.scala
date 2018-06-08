@@ -34,6 +34,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
@@ -104,22 +105,19 @@ object TextInputJsonDataSource extends JsonDataSource {
       CreateJacksonParser.internalRow(enc, _: JsonFactory, _: InternalRow)
     }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
 
-    JsonInferSchema.infer(rdd, parsedOptions, rowParser)
+    SQLExecution.withSQLConfPropagated(json.sparkSession) {
+      JsonInferSchema.infer(rdd, parsedOptions, rowParser)
+    }
   }
 
   private def createBaseDataset(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Dataset[String] = {
-    val paths = inputPaths.map(_.getPath.toString)
-    val textOptions = Map.empty[String, String] ++
-      parsedOptions.encoding.map("encoding" -> _) ++
-      parsedOptions.lineSeparator.map("lineSep" -> _)
-
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
-        paths = paths,
+        paths = inputPaths.map(_.getPath.toString),
         className = classOf[TextFileFormat].getName,
         options = parsedOptions.parameters
       ).resolveRelation(checkFilesExist = false))
@@ -165,7 +163,9 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .map(enc => createParser(enc, _: JsonFactory, _: PortableDataStream))
       .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
-    JsonInferSchema.infer[PortableDataStream](sampled, parsedOptions, parser)
+    SQLExecution.withSQLConfPropagated(sparkSession) {
+      JsonInferSchema.infer[PortableDataStream](sampled, parsedOptions, parser)
+    }
   }
 
   private def createBaseRdd(

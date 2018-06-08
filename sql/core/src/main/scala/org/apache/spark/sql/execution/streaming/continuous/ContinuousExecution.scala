@@ -318,9 +318,14 @@ class ContinuousExecution(
       }
     }
 
-    if (minLogEntriesToMaintain < currentBatchId) {
-      offsetLog.purge(currentBatchId - minLogEntriesToMaintain)
-      commitLog.purge(currentBatchId - minLogEntriesToMaintain)
+    // Since currentBatchId increases independently in cp mode, the current committed epoch may
+    // be far behind currentBatchId. It is not safe to discard the metadata with thresholdBatchId
+    // computed based on currentBatchId. As minLogEntriesToMaintain is used to keep the minimum
+    // number of batches that must be retained and made recoverable, so we should keep the
+    // specified number of metadata that have been committed.
+    if (minLogEntriesToMaintain <= epoch) {
+      offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
+      commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()
@@ -355,6 +360,22 @@ class ContinuousExecution(
         awaitProgressLock.unlock()
       }
     }
+  }
+
+  /**
+   * Stops the query execution thread to terminate the query.
+   */
+  override def stop(): Unit = {
+    // Set the state to TERMINATED so that the batching thread knows that it was interrupted
+    // intentionally
+    state.set(TERMINATED)
+    if (queryExecutionThread.isAlive) {
+      // The query execution thread will clean itself up in the finally clause of runContinuous.
+      // We just need to interrupt the long running job.
+      queryExecutionThread.interrupt()
+      queryExecutionThread.join()
+    }
+    logInfo(s"Query $prettyIdString was stopped")
   }
 }
 

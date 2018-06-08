@@ -40,6 +40,9 @@ class KubernetesConfSuite extends SparkFunSuite {
   private val SECRET_NAMES_TO_MOUNT_PATHS = Map(
     "secret1" -> "/mnt/secrets/secret1",
     "secret2" -> "/mnt/secrets/secret2")
+  private val SECRET_ENV_VARS = Map(
+    "envName1" -> "name1:key1",
+    "envName2" -> "name2:key2")
   private val CUSTOM_ENVS = Map(
     "customEnvKey1" -> "customEnvValue1",
     "customEnvKey2" -> "customEnvValue2")
@@ -103,6 +106,9 @@ class KubernetesConfSuite extends SparkFunSuite {
     SECRET_NAMES_TO_MOUNT_PATHS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$key", value)
     }
+    SECRET_ENV_VARS.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX$key", value)
+    }
     CUSTOM_ENVS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_ENV_PREFIX$key", value)
     }
@@ -121,6 +127,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       CUSTOM_LABELS)
     assert(conf.roleAnnotations === CUSTOM_ANNOTATIONS)
     assert(conf.roleSecretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
+    assert(conf.roleSecretEnvNamesToKeyRefs === SECRET_ENV_VARS)
     assert(conf.roleEnvs === CUSTOM_ENVS)
   }
 
@@ -155,6 +162,9 @@ class KubernetesConfSuite extends SparkFunSuite {
     CUSTOM_ANNOTATIONS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_EXECUTOR_ANNOTATION_PREFIX$key", value)
     }
+    SECRET_ENV_VARS.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX$key", value)
+    }
     SECRET_NAMES_TO_MOUNT_PATHS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_EXECUTOR_SECRETS_PREFIX$key", value)
     }
@@ -170,6 +180,6 @@ class KubernetesConfSuite extends SparkFunSuite {
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++ CUSTOM_LABELS)
     assert(conf.roleAnnotations === CUSTOM_ANNOTATIONS)
     assert(conf.roleSecretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
+    assert(conf.roleSecretEnvNamesToKeyRefs === SECRET_ENV_VARS)
   }
-
 }

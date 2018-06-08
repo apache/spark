@@ -106,7 +106,7 @@ class KafkaContinuousReader(
 
     startOffsets.toSeq.map {
       case (topicPartition, start) =>
-        KafkaContinuousDataReaderFactory(
+        KafkaContinuousInputPartition(
           topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
           .asInstanceOf[InputPartition[UnsafeRow]]
     }.asJava
@@ -146,7 +146,7 @@ class KafkaContinuousReader(
 }
 
 /**
- * A data reader factory for continuous Kafka processing. This will be serialized and transformed
+ * An input partition for continuous Kafka processing. This will be serialized and transformed
  * into a full reader on executors.
  *
  * @param topicPartition The (topic, partition) pair this task is responsible for.
@@ -156,7 +156,7 @@ class KafkaContinuousReader(
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
  */
-case class KafkaContinuousDataReaderFactory(
+case class KafkaContinuousInputPartition(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],

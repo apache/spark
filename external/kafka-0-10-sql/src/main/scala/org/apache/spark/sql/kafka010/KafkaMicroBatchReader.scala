@@ -68,7 +68,7 @@ private[kafka010] class KafkaMicroBatchReader(
 
   private val pollTimeoutMs = options.getLong(
     "kafkaConsumer.pollTimeoutMs",
-    SparkEnv.get.conf.getTimeAsMs("spark.network.timeout", "120s"))
+    SparkEnv.get.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L)
 
   private val maxOffsetsPerTrigger =
     Option(options.get("maxOffsetsPerTrigger").orElse(null)).map(_.toLong)
@@ -143,7 +143,7 @@ private[kafka010] class KafkaMicroBatchReader(
 
     // Generate factories based on the offset ranges
     val factories = offsetRanges.map { range =>
-      new KafkaMicroBatchDataReaderFactory(
+      new KafkaMicroBatchInputPartition(
         range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
     }
     factories.map(_.asInstanceOf[InputPartition[UnsafeRow]]).asJava
@@ -300,7 +300,7 @@ private[kafka010] class KafkaMicroBatchReader(
 }
 
 /** A [[InputPartition]] for reading Kafka data in a micro-batch streaming query. */
-private[kafka010] case class KafkaMicroBatchDataReaderFactory(
+private[kafka010] case class KafkaMicroBatchInputPartition(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,

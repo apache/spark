@@ -419,6 +419,7 @@ object FunctionRegistry {
     expression[ElementAt]("element_at"),
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
+    expression[MapEntries]("map_entries"),
     expression[Size]("size"),
     expression[Slice]("slice"),
     expression[Size]("cardinality"),
@@ -429,7 +430,16 @@ object FunctionRegistry {
     expression[Concat]("concat"),
     expression[Flatten]("flatten"),
     expression[ArrayRepeat]("array_repeat"),
+    expression[ArrayRemove]("array_remove"),
     CreateStruct.registryEntry,
+
+    // mask functions
+    expression[Mask]("mask"),
+    expression[MaskFirstN]("mask_first_n"),
+    expression[MaskLastN]("mask_last_n"),
+    expression[MaskShowFirstN]("mask_show_first_n"),
+    expression[MaskShowLastN]("mask_show_last_n"),
+    expression[MaskHash]("mask_hash"),
 
     // misc functions
     expression[AssertTrue]("assert_true"),

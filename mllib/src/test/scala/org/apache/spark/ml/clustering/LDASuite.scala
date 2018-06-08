@@ -21,11 +21,9 @@ import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql._
 
 object LDASuite {
@@ -36,9 +34,8 @@ object LDASuite {
       vocabSize: Int): DataFrame = {
     val avgWC = 1  // average instances of each word in a doc
     val sc = spark.sparkContext
-    val rng = new java.util.Random()
-    rng.setSeed(1)
     val rdd = sc.parallelize(1 to rows).map { i =>
+      val rng = new java.util.Random(i)
       Vectors.dense(Array.fill(vocabSize)(rng.nextInt(2 * avgWC).toDouble))
     }.map(v => new TestRow(v))
     spark.createDataFrame(rdd)
@@ -61,7 +58,7 @@ object LDASuite {
 }
 
 
-class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class LDASuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -186,16 +183,11 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     assert(model.topicsMatrix.numCols === k)
     assert(!model.isDistributed)
 
-    // transform()
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", lda.getTopicDistributionCol)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
-    transformed.select(lda.getTopicDistributionCol).collect().foreach { r =>
-      val topicDistribution = r.getAs[Vector](0)
-      assert(topicDistribution.size === k)
-      assert(topicDistribution.toArray.forall(w => w >= 0.0 && w <= 1.0))
+    testTransformer[Tuple1[Vector]](dataset.toDF(), model,
+      "features", lda.getTopicDistributionCol) {
+      case Row(_, topicDistribution: Vector) =>
+        assert(topicDistribution.size === k)
+        assert(topicDistribution.toArray.forall(w => w >= 0.0 && w <= 1.0))
     }
 
     // logLikelihood, logPerplexity

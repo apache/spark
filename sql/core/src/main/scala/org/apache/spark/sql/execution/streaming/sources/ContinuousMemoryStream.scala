@@ -44,8 +44,8 @@ import org.apache.spark.util.RpcUtils
  *  * ContinuousMemoryStream maintains a list of records for each partition. addData() will
  *    distribute records evenly-ish across partitions.
  *  * RecordEndpoint is set up as an endpoint for executor-side
- *    ContinuousMemoryStreamDataReader instances to poll. It returns the record at the specified
- *    offset within the list, or null if that offset doesn't yet have a record.
+ *    ContinuousMemoryStreamInputPartitionReader instances to poll. It returns the record at
+ *    the specified offset within the list, or null if that offset doesn't yet have a record.
  */
 class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPartitions: Int = 2)
   extends MemoryStreamBase[A](sqlContext) with ContinuousReader with ContinuousReadSupport {
@@ -106,7 +106,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
 
       startOffset.partitionNums.map {
         case (part, index) =>
-          new ContinuousMemoryStreamDataReaderFactory(
+          new ContinuousMemoryStreamInputPartition(
             endpointName, part, index): InputPartition[Row]
       }.toList.asJava
     }
@@ -157,9 +157,9 @@ object ContinuousMemoryStream {
 }
 
 /**
- * Data reader factory for continuous memory stream.
+ * An input partition for continuous memory stream.
  */
-class ContinuousMemoryStreamDataReaderFactory(
+class ContinuousMemoryStreamInputPartition(
     driverEndpointName: String,
     partition: Int,
     startOffset: Int) extends InputPartition[Row] {
@@ -168,7 +168,7 @@ class ContinuousMemoryStreamDataReaderFactory(
 }
 
 /**
- * Data reader for continuous memory stream.
+ * An input partition reader for continuous memory stream.
  *
  * Polls the driver endpoint for new records.
  */
