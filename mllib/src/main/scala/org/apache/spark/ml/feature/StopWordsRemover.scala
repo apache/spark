@@ -87,8 +87,8 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   def getCaseSensitive: Boolean = $(caseSensitive)
 
   /**
-   * [[https://docs.oracle.com/javase/8/docs/api/java/util/Locale.html Locale]] of the input for
-   * case insensitive matching. Ignored when [[caseSensitive]] is true.
+   * Locale of the input for case insensitive matching. Ignored when [[caseSensitive]]
+   * is true.
    * Default: Locale.getDefault.toString
    * @see `StopWordsRemover.loadDefaultStopWords()`
    * @group param
@@ -98,10 +98,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     "Locale of the input for case insensitive matching. Ignored when caseSensitive is true.",
     ParamValidators.inArray[String](Locale.getAvailableLocales.map(_.toString)))
 
-  /**
-   * @group setParam
-   * @throws IllegalArgumentException if `value` is not an available locale.
-   */
+  /** @group setParam */
   @Since("2.4.0")
   def setLocale(value: String): this.type = set(locale, value)
 
