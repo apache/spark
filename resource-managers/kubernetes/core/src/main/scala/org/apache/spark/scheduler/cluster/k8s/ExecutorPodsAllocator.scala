@@ -81,7 +81,6 @@ private[spark] class ExecutorPodsAllocator(
     // both the creation and deletion events. In either case, delete the missing pod
     // if possible, and mark such a pod to be rescheduled below.
     (newlyCreatedExecutors.keySet -- snapshot.executorPods.keySet).foreach { execId =>
-      // Wait for 1 minute
       if (clock.getTimeMillis() - newlyCreatedExecutors(execId) > podCreationTimeout) {
         logWarning(s"Executor with id $execId was not detected in the Kubernetes" +
           " cluster after 1 minute despite the fact that a previous allocation attempt" +
