@@ -18,4 +18,9 @@ package org.apache.spark.deploy.k8s.submit
 
 private[spark] sealed trait MainAppResource
 
+private[spark] sealed trait NonJVMResource
+
 private[spark] case class JavaMainAppResource(primaryResource: String) extends MainAppResource
+
+private[spark] case class PythonMainAppResource(primaryResource: String)
+  extends MainAppResource with NonJVMResource
