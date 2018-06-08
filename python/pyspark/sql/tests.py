@@ -296,7 +296,6 @@ class SQLTests(ReusedSQLTestCase):
         # tear down test_bucketed_write state
         self.spark.sql("DROP TABLE IF EXISTS pyspark_bucket")
 
-    '''
     def test_row_should_be_read_only(self):
         row = Row(a=1, b=2)
         self.assertEqual(1, row.a)
@@ -1885,7 +1884,6 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             q.stop()
             shutil.rmtree(tmpPath)
-    '''
 
     class ForeachWriterTester:
 
@@ -2144,8 +2142,6 @@ class SQLTests(ReusedSQLTestCase):
         tester.assert_invalid_writer(WriterWithNonCallableClose(),
                                      "'close' in provided object is not callable")
 
-
-'''
     def test_help_command(self):
         # Regression test for SPARK-5464
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -5652,7 +5648,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                     AnalysisException,
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
-    '''
+
 if __name__ == "__main__":
     from pyspark.sql.tests import *
     if xmlrunner:
