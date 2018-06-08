@@ -1752,6 +1752,15 @@ To use `groupBy().apply()`, the user needs to define the following:
 * A Python function that defines the computation for each group.
 * A `StructType` object or a string that defines the schema of the output `DataFrame`.
 
+The output schema will be applied to the columns of the returned `pandas.DataFrame` in order by position,
+not by name. This means that the columns in the `pandas.DataFrame` must be indexed so that their
+position matches the corresponding field in the schema.
+
+Note that when creating a new `pandas.DataFrame` using a dictionary, the actual position of the column
+can differ from the order that it was placed in the dictionary. It is recommended in this case to
+explicitly define the column order using the `columns` keyword, e.g.
+`pandas.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])`, or alternatively use an `OrderedDict`.
+
 Note that all data for a group will be loaded into memory before the function is applied. This can
 lead to out of memory exceptons, especially if the group sizes are skewed. The configuration for
 [maxRecordsPerBatch](#setting-arrow-batch-size) is not applied on groups and it is up to the user
@@ -1826,6 +1835,10 @@ working with timestamps in `pandas_udf`s to get the best performance, see
   - In version 2.3 and earlier, Spark converts Parquet Hive tables by default but ignores table properties like `TBLPROPERTIES (parquet.compression 'NONE')`. This happens for ORC Hive table properties like `TBLPROPERTIES (orc.compress 'NONE')` in case of `spark.sql.hive.convertMetastoreOrc=true`, too. Since Spark 2.4, Spark respects Parquet/ORC specific table properties while converting Parquet/ORC Hive tables. As an example, `CREATE TABLE t(id int) STORED AS PARQUET TBLPROPERTIES (parquet.compression 'NONE')` would generate Snappy parquet files during insertion in Spark 2.3, and in Spark 2.4, the result would be uncompressed parquet files.
   - Since Spark 2.0, Spark converts Parquet Hive tables by default for better performance. Since Spark 2.4, Spark converts ORC Hive tables by default, too. It means Spark uses its own ORC support by default instead of Hive SerDe. As an example, `CREATE TABLE t(id int) STORED AS ORC` would be handled with Hive SerDe in Spark 2.3, and in Spark 2.4, it would be converted into Spark's ORC data source table and ORC vectorization would be applied. To set `false` to `spark.sql.hive.convertMetastoreOrc` restores the previous behavior.
   - In version 2.3 and earlier, CSV rows are considered as malformed if at least one column value in the row is malformed. CSV parser dropped such rows in the DROPMALFORMED mode or outputs an error in the FAILFAST mode. Since Spark 2.4, CSV row is considered as malformed only when it contains malformed column values requested from CSV datasource, other values can be ignored. As an example, CSV file contains the "id,name" header and one row "1234". In Spark 2.4, selection of the id column consists of a row with one column value 1234 but in Spark 2.3 and earlier it is empty in the DROPMALFORMED mode. To restore the previous behavior, set `spark.sql.csv.parser.columnPruning.enabled` to `false`.
+
+## Upgrading From Spark SQL 2.3.0 to 2.3.1 and above
+
+  - As of version 2.3.1 Arrow functionality, including `pandas_udf` and `toPandas()`/`createDataFrame()` with `spark.sql.execution.arrow.enabled` set to `True`, has been marked as experimental. These are still evolving and not currently recommended for use in production.
 
 ## Upgrading From Spark SQL 2.2 to 2.3
 

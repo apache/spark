@@ -430,18 +430,15 @@ private[spark] class SparkSubmit extends Logging {
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
         args.childArgs = ArrayBuffer(localPrimaryResource, localPyFiles) ++ args.childArgs
-        if (clusterManager != YARN) {
-          // The YARN backend distributes the primary file differently, so don't merge it.
-          args.files = mergeFileLists(args.files, args.primaryResource)
-        }
       }
       if (clusterManager != YARN) {
         // The YARN backend handles python files differently, so don't merge the lists.
         args.files = mergeFileLists(args.files, args.pyFiles)
       }
-      if (localPyFiles != null) {
-        sparkConf.set("spark.submit.pyFiles", localPyFiles)
-      }
+    }
+
+    if (localPyFiles != null) {
+      sparkConf.set("spark.submit.pyFiles", localPyFiles)
     }
 
     // In YARN mode for an R app, add the SparkR package archive and the R package

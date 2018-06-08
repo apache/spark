@@ -78,7 +78,7 @@ abstract class LogicalPlan
     schema.map { field =>
       resolve(field.name :: Nil, resolver).map {
         case a: AttributeReference => a
-        case other => sys.error(s"can not handle nested schema yet...  plan $this")
+        case _ => sys.error(s"can not handle nested schema yet...  plan $this")
       }.getOrElse {
         throw new AnalysisException(
           s"Unable to resolve ${field.name} given [${output.map(_.name).mkString(", ")}]")

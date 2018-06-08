@@ -24,6 +24,8 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -59,12 +61,15 @@ public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
 
   private static final ObjectMapper mapper = new ObjectMapper();
+
   /**
    * This a common prefix to the key for each app registration we stick in leveldb, so they
    * are easy to find, since leveldb lets you search based on prefix.
    */
   private static final String APP_KEY_PREFIX = "AppExecShuffleInfo";
   private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
+
+  private static final Pattern MULTIPLE_SEPARATORS = Pattern.compile(File.separator + "{2,}");
 
   // Map containing all registered executors' metadata.
   @VisibleForTesting
@@ -212,6 +217,26 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
+   * Removes all the non-shuffle files in any local directories associated with the finished
+   * executor.
+   */
+  public void executorRemoved(String executorId, String appId) {
+    logger.info("Clean up non-shuffle files associated with the finished executor {}", executorId);
+    AppExecId fullId = new AppExecId(appId, executorId);
+    final ExecutorShuffleInfo executor = executors.get(fullId);
+    if (executor == null) {
+      // Executor not registered, skip clean up of the local directories.
+      logger.info("Executor is not registered (appId={}, execId={})", appId, executorId);
+    } else {
+      logger.info("Cleaning up non-shuffle files in executor {}'s {} local dirs", fullId,
+              executor.localDirs.length);
+
+      // Execute the actual deletion in a different thread, as it may take some time.
+      directoryCleaner.execute(() -> deleteNonShuffleFiles(executor.localDirs));
+    }
+  }
+
+  /**
    * Synchronously deletes each directory one at a time.
    * Should be executed in its own thread, as this may take a long time.
    */
@@ -222,6 +247,29 @@ public class ExternalShuffleBlockResolver {
         logger.debug("Successfully cleaned up directory: {}", localDir);
       } catch (Exception e) {
         logger.error("Failed to delete directory: " + localDir, e);
+      }
+    }
+  }
+
+  /**
+   * Synchronously deletes non-shuffle files in each directory recursively.
+   * Should be executed in its own thread, as this may take a long time.
+   */
+  private void deleteNonShuffleFiles(String[] dirs) {
+    FilenameFilter filter = new FilenameFilter() {
+      @Override
+      public boolean accept(File dir, String name) {
+        // Don't delete shuffle data or shuffle index files.
+        return !name.endsWith(".index") && !name.endsWith(".data");
+      }
+    };
+
+    for (String localDir : dirs) {
+      try {
+        JavaUtils.deleteRecursively(new File(localDir), filter);
+        logger.debug("Successfully cleaned up non-shuffle files in directory: {}", localDir);
+      } catch (Exception e) {
+        logger.error("Failed to delete non-shuffle files in directory: " + localDir, e);
       }
     }
   }
@@ -259,7 +307,8 @@ public class ExternalShuffleBlockResolver {
     int hash = JavaUtils.nonNegativeHash(filename);
     String localDir = localDirs[hash % localDirs.length];
     int subDirId = (hash / localDirs.length) % subDirsPerLocalDir;
-    return new File(new File(localDir, String.format("%02x", subDirId)), filename);
+    return new File(createNormalizedInternedPathname(
+        localDir, String.format("%02x", subDirId), filename));
   }
 
   void close() {
@@ -270,6 +319,28 @@ public class ExternalShuffleBlockResolver {
         logger.error("Exception closing leveldb with registered executors", e);
       }
     }
+  }
+
+  /**
+   * This method is needed to avoid the situation when multiple File instances for the
+   * same pathname "foo/bar" are created, each with a separate copy of the "foo/bar" String.
+   * According to measurements, in some scenarios such duplicate strings may waste a lot
+   * of memory (~ 10% of the heap). To avoid that, we intern the pathname, and before that
+   * we make sure that it's in a normalized form (contains no "//", "///" etc.) Otherwise,
+   * the internal code in java.io.File would normalize it later, creating a new "foo/bar"
+   * String copy. Unfortunately, we cannot just reuse the normalization code that java.io.File
+   * uses, since it is in the package-private class java.io.FileSystem.
+   */
+  @VisibleForTesting
+  static String createNormalizedInternedPathname(String dir1, String dir2, String fname) {
+    String pathname = dir1 + File.separator + dir2 + File.separator + fname;
+    Matcher m = MULTIPLE_SEPARATORS.matcher(pathname);
+    pathname = m.replaceAll("/");
+    // A single trailing slash needs to be taken care of separately
+    if (pathname.length() > 1 && pathname.endsWith("/")) {
+      pathname = pathname.substring(0, pathname.length() - 1);
+    }
+    return pathname.intern();
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */

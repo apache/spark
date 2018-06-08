@@ -902,6 +902,22 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_stopiteration_in_udf(self):
+        # test for SPARK-23754
+        from pyspark.sql.functions import udf
+        from py4j.protocol import Py4JJavaError
+
+        def foo(x):
+            raise StopIteration()
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            self.spark.range(0, 1000).withColumn('v', udf(foo)('id')).show()
+
+        self.assertIn(
+            "Caught StopIteration thrown from user's code; failing the task",
+            cm.exception.java_exception.toString()
+        )
+
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
         from pyspark.sql.column import _to_java_column
@@ -3079,6 +3095,54 @@ class SQLTests(ReusedSQLTestCase):
         schema = self.spark.read.option('inferSchema', True)\
             .csv(rdd, samplingRatio=0.5).schema
         self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
+
+    def test_checking_csv_header(self):
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+        try:
+            self.spark.createDataFrame([[1, 1000], [2000, 2]])\
+                .toDF('f1', 'f2').write.option("header", "true").csv(path)
+            schema = StructType([
+                StructField('f2', IntegerType(), nullable=True),
+                StructField('f1', IntegerType(), nullable=True)])
+            df = self.spark.read.option('header', 'true').schema(schema)\
+                .csv(path, enforceSchema=False)
+            self.assertRaisesRegexp(
+                Exception,
+                "CSV header does not conform to the schema",
+                lambda: df.collect())
+        finally:
+            shutil.rmtree(path)
+
+    def test_repr_html(self):
+        import re
+        pattern = re.compile(r'^ *\|', re.MULTILINE)
+        df = self.spark.createDataFrame([(1, "1"), (22222, "22222")], ("key", "value"))
+        self.assertEquals(None, df._repr_html_())
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
+            expected1 = """<table border='1'>
+                |<tr><th>key</th><th>value</th></tr>
+                |<tr><td>1</td><td>1</td></tr>
+                |<tr><td>22222</td><td>22222</td></tr>
+                |</table>
+                |"""
+            self.assertEquals(re.sub(pattern, '', expected1), df._repr_html_())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                expected2 = """<table border='1'>
+                    |<tr><th>key</th><th>value</th></tr>
+                    |<tr><td>1</td><td>1</td></tr>
+                    |<tr><td>222</td><td>222</td></tr>
+                    |</table>
+                    |"""
+                self.assertEquals(re.sub(pattern, '', expected2), df._repr_html_())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    expected3 = """<table border='1'>
+                        |<tr><th>key</th><th>value</th></tr>
+                        |<tr><td>1</td><td>1</td></tr>
+                        |</table>
+                        |only showing top 1 row
+                        |"""
+                    self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
