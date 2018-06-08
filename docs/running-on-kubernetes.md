@@ -651,7 +651,7 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.options.[OptionName]</code></td>
   <td>(none)</td>
   <td>
-   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> options passed to the Kubernetes with <code>OptionName</code> as key having specified value. For example,
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> options passed to the Kubernetes with <code>OptionName</code> as key having specified value, must conform with Kubernetes option format. For example,
    <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.claimName=spark-pvc-claim</code>.
   </td>
 </tr>
