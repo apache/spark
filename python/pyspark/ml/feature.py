@@ -2582,27 +2582,27 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
                       typeConverter=TypeConverters.toListString)
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
                           "comparison over the stop words", typeConverter=TypeConverters.toBoolean)
-    locale = Param(Params._dummy(), "locale", "locale of the input. ignored when case sensitive is false",
+    locale = Param(Params._dummy(), "locale", "locale of the input. ignored when case sensitive is true",
                    typeConverter=TypeConverters.toString)
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False, locale="en"):
+    def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False, locale=None):
         """
-        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, locale="en")
+        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, locale=None)
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
         self._setDefault(stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-                         caseSensitive=False, locale="en")
+                         caseSensitive=False, locale=None)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
-    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False, locale="en"):
+    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False, locale=None):
         """
-        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, locale="en")
+        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, locale=None)
         Sets params for this StopWordRemover.
         """
         kwargs = self._input_kwargs

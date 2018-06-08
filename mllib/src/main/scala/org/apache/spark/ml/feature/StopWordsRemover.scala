@@ -95,7 +95,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
    */
   @Since("2.4.0")
   val locale: Param[String] = new Param[String](this, "locale",
-    "Locale of the input for case insensitive matching. Ignored when caseSensitive is false.",
+    "Locale of the input for case insensitive matching. Ignored when caseSensitive is true.",
     ParamValidators.inArray[String](Locale.getAvailableLocales.map(_.toString)))
 
   /**
