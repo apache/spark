@@ -99,6 +99,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future[Boolean] {
+    // TODO when we support dynamic allocation, the pod allocator should be told to process the
+    // current snapshot in order to decrease/increase the number of executors accordingly.
     podAllocator.setTotalExpectedExecutors(requestedTotal)
     true
   }
