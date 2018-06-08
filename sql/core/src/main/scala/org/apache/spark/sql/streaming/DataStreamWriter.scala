@@ -22,13 +22,13 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
-import org.apache.spark.sql.execution.streaming.sources.{ForeachWriterProvider, MemoryPlanV2, MemorySinkV2}
+import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.sources.v2.StreamWriteSupport
 
 /**
@@ -279,6 +279,18 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         outputMode,
         useTempCheckpointLocation = true,
         trigger = trigger)
+    } else if (source == "foreachBatch") {
+      assertNotPartitioned("foreach")
+      val sink = new ForeachBatchSink[T](foreachBatchWriter, ds.exprEnc)
+      df.sparkSession.sessionState.streamingQueryManager.startQuery(
+        extraOptions.get("queryName"),
+        extraOptions.get("checkpointLocation"),
+        df,
+        extraOptions.toMap,
+        sink,
+        outputMode,
+        useTempCheckpointLocation = true,
+        trigger = trigger)
     } else {
       val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
@@ -362,6 +374,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this
   }
 
+  def foreachBatch(writer: (Dataset[T], Long) => Unit): DataStreamWriter[T] = {
+    this.source = "foreachBatch"
+    if (writer == null) throw new IllegalArgumentException("foreachBatch writer cannot be null")
+    this.foreachBatchWriter = writer
+    this
+  }
+
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
     cols.map(normalize(_, "Partition"))
   }
@@ -397,6 +416,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
   private var foreachWriter: ForeachWriter[T] = null
+
+  private var foreachBatchWriter: (Dataset[T], Long) => Unit = null
 
   private var partitioningColumns: Option[Seq[String]] = None
 }
