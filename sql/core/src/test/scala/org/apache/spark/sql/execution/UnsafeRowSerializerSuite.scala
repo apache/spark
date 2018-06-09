@@ -21,10 +21,9 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 import java.util.Properties
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
@@ -45,6 +44,14 @@ class ClosableByteArrayInputStream(buf: Array[Byte]) extends ByteArrayInputStrea
 
 class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
 
+  override def beforeAll() {
+    super.beforeAll()
+    // This test suite calls `UnsafeProjection.create` which accesses `SQLConf.get`, we should make
+    // sure active session is cleaned so that `SQLConf.get` won't refer to a stopped session.
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+  }
+
   private def toUnsafeRow(row: Row, schema: Array[DataType]): UnsafeRow = {
     val converter = unsafeRowConverter(schema)
     converter(row)
@@ -58,7 +65,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("toUnsafeRow() test helper method") {
-    // This currently doesnt work because the generic getter throws an exception.
+    // This currently doesn't work because the generic getter throws an exception.
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
     assert(row.getString(0) === unsafeRow.getUTF8String(0).toString)
