@@ -2159,12 +2159,12 @@ case class ArrayRemove(left: Expression, right: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (arr, value) => {
-      val numsToRemove = ctx.freshName("numsToRemove")
-      val newArraySize = ctx.freshName("newArraySize")
-      val i = ctx.freshName("i")
+      val numsToRemove = JavaCode.variable(ctx.freshName("numsToRemove"), IntegerType)
+      val newArraySize = JavaCode.variable(ctx.freshName("newArraySize"), IntegerType)
+      val i = JavaCode.variable(ctx.freshName("i"), IntegerType)
       val getValue = CodeGenerator.getValue(arr, elementType, i)
       val isEqual = ctx.genEqual(elementType, value, getValue)
-      s"""
+      code"""
          |int $numsToRemove = 0;
          |for (int $i = 0; $i < $arr.numElements(); $i ++) {
          |  if (!$arr.isNullAt($i) && $isEqual) {
@@ -2180,17 +2180,17 @@ case class ArrayRemove(left: Expression, right: Expression)
   def genCodeForResult(
       ctx: CodegenContext,
       ev: ExprCode,
-      inputArray: String,
-      value: String,
-      newArraySize: String): String = {
-    val values = ctx.freshName("values")
-    val i = ctx.freshName("i")
-    val pos = ctx.freshName("pos")
+      inputArray: ExprValue,
+      value: ExprValue,
+      newArraySize: ExprValue): Block = {
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[Array[Object]])
+    val i = JavaCode.variable(ctx.freshName("i"), IntegerType)
+    val pos = JavaCode.variable(ctx.freshName("pos"), IntegerType)
     val getValue = CodeGenerator.getValue(inputArray, elementType, i)
     val isEqual = ctx.genEqual(elementType, value, getValue)
     if (!CodeGenerator.isPrimitiveType(elementType)) {
-      val arrayClass = classOf[GenericArrayData].getName
-      s"""
+      val arrayClass = inline"${classOf[GenericArrayData].getName}"
+      code"""
          |int $pos = 0;
          |Object[] $values = new Object[$newArraySize];
          |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
@@ -2208,9 +2208,10 @@ case class ArrayRemove(left: Expression, right: Expression)
          |${ev.value} = new $arrayClass($values);
        """.stripMargin
     } else {
-      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-      s"""
-         |${ctx.createUnsafeArray(values, newArraySize, elementType, s" $prettyName failed.")}
+      val primitiveValueTypeName = inline"${CodeGenerator.primitiveTypeName(elementType)}"
+      val errorMsg = new LiteralValue(s" $prettyName failed.", classOf[String])
+      code"""
+         |${ctx.createUnsafeArray(values, newArraySize, elementType, errorMsg)}
          |int $pos = 0;
          |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
          |  if ($inputArray.isNullAt($i)) {

@@ -54,9 +54,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     } else {
       assert(ctx.INPUT_ROW != null, "INPUT_ROW and currentVars cannot both be null.")
       val javaType = inline"${CodeGenerator.javaType(dataType)}"
-      val value = JavaCode.expression(
-        CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString),
-        dataType)
+      val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
       if (nullable) {
         ev.copy(code =
           code"""

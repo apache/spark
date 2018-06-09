@@ -57,7 +57,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
       val converter = convertToSafe(
         ctx,
-        JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt),
+        CodeGenerator.getValue(tmpInput, dt, i.toString),
         dt)
       code"""
         if (!$tmpInput.isNullAt($i)) {
@@ -96,7 +96,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
     val elementConverter = convertToSafe(
       ctx,
-      JavaCode.expression(CodeGenerator.getValue(tmpInput, elementType, index), elementType),
+      CodeGenerator.getValue(tmpInput, elementType, index),
       elementType)
     val code = code"""
       final ArrayData $tmpInput = $input;

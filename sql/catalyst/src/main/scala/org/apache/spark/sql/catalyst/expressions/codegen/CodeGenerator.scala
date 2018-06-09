@@ -1376,7 +1376,7 @@ object CodeGenerator extends Logging {
         val msg = s"failed to compile: $e"
         logError(msg, e)
         val maxLines = SQLConf.get.loggingMaxLinesForCodegen
-        println(s"\n${CodeFormatter.format(code, maxLines)}")
+        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
         throw new CompileException(msg, e.getLocation)
     }
 

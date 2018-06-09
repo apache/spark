@@ -57,7 +57,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val fieldEvals = fieldTypes.zipWithIndex.map { case (dt, i) =>
       ExprCode(
         JavaCode.isNullExpression(s"$tmpInput.isNullAt($i)"),
-        JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt))
+        CodeGenerator.getValue(tmpInput, dt, i.toString))
     }
 
     val rowWriterClass = classOf[UnsafeRowWriter].getName

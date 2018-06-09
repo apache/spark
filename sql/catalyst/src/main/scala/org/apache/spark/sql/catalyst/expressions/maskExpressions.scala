@@ -22,7 +22,8 @@ import org.apache.commons.codec.digest.DigestUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.MaskExpressionsUtils._
 import org.apache.spark.sql.catalyst.expressions.MaskLike._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, CodeGenerator, ExprCode, ExprValue, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -36,23 +37,25 @@ trait MaskLike {
   protected lazy val lowerReplacement: Int = getReplacementChar(lower, defaultMaskedLowercase)
   protected lazy val digitReplacement: Int = getReplacementChar(digit, defaultMaskedDigit)
 
-  protected val maskUtilsClassName: String = classOf[MaskExpressionsUtils].getName
+  protected val maskUtilsClassName: Block = inline"${classOf[MaskExpressionsUtils].getName}"
 
-  def inputStringLengthCode(inputString: String, length: String): String = {
-    s"${CodeGenerator.JAVA_INT} $length = $inputString.codePointCount(0, $inputString.length());"
+  def inputStringLengthCode(inputString: ExprValue, length: ExprValue): Block = {
+    val intType = inline"${CodeGenerator.JAVA_INT}"
+    code"$intType $length = $inputString.codePointCount(0, $inputString.length());"
   }
 
   def appendMaskedToStringBuilderCode(
       ctx: CodegenContext,
-      sb: String,
-      inputString: String,
-      offset: String,
-      numChars: String): String = {
-    val i = ctx.freshName("i")
-    val codePoint = ctx.freshName("codePoint")
-    s"""
-       |for (${CodeGenerator.JAVA_INT} $i = 0; $i < $numChars; $i++) {
-       |  ${CodeGenerator.JAVA_INT} $codePoint = $inputString.codePointAt($offset);
+      sb: ExprValue,
+      inputString: ExprValue,
+      offset: ExprValue,
+      numChars: JavaCode): Block = {
+    val i = JavaCode.variable(ctx.freshName("i"), IntegerType)
+    val codePoint = JavaCode.variable(ctx.freshName("codePoint"), IntegerType)
+    val intType = inline"${CodeGenerator.JAVA_INT}"
+    code"""
+       |for ($intType $i = 0; $i < $numChars; $i++) {
+       |  $intType $codePoint = $inputString.codePointAt($offset);
        |  $sb.appendCodePoint($maskUtilsClassName.transformChar($codePoint,
        |    $upperReplacement, $lowerReplacement,
        |    $digitReplacement, $defaultMaskedOther));
@@ -63,15 +66,16 @@ trait MaskLike {
 
   def appendUnchangedToStringBuilderCode(
       ctx: CodegenContext,
-      sb: String,
-      inputString: String,
-      offset: String,
-      numChars: String): String = {
-    val i = ctx.freshName("i")
-    val codePoint = ctx.freshName("codePoint")
-    s"""
-       |for (${CodeGenerator.JAVA_INT} $i = 0; $i < $numChars; $i++) {
-       |  ${CodeGenerator.JAVA_INT} $codePoint = $inputString.codePointAt($offset);
+      sb: ExprValue,
+      inputString: ExprValue,
+      offset: ExprValue,
+      numChars: JavaCode): Block = {
+    val i = JavaCode.variable(ctx.freshName("i"), IntegerType)
+    val codePoint = JavaCode.variable(ctx.freshName("codePoint"), IntegerType)
+    val intType = inline"${CodeGenerator.JAVA_INT}"
+    code"""
+       |for ($intType $i = 0; $i < $numChars; $i++) {
+       |  $intType $codePoint = $inputString.codePointAt($offset);
        |  $sb.appendCodePoint($codePoint);
        |  $offset += Character.charCount($codePoint);
        |}
@@ -179,16 +183,17 @@ case class Mask(child: Expression, upper: String, lower: String, digit: String)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (input: String) => {
-      val sb = ctx.freshName("sb")
-      val length = ctx.freshName("length")
-      val offset = ctx.freshName("offset")
-      val inputString = ctx.freshName("inputString")
-      s"""
+    nullSafeCodeGen(ctx, ev, (input: ExprValue) => {
+      val sb = JavaCode.variable(ctx.freshName("sb"), classOf[StringBuilder])
+      val length = JavaCode.variable(ctx.freshName("length"), IntegerType)
+      val offset = JavaCode.variable(ctx.freshName("offset"), IntegerType)
+      val inputString = JavaCode.variable(ctx.freshName("inputString"), classOf[String])
+      val intType = inline"${CodeGenerator.JAVA_INT}"
+      code"""
          |String $inputString = $input.toString();
          |${inputStringLengthCode(inputString, length)}
          |StringBuilder $sb = new StringBuilder($length);
-         |${CodeGenerator.JAVA_INT} $offset = 0;
+         |$intType $offset = 0;
          |${appendMaskedToStringBuilderCode(ctx, sb, inputString, offset, length)}
          |${ev.value} = UTF8String.fromString($sb.toString());
        """.stripMargin
@@ -256,21 +261,22 @@ case class MaskFirstN(
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (input: String) => {
-      val sb = ctx.freshName("sb")
-      val length = ctx.freshName("length")
-      val offset = ctx.freshName("offset")
-      val inputString = ctx.freshName("inputString")
-      val endOfMask = ctx.freshName("endOfMask")
-      s"""
+    nullSafeCodeGen(ctx, ev, (input: ExprValue) => {
+      val sb = JavaCode.variable(ctx.freshName("sb"), classOf[StringBuilder])
+      val length = JavaCode.variable(ctx.freshName("length"), IntegerType)
+      val offset = JavaCode.variable(ctx.freshName("offset"), IntegerType)
+      val inputString = JavaCode.variable(ctx.freshName("inputString"), classOf[String])
+      val endOfMask = JavaCode.variable(ctx.freshName("endOfMask"), IntegerType)
+      val intType = inline"${CodeGenerator.JAVA_INT}"
+      code"""
          |String $inputString = $input.toString();
          |${inputStringLengthCode(inputString, length)}
-         |${CodeGenerator.JAVA_INT} $endOfMask = $charCount > $length ? $length : $charCount;
-         |${CodeGenerator.JAVA_INT} $offset = 0;
+         |$intType $endOfMask = $charCount > $length ? $length : $charCount;
+         |$intType $offset = 0;
          |StringBuilder $sb = new StringBuilder($length);
          |${appendMaskedToStringBuilderCode(ctx, sb, inputString, offset, endOfMask)}
          |${appendUnchangedToStringBuilderCode(
-              ctx, sb, inputString, offset, s"$length - $endOfMask")}
+              ctx, sb, inputString, offset, code"$length - $endOfMask")}
          |${ev.value} = UTF8String.fromString($sb.toString());
          |""".stripMargin
     })
@@ -339,22 +345,22 @@ case class MaskLastN(
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (input: String) => {
-      val sb = ctx.freshName("sb")
-      val length = ctx.freshName("length")
-      val offset = ctx.freshName("offset")
-      val inputString = ctx.freshName("inputString")
-      val startOfMask = ctx.freshName("startOfMask")
-      s"""
+    nullSafeCodeGen(ctx, ev, (input: ExprValue) => {
+      val sb = JavaCode.variable(ctx.freshName("sb"), classOf[StringBuilder])
+      val length = JavaCode.variable(ctx.freshName("length"), IntegerType)
+      val offset = JavaCode.variable(ctx.freshName("offset"), IntegerType)
+      val inputString = JavaCode.variable(ctx.freshName("inputString"), classOf[String])
+      val startOfMask = JavaCode.variable(ctx.freshName("startOfMask"), IntegerType)
+      val intType = inline"${CodeGenerator.JAVA_INT}"
+      code"""
          |String $inputString = $input.toString();
          |${inputStringLengthCode(inputString, length)}
-         |${CodeGenerator.JAVA_INT} $startOfMask = $charCount >= $length ?
-         |  0 : $length - $charCount;
-         |${CodeGenerator.JAVA_INT} $offset = 0;
+         |$intType $startOfMask = $charCount >= $length ? 0 : $length - $charCount;
+         |$intType $offset = 0;
          |StringBuilder $sb = new StringBuilder($length);
          |${appendUnchangedToStringBuilderCode(ctx, sb, inputString, offset, startOfMask)}
          |${appendMaskedToStringBuilderCode(
-              ctx, sb, inputString, offset, s"$length - $startOfMask")}
+              ctx, sb, inputString, offset, code"$length - $startOfMask")}
          |${ev.value} = UTF8String.fromString($sb.toString());
          |""".stripMargin
     })
@@ -423,21 +429,22 @@ case class MaskShowFirstN(
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (input: String) => {
-      val sb = ctx.freshName("sb")
-      val length = ctx.freshName("length")
-      val offset = ctx.freshName("offset")
-      val inputString = ctx.freshName("inputString")
-      val startOfMask = ctx.freshName("startOfMask")
-      s"""
+    nullSafeCodeGen(ctx, ev, (input: ExprValue) => {
+      val sb = JavaCode.variable(ctx.freshName("sb"), classOf[StringBuilder])
+      val length = JavaCode.variable(ctx.freshName("length"), IntegerType)
+      val offset = JavaCode.variable(ctx.freshName("offset"), IntegerType)
+      val inputString = JavaCode.variable(ctx.freshName("inputString"), classOf[String])
+      val startOfMask = JavaCode.variable(ctx.freshName("startOfMask"), IntegerType)
+      val intType = inline"${CodeGenerator.JAVA_INT}"
+      code"""
          |String $inputString = $input.toString();
          |${inputStringLengthCode(inputString, length)}
-         |${CodeGenerator.JAVA_INT} $startOfMask = $charCount > $length ? $length : $charCount;
-         |${CodeGenerator.JAVA_INT} $offset = 0;
+         |$intType $startOfMask = $charCount > $length ? $length : $charCount;
+         |$intType $offset = 0;
          |StringBuilder $sb = new StringBuilder($length);
          |${appendUnchangedToStringBuilderCode(ctx, sb, inputString, offset, startOfMask)}
          |${appendMaskedToStringBuilderCode(
-              ctx, sb, inputString, offset, s"$length - $startOfMask")}
+              ctx, sb, inputString, offset, code"$length - $startOfMask")}
          |${ev.value} = UTF8String.fromString($sb.toString());
          |""".stripMargin
     })
@@ -506,21 +513,22 @@ case class MaskShowLastN(
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (input: String) => {
-      val sb = ctx.freshName("sb")
-      val length = ctx.freshName("length")
-      val offset = ctx.freshName("offset")
-      val inputString = ctx.freshName("inputString")
-      val endOfMask = ctx.freshName("endOfMask")
-      s"""
+    nullSafeCodeGen(ctx, ev, (input: ExprValue) => {
+      val sb = JavaCode.variable(ctx.freshName("sb"), classOf[StringBuilder])
+      val length = JavaCode.variable(ctx.freshName("length"), IntegerType)
+      val offset = JavaCode.variable(ctx.freshName("offset"), IntegerType)
+      val inputString = JavaCode.variable(ctx.freshName("inputString"), classOf[String])
+      val endOfMask = JavaCode.variable(ctx.freshName("endOfMask"), IntegerType)
+      val intType = inline"${CodeGenerator.JAVA_INT}"
+      code"""
          |String $inputString = $input.toString();
          |${inputStringLengthCode(inputString, length)}
-         |${CodeGenerator.JAVA_INT} $endOfMask = $charCount >= $length ? 0 : $length - $charCount;
-         |${CodeGenerator.JAVA_INT} $offset = 0;
+         |$intType $endOfMask = $charCount >= $length ? 0 : $length - $charCount;
+         |$intType $offset = 0;
          |StringBuilder $sb = new StringBuilder($length);
          |${appendMaskedToStringBuilderCode(ctx, sb, inputString, offset, endOfMask)}
          |${appendUnchangedToStringBuilderCode(
-              ctx, sb, inputString, offset, s"$length - $endOfMask")}
+              ctx, sb, inputString, offset, code"$length - $endOfMask")}
          |${ev.value} = UTF8String.fromString($sb.toString());
          |""".stripMargin
     })
@@ -553,9 +561,9 @@ case class MaskHash(child: Expression)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (input: String) => {
-      val digestUtilsClass = classOf[DigestUtils].getName.stripSuffix("$")
-      s"""
+    nullSafeCodeGen(ctx, ev, (input: ExprValue) => {
+      val digestUtilsClass = inline"${classOf[DigestUtils].getName.stripSuffix("$")}"
+      code"""
          |${ev.value} = UTF8String.fromString($digestUtilsClass.md5Hex($input.toString()));
          |""".stripMargin
     })

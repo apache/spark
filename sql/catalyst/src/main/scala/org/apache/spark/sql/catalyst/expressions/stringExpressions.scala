@@ -2045,20 +2045,24 @@ case class FormatNumber(x: Expression, d: Expression)
       // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
       // as a decimal separator.
       val usLocale = "US"
-      val numberFormat = ctx.addMutableState(df, "numberFormat",
-        v => s"""$v = new $df("", new $dfs($l.$usLocale));""")
+      val numberFormat = JavaCode.global(ctx.addMutableState(df, "numberFormat",
+        v => s"""$v = new $df("", new $dfs($l.$usLocale));"""),
+        classOf[DecimalFormat])
 
       right.dataType match {
         case IntegerType =>
-          val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
-          val i = ctx.freshName("i")
-          val lastDValue =
-            ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
-          s"""
+          val pattern = JavaCode.global(
+            ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();"),
+            classOf[StringBuffer])
+          val i = JavaCode.variable(ctx.freshName("i"), IntegerType)
+          val lastDValue = JavaCode.global(
+            ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;"),
+            IntegerType)
+          code"""
             if ($d >= 0) {
               $pattern.delete(0, $pattern.length());
               if ($d != $lastDValue) {
-                $pattern.append("$defaultFormat");
+                $pattern.append("${inline"$defaultFormat"}");
 
                 if ($d > 0) {
                   $pattern.append(".");
@@ -2076,14 +2080,16 @@ case class FormatNumber(x: Expression, d: Expression)
             }
            """
         case StringType =>
-          val lastDValue = ctx.addMutableState("String", "lastDValue", v => s"""$v = null;""")
-          val dValue = ctx.freshName("dValue")
-          s"""
+          val lastDValue = JavaCode.global(
+            ctx.addMutableState("String", "lastDValue", v => s"""$v = null;"""),
+            classOf[String])
+          val dValue = JavaCode.variable(ctx.freshName("dValue"), classOf[String])
+          code"""
             String $dValue = $d.toString();
             if (!$dValue.equals($lastDValue)) {
               $lastDValue = $dValue;
               if ($dValue.isEmpty()) {
-                $numberFormat.applyLocalizedPattern("$defaultFormat");
+                $numberFormat.applyLocalizedPattern("${inline"$defaultFormat"}");
               } else {
                 $numberFormat.applyLocalizedPattern($dValue);
               }
