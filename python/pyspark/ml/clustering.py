@@ -1168,42 +1168,42 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     PIC finds a very low-dimensional embedding of a dataset using truncated power
     iteration on a normalized pair-wise similarity matrix of the data.
 
-    This class is not yet an Estimator/Transformer, use `assignClusters` method to run the
-    PowerIterationClustering algorithm.
+    This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
+    to run the PowerIterationClustering algorithm.
 
     .. seealso:: `Wikipedia on Spectral clustering \
     <http://en.wikipedia.org/wiki/Spectral_clustering>`_
 
-    >>> from pyspark.sql.types import DoubleType, LongType, StructField, StructType
-    >>> import math
-    >>> def genCircle(r, n):
-    ...     points = []
-    ...     for i in range(0, n):
-    ...         theta = 2.0 * math.pi * i / n
-    ...         points.append((r * math.cos(theta), r * math.sin(theta)))
-    ...     return points
-    >>> def sim(x, y):
-    ...     dist = (x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1])
-    ...     return math.exp(-dist / 2.0)
-    >>> r1 = 1.0
-    >>> n1 = 10
-    >>> r2 = 4.0
-    >>> n2 = 40
-    >>> n = n1 + n2
-    >>> points = genCircle(r1, n1) + genCircle(r2, n2)
-    >>> data = [(i, j, sim(points[i], points[j])) for i in range(1, n) for j in range(0, i)]
-    >>> rdd = sc.parallelize(data, 2)
-    >>> schema = StructType([StructField("src", LongType(), False), \
-                 StructField("dst", LongType(),  True), \
-                 StructField("weight", DoubleType(), True)])
-    >>> df = spark.createDataFrame(rdd, schema)
+   >>> data = [((long)(1), (long)(0), 0.5), \
+               ((long)(2), (long)(0), 0.5), \
+               ((long)(2), (long)(1), 0.7), \
+               ((long)(3), (long)(0), 0.5), \
+               ((long)(3), (long)(1), 0.7), \
+               ((long)(3), (long)(2), 0.9), \
+               ((long)(4), (long)(0), 0.5), \
+               ((long)(4), (long)(1), 0.7), \
+               ((long)(4), (long)(2), 0.9), \
+               ((long)(4), (long)(3), 1.1), \
+               ((long)(5), (long)(0), 0.5), \
+               ((long)(5), (long)(1), 0.7), \
+               ((long)(5), (long)(2), 0.9), \
+               ((long)(5), (long)(3), 1.1), \
+               ((long)(5), (long)(4), 1.3)]
+    >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight")
     >>> pic = PowerIterationClustering()
     >>> assignments = pic.setK(2).setMaxIter(40).setWeightCol("weight").assignClusters(df)
-    >>> result = sorted(assignments.collect(), key=lambda x: x.id)
-    >>> result[0].cluster == result[1].cluster == result[2].cluster == result[3].cluster
-    True
-    >>> result[4].cluster == result[5].cluster == result[6].cluster == result[7].cluster
-    True
+    >>> assignments.sort(assignments.id).show(truncate=False)
+    +---+-------+
+    |id |cluster|
+    +---+-------+
+    |0  |1      |
+    |1  |1      |
+    |2  |1      |
+    |3  |1      |
+    |4  |1      |
+    |5  |0      |
+    +---+-------+
+    ...
     >>> pic_path = temp_path + "/pic"
     >>> pic.save(pic_path)
     >>> pic2 = PowerIterationClustering.load(pic_path)
@@ -1212,11 +1212,18 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     >>> pic2.getMaxIter()
     40
     >>> assignments2 = pic2.assignClusters(df)
-    >>> result2 = sorted(assignments2.collect(), key=lambda x: x.id)
-    >>> result2[0].cluster == result2[1].cluster == result2[2].cluster == result2[3].cluster
-    True
-    >>> result2[4].cluster == result2[5].cluster == result2[6].cluster == result2[7].cluster
-    True
+    >>> assignments2.sort(assignments2.id).show(truncate=False)
+    +---+-------+
+    |id |cluster|
+    +---+-------+
+    |0  |1      |
+    |1  |1      |
+    |2  |1      |
+    |3  |1      |
+    |4  |1      |
+    |5  |0      |
+    +---+-------+
+    ...
     >>> pic3 = PowerIterationClustering(k=4, initMode="degree", srcCol="source", dstCol="dest")
     >>> pic3.getSrcCol()
     'source'
@@ -1284,7 +1291,7 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     @since("2.4.0")
     def getK(self):
         """
-        Gets the value of :py:attr:`k`.
+        Gets the value of :py:attr:`k` or its default value.
         """
         return self.getOrDefault(self.k)
 
@@ -1298,7 +1305,7 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     @since("2.4.0")
     def getInitMode(self):
         """
-        Gets the value of `initMode`
+        Gets the value of :py:attr:`initMode` or its default value.
         """
         return self.getOrDefault(self.initMode)
 
@@ -1312,7 +1319,7 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     @since("2.4.0")
     def getSrcCol(self):
         """
-        Gets the value of :py:attr:`srcCol`.
+        Gets the value of :py:attr:`srcCol` or its default value.
         """
         return self.getOrDefault(self.srcCol)
 
@@ -1326,7 +1333,7 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     @since("2.4.0")
     def getDstCol(self):
         """
-        Gets the value of :py:attr:`dstCol`.
+        Gets the value of :py:attr:`dstCol` or its default value.
         """
         return self.getOrDefault(self.dstCol)
 
@@ -1349,6 +1356,8 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
           the id. The schema of it will be:
           - id: Long
           - cluster: Int
+
+        .. versionadded:: 2.4.0
         """
         self._transfer_params_to_java()
         jdf = self._java_obj.assignClusters(dataset._jdf)
