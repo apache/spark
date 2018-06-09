@@ -27,7 +27,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{IntArrayParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
@@ -60,6 +60,10 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("2.4.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
+  /** @group setParam */
+  @Since("2.4.0")
+  def setInputVecsSize(value: Array[Int]): this.type = set(inputVecsSize, value)
+
   /**
    * Param for how to handle invalid data (NULL values). Options are 'skip' (filter out rows with
    * invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN in the
@@ -81,6 +85,10 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   setDefault(handleInvalid, VectorAssembler.ERROR_INVALID)
 
+  @Since("2.4.0")
+  final val inputVecsSize: IntArrayParam = new IntArrayParam(this, "inputVecsSize",
+    "The length of the vector specified by the user.")
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
@@ -93,7 +101,25 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case _ => false
       }
     }
-    val vectorColsLengths = VectorAssembler.getLengths(dataset, vectorCols, $(handleInvalid))
+
+    val vectorColsLengths = if (isSet(inputVecsSize)) {
+      require($(inputVecsSize).length == vectorCols.length,
+        s"The length of the input vectors ${vectorCols.length} " +
+          s"does not match the size specified ${$(inputVecsSize).length}. " +
+      s"Did you input the length of all columns rather than all columns of vector type?")
+
+      val vectorColsMap = vectorCols.zip($(inputVecsSize)).toMap
+      val inferredInputColsSize = VectorAssembler.getLengths(dataset, vectorCols, $(handleInvalid))
+
+      require(vectorColsMap == inferredInputColsSize,
+        s"The length of the vector specified ${vectorColsMap} " +
+          s"does not match the length infered ${inferredInputColsSize} + from data.")
+
+      vectorColsMap
+    }
+    else {
+      VectorAssembler.getLengths(dataset, vectorCols, $(handleInvalid))
+    }
 
     val featureAttributesMap = $(inputCols).map { c =>
       val field = schema(c)

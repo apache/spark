@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.feature.VectorAssemblerEstimator.assemble
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
@@ -26,7 +27,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 
-class VectorAssemblerSuite
+class VectorAssemblerEstimatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
@@ -47,11 +48,17 @@ class VectorAssemblerSuite
   }
 
   test("params") {
-    ParamsSuite.checkParams(new VectorAssembler)
+    ParamsSuite.checkParams(new VectorAssemblerEstimator)
+  }
+
+  test("read/write") {
+    val t = new VectorAssemblerEstimator()
+      .setInputCols(Array("myInputCol", "myInputCol2"))
+      .setOutputCol("myOutputCol")
+    testDefaultReadWrite(t)
   }
 
   test("assemble") {
-    import org.apache.spark.ml.feature.VectorAssembler.assemble
     assert(assemble(Array(1), keepInvalid = true)(0.0)
       === Vectors.sparse(1, Array.empty, Array.empty))
     assert(assemble(Array(1, 1), keepInvalid = true)(0.0, 1.0)
@@ -69,7 +76,6 @@ class VectorAssemblerSuite
   }
 
   test("assemble should compress vectors") {
-    import org.apache.spark.ml.feature.VectorAssembler.assemble
     val v1 = assemble(Array(1, 1, 1, 1), keepInvalid = true)(0.0, 0.0, 0.0, Vectors.dense(4.0))
     assert(v1.isInstanceOf[SparseVector])
     val sv = Vectors.sparse(1, Array(0), Array(4.0))
@@ -77,14 +83,16 @@ class VectorAssemblerSuite
     assert(v2.isInstanceOf[DenseVector])
   }
 
-  test("VectorAssembler") {
+  test("VectorAssemblerEstimator") {
     val df = Seq(
       (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
     ).toDF("id", "x", "y", "name", "z", "n")
-    val assembler = new VectorAssembler()
+    val assembler = new VectorAssemblerEstimator()
       .setInputCols(Array("x", "y", "z", "n"))
       .setOutputCol("features")
-    assembler.transform(df).select("features").collect().foreach {
+    val model = assembler.fit(df)
+
+      model.transform(df).select("features").collect().foreach {
       case Row(v: Vector) =>
         assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
     }
@@ -92,16 +100,16 @@ class VectorAssemblerSuite
 
   test("transform should throw an exception in case of unsupported type") {
     val df = Seq(("a", "b", "c")).toDF("a", "b", "c")
-    val assembler = new VectorAssembler()
+    val assembler = new VectorAssemblerEstimator()
       .setInputCols(Array("a", "b", "c"))
       .setOutputCol("features")
     val thrown = intercept[IllegalArgumentException] {
-      assembler.transform(df)
+      assembler.fit(df).transform(df)
     }
     assert(thrown.getMessage contains
       "Data type StringType of column a is not supported.\n" +
-      "Data type StringType of column b is not supported.\n" +
-      "Data type StringType of column c is not supported.")
+        "Data type StringType of column b is not supported.\n" +
+        "Data type StringType of column c is not supported.")
   }
 
   test("ML attributes") {
@@ -118,10 +126,11 @@ class VectorAssemblerSuite
         col("count"), // "count" is an integer column without ML attribute
         col("user").as("user", user.toMetadata()),
         col("ad")) // "ad" is a vector column without ML attribute
-    val assembler = new VectorAssembler()
+    val assembler = new VectorAssemblerEstimator()
       .setInputCols(Array("browser", "hour", "count", "user", "ad"))
       .setOutputCol("features")
-    val output = assembler.transform(df)
+    val model = assembler.fit(df)
+    val output = model.transform(df)
     val schema = output.schema
     val features = AttributeGroup.fromStructField(schema("features"))
     assert(features.size === 7)
@@ -139,22 +148,16 @@ class VectorAssemblerSuite
     assert(features.getAttr(6) === NumericAttribute.defaultAttr.withIndex(6).withName("ad_1"))
   }
 
-  test("read/write") {
-    val t = new VectorAssembler()
-      .setInputCols(Array("myInputCol", "myInputCol2"))
-      .setOutputCol("myOutputCol")
-    testDefaultReadWrite(t)
-  }
-
   test("SPARK-22446: VectorAssembler's UDF should not apply on filtered data") {
     val df = Seq(
       (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L),
       (0, 1.0, null, "b", null, 20L)
     ).toDF("id", "x", "y", "name", "z", "n")
 
-    val assembler = new VectorAssembler()
+    val assembler = new VectorAssemblerEstimator()
       .setInputCols(Array("x", "z", "n"))
       .setOutputCol("features")
+    val model = assembler.fit(df)
 
     val filteredDF = df.filter($"y".isNotNull)
 
@@ -162,13 +165,12 @@ class VectorAssemblerSuite
       vector.numActives
     }
 
-    assert(assembler.transform(filteredDF).select("features")
+    assert(model.transform(filteredDF).select("features")
       .filter(vectorUDF($"features") > 1)
       .count() == 1)
   }
 
   test("assemble should keep nulls when keepInvalid is true") {
-    import org.apache.spark.ml.feature.VectorAssembler.assemble
     assert(assemble(Array(1, 1), keepInvalid = true)(1.0, null) === Vectors.dense(1.0, Double.NaN))
     assert(assemble(Array(1, 2), keepInvalid = true)(1.0, null)
       === Vectors.dense(1.0, Double.NaN, Double.NaN))
@@ -177,7 +179,6 @@ class VectorAssemblerSuite
   }
 
   test("assemble should throw errors when keepInvalid is false") {
-    import org.apache.spark.ml.feature.VectorAssembler.assemble
     intercept[SparkException](assemble(Array(1, 1), keepInvalid = false)(1.0, null))
     intercept[SparkException](assemble(Array(1, 2), keepInvalid = false)(1.0, null))
     intercept[SparkException](assemble(Array(1), keepInvalid = false)(null))
@@ -185,7 +186,7 @@ class VectorAssemblerSuite
   }
 
   test("get lengths functions") {
-    import org.apache.spark.ml.feature.VectorAssembler._
+    import org.apache.spark.ml.feature.VectorAssemblerEstimator._
     val df = dfWithNullsAndNaNs
     assert(getVectorLengthsFromFirstRow(df, Seq("y")) === Map("y" -> 2))
     assert(intercept[NullPointerException](getVectorLengthsFromFirstRow(df.sort("id2"), Seq("y")))
@@ -201,7 +202,7 @@ class VectorAssemblerSuite
   }
 
   test("Handle Invalid should behave properly") {
-    val assembler = new VectorAssembler()
+    val assembler = new VectorAssemblerEstimator()
       .setInputCols(Array("x", "y", "z", "n"))
       .setOutputCol("features")
 
@@ -214,19 +215,21 @@ class VectorAssemblerSuite
           NumericAttribute.defaultAttr.withName("bar")))
       val dfWithMetadata = dfWithNullsAndNaNs.withColumn("y", col("y"), attributeY.toMetadata())
         .withColumn("z", col("z"), attributeZ.toMetadata()).filter(additional_filter)
-      val output = assembler.setHandleInvalid(mode).transform(dfWithMetadata)
+      val output = assembler.setHandleInvalid(mode).fit(dfWithMetadata).transform(dfWithMetadata)
       output.collect()
       output
     }
 
     def runWithFirstRow(mode: String): Dataset[_] = {
-      val output = assembler.setHandleInvalid(mode).transform(dfWithNullsAndNaNs)
+      val output = assembler.setHandleInvalid(mode)
+        .fit(dfWithNullsAndNaNs).transform(dfWithNullsAndNaNs)
       output.collect()
       output
     }
 
     def runWithAllNullVectors(mode: String): Dataset[_] = {
       val output = assembler.setHandleInvalid(mode)
+        .fit(dfWithNullsAndNaNs.filter("0 == id1 % 2"))
         .transform(dfWithNullsAndNaNs.filter("0 == id1 % 2"))
       output.collect()
       output
@@ -254,29 +257,6 @@ class VectorAssemblerSuite
 
     // behavior when scalar column is all null
     assert(runWithMetadata("keep", additional_filter = "id1 > 2").count() == 4)
-  }
-
-  test("setInputColsSize") {
-    val df = Seq(
-      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
-    ).toDF("id", "x", "y", "name", "z", "n")
-    val assembler = new VectorAssembler()
-      .setInputCols(Array("x", "y", "z", "n"))
-      .setOutputCol("features")
-      .setInputVecsSize(Array(2, 2))
-    assembler.transform(df).select("features").collect().foreach {
-      case Row(v: Vector) =>
-        assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
-    }
-    val assemblerWrongInput = new VectorAssembler()
-      .setInputCols(Array("x", "y", "z", "n"))
-      .setOutputCol("features")
-      .setInputVecsSize(Array(0, 0, 9))
-    val thrown = intercept[IllegalArgumentException] {
-      assemblerWrongInput.transform(df)
-    }
-    assert(thrown.getMessage contains
-      "The length of the input vector")
   }
 
 }
