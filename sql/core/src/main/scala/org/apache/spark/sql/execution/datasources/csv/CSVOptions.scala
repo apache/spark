@@ -25,20 +25,22 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
+    val columnPruning: Boolean,
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable {
 
   def this(
     parameters: Map[String, String],
+    columnPruning: Boolean,
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String = "") = {
       this(
         CaseInsensitiveMap(parameters),
+        columnPruning,
         defaultTimeZoneId,
         defaultColumnNameOfCorruptRecord)
   }
@@ -80,8 +82,6 @@ class CSVOptions(
       throw new Exception(s"$paramName flag can be true or false")
     }
   }
-
-  private[csv] val columnPruning = SQLConf.get.getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
   val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
@@ -155,6 +155,12 @@ class CSVOptions(
 
   val samplingRatio =
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+
+  /**
+   * Forcibly apply the specified or inferred schema to datasource files.
+   * If the option is enabled, headers of CSV files will be ignored.
+   */
+  val enforceSchema = getBool("enforceSchema", default = true)
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()

@@ -1928,12 +1928,15 @@ case class Encode(value: Expression, charset: Expression)
   usage = """
     _FUNC_(expr1, expr2) - Formats the number `expr1` like '#,###,###.##', rounded to `expr2`
       decimal places. If `expr2` is 0, the result has no decimal point or fractional part.
+      `expr2` also accept a user specified format.
       This is supposed to function like MySQL's FORMAT.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(12332.123456, 4);
        12,332.1235
+      > SELECT _FUNC_(12332.123456, '##################.###');
+       12332.123
   """)
 case class FormatNumber(x: Expression, d: Expression)
   extends BinaryExpression with ExpectsInputTypes {
@@ -1942,14 +1945,20 @@ case class FormatNumber(x: Expression, d: Expression)
   override def right: Expression = d
   override def dataType: DataType = StringType
   override def nullable: Boolean = true
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(NumericType, TypeCollection(IntegerType, StringType))
+
+  private val defaultFormat = "#,###,###,###,###,###,##0"
 
   // Associated with the pattern, for the last d value, and we will update the
   // pattern (DecimalFormat) once the new coming d value differ with the last one.
   // This is an Option to distinguish between 0 (numberFormat is valid) and uninitialized after
   // serialization (numberFormat has not been updated for dValue = 0).
   @transient
-  private var lastDValue: Option[Int] = None
+  private var lastDIntValue: Option[Int] = None
+
+  @transient
+  private var lastDStringValue: Option[String] = None
 
   // A cached DecimalFormat, for performance concern, we will change it
   // only if the d value changed.
@@ -1962,33 +1971,49 @@ case class FormatNumber(x: Expression, d: Expression)
   private lazy val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
-    val dValue = dObject.asInstanceOf[Int]
-    if (dValue < 0) {
-      return null
-    }
-
-    lastDValue match {
-      case Some(last) if last == dValue =>
-        // use the current pattern
-      case _ =>
-        // construct a new DecimalFormat only if a new dValue
-        pattern.delete(0, pattern.length)
-        pattern.append("#,###,###,###,###,###,##0")
-
-        // decimal place
-        if (dValue > 0) {
-          pattern.append(".")
-
-          var i = 0
-          while (i < dValue) {
-            i += 1
-            pattern.append("0")
-          }
+    right.dataType match {
+      case IntegerType =>
+        val dValue = dObject.asInstanceOf[Int]
+        if (dValue < 0) {
+          return null
         }
 
-        lastDValue = Some(dValue)
+        lastDIntValue match {
+          case Some(last) if last == dValue =>
+          // use the current pattern
+          case _ =>
+            // construct a new DecimalFormat only if a new dValue
+            pattern.delete(0, pattern.length)
+            pattern.append(defaultFormat)
 
-        numberFormat.applyLocalizedPattern(pattern.toString)
+            // decimal place
+            if (dValue > 0) {
+              pattern.append(".")
+
+              var i = 0
+              while (i < dValue) {
+                i += 1
+                pattern.append("0")
+              }
+            }
+
+            lastDIntValue = Some(dValue)
+
+            numberFormat.applyLocalizedPattern(pattern.toString)
+        }
+      case StringType =>
+        val dValue = dObject.asInstanceOf[UTF8String].toString
+        lastDStringValue match {
+          case Some(last) if last == dValue =>
+          case _ =>
+            pattern.delete(0, pattern.length)
+            lastDStringValue = Some(dValue)
+            if (dValue.isEmpty) {
+              numberFormat.applyLocalizedPattern(defaultFormat)
+            } else {
+              numberFormat.applyLocalizedPattern(dValue)
+            }
+        }
     }
 
     x.dataType match {
@@ -2020,35 +2045,52 @@ case class FormatNumber(x: Expression, d: Expression)
       // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
       // as a decimal separator.
       val usLocale = "US"
-      val i = JavaCode.variable(ctx.freshName("i"), IntegerType)
-      val lastDValue = JavaCode.global(
-        ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;"), IntegerType)
-      val pattern = JavaCode.global(ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();"),
-        IntegerType)
-      val numberFormat = JavaCode.global(ctx.addMutableState(df, "numberFormat",
-        v => s"""$v = new $df("", new $dfs($l.$usLocale));"""), classOf[DecimalFormat])
+      val numberFormat = ctx.addMutableState(df, "numberFormat",
+        v => s"""$v = new $df("", new $dfs($l.$usLocale));""")
 
-      code"""
-        if ($d >= 0) {
-          $pattern.delete(0, $pattern.length());
-          if ($d != $lastDValue) {
-            $pattern.append("#,###,###,###,###,###,##0");
+      right.dataType match {
+        case IntegerType =>
+          val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
+          val i = ctx.freshName("i")
+          val lastDValue =
+            ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
+          s"""
+            if ($d >= 0) {
+              $pattern.delete(0, $pattern.length());
+              if ($d != $lastDValue) {
+                $pattern.append("$defaultFormat");
 
-            if ($d > 0) {
-              $pattern.append(".");
-              for (int $i = 0; $i < $d; $i++) {
-                $pattern.append("0");
+                if ($d > 0) {
+                  $pattern.append(".");
+                  for (int $i = 0; $i < $d; $i++) {
+                    $pattern.append("0");
+                  }
+                }
+                $lastDValue = $d;
+                $numberFormat.applyLocalizedPattern($pattern.toString());
+              }
+              ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
+            } else {
+              ${ev.value} = null;
+              ${ev.isNull} = true;
+            }
+           """
+        case StringType =>
+          val lastDValue = ctx.addMutableState("String", "lastDValue", v => s"""$v = null;""")
+          val dValue = ctx.freshName("dValue")
+          s"""
+            String $dValue = $d.toString();
+            if (!$dValue.equals($lastDValue)) {
+              $lastDValue = $dValue;
+              if ($dValue.isEmpty()) {
+                $numberFormat.applyLocalizedPattern("$defaultFormat");
+              } else {
+                $numberFormat.applyLocalizedPattern($dValue);
               }
             }
-            $lastDValue = $d;
-            $numberFormat.applyLocalizedPattern($pattern.toString());
-          }
-          ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
-        } else {
-          ${ev.value} = null;
-          ${ev.isNull} = true;
-        }
-       """
+            ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
+           """
+      }
     })
   }
 

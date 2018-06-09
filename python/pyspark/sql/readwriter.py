@@ -346,7 +346,7 @@ class DataFrameReader(OptionUtils):
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            samplingRatio=None):
+            samplingRatio=None, enforceSchema=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -373,6 +373,16 @@ class DataFrameReader(OptionUtils):
                        default value, ``false``.
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
+        :param enforceSchema: If it is set to ``true``, the specified or inferred schema will be
+                              forcibly applied to datasource files, and headers in CSV files will be
+                              ignored. If the option is set to ``false``, the schema will be
+                              validated against all headers in CSV files or the first header in RDD
+                              if the ``header`` option is set to ``true``. Field names in the schema
+                              and column names in CSV headers are checked by their positions
+                              taking into account ``spark.sql.caseSensitive``. If None is set,
+                              ``true`` is used by default. Though the default value is ``true``,
+                              it is recommended to disable the ``enforceSchema`` option
+                              to avoid incorrect results.
         :param ignoreLeadingWhiteSpace: A flag indicating whether or not leading whitespaces from
                                         values being read should be skipped. If None is set, it
                                         uses the default value, ``false``.
@@ -449,7 +459,8 @@ class DataFrameReader(OptionUtils):
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio)
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
+            enforceSchema=enforceSchema)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:

@@ -222,6 +222,12 @@ def main(infile, outfile):
         taskContext._partitionId = read_int(infile)
         taskContext._attemptNumber = read_int(infile)
         taskContext._taskAttemptId = read_long(infile)
+        taskContext._localProperties = dict()
+        for i in range(read_int(infile)):
+            k = utf8_deserializer.loads(infile)
+            v = utf8_deserializer.loads(infile)
+            taskContext._localProperties[k] = v
+
         shuffle.MemoryBytesSpilled = 0
         shuffle.DiskBytesSpilled = 0
         _accumulatorRegistry.clear()

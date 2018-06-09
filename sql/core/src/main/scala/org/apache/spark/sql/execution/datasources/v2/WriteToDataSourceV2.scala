@@ -116,7 +116,9 @@ object DataWritingSparkTask extends Logging {
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-      iter.foreach(dataWriter.write)
+      while (iter.hasNext) {
+        dataWriter.write(iter.next())
+      }
 
       val msg = if (useCommitCoordinator) {
         val coordinator = SparkEnv.get.outputCommitCoordinator
