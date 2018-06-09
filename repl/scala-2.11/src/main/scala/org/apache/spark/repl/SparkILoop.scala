@@ -95,9 +95,13 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     if (intp == null) {
       createInterpreter()
     }
+    echo(s"DB printWelcome 1  ${intp.isInitializeComplete}" )
+
     if (!intp.isInitializeComplete) {
       intp.initializeSynchronous()
     }
+
+    echo(s"DB printWelcome 2  ${intp.isInitializeComplete}" )
 
     import org.apache.spark.SPARK_VERSION
     echo("""Welcome to
