@@ -1174,24 +1174,14 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     .. seealso:: `Wikipedia on Spectral clustering \
     <http://en.wikipedia.org/wiki/Spectral_clustering>`_
 
-   >>> data = [((long)(1), (long)(0), 0.5), \
-               ((long)(2), (long)(0), 0.5), \
-               ((long)(2), (long)(1), 0.7), \
-               ((long)(3), (long)(0), 0.5), \
-               ((long)(3), (long)(1), 0.7), \
-               ((long)(3), (long)(2), 0.9), \
-               ((long)(4), (long)(0), 0.5), \
-               ((long)(4), (long)(1), 0.7), \
-               ((long)(4), (long)(2), 0.9), \
-               ((long)(4), (long)(3), 1.1), \
-               ((long)(5), (long)(0), 0.5), \
-               ((long)(5), (long)(1), 0.7), \
-               ((long)(5), (long)(2), 0.9), \
-               ((long)(5), (long)(3), 1.1), \
-               ((long)(5), (long)(4), 1.3)]
+   >>> data = [(1, 0, 0.5), \
+               (2, 0, 0.5), (2, 1, 0.7), \
+               (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9), \
+               (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1), \
+               (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
     >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight")
-    >>> pic = PowerIterationClustering()
-    >>> assignments = pic.setK(2).setMaxIter(40).setWeightCol("weight").assignClusters(df)
+    >>> pic = PowerIterationClustering(k=2, maxIter=40, weightCol="weight")
+    >>> assignments = pic.assignClusters(df)
     >>> assignments.sort(assignments.id).show(truncate=False)
     +---+-------+
     |id |cluster|
@@ -1211,30 +1201,6 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     2
     >>> pic2.getMaxIter()
     40
-    >>> assignments2 = pic2.assignClusters(df)
-    >>> assignments2.sort(assignments2.id).show(truncate=False)
-    +---+-------+
-    |id |cluster|
-    +---+-------+
-    |0  |1      |
-    |1  |1      |
-    |2  |1      |
-    |3  |1      |
-    |4  |1      |
-    |5  |0      |
-    +---+-------+
-    ...
-    >>> pic3 = PowerIterationClustering(k=4, initMode="degree", srcCol="source", dstCol="dest")
-    >>> pic3.getSrcCol()
-    'source'
-    >>> pic3.getDstCol()
-    'dest'
-    >>> pic3.getK()
-    4
-    >>> pic3.getMaxIter()
-    20
-    >>> pic3.getInitMode()
-    'degree'
 
     .. versionadded:: 2.4.0
     """
