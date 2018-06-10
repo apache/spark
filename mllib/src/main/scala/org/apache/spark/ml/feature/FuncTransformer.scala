@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * :: Experimental ::
- * FuncTransformer helps create a custom feature transformer easily for DataFrame, such like
+ * FuncTransformer helps create a custom feature transformer easily with UDF, such like
  * conditional conversion(if...else...), type conversion, array indexing and many string ops.
  * Note that FuncTransformer supports serialization via Scala ObjectOutputStream and may not
  * guarantee save/load compatibility between different Scala version.

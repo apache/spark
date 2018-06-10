@@ -695,6 +695,49 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         """
         return self.getOrDefault(self.scalingVec)
 
+@inherit_doc
+class FuncTransformer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+    """
+    FuncTransformer helps create a custom feature transformer easily with UDF
+
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["words"])
+    >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
+    >>> hashingTF.transform(df).head().features
+    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
+    >>> hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
+    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
+    >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
+    >>> hashingTF.transform(df, params).head().vector
+    SparseVector(5, {0: 1.0, 1: 1.0, 2: 1.0})
+    >>> hashingTFPath = temp_path + "/hashing-tf"
+    >>> hashingTF.save(hashingTFPath)
+    >>> loadedHashingTF = HashingTF.load(hashingTFPath)
+    >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
+    True
+
+    .. versionadded:: 2.4.0
+    """
+    @keyword_only
+    def __init__(self, udf, inputCol=None, outputCol=None):
+        """
+        __init__(self, p=2.0, inputCol=None, outputCol=None)
+        """
+        super(FuncTransformer, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FuncTransformer",
+                                            self.uid, udf)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.4.0")
+    def setParams(self, inputCol=None, outputCol=None):
+        """
+        setParams(self, inputCol=None, outputCol=None)
+        Sets params for this FuncTransformer.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
 
 @inherit_doc
 class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, JavaMLReadable,
