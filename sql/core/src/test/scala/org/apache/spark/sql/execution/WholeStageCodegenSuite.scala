@@ -51,12 +51,12 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
-    val df = spark.range(3).groupBy("id").count().orderBy("id")
+    val df = spark.range(3).groupBy(col("id") * 2).count().orderBy(col("id") * 2)
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(df.collect() === Array(Row(0, 1), Row(1, 1), Row(2, 1)))
+    assert(df.collect() === Array(Row(0, 1), Row(2, 1), Row(4, 1)))
   }
 
   test("BroadcastHashJoin should be included in WholeStageCodegen") {
@@ -310,7 +310,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-23598: Codegen working for lots of aggregation operations without runtime errors") {
+  ignore("SPARK-23598: Codegen working for lots of aggregation operations without runtime errors") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       var df = Seq((8, "bat"), (15, "mouse"), (5, "horse")).toDF("age", "name")
       for (i <- 0 until 70) {

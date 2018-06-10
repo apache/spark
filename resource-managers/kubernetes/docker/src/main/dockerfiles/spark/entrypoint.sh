@@ -22,7 +22,10 @@ set -ex
 # Check whether there is a passwd entry for the container UID
 myuid=$(id -u)
 mygid=$(id -g)
+# turn off -e for getent because it will return error code in anonymous uid case
+set +e
 uidentry=$(getent passwd $myuid)
+set -e
 
 # If there is no passwd entry for the container UID, attempt to create one
 if [ -z "$uidentry" ] ; then
@@ -50,17 +53,43 @@ if [ -n "$SPARK_MOUNTED_FILES_DIR" ]; then
   cp -R "$SPARK_MOUNTED_FILES_DIR/." .
 fi
 
+if [ -n "$PYSPARK_FILES" ]; then
+    PYTHONPATH="$PYTHONPATH:$PYSPARK_FILES"
+fi
+
+PYSPARK_ARGS=""
+if [ -n "$PYSPARK_APP_ARGS" ]; then
+    PYSPARK_ARGS="$PYSPARK_APP_ARGS"
+fi
+
+
+if [ "$PYSPARK_MAJOR_PYTHON_VERSION" == "2" ]; then
+    pyv="$(python -V 2>&1)"
+    export PYTHON_VERSION="${pyv:7}"
+    export PYSPARK_PYTHON="python"
+    export PYSPARK_DRIVER_PYTHON="python"
+elif [ "$PYSPARK_MAJOR_PYTHON_VERSION" == "3" ]; then
+    pyv3="$(python3 -V 2>&1)"
+    export PYTHON_VERSION="${pyv3:7}"
+    export PYSPARK_PYTHON="python3"
+    export PYSPARK_DRIVER_PYTHON="python3"
+fi
+
 case "$SPARK_K8S_CMD" in
   driver)
     CMD=(
-      ${JAVA_HOME}/bin/java
-      "${SPARK_JAVA_OPTS[@]}"
-      -cp "$SPARK_CLASSPATH"
-      -Xms$SPARK_DRIVER_MEMORY
-      -Xmx$SPARK_DRIVER_MEMORY
-      -Dspark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS
-      $SPARK_DRIVER_CLASS
-      $SPARK_DRIVER_ARGS
+      "$SPARK_HOME/bin/spark-submit"
+      --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
+      --deploy-mode client
+      "$@"
+    )
+    ;;
+  driver-py)
+    CMD=(
+      "$SPARK_HOME/bin/spark-submit"
+      --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
+      --deploy-mode client
+      "$@" $PYSPARK_PRIMARY $PYSPARK_ARGS
     )
     ;;
 
@@ -77,14 +106,6 @@ case "$SPARK_K8S_CMD" in
       --cores $SPARK_EXECUTOR_CORES
       --app-id $SPARK_APPLICATION_ID
       --hostname $SPARK_EXECUTOR_POD_IP
-    )
-    ;;
-
-  init)
-    CMD=(
-      "$SPARK_HOME/bin/spark-class"
-      "org.apache.spark.deploy.k8s.SparkPodInitContainer"
-      "$@"
     )
     ;;
 

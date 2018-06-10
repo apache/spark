@@ -24,8 +24,8 @@ import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
-import org.apache.spark.ml.tree.LeafNode
-import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.tree.RegressionLeafNode
+import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -34,6 +34,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.loss.LogLoss
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.Utils
 
 /**
@@ -69,7 +70,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("params") {
     ParamsSuite.checkParams(new GBTClassifier)
     val model = new GBTClassificationModel("gbtc",
-      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null), 1)),
+      Array(new DecisionTreeRegressionModel("dtr", new RegressionLeafNode(0.0, 0.0, null), 1)),
       Array(1.0), 1, 2)
     ParamsSuite.checkParams(model)
   }
@@ -195,6 +196,15 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     ProbabilisticClassifierSuite.testPredictMethods[
       Vector, GBTClassificationModel](this, gbtModel, validationDataset)
+  }
+
+  test("prediction on single instance") {
+
+    val gbt = new GBTClassifier().setSeed(123)
+    val trainingDataset = trainData.toDF("label", "features")
+    val gbtModel = gbt.fit(trainingDataset)
+
+    testPredictionModelSinglePrediction(gbtModel, trainingDataset)
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {
@@ -354,6 +364,78 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
     val mostIF = importanceFeatures.argmax
     assert(mostImportantFeature !== mostIF)
+  }
+
+  test("model evaluateEachIteration") {
+    val gbt = new GBTClassifier()
+      .setSeed(1L)
+      .setMaxDepth(2)
+      .setMaxIter(3)
+      .setLossType("logistic")
+    val model3 = gbt.fit(trainData.toDF)
+    val model1 = new GBTClassificationModel("gbt-cls-model-test1",
+      model3.trees.take(1), model3.treeWeights.take(1), model3.numFeatures, model3.numClasses)
+    val model2 = new GBTClassificationModel("gbt-cls-model-test2",
+      model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures, model3.numClasses)
+
+    val evalArr = model3.evaluateEachIteration(validationData.toDF)
+    val remappedValidationData = validationData.map(
+      x => new LabeledPoint((x.label * 2) - 1, x.features))
+    val lossErr1 = GradientBoostedTrees.computeError(remappedValidationData,
+      model1.trees, model1.treeWeights, model1.getOldLossType)
+    val lossErr2 = GradientBoostedTrees.computeError(remappedValidationData,
+      model2.trees, model2.treeWeights, model2.getOldLossType)
+    val lossErr3 = GradientBoostedTrees.computeError(remappedValidationData,
+      model3.trees, model3.treeWeights, model3.getOldLossType)
+
+    assert(evalArr(0) ~== lossErr1 relTol 1E-3)
+    assert(evalArr(1) ~== lossErr2 relTol 1E-3)
+    assert(evalArr(2) ~== lossErr3 relTol 1E-3)
+  }
+
+  test("runWithValidation stops early and performs better on a validation dataset") {
+    val validationIndicatorCol = "validationIndicator"
+    val trainDF = trainData.toDF().withColumn(validationIndicatorCol, lit(false))
+    val validationDF = validationData.toDF().withColumn(validationIndicatorCol, lit(true))
+
+    val numIter = 20
+    for (lossType <- GBTClassifier.supportedLossTypes) {
+      val gbt = new GBTClassifier()
+        .setSeed(123)
+        .setMaxDepth(2)
+        .setLossType(lossType)
+        .setMaxIter(numIter)
+      val modelWithoutValidation = gbt.fit(trainDF)
+
+      gbt.setValidationIndicatorCol(validationIndicatorCol)
+      val modelWithValidation = gbt.fit(trainDF.union(validationDF))
+
+      assert(modelWithoutValidation.numTrees === numIter)
+      // early stop
+      assert(modelWithValidation.numTrees < numIter)
+
+      val (errorWithoutValidation, errorWithValidation) = {
+        val remappedRdd = validationData.map(x => new LabeledPoint(2 * x.label - 1, x.features))
+        (GradientBoostedTrees.computeError(remappedRdd, modelWithoutValidation.trees,
+          modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType),
+          GradientBoostedTrees.computeError(remappedRdd, modelWithValidation.trees,
+            modelWithValidation.treeWeights, modelWithValidation.getOldLossType))
+      }
+      assert(errorWithValidation < errorWithoutValidation)
+
+      val evaluationArray = GradientBoostedTrees
+        .evaluateEachIteration(validationData, modelWithoutValidation.trees,
+          modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
+          OldAlgo.Classification)
+      assert(evaluationArray.length === numIter)
+      assert(evaluationArray(modelWithValidation.numTrees) >
+        evaluationArray(modelWithValidation.numTrees - 1))
+      var i = 1
+      while (i < modelWithValidation.numTrees) {
+        assert(evaluationArray(i) <= evaluationArray(i - 1))
+        i += 1
+      }
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

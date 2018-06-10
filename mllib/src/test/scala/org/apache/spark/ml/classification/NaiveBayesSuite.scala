@@ -167,6 +167,28 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       Vector, NaiveBayesModel](this, model, testDataset)
   }
 
+  test("prediction on single instance") {
+    val nPoints = 1000
+    val piArray = Array(0.5, 0.1, 0.4).map(math.log)
+    val thetaArray = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
+    val pi = Vectors.dense(piArray)
+    val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
+
+    val trainDataset =
+      generateNaiveBayesInput(piArray, thetaArray, nPoints, seed, "multinomial").toDF()
+    val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
+    val model = nb.fit(trainDataset)
+
+    val validationDataset =
+      generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
+
+    testPredictionModelSinglePrediction(model, validationDataset)
+  }
+
   test("Naive Bayes with weighted samples") {
     val numClasses = 3
     def modelEquals(m1: NaiveBayesModel, m2: NaiveBayesModel): Unit = {

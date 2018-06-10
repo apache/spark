@@ -26,6 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 
 class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
@@ -103,6 +104,33 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         val df1 = spark.read.format(format).load(outputPath.toString)
         checkAnswer(df1, Seq.empty[Row])
         assert(df1.schema.equals(df.schema.asNullable))
+      }
+    }
+  }
+
+  allFileBasedDataSources.foreach { format =>
+    test(s"SPARK-23372 error while writing empty schema files using $format") {
+      withTempPath { outputPath =>
+        val errMsg = intercept[AnalysisException] {
+          spark.emptyDataFrame.write.format(format).save(outputPath.toString)
+        }
+        assert(errMsg.getMessage.contains(
+          "Datasource does not support writing empty or nested empty schemas"))
+      }
+
+      // Nested empty schema
+      withTempPath { outputPath =>
+        val schema = StructType(Seq(
+          StructField("a", IntegerType),
+          StructField("b", StructType(Nil)),
+          StructField("c", IntegerType)
+        ))
+        val df = spark.createDataFrame(sparkContext.emptyRDD[Row], schema)
+        val errMsg = intercept[AnalysisException] {
+          df.write.format(format).save(outputPath.toString)
+        }
+        assert(errMsg.getMessage.contains(
+          "Datasource does not support writing empty or nested empty schemas"))
       }
     }
   }

@@ -34,8 +34,8 @@ import org.apache.spark.sql.types.StructType;
  * It can mix in various writing optimization interfaces to speed up the data saving. The actual
  * writing logic is delegated to {@link DataWriter}.
  *
- * If an exception was throw when applying any of these writing optimizations, the action would fail
- * and no Spark job was submitted.
+ * If an exception was throw when applying any of these writing optimizations, the action will fail
+ * and no Spark job will be submitted.
  *
  * The writing procedure is:
  *   1. Create a writer factory by {@link #createWriterFactory()}, serialize and send it to all the
@@ -58,7 +58,7 @@ public interface DataSourceWriter {
   /**
    * Creates a writer factory which will be serialized and sent to executors.
    *
-   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */
   DataWriterFactory<Row> createWriterFactory();

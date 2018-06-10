@@ -531,6 +531,9 @@ setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 #' @rdname repartition
 setGeneric("repartition", function(x, ...) { standardGeneric("repartition") })
 
+#' @rdname repartitionByRange
+setGeneric("repartitionByRange", function(x, ...) { standardGeneric("repartitionByRange") })
+
 #' @rdname sample
 setGeneric("sample",
            function(x, withReplacement = FALSE, fraction, seed) {
@@ -621,7 +624,7 @@ setGeneric("summarize", function(x, ...) { standardGeneric("summarize") })
 #' @rdname summary
 setGeneric("summary", function(object, ...) { standardGeneric("summary") })
 
-setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
+setGeneric("toJSON", function(x, ...) { standardGeneric("toJSON") })
 
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
@@ -754,6 +757,34 @@ setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCoun
 #' @name NULL
 setGeneric("array_contains", function(x, value) { standardGeneric("array_contains") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_join", function(x, delimiter, ...) { standardGeneric("array_join") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_max", function(x) { standardGeneric("array_max") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_min", function(x) { standardGeneric("array_min") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_position", function(x, value) { standardGeneric("array_position") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("arrays_overlap", function(x, y) { standardGeneric("arrays_overlap") })
+
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
@@ -798,7 +829,7 @@ setGeneric("collect_set", function(x) { standardGeneric("collect_set") })
 #' @rdname column
 setGeneric("column", function(x) { standardGeneric("column") })
 
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @name NULL
 setGeneric("concat", function(x, ...) { standardGeneric("concat") })
 
@@ -883,6 +914,10 @@ setGeneric("decode", function(x, charset) { standardGeneric("decode") })
 #' @name NULL
 setGeneric("dense_rank", function(x = "missing") { standardGeneric("dense_rank") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("element_at", function(x, extraction) { standardGeneric("element_at") })
+
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("encode", function(x, charset) { standardGeneric("encode") })
@@ -898,6 +933,10 @@ setGeneric("explode_outer", function(x) { standardGeneric("explode_outer") })
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("expr", function(x) { standardGeneric("expr") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("flatten", function(x) { standardGeneric("flatten") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
@@ -1009,6 +1048,10 @@ setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("map_entries", function(x) { standardGeneric("map_entries") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("map_keys", function(x) { standardGeneric("map_keys") })
 
 #' @rdname column_collection_functions
@@ -1107,7 +1150,7 @@ setGeneric("regexp_replace",
 #' @name NULL
 setGeneric("repeat_string", function(x, n) { standardGeneric("repeat_string") })
 
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @name NULL
 setGeneric("reverse", function(x) { standardGeneric("reverse") })
 
@@ -1166,6 +1209,10 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("skewness", function(x) { standardGeneric("skewness") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("slice", function(x, start, length) { standardGeneric("slice") })
 
 #' @rdname column_collection_functions
 #' @name NULL

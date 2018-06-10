@@ -24,8 +24,6 @@ if sys.version >= '3':
 else:
     intlike = (int, long)
 
-from abc import ABCMeta, abstractmethod
-
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
@@ -407,7 +405,7 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None,  allowUnquotedControlChars=None):
+             multiLine=None,  allowUnquotedControlChars=None, lineSep=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -470,6 +468,8 @@ class DataStreamReader(OptionUtils):
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -484,7 +484,7 @@ class DataStreamReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars)
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
@@ -531,17 +531,20 @@ class DataStreamReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def text(self, path):
+    def text(self, path, wholetext=False, lineSep=None):
         """
         Loads a text file stream and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
 
-        Each line in the text file is a new row in the resulting DataFrame.
+        By default, each line in the text file is a new row in the resulting DataFrame.
 
         .. note:: Evolving.
 
         :param paths: string, or list of strings, for input path(s).
+        :param wholetext: if true, read each file from input path(s) as a single row.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
@@ -549,6 +552,7 @@ class DataStreamReader(OptionUtils):
         >>> "value" in str(text_sdf.schema)
         True
         """
+        self._set_opts(wholetext=wholetext, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.text(path))
         else:
@@ -560,7 +564,8 @@ class DataStreamReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None):
+            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
+            enforceSchema=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -588,6 +593,16 @@ class DataStreamReader(OptionUtils):
                        default value, ``false``.
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
+        :param enforceSchema: If it is set to ``true``, the specified or inferred schema will be
+                              forcibly applied to datasource files, and headers in CSV files will be
+                              ignored. If the option is set to ``false``, the schema will be
+                              validated against all headers in CSV files or the first header in RDD
+                              if the ``header`` option is set to ``true``. Field names in the schema
+                              and column names in CSV headers are checked by their positions
+                              taking into account ``spark.sql.caseSensitive``. If None is set,
+                              ``true`` is used by default. Though the default value is ``true``,
+                              it is recommended to disable the ``enforceSchema`` option
+                              to avoid incorrect results.
         :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
                                         values being read should be skipped. If None is set, it
                                         uses the default value, ``false``.
@@ -660,7 +675,7 @@ class DataStreamReader(OptionUtils):
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:

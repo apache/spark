@@ -38,10 +38,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
@@ -56,16 +58,19 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
  */
-case class ExprCode(var code: String, var isNull: String, var value: String)
+case class ExprCode(var code: Block, var isNull: ExprValue, var value: ExprValue)
 
 object ExprCode {
-  def forNullValue(dataType: DataType): ExprCode = {
-    val defaultValueLiteral = CodeGenerator.defaultValue(dataType, typedNull = true)
-    ExprCode(code = "", isNull = "true", value = defaultValueLiteral)
+  def apply(isNull: ExprValue, value: ExprValue): ExprCode = {
+    ExprCode(code = EmptyBlock, isNull, value)
   }
 
-  def forNonNullValue(value: String): ExprCode = {
-    ExprCode(code = "", isNull = "false", value = value)
+  def forNullValue(dataType: DataType): ExprCode = {
+    ExprCode(code = EmptyBlock, isNull = TrueLiteral, JavaCode.defaultLiteral(dataType))
+  }
+
+  def forNonNullValue(value: ExprValue): ExprCode = {
+    ExprCode(code = EmptyBlock, isNull = FalseLiteral, value = value)
   }
 }
 
@@ -77,7 +82,7 @@ object ExprCode {
  * @param value A term for a value of a common sub-expression. Not valid if `isNull`
  *              is set to `true`.
  */
-case class SubExprEliminationState(isNull: String, value: String)
+case class SubExprEliminationState(isNull: ExprValue, value: ExprValue)
 
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
@@ -326,11 +331,11 @@ class CodegenContext {
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = addMutableState(javaType(dataType), variableName)
     val code = dataType match {
-      case StringType => s"$value = $initCode.clone();"
-      case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
-      case _ => s"$value = $initCode;"
+      case StringType => code"$value = $initCode.clone();"
+      case _: StructType | _: ArrayType | _: MapType => code"$value = $initCode.copy();"
+      case _ => code"$value = $initCode;"
     }
-    ExprCode(code, "false", value)
+    ExprCode(code, FalseLiteral, JavaCode.global(value, dataType))
   }
 
   def declareMutableStates(): String = {
@@ -402,7 +407,7 @@ class CodegenContext {
   val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
-  val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
+  var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
 
   // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
@@ -569,14 +574,9 @@ class CodegenContext {
     } else {
       s"${freshNamePrefix}_$name"
     }
-    if (freshNameIds.contains(fullName)) {
-      val id = freshNameIds(fullName)
-      freshNameIds(fullName) = id + 1
-      s"$fullName$id"
-    } else {
-      freshNameIds += fullName -> 1
-      fullName
-    }
+    val id = freshNameIds.getOrElse(fullName, 0)
+    freshNameIds(fullName) = id + 1
+    s"${fullName}_$id"
   }
 
   /**
@@ -584,8 +584,10 @@ class CodegenContext {
    */
   def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {
     case BinaryType => s"java.util.Arrays.equals($c1, $c2)"
-    case FloatType => s"(java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2"
-    case DoubleType => s"(java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2"
+    case FloatType =>
+      s"((java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2)"
+    case DoubleType =>
+      s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
@@ -694,6 +696,107 @@ class CodegenContext {
   def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
     case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
     case _ => s"(${genComp(dataType, c1, c2)}) > 0"
+  }
+
+  /**
+   * Generates code for updating `partialResult` if `item` is smaller than it.
+   *
+   * @param dataType data type of the expressions
+   * @param partialResult `ExprCode` representing the partial result which has to be updated
+   * @param item `ExprCode` representing the new expression to evaluate for the result
+   */
+  def reassignIfSmaller(dataType: DataType, partialResult: ExprCode, item: ExprCode): String = {
+    s"""
+       |if (!${item.isNull} && (${partialResult.isNull} ||
+       |  ${genGreater(dataType, partialResult.value, item.value)})) {
+       |  ${partialResult.isNull} = false;
+       |  ${partialResult.value} = ${item.value};
+       |}
+      """.stripMargin
+  }
+
+  /**
+   * Generates code for updating `partialResult` if `item` is greater than it.
+   *
+   * @param dataType data type of the expressions
+   * @param partialResult `ExprCode` representing the partial result which has to be updated
+   * @param item `ExprCode` representing the new expression to evaluate for the result
+   */
+  def reassignIfGreater(dataType: DataType, partialResult: ExprCode, item: ExprCode): String = {
+    s"""
+       |if (!${item.isNull} && (${partialResult.isNull} ||
+       |  ${genGreater(dataType, item.value, partialResult.value)})) {
+       |  ${partialResult.isNull} = false;
+       |  ${partialResult.value} = ${item.value};
+       |}
+      """.stripMargin
+  }
+
+  /**
+   * Generates code creating a [[UnsafeArrayData]].
+   *
+   * @param arrayName name of the array to create
+   * @param numElements code representing the number of elements the array should contain
+   * @param elementType data type of the elements in the array
+   * @param additionalErrorMessage string to include in the error message
+   */
+  def createUnsafeArray(
+      arrayName: String,
+      numElements: String,
+      elementType: DataType,
+      additionalErrorMessage: String): String = {
+    val arraySize = freshName("size")
+    val arrayBytes = freshName("arrayBytes")
+
+    s"""
+       |long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
+       |  $numElements,
+       |  ${elementType.defaultSize});
+       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+       |  throw new RuntimeException("Unsuccessful try create array with " + $arraySize +
+       |    " bytes of data due to exceeding the limit " +
+       |    "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} bytes for UnsafeArrayData." +
+       |    "$additionalErrorMessage");
+       |}
+       |byte[] $arrayBytes = new byte[(int)$arraySize];
+       |UnsafeArrayData $arrayName = new UnsafeArrayData();
+       |Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
+       |$arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
+      """.stripMargin
+  }
+
+  /**
+   * Generates code creating a [[UnsafeArrayData]]. The generated code executes
+   * a provided fallback when the size of backing array would exceed the array size limit.
+   * @param arrayName a name of the array to create
+   * @param numElements a piece of code representing the number of elements the array should contain
+   * @param elementSize a size of an element in bytes
+   * @param bodyCode a function generating code that fills up the [[UnsafeArrayData]]
+   *                 and getting the backing array as a parameter
+   * @param fallbackCode a piece of code executed when the array size limit is exceeded
+   */
+  def createUnsafeArrayWithFallback(
+      arrayName: String,
+      numElements: String,
+      elementSize: Int,
+      bodyCode: String => String,
+      fallbackCode: String): String = {
+    val arraySize = freshName("size")
+    val arrayBytes = freshName("arrayBytes")
+    s"""
+       |final long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
+       |  $numElements,
+       |  $elementSize);
+       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+       |  $fallbackCode
+       |} else {
+       |  final byte[] $arrayBytes = new byte[(int)$arraySize];
+       |  UnsafeArrayData $arrayName = new UnsafeArrayData();
+       |  Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
+       |  $arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
+       |  ${bodyCode(arrayBytes)}
+       |}
+     """.stripMargin
   }
 
   /**
@@ -921,14 +1024,12 @@ class CodegenContext {
       newSubExprEliminationExprs: Map[Expression, SubExprEliminationState])(
       f: => Seq[ExprCode]): Seq[ExprCode] = {
     val oldsubExprEliminationExprs = subExprEliminationExprs
-    subExprEliminationExprs.clear
-    newSubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+    subExprEliminationExprs = newSubExprEliminationExprs
 
     val genCodes = f
 
     // Restore previous subExprEliminationExprs
-    subExprEliminationExprs.clear
-    oldsubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+    subExprEliminationExprs = oldsubExprEliminationExprs
     genCodes
   }
 
@@ -942,7 +1043,7 @@ class CodegenContext {
   def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
     // Create a clear EquivalentExpressions and SubExprEliminationState mapping
     val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
-    val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
+    val localSubExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree)
@@ -955,10 +1056,10 @@ class CodegenContext {
       // Generate the code for this expression tree.
       val eval = expr.genCode(this)
       val state = SubExprEliminationState(eval.isNull, eval.value)
-      e.foreach(subExprEliminationExprs.put(_, state))
-      eval.code.trim
+      e.foreach(localSubExprEliminationExprs.put(_, state))
+      eval.code.toString
     }
-    SubExprCodes(codes, subExprEliminationExprs.toMap)
+    SubExprCodes(codes, localSubExprEliminationExprs.toMap)
   }
 
   /**
@@ -984,7 +1085,7 @@ class CodegenContext {
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
-           |  ${eval.code.trim}
+           |  ${eval.code}
            |  $isNull = ${eval.isNull};
            |  $value = ${eval.value};
            |}
@@ -1005,8 +1106,10 @@ class CodegenContext {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
-      e.foreach(subExprEliminationExprs.put(_, state))
+      val state = SubExprEliminationState(
+        JavaCode.isNullGlobal(isNull),
+        JavaCode.global(value, expr.dataType))
+      subExprEliminationExprs ++= e.map(_ -> state).toMap
     }
   }
 
@@ -1039,7 +1142,7 @@ class CodegenContext {
    def registerComment(
        text: => String,
        placeholderId: String = "",
-       force: Boolean = false): String = {
+       force: Boolean = false): Block = {
     // By default, disable comments in generated code because computing the comments themselves can
     // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
     // inputs with wide schemas. For more details on the performance issues that motivated this
@@ -1058,9 +1161,9 @@ class CodegenContext {
         s"// $text"
       }
       placeHolderToComments += (name -> comment)
-      s"/*$name*/"
+      code"/*$name*/"
     } else {
-      ""
+      EmptyBlock
     }
   }
 }
@@ -1477,6 +1580,26 @@ object CodeGenerator extends Logging {
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
     case _ => "Object"
+  }
+
+  def javaClass(dt: DataType): Class[_] = dt match {
+    case BooleanType => java.lang.Boolean.TYPE
+    case ByteType => java.lang.Byte.TYPE
+    case ShortType => java.lang.Short.TYPE
+    case IntegerType | DateType => java.lang.Integer.TYPE
+    case LongType | TimestampType => java.lang.Long.TYPE
+    case FloatType => java.lang.Float.TYPE
+    case DoubleType => java.lang.Double.TYPE
+    case _: DecimalType => classOf[Decimal]
+    case BinaryType => classOf[Array[Byte]]
+    case StringType => classOf[UTF8String]
+    case CalendarIntervalType => classOf[CalendarInterval]
+    case _: StructType => classOf[InternalRow]
+    case _: ArrayType => classOf[ArrayData]
+    case _: MapType => classOf[MapData]
+    case udt: UserDefinedType[_] => javaClass(udt.sqlType)
+    case ObjectType(cls) => cls
+    case _ => classOf[Object]
   }
 
   /**

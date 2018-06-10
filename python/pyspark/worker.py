@@ -27,6 +27,7 @@ import traceback
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
+from pyspark.java_gateway import do_server_auth
 from pyspark.taskcontext import TaskContext
 from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
@@ -81,7 +82,7 @@ def wrap_scalar_pandas_udf(f, return_type):
     def verify_result_length(*a):
         result = f(*a)
         if not hasattr(result, "__len__"):
-            raise TypeError("Return type of the user-defined functon should be "
+            raise TypeError("Return type of the user-defined function should be "
                             "Pandas.Series, but is {}".format(type(result)))
         if len(result) != len(a[0]):
             raise RuntimeError("Result vector from pandas_udf was not the required length: "
@@ -221,6 +222,12 @@ def main(infile, outfile):
         taskContext._partitionId = read_int(infile)
         taskContext._attemptNumber = read_int(infile)
         taskContext._taskAttemptId = read_long(infile)
+        taskContext._localProperties = dict()
+        for i in range(read_int(infile)):
+            k = utf8_deserializer.loads(infile)
+            v = utf8_deserializer.loads(infile)
+            taskContext._localProperties[k] = v
+
         shuffle.MemoryBytesSpilled = 0
         shuffle.DiskBytesSpilled = 0
         _accumulatorRegistry.clear()
@@ -301,9 +308,11 @@ def main(infile, outfile):
 
 
 if __name__ == '__main__':
-    # Read a local port to connect to from stdin
-    java_port = int(sys.stdin.readline())
+    # Read information about how to connect back to the JVM from the environment.
+    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
+    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect(("127.0.0.1", java_port))
     sock_file = sock.makefile("rwb", 65536)
+    do_server_auth(sock_file, auth_secret)
     main(sock_file, sock_file)

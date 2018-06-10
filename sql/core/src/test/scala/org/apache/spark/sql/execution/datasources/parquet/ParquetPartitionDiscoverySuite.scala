@@ -57,6 +57,16 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   val timeZone = TimeZone.getDefault()
   val timeZoneId = timeZone.getID
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "parquet")
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.conf.unset(SQLConf.DEFAULT_DATA_SOURCE_NAME.key)
+    super.afterAll()
+  }
+
   test("column type inference") {
     def check(raw: String, literal: Literal, timeZone: TimeZone = timeZone): Unit = {
       assert(inferPartitionColumnValue(raw, true, timeZone) === literal)
@@ -1004,7 +1014,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val path = dir.getCanonicalPath
 
       withSQLConf(
-          ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true",
+          ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
           "spark.sql.sources.commitProtocolClass" ->
             classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
         spark.range(3).write.parquet(s"$path/p0=0/p1=0")

@@ -161,13 +161,17 @@ object DecimalType extends AbstractDataType {
    * This method is used only when `spark.sql.decimalOperations.allowPrecisionLoss` is set to true.
    */
   private[sql] def adjustPrecisionScale(precision: Int, scale: Int): DecimalType = {
-    // Assumptions:
+    // Assumption:
     assert(precision >= scale)
-    assert(scale >= 0)
 
     if (precision <= MAX_PRECISION) {
       // Adjustment only needed when we exceed max precision
       DecimalType(precision, scale)
+    } else if (scale < 0) {
+      // Decimal can have negative scale (SPARK-24468). In this case, we cannot allow a precision
+      // loss since we would cause a loss of digits in the integer part.
+      // In this case, we are likely to meet an overflow.
+      DecimalType(MAX_PRECISION, scale)
     } else {
       // Precision/scale exceed maximum precision. Result must be adjusted to MAX_PRECISION.
       val intDigits = precision - scale
