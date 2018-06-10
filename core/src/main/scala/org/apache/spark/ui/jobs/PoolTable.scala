@@ -18,26 +18,18 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.HashMap
 import scala.xml.Node
 
-import org.apache.spark.scheduler.{Schedulable, StageInfo}
+import org.apache.spark.scheduler.Schedulable
+import org.apache.spark.status.PoolData
 import org.apache.spark.ui.UIUtils
 
 /** Table showing list of pools */
-private[ui] class PoolTable(pools: Seq[Schedulable], parent: StagesTab) {
-  private val listener = parent.progressListener
+private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab) {
 
-  def toNodeSeq: Seq[Node] = {
-    listener.synchronized {
-      poolTable(poolRow, pools)
-    }
-  }
-
-  private def poolTable(
-      makeRow: (Schedulable, HashMap[String, HashMap[Int, StageInfo]]) => Seq[Node],
-      rows: Seq[Schedulable]): Seq[Node] = {
+  def toNodeSeq(request: HttpServletRequest): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable table-fixed">
       <thead>
         <th>Pool Name</th>
@@ -48,29 +40,24 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: StagesTab) {
         <th>SchedulingMode</th>
       </thead>
       <tbody>
-        {rows.map(r => makeRow(r, listener.poolToActiveStages))}
+        {pools.map { case (s, p) => poolRow(request, s, p) }}
       </tbody>
     </table>
   }
 
-  private def poolRow(
-      p: Schedulable,
-      poolToActiveStages: HashMap[String, HashMap[Int, StageInfo]]): Seq[Node] = {
-    val activeStages = poolToActiveStages.get(p.name) match {
-      case Some(stages) => stages.size
-      case None => 0
-    }
+  private def poolRow(request: HttpServletRequest, s: Schedulable, p: PoolData): Seq[Node] = {
+    val activeStages = p.stageIds.size
     val href = "%s/stages/pool?poolname=%s"
-      .format(UIUtils.prependBaseUri(parent.basePath), URLEncoder.encode(p.name, "UTF-8"))
+      .format(UIUtils.prependBaseUri(request, parent.basePath), URLEncoder.encode(p.name, "UTF-8"))
     <tr>
       <td>
         <a href={href}>{p.name}</a>
       </td>
-      <td>{p.minShare}</td>
-      <td>{p.weight}</td>
+      <td>{s.minShare}</td>
+      <td>{s.weight}</td>
       <td>{activeStages}</td>
-      <td>{p.runningTasks}</td>
-      <td>{p.schedulingMode}</td>
+      <td>{s.runningTasks}</td>
+      <td>{s.schedulingMode}</td>
     </tr>
   }
 }

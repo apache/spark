@@ -82,16 +82,32 @@ case class FlatMapGroupsWithStateExec(
   // only in the driver.
   private val stateDeserializer = stateEncoder.resolveAndBind().deserializer
 
+  private val watermarkPresent = child.output.exists {
+    case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
+    case _ => false
+  }
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(groupingAttributes) :: Nil
+    ClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) :: Nil
 
   /** Ordering needed for using GroupingIterator */
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
+
+  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    timeoutConf match {
+      case ProcessingTimeTimeout =>
+        true  // Always run batches to process timeouts
+      case EventTimeTimeout =>
+        // Process another non-data batch only if the watermark has changed in this executed plan
+        eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+      case _ =>
+        false
+    }
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -122,7 +138,6 @@ case class FlatMapGroupsWithStateExec(
           case _ =>
             iter
         }
-
         // Generate a iterator that returns the rows grouped by the grouping function
         // Note that this code ensures that the filtering for timeout occurs only after
         // all the data has been processed. This is to ensure that the timeout information of all
@@ -190,11 +205,11 @@ case class FlatMapGroupsWithStateExec(
             throw new IllegalStateException(
               s"Cannot filter timed out keys for $timeoutConf")
         }
-        val timingOutKeys = store.getRange(None, None).filter { rowPair =>
+        val timingOutPairs = store.getRange(None, None).filter { rowPair =>
           val timeoutTimestamp = getTimeoutTimestamp(rowPair.value)
           timeoutTimestamp != NO_TIMESTAMP && timeoutTimestamp < timeoutThreshold
         }
-        timingOutKeys.flatMap { rowPair =>
+        timingOutPairs.flatMap { rowPair =>
           callFunctionAndUpdateState(rowPair.key, Iterator.empty, rowPair.value, hasTimedOut = true)
         }
       } else Iterator.empty
@@ -224,7 +239,8 @@ case class FlatMapGroupsWithStateExec(
         batchTimestampMs.getOrElse(NO_TIMESTAMP),
         eventTimeWatermark.getOrElse(NO_TIMESTAMP),
         timeoutConf,
-        hasTimedOut)
+        hasTimedOut,
+        watermarkPresent)
 
       // Call function, get the returned objects and convert them to rows
       val mappedIterator = func(keyObj, valueObjIter, keyedState).map { obj =>

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -31,6 +31,7 @@ import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 class ObjectAggregationIterator(
+    partIndex: Int,
     outputAttributes: Seq[Attribute],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
@@ -43,6 +44,7 @@ class ObjectAggregationIterator(
     fallbackCountThreshold: Int,
     numOutputRows: SQLMetric)
   extends AggregationIterator(
+    partIndex,
     groupingExpressions,
     originalInputAttributes,
     aggregateExpressions,
@@ -313,9 +315,7 @@ class SortBasedAggregator(
       SparkEnv.get.blockManager,
       SparkEnv.get.serializerManager,
       TaskContext.get().taskMemoryManager().pageSizeBytes,
-      SparkEnv.get.conf.getLong(
-        "spark.shuffle.spill.numElementsForceSpillThreshold",
-        UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
+      SparkEnv.get.conf.get(config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD),
       null
     )
   }

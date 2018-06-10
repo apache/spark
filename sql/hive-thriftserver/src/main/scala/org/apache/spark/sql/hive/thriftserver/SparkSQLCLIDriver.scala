@@ -34,9 +34,13 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.log4j.{Level, Logger}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
 
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HiveDelegationTokenProvider
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
@@ -81,11 +85,17 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       System.exit(1)
     }
 
+    val sparkConf = new SparkConf(loadDefaults = true)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
+
     val cliConf = new HiveConf(classOf[SessionState])
-    // Override the location of the metastore since this is only used for local execution.
-    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
-      case (key, value) => cliConf.set(key, value)
+    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
+      ++ sparkConf.getAll.toMap ++ extraConfigs).foreach {
+      case (k, v) =>
+        cliConf.set(k, v)
     }
+
     val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in
@@ -111,6 +121,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         conf.set(key, value)
         sessionState.getOverriddenConfigurations.put(key, value)
       }
+    }
+
+    val tokenProvider = new HiveDelegationTokenProvider()
+    if (tokenProvider.delegationTokensRequired(sparkConf, hadoopConf)) {
+      val credentials = new Credentials()
+      tokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, credentials)
+      UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 
     SessionState.start(sessionState)
@@ -283,10 +300,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   private val console = new SessionState.LogHelper(LOG)
 
-  if (sessionState.getIsSilent) {
-    Logger.getRootLogger.setLevel(Level.WARN)
-  }
-
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)
   }
@@ -298,6 +311,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // because the Hive unit tests do not go through the main() code path.
   if (!isRemoteMode) {
     SparkSQLEnv.init()
+    if (sessionState.getIsSilent) {
+      SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+    }
   } else {
     // Hive 1.2 + not supported in CLI
     throw new RuntimeException("Remote operations not supported")

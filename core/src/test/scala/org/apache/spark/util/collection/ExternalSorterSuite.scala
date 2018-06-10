@@ -26,7 +26,7 @@ import org.apache.spark._
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.unsafe.array.LongArray
-import org.apache.spark.unsafe.memory.MemoryBlock
+import org.apache.spark.unsafe.memory.OnHeapMemoryBlock
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordPointerAndKeyPrefix, UnsafeSortDataFormat}
 
 class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
@@ -105,9 +105,8 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     // the form [150000000, 150000001, 150000002, ...., 300000000, 0, 1, 2, ..., 149999999]
     // that can trigger copyRange() in TimSort.mergeLo() or TimSort.mergeHi()
     val ref = Array.tabulate[Long](size) { i => if (i < size / 2) size / 2 + i else i }
-    val buf = new LongArray(MemoryBlock.fromLongArray(ref))
-    val tmp = new Array[Long](size/2)
-    val tmpBuf = new LongArray(MemoryBlock.fromLongArray(tmp))
+    val buf = new LongArray(OnHeapMemoryBlock.fromArray(ref))
+    val tmpBuf = new LongArray(new OnHeapMemoryBlock((size/2) * 8L))
 
     new Sorter(new UnsafeSortDataFormat(tmpBuf)).sort(
       buf, 0, size, new Comparator[RecordPointerAndKeyPrefix] {

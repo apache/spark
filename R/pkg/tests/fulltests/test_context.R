@@ -100,11 +100,42 @@ test_that("job group functions can be called", {
   setJobGroup("groupId", "job description", TRUE)
   cancelJobGroup("groupId")
   clearJobGroup()
-  setJobDescription("job description")
 
   suppressWarnings(setJobGroup(sc, "groupId", "job description", TRUE))
   suppressWarnings(cancelJobGroup(sc, "groupId"))
   suppressWarnings(clearJobGroup(sc))
+  sparkR.session.stop()
+})
+
+test_that("job description and local properties can be set and got", {
+  sc <- sparkR.sparkContext(master = sparkRTestMaster)
+  setJobDescription("job description")
+  expect_equal(getLocalProperty("spark.job.description"), "job description")
+  setJobDescription(1234)
+  expect_equal(getLocalProperty("spark.job.description"), "1234")
+  setJobDescription(NULL)
+  expect_equal(getLocalProperty("spark.job.description"), NULL)
+  setJobDescription(NA)
+  expect_equal(getLocalProperty("spark.job.description"), NULL)
+
+  setLocalProperty("spark.scheduler.pool", "poolA")
+  expect_equal(getLocalProperty("spark.scheduler.pool"), "poolA")
+  setLocalProperty("spark.scheduler.pool", NULL)
+  expect_equal(getLocalProperty("spark.scheduler.pool"), NULL)
+  setLocalProperty("spark.scheduler.pool", NA)
+  expect_equal(getLocalProperty("spark.scheduler.pool"), NULL)
+
+  setLocalProperty(4321, 1234)
+  expect_equal(getLocalProperty(4321), "1234")
+  setLocalProperty(4321, NULL)
+  expect_equal(getLocalProperty(4321), NULL)
+  setLocalProperty(4321, NA)
+  expect_equal(getLocalProperty(4321), NULL)
+
+  expect_error(setLocalProperty(NULL, "should fail"), "key should not be NULL or NA")
+  expect_error(getLocalProperty(NULL), "key should not be NULL or NA")
+  expect_error(setLocalProperty(NA, "should fail"), "key should not be NULL or NA")
+  expect_error(getLocalProperty(NA), "key should not be NULL or NA")
   sparkR.session.stop()
 })
 

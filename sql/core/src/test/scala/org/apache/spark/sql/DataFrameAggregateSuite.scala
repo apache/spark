@@ -17,17 +17,26 @@
 
 package org.apache.spark.sql
 
+import scala.util.Random
+
+import org.scalatest.Matchers.the
+
+import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.DecimalData
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.types.DecimalType
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
 class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  val absTol = 1e-8
 
   test("groupBy") {
     checkAnswer(
@@ -183,6 +192,22 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         Row(null, 2012, 35000.0, 2, 1) ::
         Row(null, 2013, 78000.0, 2, 2) ::
         Row(null, null, 113000.0, 3, 1) :: Nil
+    )
+  }
+
+  test("SPARK-21980: References in grouping functions should be indexed with semanticEquals") {
+    checkAnswer(
+      courseSales.cube("course", "year")
+        .agg(grouping("CouRse"), grouping("year")),
+      Row("Java", 2012, 0, 0) ::
+        Row("Java", 2013, 0, 0) ::
+        Row("Java", null, 0, 1) ::
+        Row("dotNET", 2012, 0, 0) ::
+        Row("dotNET", 2013, 0, 0) ::
+        Row("dotNET", null, 0, 1) ::
+        Row(null, 2012, 1, 0) ::
+        Row(null, 2013, 1, 0) ::
+        Row(null, null, 1, 1) :: Nil
     )
   }
 
@@ -393,7 +418,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("moments") {
-    val absTol = 1e-8
 
     val sparkVariance = testData2.agg(variance('a))
     checkAggregatesWithTol(sparkVariance, Row(4.0 / 5.0), absTol)
@@ -435,7 +459,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("null moments") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
-
     checkAnswer(
       emptyTableData.agg(variance('a), var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
       Row(null, null, null, null, null))
@@ -558,6 +581,49 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
   }
 
+  private def assertNoExceptions(c: Column): Unit = {
+    for ((wholeStage, useObjectHashAgg) <-
+         Seq((true, true), (true, false), (false, true), (false, false))) {
+      withSQLConf(
+        (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
+
+        val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
+
+        // test case for HashAggregate
+        val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        val hashAggPlan = hashAggDF.queryExecution.executedPlan
+        if (wholeStage) {
+          assert(hashAggPlan.find {
+            case WholeStageCodegenExec(_: HashAggregateExec) => true
+            case _ => false
+          }.isDefined)
+        } else {
+          assert(hashAggPlan.isInstanceOf[HashAggregateExec])
+        }
+        hashAggDF.collect()
+
+        // test case for ObjectHashAggregate and SortAggregate
+        val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
+        val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
+        if (useObjectHashAgg) {
+          assert(objHashAggOrSortAggPlan.isInstanceOf[ObjectHashAggregateExec])
+        } else {
+          assert(objHashAggOrSortAggPlan.isInstanceOf[SortAggregateExec])
+        }
+        objHashAggOrSortAggDF.collect()
+      }
+    }
+  }
+
+  test("SPARK-19471: AggregationIterator does not initialize the generated result projection" +
+    " before using it") {
+    Seq(
+      monotonically_increasing_id(), spark_partition_id(),
+      rand(Random.nextLong()), randn(Random.nextLong())
+    ).foreach(assertNoExceptions)
+  }
+
   test("SPARK-21580 ints in aggregation expressions are taken as group-by ordinal.") {
     checkAnswer(
       testData2.groupBy(lit(3), lit(4)).agg(lit(6), lit(7), sum("b")),
@@ -573,4 +639,82 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       spark.sql("SELECT 3 AS c, 4 AS d, SUM(b) FROM testData2 GROUP BY c, d"),
       Seq(Row(3, 4, 9)))
   }
+
+  test("SPARK-22223: ObjectHashAggregate should not introduce unnecessary shuffle") {
+    withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
+      val df = Seq(("1", "2", 1), ("1", "2", 2), ("2", "3", 3), ("2", "3", 4)).toDF("a", "b", "c")
+        .repartition(col("a"))
+
+      val objHashAggDF = df
+        .withColumn("d", expr("(a, b, c)"))
+        .groupBy("a", "b").agg(collect_list("d").as("e"))
+        .withColumn("f", expr("(b, e)"))
+        .groupBy("a").agg(collect_list("f").as("g"))
+      val aggPlan = objHashAggDF.queryExecution.executedPlan
+
+      val sortAggPlans = aggPlan.collect {
+        case sortAgg: SortAggregateExec => sortAgg
+      }
+      assert(sortAggPlans.isEmpty)
+
+      val objHashAggPlans = aggPlan.collect {
+        case objHashAgg: ObjectHashAggregateExec => objHashAgg
+      }
+      assert(objHashAggPlans.nonEmpty)
+
+      val exchangePlans = aggPlan.collect {
+        case shuffle: ShuffleExchangeExec => shuffle
+      }
+      assert(exchangePlans.length == 1)
+    }
+  }
+
+  Seq(true, false).foreach { codegen =>
+    test("SPARK-22951: dropDuplicates on empty dataFrames should produce correct aggregate " +
+      s"results when codegen is enabled: $codegen") {
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, codegen.toString)) {
+        // explicit global aggregations
+        val emptyAgg = Map.empty[String, String]
+        checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
+        checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
+
+        // global aggregation is converted to grouping aggregation:
+        assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
+      }
+    }
+  }
+
+  test("SPARK-21896: Window functions inside aggregate functions") {
+    def checkWindowError(df: => DataFrame): Unit = {
+      val thrownException = the [AnalysisException] thrownBy {
+        df.queryExecution.analyzed
+      }
+      assert(thrownException.message.contains("not allowed to use a window function"))
+    }
+
+    checkWindowError(testData2.select(min(avg('b).over(Window.partitionBy('a)))))
+    checkWindowError(testData2.agg(sum('b), max(rank().over(Window.orderBy('a)))))
+    checkWindowError(testData2.groupBy('a).agg(sum('b), max(rank().over(Window.orderBy('b)))))
+    checkWindowError(testData2.groupBy('a).agg(max(sum(sum('b)).over(Window.orderBy('a)))))
+    checkWindowError(
+      testData2.groupBy('a).agg(sum('b).as("s"), max(count("*").over())).where('s === 3))
+    checkAnswer(
+      testData2.groupBy('a).agg(max('b), sum('b).as("s"), count("*").over()).where('s === 3),
+      Row(1, 2, 3, 3) :: Row(2, 2, 3, 3) :: Row(3, 2, 3, 3) :: Nil)
+
+    checkWindowError(sql("SELECT MIN(AVG(b) OVER(PARTITION BY a)) FROM testData2"))
+    checkWindowError(sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY a)) FROM testData2"))
+    checkWindowError(sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a"))
+    checkWindowError(sql("SELECT MAX(SUM(SUM(b)) OVER(ORDER BY a)) FROM testData2 GROUP BY a"))
+    checkWindowError(
+      sql("SELECT MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a HAVING SUM(b) = 3"))
+    checkAnswer(
+      sql("SELECT a, MAX(b), RANK() OVER(ORDER BY a) FROM testData2 GROUP BY a HAVING SUM(b) = 3"),
+      Row(1, 2, 1) :: Row(2, 2, 2) :: Row(3, 2, 3) :: Nil)
+  }
+
 }

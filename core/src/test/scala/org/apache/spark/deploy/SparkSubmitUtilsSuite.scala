@@ -83,11 +83,12 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val resolver = settings.getDefaultResolver.asInstanceOf[ChainResolver]
     assert(resolver.getResolvers.size() === 4)
     val expected = repos.split(",").map(r => s"$r/")
-    resolver.getResolvers.toArray.zipWithIndex.foreach { case (resolver: AbstractResolver, i) =>
-      if (1 < i && i < 3) {
-        assert(resolver.getName === s"repo-$i")
-        assert(resolver.asInstanceOf[IBiblioResolver].getRoot === expected(i - 1))
-      }
+    resolver.getResolvers.toArray.map(_.asInstanceOf[AbstractResolver]).zipWithIndex.foreach {
+      case (r, i) =>
+        if (1 < i && i < 3) {
+          assert(r.getName === s"repo-$i")
+          assert(r.asInstanceOf[IBiblioResolver].getRoot === expected(i - 1))
+        }
     }
   }
 
@@ -253,6 +254,21 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
       assert(jarPath.indexOf(tempIvyPath) >= 0, "should be in new ivy path")
       assert(jarPath.indexOf("mydep") >= 0, "should find dependency")
+    }
+  }
+
+  test("SPARK-10878: test resolution files cleaned after resolving artifact") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
+
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val ivySettings = SparkSubmitUtils.buildIvySettings(Some(repo), Some(tempIvyPath))
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString,
+        ivySettings,
+        isTest = true)
+      val r = """.*org.apache.spark-spark-submit-parent-.*""".r
+      assert(!ivySettings.getDefaultCache.listFiles.map(_.getName)
+        .exists(r.findFirstIn(_).isDefined), "resolution files should be cleaned")
     }
   }
 }

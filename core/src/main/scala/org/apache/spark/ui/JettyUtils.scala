@@ -21,12 +21,11 @@ import java.net.{URI, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 
-import org.eclipse.jetty.client.api.Response
 import org.eclipse.jetty.client.HttpClient
+import org.eclipse.jetty.client.api.Response
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP
 import org.eclipse.jetty.proxy.ProxyServlet
 import org.eclipse.jetty.server._
@@ -40,6 +39,7 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -90,6 +90,14 @@ private[spark] object JettyUtils extends Logging {
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
+            response.setHeader("X-XSS-Protection", conf.get(UI_X_XSS_PROTECTION))
+            if (conf.get(UI_X_CONTENT_TYPE_OPTIONS)) {
+              response.setHeader("X-Content-Type-Options", "nosniff")
+            }
+            if (request.getScheme == "https") {
+              conf.get(UI_STRICT_TRANSPORT_SECURITY).foreach(
+                response.setHeader("Strict-Transport-Security", _))
+            }
             response.getWriter.print(servletParams.extractFn(result))
           } else {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN)
@@ -209,7 +217,8 @@ private[spark] object JettyUtils extends Logging {
         val id = prefix.drop(1)
 
         // Query master state for id's corresponding UI address
-        // If that address exists, turn it into a valid, target URI string or return null
+        // If that address exists, try to turn it into a valid, target URI string
+        // Otherwise, return null
         idToUiAddress(id)
           .map(createProxyURI(prefix, _, path, request.getQueryString))
           .filter(uri => uri != null && validateDestination(uri.getHost, uri.getPort))
@@ -334,12 +343,14 @@ private[spark] object JettyUtils extends Logging {
           -1,
           connectionFactories: _*)
         connector.setPort(port)
-        connector.start()
+        connector.setHost(hostName)
+        connector.setReuseAddress(!Utils.isWindows)
 
         // Currently we only use "SelectChannelConnector"
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads
         connector.setAcceptQueueSize(math.min(connector.getAcceptors, 8))
-        connector.setHost(hostName)
+
+        connector.start()
         // The number of selectors always equals to the number of acceptors
         minThreads += connector.getAcceptors * 2
 
@@ -467,8 +478,10 @@ private[spark] object JettyUtils extends Logging {
       targetUri: URI): String = {
     val toReplace = targetUri.getScheme() + "://" + targetUri.getAuthority()
     if (headerValue.startsWith(toReplace)) {
-      clientRequest.getScheme() + "://" + clientRequest.getHeader("host") +
-          clientRequest.getPathInfo() + headerValue.substring(toReplace.length())
+      val id = clientRequest.getPathInfo.substring("/proxy/".length).takeWhile(_ != '/')
+      val headerPath = headerValue.substring(toReplace.length)
+
+      s"${clientRequest.getScheme}://${clientRequest.getHeader("host")}/proxy/$id$headerPath"
     } else {
       null
     }

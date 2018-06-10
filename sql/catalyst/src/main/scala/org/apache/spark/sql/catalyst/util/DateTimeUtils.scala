@@ -45,7 +45,8 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
   final val SECONDS_PER_DAY = 60 * 60 * 24L
-  final val MICROS_PER_SECOND = 1000L * 1000L
+  final val MICROS_PER_MILLIS = 1000L
+  final val MICROS_PER_SECOND = MICROS_PER_MILLIS * MILLIS_PER_SECOND
   final val MILLIS_PER_SECOND = 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
   final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
@@ -61,6 +62,7 @@ object DateTimeUtils {
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
+  final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
   final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
   val TIMEZONE_OPTION = "timeZone"
@@ -294,10 +296,28 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
   def stringToTimestamp(s: UTF8String): Option[SQLTimestamp] = {
-    stringToTimestamp(s, defaultTimeZone())
+    stringToTimestamp(s, defaultTimeZone(), rejectTzInString = false)
   }
 
   def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
+    stringToTimestamp(s, timeZone, rejectTzInString = false)
+  }
+
+  /**
+   * Converts a timestamp string to microseconds from the unix epoch, w.r.t. the given timezone.
+   * Returns None if the input string is not a valid timestamp format.
+   *
+   * @param s the input timestamp string.
+   * @param timeZone the timezone of the timestamp string, will be ignored if the timestamp string
+   *                 already contains timezone information and `forceTimezone` is false.
+   * @param rejectTzInString if true, rejects timezone in the input string, i.e., if the
+   *                         timestamp string contains timezone, like `2000-10-10 00:00:00+00:00`,
+   *                         return None.
+   */
+  def stringToTimestamp(
+      s: UTF8String,
+      timeZone: TimeZone,
+      rejectTzInString: Boolean): Option[SQLTimestamp] = {
     if (s == null) {
       return None
     }
@@ -414,6 +434,8 @@ object DateTimeUtils {
         segments(7) < 0 || segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
       return None
     }
+
+    if (tz.isDefined && rejectTzInString) return None
 
     val c = if (tz.isEmpty) {
       Calendar.getInstance(timeZone)
@@ -863,29 +885,19 @@ object DateTimeUtils {
 
   /**
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
-   * microseconds since 1.1.1970.
+   * microseconds since 1.1.1970. If time1 is later than time2, the result is positive.
    *
-   * If time1 and time2 having the same day of month, or both are the last day of month,
-   * it returns an integer (time under a day will be ignored).
+   * If time1 and time2 are on the same day of month, or both are the last day of month,
+   * returns, time of day will be ignored.
    *
-   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
-   * 8 digits.
+   * Otherwise, the difference is calculated based on 31 days per month.
+   * The result is rounded to 8 decimal places if `roundOff` is set to true.
    */
-  def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp): Double = {
-    monthsBetween(time1, time2, defaultTimeZone())
-  }
-
-  /**
-   * Returns number of months between time1 and time2. time1 and time2 are expressed in
-   * microseconds since 1.1.1970.
-   *
-   * If time1 and time2 having the same day of month, or both are the last day of month,
-   * it returns an integer (time under a day will be ignored).
-   *
-   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
-   * 8 digits.
-   */
-  def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp, timeZone: TimeZone): Double = {
+  def monthsBetween(
+      time1: SQLTimestamp,
+      time2: SQLTimestamp,
+      roundOff: Boolean,
+      timeZone: TimeZone): Double = {
     val millis1 = time1 / 1000L
     val millis2 = time2 / 1000L
     val date1 = millisToDays(millis1, timeZone)
@@ -896,17 +908,35 @@ object DateTimeUtils {
     val months1 = year1 * 12 + monthInYear1
     val months2 = year2 * 12 + monthInYear2
 
+    val monthDiff = (months1 - months2).toDouble
+
     if (dayInMonth1 == dayInMonth2 || ((daysToMonthEnd1 == 0) && (daysToMonthEnd2 == 0))) {
-      return (months1 - months2).toDouble
+      return monthDiff
     }
-    // milliseconds is enough for 8 digits precision on the right side
-    val timeInDay1 = millis1 - daysToMillis(date1, timeZone)
-    val timeInDay2 = millis2 - daysToMillis(date2, timeZone)
-    val timesBetween = (timeInDay1 - timeInDay2).toDouble / MILLIS_PER_DAY
-    val diff = (months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
-    // rounding to 8 digits
-    math.round(diff * 1e8) / 1e8
+    // using milliseconds can cause precision loss with more than 8 digits
+    // we follow Hive's implementation which uses seconds
+    val secondsInDay1 = (millis1 - daysToMillis(date1, timeZone)) / 1000L
+    val secondsInDay2 = (millis2 - daysToMillis(date2, timeZone)) / 1000L
+    val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
+    // 2678400D is the number of seconds in 31 days
+    // every month is considered to be 31 days long in this function
+    val diff = monthDiff + secondsDiff / 2678400D
+    if (roundOff) {
+      // rounding to 8 digits
+      math.round(diff * 1e8) / 1e8
+    } else {
+      diff
+    }
   }
+
+  // Thursday = 0 since 1970/Jan/01 => Thursday
+  private val SUNDAY = 3
+  private val MONDAY = 4
+  private val TUESDAY = 5
+  private val WEDNESDAY = 6
+  private val THURSDAY = 0
+  private val FRIDAY = 1
+  private val SATURDAY = 2
 
   /*
    * Returns day of week from String. Starting from Thursday, marked as 0.
@@ -915,13 +945,13 @@ object DateTimeUtils {
   def getDayOfWeekFromString(string: UTF8String): Int = {
     val dowString = string.toString.toUpperCase(Locale.ROOT)
     dowString match {
-      case "SU" | "SUN" | "SUNDAY" => 3
-      case "MO" | "MON" | "MONDAY" => 4
-      case "TU" | "TUE" | "TUESDAY" => 5
-      case "WE" | "WED" | "WEDNESDAY" => 6
-      case "TH" | "THU" | "THURSDAY" => 0
-      case "FR" | "FRI" | "FRIDAY" => 1
-      case "SA" | "SAT" | "SATURDAY" => 2
+      case "SU" | "SUN" | "SUNDAY" => SUNDAY
+      case "MO" | "MON" | "MONDAY" => MONDAY
+      case "TU" | "TUE" | "TUESDAY" => TUESDAY
+      case "WE" | "WED" | "WEDNESDAY" => WEDNESDAY
+      case "TH" | "THU" | "THURSDAY" => THURSDAY
+      case "FR" | "FRI" | "FRIDAY" => FRIDAY
+      case "SA" | "SAT" | "SATURDAY" => SATURDAY
       case _ => -1
     }
   }
@@ -943,9 +973,16 @@ object DateTimeUtils {
     date + daysToMonthEnd
   }
 
-  private val TRUNC_TO_YEAR = 1
-  private val TRUNC_TO_MONTH = 2
-  private val TRUNC_INVALID = -1
+  // Visible for testing.
+  private[sql] val TRUNC_TO_YEAR = 1
+  private[sql] val TRUNC_TO_MONTH = 2
+  private[sql] val TRUNC_TO_QUARTER = 3
+  private[sql] val TRUNC_TO_WEEK = 4
+  private[sql] val TRUNC_TO_DAY = 5
+  private[sql] val TRUNC_TO_HOUR = 6
+  private[sql] val TRUNC_TO_MINUTE = 7
+  private[sql] val TRUNC_TO_SECOND = 8
+  private[sql] val TRUNC_INVALID = -1
 
   /**
    * Returns the trunc date from original date and trunc level.
@@ -963,7 +1000,62 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the truncate level, could be TRUNC_YEAR, TRUNC_MONTH, or TRUNC_INVALID,
+   * Returns the trunc date time from original date time and trunc level.
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 1 and 8
+   */
+  def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
+    var millis = t / MICROS_PER_MILLIS
+    val truncated = level match {
+      case TRUNC_TO_YEAR =>
+        val dDays = millisToDays(millis, timeZone)
+        daysToMillis(truncDate(dDays, level), timeZone)
+      case TRUNC_TO_MONTH =>
+        val dDays = millisToDays(millis, timeZone)
+        daysToMillis(truncDate(dDays, level), timeZone)
+      case TRUNC_TO_DAY =>
+        val offset = timeZone.getOffset(millis)
+        millis += offset
+        millis - millis % (MILLIS_PER_SECOND * SECONDS_PER_DAY) - offset
+      case TRUNC_TO_HOUR =>
+        val offset = timeZone.getOffset(millis)
+        millis += offset
+        millis - millis % (60 * 60 * MILLIS_PER_SECOND) - offset
+      case TRUNC_TO_MINUTE =>
+        millis - millis % (60 * MILLIS_PER_SECOND)
+      case TRUNC_TO_SECOND =>
+        millis - millis % MILLIS_PER_SECOND
+      case TRUNC_TO_WEEK =>
+        val dDays = millisToDays(millis, timeZone)
+        val prevMonday = getNextDateForDayOfWeek(dDays - 7, MONDAY)
+        daysToMillis(prevMonday, timeZone)
+      case TRUNC_TO_QUARTER =>
+        val dDays = millisToDays(millis, timeZone)
+        millis = daysToMillis(truncDate(dDays, TRUNC_TO_MONTH), timeZone)
+        val cal = Calendar.getInstance()
+        cal.setTimeInMillis(millis)
+        val quarter = getQuarter(dDays)
+        val month = quarter match {
+          case 1 => Calendar.JANUARY
+          case 2 => Calendar.APRIL
+          case 3 => Calendar.JULY
+          case 4 => Calendar.OCTOBER
+        }
+        cal.set(Calendar.MONTH, month)
+        cal.getTimeInMillis()
+      case _ =>
+        // caller make sure that this should never be reached
+        sys.error(s"Invalid trunc level: $level")
+    }
+    truncated * MICROS_PER_MILLIS
+  }
+
+  def truncTimestamp(d: SQLTimestamp, level: Int): SQLTimestamp = {
+    truncTimestamp(d, level, defaultTimeZone())
+  }
+
+  /**
+   * Returns the truncate level, could be TRUNC_YEAR, TRUNC_MONTH, TRUNC_TO_DAY, TRUNC_TO_HOUR,
+   * TRUNC_TO_MINUTE, TRUNC_TO_SECOND, TRUNC_TO_WEEK, TRUNC_TO_QUARTER or TRUNC_INVALID,
    * TRUNC_INVALID means unsupported truncate level.
    */
   def parseTruncLevel(format: UTF8String): Int = {
@@ -973,6 +1065,12 @@ object DateTimeUtils {
       format.toString.toUpperCase(Locale.ROOT) match {
         case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
         case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
+        case "DAY" | "DD" => TRUNC_TO_DAY
+        case "HOUR" => TRUNC_TO_HOUR
+        case "MINUTE" => TRUNC_TO_MINUTE
+        case "SECOND" => TRUNC_TO_SECOND
+        case "WEEK" => TRUNC_TO_WEEK
+        case "QUARTER" => TRUNC_TO_QUARTER
         case _ => TRUNC_INVALID
       }
     }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, EmptyBlock, ExprCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -70,10 +70,13 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
 case class PromotePrecision(child: Expression) extends UnaryExpression {
   override def dataType: DataType = child.dataType
   override def eval(input: InternalRow): Any = child.eval(input)
+  /** Just a simple pass-through for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    ev.copy(EmptyBlock)
   override def prettyName: String = "promote_precision"
   override def sql: String = child.sql
+  override lazy val canonicalized: Expression = child.canonicalized
 }
 
 /**
@@ -85,7 +88,7 @@ case class CheckOverflow(child: Expression, dataType: DecimalType) extends Unary
   override def nullable: Boolean = true
 
   override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[Decimal].toPrecision(dataType.precision, dataType.scale).orNull
+    input.asInstanceOf[Decimal].toPrecision(dataType.precision, dataType.scale)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {

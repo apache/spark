@@ -31,9 +31,10 @@ import java.nio.file.Files;
 public class ShuffleIndexInformation {
   /** offsets as long buffer */
   private final LongBuffer offsets;
+  private int size;
 
   public ShuffleIndexInformation(File indexFile) throws IOException {
-    int size = (int)indexFile.length();
+    size = (int)indexFile.length();
     ByteBuffer buffer = ByteBuffer.allocate(size);
     offsets = buffer.asLongBuffer();
     DataInputStream dis = null;
@@ -45,6 +46,14 @@ public class ShuffleIndexInformation {
         dis.close();
       }
     }
+  }
+
+  /**
+   * Size of the index file
+   * @return size
+   */
+  public int getSize() {
+    return size;
   }
 
   /**

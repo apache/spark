@@ -21,7 +21,8 @@ import scala.collection.immutable.TreeSet
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -36,6 +37,14 @@ object InterpretedPredicate {
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+
+  override def initialize(partitionIndex: Int): Unit = {
+    super.initialize(partitionIndex)
+    expression.foreach {
+      case n: Nondeterministic => n.initialize(partitionIndex)
+      case _ =>
+    }
+  }
 }
 
 /**
@@ -133,37 +142,56 @@ case class Not(child: Expression)
 /**
  * Evaluates to `true` if `list` contains `value`.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.")
+  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.",
+  arguments = """
+    Arguments:
+      * expr1, expr2, expr3, ... - the arguments must be same type.
+  """,
+  examples = """
+    Examples:
+      > SELECT 1 _FUNC_(1, 2, 3);
+       true
+      > SELECT 1 _FUNC_(2, 3, 4);
+       false
+      > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 1), named_struct('a', 1, 'b', 3));
+       false
+      > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
+       true
+  """)
+// scalastyle:on line.size.limit
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
+
   override def checkInputDataTypes(): TypeCheckResult = {
-    list match {
-      case ListQuery(sub, _, _) :: Nil =>
-        val valExprs = value match {
-          case cns: CreateNamedStruct => cns.valExprs
-          case expr => Seq(expr)
-        }
-        if (valExprs.length != sub.output.length) {
-          TypeCheckResult.TypeCheckFailure(
-            s"""
-               |The number of columns in the left hand side of an IN subquery does not match the
-               |number of columns in the output of subquery.
-               |#columns in left hand side: ${valExprs.length}.
-               |#columns in right hand side: ${sub.output.length}.
-               |Left side columns:
-               |[${valExprs.map(_.sql).mkString(", ")}].
-               |Right side columns:
-               |[${sub.output.map(_.sql).mkString(", ")}].
-             """.stripMargin)
-        } else {
-          val mismatchedColumns = valExprs.zip(sub.output).flatMap {
-            case (l, r) if l.dataType != r.dataType =>
-              s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
-            case _ => None
+    val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
+      ignoreNullability = true))
+    if (mismatchOpt.isDefined) {
+      list match {
+        case ListQuery(_, _, _, childOutputs) :: Nil =>
+          val valExprs = value match {
+            case cns: CreateNamedStruct => cns.valExprs
+            case expr => Seq(expr)
           }
-          if (mismatchedColumns.nonEmpty) {
+          if (valExprs.length != childOutputs.length) {
+            TypeCheckResult.TypeCheckFailure(
+              s"""
+                 |The number of columns in the left hand side of an IN subquery does not match the
+                 |number of columns in the output of subquery.
+                 |#columns in left hand side: ${valExprs.length}.
+                 |#columns in right hand side: ${childOutputs.length}.
+                 |Left side columns:
+                 |[${valExprs.map(_.sql).mkString(", ")}].
+                 |Right side columns:
+                 |[${childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
+          } else {
+            val mismatchedColumns = valExprs.zip(childOutputs).flatMap {
+              case (l, r) if l.dataType != r.dataType =>
+                s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+              case _ => None
+            }
             TypeCheckResult.TypeCheckFailure(
               s"""
                  |The data type of one or more elements in the left hand side of an IN subquery
@@ -173,20 +201,14 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
                  |Left side:
                  |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
                  |Right side:
-                 |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
-               """.stripMargin)
-          } else {
-            TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
+                 |[${childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
           }
-        }
-      case _ =>
-        val mismatchOpt = list.find(l => l.dataType != value.dataType)
-        if (mismatchOpt.isDefined) {
+        case _ =>
           TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-            s"${value.dataType} != ${mismatchOpt.get.dataType}")
-        } else {
-          TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
-        }
+            s"${value.dataType.simpleString} != ${mismatchOpt.get.dataType.simpleString}")
+      }
+    } else {
+      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
     }
   }
 
@@ -222,28 +244,66 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaDataType = CodeGenerator.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
+    // inTmpResult has 3 possible values:
+    // -1 means no matches found and there is at least one value in the list evaluated to null
+    val HAS_NULL = -1
+    // 0 means no matches found and all values in the list are not null
+    val NOT_MATCHED = 0
+    // 1 means one value in the list is matched
+    val MATCHED = 1
+    val tmpResult = ctx.freshName("inTmpResult")
+    val valueArg = ctx.freshName("valueArg")
+    // All the blocks are meant to be inside a do { ... } while (false); loop.
+    // The evaluation of variables can be stopped when we find a matching value.
     val listCode = listGen.map(x =>
       s"""
-        if (!${ev.value}) {
-          ${x.code}
-          if (${x.isNull}) {
-            ${ev.isNull} = true;
-          } else if (${ctx.genEqual(value.dataType, valueGen.value, x.value)}) {
-            ${ev.isNull} = false;
-            ${ev.value} = true;
-          }
-        }
-       """).mkString("\n")
-    ev.copy(code = s"""
-      ${valueGen.code}
-      boolean ${ev.value} = false;
-      boolean ${ev.isNull} = ${valueGen.isNull};
-      if (!${ev.isNull}) {
-        $listCode
-      }
-    """)
+         |${x.code}
+         |if (${x.isNull}) {
+         |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
+         |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
+         |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
+         |  continue;
+         |}
+       """.stripMargin)
+
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = listCode,
+      funcName = "valueIn",
+      extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BYTE, tmpResult) :: Nil,
+      returnType = CodeGenerator.JAVA_BYTE,
+      makeSplitFunction = body =>
+        s"""
+           |do {
+           |  $body
+           |} while (false);
+           |return $tmpResult;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$tmpResult = $funcCall;
+           |if ($tmpResult == $MATCHED) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString("\n"))
+
+    ev.copy(code =
+      code"""
+         |${valueGen.code}
+         |byte $tmpResult = $HAS_NULL;
+         |if (!${valueGen.isNull}) {
+         |  $tmpResult = $NOT_MATCHED;
+         |  $javaDataType $valueArg = ${valueGen.value};
+         |  do {
+         |    $codes
+         |  } while (false);
+         |}
+         |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
+         |final boolean ${ev.value} = ($tmpResult == $MATCHED);
+       """.stripMargin)
   }
 
   override def sql: String = {
@@ -278,7 +338,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     }
   }
 
-  @transient private[this] lazy val set = child.dataType match {
+  @transient lazy val set: Set[Any] = child.dataType match {
     case _: AtomicType => hset
     case _: NullType => hset
     case _ =>
@@ -286,34 +346,24 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ hset
   }
 
-  def getSet(): Set[Any] = set
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val setName = classOf[Set[Any]].getName
-    val InSetName = classOf[InSet].getName
+    val setTerm = ctx.addReferenceObj("set", set)
     val childGen = child.genCode(ctx)
-    ctx.references += this
-    val setTerm = ctx.freshName("set")
-    val setNull = if (hasNull) {
-      s"""
-         |if (!${ev.value}) {
-         |  ${ev.isNull} = true;
-         |}
-       """.stripMargin
+    val setIsNull = if (hasNull) {
+      s"${ev.isNull} = !${ev.value};"
     } else {
       ""
     }
-    ctx.addMutableState(setName, setTerm,
-      s"$setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();")
-    ev.copy(code = s"""
-      ${childGen.code}
-      boolean ${ev.isNull} = ${childGen.isNull};
-      boolean ${ev.value} = false;
-      if (!${ev.isNull}) {
-        ${ev.value} = $setTerm.contains(${childGen.value});
-        $setNull
-      }
-     """)
+    ev.copy(code =
+      code"""
+         |${childGen.code}
+         |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
+         |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $setTerm.contains(${childGen.value});
+         |  $setIsNull
+         |}
+       """.stripMargin)
   }
 
   override def sql: String = {
@@ -357,16 +407,16 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
     // The result should be `false`, if any of them is `false` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.value} = false;
 
         if (${eval1.value}) {
           ${eval2.code}
           ${ev.value} = ${eval2.value};
-        }""", isNull = "false")
+        }""", isNull = FalseLiteral)
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.isNull} = false;
         boolean ${ev.value} = false;
@@ -420,17 +470,17 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {
-      ev.isNull = "false"
-      ev.copy(code = s"""
+      ev.isNull = FalseLiteral
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.value} = true;
 
         if (!${eval1.value}) {
           ${eval2.code}
           ${ev.value} = ${eval2.value};
-        }""", isNull = "false")
+        }""", isNull = FalseLiteral)
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.isNull} = false;
         boolean ${ev.value} = true;
@@ -453,8 +503,18 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
 abstract class BinaryComparison extends BinaryOperator with Predicate {
 
+  // Note that we need to give a superset of allowable input types since orderable types are not
+  // finitely enumerable. The allowable types are checked below by checkInputDataTypes.
+  override def inputType: AbstractDataType = AnyDataType
+
+  override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
+    case TypeCheckResult.TypeCheckSuccess =>
+      TypeUtils.checkForOrderingExpr(left.dataType, this.getClass.getSimpleName)
+    case failure => failure
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (ctx.isPrimitiveType(left.dataType)
+    if (CodeGenerator.isPrimitiveType(left.dataType)
         && left.dataType != BooleanType // java boolean doesn't support > or < operator
         && left.dataType != FloatType
         && left.dataType != DoubleType) {
@@ -465,7 +525,7 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
     }
   }
 
-  protected lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
+  protected lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(left.dataType)
 }
 
 
@@ -483,27 +543,29 @@ object Equality {
   }
 }
 
+// TODO: although map type is not orderable, technically map type should be able to be used
+// in equality comparison
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2`, or false otherwise.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2`, or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be used in equality comparison. Map type is not supported.
+          For complex types such array/struct, the data types of fields must be orderable.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 2;
+       true
+      > SELECT 1 _FUNC_ '1';
+       true
+      > SELECT true _FUNC_ NULL;
+       NULL
+      > SELECT NULL _FUNC_ NULL;
+       NULL
+  """)
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
-
-  override def inputType: AbstractDataType = AnyDataType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        // TODO: although map type is not orderable, technically map type should be able to be used
-        // in equality comparison, remove this type check once we support it.
-        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
-          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualTo, but the actual " +
-            s"input type is ${left.dataType.catalogString}.")
-        } else {
-          TypeCheckResult.TypeCheckSuccess
-        }
-      case failure => failure
-    }
-  }
 
   override def symbol: String = "="
 
@@ -514,29 +576,31 @@ case class EqualTo(left: Expression, right: Expression)
   }
 }
 
+// TODO: although map type is not orderable, technically map type should be able to be used
+// in equality comparison
 @ExpressionDescription(
   usage = """
     expr1 _FUNC_ expr2 - Returns same result as the EQUAL(=) operator for non-null operands,
       but returns true if both are null, false if one of the them is null.
+  """,
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be used in equality comparison. Map type is not supported.
+          For complex types such array/struct, the data types of fields must be orderable.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 2;
+       true
+      > SELECT 1 _FUNC_ '1';
+       true
+      > SELECT true _FUNC_ NULL;
+       false
+      > SELECT NULL _FUNC_ NULL;
+       true
   """)
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
-
-  override def inputType: AbstractDataType = AnyDataType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        // TODO: although map type is not orderable, technically map type should be able to be used
-        // in equality comparison, remove this type check once we support it.
-        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
-          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualNullSafe, but the actual " +
-            s"input type is ${left.dataType.catalogString}.")
-        } else {
-          TypeCheckResult.TypeCheckSuccess
-        }
-      case failure => failure
-    }
-  }
 
   override def symbol: String = "<=>"
 
@@ -558,18 +622,36 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
     val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)
-    ev.copy(code = eval1.code + eval2.code + s"""
+    ev.copy(code = eval1.code + eval2.code + code"""
         boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
-           (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = "false")
+           (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = FalseLiteral)
   }
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be ordered. For example, map type is not orderable, so it
+          is not supported. For complex types such array/struct, the data types of fields must
+          be orderable.
+  """,
+  examples = """
+    Examples:
+      > SELECT 1 _FUNC_ 2;
+       true
+      > SELECT 1.1 _FUNC_ '1';
+       false
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
+       false
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
+       true
+      > SELECT 1 _FUNC_ NULL;
+       NULL
+  """)
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
-
-  override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = "<"
 
@@ -577,11 +659,29 @@ case class LessThan(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be ordered. For example, map type is not orderable, so it
+          is not supported. For complex types such array/struct, the data types of fields must
+          be orderable.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 2;
+       true
+      > SELECT 1.0 _FUNC_ '1';
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
+       true
+      > SELECT 1 _FUNC_ NULL;
+       NULL
+  """)
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
-
-  override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = "<="
 
@@ -589,11 +689,29 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be ordered. For example, map type is not orderable, so it
+          is not supported. For complex types such array/struct, the data types of fields must
+          be orderable.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 1;
+       true
+      > SELECT 2 _FUNC_ '1.1';
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
+       false
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
+       false
+      > SELECT 1 _FUNC_ NULL;
+       NULL
+  """)
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
-
-  override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = ">"
 
@@ -601,11 +719,29 @@ case class GreaterThan(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be ordered. For example, map type is not orderable, so it
+          is not supported. For complex types such array/struct, the data types of fields must
+          be orderable.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 1;
+       true
+      > SELECT 2.0 _FUNC_ '2.1';
+       false
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
+       false
+      > SELECT 1 _FUNC_ NULL;
+       NULL
+  """)
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
-
-  override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = ">="
 

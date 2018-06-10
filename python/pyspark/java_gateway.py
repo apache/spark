@@ -21,16 +21,19 @@ import sys
 import select
 import signal
 import shlex
+import shutil
 import socket
 import platform
+import tempfile
+import time
 from subprocess import Popen, PIPE
 
 if sys.version >= '3':
     xrange = range
 
-from py4j.java_gateway import java_import, JavaGateway, GatewayClient
+from py4j.java_gateway import java_import, JavaGateway, GatewayParameters
 from pyspark.find_spark_home import _find_spark_home
-from pyspark.serializers import read_int
+from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
 
 
 def launch_gateway(conf=None):
@@ -41,6 +44,7 @@ def launch_gateway(conf=None):
     """
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
+        gateway_secret = os.environ["PYSPARK_GATEWAY_SECRET"]
     else:
         SPARK_HOME = _find_spark_home()
         # Launch the Py4j gateway using Spark's run command so that we pick up the
@@ -59,40 +63,40 @@ def launch_gateway(conf=None):
             ])
         command = command + shlex.split(submit_args)
 
-        # Start a socket that will be used by PythonGatewayServer to communicate its port to us
-        callback_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        callback_socket.bind(('127.0.0.1', 0))
-        callback_socket.listen(1)
-        callback_host, callback_port = callback_socket.getsockname()
-        env = dict(os.environ)
-        env['_PYSPARK_DRIVER_CALLBACK_HOST'] = callback_host
-        env['_PYSPARK_DRIVER_CALLBACK_PORT'] = str(callback_port)
+        # Create a temporary directory where the gateway server should write the connection
+        # information.
+        conn_info_dir = tempfile.mkdtemp()
+        try:
+            fd, conn_info_file = tempfile.mkstemp(dir=conn_info_dir)
+            os.close(fd)
+            os.unlink(conn_info_file)
 
-        # Launch the Java gateway.
-        # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
-        if not on_windows:
-            # Don't send ctrl-c / SIGINT to the Java gateway:
-            def preexec_func():
-                signal.signal(signal.SIGINT, signal.SIG_IGN)
-            proc = Popen(command, stdin=PIPE, preexec_fn=preexec_func, env=env)
-        else:
-            # preexec_fn not supported on Windows
-            proc = Popen(command, stdin=PIPE, env=env)
+            env = dict(os.environ)
+            env["_PYSPARK_DRIVER_CONN_INFO_PATH"] = conn_info_file
 
-        gateway_port = None
-        # We use select() here in order to avoid blocking indefinitely if the subprocess dies
-        # before connecting
-        while gateway_port is None and proc.poll() is None:
-            timeout = 1  # (seconds)
-            readable, _, _ = select.select([callback_socket], [], [], timeout)
-            if callback_socket in readable:
-                gateway_connection = callback_socket.accept()[0]
-                # Determine which ephemeral port the server started on:
-                gateway_port = read_int(gateway_connection.makefile(mode="rb"))
-                gateway_connection.close()
-                callback_socket.close()
-        if gateway_port is None:
-            raise Exception("Java gateway process exited before sending the driver its port number")
+            # Launch the Java gateway.
+            # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
+            if not on_windows:
+                # Don't send ctrl-c / SIGINT to the Java gateway:
+                def preexec_func():
+                    signal.signal(signal.SIGINT, signal.SIG_IGN)
+                proc = Popen(command, stdin=PIPE, preexec_fn=preexec_func, env=env)
+            else:
+                # preexec_fn not supported on Windows
+                proc = Popen(command, stdin=PIPE, env=env)
+
+            # Wait for the file to appear, or for the process to exit, whichever happens first.
+            while not proc.poll() and not os.path.isfile(conn_info_file):
+                time.sleep(0.1)
+
+            if not os.path.isfile(conn_info_file):
+                raise Exception("Java gateway process exited before sending its port number")
+
+            with open(conn_info_file, "rb") as info:
+                gateway_port = read_int(info)
+                gateway_secret = UTF8Deserializer().loads(info)
+        finally:
+            shutil.rmtree(conn_info_dir)
 
         # In Windows, ensure the Java child processes do not linger after Python has exited.
         # In UNIX-based systems, the child process can kill itself on broken pipe (i.e. when
@@ -111,7 +115,9 @@ def launch_gateway(conf=None):
             atexit.register(killChild)
 
     # Connect to the gateway
-    gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=True)
+    gateway = JavaGateway(
+        gateway_parameters=GatewayParameters(port=gateway_port, auth_token=gateway_secret,
+                                             auto_convert=True))
 
     # Import the classes used by PySpark
     java_import(gateway.jvm, "org.apache.spark.SparkConf")
@@ -121,7 +127,21 @@ def launch_gateway(conf=None):
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
     # TODO(davies): move into sql
     java_import(gateway.jvm, "org.apache.spark.sql.*")
+    java_import(gateway.jvm, "org.apache.spark.sql.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.sql.hive.*")
     java_import(gateway.jvm, "scala.Tuple2")
 
     return gateway
+
+
+def do_server_auth(conn, auth_secret):
+    """
+    Performs the authentication protocol defined by the SocketAuthHelper class on the given
+    file-like object 'conn'.
+    """
+    write_with_length(auth_secret.encode("utf-8"), conn)
+    conn.flush()
+    reply = UTF8Deserializer().loads(conn)
+    if reply != "ok":
+        conn.close()
+        raise Exception("Unexpected reply from iterator server.")

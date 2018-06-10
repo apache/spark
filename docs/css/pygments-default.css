@@ -5,7 +5,7 @@ To generate this, I had to run
 But first I had to install pygments via easy_install pygments
 
 I had to override the conflicting bootstrap style rules by linking to
-this stylesheet lower in the html than the bootstap css.
+this stylesheet lower in the html than the bootstrap css.
 
 Also, I was thrown off for a while at first when I was using markdown
 code block inside my {% highlight scala %} ... {% endhighlight %} tags

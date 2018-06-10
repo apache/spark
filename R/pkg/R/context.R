@@ -308,7 +308,6 @@ setCheckpointDirSC <- function(sc, dirName) {
 #' @rdname spark.addFile
 #' @param path The path of the file to be added
 #' @param recursive Whether to add files recursively from the path. Default is FALSE.
-#' @export
 #' @examples
 #'\dontrun{
 #' spark.addFile("~/myfile")
@@ -323,13 +322,12 @@ spark.addFile <- function(path, recursive = FALSE) {
 #'
 #' @rdname spark.getSparkFilesRootDirectory
 #' @return the root directory that contains files added through spark.addFile
-#' @export
 #' @examples
 #'\dontrun{
 #' spark.getSparkFilesRootDirectory()
 #'}
 #' @note spark.getSparkFilesRootDirectory since 2.1.0
-spark.getSparkFilesRootDirectory <- function() {
+spark.getSparkFilesRootDirectory <- function() { # nolint
   if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
     # Running on driver.
     callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
@@ -344,7 +342,6 @@ spark.getSparkFilesRootDirectory <- function() {
 #' @rdname spark.getSparkFiles
 #' @param fileName The name of the file added through spark.addFile
 #' @return the absolute path of a file added through spark.addFile.
-#' @export
 #' @examples
 #'\dontrun{
 #' spark.getSparkFiles("myfile")
@@ -391,7 +388,6 @@ spark.getSparkFiles <- function(fileName) {
 #' @param list the list of elements
 #' @param func a function that takes one argument.
 #' @return a list of results (the exact type being determined by the function)
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -412,7 +408,6 @@ spark.lapply <- function(list, func) {
 #'
 #' @rdname setLogLevel
 #' @param level New log level
-#' @export
 #' @examples
 #'\dontrun{
 #' setLogLevel("ERROR")
@@ -431,7 +426,6 @@ setLogLevel <- function(level) {
 #' @rdname setCheckpointDir
 #' @param directory Directory path to checkpoint to
 #' @seealso \link{checkpoint}
-#' @export
 #' @examples
 #'\dontrun{
 #' setCheckpointDir("/checkpoint")

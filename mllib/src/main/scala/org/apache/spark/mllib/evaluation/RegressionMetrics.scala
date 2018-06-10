@@ -54,7 +54,7 @@ class RegressionMetrics @Since("2.0.0") (
   private lazy val summary: MultivariateStatisticalSummary = {
     val summary: MultivariateStatisticalSummary = predictionAndObservations.map {
       case (prediction, observation) => Vectors.dense(observation, observation - prediction)
-    }.aggregate(new MultivariateOnlineSummarizer())(
+    }.treeAggregate(new MultivariateOnlineSummarizer())(
         (summary, v) => summary.add(v),
         (sum1, sum2) => sum1.merge(sum2)
       )

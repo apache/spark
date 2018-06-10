@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -127,12 +128,31 @@ public class ExternalShuffleBlockResolverSuite {
       mapper.readValue(shuffleJson, ExecutorShuffleInfo.class);
     assertEquals(parsedShuffleInfo, shuffleInfo);
 
-    // Intentionally keep these hard-coded strings in here, to check backwards-compatability.
+    // Intentionally keep these hard-coded strings in here, to check backwards-compatibility.
     // its not legacy yet, but keeping this here in case anybody changes it
     String legacyAppIdJson = "{\"appId\":\"foo\", \"execId\":\"bar\"}";
     assertEquals(appId, mapper.readValue(legacyAppIdJson, AppExecId.class));
     String legacyShuffleJson = "{\"localDirs\": [\"/bippy\", \"/flippy\"], " +
       "\"subDirsPerLocalDir\": 7, \"shuffleManager\": " + "\"" + SORT_MANAGER + "\"}";
     assertEquals(shuffleInfo, mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
+  }
+
+  @Test
+  public void testNormalizeAndInternPathname() {
+    assertPathsMatch("/foo", "bar", "baz", "/foo/bar/baz");
+    assertPathsMatch("//foo/", "bar/", "//baz", "/foo/bar/baz");
+    assertPathsMatch("foo", "bar", "baz///", "foo/bar/baz");
+    assertPathsMatch("/foo/", "/bar//", "/baz", "/foo/bar/baz");
+    assertPathsMatch("/", "", "", "/");
+    assertPathsMatch("/", "/", "/", "/");
+  }
+
+  private void assertPathsMatch(String p1, String p2, String p3, String expectedPathname) {
+    String normPathname =
+        ExternalShuffleBlockResolver.createNormalizedInternedPathname(p1, p2, p3);
+    assertEquals(expectedPathname, normPathname);
+    File file = new File(normPathname);
+    String returnedPath = file.getPath();
+    assertTrue(normPathname == returnedPath);
   }
 }

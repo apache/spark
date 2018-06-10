@@ -26,8 +26,8 @@ import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
 import org.apache.spark.metrics.source.{Source, StaticSources}
 import org.apache.spark.util.Utils

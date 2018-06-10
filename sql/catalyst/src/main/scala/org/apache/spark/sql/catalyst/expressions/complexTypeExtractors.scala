@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,12 +129,12 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
           if ($eval.isNullAt($ordinal)) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+            ${ev.value} = ${CodeGenerator.getValue(eval, dataType, ordinal.toString)};
           }
         """
       } else {
         s"""
-          ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+          ${ev.value} = ${CodeGenerator.getValue(eval, dataType, ordinal.toString)};
         """
       }
     })
@@ -186,6 +186,16 @@ case class GetArrayStructFields(
       val values = ctx.freshName("values")
       val j = ctx.freshName("j")
       val row = ctx.freshName("row")
+      val nullSafeEval = if (field.nullable) {
+        s"""
+         if ($row.isNullAt($ordinal)) {
+           $values[$j] = null;
+         } else
+        """
+      } else {
+        ""
+      }
+
       s"""
         final int $n = $eval.numElements();
         final Object[] $values = new Object[$n];
@@ -194,10 +204,8 @@ case class GetArrayStructFields(
             $values[$j] = null;
           } else {
             final InternalRow $row = $eval.getStruct($j, $numFields);
-            if ($row.isNullAt($ordinal)) {
-              $values[$j] = null;
-            } else {
-              $values[$j] = ${ctx.getValue(row, field.dataType, ordinal.toString)};
+            $nullSafeEval {
+              $values[$j] = ${CodeGenerator.getValue(row, field.dataType, ordinal.toString)};
             }
           }
         }
@@ -242,12 +250,87 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
+      val nullCheck = if (child.dataType.asInstanceOf[ArrayType].containsNull) {
+        s" || $eval1.isNullAt($index)"
+      } else {
+        ""
+      }
       s"""
         final int $index = (int) $eval2;
-        if ($index >= $eval1.numElements() || $index < 0 || $eval1.isNullAt($index)) {
+        if ($index >= $eval1.numElements() || $index < 0$nullCheck) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = ${ctx.getValue(eval1, dataType, index)};
+          ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
+        }
+      """
+    })
+  }
+}
+
+/**
+ * Common base class for [[GetMapValue]] and [[ElementAt]].
+ */
+
+abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
+  // todo: current search is O(n), improve it.
+  def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
+    val map = value.asInstanceOf[MapData]
+    val length = map.numElements()
+    val keys = map.keyArray()
+    val values = map.valueArray()
+
+    var i = 0
+    var found = false
+    while (i < length && !found) {
+      if (ordering.equiv(keys.get(i, keyType), ordinal)) {
+        found = true
+      } else {
+        i += 1
+      }
+    }
+
+    if (!found || values.isNullAt(i)) {
+      null
+    } else {
+      values.get(i, dataType)
+    }
+  }
+
+  def doGetValueGenCode(ctx: CodegenContext, ev: ExprCode, mapType: MapType): ExprCode = {
+    val index = ctx.freshName("index")
+    val length = ctx.freshName("length")
+    val keys = ctx.freshName("keys")
+    val found = ctx.freshName("found")
+    val key = ctx.freshName("key")
+    val values = ctx.freshName("values")
+    val keyType = mapType.keyType
+    val nullCheck = if (mapType.valueContainsNull) {
+      s" || $values.isNullAt($index)"
+    } else {
+      ""
+    }
+    val keyJavaType = CodeGenerator.javaType(keyType)
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      s"""
+        final int $length = $eval1.numElements();
+        final ArrayData $keys = $eval1.keyArray();
+        final ArrayData $values = $eval1.valueArray();
+
+        int $index = 0;
+        boolean $found = false;
+        while ($index < $length && !$found) {
+          final $keyJavaType $key = ${CodeGenerator.getValue(keys, keyType, index)};
+          if (${ctx.genEqual(keyType, key, eval2)}) {
+            $found = true;
+          } else {
+            $index++;
+          }
+        }
+
+        if (!$found$nullCheck) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
         }
       """
     })
@@ -260,9 +343,20 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
  * We need to do type checking here as `key` expression maybe unresolved.
  */
 case class GetMapValue(child: Expression, key: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with ExtractValue with NullIntolerant {
+  extends GetMapValueUtil with ExtractValue with NullIntolerant {
+
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(keyType)
 
   private def keyType = child.dataType.asInstanceOf[MapType].keyType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case f: TypeCheckResult.TypeCheckFailure => f
+      case TypeCheckResult.TypeCheckSuccess =>
+        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
+    }
+  }
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `key`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
@@ -279,59 +373,11 @@ case class GetMapValue(child: Expression, key: Expression)
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
   // todo: current search is O(n), improve it.
-  protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    val map = value.asInstanceOf[MapData]
-    val length = map.numElements()
-    val keys = map.keyArray()
-    val values = map.valueArray()
-
-    var i = 0
-    var found = false
-    while (i < length && !found) {
-      if (keys.get(i, keyType) == ordinal) {
-        found = true
-      } else {
-        i += 1
-      }
-    }
-
-    if (!found || values.isNullAt(i)) {
-      null
-    } else {
-      values.get(i, dataType)
-    }
+  override def nullSafeEval(value: Any, ordinal: Any): Any = {
+    getValueEval(value, ordinal, keyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val index = ctx.freshName("index")
-    val length = ctx.freshName("length")
-    val keys = ctx.freshName("keys")
-    val found = ctx.freshName("found")
-    val key = ctx.freshName("key")
-    val values = ctx.freshName("values")
-    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"""
-        final int $length = $eval1.numElements();
-        final ArrayData $keys = $eval1.keyArray();
-        final ArrayData $values = $eval1.valueArray();
-
-        int $index = 0;
-        boolean $found = false;
-        while ($index < $length && !$found) {
-          final ${ctx.javaType(keyType)} $key = ${ctx.getValue(keys, keyType, index)};
-          if (${ctx.genEqual(keyType, key, eval2)}) {
-            $found = true;
-          } else {
-            $index++;
-          }
-        }
-
-        if (!$found || $values.isNullAt($index)) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${ctx.getValue(values, dataType, index)};
-        }
-      """
-    })
+    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType])
   }
 }
