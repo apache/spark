@@ -213,8 +213,8 @@ class HeartbeatReceiverSuite
       executorShouldReregister: Boolean): Unit = {
     val metrics = TaskMetrics.empty
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
-    val executorUpdates = new ExecutorMetrics(1234567L, 123456L, 543L, 12345L, 1234L, 123L, 12L,
-      432L, 321L, 654L, 765L)
+    val executorUpdates = new ExecutorMetrics(1234567L, Array(123456L, 543L, 12345L, 1234L, 123L,
+      12L, 432L, 321L, 654L, 765L))
     val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
       Heartbeat(executorId, Array(1L -> metrics.accumulators()), blockManagerId, executorUpdates))
     if (executorShouldReregister) {

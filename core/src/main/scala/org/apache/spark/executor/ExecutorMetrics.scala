@@ -29,8 +29,15 @@ import org.apache.spark.metrics.MetricGetter
  *
  * @param timestamp the time the metrics were collected, or -1 for Spark history
  *                  log events which are logged when a stage has completed
+ * @param metrics the array of executor metrics values, order and elements as
+ *                specified in MetricGetter
  */
 @DeveloperApi
-class ExecutorMetrics private[spark] (val timestamp: Long) extends Serializable {
-  val metrics = new Array[Long](MetricGetter.values.length)
+class ExecutorMetrics private[spark] (
+    val timestamp: Long,
+    val metrics: Array[Long]) extends Serializable {
+  if (metrics.length != MetricGetter.values.length) {
+    throw new IllegalArgumentException("invalid metrics length " + metrics.length +
+      " does not equal expected length " + MetricGetter.values.length)
+  }
 }

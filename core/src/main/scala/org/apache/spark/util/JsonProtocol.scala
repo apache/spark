@@ -612,12 +612,12 @@ private[spark] object JsonProtocol {
    */
   def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
     val timeStamp = (json \ "Timestamp").extract[Long]
-    val metrics = new ExecutorMetrics(timeStamp)
-    MetricGetter.idxAndValues.foreach { case (idx, metric) =>
-      val metricValue = (json \ metric.name).extract[Long]
-      metrics.metrics(idx) = metricValue
-    }
-    metrics
+
+    val metrics =
+      MetricGetter.values.map {metric =>
+        val metricVal = (json \ metric.name).extract[Long]
+      metricVal}
+    new ExecutorMetrics(timeStamp, metrics.toArray)
   }
 
   def taskEndFromJson(json: JValue): SparkListenerTaskEnd = {

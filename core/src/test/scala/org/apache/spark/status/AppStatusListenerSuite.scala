@@ -29,10 +29,10 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.metrics.MetricGetter
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.api.v1
-import org.apache.spark.status.api.v1.PeakMemoryMetrics
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -1218,42 +1218,42 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     listener.onExecutorAdded(createExecutorAddedEvent(2))
     listener.onStageSubmitted(createStageSubmittedEvent(0))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      new ExecutorMetrics(10L, 4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L)))
+      new ExecutorMetrics(10L, Array(4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      new ExecutorMetrics(10L, 1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L)))
+      new ExecutorMetrics(10L, Array(1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      new ExecutorMetrics(15L, 4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L)))
+      new ExecutorMetrics(15L, Array(4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      new ExecutorMetrics(15L, 2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L)))
+      new ExecutorMetrics(15L, Array(2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      new ExecutorMetrics(20L, 2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L)))
+      new ExecutorMetrics(20L, Array(2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      new ExecutorMetrics(20L, 3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L)))
+      new ExecutorMetrics(20L, Array(3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L))))
     listener.onStageSubmitted(createStageSubmittedEvent(1))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      new ExecutorMetrics(25L, 5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L, 0L)))
+      new ExecutorMetrics(25L, Array(5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L, 0L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      new ExecutorMetrics(25L, 7000L, 80L, 50L, 20L, 0L, 10L, 50L, 30L, 10L, 40L)))
+      new ExecutorMetrics(25L, Array(7000L, 80L, 50L, 20L, 0L, 10L, 50L, 30L, 10L, 40L))))
     listener.onStageCompleted(createStageCompletedEvent(0))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      new ExecutorMetrics(30L, 6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L)))
+      new ExecutorMetrics(30L, Array(6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      new ExecutorMetrics(30L, 5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L, 20L)))
+      new ExecutorMetrics(30L, Array(5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L, 20L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      new ExecutorMetrics(35L, 7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L)))
+      new ExecutorMetrics(35L, Array(7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      new ExecutorMetrics(35L, 5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 20L)))
+      new ExecutorMetrics(35L, Array(5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 20L))))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      new ExecutorMetrics(40L, 5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L, 0L)))
+      new ExecutorMetrics(40L, Array(5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L, 0L))))
     listener.onExecutorRemoved(createExecutorRemovedEvent(1))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      new ExecutorMetrics(40L, 4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L)))
+      new ExecutorMetrics(40L, Array(4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L))))
     listener.onStageCompleted(createStageCompletedEvent(1))
 
     // expected peak values for each executor
     val expectedValues = Map(
-      "1" -> new PeakMemoryMetrics(7000L, 70L, 50L, 30L, 60L, 30L, 100L, 55L, 70L, 20L),
-      "2" -> new PeakMemoryMetrics(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 80L, 40L))
+      "1" -> Array(7000L, 70L, 50L, 30L, 60L, 30L, 100L, 55L, 70L, 20L),
+      "2" -> Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 80L, 40L))
 
     // check that the stored peak values match the expected values
     for ((id, metrics) <- expectedValues) {
@@ -1261,16 +1261,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(exec.info.id === id)
         exec.info.peakMemoryMetrics match {
           case Some(actual) =>
-            assert(actual.jvmUsedHeapMemory == metrics.jvmUsedHeapMemory)
-            assert(actual.jvmUsedNonHeapMemory == metrics.jvmUsedNonHeapMemory)
-            assert(actual.onHeapExecutionMemory == metrics.onHeapExecutionMemory)
-            assert(actual.offHeapExecutionMemory == metrics.offHeapExecutionMemory)
-            assert(actual.onHeapStorageMemory == metrics.onHeapStorageMemory)
-            assert(actual.offHeapStorageMemory == metrics.offHeapStorageMemory)
-            assert(actual.onHeapUnifiedMemory == metrics.onHeapUnifiedMemory)
-            assert(actual.offHeapUnifiedMemory == metrics.offHeapUnifiedMemory)
-            assert(actual.directMemory == metrics.directMemory)
-            assert(actual.mappedMemory == metrics.mappedMemory)
+            (0 until MetricGetter.values.length).foreach { idx =>
+              assert(actual(idx) === metrics(idx))
+            }
           case _ =>
             assert(false)
         }

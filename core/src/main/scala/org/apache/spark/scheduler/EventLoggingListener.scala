@@ -24,7 +24,7 @@ import java.util.EnumSet
 import java.util.Locale
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
@@ -84,7 +84,7 @@ private[spark] class EventLoggingListener(
   private val compressionCodecName = compressionCodec.map { c =>
     CompressionCodec.getShortName(c.getClass.getName)
   }
-logInfo("spark.eventLog.logExecutorMetricsUpdates.enabled is " + shouldLogExecutorMetricsUpdates)
+
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
@@ -97,8 +97,7 @@ logInfo("spark.eventLog.logExecutorMetricsUpdates.enabled is " + shouldLogExecut
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
   // map of live stages, to peak executor metrics for the stage
-  private val liveStageExecutorMetrics = mutable.HashMap[(Int, Int),
-    mutable.HashMap[String, PeakExecutorMetrics]]()
+  private val liveStageExecutorMetrics = HashMap[(Int, Int), HashMap[String, PeakExecutorMetrics]]()
 
   /**
    * Creates the log file in the configured log directory.
@@ -167,7 +166,7 @@ logInfo("spark.eventLog.logExecutorMetricsUpdates.enabled is " + shouldLogExecut
     if (shouldLogExecutorMetricsUpdates) {
       // record the peak metrics for the new stage
       liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
-        new mutable.HashMap[String, PeakExecutorMetrics]())
+        new HashMap[String, PeakExecutorMetrics]())
     }
   }
 
@@ -190,16 +189,15 @@ logInfo("spark.eventLog.logExecutorMetricsUpdates.enabled is " + shouldLogExecut
         liveStageExecutorMetrics.remove((event.stageInfo.stageId, attemptId))
       }
 
-      // log the peak executor metrics for the stage, for each executor
+      // log the peak executor metrics for the stage, for each live executor,
+      // whether or not the executor is running tasks for the stage
       val accumUpdates = new ArrayBuffer[(Long, Int, Int, Seq[AccumulableInfo])]()
       val executorMap = liveStageExecutorMetrics.remove(
         (event.stageInfo.stageId, event.stageInfo.attemptNumber()))
       executorMap.foreach {
        executorEntry => {
           for ((executorId, peakExecutorMetrics) <- executorEntry) {
-            val executorMetrics = new ExecutorMetrics(-1)
-            System.arraycopy(peakExecutorMetrics.metrics, 0, executorMetrics.metrics, 0,
-              peakExecutorMetrics.metrics.size)
+            val executorMetrics = new ExecutorMetrics(-1, peakExecutorMetrics.metrics)
             val executorUpdate = new SparkListenerExecutorMetricsUpdate(
               executorId, accumUpdates, Some(executorMetrics))
             logEvent(executorUpdate)
@@ -346,7 +344,7 @@ private[spark] object EventLoggingListener extends Logging {
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   // A cache for compression codecs to avoid creating the same codec many times
-  private val codecMap = new mutable.HashMap[String, CompressionCodec]
+  private val codecMap = new HashMap[String, CompressionCodec]
 
   /**
    * Write metadata about an event log to the given stream.
