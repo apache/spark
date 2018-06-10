@@ -423,7 +423,7 @@ object FunctionRegistry {
     expression[Size]("size"),
     expression[Slice]("slice"),
     expression[Size]("cardinality"),
-    expression[Zip]("zip"),
+    expression[ArraysZip]("arrays_zip"),
     expression[SortArray]("sort_array"),
     expression[ArrayMin]("array_min"),
     expression[ArrayMax]("array_max"),

@@ -316,7 +316,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Some(Literal.create(null, StringType))), null)
   }
 
-  test("Zip") {
+  test("ArraysZip") {
     val literals = Seq(
       Literal.create(Seq(9001, 9002, 9003, null), ArrayType(IntegerType)),
       Literal.create(Seq(null, 1L, null, 4L, 11L), ArrayType(LongType)),
@@ -332,28 +332,28 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq(Array[Byte](1.toByte, 5.toByte)), ArrayType(BinaryType))
     )
 
-    checkEvaluation(Zip(Seq(literals(0), literals(1))),
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(1))),
       List(Row(9001, null), Row(9002, 1L), Row(9003, null), Row(null, 4L), Row(null, 11L)))
 
-    checkEvaluation(Zip(Seq(literals(0), literals(2))),
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(2))),
       List(Row(9001, -1), Row(9002, -3), Row(9003, 900), Row(null, null)))
 
-    checkEvaluation(Zip(Seq(literals(0), literals(3))),
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(3))),
       List(Row(9001, "a"), Row(9002, null), Row(9003, "c"), Row(null, null)))
 
-    checkEvaluation(Zip(Seq(literals(0), literals(4))),
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(4))),
       List(Row(9001, null), Row(9002, false), Row(9003, true), Row(null, null)))
 
-    checkEvaluation(Zip(Seq(literals(0), literals(5))),
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(5))),
       List(Row(9001, 1.1), Row(9002, null), Row(9003, 1.3), Row(null, null)))
 
-    checkEvaluation(Zip(Seq(literals(0), literals(6))),
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(6))),
       List(Row(9001, null), Row(9002, null), Row(9003, null), Row(null, null)))
 
-    checkEvaluation(Zip(Seq(literals(0), literals(7))),
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(7))),
       List(Row(9001, null), Row(9002, null), Row(9003, null), Row(null, null)))
 
-    checkEvaluation(Zip(Seq(literals(0), literals(1), literals(2), literals(3))),
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(1), literals(2), literals(3))),
       List(
         Row(9001, null, -1, "a"),
         Row(9002, 1L, -3, null),
@@ -361,27 +361,27 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Row(null, 4L, null, null),
         Row(null, 11L, null, null)))
 
-    checkEvaluation(Zip(Seq(literals(4), literals(5), literals(6), literals(7), literals(8))),
+    checkEvaluation(ArraysZip(Seq(literals(4), literals(5), literals(6), literals(7), literals(8))),
       List(
         Row(null, 1.1, null, null, 192.toByte),
         Row(false, null, null, null, null),
         Row(true, 1.3, null, null, null),
         Row(null, null, null, null, null)))
 
-    checkEvaluation(Zip(Seq(literals(9), literals(0))),
+    checkEvaluation(ArraysZip(Seq(literals(9), literals(0))),
       List(
         Row(List(1, 2, 3), 9001),
         Row(null, 9002),
         Row(List(4, 5), 9003),
         Row(List(1, null, 3), null)))
 
-    checkEvaluation(Zip(Seq(literals(7), literals(10))),
+    checkEvaluation(ArraysZip(Seq(literals(7), literals(10))),
       List(Row(null, Array[Byte](1.toByte, 5.toByte))))
 
     val longLiteral =
       Literal.create((0 to 1000).toSeq, ArrayType(IntegerType))
 
-    checkEvaluation(Zip(Seq(literals(0), longLiteral)),
+    checkEvaluation(ArraysZip(Seq(literals(0), longLiteral)),
       List(Row(9001, 0), Row(9002, 1), Row(9003, 2)) ++
       (3 to 1000).map { Row(null, _) }.toList)
 
@@ -394,11 +394,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Row(Seq(9002) ++ (0 to 1000).map { _ => null }.toSeq: _*),
       Row(Seq(9003) ++ (0 to 1000).map { _ => null }.toSeq: _*),
       Row(Seq(null) ++ (0 to 1000).map { _ => null }.toSeq: _*))
-    checkEvaluation(Zip(Seq(literals(0)) ++ manyLiterals),
+    checkEvaluation(ArraysZip(Seq(literals(0)) ++ manyLiterals),
       List(numbers(0), numbers(1), numbers(2), numbers(3)))
 
-    checkEvaluation(Zip(Seq(literals(0), Literal.create(null, ArrayType(IntegerType)))), null)
-    checkEvaluation(Zip(Seq()), List())
+    checkEvaluation(ArraysZip(Seq(literals(0), Literal.create(null, ArrayType(IntegerType)))), null)
+    checkEvaluation(ArraysZip(Seq()), List())
   }
 
   test("Array Min") {

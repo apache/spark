@@ -130,8 +130,8 @@ case class MapKeys(child: Expression)
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(a1, a2, ...) - Returns a merged array containing in the N-th position the
-    N-th value of each array given.
+    _FUNC_(a1, a2, ...) - Returns a merged array of structs in which the N-th struct contains all
+    N-th values of input arrays.
   """,
   examples = """
     Examples:
@@ -141,7 +141,7 @@ case class MapKeys(child: Expression)
         [[1, 2, 3], [2, 3, 4]]
   """,
   since = "2.4.0")
-case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
+case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.length)(ArrayType)
 
@@ -177,7 +177,6 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
   def nonEmptyInputGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val genericInternalRow = classOf[GenericInternalRow].getName
     val arrVals = ctx.freshName("arrVals")
-    val arrCardinality = ctx.freshName("arrCardinality")
     val biggestCardinality = ctx.freshName("biggestCardinality")
 
     val currentRow = ctx.freshName("currentRow")
@@ -192,8 +191,7 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
         |  ${eval.code}
         |  if (!${eval.isNull}) {
         |    $arrVals[$index] = ${eval.value};
-        |    $arrCardinality[$index] = ${eval.value}.numElements();
-        |    $biggestCardinality = Math.max($biggestCardinality, $arrCardinality[$index]);
+        |    $biggestCardinality = Math.max($biggestCardinality, ${eval.value}.numElements());
         |  } else {
         |    $biggestCardinality = -1;
         |  }
@@ -213,13 +211,12 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       foldFunctions = _.map(funcCall => s"$biggestCardinality = $funcCall;").mkString("\n"),
       arguments =
         ("ArrayData[]", arrVals) ::
-        ("int[]", arrCardinality) ::
         ("int", biggestCardinality) :: Nil)
 
     val getValueForType = arrayElementTypes.zipWithIndex.map { case (eleType, idx) =>
       val g = CodeGenerator.getValue(s"$arrVals[$idx]", eleType, i)
       s"""
-        |if ($i < $arrCardinality[$idx] && !$arrVals[$idx].isNullAt($i)) {
+        |if ($i < $arrVals[$idx].numElements() && !$arrVals[$idx].isNullAt($i)) {
         |  $currentRow[$idx] = $g;
         |} else {
         |  $currentRow[$idx] = null;
@@ -233,12 +230,10 @@ case class Zip(children: Seq[Expression]) extends Expression with ExpectsInputTy
       arguments =
         ("int", i) ::
         ("Object[]", currentRow) ::
-        ("int[]", arrCardinality) ::
         ("ArrayData[]", arrVals) :: Nil)
 
     val initVariables = s"""
       |ArrayData[] $arrVals = new ArrayData[$numberOfArrays];
-      |int[] $arrCardinality = new int[$numberOfArrays];
       |int $biggestCardinality = 0;
       |${CodeGenerator.javaType(dataType)} ${ev.value} = null;
     """.stripMargin
