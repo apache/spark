@@ -95,8 +95,8 @@ class JsonProtocolSuite extends SparkFunSuite {
         makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
-      val executorUpdates = Some(new ExecutorMetrics(1234567L, 543L, 123456L, 12345L, 1234L, 123L,
-        12L, 432L, 321L, 654L, 765L))
+      val executorUpdates = Some(new ExecutorMetrics(1234567L, Array(543L, 123456L, 12345L,
+        1234L, 123L, 12L, 432L, 321L, 654L, 765L)))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)), executorUpdates)
     }
     val blockUpdated =
@@ -876,7 +876,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       }
     val executorMetricsUpdate =
       if (includeExecutorMetrics) {
-        Some(new ExecutorMetrics(1234567L, 123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L))
+        Some(new ExecutorMetrics(1234567L, Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L)))
       } else {
         None
       }
@@ -2073,16 +2073,16 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  ],
       |  "Executor Metrics Updated" : {
       |    "Timestamp" : 1234567,
-      |    "JVM Used Heap Memory" : 543,
-      |    "JVM Used Nonheap Memory" : 123456,
-      |    "Onheap Execution Memory" : 12345,
-      |    "Offheap Execution Memory" : 1234,
-      |    "Onheap Storage Memory" : 123,
-      |    "Offheap Storage Memory" : 12,
-      |    "Onheap Unified Memory" : 432,
-      |    "Offheap Unified Memory" : 321,
-      |    "Direct Memory" : 654,
-      |    "Mapped Memory" : 765
+      |    "JVMHeapMemory" : 543,
+      |    "JVMOffHeapMemory" : 123456,
+      |    "OnHeapExecutionMemory" : 12345,
+      |    "OffHeapExecutionMemory" : 1234,
+      |    "OnHeapStorageMemory" : 123,
+      |    "OffHeapStorageMemory" : 12,
+      |    "OnHeapUnifiedMemory" : 432,
+      |    "OffHeapUnifiedMemory" : 321,
+      |    "DirectPoolMemory" : 654,
+      |    "MappedPoolMemory" : 765
       |  }
       |
       |}

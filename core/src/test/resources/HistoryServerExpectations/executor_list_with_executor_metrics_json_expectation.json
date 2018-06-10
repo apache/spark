@@ -28,16 +28,16 @@
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedHeapMemory" : 629553808,
-    "jvmUsedNonHeapMemory" : 205304696,
-    "onHeapExecutionMemory" : 0,
-    "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 905801,
-    "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 905801,
-    "offHeapUnifiedMemory" : 0,
-    "directMemory" : 397602,
-    "mappedMemory" : 0
+    "OnHeapStorageMemory" : 905801,
+    "JVMOffHeapMemory" : 205304696,
+    "OffHeapExecutionMemory" : 0,
+    "OnHeapUnifiedMemory" : 905801,
+    "OnHeapExecutionMemory" : 0,
+    "OffHeapUnifiedMemory" : 0,
+    "DirectPoolMemory" : 397602,
+    "MappedPoolMemory" : 0,
+    "JVMHeapMemory" : 629553808,
+    "OffHeapStorageMemory" : 0
   }
 }, {
   "id" : "7",
@@ -168,16 +168,16 @@
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedHeapMemory" : 518613056,
-    "jvmUsedNonHeapMemory" : 95657456,
-    "onHeapExecutionMemory" : 37748736,
-    "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 63104457,
-    "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 100853193,
-    "offHeapUnifiedMemory" : 0,
-    "directMemory" : 126261,
-    "mappedMemory" : 0
+    "OnHeapStorageMemory" : 63104457,
+    "JVMOffHeapMemory" : 95657456,
+    "OffHeapExecutionMemory" : 0,
+    "OnHeapUnifiedMemory" : 100853193,
+    "OnHeapExecutionMemory" : 37748736,
+    "OffHeapUnifiedMemory" : 0,
+    "DirectPoolMemory" : 126261,
+    "MappedPoolMemory" : 0,
+    "JVMHeapMemory" : 518613056,
+    "OffHeapStorageMemory" : 0
   }
 }, {
   "id" : "3",
@@ -212,16 +212,16 @@
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedHeapMemory" : 726805712,
-    "jvmUsedNonHeapMemory" : 90709624,
-    "onHeapExecutionMemory" : 0,
-    "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 69535048,
-    "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 69535048,
-    "offHeapUnifiedMemory" : 0,
-    "directMemory" : 87796,
-    "mappedMemory" : 0
+    "OnHeapStorageMemory" : 69535048,
+    "JVMOffHeapMemory" : 90709624,
+    "OffHeapExecutionMemory" : 0,
+    "OnHeapUnifiedMemory" : 69535048,
+    "OnHeapExecutionMemory" : 0,
+    "OffHeapUnifiedMemory" : 0,
+    "DirectPoolMemory" : 87796,
+    "MappedPoolMemory" : 0,
+    "JVMHeapMemory" : 726805712,
+    "OffHeapStorageMemory" : 0
   }
 }, {
   "id" : "2",
@@ -256,16 +256,16 @@
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedHeapMemory" : 595946552,
-    "jvmUsedNonHeapMemory" : 91208368,
-    "onHeapExecutionMemory" : 0,
-    "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 58468944,
-    "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 58468944,
-    "offHeapUnifiedMemory" : 0,
-    "directMemory" : 87796,
-    "mappedMemory" : 0
+    "OnHeapStorageMemory" : 58468944,
+    "JVMOffHeapMemory" : 91208368,
+    "OffHeapExecutionMemory" : 0,
+    "OnHeapUnifiedMemory" : 58468944,
+    "OnHeapExecutionMemory" : 0,
+    "OffHeapUnifiedMemory" : 0,
+    "DirectPoolMemory" : 87796,
+    "MappedPoolMemory" : 0,
+    "JVMHeapMemory" : 595946552,
+    "OffHeapStorageMemory" : 0
   }
 }, {
   "id" : "1",
@@ -300,15 +300,15 @@
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedHeapMemory" : 755008624,
-    "jvmUsedNonHeapMemory" : 100519936,
-    "onHeapExecutionMemory" : 0,
-    "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 47962185,
-    "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 47962185,
-    "offHeapUnifiedMemory" : 0,
-    "directMemory" : 98230,
-    "mappedMemory" : 0
+    "OnHeapStorageMemory" : 47962185,
+    "JVMOffHeapMemory" : 100519936,
+    "OffHeapExecutionMemory" : 0,
+    "OnHeapUnifiedMemory" : 47962185,
+    "OnHeapExecutionMemory" : 0,
+    "OffHeapUnifiedMemory" : 0,
+    "DirectPoolMemory" : 98230,
+    "MappedPoolMemory" : 0,
+    "JVMHeapMemory" : 755008624,
+    "OffHeapStorageMemory" : 0
   }
 } ]

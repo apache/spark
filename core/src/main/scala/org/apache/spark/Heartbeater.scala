@@ -19,17 +19,26 @@ package org.apache.spark
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.internal.Logging
+import org.apache.spark.memory.MemoryManager
+import org.apache.spark.metrics.MetricGetter
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Creates a heartbeat thread which will call the specified reportHeartbeat function at
  * intervals of intervalMs.
  *
+ * @param memoryManager the memory manager for execution and storage memory.
  * @param reportHeartbeat the heartbeat reporting function to call.
  * @param name the thread name for the heartbeater.
  * @param intervalMs the interval between heartbeats.
  */
-private[spark] class Heartbeater(reportHeartbeat: () => Unit, name: String, intervalMs: Long) {
+private[spark] class Heartbeater(
+    memoryManager: MemoryManager,
+    reportHeartbeat: () => Unit,
+    name: String,
+    intervalMs: Long) extends Logging {
   // Executor for the heartbeat task
   private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor(name)
 
@@ -48,6 +57,12 @@ private[spark] class Heartbeater(reportHeartbeat: () => Unit, name: String, inte
   private[spark] def stop(): Unit = {
     heartbeater.shutdown()
     heartbeater.awaitTermination(10, TimeUnit.SECONDS)
+  }
+
+  /** Get the current metrics. */
+  def getCurrentMetrics(): ExecutorMetrics = {
+    new ExecutorMetrics(System.currentTimeMillis(),
+      MetricGetter.values.map(_.getMetricValue(memoryManager)).toArray)
   }
 }
 

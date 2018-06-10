@@ -306,7 +306,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       executorLogs,
       memoryMetrics,
       blacklistedInStages,
-      peakExecutorMetrics.getPeakMemoryMetrics)
+      if (peakExecutorMetrics.metrics(0) == -1) None else Some(peakExecutorMetrics.metrics))
     new ExecutorSummaryWrapper(info)
   }
 }

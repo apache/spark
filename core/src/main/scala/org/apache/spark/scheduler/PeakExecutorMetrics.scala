@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.MetricGetter
-import org.apache.spark.status.api.v1.PeakMemoryMetrics
 
 /**
  * Records the peak values for executor level metrics. If jvmUsedHeapMemory is -1, then no
@@ -47,20 +46,6 @@ private[spark] class PeakExecutorMetrics {
       }
     }
     updated
-  }
-
-  /**
-   * @return None if no peak metrics have been recorded, else PeakMemoryMetrics with the peak
-   *         values set.
-   */
-  def getPeakMemoryMetrics: Option[PeakMemoryMetrics] = {
-    if (metrics(0) < 0) {
-      None
-    } else {
-      val copy = new PeakMemoryMetrics
-      System.arraycopy(this.metrics, 0, copy.metrics, 0, this.metrics.length)
-      Some(copy)
-    }
   }
 
   /** Clears/resets the saved peak values. */

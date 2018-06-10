@@ -23,7 +23,7 @@ import org.apache.spark.memory.MemoryManager
 
 sealed trait MetricGetter {
   def getMetricValue(memoryManager: MemoryManager): Long
-  val name = getClass().getName().stripSuffix("$")
+  val name = getClass().getName().stripSuffix("$").split("""\.""").last
 }
 
 abstract class MemoryManagerMetricGetter(f: MemoryManager => Long) extends MetricGetter {
@@ -53,13 +53,19 @@ case object JVMOffHeapMemory extends MetricGetter {
   }
 }
 
-case object OnHeapExecution extends MemoryManagerMetricGetter(_.onHeapExecutionMemoryUsed)
+case object OnHeapExecutionMemory extends MemoryManagerMetricGetter(_.onHeapExecutionMemoryUsed)
 
-case object OffHeapExecution extends MemoryManagerMetricGetter(_.offHeapExecutionMemoryUsed)
+case object OffHeapExecutionMemory extends MemoryManagerMetricGetter(_.offHeapExecutionMemoryUsed)
 
-case object OnHeapStorage extends MemoryManagerMetricGetter(_.onHeapStorageMemoryUsed)
+case object OnHeapStorageMemory extends MemoryManagerMetricGetter(_.onHeapStorageMemoryUsed)
 
-case object OffHeapStorage extends MemoryManagerMetricGetter(_.offHeapStorageMemoryUsed)
+case object OffHeapStorageMemory extends MemoryManagerMetricGetter(_.offHeapStorageMemoryUsed)
+
+case object OnHeapUnifiedMemory extends MemoryManagerMetricGetter(
+  (m => m.onHeapExecutionMemoryUsed + m.onHeapStorageMemoryUsed))
+
+case object OffHeapUnifiedMemory extends MemoryManagerMetricGetter(
+  (m => m.offHeapExecutionMemoryUsed + m.offHeapStorageMemoryUsed))
 
 case object DirectPoolMemory extends MBeanMetricGetter("java.nio:type=BufferPool,name=direct")
 case object MappedPoolMemory extends MBeanMetricGetter("java.nio:type=BufferPool,name=mapped")
@@ -68,10 +74,12 @@ object MetricGetter {
   val values = IndexedSeq(
     JVMHeapMemory,
     JVMOffHeapMemory,
-    OnHeapExecution,
-    OffHeapExecution,
-    OnHeapStorage,
-    OffHeapStorage,
+    OnHeapExecutionMemory,
+    OffHeapExecutionMemory,
+    OnHeapStorageMemory,
+    OffHeapStorageMemory,
+    OnHeapUnifiedMemory,
+    OffHeapUnifiedMemory,
     DirectPoolMemory,
     MappedPoolMemory
   )

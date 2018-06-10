@@ -36,8 +36,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.{MemoryManager, SparkOutOfMemoryError, TaskMemoryManager}
-import org.apache.spark.metrics.MetricGetter
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
@@ -149,8 +148,8 @@ private[spark] class Executor(
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
   // Executor for the heartbeat task.
-  private val heartbeater = new Heartbeater(reportHeartBeat, "executor-heartbeater",
-    conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
+  private val heartbeater = new Heartbeater(env.memoryManager, reportHeartBeat,
+    "executor-heartbeater", conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
 
   // must be initialized before running startDriverHeartbeat()
   private val heartbeatReceiverRef =
@@ -774,7 +773,7 @@ private[spark] class Executor(
     val curGCTime = computeTotalGcTime()
 
     // get executor level memory metrics
-    val executorUpdates = Executor.getCurrentExecutorMetrics(env.memoryManager)
+    val executorUpdates = heartbeater.getCurrentMetrics()
 
     for (taskRunner <- runningTasks.values().asScala) {
       if (taskRunner.task != null) {
@@ -812,15 +811,4 @@ private[spark] object Executor {
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
   val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
-
-  /**
-   * Get the current executor level memory metrics.
-   */
-  def getCurrentExecutorMetrics(memoryManager: MemoryManager): ExecutorMetrics = {
-    val metrics = new ExecutorMetrics(System.currentTimeMillis())
-    MetricGetter.idxAndValues.foreach { case (idx, metric) =>
-      metrics.metrics(idx) = metric.getMetricValue(memoryManager)
-    }
-    metrics
-  }
 }
