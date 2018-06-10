@@ -1118,7 +1118,7 @@ object SQLConf {
 
   val typeCoercionMode =
     buildConf("spark.sql.typeCoercion.mode")
-      .doc("Since Spark 2.3, the 'hive' mode is introduced for Hive compatiblity. " +
+      .doc("Since Spark 2.4, the 'hive' mode is introduced for Hive compatiblity. " +
         "Spark SQL has its native type cocersion mode, which is enabled by default.")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))

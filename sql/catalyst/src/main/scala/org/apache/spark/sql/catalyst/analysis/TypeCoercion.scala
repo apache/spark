@@ -125,9 +125,9 @@ object TypeCoercion {
   private def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = {
     if (conf.isHiveTypeCoercionMode) {
-      findCommonTypeToCompatibleWithHive(dt1, dt2)
+      findHiveCommonTypeForBinary(dt1, dt2)
     } else {
-      findCommonTypeForBinaryComparisonNative(dt1, dt2, conf)
+      findNativeCommonTypeForBinary(dt1, dt2, conf)
     }
   }
 
@@ -136,7 +136,7 @@ object TypeCoercion {
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
-  private def findCommonTypeForBinaryComparisonNative(
+  private def findNativeCommonTypeForBinary(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
     // We should cast all relative timestamp/date/string comparison into string comparisons
     // This behaves as a user would expect because timestamp strings sort lexicographically.
@@ -167,10 +167,13 @@ object TypeCoercion {
     case (l, r) => None
   }
 
-  val findCommonTypeToCompatibleWithHive: (DataType, DataType) => Option[DataType] = {
-    // Follow hive's binary comparison action:
-    // https://github.com/apache/hive/blob/rel/storage-release-2.4.0/ql/src/java/
-    // org/apache/hadoop/hive/ql/exec/FunctionRegistry.java#L781
+  /**
+   * This function follow hive's binary comparison action:
+   * https://github.com/apache/hive/blob/rel/release-3.0.0/ql/src/java/
+   * org/apache/hadoop/hive/ql/exec/FunctionRegistry.java#L802
+   */
+  private def findHiveCommonTypeForBinary(
+      dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
     case (StringType, DateType) => Some(DateType)
     case (DateType, StringType) => Some(DateType)
     case (StringType, TimestampType) => Some(TimestampType)

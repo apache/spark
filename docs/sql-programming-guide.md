@@ -1528,7 +1528,7 @@ that these options will be deprecated in future release as more optimizations ar
     <td><code>spark.sql.typeCoercion.mode</code></td>
     <td><code>default</code></td>
     <td>
-      Since Spark 2.3, the <code>hive</code> mode is introduced for Hive compatiblity.
+      Since Spark 2.4, the <code>hive</code> mode is introduced for Hive compatiblity.
       Spark SQL has its native type cocersion mode, which is enabled by default.
     </td>
   </tr>
