@@ -3199,7 +3199,6 @@ object functions {
 
   /**
    * Returns an array of the elements in the union of the given two arrays, without duplicates.
-   * The order of elements in the result is not determined
    *
    * @group collection_funcs
    * @since 2.4.0

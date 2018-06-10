@@ -1122,7 +1122,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("array_union functions") {
     val df1 = Seq((Array(1, 2, 3), Array(4, 2))).toDF("a", "b")
-    val ans1 = Row(Seq(4, 1, 3, 2))
+    val ans1 = Row(Seq(1, 2, 3, 4))
     checkAnswer(df1.select(array_union($"a", $"b")), ans1)
     checkAnswer(df1.selectExpr("array_union(a, b)"), ans1)
 
@@ -1132,7 +1132,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df2.selectExpr("array_union(a, b)"), ans2)
 
     val df3 = Seq((Array(1L, 2L, 3L), Array(4L, 2L))).toDF("a", "b")
-    val ans3 = Row(Seq(4L, 1L, 3L, 2L))
+    val ans3 = Row(Seq(1L, 2L, 3L, 4L))
     checkAnswer(df3.select(array_union($"a", $"b")), ans3)
     checkAnswer(df3.selectExpr("array_union(a, b)"), ans3)
 

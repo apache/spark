@@ -2018,7 +2018,7 @@ def array_distinct(col):
 def array_union(col1, col2):
     """
     Collection function: returns an array of the elements in the union of col1 and col2,
-    without duplicates. The order of elements in the result is not determined.
+    without duplicates.
 
     :param col1: name of column containing array
     :param col2: name of column containing array
