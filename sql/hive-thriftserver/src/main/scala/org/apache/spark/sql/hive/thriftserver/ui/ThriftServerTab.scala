@@ -21,7 +21,7 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab._
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.{JettyUtils, SparkUI, SparkUITab}
 
 /**
  * Spark Web UI tab that shows statistics of jobs running in the thrift server.
@@ -38,6 +38,10 @@ private[thriftserver] class ThriftServerTab(sparkContext: SparkContext)
   attachPage(new ThriftServerPage(this))
   attachPage(new ThriftServerSessionPage(this))
   parent.attachTab(this)
+
+  // We need to add the filters to the handlers generated here since the SparkUI has been already
+  // started.
+  JettyUtils.addFilters(this.pages.flatMap(parent.handlersForPage), parent.conf)
 
   def detach() {
     getSparkUI(sparkContext).detachTab(this)
