@@ -29,6 +29,8 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.Pipeline.PipelineWriter
+import org.apache.spark.ml.PipelineModel.PipelineModelWriter
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -83,11 +85,10 @@ abstract class PipelineStage extends Params with Logging with
   override def copy(extra: ParamMap): PipelineStage
 
   override protected def doPostEvent(
-                                      listener: MLListener,
-                                      event: MLListenEvent): Unit = {
+        listener: MLListener,
+        event: MLListenEvent): Unit = {
     listener.onEvent(event)
   }
-
 }
 
 /**
@@ -201,7 +202,7 @@ class Pipeline @Since("1.4.0") (
   }
 
   @Since("1.6.0")
-  override def write: MLWriter = new Pipeline.PipelineWriter(this)
+  override def write: PipelineWriter = new Pipeline.PipelineWriter(this)
 }
 
 @Since("1.6.0")
@@ -213,7 +214,8 @@ object Pipeline extends MLReadable[Pipeline] {
   @Since("1.6.0")
   override def load(path: String): Pipeline = super.load(path)
 
-  private[Pipeline] class PipelineWriter(instance: Pipeline) extends MLWriter {
+  private[Pipeline] class PipelineWriter(instance: Pipeline) extends MLWriter with
+     ListenerBus[MLListener, MLListenEvent]{
 
     SharedReadWrite.validateStages(instance.getStages)
 
@@ -225,6 +227,10 @@ object Pipeline extends MLReadable[Pipeline] {
         }
       })
       postToAll(SavePipelineEvent(instance.uid, path))
+    }
+
+    override protected def doPostEvent(listener: MLListener, event: MLListenEvent): Unit = {
+      listener.onEvent(event)
     }
   }
 
@@ -347,7 +353,7 @@ class PipelineModel private[ml] (
   }
 
   @Since("1.6.0")
-  override def write: MLWriter = new PipelineModel.PipelineModelWriter(this)
+  override def write: PipelineModelWriter = new PipelineModel.PipelineModelWriter(this)
 }
 
 @Since("1.6.0")
@@ -361,7 +367,8 @@ object PipelineModel extends MLReadable[PipelineModel] {
   @Since("1.6.0")
   override def load(path: String): PipelineModel = super.load(path)
 
-  private[PipelineModel] class PipelineModelWriter(instance: PipelineModel) extends MLWriter {
+  private[PipelineModel] class PipelineModelWriter(instance: PipelineModel) extends MLWriter with
+      ListenerBus[MLListener, MLListenEvent] {
 
     SharedReadWrite.validateStages(instance.stages.asInstanceOf[Array[PipelineStage]])
 
@@ -374,6 +381,10 @@ object PipelineModel extends MLReadable[PipelineModel] {
         }
       })
       postToAll(SaveModelEvent(instance.uid, path))
+    }
+
+    override protected def doPostEvent(listener: MLListener, event: MLListenEvent): Unit = {
+      listener.onEvent(event)
     }
   }
 
