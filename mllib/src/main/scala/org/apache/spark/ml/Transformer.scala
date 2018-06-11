@@ -116,10 +116,17 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
     StructType(outputFields)
   }
 
+  /**
+   * Returns [[Metadata]] to be attached to the output column.
+   */
+  protected def outputMetadata(outputSchema: StructType, dataset: Dataset[_]): Metadata =
+    Metadata.empty
+
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val transformUDF = udf(this.createTransformFunc, outputDataType)
-    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
+    val metadata = outputMetadata(outputSchema, dataset)
+    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))), metadata)
   }
 
   override def copy(extra: ParamMap): T = defaultCopy(extra)
