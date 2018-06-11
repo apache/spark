@@ -290,6 +290,8 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
       new GenericArrayData(result)
     }
   }
+
+  override def prettyName: String = "arrays_zip"
 }
 
 /**
