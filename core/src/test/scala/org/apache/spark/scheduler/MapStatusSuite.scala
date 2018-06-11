@@ -188,4 +188,36 @@ class MapStatusSuite extends SparkFunSuite {
       assert(count === 3000)
     }
   }
+
+  test("YSPARK-500 MapStatus has 2000 hardcoded") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("YSPARK-500")
+    val sizes = Array.fill[Long](500)(150L)
+    //Test default value
+    withSpark(new SparkContext(conf)) { sc =>
+      val status = MapStatus(null, sizes)
+      assert(status.isInstanceOf[CompressedMapStatus])
+    }
+    //Test Non-positive values
+    for (s <- -1 to 0) {
+      assertThrows[IllegalArgumentException] {
+        conf.set(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS, s)
+        withSpark(new SparkContext(conf)){ sc => //
+          val status = MapStatus(null, sizes)
+        }
+      }
+    }
+    //Test positive values
+    for(s <- 1 to 3000){
+      conf.set(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS, s)
+      withSpark(new SparkContext(conf)) { sc =>
+        val status = MapStatus(null, sizes)
+        if(sizes.length > s)
+          assert(status.isInstanceOf[HighlyCompressedMapStatus])
+        else
+          assert(status.isInstanceOf[CompressedMapStatus])
+      }
+    }
+  }
 }
