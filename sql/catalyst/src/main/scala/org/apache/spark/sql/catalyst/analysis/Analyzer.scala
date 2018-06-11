@@ -2342,7 +2342,6 @@ object CleanupAliases extends Rule[LogicalPlan] {
     e.transformDown {
       case Alias(child, _) => child
       case MultiAlias(child, _) => child
-      case UnresolvedAlias(child, _) => child
     }
   }
 
@@ -2353,8 +2352,6 @@ object CleanupAliases extends Rule[LogicalPlan] {
         qualifier = a.qualifier,
         explicitMetadata = Some(a.metadata))
     case a: MultiAlias =>
-      a.copy(child = trimAliases(a.child))
-    case a: UnresolvedAlias =>
       a.copy(child = trimAliases(a.child))
     case other => trimAliases(other)
   }

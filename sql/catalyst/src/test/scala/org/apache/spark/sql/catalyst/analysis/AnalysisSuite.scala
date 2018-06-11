@@ -564,8 +564,5 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(
       listRelation.select(MultiAlias(MultiAlias(
         PosExplode('list), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
-    assertAnalysisSuccess(
-      listRelation.select(UnresolvedAlias(UnresolvedAlias(
-        Explode('list), Some(e => "first_alias")), Some(e => "second_alias"))))
   }
 }
