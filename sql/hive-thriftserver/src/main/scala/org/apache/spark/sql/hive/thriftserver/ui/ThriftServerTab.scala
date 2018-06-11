@@ -21,7 +21,7 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab._
-import org.apache.spark.ui.{JettyUtils, SparkUI, SparkUITab}
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 /**
  * Spark Web UI tab that shows statistics of jobs running in the thrift server.

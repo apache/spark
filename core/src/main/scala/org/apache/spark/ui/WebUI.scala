@@ -59,8 +59,6 @@ private[spark] abstract class WebUI(
   def getTabs: Seq[WebUITab] = tabs
   def getHandlers: Seq[ServletContextHandler] = handlers
   def getSecurityManager: SecurityManager = securityManager
-  def handlersForPage(page: WebUIPage): Seq[ServletContextHandler] =
-    pageToHandlers.getOrElse(page, Seq.empty)
 
   /** Attach a tab to this UI, along with all of its attached pages. */
   def attachTab(tab: WebUITab) {
