@@ -87,22 +87,6 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
 
   /** Print a welcome message */
   override def printWelcome() {
-    // Before Scala 2.11.9, `printWelcome()` will be called after Scala REPL and Spark
-    // are initialized, so we will not call `initializeSynchronous()` in `printWelcome()`.
-    //
-    // However, after Scala 2.11.9, `printWelcome()` will be the first thing to be called,
-    // so we initialize the Scala REPL and Spark here instead.
-    if (intp == null) {
-      createInterpreter()
-    }
-    echo(s"DB printWelcome 1  ${intp.isInitializeComplete}" )
-
-    if (!intp.isInitializeComplete) {
-      intp.initializeSynchronous()
-    }
-
-    echo(s"DB printWelcome 2  ${intp.isInitializeComplete}" )
-
     import org.apache.spark.SPARK_VERSION
     echo("""Welcome to
       ____              __

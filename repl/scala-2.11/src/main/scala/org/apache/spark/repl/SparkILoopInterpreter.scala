@@ -34,14 +34,8 @@ class SparkILoopInterpreter(settings: Settings, out: JPrintWriter, initializeSpa
    * See the discussion in Scala community https://github.com/scala/bug/issues/10913 for detail.
    */
   override def initializeSynchronous(): Unit = {
-    // scalastyle:off println
-    println(s"DB initializeSynchronous  ${isInitializeComplete}" )
-    // scalastyle:on println
-
-    if (!isInitializeComplete) {
-      super.initializeSynchronous()
-      initializeSpark()
-    }
+    super.initializeSynchronous()
+    initializeSpark()
   }
 
   override lazy val memberHandlers = new {
