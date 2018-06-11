@@ -130,7 +130,6 @@ def _reverse_op(name, doc="binary operator"):
 
 
 class Column(object):
-
     """
     A column in a DataFrame.
 
