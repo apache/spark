@@ -626,6 +626,8 @@ object CoalesceExec {
  */
 case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 
+  override def doCanonicalize(): SparkPlan = child.canonicalized
+
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
