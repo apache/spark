@@ -266,7 +266,6 @@ class ContinuousExecution(
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
       sparkSession.sparkContext.cancelJobGroup(runId.toString)
-      Thread.sleep(2000)
 
       epochEndpoint.askSync[Unit](StopContinuousExecutionWrites)
       SparkEnv.get.rpcEnv.stop(epochEndpoint)

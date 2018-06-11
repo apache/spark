@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD, ContinuousShuffleWriteRDD}
+import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD}
 
 case class ContinuousCoalesceExec(numPartitions: Int, child: SparkPlan) extends SparkPlan {
   override def output: Seq[Attribute] = child.output
@@ -47,11 +47,6 @@ case class ContinuousCoalesceExec(numPartitions: Int, child: SparkPlan) extends 
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_INTERVAL_KEY).toLong,
       Seq(endpointName))
 
-    val writer = new ContinuousShuffleWriteRDD(
-      childRdd.asInstanceOf[RDD[UnsafeRow]],
-      new HashPartitioner(1),
-      Seq((SparkEnv.get.rpcEnv.address, endpointName)))
-
-    new ContinuousCoalesceRDD(reader, writer)
+    new ContinuousCoalesceRDD(reader, childRdd)
   }
 }

@@ -64,7 +64,7 @@ class ContinuousShuffleReadRDD(
     queueSize: Int = 1024,
     numShuffleWriters: Int = 1,
     epochIntervalMs: Long = 1000,
-    endpointNames: Seq[String] = Seq(s"UnsafeRowReceiver-${UUID.randomUUID()}"))
+    val endpointNames: Seq[String] = Seq(s"UnsafeRowReceiver-${UUID.randomUUID()}"))
   extends RDD[UnsafeRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {

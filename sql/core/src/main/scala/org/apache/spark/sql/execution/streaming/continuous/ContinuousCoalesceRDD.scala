@@ -17,20 +17,18 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import org.apache.spark.{Dependency, NarrowDependency, Partition, TaskContext}
+import org.apache.spark._
 import org.apache.spark.rdd.{CoalescedRDDPartition, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD, ContinuousShuffleWriteRDD}
+import org.apache.spark.sql.execution.streaming.continuous.shuffle._
 
 case class ContinuousCoalesceRDDPartition(index: Int) extends Partition {
   private[continuous] var writersInitialized: Boolean = false
 }
 
-class ContinuousCoalesceRDD(
-    var reader: ContinuousShuffleReadRDD,
-    var writer: ContinuousShuffleWriteRDD)
-  extends RDD[InternalRow](writer.context, Nil) {
+class ContinuousCoalesceRDD(var reader: ContinuousShuffleReadRDD, var prev: RDD[InternalRow])
+  extends RDD[InternalRow](reader.context, Nil) {
 
   override def getPartitions: Array[Partition] = Array(ContinuousCoalesceRDDPartition(0))
 
@@ -40,13 +38,27 @@ class ContinuousCoalesceRDD(
     reader.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
 
     if (!split.asInstanceOf[ContinuousCoalesceRDDPartition].writersInitialized) {
-      val threads = writer.partitions.map { part =>
+      val rpcEnv = SparkEnv.get.rpcEnv
+      val outputPartitioner = new HashPartitioner(1)
+      val endpointRefs = reader.endpointNames.map { endpointName =>
+          rpcEnv.setupEndpointRef(rpcEnv.address, endpointName)
+      }
+
+      val threads = prev.partitions.map { prevSplit =>
         new Thread() {
           override def run(): Unit = {
-            try {
-              writer.compute(part, context)
-            } catch {
-              case e: InterruptedException => // allow clean shutdown
+            TaskContext.setTaskContext(context)
+
+            val writer: ContinuousShuffleWriter =
+              new UnsafeRowWriter(prevSplit.index, outputPartitioner, endpointRefs.toArray)
+
+            EpochTracker.initializeCurrentEpoch(
+              context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
+            while (!context.isInterrupted() && !context.isCompleted()) {
+              writer.write(prev.compute(prevSplit, context).asInstanceOf[Iterator[UnsafeRow]])
+              // Note that current epoch is a non-inheritable thread local, so each writer thread
+              // can properly increment its own epoch without affecting the main task thread.
+              EpochTracker.incrementCurrentEpoch()
             }
           }
         }
@@ -64,7 +76,7 @@ class ContinuousCoalesceRDD(
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    Seq(new NarrowDependency(writer) {
+    Seq(new NarrowDependency(prev) {
       def getParents(id: Int): Seq[Int] = Seq(0)
     })
   }
@@ -72,6 +84,6 @@ class ContinuousCoalesceRDD(
   override def clearDependencies() {
     super.clearDependencies()
     reader = null
-    writer = null
+    prev = null
   }
 }

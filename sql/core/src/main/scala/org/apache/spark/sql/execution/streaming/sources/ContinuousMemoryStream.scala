@@ -29,7 +29,7 @@ import scala.collection.mutable.ListBuffer
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.{Encoder, Row, SQLContext}
 import org.apache.spark.sql.execution.streaming._
@@ -184,6 +184,14 @@ class ContinuousMemoryStreamInputPartitionReader(
 
   private var currentOffset = startOffset
   private var current: Option[Row] = None
+
+  // Defense-in-depth against failing to propagate the task context. Since it's not inheritable,
+  // we have to do a bit of error prone work to get it into every thread used by continuous
+  // processing. We hope that some unit test will end up instantiating a continuous memory stream
+  // in such cases.
+  if (TaskContext.get() == null) {
+    throw new IllegalStateException("Task context was not set!")
+  }
 
   override def next(): Boolean = {
     current = getRecord
