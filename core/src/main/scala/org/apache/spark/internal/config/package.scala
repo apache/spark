@@ -552,7 +552,7 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
-  private[spark] val MIN_NUM_PARTITIONS_TO_HIGHLY_COMPRESS =
+  private[spark] val SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS =
     ConfigBuilder("spark.shuffle.minNumPartitionsToHighlyCompress")
       .doc("Number of partitions to determine if MapStatus should use HighlyCompressedMapStatus")
       .intConf
