@@ -679,6 +679,17 @@ class PlannerSuite extends SharedSQLContext {
     }
     assert(rangeExecInZeroPartition.head.outputPartitioning == UnknownPartitioning(0))
   }
+
+  test("SPARK-24495: EnsureRequirements can return wrong plan when reusing the same key in join") {
+    withSQLConf(("spark.sql.shuffle.partitions", "1"),
+      ("spark.sql.constraintPropagation.enabled", "false"),
+      ("spark.sql.autoBroadcastJoinThreshold", "-1")) {
+      val df1 = spark.range(100)
+      val df2 = spark.range(100).select(($"id" * 2).as("b1"), (- $"id").as("b2"))
+      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2")
+      assert(res.collect().sameElements(Array(Row(0, 0, 0))))
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements
