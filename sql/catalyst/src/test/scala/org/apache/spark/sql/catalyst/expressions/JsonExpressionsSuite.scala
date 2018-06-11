@@ -428,6 +428,15 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       output)
   }
 
+  test("from_json - input=object, schema=array, output=null") {
+    val input = """{"a": 1}"""
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val output = null
+    checkEvaluation(
+      JsonToStructs(schema, Map("unpackArray" -> "false"), Literal(input), gmtId, true),
+      output)
+  }
+
   test("from_json - input=empty array, schema=array, output=empty array") {
     val input = "[ ]"
     val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
