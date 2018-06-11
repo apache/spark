@@ -50,10 +50,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   def rddIdOf(tableName: String): Int = {
-    rddIdOf(spark.table(tableName), tableName)
-  }
-
-  def rddIdOf(ds: Dataset[_], tableName: String = "unnamedTable"): Int = {
     val plan = ds.queryExecution.sparkPlan
     plan.collect {
       case InMemoryTableScanExec(_, _, relation) =>
