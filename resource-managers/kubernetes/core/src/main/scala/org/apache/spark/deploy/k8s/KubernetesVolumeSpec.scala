@@ -16,15 +16,17 @@
  */
 package org.apache.spark.deploy.k8s
 
-import scala.collection.immutable.Map
+private[spark] sealed trait KubernetesVolumeSpecificConf
+private[spark] case class KubernetesHostPathVolumeConf(
+  hostPath: String) extends KubernetesVolumeSpecificConf
+private[spark] case class KubernetesPVCVolumeConf(
+  claimName: String) extends KubernetesVolumeSpecificConf
+private[spark] case class KubernetesEmptyDirVolumeConf(
+  medium: String,
+  sizeLimit: String) extends KubernetesVolumeSpecificConf
 
-private[spark] case class KubernetesVolumeSpec(
+private[spark] case class KubernetesVolumeSpec[T <: KubernetesVolumeSpecificConf](
     volumeName: String,
-    volumeType: String, // ADT
     mountPath: String,
     mountReadOnly: Boolean,
-    optionsSpec: Map[String, String])
-
-private[spark] object KubernetesVolumeSpec {
-  def emptySpec(): KubernetesVolumeSpec = new KubernetesVolumeSpec("", "", "", false, Map())
-}
+    volumeConf: T)

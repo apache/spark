@@ -17,8 +17,7 @@
 package org.apache.spark.deploy.k8s.features
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesVolumeSpec, SparkPod}
-import org.apache.spark.deploy.k8s.Config.{KUBERNETES_VOLUMES_SIZE_LIMIT_KEY, _}
+import org.apache.spark.deploy.k8s._
 
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
   private val sparkConf = new SparkConf(false)
@@ -41,10 +40,9 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
   test("Mounts hostPath volumes") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
-      KUBERNETES_VOLUMES_HOSTPATH_KEY,
       "/tmp",
       false,
-      Map(KUBERNETES_VOLUMES_PATH_KEY -> "/hostPath/tmp")
+      KubernetesHostPathVolumeConf("/hostPath/tmp")
     )
     val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
     val step = new MountVolumesFeatureStep(kubernetesConf)
@@ -61,10 +59,9 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
   test("Mounts pesistentVolumeClaims") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
-      KUBERNETES_VOLUMES_PVC_KEY,
       "/tmp",
       true,
-      Map(KUBERNETES_VOLUMES_CLAIM_NAME_KEY -> "pvcClaim")
+      KubernetesPVCVolumeConf("pvcClaim")
     )
     val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
     val step = new MountVolumesFeatureStep(kubernetesConf)
@@ -83,12 +80,9 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
   test("Mounts emptyDir") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
-      KUBERNETES_VOLUMES_EMPTYDIR_KEY,
       "/tmp",
       false,
-      Map(
-        KUBERNETES_VOLUMES_MEDIUM_KEY -> "Memory",
-        KUBERNETES_VOLUMES_SIZE_LIMIT_KEY -> "6G")
+      KubernetesEmptyDirVolumeConf("Memory", "6G")
     )
     val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
     val step = new MountVolumesFeatureStep(kubernetesConf)
@@ -107,17 +101,15 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
   test("Mounts multiple volumes") {
     val hpVolumeConf = KubernetesVolumeSpec(
       "hpVolume",
-      KUBERNETES_VOLUMES_HOSTPATH_KEY,
       "/tmp",
       false,
-      Map(KUBERNETES_VOLUMES_PATH_KEY -> "/hostPath/tmp")
+      KubernetesHostPathVolumeConf("/hostPath/tmp")
     )
     val pvcVolumeConf = KubernetesVolumeSpec(
       "checkpointVolume",
-      KUBERNETES_VOLUMES_PVC_KEY,
       "/checkpoints",
       true,
-      Map(KUBERNETES_VOLUMES_CLAIM_NAME_KEY -> "pvcClaim")
+      KubernetesPVCVolumeConf("pvcClaim")
     )
     val volumesConf = hpVolumeConf :: pvcVolumeConf :: Nil
     val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumesConf)

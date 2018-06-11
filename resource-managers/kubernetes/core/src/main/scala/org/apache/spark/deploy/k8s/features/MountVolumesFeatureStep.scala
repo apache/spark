@@ -18,8 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, KubernetesVolumeSpec, SparkPod}
-import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s._
 
 private[spark] class MountVolumesFeatureStep(
   kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
@@ -46,7 +45,8 @@ private[spark] class MountVolumesFeatureStep(
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 
   private def constructVolumes(
-    volumeSpecs: Iterable[KubernetesVolumeSpec]): Iterable[(VolumeMount, Volume)] = {
+    volumeSpecs: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]]
+  ): Iterable[(VolumeMount, Volume)] = {
     volumeSpecs.map { spec =>
       val volumeMount = new VolumeMountBuilder()
         .withMountPath(spec.mountPath)
@@ -54,27 +54,22 @@ private[spark] class MountVolumesFeatureStep(
         .withName(spec.volumeName)
         .build()
 
-      val volumeBuilder = spec.volumeType match {
-        case KUBERNETES_VOLUMES_HOSTPATH_KEY =>
-          val hostPath = spec.optionsSpec(KUBERNETES_VOLUMES_PATH_KEY)
+      val volumeBuilder = spec.volumeConf match {
+        case KubernetesHostPathVolumeConf(hostPath) =>
           new VolumeBuilder()
             .withHostPath(new HostPathVolumeSource(hostPath))
 
-        case KUBERNETES_VOLUMES_PVC_KEY =>
-          val claimName = spec.optionsSpec(KUBERNETES_VOLUMES_CLAIM_NAME_KEY)
+        case KubernetesPVCVolumeConf(claimName) =>
           new VolumeBuilder()
             .withPersistentVolumeClaim(
               new PersistentVolumeClaimVolumeSource(claimName, spec.mountReadOnly))
 
-        case KUBERNETES_VOLUMES_EMPTYDIR_KEY =>
-          val medium = spec.optionsSpec(KUBERNETES_VOLUMES_MEDIUM_KEY)
-          val sizeLimit = spec.optionsSpec(KUBERNETES_VOLUMES_SIZE_LIMIT_KEY)
+        case KubernetesEmptyDirVolumeConf(medium, sizeLimit) =>
           new VolumeBuilder()
             .withEmptyDir(new EmptyDirVolumeSource(medium, new Quantity(sizeLimit)))
       }
 
       val volume = volumeBuilder.withName(spec.volumeName).build()
-
 
       (volumeMount, volume)
     }

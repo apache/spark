@@ -17,8 +17,8 @@
 package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesVolumeSpec}
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_VOLUMES_HOSTPATH_KEY
+import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_VOLUMES_HOSTPATH_TYPE
 import org.apache.spark.deploy.k8s.features._
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
@@ -116,10 +116,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   test("Apply volumes step if mounts are present.") {
     val volumeSpec = KubernetesVolumeSpec(
       "volume",
-      KUBERNETES_VOLUMES_HOSTPATH_KEY,
       "/tmp",
       false,
-      Map.empty)
+      KubernetesHostPathVolumeConf("/path"))
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesDriverSpecificConf(

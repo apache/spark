@@ -19,8 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.api.model.PodBuilder
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesVolumeSpec, SparkPod}
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_VOLUMES_HOSTPATH_KEY
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
@@ -89,10 +88,9 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   test("Apply volumes step if mounts are present.") {
     val volumeSpec = KubernetesVolumeSpec(
       "volume",
-      KUBERNETES_VOLUMES_HOSTPATH_KEY,
       "/tmp",
       false,
-      Map.empty)
+      KubernetesHostPathVolumeConf("/checkpoint"))
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesExecutorSpecificConf(

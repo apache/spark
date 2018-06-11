@@ -173,7 +173,7 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
 
-    SparkPod(executorPod, executorContainer)
+    SparkPod(executorPod, containerWithLimitCores)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty

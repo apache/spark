@@ -16,11 +16,14 @@
  */
 package org.apache.spark.deploy.k8s
 
+import java.util.NoSuchElementException
+
+import scala.util.{Failure, Success, Try}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 
 private[spark] object KubernetesVolumeUtils {
-
   /**
    * Extract Spark volume configuration properties with a given name prefix.
    *
@@ -30,42 +33,82 @@ private[spark] object KubernetesVolumeUtils {
    */
   def parseVolumesWithPrefix(
     sparkConf: SparkConf,
-    prefix: String): Iterable[KubernetesVolumeSpec] = {
-    val properties = sparkConf.getAllWithPrefix(prefix)
+    prefix: String): Iterable[Try[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]]] = {
+    val properties = sparkConf.getAllWithPrefix(prefix).toMap
 
-    val propsByTypeName: Map[(String, String), Array[(String, String)]] =
-      properties.flatMap { case (k, v) =>
-        k.split('.').toList match {
-          case tpe :: name :: rest => Some(((tpe, name), (rest.mkString("."), v)))
-          case _ => None
-        }
-      }.groupBy(_._1).mapValues(_.map(_._2))
+    getVolumeTypesAndNames(properties).map { case (volumeType, volumeName) =>
+      val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
+      val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_READONLY_KEY"
 
-    propsByTypeName.map { case ((tpe, name), props) =>
-      val propMap = props.toMap
-      val mountProps = getAllWithPrefix(propMap, s"$KUBERNETES_VOLUMES_MOUNT_KEY.")
-      val options = getAllWithPrefix(propMap, s"$KUBERNETES_VOLUMES_OPTIONS_KEY.")
-
-      KubernetesVolumeSpec(
-        volumeName = name,
-        volumeType = tpe,
-        mountPath = mountProps(KUBERNETES_VOLUMES_PATH_KEY),
-        mountReadOnly = mountProps(KUBERNETES_VOLUMES_READONLY_KEY).toBoolean,
-        optionsSpec = options
+      for {
+        path <- properties.getTry(pathKey)
+        readOnly <- properties.getTry(readOnlyKey)
+        volumeConf <- parseVolumeSpecificConf(properties, volumeType, volumeName)
+      } yield KubernetesVolumeSpec(
+        volumeName = volumeName,
+        mountPath = path,
+        mountReadOnly = readOnly.toBoolean,
+        volumeConf = volumeConf
       )
     }
   }
 
   /**
-   * Extract subset of elements with keys matching on prefix, which is then excluded
-   * @param props properties to extract data from
-   * @param prefix prefix to match against
-   * @return subset of original props
+   * Get unique pairs of volumeType and volumeName,
+   * assuming options are formatted in this way:
+   * `volumeType`.`volumeName`.`property` = `value`
+   * @param properties flat mapping of property names to values
+   * @return Set[(volumeType, volumeName)]
    */
-  private def getAllWithPrefix(props: Map[String, String], prefix: String): Map[String, String] = {
-    props
-      .filterKeys(_.startsWith(prefix))
-      .map { case (k, v) => k.substring(prefix.length) -> v }
+  private def getVolumeTypesAndNames(
+    properties: Map[String, String]
+  ): Set[(String, String)] = {
+    properties.keys.flatMap { k =>
+      k.split('.').toList match {
+        case tpe :: name :: _ => Some((tpe, name))
+        case _ => None
+      }
+    }.toSet
   }
 
+  private def parseVolumeSpecificConf(
+    options: Map[String, String],
+    volumeType: String,
+    volumeName: String): Try[KubernetesVolumeSpecificConf] = {
+    volumeType match {
+      case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
+        val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
+        for {
+          path <- options.getTry(pathKey)
+        } yield KubernetesHostPathVolumeConf(path)
+
+      case KUBERNETES_VOLUMES_PVC_TYPE =>
+        val claimNameKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY"
+        for {
+          claimName <- options.getTry(claimNameKey)
+        } yield KubernetesPVCVolumeConf(claimName)
+
+      case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
+        val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
+        val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
+        for {
+          medium <- options.getTry(mediumKey)
+          sizeLimit <- options.getTry(sizeLimitKey)
+        } yield KubernetesEmptyDirVolumeConf(medium, sizeLimit)
+
+      case _ =>
+        Failure(new RuntimeException(s"Kubernetes Volume type `$volumeType` is not supported"))
+    }
+  }
+
+  /**
+   * Convenience wrapper to accumulate key lookup errors
+   */
+  implicit private class MapOps[A, B](m: Map[A, B]) {
+    def getTry(key: A): Try[B] = {
+      m
+        .get(key)
+        .fold[Try[B]](Failure(new NoSuchElementException(key.toString)))(Success(_))
+    }
+  }
 }
