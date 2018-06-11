@@ -159,19 +159,29 @@ class SQLAppStatusListener(
   }
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
-    val metricIds = exec.metrics.map(_.accumulatorId).sorted
     val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
-    val metrics = exec.stages.toSeq
-      .flatMap { stageId => Option(stageMetrics.get(stageId)) }
-      .flatMap(_.taskMetrics.values().asScala)
-      .flatMap { metrics => metrics.ids.zip(metrics.values) }
-
-    val aggregatedMetrics = (metrics ++ exec.driverAccumUpdates.toSeq)
-      .filter { case (id, _) => metricIds.contains(id) }
-      .groupBy(_._1)
-      .map { case (id, values) =>
-        id -> SQLMetrics.stringValue(metricTypes(id), values.map(_._2).toSeq)
+    val metrics = metricTypes.keys
+      .map { id => (id, scala.collection.mutable.ArrayBuffer.empty[Long]) }
+      .toMap
+    stageMetrics.asScala.collect { case (stage, liveStageMetrics) if exec.stages.contains(stage) =>
+      liveStageMetrics.taskMetrics.values().asScala.foreach { case liveMetrics =>
+        var i = 0
+        while (i < liveMetrics.ids.length) {
+          if (metrics.contains(liveMetrics.ids(i))) {
+            metrics(liveMetrics.ids(i)) += liveMetrics.values(i)
+          }
+          i += 1
+        }
       }
+    }
+
+    exec.driverAccumUpdates.collect { case (id, value) if (metrics.contains(id)) =>
+      metrics(id) += value
+    }
+
+    val aggregatedMetrics = metrics.collect { case (id, values) if values.nonEmpty =>
+      id -> SQLMetrics.stringValue(metricTypes(id), values)
+    }
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
     // This can happen if the UI is requesting this data, and the onExecutionEnd handler is
