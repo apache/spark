@@ -90,7 +90,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
    * Locale of the input for case insensitive matching. Ignored when [[caseSensitive]]
    * is true.
    * Default: Locale.getDefault.toString
-   * @see `StopWordsRemover.loadDefaultStopWords()`
+   * @see `StopWordsRemover.getDefaultLocale()`
    * @group param
    */
   @Since("2.4.0")

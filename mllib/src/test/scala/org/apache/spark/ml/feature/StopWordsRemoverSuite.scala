@@ -71,6 +71,7 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords)
+      .setCaseSensitive(false)
       .setLocale("tr")  // Turkish alphabet: has no Q, W, X but has dotted and dotless 'I's.
     val dataSet = Seq(
       // scalastyle:off
@@ -107,7 +108,7 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
   test("StopWordsRemover with invalid locale") {
     intercept[IllegalArgumentException] {
       val stopWords = Array("test", "a", "an", "the")
-      val _ = new StopWordsRemover()
+      new StopWordsRemover()
         .setInputCol("raw")
         .setOutputCol("filtered")
         .setStopWords(stopWords)
