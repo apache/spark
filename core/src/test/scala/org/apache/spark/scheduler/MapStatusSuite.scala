@@ -194,29 +194,30 @@ class MapStatusSuite extends SparkFunSuite {
       .setMaster("local")
       .setAppName("YSPARK-500")
     val sizes = Array.fill[Long](500)(150L)
-    //Test default value
+    // Test default value
     withSpark(new SparkContext(conf)) { sc =>
       val status = MapStatus(null, sizes)
       assert(status.isInstanceOf[CompressedMapStatus])
     }
-    //Test Non-positive values
+    // Test Non-positive values
     for (s <- -1 to 0) {
       assertThrows[IllegalArgumentException] {
         conf.set(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS, s)
-        withSpark(new SparkContext(conf)){ sc => //
+        withSpark(new SparkContext(conf)) { sc =>
           val status = MapStatus(null, sizes)
         }
       }
     }
-    //Test positive values
-    for(s <- 1 to 3000){
+    // Test positive values
+    for(s <- 1 to 3000) {
       conf.set(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS, s)
       withSpark(new SparkContext(conf)) { sc =>
         val status = MapStatus(null, sizes)
-        if(sizes.length > s)
+        if(sizes.length > s) {
           assert(status.isInstanceOf[HighlyCompressedMapStatus])
-        else
+        } else {
           assert(status.isInstanceOf[CompressedMapStatus])
+        }
       }
     }
   }
