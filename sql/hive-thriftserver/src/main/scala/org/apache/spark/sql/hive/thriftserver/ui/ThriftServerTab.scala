@@ -39,10 +39,6 @@ private[thriftserver] class ThriftServerTab(sparkContext: SparkContext)
   attachPage(new ThriftServerSessionPage(this))
   parent.attachTab(this)
 
-  // We need to add the filters to the handlers generated here since the SparkUI has been already
-  // started.
-  JettyUtils.addFilters(this.pages.flatMap(parent.handlersForPage), parent.conf)
-
   def detach() {
     getSparkUI(sparkContext).detachTab(this)
   }

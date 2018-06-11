@@ -263,7 +263,7 @@ private[spark] object JettyUtils extends Logging {
     filters.foreach {
       case filter : String =>
         if (!filter.isEmpty) {
-          logInfo("Adding filter: " + filter)
+          logInfo(s"Adding filter $filter to ${handlers.map(_.getContextPath).mkString(", ")}.")
           val holder : FilterHolder = new FilterHolder()
           holder.setClassName(filter)
           // Get any parameters for each filter
