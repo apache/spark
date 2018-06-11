@@ -553,8 +553,6 @@ case class JsonToStructs(
       forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case ArrayType(_: StructType, _) if unpackArray =>
-      super.checkInputDataTypes()
     case _: StructType | _: ArrayType | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
