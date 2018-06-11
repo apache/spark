@@ -524,6 +524,9 @@ case class JsonToStructs(
   val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
 
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
+  // The flag enables old behavior which allows to specify array of struct as a schema
+  // for the json string `{...}`. For example, if the schema is ArrayType(StructType(...)),
+  // the array type will be unpacked and StructType will be applied for JSON string.
   private val unpackArray: Boolean = {
     caseInsensitiveOptions.get("unpackArray").map(_.toBoolean).getOrElse(false)
   }
