@@ -1053,7 +1053,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // users that they may loss data if they are using a direct output committer.
     val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
     val outputCommitterClass = hadoopConf.get("mapred.output.committer.class", "")
-    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
+    val outputCommitCoordinationEnabled = self.conf.getBoolean(
+      "spark.hadoop.outputCommitCoordination.enabled", true)
+    if (speculationEnabled && outputCommitterClass.contains("Direct")
+      && !outputCommitCoordinationEnabled) {
       val warningMessage =
         s"$outputCommitterClass may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
