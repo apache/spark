@@ -50,7 +50,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   def rddIdOf(tableName: String): Int = {
-    val plan = spark.table(tableName).queryExecution.sparkPlan
+    rddIdOf(spark.table(tableName), tableName)
+  }
+
+  def rddIdOf(ds: Dataset[_], tableName: String = "unnamedTable"): Int = {
+    val plan = ds.queryExecution.sparkPlan
     plan.collect {
       case InMemoryTableScanExec(_, _, relation) =>
         relation.cacheBuilder.cachedColumnBuffers.id
@@ -81,25 +85,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       case InMemoryTableScanExec(_, _, relation) =>
         getNumInMemoryTablesRecursively(relation.cachedPlan) + 1
     }.sum
-  }
-
-  test("withColumn doesn't invalidate cached dataframe") {
-    var evalCount = 0
-    val myUDF = udf((x: String) => { evalCount += 1; "result" })
-    val df = Seq(("test", 1)).toDF("s", "i").select(myUDF($"s"))
-    df.cache()
-
-    df.collect()
-    assert(evalCount === 1)
-
-    df.collect()
-    assert(evalCount === 1)
-
-    val df2 = df.withColumn("newColumn", lit(1))
-    df2.collect()
-
-    // We should not reevaluate the cached dataframe
-    assert(evalCount === 1)
   }
 
   test("cache temp table") {
