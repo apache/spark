@@ -318,7 +318,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       resultMap
     }
 
-    logWarning(s"Loading state for $version takes $elapsedMs ms.")
+    logDebug(s"Loading state for $version takes $elapsedMs ms.")
 
     result
   }
