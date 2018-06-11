@@ -22,20 +22,21 @@ import org.apache.spark.deploy.k8s._
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
   private val sparkConf = new SparkConf(false)
   private val emptyKubernetesConf = KubernetesConf(
-    sparkConf,
-    KubernetesDriverSpecificConf(
+    sparkConf = sparkConf,
+    roleSpecificConf = KubernetesDriverSpecificConf(
       None,
       "app-name",
       "main",
       Seq.empty),
-    "resource",
-    "app-id",
-    Map.empty,
-    Map.empty,
-    Map.empty,
-    Map.empty,
-    Map.empty,
-    Nil)
+    appResourceNamePrefix = "resource",
+    appId = "app-id",
+    roleLabels = Map.empty,
+    roleAnnotations = Map.empty,
+    roleSecretNamesToMountPaths = Map.empty,
+    roleSecretEnvNamesToKeyRefs = Map.empty,
+    roleEnvs = Map.empty,
+    roleVolumes = Nil,
+    sparkFiles = Nil)
 
   test("Mounts hostPath volumes") {
     val volumeConf = KubernetesVolumeSpec(

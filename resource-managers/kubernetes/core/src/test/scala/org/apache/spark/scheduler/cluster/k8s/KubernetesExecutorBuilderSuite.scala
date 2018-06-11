@@ -59,7 +59,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
-      Nil)
+      Nil,
+      Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
   }
@@ -76,7 +77,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map("secret" -> "secretMountPath"),
       Map("secret-name" -> "secret-key"),
       Map.empty,
-      Nil)
+      Nil,
+      Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -102,7 +104,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
-      volumeSpec :: Nil)
+      volumeSpec :: Nil,
+      Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,

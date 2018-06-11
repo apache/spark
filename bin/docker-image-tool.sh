@@ -63,12 +63,20 @@ function build {
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
-
-  local DOCKERFILE=${DOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
+  local BINDING_BUILD_ARGS=(
+    --build-arg
+    base_img=$(image_ref spark)
+  )
+  local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
+  local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
 
   docker build "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
-    -f "$DOCKERFILE" .
+    -f "$BASEDOCKERFILE" .
+
+    docker build "${BINDING_BUILD_ARGS[@]}" \
+    -t $(image_ref spark-py) \
+    -f "$PYDOCKERFILE" .
 }
 
 function push {
@@ -86,7 +94,8 @@ Commands:
   push        Push a pre-built image to a registry. Requires a repository address to be provided.
 
 Options:
-  -f file     Dockerfile to build. By default builds the Dockerfile shipped with Spark.
+  -f file     Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
+  -p file     Dockerfile with Python baked in. By default builds the Dockerfile shipped with Spark.
   -r repo     Repository address.
   -t tag      Tag to apply to the built image, or to identify the image to be pushed.
   -m          Use minikube's Docker daemon.
@@ -116,12 +125,14 @@ fi
 
 REPO=
 TAG=
-DOCKERFILE=
+BASEDOCKERFILE=
+PYDOCKERFILE=
 while getopts f:mr:t: option
 do
  case "${option}"
  in
- f) DOCKERFILE=${OPTARG};;
+ f) BASEDOCKERFILE=${OPTARG};;
+ p) PYDOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  m)

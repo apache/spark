@@ -270,7 +270,6 @@ future versions of the spark-kubernetes integration.
 
 Some of these include:
 
-* PySpark
 * R
 * Dynamic Executor Scaling
 * Local File Dependency Management
@@ -677,6 +676,21 @@ specific to Spark on Kubernetes.
   <td>
    Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> options passed to the Kubernetes with <code>OptionName</code> as key having specified value. For example,
    <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.options.claimName=spark-pvc-claim</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
+  <td><code>0.1</code></td>
+  <td>
+    This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, and various systems processes. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
+    This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This prempts this error with a higher default. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.pyspark.pythonversion</code></td>
+  <td><code>"2"</code></td>
+  <td>
+   This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
   </td>
 </tr>
 </table>
