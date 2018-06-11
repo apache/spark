@@ -60,22 +60,24 @@ private[spark] abstract class WebUI(
   def getHandlers: Seq[ServletContextHandler] = handlers
   def getSecurityManager: SecurityManager = securityManager
 
-  /** Attach a tab to this UI, along with all of its attached pages. */
+  /** Attaches a tab to this UI, along with all of its attached pages. */
   def attachTab(tab: WebUITab) {
     tab.pages.foreach(attachPage)
     tabs += tab
   }
 
+  /** Detaches a tab from this UI. */
   def detachTab(tab: WebUITab) {
     tab.pages.foreach(detachPage)
     tabs -= tab
   }
 
+  /** Detaches a page from this UI. */
   def detachPage(page: WebUIPage) {
     pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }
 
-  /** Attach a page to this UI. */
+  /** Attaches a page to this UI. */
   def attachPage(page: WebUIPage) {
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
@@ -88,13 +90,13 @@ private[spark] abstract class WebUI(
     handlers += renderHandler
   }
 
-  /** Attach a handler to this UI. */
+  /** Attaches a handler to this UI. */
   def attachHandler(handler: ServletContextHandler) {
     handlers += handler
     serverInfo.foreach(_.addHandler(handler))
   }
 
-  /** Detach a handler from this UI. */
+  /** Detaches a handler from this UI. */
   def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
     serverInfo.foreach(_.removeHandler(handler))
@@ -111,7 +113,7 @@ private[spark] abstract class WebUI(
   }
 
   /**
-   * Remove a static content handler.
+   * Removes a static content handler.
    *
    * @param path Path in UI to unmount.
    */
@@ -119,10 +121,10 @@ private[spark] abstract class WebUI(
     handlers.find(_.getContextPath() == path).foreach(detachHandler)
   }
 
-  /** Initialize all components of the server. */
+  /** Initializes all components of the server. */
   def initialize(): Unit
 
-  /** Bind to the HTTP server behind this web interface. */
+  /** Binds to the HTTP server behind this web interface. */
   def bind(): Unit = {
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
@@ -136,13 +138,13 @@ private[spark] abstract class WebUI(
     }
   }
 
-  /** Return the url of web interface. Only valid after bind(). */
+  /** @return The url of web interface. Only valid after [[bind]]. */
   def webUrl: String = s"http://$publicHostName:$boundPort"
 
-  /** Return the actual port to which this server is bound. Only valid after bind(). */
+  /** @return The actual port to which this server is bound. Only valid after bind(). */
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
-  /** Stop the server behind this web interface. Only valid after bind(). */
+  /** Stops the server behind this web interface. Only valid after [[bind]]. */
   def stop(): Unit = {
     assert(serverInfo.isDefined,
       s"Attempted to stop $className before binding to a server!")
