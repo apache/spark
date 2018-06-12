@@ -28,7 +28,10 @@ import java.util.regex.Pattern;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
+
 import static org.junit.Assert.*;
 
 public class SparkSubmitCommandBuilderSuite extends BaseSuite {
@@ -206,6 +209,22 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.HELP, null);
     testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.USAGE_ERROR, null);
     testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.VERSION, null);
+  }
+
+  @Rule
+  public ExpectedException testExamplesRunnerWithMasterNoMainClassEx = ExpectedException.none();
+
+  @Test
+  public void testExamplesRunnerWithMasterNoMainClass() throws Exception {
+    testExamplesRunnerWithMasterNoMainClassEx.expect(IllegalArgumentException.class);
+    testExamplesRunnerWithMasterNoMainClassEx.expectMessage("Missing example class name.");
+
+    List<String> sparkSubmitArgs = Arrays.asList(
+      SparkSubmitCommandBuilder.RUN_EXAMPLE,
+      parser.MASTER + "=foo"
+    );
+    Map<String, String> env = new HashMap<>();
+    buildCommand(sparkSubmitArgs, env);
   }
 
   @Test

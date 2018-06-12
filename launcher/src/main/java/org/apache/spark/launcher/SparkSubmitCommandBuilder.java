@@ -139,10 +139,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
         case RUN_EXAMPLE:
           isExample = true;
+          appResource = SparkLauncher.NO_RESOURCE;
           submitArgs = args.subList(1, args.size());
-          if (submitArgs.isEmpty()) {
-            throw new IllegalArgumentException("Missing argument");
-          }
       }
 
       this.isExample = isExample;
@@ -151,7 +149,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         parser.parse(submitArgs);
         this.isSpecialCommand = parser.isSpecialCommand;
       } else {
-        this.isSpecialCommand = true;
+        this.isSpecialCommand = false;
       }
     } else {
       this.isExample = isExample;
