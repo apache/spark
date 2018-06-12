@@ -116,49 +116,52 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("basic case for addFile and listFiles") {
     val dir = Utils.createTempDir()
 
+    // file and absolute path for normal path
     val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
     val absolutePath1 = file1.getAbsolutePath
 
+    // file and absolute path for relative path
     val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
     val relativePath = file2.getParent + "/../" + file2.getParentFile.getName + "/" + file2.getName
     val absolutePath2 = file2.getAbsolutePath
 
+    // file and absolute path for path with local scheme
+    val file3 = File.createTempFile("someprefix3", "somesuffix3", dir)
+    val localPath = "local://" + file3.getParent + "/../" + file3.getParentFile.getName +
+      "/" + file3.getName
+    val absolutePath3 = file3.getAbsolutePath
+
     try {
       Files.write("somewords1", file1, StandardCharsets.UTF_8)
       Files.write("somewords2", file2, StandardCharsets.UTF_8)
-      val length1 = file1.length()
-      val length2 = file2.length()
+      Files.write("somewords3", file3, StandardCharsets.UTF_8)
+
+      def checkGottenFile(file: File, absolutePath: String): Unit = {
+        val length = file.length()
+        val gotten = new File(SparkFiles.get(file.getName))
+        if (!gotten.exists()) {
+          throw new SparkException("file doesn't exist : " + absolutePath1)
+        }
+
+        if (file.length() != gotten.length()) {
+          throw new SparkException(
+            s"file has different length $length than added file ${gotten.length()} : " +
+              absolutePath1)
+        }
+
+        if (absolutePath == gotten.getAbsolutePath) {
+          throw new SparkException("file should have been copied :" + absolutePath1)
+        }
+      }
 
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addFile(file1.getAbsolutePath)
       sc.addFile(relativePath)
+      sc.addFile(localPath)
       sc.parallelize(Array(1), 1).map(x => {
-        val gotten1 = new File(SparkFiles.get(file1.getName))
-        val gotten2 = new File(SparkFiles.get(file2.getName))
-        if (!gotten1.exists()) {
-          throw new SparkException("file doesn't exist : " + absolutePath1)
-        }
-        if (!gotten2.exists()) {
-          throw new SparkException("file doesn't exist : " + absolutePath2)
-        }
-
-        if (length1 != gotten1.length()) {
-          throw new SparkException(
-            s"file has different length $length1 than added file ${gotten1.length()} : " +
-              absolutePath1)
-        }
-        if (length2 != gotten2.length()) {
-          throw new SparkException(
-            s"file has different length $length2 than added file ${gotten2.length()} : " +
-              absolutePath2)
-        }
-
-        if (absolutePath1 == gotten1.getAbsolutePath) {
-          throw new SparkException("file should have been copied :" + absolutePath1)
-        }
-        if (absolutePath2 == gotten2.getAbsolutePath) {
-          throw new SparkException("file should have been copied : " + absolutePath2)
-        }
+        checkGottenFile(file1, absolutePath1)
+        checkGottenFile(file2, absolutePath2)
+        checkGottenFile(file3, absolutePath3)
         x
       }).count()
       assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 1)

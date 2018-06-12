@@ -1517,9 +1517,12 @@ class SparkContext(config: SparkConf) extends Logging {
    * only supported for Hadoop-supported filesystems.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    val uri = new Path(path).toUri
+    var uri = new Path(path).toUri
     val schemeCorrectedPath = uri.getScheme match {
-      case null | "local" => new File(path).getCanonicalFile.toURI.toString
+      case null | "local" =>
+        // SPARK-24195: Local is not a valid scheme for FileSystem, we should only keep path here.
+        uri = new Path(uri.getPath).toUri
+        new File(uri.getPath).getCanonicalFile.toURI.toString
       case _ => path
     }
 
