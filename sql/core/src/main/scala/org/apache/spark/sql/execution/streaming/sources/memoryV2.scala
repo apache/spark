@@ -130,8 +130,15 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
 
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row]) extends WriterCommitMessage {}
 
-class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
+class MemoryWriter(
+    sink: MemorySinkV2,
+    batchId: Long,
+    schema: StructType,
+    outputMode: OutputMode,
+    options: DataSourceOptions)
   extends DataSourceWriter with Logging {
+
+  val sinkCapacity: Option[Int] = MemorySinkBase.getMaxRows(schema, options)
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
@@ -139,7 +146,7 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data
     }
-    sink.write(batchId, outputMode, newRows, None)
+    sink.write(batchId, outputMode, newRows, sinkCapacity)
   }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
