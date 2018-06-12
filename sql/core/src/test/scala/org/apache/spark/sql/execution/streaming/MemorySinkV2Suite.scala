@@ -21,7 +21,10 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.sources._
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.StructType
 
 class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
   test("data writer") {
@@ -40,7 +43,9 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
 
   test("continuous writer") {
     val sink = new MemorySinkV2
-    val writer = new MemoryStreamWriter(sink, OutputMode.Append())
+    var schema = new StructType().add("value", IntegerType)
+    val writer =
+      new MemoryStreamWriter(sink, schema, OutputMode.Append(), DataSourceOptions.empty())
     writer.commit(0,
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),

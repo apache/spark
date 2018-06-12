@@ -22,6 +22,7 @@ import scala.language.implicitConversions
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -36,7 +37,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Append output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Append)
+    val sink = new MemorySink(schema, OutputMode.Append, DataSourceOptions.empty())
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -70,7 +71,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Update output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Update)
+    val sink = new MemorySink(schema, OutputMode.Update, DataSourceOptions.empty())
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -104,7 +105,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Complete output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Complete)
+    val sink = new MemorySink(schema, OutputMode.Complete, DataSourceOptions.empty())
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -211,7 +212,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("MemoryPlan statistics") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Append)
+    val sink = new MemorySink(schema, OutputMode.Append, DataSourceOptions.empty())
     val plan = new MemoryPlan(sink)
 
     // Before adding data, check output
