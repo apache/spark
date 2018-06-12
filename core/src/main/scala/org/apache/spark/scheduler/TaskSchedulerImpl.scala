@@ -370,11 +370,9 @@ private[spark] class TaskSchedulerImpl(
       }
       if (!launchedAnyTask) {
         taskSet.abortIfCompletelyBlacklisted(hostToExecutors)
+      } else {
+        hasLaunchedTask = true
       }
-    }
-
-    if (tasks.size > 0) {
-      hasLaunchedTask = true
     }
     return tasks
   }
