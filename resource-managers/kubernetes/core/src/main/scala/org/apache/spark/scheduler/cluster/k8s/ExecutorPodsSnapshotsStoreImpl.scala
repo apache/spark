@@ -84,5 +84,5 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
 
   private case class SnapshotsSubscriber(
       snapshotsBuffer: BlockingQueue[ExecutorPodsSnapshot],
-      onNewSnapshots: (Seq[ExecutorPodsSnapshot] => Unit))
+      onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit)
 }
