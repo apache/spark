@@ -55,6 +55,9 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
   @GuardedBy("this")
   private val batches = new ArrayBuffer[AddedData]()
 
+  /** The number of rows in this MemorySink. */
+  private var numRows = 0
+
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
     batches.flatMap(_.data)
@@ -81,7 +84,8 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
     }.mkString("\n")
   }
 
-  def write(batchId: Long, outputMode: OutputMode, newRows: Array[Row]): Unit = {
+  def write(batchId: Long, outputMode: OutputMode, newRows: Array[Row], sinkCapacity: Option[Int])
+  : Unit = {
     val notCommitted = synchronized {
       latestBatchId.isEmpty || batchId > latestBatchId.get
     }
@@ -89,14 +93,22 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
         case Append | Update =>
-          val rows = AddedData(batchId, newRows)
-          synchronized { batches += rows }
+          synchronized {
+            val rowsToAdd =
+              if (sinkCapacity.isDefined) newRows.take(sinkCapacity.get - numRows) else newRows
+            val rows = AddedData(batchId, rowsToAdd)
+            batches += rows
+            numRows += rowsToAdd.length
+          }
 
         case Complete =>
-          val rows = AddedData(batchId, newRows)
           synchronized {
+            val rowsToAdd =
+              if (sinkCapacity.isDefined) newRows.take(sinkCapacity.get) else newRows
+            val rows = AddedData(batchId, rowsToAdd)
             batches.clear()
             batches += rows
+            numRows = rowsToAdd.length
           }
 
         case _ =>
@@ -110,6 +122,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
 
   def clear(): Unit = synchronized {
     batches.clear()
+    numRows = 0
   }
 
   override def toString(): String = "MemorySinkV2"
@@ -126,7 +139,7 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data
     }
-    sink.write(batchId, outputMode, newRows)
+    sink.write(batchId, outputMode, newRows, None)
   }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
@@ -141,7 +154,7 @@ class MemoryStreamWriter(
     options: DataSourceOptions)
   extends StreamWriter {
 
-  val maxRowsInSink = MemorySinkBase.getMaxRows(schema, options)
+  val sinkCapacity: Option[Int] = MemorySinkBase.getMaxRows(schema, options)
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
@@ -149,7 +162,7 @@ class MemoryStreamWriter(
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data
     }
-    sink.write(epochId, outputMode, newRows)
+    sink.write(epochId, outputMode, newRows, sinkCapacity)
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {

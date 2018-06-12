@@ -233,19 +233,27 @@ trait MemorySinkBase extends BaseStreamingSink {
  * Companion object to MemorySinkBase.
  */
 object MemorySinkBase {
-  val MAX_MEMORY_SINK_ROWS = ""
-  val MAX_MEMORY_SINK_ROWS_DEFAULT = -1L
-  val MAX_MEMORY_SINK_BYTES = ""
+  val MAX_MEMORY_SINK_ROWS = "maxMemorySinkRows"
+  val MAX_MEMORY_SINK_ROWS_DEFAULT = -1
+  val MAX_MEMORY_SINK_BYTES = "maxMemorySinkBytes"
   val MAX_MEMORY_SINK_BYTES_DEFAULT = -1L
 
-  def getMaxRows(schema: StructType, options: DataSourceOptions): Option[Long] = {
+  /**
+   * Gets the max number of rows a MemorySink should store. This number is based on the lesser of
+   * the memory sink row limit or the memory sink byte limit, if either is set. If not, there is
+   * no limit.
+   * @param schema The row schema, for use in computing size per row.
+   * @param options Options for writing from which we get the max rows or bytes.
+   * @return The maximum number of rows a memorySink should store, or None for no limit.
+   */
+  def getMaxRows(schema: StructType, options: DataSourceOptions): Option[Int] = {
     val maxBytes = options.getLong(MAX_MEMORY_SINK_BYTES, MAX_MEMORY_SINK_BYTES_DEFAULT)
-    val maxRows = options.getLong(MAX_MEMORY_SINK_ROWS, MAX_MEMORY_SINK_ROWS_DEFAULT)
+    val maxRows = options.getInt(MAX_MEMORY_SINK_ROWS, MAX_MEMORY_SINK_ROWS_DEFAULT)
     val sizePerRow = EstimationUtils.getSizePerRow(schema.toAttributes).longValue()
     if (maxBytes >= 0 && maxRows >= 0) {
-      Some(math.min(maxRows, maxBytes / sizePerRow))
+      Some(math.min(maxRows, (maxBytes / sizePerRow).asInstanceOf[Int]))
     } else if (maxBytes >= 0) {
-      Some(maxBytes / sizePerRow)
+      Some((maxBytes / sizePerRow).asInstanceOf[Int])
     } else if (maxRows >= 0) {
       Some(maxRows)
     } else {
@@ -259,14 +267,20 @@ object MemorySinkBase {
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink
-  with MemorySinkBase with Logging {
+class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSourceOptions)
+  extends Sink with MemorySinkBase with Logging {
 
   private case class AddedData(batchId: Long, data: Array[Row])
 
   /** An order list of batches that have been written to this [[Sink]]. */
   @GuardedBy("this")
   private val batches = new ArrayBuffer[AddedData]()
+
+  /** The number of rows in this MemorySink. */
+  private var numRows = 0
+
+  /** The capacity in rows of this sink. */
+  val sinkCapacity: Option[Int] = MemorySinkBase.getMaxRows(schema, options)
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
@@ -300,14 +314,24 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
         case Append | Update =>
-          val rows = AddedData(batchId, data.collect())
-          synchronized { batches += rows }
+          val newRows = data.collect()
+          synchronized {
+            val rowsToAdd =
+              if (sinkCapacity.isDefined) newRows.take(sinkCapacity.get - numRows) else newRows
+            val rows = AddedData(batchId, rowsToAdd)
+            batches += rows
+            numRows += rowsToAdd.length
+          }
 
         case Complete =>
-          val rows = AddedData(batchId, data.collect())
+          val newRows = data.collect()
           synchronized {
+            val rowsToAdd =
+              if (sinkCapacity.isDefined) newRows.take(sinkCapacity.get) else newRows
+            val rows = AddedData(batchId, rowsToAdd)
             batches.clear()
             batches += rows
+            numRows = rowsToAdd.length
           }
 
         case _ =>
@@ -321,6 +345,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink
 
   def clear(): Unit = synchronized {
     batches.clear()
+    numRows = 0
   }
 
   override def toString(): String = "MemorySink"
