@@ -90,7 +90,6 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
    * Locale of the input for case insensitive matching. Ignored when [[caseSensitive]]
    * is true.
    * Default: Locale.getDefault.toString
-   * @see `StopWordsRemover.getDefaultLocale()`
    * @group param
    */
   @Since("2.4.0")
@@ -107,7 +106,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   def getLocale: String = $(locale)
 
   setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"),
-    caseSensitive -> false, locale -> StopWordsRemover.getDefaultLocale)
+    caseSensitive -> false, locale -> Locale.getDefault.toString)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -150,12 +149,6 @@ object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
 
   @Since("1.6.0")
   override def load(path: String): StopWordsRemover = super.load(path)
-
-  /**
-   * Returns the JVM's default locale.
-   */
-  @Since("2.4.0")
-  def getDefaultLocale(): String = Locale.getDefault.toString
 
   /**
    * Loads the default stop words for the given language.

@@ -2596,7 +2596,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
         self._setDefault(stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-                         caseSensitive=False, locale=StopWordsRemover.defaultLocale())
+                         caseSensitive=False, locale=self._java_obj.getLocale())
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2653,15 +2653,6 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         Gets the value of :py:attr:`locale`.
         """
         return self.getOrDefault(self.locale)
-
-    @staticmethod
-    @since("2.4.0")
-    def defaultLocale():
-        """
-        Returns the default jvm locale.
-        """
-        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
-        return stopWordsObj.getDefaultLocale()
 
     @staticmethod
     @since("2.0.0")
