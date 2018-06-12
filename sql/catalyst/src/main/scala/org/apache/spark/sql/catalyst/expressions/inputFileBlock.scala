@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{DataType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -42,9 +42,9 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
-    val typeDef = s"final ${CodeGenerator.javaType(dataType)}"
-    ev.copy(code = code"$typeDef ${ev.value} = $className.getInputFilePath();",
+    val className = inline"${InputFileBlockHolder.getClass.getName.stripSuffix("$")}"
+    val typeDef = inline"${CodeGenerator.javaType(dataType)}"
+    ev.copy(code = code"final $typeDef ${ev.value} = $className.getInputFilePath();",
       isNull = FalseLiteral)
   }
 }
@@ -66,9 +66,10 @@ case class InputFileBlockStart() extends LeafExpression with Nondeterministic {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
-    val typeDef = s"final ${CodeGenerator.javaType(dataType)}"
-    ev.copy(code = code"$typeDef ${ev.value} = $className.getStartOffset();", isNull = FalseLiteral)
+    val className = inline"${InputFileBlockHolder.getClass.getName.stripSuffix("$")}"
+    val typeDef = inline"${CodeGenerator.javaType(dataType)}"
+    ev.copy(code = code"final $typeDef ${ev.value} = $className.getStartOffset();",
+      isNull = FalseLiteral)
   }
 }
 
@@ -89,8 +90,9 @@ case class InputFileBlockLength() extends LeafExpression with Nondeterministic {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
-    val typeDef = s"final ${CodeGenerator.javaType(dataType)}"
-    ev.copy(code = code"$typeDef ${ev.value} = $className.getLength();", isNull = FalseLiteral)
+    val className = inline"${InputFileBlockHolder.getClass.getName.stripSuffix("$")}"
+    val typeDef = inline"${CodeGenerator.javaType(dataType)}"
+    ev.copy(code = code"final $typeDef ${ev.value} = $className.getLength();",
+      isNull = FalseLiteral)
   }
 }

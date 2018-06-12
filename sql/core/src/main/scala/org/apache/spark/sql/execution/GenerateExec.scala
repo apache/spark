@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types._
 
@@ -163,10 +164,10 @@ case class GenerateExec(
     val data = e.genCode(ctx)
 
     // Generate looping variables.
-    val index = ctx.freshName("index")
+    val index = JavaCode.variable(ctx.freshName("index"), IntegerType)
 
     // Add a check if the generate outer flag is true.
-    val checks = optionalCode(outer, s"($index == -1)")
+    val checks = optionalCode(outer, code"($index == -1)")
 
     // Add position
     val position = if (e.position) {
@@ -185,13 +186,13 @@ case class GenerateExec(
     val (initMapData, updateRowData, values) = e.collectionType match {
       case ArrayType(st: StructType, nullable) if e.inline =>
         val row = codeGenAccessor(ctx, data.value, "col", index, st, nullable, checks)
-        val fieldChecks = checks ++ optionalCode(nullable, row.isNull)
+        val fieldChecks = checks ++ optionalCode(nullable, code"${row.isNull}")
         val columns = st.fields.toSeq.zipWithIndex.map { case (f, i) =>
           codeGenAccessor(
             ctx,
             row.value,
             s"st_col${i}",
-            i.toString,
+            JavaCode.variable(i.toString, IntegerType),
             f.dataType,
             f.nullable,
             fieldChecks)
@@ -203,8 +204,8 @@ case class GenerateExec(
 
       case MapType(keyType, valueType, valueContainsNull) =>
         // Materialize the key and the value arrays before we enter the loop.
-        val keyArray = ctx.freshName("keyArray")
-        val valueArray = ctx.freshName("valueArray")
+        val keyArray = JavaCode.variable(ctx.freshName("keyArray"), classOf[ArrayData])
+        val valueArray = JavaCode.variable(ctx.freshName("valueArray"), classOf[ArrayData])
         val initArrayData =
           s"""
              |ArrayData $keyArray = ${data.isNull} ? null : ${data.value}.keyArray();
@@ -251,16 +252,17 @@ case class GenerateExec(
     val data = e.genCode(ctx)
 
     // Generate looping variables.
-    val iterator = ctx.freshName("iterator")
-    val hasNext = ctx.freshName("hasNext")
-    val current = ctx.freshName("row")
+    val iterator = JavaCode.variable(ctx.freshName("iterator"), classOf[Iterator[InternalRow]])
+    val hasNext = JavaCode.variable(ctx.freshName("hasNext"), BooleanType)
+    val current = JavaCode.variable(ctx.freshName("row"), classOf[InternalRow])
 
     // Add a check if the generate outer flag is true.
-    val checks = optionalCode(outer, s"!$hasNext")
+    val checks = optionalCode(outer, code"!$hasNext")
     val values = e.dataType match {
       case ArrayType(st: StructType, nullable) =>
         st.fields.toSeq.zipWithIndex.map { case (f, i) =>
-          codeGenAccessor(ctx, current, s"st_col${i}", s"$i", f.dataType, f.nullable, checks)
+          val index = JavaCode.variable(s"$i", IntegerType)
+          codeGenAccessor(ctx, current, s"st_col${i}", index, f.dataType, f.nullable, checks)
         }
     }
 
@@ -301,21 +303,22 @@ case class GenerateExec(
    */
   private def codeGenAccessor(
       ctx: CodegenContext,
-      source: String,
+      source: ExprValue,
       name: String,
-      index: String,
+      index: ExprValue,
       dt: DataType,
       nullable: Boolean,
-      initialChecks: Seq[String]): ExprCode = {
-    val value = ctx.freshName(name)
-    val javaType = CodeGenerator.javaType(dt)
+      initialChecks: Seq[Block]): ExprCode = {
+    val value = JavaCode.variable(ctx.freshName(name), dt)
+    val javaType = inline"${CodeGenerator.javaType(dt)}"
     val getter = CodeGenerator.getValue(source, dt, index)
-    val checks = initialChecks ++ optionalCode(nullable, s"$source.isNullAt($index)")
+    val checks = initialChecks ++ optionalCode(nullable, code"$source.isNullAt($index)")
     if (checks.nonEmpty) {
-      val isNull = ctx.freshName("isNull")
+      val isNull = JavaCode.isNullVariable(ctx.freshName("isNull"))
+      val checkBlock = checks.reduceLeft((left, right) => code"$left || $right")
       val code =
         code"""
-           |boolean $isNull = ${checks.mkString(" || ")};
+           |boolean $isNull = $checkBlock;
            |$javaType $value = $isNull ? ${CodeGenerator.defaultValue(dt)} : $getter;
          """.stripMargin
       ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, dt))
@@ -324,8 +327,8 @@ case class GenerateExec(
     }
   }
 
-  private def optionalCode(condition: Boolean, code: => String): Seq[String] = {
+  private def optionalCode(condition: Boolean, code: => Block): Seq[Block] = {
     if (condition) Seq(code)
-    else Seq.empty
+    else Seq(EmptyBlock)
   }
 }

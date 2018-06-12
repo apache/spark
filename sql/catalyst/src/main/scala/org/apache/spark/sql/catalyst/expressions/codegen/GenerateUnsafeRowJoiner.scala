@@ -21,7 +21,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.unsafe.Platform
 
 abstract class UnsafeRowJoiner {
@@ -56,8 +57,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
   def create(schema1: StructType, schema2: StructType): UnsafeRowJoiner = {
     val ctx = new CodegenContext
     val offset = Platform.BYTE_ARRAY_OFFSET
-    val getLong = "Platform.getLong"
-    val putLong = "Platform.putLong"
+    val getLong = inline"Platform.getLong"
+    val putLong = inline"Platform.putLong"
 
     val bitset1Words = (schema1.size + 63) / 64
     val bitset2Words = (schema2.size + 63) / 64
@@ -68,38 +69,46 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     // The only reduction comes from merging the bitset portion of the two rows, saving 1 word.
     val sizeReduction = (bitset1Words + bitset2Words - outputBitsetWords) * 8
 
+    val obj1 = JavaCode.variable("obj1", classOf[Object])
+    val obj2 = JavaCode.variable("obj2", classOf[Object])
+    val offset1 = JavaCode.variable("offset1", LongType)
+    val offset2 = JavaCode.variable("offset2", LongType)
+
     // --------------------- copy bitset from row 1 and row 2 --------------------------- //
     val copyBitset = Seq.tabulate(outputBitsetWords) { i =>
       val bits = if (bitset1Remainder > 0 && bitset2Words != 0) {
         if (i < bitset1Words - 1) {
-          s"$getLong(obj1, offset1 + ${i * 8})"
+          code"$getLong($obj1, $offset1 + ${i * 8})"
         } else if (i == bitset1Words - 1) {
           // combine last work of bitset1 and first word of bitset2
-          s"$getLong(obj1, offset1 + ${i * 8}) | ($getLong(obj2, offset2) << $bitset1Remainder)"
+          val block = code"$getLong($obj1, $offset1 + ${i * 8}) |"
+          code"$block ($getLong($obj2, $offset2) << $bitset1Remainder)"
         } else if (i - bitset1Words < bitset2Words - 1) {
           // combine next two words of bitset2
-          s"($getLong(obj2, offset2 + ${(i - bitset1Words) * 8}) >>> (64 - $bitset1Remainder))" +
-            s" | ($getLong(obj2, offset2 + ${(i - bitset1Words + 1) * 8}) << $bitset1Remainder)"
+          val block1 = code"($getLong($obj2, $offset2 + ${(i - bitset1Words) * 8}) >>>"
+          val block2 = code"(64 - $bitset1Remainder))"
+          val block3 = code"| ($getLong($obj2, $offset2 + ${(i - bitset1Words + 1) * 8})"
+          code"$block1 $block2 $block3 << $bitset1Remainder)"
         } else {
           // last word of bitset2
-          s"$getLong(obj2, offset2 + ${(i - bitset1Words) * 8}) >>> (64 - $bitset1Remainder)"
+          code"$getLong($obj2, $offset2 + ${(i - bitset1Words) * 8}) >>> (64 - $bitset1Remainder)"
         }
       } else {
         // they are aligned by word
         if (i < bitset1Words) {
-          s"$getLong(obj1, offset1 + ${i * 8})"
+          code"$getLong($obj1, $offset1 + ${i * 8})"
         } else {
-          s"$getLong(obj2, offset2 + ${(i - bitset1Words) * 8})"
+          code"$getLong($obj2, $offset2 + ${(i - bitset1Words) * 8})"
         }
       }
-      s"$putLong(buf, ${offset + i * 8}, $bits);\n"
+      code"$putLong(buf, ${offset + i * 8}, $bits);\n"
     }
 
     val copyBitsets = ctx.splitExpressions(
       expressions = copyBitset,
       funcName = "copyBitsetFunc",
-      arguments = ("java.lang.Object", "obj1") :: ("long", "offset1") ::
-                  ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
+      arguments = (obj1) :: (offset1) ::
+                  (obj2) :: (offset2) :: Nil)
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
     var cursor = offset + outputBitsetWords * 8
@@ -124,13 +133,14 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     // --------------------- copy variable length portion from row 1 ----------------------- //
     val numBytesBitsetAndFixedRow1 = (bitset1Words + schema1.size) * 8
+    val numBytesVariableRow1 = JavaCode.variable("numBytesVariableRow1", LongType)
     val copyVariableLengthRow1 = s"""
        |// Copy variable length data for row1
-       |long numBytesVariableRow1 = row1.getSizeInBytes() - $numBytesBitsetAndFixedRow1;
+       |long $numBytesVariableRow1 = row1.getSizeInBytes() - $numBytesBitsetAndFixedRow1;
        |Platform.copyMemory(
        |  obj1, offset1 + ${(bitset1Words + schema1.size) * 8},
        |  buf, $cursor,
-       |  numBytesVariableRow1);
+       |  $numBytesVariableRow1);
      """.stripMargin
 
     // --------------------- copy variable length portion from row 2 ----------------------- //
@@ -148,7 +158,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val updateOffset = (schema1 ++ schema2).zipWithIndex.map { case (field, i) =>
       // Skip fixed length data types, and only generate code for variable length data
       if (UnsafeRow.isFixedLength(field.dataType)) {
-        ""
+        EmptyBlock
       } else {
         // Number of bytes to increase for the offset. Note that since in UnsafeRow we store the
         // offset in the upper 32 bit of the words, we can just shift the offset to the left by
@@ -157,9 +167,10 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
         // shift added to it.
         val shift =
           if (i < schema1.size) {
-            s"${(outputBitsetWords - bitset1Words + schema2.size) * 8}L"
+            code"${(outputBitsetWords - bitset1Words + schema2.size) * 8}L"
           } else {
-            s"(${(outputBitsetWords - bitset2Words + schema1.size) * 8}L + numBytesVariableRow1)"
+            code"(${(outputBitsetWords - bitset2Words + schema1.size) * 8}L + " +
+              code"$numBytesVariableRow1)"
           }
         val cursor = offset + outputBitsetWords * 8 + i * 8
         // UnsafeRow is a little underspecified, so in what follows we'll treat UnsafeRowWriter's
@@ -197,7 +208,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
         //
         // Thus it is safe to perform `existingOffset != 0` checks here in the place of
         // more expensive null-bit checks.
-        s"""
+        code"""
            |existingOffset = $getLong(buf, $cursor);
            |if (existingOffset != 0) {
            |    $putLong(buf, $cursor, existingOffset + ($shift << 32));
@@ -209,7 +220,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val updateOffsets = ctx.splitExpressions(
       expressions = updateOffset,
       funcName = "copyBitsetFunc",
-      arguments = ("long", "numBytesVariableRow1") :: Nil,
+      arguments = (numBytesVariableRow1) :: Nil,
       makeSplitFunction = (s: String) => "long existingOffset;\n" + s)
 
     // ------------------------ Finally, put everything together  --------------------------- //

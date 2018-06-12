@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -80,11 +80,12 @@ case class Rand(child: Expression) extends RDG {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = classOf[XORShiftRandom].getName
-    val rngTerm = ctx.addMutableState(className, "rng")
+    val rngTerm = JavaCode.global(ctx.addMutableState(className, "rng"), classOf[XORShiftRandom])
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     ev.copy(code = code"""
-      final ${CodeGenerator.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""",
+      final $javaType ${ev.value} = $rngTerm.nextDouble();""",
       isNull = FalseLiteral)
   }
 
@@ -118,11 +119,12 @@ case class Randn(child: Expression) extends RDG {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = classOf[XORShiftRandom].getName
-    val rngTerm = ctx.addMutableState(className, "rng")
+    val rngTerm = JavaCode.global(ctx.addMutableState(className, "rng"), classOf[XORShiftRandom])
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
     ev.copy(code = code"""
-      final ${CodeGenerator.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""",
+      final $javaType ${ev.value} = $rngTerm.nextGaussian();""",
       isNull = FalseLiteral)
   }
 

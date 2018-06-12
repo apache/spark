@@ -45,21 +45,21 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
   private def createCodeForStruct(
       ctx: CodegenContext,
-      input: String,
+      input: ExprValue,
       schema: StructType): ExprCode = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
-    val tmpInput = ctx.freshName("tmpInput")
-    val output = ctx.freshName("safeRow")
-    val values = ctx.freshName("values")
+    val tmpInput = JavaCode.variable(ctx.freshName("tmpInput"), classOf[InternalRow])
+    val output = JavaCode.variable(ctx.freshName("safeRow"), classOf[InternalRow])
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[Array[Object]])
 
-    val rowClass = classOf[GenericInternalRow].getName
+    val rowClass = inline"${classOf[GenericInternalRow].getName}"
 
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
       val converter = convertToSafe(
         ctx,
-        JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt),
+        CodeGenerator.getValue(tmpInput, dt, i.toString),
         dt)
-      s"""
+      code"""
         if (!$tmpInput.isNullAt($i)) {
           ${converter.code}
           $values[$i] = ${converter.value};
@@ -69,7 +69,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val allFields = ctx.splitExpressions(
       expressions = fieldWriters,
       funcName = "writeFields",
-      arguments = Seq("InternalRow" -> tmpInput, "Object[]" -> values)
+      arguments = Seq(tmpInput, values)
     )
     val code =
       code"""
@@ -84,19 +84,19 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
   private def createCodeForArray(
       ctx: CodegenContext,
-      input: String,
+      input: ExprValue,
       elementType: DataType): ExprCode = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
-    val tmpInput = ctx.freshName("tmpInput")
-    val output = ctx.freshName("safeArray")
-    val values = ctx.freshName("values")
-    val numElements = ctx.freshName("numElements")
-    val index = ctx.freshName("index")
-    val arrayClass = classOf[GenericArrayData].getName
+    val tmpInput = JavaCode.variable(ctx.freshName("tmpInput"), classOf[ArrayData])
+    val output = JavaCode.variable(ctx.freshName("safeArray"), classOf[ArrayData])
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[Array[Object]])
+    val numElements = JavaCode.variable(ctx.freshName("numElements"), IntegerType)
+    val index = JavaCode.variable(ctx.freshName("index"), IntegerType)
+    val arrayClass = inline"${classOf[GenericArrayData].getName}"
 
     val elementConverter = convertToSafe(
       ctx,
-      JavaCode.expression(CodeGenerator.getValue(tmpInput, elementType, index), elementType),
+      CodeGenerator.getValue(tmpInput, elementType, index),
       elementType)
     val code = code"""
       final ArrayData $tmpInput = $input;
@@ -116,15 +116,17 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
   private def createCodeForMap(
       ctx: CodegenContext,
-      input: String,
+      input: ExprValue,
       keyType: DataType,
       valueType: DataType): ExprCode = {
-    val tmpInput = ctx.freshName("tmpInput")
-    val output = ctx.freshName("safeMap")
-    val mapClass = classOf[ArrayBasedMapData].getName
+    val tmpInput = JavaCode.variable(ctx.freshName("tmpInput"), classOf[MapData])
+    val output = JavaCode.variable(ctx.freshName("safeMap"), classOf[MapData])
+    val mapClass = inline"${classOf[ArrayBasedMapData].getName}"
+    val keyArray = JavaCode.expression(s"$tmpInput.keyArray()", classOf[ArrayData])
+    val valueArray = JavaCode.expression(s"$tmpInput.valueArray()", classOf[ArrayData])
 
-    val keyConverter = createCodeForArray(ctx, s"$tmpInput.keyArray()", keyType)
-    val valueConverter = createCodeForArray(ctx, s"$tmpInput.valueArray()", valueType)
+    val keyConverter = createCodeForArray(ctx, keyArray, keyType)
+    val valueConverter = createCodeForArray(ctx, valueArray, valueType)
     val code = code"""
       final MapData $tmpInput = $input;
       ${keyConverter.code}
@@ -149,22 +151,23 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
   protected def create(expressions: Seq[Expression]): Projection = {
     val ctx = newCodeGenContext()
+    val mutableRow = JavaCode.variable("mutableRow", classOf[InternalRow])
     val expressionCodes = expressions.zipWithIndex.map {
-      case (NoOp, _) => ""
+      case (NoOp, _) => EmptyBlock
       case (e, i) =>
         val evaluationCode = e.genCode(ctx)
         val converter = convertToSafe(ctx, evaluationCode.value, e.dataType)
         evaluationCode.code +
-          s"""
+          code"""
             if (${evaluationCode.isNull}) {
               mutableRow.setNullAt($i);
             } else {
               ${converter.code}
-              ${CodeGenerator.setColumn("mutableRow", e.dataType, i, converter.value)};
+              ${CodeGenerator.setColumn(mutableRow, e.dataType, i, converter.value)};
             }
           """
     }
-    val allExpressions = ctx.splitExpressionsWithCurrentInputs(expressionCodes)
+    val allExpressions = ctx.splitExpressionsWithCurrentInputs(expressionCodes).code
 
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {

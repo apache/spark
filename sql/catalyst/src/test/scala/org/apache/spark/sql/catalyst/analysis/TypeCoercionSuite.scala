@@ -22,6 +22,8 @@ import java.sql.Timestamp
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.codegen.JavaCode
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -1374,13 +1376,13 @@ object TypeCoercionSuite {
     extends BinaryOperator with Unevaluable {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = AnyDataType
-    override def symbol: String = "anytype"
+    override def symbol: JavaCode = inline"anytype"
   }
 
   case class NumericTypeBinaryOperator(left: Expression, right: Expression)
     extends BinaryOperator with Unevaluable {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = NumericType
-    override def symbol: String = "numerictype"
+    override def symbol: JavaCode = inline"numerictype"
   }
 }

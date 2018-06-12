@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, EmptyBlock, ExprCode, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 
@@ -125,7 +126,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
       if (nullable) {
-        s"""
+        code"""
           if ($eval.isNullAt($ordinal)) {
             ${ev.isNull} = true;
           } else {
@@ -133,7 +134,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
           }
         """
       } else {
-        s"""
+        code"""
           ${ev.value} = ${CodeGenerator.getValue(eval, dataType, ordinal.toString)};
         """
       }
@@ -180,23 +181,23 @@ case class GetArrayStructFields(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val arrayClass = classOf[GenericArrayData].getName
+    val arrayClass = inline"${classOf[GenericArrayData].getName}"
     nullSafeCodeGen(ctx, ev, eval => {
-      val n = ctx.freshName("n")
-      val values = ctx.freshName("values")
-      val j = ctx.freshName("j")
-      val row = ctx.freshName("row")
+      val n = JavaCode.variable(ctx.freshName("n"), IntegerType)
+      val values = JavaCode.variable(ctx.freshName("values"), classOf[Array[Object]])
+      val j = JavaCode.variable(ctx.freshName("j"), IntegerType)
+      val row = JavaCode.variable(ctx.freshName("row"), classOf[InternalRow])
       val nullSafeEval = if (field.nullable) {
-        s"""
+        code"""
          if ($row.isNullAt($ordinal)) {
            $values[$j] = null;
          } else
         """
       } else {
-        ""
+        EmptyBlock
       }
 
-      s"""
+      code"""
         final int $n = $eval.numElements();
         final Object[] $values = new Object[$n];
         for (int $j = 0; $j < $n; $j++) {
@@ -249,13 +250,13 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      val index = ctx.freshName("index")
+      val index = JavaCode.variable(ctx.freshName("index"), IntegerType)
       val nullCheck = if (child.dataType.asInstanceOf[ArrayType].containsNull) {
-        s" || $eval1.isNullAt($index)"
+        code" || $eval1.isNullAt($index)"
       } else {
-        ""
+        EmptyBlock
       }
-      s"""
+      code"""
         final int $index = (int) $eval2;
         if ($index >= $eval1.numElements() || $index < 0$nullCheck) {
           ${ev.isNull} = true;
@@ -297,21 +298,21 @@ abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTy
   }
 
   def doGetValueGenCode(ctx: CodegenContext, ev: ExprCode, mapType: MapType): ExprCode = {
-    val index = ctx.freshName("index")
-    val length = ctx.freshName("length")
-    val keys = ctx.freshName("keys")
-    val found = ctx.freshName("found")
-    val key = ctx.freshName("key")
-    val values = ctx.freshName("values")
+    val index = JavaCode.variable(ctx.freshName("index"), IntegerType)
+    val length = JavaCode.variable(ctx.freshName("length"), IntegerType)
+    val keys = JavaCode.variable(ctx.freshName("keys"), classOf[ArrayData])
+    val found = JavaCode.variable(ctx.freshName("found"), BooleanType)
     val keyType = mapType.keyType
+    val key = JavaCode.variable(ctx.freshName("key"), keyType)
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[ArrayData])
     val nullCheck = if (mapType.valueContainsNull) {
-      s" || $values.isNullAt($index)"
+      code" || $values.isNullAt($index)"
     } else {
-      ""
+      EmptyBlock
     }
-    val keyJavaType = CodeGenerator.javaType(keyType)
+    val keyJavaType = inline"${CodeGenerator.javaType(keyType)}"
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"""
+      code"""
         final int $length = $eval1.numElements();
         final ArrayData $keys = $eval1.keyArray();
         final ArrayData $values = $eval1.valueArray();

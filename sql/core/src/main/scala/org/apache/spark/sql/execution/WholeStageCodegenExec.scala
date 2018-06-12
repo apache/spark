@@ -120,7 +120,7 @@ trait CodegenSupport extends SparkPlan {
         }
         val evaluateInputs = evaluateVariables(colVars)
         // generate the code to create a UnsafeRow
-        ctx.INPUT_ROW = row
+        ctx.INPUT_ROW = JavaCode.variable(row, classOf[InternalRow])
         ctx.currentVars = colVars
         val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         val code = code"""
@@ -149,7 +149,7 @@ trait CodegenSupport extends SparkPlan {
       } else {
         assert(row != null, "outputVars and row cannot both be null.")
         ctx.currentVars = null
-        ctx.INPUT_ROW = row
+        ctx.INPUT_ROW = JavaCode.variable(row, classOf[InternalRow])
         output.zipWithIndex.map { case (attr, i) =>
           BoundReference(i, attr.dataType, attr.nullable).genCode(ctx)
         }
@@ -259,8 +259,8 @@ trait CodegenSupport extends SparkPlan {
    * Returns source code to evaluate all the variables, and clear the code of them, to prevent
    * them to be evaluated twice.
    */
-  protected def evaluateVariables(variables: Seq[ExprCode]): String = {
-    val evaluate = variables.filter(_.code.nonEmpty).map(_.code.toString).mkString("\n")
+  protected def evaluateVariables(variables: Seq[ExprCode]): Block = {
+    val evaluate = Blocks(variables.filter(_.code.nonEmpty).map(_.code))
     variables.foreach(_.code = EmptyBlock)
     evaluate
   }

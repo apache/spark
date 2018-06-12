@@ -62,7 +62,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
+      code"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
   }
 }
 
@@ -119,9 +119,9 @@ case class Sha2(left: Expression, right: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val digestUtils = "org.apache.commons.codec.digest.DigestUtils"
+    val digestUtils = inline"org.apache.commons.codec.digest.DigestUtils"
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"""
+      code"""
         if ($eval2 == 224) {
           try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-224");
@@ -169,7 +169,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
+      code"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
     )
   }
 }
@@ -198,10 +198,10 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val CRC32 = "java.util.zip.CRC32"
-    val checksum = ctx.freshName("checksum")
+    val CRC32 = inline"java.util.zip.CRC32"
+    val checksum = JavaCode.variable(ctx.freshName("checksum"), classOf[java.util.zip.CRC32])
     nullSafeCodeGen(ctx, ev, value => {
-      s"""
+      code"""
         $CRC32 $checksum = new $CRC32();
         $checksum.update($value, 0, $value.length);
         ${ev.value} = $checksum.getValue();
@@ -284,98 +284,101 @@ abstract class HashExpression[E] extends Expression {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",
-      extraArguments = Seq(hashResultType -> ev.value),
+      extraArguments = Seq(ev.value),
       returnType = hashResultType,
       makeSplitFunction = body =>
         s"""
            |$body
            |return ${ev.value};
          """.stripMargin,
-      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
+      foldFunctions = funcCalls => {
+        Blocks(funcCalls.map(funcCall => code"${ev.value} = $funcCall;"))
+      })
 
+    val seedExpr = JavaCode.literal(s"$seed", dataType)
     ev.copy(code =
       code"""
-         |$hashResultType ${ev.value} = $seed;
+         |${inline"$hashResultType"} ${ev.value} = $seedExpr;
          |$codes
        """.stripMargin)
   }
 
   protected def nullSafeElementHash(
-      input: String,
-      index: String,
+      input: ExprValue,
+      index: ExprValue,
       nullable: Boolean,
       elementType: DataType,
-      result: String,
-      ctx: CodegenContext): String = {
-    val element = ctx.freshName("element")
+      result: ExprValue,
+      ctx: CodegenContext): Block = {
+    val element = JavaCode.variable(ctx.freshName("element"), elementType)
 
-    val jt = CodeGenerator.javaType(elementType)
-    ctx.nullSafeExec(nullable, s"$input.isNullAt($index)") {
-      s"""
+    val jt = inline"${CodeGenerator.javaType(elementType)}"
+    ctx.nullSafeExec(nullable, JavaCode.expression(s"$input.isNullAt($index)", BooleanType)) {
+      code"""
         final $jt $element = ${CodeGenerator.getValue(input, elementType, index)};
         ${computeHash(element, elementType, result, ctx)}
       """
     }
   }
 
-  protected def genHashInt(i: String, result: String): String =
-    s"$result = $hasherClassName.hashInt($i, $result);"
+  protected def genHashInt(i: ExprValue, result: ExprValue): Block =
+    code"$result = $hasherClassName.hashInt($i, $result);"
 
-  protected def genHashLong(l: String, result: String): String =
-    s"$result = $hasherClassName.hashLong($l, $result);"
+  protected def genHashLong(l: ExprValue, result: ExprValue): Block =
+    code"$result = $hasherClassName.hashLong($l, $result);"
 
-  protected def genHashBytes(b: String, result: String): String = {
-    val offset = "Platform.BYTE_ARRAY_OFFSET"
-    s"$result = $hasherClassName.hashUnsafeBytes($b, $offset, $b.length, $result);"
+  protected def genHashBytes(b: ExprValue, result: ExprValue): Block = {
+    val offset = JavaCode.global("Platform.BYTE_ARRAY_OFFSET", LongType)
+    code"$result = $hasherClassName.hashUnsafeBytes($b, $offset, $b.length, $result);"
   }
 
-  protected def genHashBoolean(input: String, result: String): String =
-    genHashInt(s"$input ? 1 : 0", result)
+  protected def genHashBoolean(input: ExprValue, result: ExprValue): Block =
+    genHashInt(JavaCode.expression(s"$input ? 1 : 0", IntegerType), result)
 
-  protected def genHashFloat(input: String, result: String): String =
-    genHashInt(s"Float.floatToIntBits($input)", result)
+  protected def genHashFloat(input: ExprValue, result: ExprValue): Block =
+    genHashInt(JavaCode.expression(s"Float.floatToIntBits($input)", IntegerType), result)
 
-  protected def genHashDouble(input: String, result: String): String =
-    genHashLong(s"Double.doubleToLongBits($input)", result)
+  protected def genHashDouble(input: ExprValue, result: ExprValue): Block =
+    genHashLong(JavaCode.expression(s"Double.doubleToLongBits($input)", LongType), result)
 
   protected def genHashDecimal(
       ctx: CodegenContext,
       d: DecimalType,
-      input: String,
-      result: String): String = {
+      input: ExprValue,
+      result: ExprValue): Block = {
     if (d.precision <= Decimal.MAX_LONG_DIGITS) {
-      genHashLong(s"$input.toUnscaledLong()", result)
+      genHashLong(JavaCode.expression(s"$input.toUnscaledLong()", LongType), result)
     } else {
-      val bytes = ctx.freshName("bytes")
-      s"""
+      val bytes = JavaCode.variable(ctx.freshName("bytes"), BinaryType)
+      code"""
          |final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
          |${genHashBytes(bytes, result)}
        """.stripMargin
     }
   }
 
-  protected def genHashTimestamp(t: String, result: String): String = genHashLong(t, result)
+  protected def genHashTimestamp(t: ExprValue, result: ExprValue): Block = genHashLong(t, result)
 
-  protected def genHashCalendarInterval(input: String, result: String): String = {
-    val microsecondsHash = s"$hasherClassName.hashLong($input.microseconds, $result)"
-    s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
+  protected def genHashCalendarInterval(input: ExprValue, result: ExprValue): Block = {
+    val microsecondsHash = code"$hasherClassName.hashLong($input.microseconds, $result)"
+    code"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
   }
 
-  protected def genHashString(input: String, result: String): String = {
-    s"$result = $hasherClassName.hashUTF8String($input, $result);"
+  protected def genHashString(input: ExprValue, result: ExprValue): Block = {
+    code"$result = $hasherClassName.hashUTF8String($input, $result);"
   }
 
   protected def genHashForMap(
       ctx: CodegenContext,
-      input: String,
-      result: String,
+      input: ExprValue,
+      result: ExprValue,
       keyType: DataType,
       valueType: DataType,
-      valueContainsNull: Boolean): String = {
-    val index = ctx.freshName("index")
-    val keys = ctx.freshName("keys")
-    val values = ctx.freshName("values")
-    s"""
+      valueContainsNull: Boolean): Block = {
+    val index = JavaCode.variable(ctx.freshName("index"), IntegerType)
+    val keys = JavaCode.variable(ctx.freshName("keys"), classOf[ArrayData])
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[ArrayData])
+    code"""
         final ArrayData $keys = $input.keyArray();
         final ArrayData $values = $input.valueArray();
         for (int $index = 0; $index < $input.numElements(); $index++) {
@@ -387,12 +390,12 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashForArray(
       ctx: CodegenContext,
-      input: String,
-      result: String,
+      input: ExprValue,
+      result: ExprValue,
       elementType: DataType,
-      containsNull: Boolean): String = {
-    val index = ctx.freshName("index")
-    s"""
+      containsNull: Boolean): Block = {
+    val index = JavaCode.variable(ctx.freshName("index"), IntegerType)
+    code"""
         for (int $index = 0; $index < $input.numElements(); $index++) {
           ${nullSafeElementHash(input, index, containsNull, elementType, result, ctx)}
         }
@@ -401,33 +404,36 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashForStruct(
       ctx: CodegenContext,
-      input: String,
-      result: String,
-      fields: Array[StructField]): String = {
+      input: ExprValue,
+      result: ExprValue,
+      fields: Array[StructField]): Block = {
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
-      nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
+      val indexExpr = JavaCode.literal(index.toString, IntegerType)
+      nullSafeElementHash(input, indexExpr, field.nullable, field.dataType, result, ctx)
     }
     val hashResultType = CodeGenerator.javaType(dataType)
     ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, hashResultType -> result),
+      arguments = Seq(input, result),
       returnType = hashResultType,
       makeSplitFunction = body =>
         s"""
            |$body
            |return $result;
          """.stripMargin,
-      foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+      foldFunctions = funcCalls => {
+        Blocks(funcCalls.map(funcCall => code"$result = $funcCall;"))
+      })
   }
 
   @tailrec
   private def computeHashWithTailRec(
-      input: String,
+      input: ExprValue,
       dataType: DataType,
-      result: String,
-      ctx: CodegenContext): String = dataType match {
-    case NullType => ""
+      result: ExprValue,
+      ctx: CodegenContext): Block = dataType match {
+    case NullType => EmptyBlock
     case BooleanType => genHashBoolean(input, result)
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
     case LongType => genHashLong(input, result)
@@ -446,12 +452,12 @@ abstract class HashExpression[E] extends Expression {
   }
 
   protected def computeHash(
-      input: String,
+      input: ExprValue,
       dataType: DataType,
-      result: String,
-      ctx: CodegenContext): String = computeHashWithTailRec(input, dataType, result, ctx)
+      result: ExprValue,
+      ctx: CodegenContext): Block = computeHashWithTailRec(input, dataType, result, ctx)
 
-  protected def hasherClassName: String
+  protected def hasherClassName: JavaCode
 }
 
 /**
@@ -562,7 +568,8 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpress
 
   override def prettyName: String = "hash"
 
-  override protected def hasherClassName: String = classOf[Murmur3_x86_32].getName
+  override protected def hasherClassName: JavaCode =
+    inline"${classOf[Murmur3_x86_32].getName}"
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
     Murmur3HashFunction.hash(value, dataType, seed).toInt
@@ -599,7 +606,7 @@ case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpressio
 
   override def prettyName: String = "xxHash"
 
-  override protected def hasherClassName: String = classOf[XXH64].getName
+  override protected def hasherClassName: JavaCode = inline"${classOf[XXH64].getName}"
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Long): Long = {
     XxHash64Function.hash(value, dataType, seed)
@@ -637,7 +644,8 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override def prettyName: String = "hive-hash"
 
-  override protected def hasherClassName: String = classOf[HiveHasher].getName
+  override protected def hasherClassName: JavaCode =
+    inline"${classOf[HiveHasher].getName}"
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
     HiveHashFunction.hash(value, dataType, this.seed).toInt
@@ -646,13 +654,13 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.isNull = FalseLiteral
 
-    val childHash = ctx.freshName("childHash")
+    val childHash = JavaCode.variable(ctx.freshName("childHash"), IntegerType)
     val childrenHash = children.map { child =>
       val childGen = child.genCode(ctx)
       val codeToComputeHash = ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, childHash, ctx)
       }
-      s"""
+      code"""
          |${childGen.code}
          |$childHash = 0;
          |$codeToComputeHash
@@ -663,7 +671,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",
-      extraArguments = Seq(CodeGenerator.JAVA_INT -> ev.value),
+      extraArguments = Seq(ev.value),
       returnType = CodeGenerator.JAVA_INT,
       makeSplitFunction = body =>
         s"""
@@ -671,13 +679,15 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
            |$body
            |return ${ev.value};
          """.stripMargin,
-      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
+      foldFunctions = funcCalls => {
+        Blocks(funcCalls.map(funcCall => code"${ev.value} = $funcCall;"))
+      })
 
 
     ev.copy(code =
       code"""
-         |${CodeGenerator.JAVA_INT} ${ev.value} = $seed;
-         |${CodeGenerator.JAVA_INT} $childHash = 0;
+         |${inline"${CodeGenerator.JAVA_INT}"} ${ev.value} = $seed;
+         |${inline"${CodeGenerator.JAVA_INT}"} $childHash = 0;
          |$codes
        """.stripMargin)
   }
@@ -693,50 +703,54 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
     hash
   }
 
-  override protected def genHashInt(i: String, result: String): String =
-    s"$result = $hasherClassName.hashInt($i);"
+  override protected def genHashInt(i: ExprValue, result: ExprValue): Block =
+    code"$result = $hasherClassName.hashInt($i);"
 
-  override protected def genHashLong(l: String, result: String): String =
-    s"$result = $hasherClassName.hashLong($l);"
+  override protected def genHashLong(l: ExprValue, result: ExprValue): Block =
+    code"$result = $hasherClassName.hashLong($l);"
 
-  override protected def genHashBytes(b: String, result: String): String =
-    s"$result = $hasherClassName.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length);"
+  override protected def genHashBytes(b: ExprValue, result: ExprValue): Block =
+    code"$result = $hasherClassName.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length);"
 
   override protected def genHashDecimal(
       ctx: CodegenContext,
       d: DecimalType,
-      input: String,
-      result: String): String = {
-    s"""
-      $result = ${HiveHashFunction.getClass.getName.stripSuffix("$")}.normalizeDecimal(
+      input: ExprValue,
+      result: ExprValue): Block = {
+    val hiveHashFunction = inline"${HiveHashFunction.getClass.getName.stripSuffix("$")}"
+    code"""
+      $result = $hiveHashFunction.normalizeDecimal(
         $input.toJavaBigDecimal()).hashCode();"""
   }
 
-  override protected def genHashCalendarInterval(input: String, result: String): String = {
-    s"""
+  override protected def genHashCalendarInterval(input: ExprValue, result: ExprValue): Block = {
+   val hiveHashFunction = inline"${HiveHashFunction.getClass.getName.stripSuffix("$")}"
+    code"""
       $result = (int)
-        ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashCalendarInterval($input);
+        $hiveHashFunction.hashCalendarInterval($input);
      """
   }
 
-  override protected def genHashTimestamp(input: String, result: String): String =
-    s"""
-      $result = (int) ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestamp($input);
+  override protected def genHashTimestamp(input: ExprValue, result: ExprValue): Block = {
+    val hiveHashFunction = inline"${HiveHashFunction.getClass.getName.stripSuffix("$")}"
+    code"""
+      $result = (int) $hiveHashFunction.hashTimestamp($input);
      """
+  }
 
-  override protected def genHashString(input: String, result: String): String = {
-    s"$result = $hasherClassName.hashUTF8String($input);"
+  override protected def genHashString(input: ExprValue, result: ExprValue): Block = {
+    code"$result = $hasherClassName.hashUTF8String($input);"
   }
 
   override protected def genHashForArray(
       ctx: CodegenContext,
-      input: String,
-      result: String,
+      input: ExprValue,
+      result: ExprValue,
       elementType: DataType,
-      containsNull: Boolean): String = {
-    val index = ctx.freshName("index")
-    val childResult = ctx.freshName("childResult")
-    s"""
+      containsNull: Boolean): Block = {
+    val index = JavaCode.variable(ctx.freshName("index"), IntegerType)
+    val childResult = JavaCode.variable(ctx.freshName("childResult"), IntegerType)
+    code"""
         int $childResult = 0;
         for (int $index = 0; $index < $input.numElements(); $index++) {
           $childResult = 0;
@@ -748,17 +762,17 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashForMap(
       ctx: CodegenContext,
-      input: String,
-      result: String,
+      input: ExprValue,
+      result: ExprValue,
       keyType: DataType,
       valueType: DataType,
-      valueContainsNull: Boolean): String = {
-    val index = ctx.freshName("index")
-    val keys = ctx.freshName("keys")
-    val values = ctx.freshName("values")
-    val keyResult = ctx.freshName("keyResult")
-    val valueResult = ctx.freshName("valueResult")
-    s"""
+      valueContainsNull: Boolean): Block = {
+    val index = JavaCode.variable(ctx.freshName("index"), IntegerType)
+    val keys = JavaCode.variable(ctx.freshName("keys"), classOf[ArrayData])
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[ArrayData])
+    val keyResult = JavaCode.variable(ctx.freshName("keyResult"), IntegerType)
+    val valueResult = JavaCode.variable(ctx.freshName("valueResult"), IntegerType)
+    code"""
         final ArrayData $keys = $input.keyArray();
         final ArrayData $values = $input.valueArray();
         int $keyResult = 0;
@@ -775,32 +789,35 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashForStruct(
       ctx: CodegenContext,
-      input: String,
-      result: String,
-      fields: Array[StructField]): String = {
-    val childResult = ctx.freshName("childResult")
+      input: ExprValue,
+      result: ExprValue,
+      fields: Array[StructField]): Block = {
+    val childResult = JavaCode.variable(ctx.freshName("childResult"), IntegerType)
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
+      val indexExpr = JavaCode.literal(index.toString, IntegerType)
       val computeFieldHash = nullSafeElementHash(
-        input, index.toString, field.nullable, field.dataType, childResult, ctx)
-      s"""
+        input, indexExpr, field.nullable, field.dataType, childResult, ctx)
+      code"""
          |$childResult = 0;
          |$computeFieldHash
          |$result = (31 * $result) + $childResult;
        """.stripMargin
     }
 
-    s"${CodeGenerator.JAVA_INT} $childResult = 0;\n" + ctx.splitExpressions(
+    code"${inline"${CodeGenerator.JAVA_INT}"} $childResult = 0;\n" + ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, CodeGenerator.JAVA_INT -> result),
+      arguments = Seq(input, result),
       returnType = CodeGenerator.JAVA_INT,
       makeSplitFunction = body =>
         s"""
-           |${CodeGenerator.JAVA_INT} $childResult = 0;
+           |${inline"${CodeGenerator.JAVA_INT}"} $childResult = 0;
            |$body
            |return $result;
            """.stripMargin,
-      foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+      foldFunctions = funcCalls => {
+        Blocks(funcCalls.map(funcCall => code"$result = $funcCall;"))
+      })
   }
 }
 

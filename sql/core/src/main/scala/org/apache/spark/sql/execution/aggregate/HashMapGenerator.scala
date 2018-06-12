@@ -47,8 +47,12 @@ abstract class HashMapGenerator(
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
     initExpr.map { e =>
-      val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "bufIsNull")
-      val value = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue")
+      val isNull = JavaCode.variable(
+        ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "bufIsNull"),
+        BooleanType)
+      val value = JavaCode.variable(
+        ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue"),
+        e.dataType)
       val ev = e.genCode(ctx)
       val initVars =
         code"""

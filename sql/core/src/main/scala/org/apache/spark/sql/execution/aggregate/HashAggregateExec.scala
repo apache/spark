@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
-import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.Utils
 
@@ -187,8 +187,12 @@ case class HashAggregateExec(
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
     bufVars = initExpr.map { e =>
-      val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "bufIsNull")
-      val value = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue")
+      val isNull = JavaCode.global(
+        ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "bufIsNull"),
+        BooleanType)
+      val value = JavaCode.global(
+        ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue"),
+        e.dataType)
       // The initial expression should not access any column
       val ev = e.genCode(ctx)
       val initVars = code"""
@@ -215,13 +219,13 @@ case class HashAggregateExec(
       val resultVars = resultExpressions.map { e =>
         BindReferences.bindReference(e, aggregateAttributes).genCode(ctx)
       }
-      (resultVars, s"""
+      (resultVars, code"""
         |$evaluateAggResults
         |${evaluateVariables(resultVars)}
        """.stripMargin)
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
       // output the aggregate buffer directly
-      (bufVars, "")
+      (bufVars, EmptyBlock)
     } else {
       // no aggregate function, the result should be literals
       val resultVars = resultExpressions.map(_.genCode(ctx))
@@ -250,7 +254,7 @@ case class HashAggregateExec(
        |   $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
        |
        |   // output the result
-       |   ${genResult.trim}
+       |   ${genResult.code}
        |
        |   $numOutput.add(1);
        |   ${consume(ctx, resultVars).trim}
@@ -451,12 +455,12 @@ case class HashAggregateExec(
     if (modes.contains(Final) || modes.contains(Complete)) {
       // generate output using resultExpressions
       ctx.currentVars = null
-      ctx.INPUT_ROW = keyTerm
+      ctx.INPUT_ROW = JavaCode.variable(keyTerm, classOf[InternalRow])
       val keyVars = groupingExpressions.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
       val evaluateKeyVars = evaluateVariables(keyVars)
-      ctx.INPUT_ROW = bufferTerm
+      ctx.INPUT_ROW = JavaCode.variable(bufferTerm, classOf[InternalRow])
       val bufferVars = aggregateBufferAttributes.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
@@ -487,13 +491,13 @@ case class HashAggregateExec(
 
       ctx.currentVars = null
 
-      ctx.INPUT_ROW = keyTerm
+      ctx.INPUT_ROW = JavaCode.variable(keyTerm, classOf[InternalRow])
       val keyVars = groupingExpressions.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
       val evaluateKeyVars = evaluateVariables(keyVars)
 
-      ctx.INPUT_ROW = bufferTerm
+      ctx.INPUT_ROW = JavaCode.variable(bufferTerm, classOf[InternalRow])
       val resultBufferVars = aggregateBufferAttributes.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
@@ -511,7 +515,7 @@ case class HashAggregateExec(
        """
     } else {
       // generate result based on grouping key
-      ctx.INPUT_ROW = keyTerm
+      ctx.INPUT_ROW = JavaCode.variable(keyTerm, classOf[InternalRow])
       ctx.currentVars = null
       val eval = resultExpressions.map{ e =>
         BindReferences.bindReference(e, groupingAttributes).genCode(ctx)
@@ -679,7 +683,7 @@ case class HashAggregateExec(
     def outputFromVectorizedMap: String = {
       val row = ctx.freshName("fastHashMapRow")
       ctx.currentVars = null
-      ctx.INPUT_ROW = row
+      ctx.INPUT_ROW = JavaCode.variable(row, classOf[InternalRow])
       val generateKeyRow = GenerateUnsafeProjection.createCode(ctx,
         groupingKeySchema.toAttributes.zipWithIndex
           .map { case (attr, i) => BoundReference(i, attr.dataType, attr.nullable) }
@@ -830,7 +834,8 @@ case class HashAggregateExec(
     ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
 
     val updateRowInRegularHashMap: String = {
-      ctx.INPUT_ROW = unsafeRowBuffer
+      val unsafeRowBufferVar = JavaCode.variable(unsafeRowBuffer, classOf[InternalRow])
+      ctx.INPUT_ROW = unsafeRowBufferVar
       val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
       val effectiveCodes = subExprs.codes.mkString("\n")
@@ -839,7 +844,7 @@ case class HashAggregateExec(
       }
       val updateUnsafeRowBuffer = unsafeRowBufferEvals.zipWithIndex.map { case (ev, i) =>
         val dt = updateExpr(i).dataType
-        CodeGenerator.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
+        CodeGenerator.updateColumn(unsafeRowBufferVar, dt, i, ev, updateExpr(i).nullable)
       }
       s"""
          |// common sub-expressions
@@ -853,7 +858,8 @@ case class HashAggregateExec(
 
     val updateRowInHashMap: String = {
       if (isFastHashMapEnabled) {
-        ctx.INPUT_ROW = fastRowBuffer
+        val fastRowBufferVar = JavaCode.variable(fastRowBuffer, classOf[InternalRow])
+        ctx.INPUT_ROW = fastRowBufferVar
         val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
         val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
         val effectiveCodes = subExprs.codes.mkString("\n")
@@ -863,7 +869,7 @@ case class HashAggregateExec(
         val updateFastRow = fastRowEvals.zipWithIndex.map { case (ev, i) =>
           val dt = updateExpr(i).dataType
           CodeGenerator.updateColumn(
-            fastRowBuffer, dt, i, ev, updateExpr(i).nullable, isVectorizedHashMapEnabled)
+            fastRowBufferVar, dt, i, ev, updateExpr(i).nullable, isVectorizedHashMapEnabled)
         }
 
         // If fast hash map is on, we first generate code to update row in fast hash map, if the

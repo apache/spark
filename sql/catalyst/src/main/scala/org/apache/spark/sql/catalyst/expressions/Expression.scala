@@ -130,8 +130,8 @@ abstract class Expression extends TreeNode[Expression] {
         ""
       }
 
-      val javaType = CodeGenerator.javaType(dataType)
-      val newValue = ctx.freshName("value")
+      val javaType = inline"${CodeGenerator.javaType(dataType)}"
+      val newValue = JavaCode.variable(ctx.freshName("value"), dataType)
 
       val funcName = ctx.freshName(nodeName)
       val funcFullName = ctx.addNewFunction(funcName,
@@ -143,8 +143,8 @@ abstract class Expression extends TreeNode[Expression] {
            |}
            """.stripMargin)
 
-      eval.value = JavaCode.variable(newValue, dataType)
-      eval.code = code"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
+      eval.value = newValue
+      eval.code = code"$javaType $newValue = ${inline"$funcFullName"}(${ctx.INPUT_ROW});"
     }
   }
 
@@ -416,9 +416,9 @@ abstract class UnaryExpression extends Expression {
   protected def defineCodeGen(
       ctx: CodegenContext,
       ev: ExprCode,
-      f: String => String): ExprCode = {
+      f: ExprValue => Block): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"${ev.value} = ${f(eval)};"
+      code"${ev.value} = ${f(eval)};"
     })
   }
 
@@ -432,22 +432,23 @@ abstract class UnaryExpression extends Expression {
   protected def nullSafeCodeGen(
       ctx: CodegenContext,
       ev: ExprCode,
-      f: String => String): ExprCode = {
+      f: ExprValue => Block): ExprCode = {
     val childGen = child.genCode(ctx)
     val resultCode = f(childGen.value)
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
 
     if (nullable) {
       val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
       ev.copy(code = code"""
         ${childGen.code}
         boolean ${ev.isNull} = ${childGen.isNull};
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
       ev.copy(code = code"""
         ${childGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
   }
@@ -504,9 +505,9 @@ abstract class BinaryExpression extends Expression {
   protected def defineCodeGen(
       ctx: CodegenContext,
       ev: ExprCode,
-      f: (String, String) => String): ExprCode = {
+      f: (ExprValue, ExprValue) => Block): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"${ev.value} = ${f(eval1, eval2)};"
+      code"${ev.value} = ${f(eval1, eval2)};"
     })
   }
 
@@ -521,16 +522,17 @@ abstract class BinaryExpression extends Expression {
   protected def nullSafeCodeGen(
       ctx: CodegenContext,
       ev: ExprCode,
-      f: (String, String) => String): ExprCode = {
+      f: (ExprValue, ExprValue) => Block): ExprCode = {
     val leftGen = left.genCode(ctx)
     val rightGen = right.genCode(ctx)
     val resultCode = f(leftGen.value, rightGen.value)
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
 
     if (nullable) {
       val nullSafeEval =
         leftGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
           rightGen.code + ctx.nullSafeExec(right.nullable, rightGen.isNull) {
-            s"""
+            code"""
               ${ev.isNull} = false; // resultCode could change nullability.
               $resultCode
             """
@@ -539,14 +541,14 @@ abstract class BinaryExpression extends Expression {
 
       ev.copy(code = code"""
         boolean ${ev.isNull} = true;
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
       ev.copy(code = code"""
         ${leftGen.code}
         ${rightGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
   }
@@ -568,9 +570,9 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
    */
   def inputType: AbstractDataType
 
-  def symbol: String
+  def symbol: JavaCode
 
-  def sqlOperator: String = symbol
+  def sqlOperator: String = symbol.code
 
   override def toString: String = s"($left $symbol $right)"
 
@@ -644,9 +646,9 @@ abstract class TernaryExpression extends Expression {
   protected def defineCodeGen(
     ctx: CodegenContext,
     ev: ExprCode,
-    f: (String, String, String) => String): ExprCode = {
+    f: (ExprValue, ExprValue, ExprValue) => Block): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
-      s"${ev.value} = ${f(eval1, eval2, eval3)};"
+      code"${ev.value} = ${f(eval1, eval2, eval3)};"
     })
   }
 
@@ -661,18 +663,19 @@ abstract class TernaryExpression extends Expression {
   protected def nullSafeCodeGen(
     ctx: CodegenContext,
     ev: ExprCode,
-    f: (String, String, String) => String): ExprCode = {
+    f: (ExprValue, ExprValue, ExprValue) => Block): ExprCode = {
     val leftGen = children(0).genCode(ctx)
     val midGen = children(1).genCode(ctx)
     val rightGen = children(2).genCode(ctx)
     val resultCode = f(leftGen.value, midGen.value, rightGen.value)
+    val javaType = inline"${CodeGenerator.javaType(dataType)}"
 
     if (nullable) {
       val nullSafeEval =
         leftGen.code + ctx.nullSafeExec(children(0).nullable, leftGen.isNull) {
           midGen.code + ctx.nullSafeExec(children(1).nullable, midGen.isNull) {
             rightGen.code + ctx.nullSafeExec(children(2).nullable, rightGen.isNull) {
-              s"""
+              code"""
                 ${ev.isNull} = false; // resultCode could change nullability.
                 $resultCode
               """
@@ -682,14 +685,14 @@ abstract class TernaryExpression extends Expression {
 
       ev.copy(code = code"""
         boolean ${ev.isNull} = true;
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
       ev.copy(code = code"""
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
   }
