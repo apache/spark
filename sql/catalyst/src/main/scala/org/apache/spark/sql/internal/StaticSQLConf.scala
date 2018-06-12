@@ -96,7 +96,7 @@ object StaticSQLConf {
     .toSequence
     .createOptional
 
-  val STREAMING_QUERY_LISTENERS = buildStaticConf("spark.sql.streamingQueryListeners")
+  val STREAMING_QUERY_LISTENERS = buildStaticConf("spark.sql.streaming.streamingQueryListeners")
     .doc("List of class names implementing StreamingQueryListener that will be automatically " +
       "added to newly created sessions. The classes should have either a no-arg constructor, " +
       "or a constructor that expects a SparkConf argument.")
