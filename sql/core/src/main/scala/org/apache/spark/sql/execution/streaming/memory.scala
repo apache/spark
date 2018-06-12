@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader, SupportsScanUnsafeRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
@@ -227,6 +228,32 @@ trait MemorySinkBase extends BaseStreamingSink {
   def dataSinceBatch(sinceBatchId: Long): Seq[Row]
   def latestBatchId: Option[Long]
 }
+
+/**
+ * Companion object to MemorySinkBase.
+ */
+object MemorySinkBase {
+  val MAX_MEMORY_SINK_ROWS = ""
+  val MAX_MEMORY_SINK_ROWS_DEFAULT = -1L
+  val MAX_MEMORY_SINK_BYTES = ""
+  val MAX_MEMORY_SINK_BYTES_DEFAULT = -1L
+
+  def getMaxRows(schema: StructType, options: DataSourceOptions): Option[Long] = {
+    val maxBytes = options.getLong(MAX_MEMORY_SINK_BYTES, MAX_MEMORY_SINK_BYTES_DEFAULT)
+    val maxRows = options.getLong(MAX_MEMORY_SINK_ROWS, MAX_MEMORY_SINK_ROWS_DEFAULT)
+    val sizePerRow = EstimationUtils.getSizePerRow(schema.toAttributes).longValue()
+    if (maxBytes >= 0 && maxRows >= 0) {
+      Some(math.min(maxRows, maxBytes / sizePerRow))
+    } else if (maxBytes >= 0) {
+      Some(maxBytes / sizePerRow)
+    } else if (maxRows >= 0) {
+      Some(maxRows)
+    } else {
+      None
+    }
+  }
+}
+
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit

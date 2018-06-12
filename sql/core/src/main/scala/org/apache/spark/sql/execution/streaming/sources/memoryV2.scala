@@ -46,7 +46,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
       schema: StructType,
       mode: OutputMode,
       options: DataSourceOptions): StreamWriter = {
-    new MemoryStreamWriter(this, mode)
+    new MemoryStreamWriter(this, schema, mode, options)
   }
 
   private case class AddedData(batchId: Long, data: Array[Row])
@@ -134,8 +134,14 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
   }
 }
 
-class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
+class MemoryStreamWriter(
+    val sink: MemorySinkV2,
+    schema: StructType,
+    outputMode: OutputMode,
+    options: DataSourceOptions)
   extends StreamWriter {
+
+  val maxRowsInSink = MemorySinkBase.getMaxRows(schema, options)
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
