@@ -26,7 +26,7 @@ import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.JsonFileReader
-import org.apache.arrow.vector.util.Validator
+import org.apache.arrow.vector.util.{ByteArrayReadableSeekableByteChannel, Validator}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -1342,32 +1342,6 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     assert(count == inputRows.length)
   }
 
-  test("roundtrip arrow stream") {
-    val inputRows = (0 until 9).map { i =>
-      InternalRow(i)
-    } :+ InternalRow(null)
-
-    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
-
-    val ctx = TaskContext.empty()
-    val streamIter = ArrowConverters.toStreamIterator(inputRows.toIterator, schema, 5, null, ctx)
-    val outputRowIter = ArrowConverters.fromStreamIterator(streamIter, ctx)
-
-    assert(schema == outputRowIter.schema)
-
-    var count = 0
-    outputRowIter.zipWithIndex.foreach { case (row, i) =>
-      if (i != 9) {
-        assert(row.getInt(0) == i)
-      } else {
-        assert(row.isNullAt(0))
-      }
-      count += 1
-    }
-
-    assert(count == inputRows.length)
-  }
-
   test("ArrowBatchStreamWriter roundtrip") {
     val inputRows = (0 until 9).map { i =>
       InternalRow(i)
@@ -1386,11 +1360,10 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     writer.close()
     out.close()
 
-    // Convert Arrow stream format to Rows
-    val streamIter = Iterator(out.toByteArray)
-    val outputRowIter = ArrowConverters.fromStreamIterator(streamIter, ctx)
-
-    assert(schema == outputRowIter.schema)
+    // Read Arrow stream into batches, then convert back to rows
+    val in = new ByteArrayReadableSeekableByteChannel(out.toByteArray)
+    val readBatches = ArrowConverters.getBatchesFromStream(in)
+    val outputRowIter = ArrowConverters.fromBatchIterator(readBatches.toIterator, schema, null, ctx)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>

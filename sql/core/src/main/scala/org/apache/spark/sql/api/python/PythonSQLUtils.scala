@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.api.python
 
-import java.util.{ArrayList => JArrayList}
-
-import scala.collection.JavaConverters._
-
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -38,10 +34,10 @@ private[sql] object PythonSQLUtils {
   }
 
   /**
-   * Python Callable function to convert ArrowPayloads into a [[DataFrame]].
+   * Python callable function to convert an RDD of Arrow record batches into a [[DataFrame]].
    *
-   * @param arrowStreamRDD A JavaRDD of Arrow data in stream protocol.
-   * @param schemaString JSON Formatted Schema for ArrowPayloads.
+   * @param arrowStreamRDD A JavaRDD of Arrow record batches as byte arrays.
+   * @param schemaString JSON Formatted Spark schema for Arrow batches.
    * @param sqlContext The active [[SQLContext]].
    * @return The converted [[DataFrame]].
    */
@@ -52,12 +48,21 @@ private[sql] object PythonSQLUtils {
     ArrowConverters.toDataFrame(arrowStreamRDD, schemaString, sqlContext)
   }
 
-  def arrowReadStreamFromFiles(
+  /**
+   * Python callable function to read a file in Arrow stream format and create a [[DataFrame]]
+   * using each batch as a partition.
+   *
+   * @param sqlContext The active [[SQLContext]].
+   * @param filename File to read the Arrow stream from.
+   * @param schemaString JSON Formatted Spark schema for Arrow batches.
+   * @return A new [[DataFrame]].
+   */
+  def arrowReadStreamFromFile(
       sqlContext: SQLContext,
-      schemaString: String,
-      filenames: JArrayList[String]): DataFrame = {
+      filename: String,
+      schemaString: String): DataFrame = {
     JavaSparkContext.fromSparkContext(sqlContext.sparkContext)
-    val jrdd = ArrowConverters.readArrowStreamFromFiles(sqlContext, filenames.asScala.toArray)
+    val jrdd = ArrowConverters.readArrowStreamFromFile(sqlContext, filename)
     arrowStreamToDataFrame(jrdd, schemaString, sqlContext)
   }
 }

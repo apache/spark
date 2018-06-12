@@ -493,10 +493,14 @@ class SparkContext(object):
             c = list(c)    # Make it a list so we can compute its length
         batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
-        jrdd = self._serialize_to_jvm(c, numSlices, serializer)
+
+        def reader_func(temp_filename):
+            return self._jvm.PythonRDD.readRDDFromFile(self._jsc, temp_filename, numSlices)
+
+        jrdd = self._serialize_to_jvm(c, serializer, reader_func)
         return RDD(jrdd, self, serializer)
 
-    def _serialize_to_jvm(self, data, parallelism, serializer):
+    def _serialize_to_jvm(self, data, serializer, reader_func):
         """
         Calling the Java parallelize() method with an ArrayList is too slow,
         because it sends O(n) Py4J commands.  As an alternative, serialized
@@ -506,8 +510,7 @@ class SparkContext(object):
         try:
             serializer.dump_stream(data, tempFile)
             tempFile.close()
-            readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
-            return readRDDFromFile(self._jsc, tempFile.name, parallelism)
+            return reader_func(tempFile.name)
         finally:
             # readRDDFromFile eagerily reads the file so we can delete right after.
             os.unlink(tempFile.name)

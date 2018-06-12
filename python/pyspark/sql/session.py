@@ -539,23 +539,12 @@ class SparkSession(object):
                 struct.names[i] = name
             schema = struct
 
-        import os
-        from tempfile import NamedTemporaryFile
-        serializer = ArrowSerializer()
-        temp_filenames = []
-        try:
-            for batch in batches:
-                temp_file = NamedTemporaryFile(delete=False, dir=self.sparkContext._temp_dir)
-                temp_filenames.append(temp_file.name)
-                serializer.dump_stream([batch], temp_file)
-                temp_file.close()
-            jdf = self._jvm.PythonSQLUtils.arrowReadStreamFromFiles(
-                self._wrapped._jsqlContext, schema.json(), temp_filenames)
-        finally:
-            # arrowReadStreamFromFile eagerly reads the file so we can delete right after.
-            for temp_filename in temp_filenames:
-                os.unlink(temp_filename)
+        def reader_func(temp_filename):
+            return self._jvm.PythonSQLUtils.arrowReadStreamFromFile(
+                self._wrapped._jsqlContext, temp_filename, schema.json())
 
+        # Create Spark DataFrame from Arrow stream file, using one batch per partition
+        jdf = self._sc._serialize_to_jvm(batches, ArrowSerializer(), reader_func)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df
