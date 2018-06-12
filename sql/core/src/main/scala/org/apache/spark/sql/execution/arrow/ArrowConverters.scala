@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, SeekableByteChannel}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.arrow.flatbuf.{Message, MessageHeader}
 import org.apache.arrow.memory.BufferAllocator
@@ -40,7 +39,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Writes serialized ArrowRecordBatches to a DataOutputStream in the Arrow stream format
+ * Writes serialized ArrowRecordBatches to a DataOutputStream in the Arrow stream format.
  */
 private[sql] class ArrowBatchStreamWriter(
     schema: StructType,
@@ -49,15 +48,23 @@ private[sql] class ArrowBatchStreamWriter(
 
   val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
   val writeChannel = new WriteChannel(Channels.newChannel(out))
+
+  // Write the Arrow schema first, before batches
   MessageSerializer.serialize(writeChannel, arrowSchema)
 
+  /**
+   * Consume iterator to write each serialized ArrowRecordBatch to the stream.
+   */
   def writeBatches(arrowBatchIter: Iterator[Array[Byte]]): Unit = {
     arrowBatchIter.foreach { batchBytes =>
       writeChannel.write(batchBytes)
     }
   }
 
-  def close(): Unit = {
+  /**
+   * End the Arrow stream, does not close output stream.
+   */
+  def end(): Unit = {
     // Write End of Stream
     // TODO: this could be a static function in ArrowStreamWriter
     writeChannel.writeIntLittleEndian(0)
@@ -67,7 +74,7 @@ private[sql] class ArrowBatchStreamWriter(
 private[sql] object ArrowConverters {
 
   /**
-   * Maps Iterator from InternalRow to Arrow batches as byte arrays. Limit ArrowRecordBatch size
+   * Maps Iterator from InternalRow to serialized ArrowRecordBatches. Limit ArrowRecordBatch size
    * in a batch by setting maxRecordsPerBatch or use 0 to fully consume rowIter.
    */
   private[sql] def toBatchIterator(
@@ -123,7 +130,7 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Maps iterator from Arrow batches as byte arrays to InternalRows.
+   * Maps iterator from serialized ArrowRecordBatches to InternalRows.
    */
   private[sql] def fromBatchIterator(
       arrowBatchIter: Iterator[Array[Byte]],
@@ -175,7 +182,7 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Convert a byte array to an ArrowRecordBatch.
+   * Load a serialized ArrowRecordBatch.
    */
   private[arrow] def loadBatch(
       batchBytes: Array[Byte],
@@ -186,7 +193,7 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Create a DataFrame from a JavaRDD of Arrow record batches
+   * Create a DataFrame from a JavaRDD of serialized ArrowRecordBatches.
    */
   private[sql] def toDataFrame(
       arrowStreamRDD: JavaRDD[Array[Byte]],
@@ -202,7 +209,7 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Read a file as an Arrow stream and create an RDD from record batches
+   * Read a file as an Arrow stream and create an RDD of serialized ArrowRecordBatches.
    */
   private[sql] def readArrowStreamFromFile(sqlContext: SQLContext, filename: String):
   JavaRDD[Array[Byte]] = {
@@ -218,7 +225,7 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Read input of an Arrow stream and return all record batches read as byte arrays
+   * Read an Arrow stream input and return an iterator of serialized ArrowRecordBatches.
    */
   private[sql] def getBatchesFromStream(in: SeekableByteChannel): Iterator[Array[Byte]] = {
 

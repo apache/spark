@@ -34,7 +34,8 @@ private[sql] object PythonSQLUtils {
   }
 
   /**
-   * Python callable function to convert an RDD of Arrow record batches into a [[DataFrame]].
+   * Python callable function to convert an RDD of serialized ArrowRecordBatches into
+   * a [[DataFrame]].
    *
    * @param arrowStreamRDD A JavaRDD of Arrow record batches as byte arrays.
    * @param schemaString JSON Formatted Spark schema for Arrow batches.
@@ -50,7 +51,7 @@ private[sql] object PythonSQLUtils {
 
   /**
    * Python callable function to read a file in Arrow stream format and create a [[DataFrame]]
-   * using each batch as a partition.
+   * using each serialized ArrowRecordBatch as a partition.
    *
    * @param sqlContext The active [[SQLContext]].
    * @param filename File to read the Arrow stream from.

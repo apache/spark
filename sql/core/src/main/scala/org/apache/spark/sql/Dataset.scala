@@ -3263,6 +3263,10 @@ class Dataset[T] private[sql](
               results(lastIndex) = null
               lastIndex += 1
             }
+            // After last batch, end the stream
+            if (lastIndex == results.length) {
+              batchWriter.end()
+            }
           } else {
             // Store partitions received out of order
             results(index - 1) = arrowBatches
