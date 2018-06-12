@@ -35,12 +35,12 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class DataFrameSuite extends QueryTest with SharedSQLContext {
+class DataFrameSuite extends CodegenInterpretedTest {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
