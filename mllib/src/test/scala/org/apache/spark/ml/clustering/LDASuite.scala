@@ -34,9 +34,8 @@ object LDASuite {
       vocabSize: Int): DataFrame = {
     val avgWC = 1  // average instances of each word in a doc
     val sc = spark.sparkContext
-    val rng = new java.util.Random()
-    rng.setSeed(1)
     val rdd = sc.parallelize(1 to rows).map { i =>
+      val rng = new java.util.Random(i)
       Vectors.dense(Array.fill(vocabSize)(rng.nextInt(2 * avgWC).toDouble))
     }.map(v => new TestRow(v))
     spark.createDataFrame(rdd)

@@ -68,12 +68,8 @@ object CSVUtils {
     }
   }
 
-  /**
-   * Drop header line so that only data can remain.
-   * This is similar with `filterHeaderLine` above and currently being used in CSV reading path.
-   */
-  def dropHeaderLine(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
-    val nonEmptyLines = if (options.isCommentSet) {
+  def skipComments(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+    if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.dropWhile { line =>
         line.trim.isEmpty || line.trim.startsWith(commentPrefix)
@@ -81,11 +77,19 @@ object CSVUtils {
     } else {
       iter.dropWhile(_.trim.isEmpty)
     }
-
-    if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
-    iter
   }
 
+  /**
+   * Extracts header and moves iterator forward so that only data remains in it
+   */
+  def extractHeader(iter: Iterator[String], options: CSVOptions): Option[String] = {
+    val nonEmptyLines = skipComments(iter, options)
+    if (nonEmptyLines.hasNext) {
+      Some(nonEmptyLines.next())
+    } else {
+      None
+    }
+  }
   /**
    * Helper method that converts string representation of a character to actual character.
    * It handles some Java escaped strings and throws exception if given string is longer than one
