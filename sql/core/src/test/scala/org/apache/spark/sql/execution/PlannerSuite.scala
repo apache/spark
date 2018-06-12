@@ -684,7 +684,7 @@ class PlannerSuite extends SharedSQLContext {
     withSQLConf(("spark.sql.shuffle.partitions", "1"),
       ("spark.sql.constraintPropagation.enabled", "false"),
       ("spark.sql.autoBroadcastJoinThreshold", "-1")) {
-      val df1 = spark.range(100)
+      val df1 = spark.range(100).repartition(2, $"id", $"id")
       val df2 = spark.range(100).select(($"id" * 2).as("b1"), (- $"id").as("b2"))
       val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2")
       assert(res.collect().sameElements(Array(Row(0, 0, 0))))

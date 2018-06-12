@@ -228,16 +228,16 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       currentOrderOfKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
     val leftKeysBuffer = ArrayBuffer[Expression]()
     val rightKeysBuffer = ArrayBuffer[Expression]()
-    val alreadyUsedIndexes = mutable.Set[Int]()
+    val pickedIndexes = mutable.Set[Int]()
     val keysAndIndexes = currentOrderOfKeys.zipWithIndex
 
     expectedOrderOfKeys.foreach(expression => {
       val index = keysAndIndexes.find { case (e, idx) =>
         // As we may have the same key used many times, we need to filter out its occurrence we
         // have already used.
-        e.semanticEquals(expression) && !alreadyUsedIndexes.contains(idx)
+        e.semanticEquals(expression) && !pickedIndexes.contains(idx)
       }.map(_._2).get
-      alreadyUsedIndexes += index
+      pickedIndexes += index
       leftKeysBuffer.append(leftKeys(index))
       rightKeysBuffer.append(rightKeys(index))
     })
@@ -278,7 +278,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
    * partitioning of the join nodes' children.
    */
   private def reorderJoinPredicates(plan: SparkPlan): SparkPlan = {
-    plan.transformUp {
+    plan match {
       case BroadcastHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left,
         right) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
@@ -296,6 +296,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
         SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition, left, right)
+
+      case other => other
     }
   }
 
