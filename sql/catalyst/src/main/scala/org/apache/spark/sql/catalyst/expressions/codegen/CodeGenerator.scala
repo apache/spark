@@ -580,6 +580,22 @@ class CodegenContext {
   }
 
   /**
+   * Creates an `ExprValue` representing a local java variable of required data type.
+   */
+  def freshName(name: String, dt: DataType): VariableValue = JavaCode.variable(freshName(name), dt)
+
+  /**
+   * Creates an `ExprValue` representing a local java variable of required data type.
+   */
+  def freshName(name: String, javaClass: Class[_]): VariableValue =
+    JavaCode.variable(freshName(name), javaClass)
+
+  /**
+   * Creates an `ExprValue` representing a local boolean java variable.
+   */
+  def isNullFreshName(name: String): VariableValue = JavaCode.isNullVariable(freshName(name))
+
+  /**
    * Generates code for equal expression in Java.
    */
   def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {

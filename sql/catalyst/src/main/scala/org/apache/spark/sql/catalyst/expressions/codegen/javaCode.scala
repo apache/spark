@@ -113,6 +113,21 @@ object JavaCode {
   def isNullExpression(code: String): SimpleExprValue = {
     expression(code, BooleanType)
   }
+
+  /**
+   * Create an `InlineBlock` for Java Class name.
+   */
+  def className(javaClass: Class[_]): InlineBlock = InlineBlock(javaClass.getName)
+
+  /**
+   * Create an `InlineBlock` for Java Type name.
+   */
+  def javaType(dataType: DataType): InlineBlock = InlineBlock(CodeGenerator.javaType(dataType))
+
+  /**
+   * Create an `InlineBlock` for boxed Java Type name.
+   */
+  def boxedType(dataType: DataType): InlineBlock = InlineBlock(CodeGenerator.boxedType(dataType))
 }
 
 /**
@@ -154,6 +169,17 @@ trait Block extends JavaCode {
 object Block {
 
   val CODE_BLOCK_BUFFER_LENGTH: Int = 512
+
+  /**
+   * A custom string interpolator which inlines all types of input arguments into a string without
+   * tracking any reference of `JavaCode` instances.
+   */
+  implicit class InlineHelper(val sc: StringContext) extends AnyVal {
+    def inline(args: Any*): Block = {
+      val inlineString = sc.raw(args: _*)
+      InlineBlock(inlineString)
+    }
+  }
 
   implicit def blocksToBlock(blocks: Seq[Block]): Block = Blocks(blocks)
 
@@ -233,6 +259,7 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
 
   override def + (other: Block): Block = other match {
     case c: CodeBlock => Blocks(Seq(this, c))
+    case i: InlineBlock => Blocks(Seq(this, i))
     case b: Blocks => Blocks(Seq(this) ++ b.blocks)
     case EmptyBlock => this
   }
@@ -244,6 +271,7 @@ case class Blocks(blocks: Seq[Block]) extends Block {
 
   override def + (other: Block): Block = other match {
     case c: CodeBlock => Blocks(blocks :+ c)
+    case i: InlineBlock => Blocks(blocks :+ i)
     case b: Blocks => Blocks(blocks ++ b.blocks)
     case EmptyBlock => this
   }
@@ -254,6 +282,18 @@ object EmptyBlock extends Block with Serializable {
   override val exprValues: Set[ExprValue] = Set.empty
 
   override def + (other: Block): Block = other
+}
+
+case class InlineBlock(block: String) extends Block {
+  override val code: String = block
+  override val exprValues: Set[ExprValue] = Set.empty
+
+  override def + (other: Block): Block = other match {
+    case c: CodeBlock => Blocks(Seq(this, c))
+    case i: InlineBlock => InlineBlock(block + i.block)
+    case b: Blocks => Blocks(Seq(this) ++ b.blocks)
+    case EmptyBlock => this
+  }
 }
 
 /**
