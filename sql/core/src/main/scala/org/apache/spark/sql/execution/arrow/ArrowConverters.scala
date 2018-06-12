@@ -196,12 +196,12 @@ private[sql] object ArrowConverters {
    * Create a DataFrame from a JavaRDD of serialized ArrowRecordBatches.
    */
   private[sql] def toDataFrame(
-      arrowStreamRDD: JavaRDD[Array[Byte]],
+      arrowBatchRDD: JavaRDD[Array[Byte]],
       schemaString: String,
       sqlContext: SQLContext): DataFrame = {
     val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
     val timeZoneId = sqlContext.sessionState.conf.sessionLocalTimeZone
-    val rdd = arrowStreamRDD.rdd.mapPartitions { iter =>
+    val rdd = arrowBatchRDD.rdd.mapPartitions { iter =>
       val context = TaskContext.get()
       ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, context)
     }
@@ -209,7 +209,7 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Read a file as an Arrow stream and create an RDD of serialized ArrowRecordBatches.
+   * Read a file as an Arrow stream and return an RDD of serialized ArrowRecordBatches.
    */
   private[sql] def readArrowStreamFromFile(sqlContext: SQLContext, filename: String):
   JavaRDD[Array[Byte]] = {

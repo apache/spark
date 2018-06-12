@@ -37,16 +37,16 @@ private[sql] object PythonSQLUtils {
    * Python callable function to convert an RDD of serialized ArrowRecordBatches into
    * a [[DataFrame]].
    *
-   * @param arrowStreamRDD A JavaRDD of Arrow record batches as byte arrays.
+   * @param arrowBatchRDD A JavaRDD of serialized ArrowRecordBatches.
    * @param schemaString JSON Formatted Spark schema for Arrow batches.
    * @param sqlContext The active [[SQLContext]].
    * @return The converted [[DataFrame]].
    */
   def arrowStreamToDataFrame(
-      arrowStreamRDD: JavaRDD[Array[Byte]],
+      arrowBatchRDD: JavaRDD[Array[Byte]],
       schemaString: String,
       sqlContext: SQLContext): DataFrame = {
-    ArrowConverters.toDataFrame(arrowStreamRDD, schemaString, sqlContext)
+    ArrowConverters.toDataFrame(arrowBatchRDD, schemaString, sqlContext)
   }
 
   /**
