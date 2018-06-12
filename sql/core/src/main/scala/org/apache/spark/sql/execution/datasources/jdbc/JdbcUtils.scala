@@ -74,7 +74,7 @@ object JdbcUtils extends Logging {
     // SQL database systems using JDBC meta data calls, considering "table" could also include
     // the database name. Query used to find table exists can be overridden by the dialects.
     Try {
-      val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
+      val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.tableExpression))
       try {
         statement.setQueryTimeout(options.queryTimeout)
         statement.executeQuery()
@@ -105,7 +105,7 @@ object JdbcUtils extends Logging {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(dialect.getTruncateQuery(options.table))
+      statement.executeUpdate(dialect.getTruncateQuery(options.tableExpression))
     } finally {
       statement.close()
     }
@@ -255,7 +255,7 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(options.url)
 
     try {
-      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.table))
+      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.tableExpression))
       try {
         statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(statement.executeQuery(), dialect))
@@ -811,7 +811,7 @@ object JdbcUtils extends Logging {
       isCaseSensitive: Boolean,
       options: JDBCOptions): Unit = {
     val url = options.url
-    val table = options.table
+    val table = options.tableExpression
     val dialect = JdbcDialects.get(url)
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(options)
@@ -841,7 +841,7 @@ object JdbcUtils extends Logging {
       options: JDBCOptions): Unit = {
     val strSchema = schemaString(
       df, options.url, options.createTableColumnTypes)
-    val table = options.table
+    val table = options.tableExpression
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be

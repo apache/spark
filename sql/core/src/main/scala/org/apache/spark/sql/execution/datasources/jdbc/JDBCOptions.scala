@@ -65,13 +65,38 @@ class JDBCOptions(
   // Required parameters
   // ------------------------------------------------------------
   require(parameters.isDefinedAt(JDBC_URL), s"Option '$JDBC_URL' is required.")
-  require(parameters.isDefinedAt(JDBC_TABLE_NAME), s"Option '$JDBC_TABLE_NAME' is required.")
+
   // a JDBC URL
   val url = parameters(JDBC_URL)
-  // name of table
-  val table = parameters(JDBC_TABLE_NAME)
+  val tableName = parameters.get(JDBC_TABLE_NAME)
+  val query = parameters.get(JDBC_QUERY_STRING)
+  // Following two conditions make sure that :
+  // 1. One of the option (dbtable or query) must be specified.
+  // 2. Both of them can not be specified at the same time as they are conflicting in nature.
+  require(
+    tableName.isDefined || query.isDefined,
+    s"Option '$JDBC_TABLE_NAME' or '${JDBC_QUERY_STRING}' is required."
+  )
 
-  // ------------------------------------------------------------
+  require(
+    !(tableName.isDefined && query.isDefined),
+    s"Both '$JDBC_TABLE_NAME' and '$JDBC_QUERY_STRING' can not be specified."
+  )
+
+  // table name or a table expression.
+  val tableExpression = tableName.map(_.trim).getOrElse {
+    // We have ensured in the code above that either dbtable or query is specified.
+    query.get match {
+      case subq if subq.nonEmpty => s"(${subq}) spark_gen_${curId.getAndIncrement()}"
+      case subq => subq
+    }
+  }
+
+  require(tableExpression.nonEmpty,
+    s"One of the option `$JDBC_TABLE_NAME` or `$JDBC_QUERY_STRING` should not be empty string."
+  )
+
+
   // Optional parameters
   // ------------------------------------------------------------
   val driverClass = {
@@ -109,6 +134,20 @@ class JDBCOptions(
     s"When reading JDBC data sources, users need to specify all or none for the following " +
       s"options: '$JDBC_PARTITION_COLUMN', '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', " +
       s"and '$JDBC_NUM_PARTITIONS'")
+
+  require(!(query.isDefined && partitionColumn.isDefined),
+    s"""
+       |Options '$JDBC_QUERY_STRING' and '$JDBC_PARTITION_COLUMN' can not be specified together.
+       |Please define the query using `$JDBC_TABLE_NAME` option instead and make sure to qualify
+       |the partition columns using the supplied subquery alias to resolve any ambiguity.
+       |Example :
+       |spark.read.format("jdbc")
+       |        .option("dbtable", "(select c1, c2 from t1) as subq")
+       |        .option("partitionColumn", "subq.c1"
+       |        .load()
+     """.stripMargin
+  )
+
   val fetchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
     require(size >= 0,
@@ -150,6 +189,7 @@ class JDBCOptions(
 }
 
 object JDBCOptions {
+  private val curId = new java.util.concurrent.atomic.AtomicLong(0L)
   private val jdbcOptionNames = collection.mutable.Set[String]()
 
   private def newOption(name: String): String = {
@@ -159,6 +199,7 @@ object JDBCOptions {
 
   val JDBC_URL = newOption("url")
   val JDBC_TABLE_NAME = newOption("dbtable")
+  val JDBC_QUERY_STRING = newOption("query")
   val JDBC_DRIVER_CLASS = newOption("driver")
   val JDBC_PARTITION_COLUMN = newOption("partitionColumn")
   val JDBC_LOWER_BOUND = newOption("lowerBound")

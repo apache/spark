@@ -189,12 +189,12 @@ private[sql] case class JDBCRelation(
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     data.write
       .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
-      .jdbc(jdbcOptions.url, jdbcOptions.table, jdbcOptions.asProperties)
+      .jdbc(jdbcOptions.url, jdbcOptions.tableExpression, jdbcOptions.asProperties)
   }
 
   override def toString: String = {
     val partitioningInfo = if (parts.nonEmpty) s" [numPartitions=${parts.length}]" else ""
     // credentials should not be included in the plan output, table information is sufficient.
-    s"JDBCRelation(${jdbcOptions.table})" + partitioningInfo
+    s"JDBCRelation(${jdbcOptions.tableExpression})" + partitioningInfo
   }
 }
