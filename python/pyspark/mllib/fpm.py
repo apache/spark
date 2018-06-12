@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import sys
+
 import numpy
 from numpy import array
 from collections import namedtuple
@@ -197,7 +199,7 @@ def _test():
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -24,10 +24,14 @@
    :members:
 """
 
+import sys
+
 import numpy as np
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
 from pyspark.sql import DataFrame, SparkSession
+
+__all__ = ["ImageSchema"]
 
 
 class _ImageSchema(object):
@@ -251,7 +255,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

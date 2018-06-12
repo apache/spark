@@ -128,7 +128,7 @@ private[spark] case class SSLOptions(
   }
 
   /** Returns a string representation of this SSLOptions with all the passwords masked. */
-  override def toString: String = s"SSLOptions{enabled=$enabled, " +
+  override def toString: String = s"SSLOptions{enabled=$enabled, port=$port, " +
       s"keyStore=$keyStore, keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
       s"trustStore=$trustStore, trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
       s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
@@ -142,6 +142,7 @@ private[spark] object SSLOptions extends Logging {
    *
    * The following settings are allowed:
    * $ - `[ns].enabled` - `true` or `false`, to enable or disable SSL respectively
+   * $ - `[ns].port` - the port where to bind the SSL server
    * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
    * $ - `[ns].keyStorePassword` - a password to the key-store file
    * $ - `[ns].keyPassword` - a password to the private key

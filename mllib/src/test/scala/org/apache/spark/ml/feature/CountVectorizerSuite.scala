@@ -16,16 +16,13 @@
  */
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
-class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
-  with DefaultReadWriteTest {
+class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -50,7 +47,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
       .setInputCol("words")
       .setOutputCol("features")
-    cv.transform(df).select("features", "expected").collect().foreach {
+    testTransformer[(Int, Seq[String], Vector)](df, cv, "features", "expected") {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
@@ -72,7 +69,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     MLTestingUtils.checkCopyAndUids(cv, cvm)
     assert(cvm.vocabulary.toSet === Set("a", "b", "c", "d", "e"))
 
-    cvm.transform(df).select("features", "expected").collect().foreach {
+    testTransformer[(Int, Seq[String], Vector)](df, cvm, "features", "expected") {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
@@ -100,7 +97,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .fit(df)
     assert(cvModel2.vocabulary === Array("a", "b"))
 
-    cvModel2.transform(df).select("features", "expected").collect().foreach {
+    testTransformer[(Int, Seq[String], Vector)](df, cvModel2, "features", "expected") {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
@@ -113,7 +110,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .fit(df)
     assert(cvModel3.vocabulary === Array("a", "b"))
 
-    cvModel3.transform(df).select("features", "expected").collect().foreach {
+    testTransformer[(Int, Seq[String], Vector)](df, cvModel3, "features", "expected") {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
@@ -219,7 +216,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setInputCol("words")
       .setOutputCol("features")
       .setMinTF(3)
-    cv.transform(df).select("features", "expected").collect().foreach {
+    testTransformer[(Int, Seq[String], Vector)](df, cv, "features", "expected") {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
@@ -238,7 +235,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setInputCol("words")
       .setOutputCol("features")
       .setMinTF(0.3)
-    cv.transform(df).select("features", "expected").collect().foreach {
+    testTransformer[(Int, Seq[String], Vector)](df, cv, "features", "expected") {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
@@ -258,7 +255,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setOutputCol("features")
       .setBinary(true)
       .fit(df)
-    cv.transform(df).select("features", "expected").collect().foreach {
+    testTransformer[(Int, Seq[String], Vector)](df, cv, "features", "expected") {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
@@ -268,7 +265,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setInputCol("words")
       .setOutputCol("features")
       .setBinary(true)
-    cv2.transform(df).select("features", "expected").collect().foreach {
+    testTransformer[(Int, Seq[String], Vector)](df, cv2, "features", "expected") {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
