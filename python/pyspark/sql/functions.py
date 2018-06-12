@@ -2394,6 +2394,23 @@ def array_repeat(col, count):
     return Column(sc._jvm.functions.array_repeat(_to_java_column(col), count))
 
 
+@since(2.4)
+def arrays_zip(*cols):
+    """
+    Collection function: Returns a merged array of structs in which the N-th struct contains all
+    N-th values of input arrays.
+
+    :param cols: columns of arrays to be merged.
+
+    >>> from pyspark.sql.functions import arrays_zip
+    >>> df = spark.createDataFrame([(([1, 2, 3], [2, 3, 4]))], ['vals1', 'vals2'])
+    >>> df.select(arrays_zip(df.vals1, df.vals2).alias('zipped')).collect()
+    [Row(zipped=[Row(vals1=1, vals2=2), Row(vals1=2, vals2=3), Row(vals1=3, vals2=4)])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 class PandasUDFType(object):

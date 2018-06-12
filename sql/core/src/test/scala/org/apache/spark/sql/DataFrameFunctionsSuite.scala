@@ -479,6 +479,53 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("dataframe arrays_zip function") {
+    val df1 = Seq((Seq(9001, 9002, 9003), Seq(4, 5, 6))).toDF("val1", "val2")
+    val df2 = Seq((Seq("a", "b"), Seq(true, false), Seq(10, 11))).toDF("val1", "val2", "val3")
+    val df3 = Seq((Seq("a", "b"), Seq(4, 5, 6))).toDF("val1", "val2")
+    val df4 = Seq((Seq("a", "b", null), Seq(4L))).toDF("val1", "val2")
+    val df5 = Seq((Seq(-1), Seq(null), Seq(), Seq(null, null))).toDF("val1", "val2", "val3", "val4")
+    val df6 = Seq((Seq(192.toByte, 256.toByte), Seq(1.1), Seq(), Seq(null, null)))
+      .toDF("v1", "v2", "v3", "v4")
+    val df7 = Seq((Seq(Seq(1, 2, 3), Seq(4, 5)), Seq(1.1, 2.2))).toDF("v1", "v2")
+    val df8 = Seq((Seq(Array[Byte](1.toByte, 5.toByte)), Seq(null))).toDF("v1", "v2")
+
+    val expectedValue1 = Row(Seq(Row(9001, 4), Row(9002, 5), Row(9003, 6)))
+    checkAnswer(df1.select(arrays_zip($"val1", $"val2")), expectedValue1)
+    checkAnswer(df1.selectExpr("arrays_zip(val1, val2)"), expectedValue1)
+
+    val expectedValue2 = Row(Seq(Row("a", true, 10), Row("b", false, 11)))
+    checkAnswer(df2.select(arrays_zip($"val1", $"val2", $"val3")), expectedValue2)
+    checkAnswer(df2.selectExpr("arrays_zip(val1, val2, val3)"), expectedValue2)
+
+    val expectedValue3 = Row(Seq(Row("a", 4), Row("b", 5), Row(null, 6)))
+    checkAnswer(df3.select(arrays_zip($"val1", $"val2")), expectedValue3)
+    checkAnswer(df3.selectExpr("arrays_zip(val1, val2)"), expectedValue3)
+
+    val expectedValue4 = Row(Seq(Row("a", 4L), Row("b", null), Row(null, null)))
+    checkAnswer(df4.select(arrays_zip($"val1", $"val2")), expectedValue4)
+    checkAnswer(df4.selectExpr("arrays_zip(val1, val2)"), expectedValue4)
+
+    val expectedValue5 = Row(Seq(Row(-1, null, null, null), Row(null, null, null, null)))
+    checkAnswer(df5.select(arrays_zip($"val1", $"val2", $"val3", $"val4")), expectedValue5)
+    checkAnswer(df5.selectExpr("arrays_zip(val1, val2, val3, val4)"), expectedValue5)
+
+    val expectedValue6 = Row(Seq(
+      Row(192.toByte, 1.1, null, null), Row(256.toByte, null, null, null)))
+    checkAnswer(df6.select(arrays_zip($"v1", $"v2", $"v3", $"v4")), expectedValue6)
+    checkAnswer(df6.selectExpr("arrays_zip(v1, v2, v3, v4)"), expectedValue6)
+
+    val expectedValue7 = Row(Seq(
+      Row(Seq(1, 2, 3), 1.1), Row(Seq(4, 5), 2.2)))
+    checkAnswer(df7.select(arrays_zip($"v1", $"v2")), expectedValue7)
+    checkAnswer(df7.selectExpr("arrays_zip(v1, v2)"), expectedValue7)
+
+    val expectedValue8 = Row(Seq(
+      Row(Array[Byte](1.toByte, 5.toByte), null)))
+    checkAnswer(df8.select(arrays_zip($"v1", $"v2")), expectedValue8)
+    checkAnswer(df8.selectExpr("arrays_zip(v1, v2)"), expectedValue8)
+  }
+
   test("map size function") {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),

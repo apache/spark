@@ -3508,6 +3508,14 @@ object functions {
    */
   def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
 
+  /**
+   * Returns a merged array of structs in which the N-th struct contains all N-th values of input
+   * arrays.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def arrays_zip(e: Column*): Column = withExpr { ArraysZip(e.map(_.expr)) }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Mask functions
   //////////////////////////////////////////////////////////////////////////////////////////////
