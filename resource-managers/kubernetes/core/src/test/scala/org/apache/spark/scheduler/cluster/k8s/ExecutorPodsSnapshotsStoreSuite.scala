@@ -30,15 +30,11 @@ import org.apache.spark.deploy.k8s.Constants._
 class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter {
 
   private var eventBufferScheduler: DeterministicScheduler = _
-  private var executeSubscriptionsExecutor: DeterministicScheduler = _
   private var eventQueueUnderTest: ExecutorPodsSnapshotsStoreImpl = _
 
   before {
     eventBufferScheduler = new DeterministicScheduler()
-    executeSubscriptionsExecutor = new DeterministicScheduler()
-    eventQueueUnderTest = new ExecutorPodsSnapshotsStoreImpl(
-      eventBufferScheduler,
-      executeSubscriptionsExecutor)
+    eventQueueUnderTest = new ExecutorPodsSnapshotsStoreImpl(eventBufferScheduler)
   }
 
   test("Subscribers get notified of events periodically.") {
@@ -50,6 +46,7 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
     eventQueueUnderTest.addSubscriber(2000) {
       receivedSnapshots2 ++= _
     }
+    eventBufferScheduler.runUntilIdle()
 
     pushPodWithIndex(1)
     assert(receivedSnapshots1.isEmpty)
@@ -58,42 +55,32 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
     // processing task on the subscription executor...
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
     // ... then actually execute the subscribers.
-    executeSubscriptionsExecutor.runUntilIdle()
 
     assert(receivedSnapshots1 === Seq(
-      ExecutorPodsSnapshot(),
       ExecutorPodsSnapshot(Seq(podWithIndex(1)))))
-    assert(receivedSnapshots2 === Seq(ExecutorPodsSnapshot()))
+    assert(receivedSnapshots2.isEmpty)
 
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
-    executeSubscriptionsExecutor.runUntilIdle()
 
     // Don't repeat snapshots
     assert(receivedSnapshots1 === Seq(
-      ExecutorPodsSnapshot(),
       ExecutorPodsSnapshot(Seq(podWithIndex(1)))))
     assert(receivedSnapshots2 === Seq(
-      ExecutorPodsSnapshot(),
       ExecutorPodsSnapshot(Seq(podWithIndex(1))))
     )
     pushPodWithIndex(2)
     pushPodWithIndex(3)
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
-    executeSubscriptionsExecutor.runUntilIdle()
 
     assert(receivedSnapshots1 === Seq(
-      ExecutorPodsSnapshot(),
       ExecutorPodsSnapshot(Seq(podWithIndex(1))),
       ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2))),
       ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2), podWithIndex(3)))))
     assert(receivedSnapshots2 === Seq(
-      ExecutorPodsSnapshot(),
       ExecutorPodsSnapshot(Seq(podWithIndex(1)))))
 
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
-    executeSubscriptionsExecutor.runUntilIdle()
     assert(receivedSnapshots1 === Seq(
-      ExecutorPodsSnapshot(),
       ExecutorPodsSnapshot(Seq(podWithIndex(1))),
       ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2))),
       ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2), podWithIndex(3)))))
@@ -106,8 +93,8 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
       receivedInitialSnapshot.set
     }
     assert(receivedInitialSnapshot.get == null)
-    executeSubscriptionsExecutor.runUntilIdle()
-    assert(receivedInitialSnapshot.get === Seq(ExecutorPodsSnapshot()))
+    eventBufferScheduler.runUntilIdle()
+    assert(receivedInitialSnapshot.get.isEmpty)
   }
 
   test("Replacing the snapshot passes the new snapshot to subscribers.") {
@@ -117,15 +104,11 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
     }
     eventQueueUnderTest.updatePod(podWithIndex(1))
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
-    executeSubscriptionsExecutor.runUntilIdle()
     assert(receivedSnapshots === Seq(
-      ExecutorPodsSnapshot(),
       ExecutorPodsSnapshot(Seq(podWithIndex(1)))))
     eventQueueUnderTest.replaceSnapshot(Seq(podWithIndex(2)))
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
-    executeSubscriptionsExecutor.runUntilIdle()
     assert(receivedSnapshots === Seq(
-      ExecutorPodsSnapshot(),
       ExecutorPodsSnapshot(Seq(podWithIndex(1))),
       ExecutorPodsSnapshot(Seq(podWithIndex(2)))))
   }
