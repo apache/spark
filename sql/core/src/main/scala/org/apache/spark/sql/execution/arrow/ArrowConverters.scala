@@ -234,7 +234,6 @@ private[sql] object ArrowConverters {
       // TODO: need ReadChannel to be protected
       // extends MessageChannelReader(new ReadChannel(fileChannel)) {
       val in = new ReadChannel(inputChannel)
-      //private val batches = new ArrayBuffer[Array[Byte]]
       private var lastBatch: Array[Byte] = null
 
       def getLastBatch() = lastBatch
