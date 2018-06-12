@@ -3385,7 +3385,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  /** Convert to an RDD of Arrow record batch byte arrays */
+  /** Convert to an RDD of serialized ArrowRecordBatches. */
   private[sql] def getArrowBatchRdd(plan: SparkPlan): RDD[Array[Byte]] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch

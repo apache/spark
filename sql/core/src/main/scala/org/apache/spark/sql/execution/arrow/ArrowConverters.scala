@@ -263,7 +263,7 @@ private[sql] object ArrowConverters {
         buffer
       }
 
-      // Load a Message and read RecordBatch, storing it in an array
+      // Load a Message, if it is a RecordBatch then read body and store as serialized bytes
       protected def loadMessageBuffer(buffer: ByteBuffer, messageLength: Int): Message = {
         val msg = Message.getRootAsMessage(buffer)
         val bodyLength = msg.bodyLength().asInstanceOf[Int]
@@ -283,9 +283,8 @@ private[sql] object ArrowConverters {
       }
     }
 
+    // Create an iterator to get each serialized ArrowRecordBatch in an stream
     new Iterator[Array[Byte]] {
-
-      // Read the input stream and store the next batch read
       val msgReader = new RecordBatchMessageReader(in)
       var batch: Array[Byte] = null
       readNextBatch()
