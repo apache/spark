@@ -208,7 +208,8 @@ private[sql] object ArrowConverters {
   JavaRDD[Array[Byte]] = {
     val fileStream = new FileInputStream(filename)
     try {
-      val batches = getBatchesFromStream(fileStream.getChannel)
+      // Create array so that we can safely close the file
+      val batches = getBatchesFromStream(fileStream.getChannel).toArray
       // Parallelize the record batches to create an RDD
       JavaRDD.fromRDD(sqlContext.sparkContext.parallelize(batches, batches.length))
     } finally {
@@ -219,18 +220,20 @@ private[sql] object ArrowConverters {
   /**
    * Read input of an Arrow stream and return all record batches read as byte arrays
    */
-  private[sql] def getBatchesFromStream(in: SeekableByteChannel): Array[Array[Byte]] = {
+  private[sql] def getBatchesFromStream(in: SeekableByteChannel): Iterator[Array[Byte]] = {
 
     // TODO: simplify in super class
     class RecordBatchMessageReader(inputChannel: SeekableByteChannel) {
       // TODO: need ReadChannel to be protected
       // extends MessageChannelReader(new ReadChannel(fileChannel)) {
       val in = new ReadChannel(inputChannel)
-      private val batches = new ArrayBuffer[Array[Byte]]
+      //private val batches = new ArrayBuffer[Array[Byte]]
+      private var lastBatch: Array[Byte] = null
 
-      def getRecordBatchBytes() = batches.toArray
+      def getLastBatch() = lastBatch
 
       def readNextMessage(): Message = {
+        lastBatch = null
         val buffer = ByteBuffer.allocate(4)
         if (in.readFully(buffer) != 4) {
           return null
@@ -264,7 +267,7 @@ private[sql] object ArrowConverters {
           allbuf.put(WriteChannel.intToBytes(messageLength))
           allbuf.put(buffer)
           in.readFully(allbuf)
-          batches.append(allbuf.array())
+          lastBatch = allbuf.array()
         } else if (bodyLength > 0) {
           // Skip message body if not a record batch
           inputChannel.position(inputChannel.position() + bodyLength)
@@ -274,9 +277,31 @@ private[sql] object ArrowConverters {
       }
     }
 
-    // Read the input stream and store all record batches in an array
-    val msgReader = new RecordBatchMessageReader(in)
-    while (msgReader.readNextMessage() != null) {}
-    msgReader.getRecordBatchBytes()
+    new Iterator[Array[Byte]] {
+
+      // Read the input stream and store the next batch read
+      val msgReader = new RecordBatchMessageReader(in)
+      var batch: Array[Byte] = null
+      readNextBatch()
+
+      override def hasNext: Boolean = batch != null
+
+      override def next(): Array[Byte] = {
+        val prevBatch = batch
+        readNextBatch()
+        prevBatch
+      }
+
+      def readNextBatch(): Unit = {
+        var stop = false
+        while (!stop) {
+          val msg = msgReader.readNextMessage()
+          batch = msgReader.getLastBatch()
+          if (msg == null || (msg != null && batch != null)) {
+            stop = true
+          }
+        }
+      }
+    }
   }
 }

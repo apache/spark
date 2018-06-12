@@ -1363,7 +1363,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     // Read Arrow stream into batches, then convert back to rows
     val in = new ByteArrayReadableSeekableByteChannel(out.toByteArray)
     val readBatches = ArrowConverters.getBatchesFromStream(in)
-    val outputRowIter = ArrowConverters.fromBatchIterator(readBatches.toIterator, schema, null, ctx)
+    val outputRowIter = ArrowConverters.fromBatchIterator(readBatches, schema, null, ctx)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>
