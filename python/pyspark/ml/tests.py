@@ -681,6 +681,13 @@ class FeatureTests(SparkSessionTestCase):
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
+        # with locale
+        stopwords = ["BELKİ"]
+        dataset = self.spark.createDataFrame([Row(input=["belki"])])
+        stopWordRemover.setStopWords(stopwords).setLocale("tr")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, [])
 
     def test_count_vectorizer_with_binary(self):
         dataset = self.spark.createDataFrame([
