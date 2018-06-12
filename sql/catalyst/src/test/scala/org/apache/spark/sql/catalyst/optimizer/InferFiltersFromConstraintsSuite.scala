@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
@@ -40,6 +41,11 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+
+  // Separate relation for testing complex type extractors
+  val testComplexTypeRelation = LocalRelation('a.struct('b.int), 'c.array(IntegerType),
+    'd.array(StructType(Array(StructField("e", IntegerType)))),
+    'f.map(StringType, IntegerType))
 
   private def testConstraintsAfterJoin(
       x: LogicalPlan,
@@ -58,6 +64,37 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
     val correctAnswer = testRelation
       .where(IsNotNull('a) && IsNotNull('b) && 'a === 'b && 'a === 1 && 'b === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("filter: filter out nulls on struct field in condition") {
+    val originalQuery = testComplexTypeRelation.where($"a.b" === 1).analyze
+    val correctAnswer = testComplexTypeRelation.where(IsNotNull($"a.b") && $"a.b" === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("filter: filter out nulls on array item in condition") {
+    val originalQuery = testComplexTypeRelation.where('c.getItem(0) === 1).analyze
+    val correctAnswer = testComplexTypeRelation
+      .where(IsNotNull('c.getItem(0)) &&'c.getItem(0) === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("filter: filter out nulls on array struct field in condition") {
+    val originalQuery = testComplexTypeRelation.where($"d.e" === Literal(Array(1))).analyze
+    val correctAnswer = testComplexTypeRelation
+      .where(IsNotNull($"d.e") && $"d.e" === Literal(Array(1))).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("filter: filter out nulls on map value in condition") {
+    val originalQuery = testComplexTypeRelation.where(GetMapValue('f, "key") === 1).analyze
+    val correctAnswer = testComplexTypeRelation
+      .where(IsNotNull(GetMapValue('f, "key")) && GetMapValue('f, "key") === 1).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
