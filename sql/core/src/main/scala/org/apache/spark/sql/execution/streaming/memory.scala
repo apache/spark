@@ -246,7 +246,7 @@ object MemorySinkBase {
    * @param options Options for writing from which we get the max rows or bytes.
    * @return The maximum number of rows a memorySink should store, or None for no limit.
    */
-  def getMaxRows(schema: StructType, options: DataSourceOptions): Option[Int] = {
+  def getMemorySinkCapacity(schema: StructType, options: DataSourceOptions): Option[Int] = {
     val maxBytes = options.getLong(MAX_MEMORY_SINK_BYTES, MAX_MEMORY_SINK_BYTES_DEFAULT)
     val maxRows = options.getInt(MAX_MEMORY_SINK_ROWS, MAX_MEMORY_SINK_ROWS_DEFAULT)
     val sizePerRow = EstimationUtils.getSizePerRow(schema.toAttributes).longValue()
@@ -280,7 +280,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
   private var numRows = 0
 
   /** The capacity in rows of this sink. */
-  val sinkCapacity: Option[Int] = MemorySinkBase.getMaxRows(schema, options)
+  val sinkCapacity: Option[Int] = MemorySinkBase.getMemorySinkCapacity(schema, options)
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {

@@ -138,7 +138,7 @@ class MemoryWriter(
     options: DataSourceOptions)
   extends DataSourceWriter with Logging {
 
-  val sinkCapacity: Option[Int] = MemorySinkBase.getMaxRows(schema, options)
+  val sinkCapacity: Option[Int] = MemorySinkBase.getMemorySinkCapacity(schema, options)
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
@@ -161,7 +161,7 @@ class MemoryStreamWriter(
     options: DataSourceOptions)
   extends StreamWriter {
 
-  val sinkCapacity: Option[Int] = MemorySinkBase.getMaxRows(schema, options)
+  val sinkCapacity: Option[Int] = MemorySinkBase.getMemorySinkCapacity(schema, options)
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
