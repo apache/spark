@@ -728,7 +728,8 @@ object Unidoc {
 
     scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(
       "-groups", // Group similar methods together based on the @group annotation.
-      "-skip-packages", "org.apache.hadoop"
+      "-skip-packages", "org.apache.hadoop",
+      "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath
     ) ++ (
       // Add links to sources when generating Scaladoc for a non-snapshot release
       if (!isSnapshot.value) {
