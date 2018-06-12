@@ -1167,6 +1167,22 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
   }
+
+  object MalformedClassObject {
+    class MalformedClass
+  }
+
+  test("Safe getSimpleName") {
+    // getSimpleName on class of MalformedClass will result in error: Malformed class name
+    // Utils.getSimpleName works
+    val err = intercept[java.lang.InternalError] {
+      classOf[MalformedClassObject.MalformedClass].getSimpleName
+    }
+    assert(err.getMessage === "Malformed class name")
+
+    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
+      "UtilsSuite$MalformedClassObject$MalformedClass")
+  }
 }
 
 private class SimpleExtension
