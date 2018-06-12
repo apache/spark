@@ -47,6 +47,10 @@ case class DataSourceV2Relation(
     source: DataSourceV2,
     options: Map[String, String],
     userSpecifiedSchema: Option[StructType],
+    // TODO: This is a workaround for the issue that Spark puts statistics in the logical plans.
+    //       A `DataSourceReader` must be created during logical phase to report statistics.
+    //       In the future we should move statistics to the physical plans and create the
+    //       `DataSourceReader` on the fly during planning.
     optimizedReader: Option[DataSourceReader] = None,
     pushedFilters: Seq[Expression] = Nil)
   extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
