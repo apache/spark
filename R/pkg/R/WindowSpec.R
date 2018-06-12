@@ -28,7 +28,6 @@ NULL
 #' @seealso \link{windowPartitionBy}, \link{windowOrderBy}
 #'
 #' @param sws A Java object reference to the backing Scala WindowSpec
-#' @export
 #' @note WindowSpec since 2.0.0
 setClass("WindowSpec",
          slots = list(sws = "jobj"))
@@ -44,7 +43,6 @@ windowSpec <- function(sws) {
 }
 
 #' @rdname show
-#' @export
 #' @note show(WindowSpec) since 2.0.0
 setMethod("show", "WindowSpec",
           function(object) {
@@ -63,7 +61,6 @@ setMethod("show", "WindowSpec",
 #' @name partitionBy
 #' @aliases partitionBy,WindowSpec-method
 #' @family windowspec_method
-#' @export
 #' @examples
 #' \dontrun{
 #'   partitionBy(ws, "col1", "col2")
@@ -73,7 +70,7 @@ setMethod("show", "WindowSpec",
 setMethod("partitionBy",
           signature(x = "WindowSpec"),
           function(x, col, ...) {
-            stopifnot (class(col) %in% c("character", "Column"))
+            stopifnot(class(col) %in% c("character", "Column"))
 
             if (class(col) == "character") {
               windowSpec(callJMethod(x@sws, "partitionBy", col, list(...)))
@@ -97,7 +94,6 @@ setMethod("partitionBy",
 #' @aliases orderBy,WindowSpec,character-method
 #' @family windowspec_method
 #' @seealso See \link{arrange} for use in sorting a SparkDataFrame
-#' @export
 #' @examples
 #' \dontrun{
 #'   orderBy(ws, "col1", "col2")
@@ -113,7 +109,6 @@ setMethod("orderBy",
 #' @rdname orderBy
 #' @name orderBy
 #' @aliases orderBy,WindowSpec,Column-method
-#' @export
 #' @note orderBy(WindowSpec, Column) since 2.0.0
 setMethod("orderBy",
           signature(x = "WindowSpec", col = "Column"),
@@ -142,7 +137,6 @@ setMethod("orderBy",
 #' @aliases rowsBetween,WindowSpec,numeric,numeric-method
 #' @name rowsBetween
 #' @family windowspec_method
-#' @export
 #' @examples
 #' \dontrun{
 #'   rowsBetween(ws, 0, 3)
@@ -174,7 +168,6 @@ setMethod("rowsBetween",
 #' @aliases rangeBetween,WindowSpec,numeric,numeric-method
 #' @name rangeBetween
 #' @family windowspec_method
-#' @export
 #' @examples
 #' \dontrun{
 #'   rangeBetween(ws, 0, 3)
@@ -202,7 +195,6 @@ setMethod("rangeBetween",
 #' @name over
 #' @aliases over,Column,WindowSpec-method
 #' @family colum_func
-#' @export
 #' @examples
 #' \dontrun{
 #'   df <- createDataFrame(mtcars)

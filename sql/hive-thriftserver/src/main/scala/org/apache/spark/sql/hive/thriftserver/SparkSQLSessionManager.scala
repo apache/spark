@@ -40,22 +40,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
   override def init(hiveConf: HiveConf) {
-    setSuperField(this, "hiveConf", hiveConf)
-
-    // Create operation log root directory, if operation logging is enabled
-    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
-      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
-    }
-
-    val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
-    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
-    getAncestorField[Log](this, 3, "LOG").info(
-      s"HiveServer2: Async execution pool size $backgroundPoolSize")
-
     setSuperField(this, "operationManager", sparkSqlOperationManager)
-    addService(sparkSqlOperationManager)
-
-    initCompositeService(hiveConf)
+    super.init(hiveConf)
   }
 
   override def openSession(
@@ -77,7 +63,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     } else {
       sqlContext.newSession()
     }
-    ctx.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
+    ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
       ctx.sql(s"use ${sessionConf.get("use:database")}")
     }

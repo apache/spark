@@ -565,7 +565,7 @@ class SparseVector @Since("2.0.0") (
 
   // validate the data
   {
-    require(size >= 0, "The size of the requested sparse vector must be greater than 0.")
+    require(size >= 0, "The size of the requested sparse vector must be no less than 0.")
     require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
       s" indices match the dimension of the values. You provided ${indices.length} indices and " +
       s" ${values.length} values.")

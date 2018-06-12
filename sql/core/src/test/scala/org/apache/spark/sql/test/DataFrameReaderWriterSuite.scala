@@ -21,10 +21,14 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import scala.collection.JavaConverters._
+
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
@@ -151,7 +155,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-
   test("resolve default source") {
     spark.read
       .format("org.apache.spark.sql.test")
@@ -273,7 +276,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     assert(LastOptions.parameters("doubleOpt") == "6.7")
   }
 
-  test("check jdbc() does not support partitioning or bucketing") {
+  test("check jdbc() does not support partitioning, bucketBy or sortBy") {
     val df = spark.read.text(Utils.createTempDir(namePrefix = "text").getCanonicalPath)
 
     var w = df.write.partitionBy("value")
@@ -284,7 +287,19 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
     w = df.write.bucketBy(2, "value")
     e = intercept[AnalysisException](w.jdbc(null, null, null))
-    Seq("jdbc", "bucketing").foreach { s =>
+    Seq("jdbc", "does not support bucketBy right now").foreach { s =>
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+    }
+
+    w = df.write.sortBy("value")
+    e = intercept[AnalysisException](w.jdbc(null, null, null))
+    Seq("sortBy must be used together with bucketBy").foreach { s =>
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+    }
+
+    w = df.write.bucketBy(2, "value").sortBy("value")
+    e = intercept[AnalysisException](w.jdbc(null, null, null))
+    Seq("jdbc", "does not support bucketBy and sortBy right now").foreach { s =>
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
@@ -298,7 +313,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       intercept[AnalysisException] {
         spark.range(10).write.format("csv").mode("overwrite").partitionBy("id").save(path)
       }
-      spark.emptyDataFrame.write.format("parquet").mode("overwrite").save(path)
     }
   }
 
@@ -474,42 +488,56 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       spark.read.schema(userSchema).parquet(Seq(dir, dir): _*), expData ++ expData, userSchema)
   }
 
-  /**
-   * This only tests whether API compiles, but does not run it as orc()
-   * cannot be run without Hive classes.
-   */
-  ignore("orc - API") {
-    // Reader, with user specified schema
-    // Refer to csv-specific test suites for behavior without user specified schema
-    spark.read.schema(userSchema).orc()
-    spark.read.schema(userSchema).orc(dir)
-    spark.read.schema(userSchema).orc(dir, dir, dir)
-    spark.read.schema(userSchema).orc(Seq(dir, dir): _*)
-    Option(dir).map(spark.read.schema(userSchema).orc)
+  test("orc - API and behavior regarding schema") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
+      // Writer
+      spark.createDataset(data).toDF("str").write.mode(SaveMode.Overwrite).orc(dir)
+      val df = spark.read.orc(dir)
+      checkAnswer(df, spark.createDataset(data).toDF())
+      val schema = df.schema
 
-    // Writer
-    spark.range(10).write.orc(dir)
+      // Reader, without user specified schema
+      intercept[AnalysisException] {
+        testRead(spark.read.orc(), Seq.empty, schema)
+      }
+      testRead(spark.read.orc(dir), data, schema)
+      testRead(spark.read.orc(dir, dir), data ++ data, schema)
+      testRead(spark.read.orc(Seq(dir, dir): _*), data ++ data, schema)
+      // Test explicit calls to single arg method - SPARK-16009
+      testRead(Option(dir).map(spark.read.orc).get, data, schema)
+
+      // Reader, with user specified schema, data should be nulls as schema in file different
+      // from user schema
+      val expData = Seq[String](null, null, null)
+      testRead(spark.read.schema(userSchema).orc(), Seq.empty, userSchema)
+      testRead(spark.read.schema(userSchema).orc(dir), expData, userSchema)
+      testRead(spark.read.schema(userSchema).orc(dir, dir), expData ++ expData, userSchema)
+      testRead(
+        spark.read.schema(userSchema).orc(Seq(dir, dir): _*), expData ++ expData, userSchema)
+    }
   }
 
   test("column nullability and comment - write and then read") {
-    Seq("json", "parquet", "csv").foreach { format =>
-      val schema = StructType(
-        StructField("cl1", IntegerType, nullable = false).withComment("test") ::
-          StructField("cl2", IntegerType, nullable = true) ::
-          StructField("cl3", IntegerType, nullable = true) :: Nil)
-      val row = Row(3, null, 4)
-      val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
+      Seq("json", "orc", "parquet", "csv").foreach { format =>
+        val schema = StructType(
+          StructField("cl1", IntegerType, nullable = false).withComment("test") ::
+            StructField("cl2", IntegerType, nullable = true) ::
+            StructField("cl3", IntegerType, nullable = true) :: Nil)
+        val row = Row(3, null, 4)
+        val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
 
-      val tableName = "tab"
-      withTable(tableName) {
-        df.write.format(format).mode("overwrite").saveAsTable(tableName)
-        // Verify the DDL command result: DESCRIBE TABLE
-        checkAnswer(
-          sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
-          Row("cl1", "test") :: Nil)
-        // Verify the schema
-        val expectedFields = schema.fields.map(f => f.copy(nullable = true))
-        assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
+        val tableName = "tab"
+        withTable(tableName) {
+          df.write.format(format).mode("overwrite").saveAsTable(tableName)
+          // Verify the DDL command result: DESCRIBE TABLE
+          checkAnswer(
+            sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
+            Row("cl1", "test") :: Nil)
+          // Verify the schema
+          val expectedFields = schema.fields.map(f => f.copy(nullable = true))
+          assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
+        }
       }
     }
   }
@@ -546,7 +574,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     "and a same-name temp view exist") {
     withTable("same_name") {
       withTempView("same_name") {
-        sql("CREATE TABLE same_name(id LONG) USING parquet")
+        val format = spark.sessionState.conf.defaultDataSourceName
+        sql(s"CREATE TABLE same_name(id LONG) USING $format")
         spark.range(10).createTempView("same_name")
         spark.range(20).write.mode(SaveMode.Append).saveAsTable("same_name")
         checkAnswer(spark.table("same_name"), spark.range(10).toDF())
@@ -771,6 +800,33 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "parquet", c0, c1, src)
           checkReadPartitionColumnDuplication("parquet", c0, c1, src)
+        }
+      }
+    }
+  }
+
+  test("use Spark jobs to list files") {
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
+      withTempDir { dir =>
+        val jobDescriptions = new ConcurrentLinkedQueue[String]()
+        val jobListener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobDescriptions.add(jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+          }
+        }
+        sparkContext.addSparkListener(jobListener)
+        try {
+          spark.range(0, 3).map(i => (i, i))
+            .write.partitionBy("_1").mode("overwrite").parquet(dir.getCanonicalPath)
+          // normal file paths
+          checkDatasetUnorderly(
+            spark.read.parquet(dir.getCanonicalPath).as[(Long, Long)],
+            0L -> 0L, 1L -> 1L, 2L -> 2L)
+          sparkContext.listenerBus.waitUntilEmpty(10000)
+          assert(jobDescriptions.asScala.toList.exists(
+            _.contains("Listing leaf files and directories for 3 paths")))
+        } finally {
+          sparkContext.removeSparkListener(jobListener)
         }
       }
     }

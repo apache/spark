@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -436,7 +437,8 @@ case class JsonTuple(children: Seq[Expression])
     while (parser.nextToken() != JsonToken.END_OBJECT) {
       if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
         // check to see if this field is desired in the output
-        val idx = fieldNames.indexOf(parser.getCurrentName)
+        val jsonField = parser.getCurrentName
+        var idx = fieldNames.indexOf(jsonField)
         if (idx >= 0) {
           // it is, copy the child tree to the correct location in the output row
           val output = new ByteArrayOutputStream()
@@ -447,7 +449,14 @@ case class JsonTuple(children: Seq[Expression])
               generator => copyCurrentStructure(generator, parser)
             }
 
-            row(idx) = UTF8String.fromBytes(output.toByteArray)
+            val jsonValue = UTF8String.fromBytes(output.toByteArray)
+
+            // SPARK-21804: json_tuple returns null values within repeated columns
+            // except the first one; so that we need to check the remaining fields.
+            do {
+              row(idx) = jsonValue
+              idx = fieldNames.indexOf(jsonField, idx + 1)
+            } while (idx >= 0)
           }
         }
       }
@@ -505,12 +514,16 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String],
+    forceNullableSchema: Boolean)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
-  override def nullable: Boolean = true
 
-  def this(schema: DataType, options: Map[String, String], child: Expression) =
-    this(schema, options, child, None)
+  // The JSON input data might be missing certain fields. We force the nullability
+  // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
+  // can generate incorrect files if values are missing in columns declared as non-nullable.
+  val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
+
+  override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression) =
@@ -518,35 +531,45 @@ case class JsonToStructs(
       schema = JsonExprUtils.validateSchemaLiteral(schema),
       options = Map.empty[String, String],
       child = child,
-      timeZoneId = None)
+      timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = JsonExprUtils.validateSchemaLiteral(schema),
       options = JsonExprUtils.convertToMapData(options),
       child = child,
-      timeZoneId = None)
+      timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
-  override def checkInputDataTypes(): TypeCheckResult = schema match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+  // Used in `org.apache.spark.sql.functions`
+  def this(schema: DataType, options: Map[String, String], child: Expression) =
+    this(schema, options, child, timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
+
+  override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
+    case _: StructType | ArrayType(_: StructType, _) | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
+      s"Input schema ${nullableSchema.simpleString} must be a struct or an array of structs.")
   }
 
   @transient
-  lazy val rowSchema = schema match {
+  lazy val rowSchema = nullableSchema match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
   }
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = schema match {
+  lazy val converter = nullableSchema match {
     case _: StructType =>
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
     case ArrayType(_: StructType, _) =>
       (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+    case _: MapType =>
+      (rows: Seq[InternalRow]) => rows.head.getMap(0)
   }
 
   @transient
@@ -555,7 +578,7 @@ case class JsonToStructs(
       rowSchema,
       new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
 
-  override def dataType: DataType = schema
+  override def dataType: DataType = nullableSchema
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -593,10 +616,16 @@ case class JsonToStructs(
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+
+  override def sql: String = schema match {
+    case _: MapType => "entries"
+    case _ => super.sql
+  }
 }
 
 /**
- * Converts a [[StructType]] or [[ArrayType]] of [[StructType]]s to a json output string.
+ * Converts a [[StructType]], [[ArrayType]] of [[StructType]]s, [[MapType]]
+ * or [[ArrayType]] of [[MapType]]s to a json output string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -609,6 +638,14 @@ case class JsonToStructs(
        {"time":"26/08/2015"}
       > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
        [{"a":1,"b":2}]
+      > SELECT _FUNC_(map('a', named_struct('b', 1)));
+       {"a":{"b":1}}
+      > SELECT _FUNC_(map(named_struct('a', 1),named_struct('b', 2)));
+       {"[1]":{"b":2}}
+      > SELECT _FUNC_(map('a', 1));
+       {"a":1}
+      > SELECT _FUNC_(array((map('a', 1))));
+       [{"a":1}]
   """,
   since = "2.2.0")
 // scalastyle:on line.size.limit
@@ -640,6 +677,8 @@ case class StructsToJson(
   lazy val rowSchema = child.dataType match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
+    case ArrayType(mt: MapType, _) => mt
   }
 
   // This converts rows to the JSON output according to the given schema.
@@ -661,6 +700,14 @@ case class StructsToJson(
         (arr: Any) =>
           gen.write(arr.asInstanceOf[ArrayData])
           getAndReset()
+      case _: MapType =>
+        (map: Any) =>
+          gen.write(map.asInstanceOf[MapData])
+          getAndReset()
+      case ArrayType(_: MapType, _) =>
+        (arr: Any) =>
+          gen.write(arr.asInstanceOf[ArrayData])
+          getAndReset()
     }
   }
 
@@ -669,14 +716,25 @@ case class StructsToJson(
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case _: StructType | ArrayType(_: StructType, _) =>
       try {
-        JacksonUtils.verifySchema(rowSchema)
+        JacksonUtils.verifySchema(rowSchema.asInstanceOf[StructType])
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    case _: MapType | ArrayType(_: MapType, _) =>
+      // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
+      try {
+        val st = StructType(StructField("a", rowSchema.asInstanceOf[MapType]) :: Nil)
+        JacksonUtils.verifySchema(st)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input type ${child.dataType.simpleString} must be a struct or array of structs.")
+      s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +
+          "a map or array of map.")
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =

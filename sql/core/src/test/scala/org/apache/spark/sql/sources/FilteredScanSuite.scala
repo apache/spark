@@ -326,8 +326,8 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
         assert(ColumnsRequired.set === requiredColumnNames)
 
         val table = spark.table("oneToTenFiltered")
-        val relation = table.queryExecution.logical.collectFirst {
-          case LogicalRelation(r, _, _) => r
+        val relation = table.queryExecution.analyzed.collectFirst {
+          case LogicalRelation(r, _, _, _) => r
         }.get
 
         assert(

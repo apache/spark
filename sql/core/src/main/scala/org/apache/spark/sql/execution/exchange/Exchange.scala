@@ -50,7 +50,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   extends LeafExecNode {
 
   // Ignore this wrapper for canonicalizing.
-  override lazy val canonicalized: SparkPlan = child.canonicalized
+  override def doCanonicalize(): SparkPlan = child.canonicalized
 
   def doExecute(): RDD[InternalRow] = {
     child.execute()

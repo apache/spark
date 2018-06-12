@@ -20,6 +20,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
@@ -52,4 +53,34 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
       assert(df.queryExecution.simpleString.contains(replacement))
     }
   }
+
+  private def isIncluded(queryExecution: QueryExecution, msg: String): Boolean = {
+    queryExecution.toString.contains(msg) ||
+    queryExecution.simpleString.contains(msg) ||
+    queryExecution.stringWithStats.contains(msg)
+  }
+
+  test("explain is redacted using SQLConf") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+      val df = spark.read.parquet(basePath)
+      val replacement = "*********"
+
+      // Respect SparkConf and replace file:/
+      assert(isIncluded(df.queryExecution, replacement))
+
+      assert(isIncluded(df.queryExecution, "FileScan"))
+      assert(!isIncluded(df.queryExecution, "file:/"))
+
+      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "(?i)FileScan") {
+        // Respect SQLConf and replace FileScan
+        assert(isIncluded(df.queryExecution, replacement))
+
+        assert(!isIncluded(df.queryExecution, "FileScan"))
+        assert(isIncluded(df.queryExecution, "file:/"))
+      }
+    }
+  }
+
 }

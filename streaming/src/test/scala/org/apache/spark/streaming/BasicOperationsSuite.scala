@@ -596,8 +596,6 @@ class BasicOperationsSuite extends TestSuiteBase {
       )
 
     val updateStateOperation = (s: DStream[String]) => {
-      class StateObject(var counter: Int = 0, var expireCounter: Int = 0) extends Serializable
-
       // updateFunc clears a state when a StateObject is seen without new values twice in a row
       val updateFunc = (values: Seq[Int], state: Option[StateObject]) => {
         val stateObj = state.getOrElse(new StateObject)
@@ -817,3 +815,5 @@ class BasicOperationsSuite extends TestSuiteBase {
     }
   }
 }
+
+class StateObject(var counter: Int = 0, var expireCounter: Int = 0) extends Serializable

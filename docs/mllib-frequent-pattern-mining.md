@@ -41,7 +41,7 @@ We refer users to the papers for more details.
 
 [`FPGrowth`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) implements the
 FP-growth algorithm.
-It take a `RDD` of transactions, where each transaction is an `Array` of items of a generic type.
+It takes an `RDD` of transactions, where each transaction is an `Array` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowthModel)
 that stores the frequent itemsets with their frequencies.  The following
@@ -60,7 +60,7 @@ Refer to the [`FPGrowth` Scala docs](api/scala/index.html#org.apache.spark.mllib
 
 [`FPGrowth`](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) implements the
 FP-growth algorithm.
-It take an `JavaRDD` of transactions, where each transaction is an `Iterable` of items of a generic type.
+It takes a `JavaRDD` of transactions, where each transaction is an `Iterable` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/java/org/apache/spark/mllib/fpm/FPGrowthModel.html)
 that stores the frequent itemsets with their frequencies.  The following
@@ -79,7 +79,7 @@ Refer to the [`FPGrowth` Java docs](api/java/org/apache/spark/mllib/fpm/FPGrowth
 
 [`FPGrowth`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowth) implements the
 FP-growth algorithm.
-It take an `RDD` of transactions, where each transaction is an `List` of items of a generic type.
+It takes an `RDD` of transactions, where each transaction is an `List` of items of a generic type.
 Calling `FPGrowth.train` with transactions returns an
 [`FPGrowthModel`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowthModel)
 that stores the frequent itemsets with their frequencies.

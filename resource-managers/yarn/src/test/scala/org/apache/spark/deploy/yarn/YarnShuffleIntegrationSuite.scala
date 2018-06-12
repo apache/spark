@@ -70,11 +70,18 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     val finalState = runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
-      appArgs = Seq(result.getAbsolutePath(), registeredExecFile.getAbsolutePath),
+      appArgs = if (registeredExecFile != null) {
+        Seq(result.getAbsolutePath, registeredExecFile.getAbsolutePath)
+      } else {
+        Seq(result.getAbsolutePath)
+      },
       extraConf = extraSparkConf()
     )
     checkResult(finalState, result)
-    assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
+
+    if (registeredExecFile != null) {
+      assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
+    }
   }
 }
 
@@ -105,7 +112,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
   val WAIT_TIMEOUT_MILLIS = 10000
 
   def main(args: Array[String]): Unit = {
-    if (args.length != 2) {
+    if (args.length > 2) {
       // scalastyle:off println
       System.err.println(
         s"""
@@ -121,10 +128,16 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       .setAppName("External Shuffle Test"))
     val conf = sc.getConf
     val status = new File(args(0))
-    val registeredExecFile = new File(args(1))
+    val registeredExecFile = if (args.length == 2) {
+      new File(args(1))
+    } else {
+      null
+    }
     logInfo("shuffle service executor file = " + registeredExecFile)
     var result = "failure"
-    val execStateCopy = new File(registeredExecFile.getAbsolutePath + "_dup")
+    val execStateCopy = Option(registeredExecFile).map { file =>
+      new File(file.getAbsolutePath + "_dup")
+    }.orNull
     try {
       val data = sc.parallelize(0 until 100, 10).map { x => (x % 10) -> x }.reduceByKey{ _ + _ }.
         collect().toSet
@@ -132,11 +145,15 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       data should be ((0 until 10).map{x => x -> (x * 10 + 450)}.toSet)
       result = "success"
       // only one process can open a leveldb file at a time, so we copy the files
-      FileUtils.copyDirectory(registeredExecFile, execStateCopy)
-      assert(!ShuffleTestAccessor.reloadRegisteredExecutors(execStateCopy).isEmpty)
+      if (registeredExecFile != null && execStateCopy != null) {
+        FileUtils.copyDirectory(registeredExecFile, execStateCopy)
+        assert(!ShuffleTestAccessor.reloadRegisteredExecutors(execStateCopy).isEmpty)
+      }
     } finally {
       sc.stop()
-      FileUtils.deleteDirectory(execStateCopy)
+      if (execStateCopy != null) {
+        FileUtils.deleteDirectory(execStateCopy)
+      }
       Files.write(result, status, StandardCharsets.UTF_8)
     }
   }

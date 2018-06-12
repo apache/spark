@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.{CommonTokenStream, ParserRuleContext}
+import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -57,7 +57,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   private def buildContext[T](command: String)(toResult: SqlBaseParser => T): T = {
-    val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
+    val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     toResult(parser)

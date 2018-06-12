@@ -29,7 +29,6 @@
 #' @param ... additional structField objects
 #' @return a structType object
 #' @rdname structType
-#' @export
 #' @examples
 #'\dontrun{
 #' schema <- structType(structField("a", "integer"), structField("c", "string"),
@@ -49,7 +48,6 @@ structType <- function(x, ...) {
 
 #' @rdname structType
 #' @method structType jobj
-#' @export
 structType.jobj <- function(x, ...) {
   obj <- structure(list(), class = "structType")
   obj$jobj <- x
@@ -59,7 +57,6 @@ structType.jobj <- function(x, ...) {
 
 #' @rdname structType
 #' @method structType structField
-#' @export
 structType.structField <- function(x, ...) {
   fields <- list(x, ...)
   if (!all(sapply(fields, inherits, "structField"))) {
@@ -76,7 +73,6 @@ structType.structField <- function(x, ...) {
 
 #' @rdname structType
 #' @method structType character
-#' @export
 structType.character <- function(x, ...) {
   if (!is.character(x)) {
     stop("schema must be a DDL-formatted string.")
@@ -119,7 +115,6 @@ print.structType <- function(x, ...) {
 #' @param ... additional argument(s) passed to the method.
 #' @return A structField object.
 #' @rdname structField
-#' @export
 #' @examples
 #'\dontrun{
 #' field1 <- structField("a", "integer")
@@ -137,7 +132,6 @@ structField <- function(x, ...) {
 
 #' @rdname structField
 #' @method structField jobj
-#' @export
 structField.jobj <- function(x, ...) {
   obj <- structure(list(), class = "structField")
   obj$jobj <- x
@@ -155,7 +149,7 @@ checkType <- function(type) {
   } else {
     # Check complex types
     firstChar <- substr(type, 1, 1)
-    switch (firstChar,
+    switch(firstChar,
             a = {
               # Array type
               m <- regexec("^array<(.+)>$", type)
@@ -212,7 +206,6 @@ checkType <- function(type) {
 #' @param type The data type of the field
 #' @param nullable A logical vector indicating whether or not the field is nullable
 #' @rdname structField
-#' @export
 structField.character <- function(x, type, nullable = TRUE, ...) {
   if (class(x) != "character") {
     stop("Field name must be a string.")

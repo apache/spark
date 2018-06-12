@@ -27,7 +27,6 @@ import javax.security.sasl.RealmCallback;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -155,7 +154,7 @@ public class SparkSaslServer implements SaslEncryptionBackend {
    */
   private class DigestCallbackHandler implements CallbackHandler {
     @Override
-    public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+    public void handle(Callback[] callbacks) throws UnsupportedCallbackException {
       for (Callback callback : callbacks) {
         if (callback instanceof NameCallback) {
           logger.trace("SASL server callback: setting username");

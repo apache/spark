@@ -150,6 +150,10 @@ You can optionally configure the cluster further by setting environment variable
     <td>JVM options for the Spark master and worker daemons themselves in the form "-Dx=y" (default: none).</td>
   </tr>
   <tr>
+    <td><code>SPARK_DAEMON_CLASSPATH</code></td>
+    <td>Classpath for the Spark master and worker daemons themselves (default: none).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_PUBLIC_DNS</code></td>
     <td>The public DNS name of the Spark master and workers (default: none).</td>
   </tr>
@@ -251,6 +255,18 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
+  <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
+  <td>true</td>
+  <td>
+    Enable cleanup non-shuffle files(such as temp. shuffle blocks, cached RDD/broadcast blocks,
+    spill files, etc) of worker directories following executor exits. Note that this doesn't
+    overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
+    local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
+    all files/subdirectories of a stopped and timeout application.
+    This only affects Standalone mode, support of other cluster manangers can be added in the future.
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
   <td>100</td>
   <td>
@@ -324,9 +340,17 @@ export SPARK_MASTER_OPTS="-Dspark.deploy.defaultCores=<value>"
 This is useful on shared clusters where users might not have configured a maximum number of cores
 individually.
 
+# Executors Scheduling
+
+The number of cores assigned to each executor is configurable. When `spark.executor.cores` is
+explicitly set, multiple executors from the same application may be launched on the same worker
+if the worker has enough cores and memory. Otherwise, each executor grabs all the cores available
+on the worker by default, in which case only one executor per application may be launched on each
+worker during one single schedule iteration.
+
 # Monitoring and Logging
 
-Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
+Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default, you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
 
 In addition, detailed log output for each job is also written to the work directory of each slave node (`SPARK_HOME/work` by default). You will see two files for each job, `stdout` and `stderr`, with all output it wrote to its console.
 
@@ -352,7 +376,7 @@ By default, standalone scheduling clusters are resilient to Worker failures (ins
 
 Utilizing ZooKeeper to provide leader election and some state storage, you can launch multiple Masters in your cluster connected to the same ZooKeeper instance. One will be elected "leader" and the others will remain in standby mode. If the current leader dies, another Master will be elected, recover the old Master's state, and then resume scheduling. The entire recovery process (from the time the first leader goes down) should take between 1 and 2 minutes. Note that this delay only affects scheduling _new_ applications -- applications that were already running during Master failover are unaffected.
 
-Learn more about getting started with ZooKeeper [here](http://zookeeper.apache.org/doc/trunk/zookeeperStarted.html).
+Learn more about getting started with ZooKeeper [here](http://zookeeper.apache.org/doc/current/zookeeperStarted.html).
 
 **Configuration**
 

@@ -136,19 +136,19 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
 
   test("maximum decimals") {
     for (expr <- Seq(d1, d2, i, u)) {
-      checkType(Add(expr, u), DecimalType.SYSTEM_DEFAULT)
-      checkType(Subtract(expr, u), DecimalType.SYSTEM_DEFAULT)
+      checkType(Add(expr, u), DecimalType(38, 17))
+      checkType(Subtract(expr, u), DecimalType(38, 17))
     }
 
-    checkType(Multiply(d1, u), DecimalType(38, 19))
-    checkType(Multiply(d2, u), DecimalType(38, 20))
-    checkType(Multiply(i, u), DecimalType(38, 18))
-    checkType(Multiply(u, u), DecimalType(38, 36))
+    checkType(Multiply(d1, u), DecimalType(38, 16))
+    checkType(Multiply(d2, u), DecimalType(38, 14))
+    checkType(Multiply(i, u), DecimalType(38, 7))
+    checkType(Multiply(u, u), DecimalType(38, 6))
 
-    checkType(Divide(u, d1), DecimalType(38, 18))
-    checkType(Divide(u, d2), DecimalType(38, 19))
-    checkType(Divide(u, i), DecimalType(38, 23))
-    checkType(Divide(u, u), DecimalType(38, 18))
+    checkType(Divide(u, d1), DecimalType(38, 17))
+    checkType(Divide(u, d2), DecimalType(38, 16))
+    checkType(Divide(u, i), DecimalType(38, 18))
+    checkType(Divide(u, u), DecimalType(38, 6))
 
     checkType(Remainder(d1, u), DecimalType(19, 18))
     checkType(Remainder(d2, u), DecimalType(21, 18))
@@ -270,6 +270,15 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
       ruleTest(minValue <= int, Literal(Long.MinValue) <= int)
       ruleTest(underflow <= int, TrueLiteral)
     }
+  }
+
+  test("SPARK-24468: operations on decimals with negative scale") {
+    val a = AttributeReference("a", DecimalType(3, -10))()
+    val b = AttributeReference("b", DecimalType(1, -1))()
+    val c = AttributeReference("c", DecimalType(35, 1))()
+    checkType(Multiply(a, b), DecimalType(5, -11))
+    checkType(Multiply(a, c), DecimalType(38, -9))
+    checkType(Multiply(b, c), DecimalType(37, 0))
   }
 
   /** strength reduction for integer/decimal comparisons */

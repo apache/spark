@@ -57,6 +57,7 @@ object JDBCRDD extends Logging {
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
       try {
+        statement.setQueryTimeout(options.queryTimeout)
         val rs = statement.executeQuery()
         try {
           JdbcUtils.getSchema(rs, dialect, alwaysNullable = true)
@@ -80,7 +81,7 @@ object JDBCRDD extends Logging {
    * @return A Catalyst schema corresponding to columns in the given order.
    */
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields.map(x => x.metadata.getString("name") -> x): _*)
+    val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
     new StructType(columns.map(name => fieldMap(name)))
   }
 
@@ -281,6 +282,7 @@ private[jdbc] class JDBCRDD(
         val statement = conn.prepareStatement(sql)
         logInfo(s"Executing sessionInitStatement: $sql")
         try {
+          statement.setQueryTimeout(options.queryTimeout)
           statement.execute()
         } finally {
           statement.close()
@@ -298,6 +300,7 @@ private[jdbc] class JDBCRDD(
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
+    stmt.setQueryTimeout(options.queryTimeout)
     rs = stmt.executeQuery()
     val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
 

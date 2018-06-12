@@ -78,10 +78,10 @@ class KryoBenchmark extends SparkFunSuite {
         sum
       }
     }
-    basicTypes("Int", Random.nextInt)
-    basicTypes("Long", Random.nextLong)
-    basicTypes("Float", Random.nextFloat)
-    basicTypes("Double", Random.nextDouble)
+    basicTypes("Int", () => Random.nextInt())
+    basicTypes("Long", () => Random.nextLong())
+    basicTypes("Float", () => Random.nextFloat())
+    basicTypes("Double", () => Random.nextDouble())
 
     // Benchmark Array of Primitives
     val arrayCount = 10000
@@ -101,10 +101,10 @@ class KryoBenchmark extends SparkFunSuite {
         sum
       }
     }
-    basicTypeArray("Int", Random.nextInt)
-    basicTypeArray("Long", Random.nextLong)
-    basicTypeArray("Float", Random.nextFloat)
-    basicTypeArray("Double", Random.nextDouble)
+    basicTypeArray("Int", () => Random.nextInt())
+    basicTypeArray("Long", () => Random.nextLong())
+    basicTypeArray("Float", () => Random.nextFloat())
+    basicTypeArray("Double", () => Random.nextDouble())
 
     // Benchmark Maps
     val mapsCount = 1000

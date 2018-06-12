@@ -70,7 +70,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
     val ctx = newCodeGenContext()
     val numFields = columnTypes.size
     val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
-      val accessorName = ctx.freshName("accessor")
       val accessorCls = dt match {
         case NullType => classOf[NullColumnAccessor].getName
         case BooleanType => classOf[BooleanColumnAccessor].getName
@@ -89,10 +88,10 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case array: ArrayType => classOf[ArrayColumnAccessor].getName
         case t: MapType => classOf[MapColumnAccessor].getName
       }
-      ctx.addMutableState(accessorCls, accessorName, "")
+      val accessorName = ctx.addMutableState(accessorCls, "accessor")
 
       val createCode = dt match {
-        case t if ctx.isPrimitiveType(dt) =>
+        case t if CodeGenerator.isPrimitiveType(dt) =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case NullType | StringType | BinaryType =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
@@ -166,9 +165,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         private ByteOrder nativeOrder = null;
         private byte[][] buffers = null;
-        private UnsafeRow unsafeRow = new UnsafeRow($numFields);
-        private BufferHolder bufferHolder = new BufferHolder(unsafeRow);
-        private UnsafeRowWriter rowWriter = new UnsafeRowWriter(bufferHolder, $numFields);
+        private UnsafeRowWriter rowWriter = new UnsafeRowWriter($numFields);
         private MutableUnsafeRow mutableRow = null;
 
         private int currentRow = 0;
@@ -213,11 +210,10 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         public InternalRow next() {
           currentRow += 1;
-          bufferHolder.reset();
+          rowWriter.reset();
           rowWriter.zeroOutNullBytes();
           ${extractorCalls}
-          unsafeRow.setTotalSize(bufferHolder.totalSize());
-          return unsafeRow;
+          return rowWriter.getRow();
         }
 
         ${ctx.declareAddedFunctions()}
@@ -227,6 +223,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"Generated ColumnarIterator:\n${CodeFormatter.format(code)}")
 
-    CodeGenerator.compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(Array.empty).asInstanceOf[ColumnarIterator]
   }
 }

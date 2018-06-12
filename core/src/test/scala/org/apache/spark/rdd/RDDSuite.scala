@@ -1129,6 +1129,35 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }.collect()
   }
 
+  test("SPARK-23496: order of input partitions can result in severe skew in coalesce") {
+    val numInputPartitions = 100
+    val numCoalescedPartitions = 50
+    val locations = Array("locA", "locB")
+
+    val inputRDD = sc.makeRDD(Range(0, numInputPartitions).toArray[Int], numInputPartitions)
+    assert(inputRDD.getNumPartitions == numInputPartitions)
+
+    val locationPrefRDD = new LocationPrefRDD(inputRDD, { (p: Partition) =>
+      if (p.index < numCoalescedPartitions) {
+        Seq(locations(0))
+      } else {
+        Seq(locations(1))
+      }
+    })
+    val coalescedRDD = new CoalescedRDD(locationPrefRDD, numCoalescedPartitions)
+
+    val numPartsPerLocation = coalescedRDD
+      .getPartitions
+      .map(coalescedRDD.getPreferredLocations(_).head)
+      .groupBy(identity)
+      .mapValues(_.size)
+
+    // Make sure the coalesced partitions are distributed fairly evenly between the two locations.
+    // This should not become flaky since the DefaultPartitionsCoalescer uses a fixed seed.
+    assert(numPartsPerLocation(locations(0)) > 0.4 * numCoalescedPartitions)
+    assert(numPartsPerLocation(locations(1)) > 0.4 * numCoalescedPartitions)
+  }
+
   // NOTE
   // Below tests calling sc.stop() have to be the last tests in this suite. If there are tests
   // running after them and if they access sc those tests will fail as sc is already closed, because
@@ -1209,4 +1238,17 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
     }
     groups.toArray
   }
+}
+
+/** Alters the preferred locations of the parent RDD using provided function. */
+class LocationPrefRDD[T: ClassTag](
+    @transient var prev: RDD[T],
+    val locationPicker: Partition => Seq[String]) extends RDD[T](prev) {
+  override protected def getPartitions: Array[Partition] = prev.partitions
+
+  override def compute(partition: Partition, context: TaskContext): Iterator[T] =
+    null.asInstanceOf[Iterator[T]]
+
+  override def getPreferredLocations(partition: Partition): Seq[String] =
+    locationPicker(partition)
 }

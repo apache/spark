@@ -116,6 +116,7 @@ class RandomForestClassifier @Since("1.4.0") (
     set(featureSubsetStrategy, value)
 
   override protected def train(dataset: Dataset[_]): RandomForestClassificationModel = {
+    val instr = Instrumentation.create(this, dataset)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses: Int = getNumClasses(dataset)
@@ -130,7 +131,6 @@ class RandomForestClassifier @Since("1.4.0") (
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
 
-    val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
       impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
@@ -141,6 +141,8 @@ class RandomForestClassifier @Since("1.4.0") (
 
     val numFeatures = oldDataset.first().features.size
     val m = new RandomForestClassificationModel(uid, trees, numFeatures, numClasses)
+    instr.logNumClasses(numClasses)
+    instr.logNumFeatures(numFeatures)
     instr.logSuccess(m)
     m
   }
@@ -158,7 +160,7 @@ object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifi
   /** Accessor for supported featureSubsetStrategy settings: auto, all, onethird, sqrt, log2 */
   @Since("1.4.0")
   final val supportedFeatureSubsetStrategies: Array[String] =
-    RandomForestParams.supportedFeatureSubsetStrategies
+    TreeEnsembleParams.supportedFeatureSubsetStrategies
 
   @Since("2.0.0")
   override def load(path: String): RandomForestClassifier = super.load(path)
@@ -310,23 +312,23 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     override def load(path: String): RandomForestClassificationModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], _) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName, true)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
       val trees: Array[DecisionTreeClassificationModel] = treesData.map {
         case (treeMetadata, root) =>
-          val tree =
-            new DecisionTreeClassificationModel(treeMetadata.uid, root, numFeatures, numClasses)
-          DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+          val tree = new DecisionTreeClassificationModel(treeMetadata.uid,
+            root.asInstanceOf[ClassificationNode], numFeatures, numClasses)
+          treeMetadata.getAndSetParams(tree)
           tree
       }
       require(numTrees == trees.length, s"RandomForestClassificationModel.load expected $numTrees" +
         s" trees based on metadata but found ${trees.length} trees.")
 
       val model = new RandomForestClassificationModel(metadata.uid, trees, numFeatures, numClasses)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

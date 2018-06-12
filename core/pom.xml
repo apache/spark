@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.3.0-SNAPSHOT</version>
+    <version>2.4.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -69,6 +69,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kvstore_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-network-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -89,6 +94,12 @@
     <dependency>
       <groupId>org.apache.curator</groupId>
       <artifactId>curator-recipes</artifactId>
+    </dependency>
+    <!-- With curator 2.12  SBT/Ivy doesn't get ZK on the build classpath.
+         Explicitly declaring it as a dependency fixes this. -->
+    <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
     </dependency>
 
     <!-- Jetty dependencies promoted to compile here so they are shaded
@@ -192,6 +203,10 @@
     <dependency>
       <groupId>org.lz4</groupId>
       <artifactId>lz4-java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.luben</groupId>
+      <artifactId>zstd-jni</artifactId>
     </dependency>
     <dependency>
       <groupId>org.roaringbitmap</groupId>
@@ -335,11 +350,19 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.6</version>
+      <version>0.10.7</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-launcher_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <classifier>tests</classifier>
+      <scope>test</scope>
     </dependency>
 
     <!--
@@ -483,6 +506,7 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
+            <version>1.6.0</version>
             <executions>
               <execution>
                 <id>sparkr-pkg</id>
@@ -493,7 +517,7 @@
               </execution>
             </executions>
             <configuration>
-              <executable>..${file.separator}R${file.separator}install-dev${script.extension}</executable>
+              <executable>${project.basedir}${file.separator}..${file.separator}R${file.separator}install-dev${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>

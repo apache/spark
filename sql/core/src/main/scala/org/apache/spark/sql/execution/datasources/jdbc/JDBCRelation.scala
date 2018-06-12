@@ -111,7 +111,14 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = JDBCRDD.resolveTable(jdbcOptions)
+  override val schema: StructType = {
+    val tableSchema = JDBCRDD.resolveTable(jdbcOptions)
+    jdbcOptions.customSchema match {
+      case Some(customSchema) => JdbcUtils.getCustomSchema(
+        tableSchema, customSchema, sparkSession.sessionState.conf.resolver)
+      case None => tableSchema
+    }
+  }
 
   // Check if JDBCRDD.compileFilter can accept input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {

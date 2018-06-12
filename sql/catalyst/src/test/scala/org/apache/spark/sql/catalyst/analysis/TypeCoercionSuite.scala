@@ -131,14 +131,17 @@ class TypeCoercionSuite extends AnalysisTest {
       widenFunc: (DataType, DataType) => Option[DataType],
       t1: DataType,
       t2: DataType,
-      expected: Option[DataType]): Unit = {
+      expected: Option[DataType],
+      isSymmetric: Boolean = true): Unit = {
     var found = widenFunc(t1, t2)
     assert(found == expected,
       s"Expected $expected as wider common type for $t1 and $t2, found $found")
     // Test both directions to make sure the widening is symmetric.
-    found = widenFunc(t2, t1)
-    assert(found == expected,
-      s"Expected $expected as wider common type for $t2 and $t1, found $found")
+    if (isSymmetric) {
+      found = widenFunc(t2, t1)
+      assert(found == expected,
+        s"Expected $expected as wider common type for $t2 and $t1, found $found")
+    }
   }
 
   test("implicit type cast - ByteType") {
@@ -385,6 +388,65 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTest(NullType, StructType(Seq()), Some(StructType(Seq())))
     widenTest(StringType, MapType(IntegerType, StringType, true), None)
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
+
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType))),
+      StructType(Seq(StructField("b", IntegerType))),
+      None)
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", DoubleType, nullable = false))),
+      None)
+
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = false)))))
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      widenTest(
+        StructType(Seq(StructField("a", IntegerType))),
+        StructType(Seq(StructField("A", IntegerType))),
+        None)
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkWidenType(
+        TypeCoercion.findTightestCommonType,
+        StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType))),
+        StructType(Seq(StructField("A", IntegerType), StructField("b", IntegerType))),
+        Some(StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType)))),
+        isSymmetric = false)
+    }
+
+    widenTest(
+      ArrayType(IntegerType, containsNull = true),
+      ArrayType(IntegerType, containsNull = false),
+      Some(ArrayType(IntegerType, containsNull = true)))
+
+    widenTest(
+      MapType(IntegerType, StringType, valueContainsNull = true),
+      MapType(IntegerType, StringType, valueContainsNull = false),
+      Some(MapType(IntegerType, StringType, valueContainsNull = true)))
+
+    widenTest(
+      new StructType()
+        .add("arr", ArrayType(IntegerType, containsNull = true), nullable = false),
+      new StructType()
+        .add("arr", ArrayType(IntegerType, containsNull = false), nullable = true),
+      Some(new StructType()
+        .add("arr", ArrayType(IntegerType, containsNull = true), nullable = true)))
   }
 
   test("wider common type for decimal and array") {
@@ -462,11 +524,11 @@ class TypeCoercionSuite extends AnalysisTest {
   test("cast NullType for expressions that implement ExpectsInputTypes") {
     import TypeCoercionSuite._
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       AnyTypeUnaryExpression(Literal.create(null, NullType)),
       AnyTypeUnaryExpression(Literal.create(null, NullType)))
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
   }
@@ -474,11 +536,11 @@ class TypeCoercionSuite extends AnalysisTest {
   test("cast NullType for binary operators") {
     import TypeCoercionSuite._
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)))
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       NumericTypeBinaryOperator(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
   }
@@ -495,6 +557,9 @@ class TypeCoercionSuite extends AnalysisTest {
     val floatLit = Literal.create(1.0f, FloatType)
     val timestampLit = Literal.create("2017-04-12", TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
+    val tsArrayLit = Literal(Array(new Timestamp(System.currentTimeMillis())))
+    val strArrayLit = Literal(Array("c"))
+    val intArrayLit = Literal(Array(1))
 
     ruleTest(rule,
       Coalesce(Seq(doubleLit, intLit, floatLit)),
@@ -528,6 +593,16 @@ class TypeCoercionSuite extends AnalysisTest {
       Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
       Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
         Cast(doubleLit, StringType), Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(timestampLit, intLit, stringLit)),
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType),
+        Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(tsArrayLit, intArrayLit, strArrayLit)),
+      Coalesce(Seq(Cast(tsArrayLit, ArrayType(StringType)),
+        Cast(intArrayLit, ArrayType(StringType)), Cast(strArrayLit, ArrayType(StringType)))))
   }
 
   test("CreateArray casts") {
@@ -748,7 +823,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("type coercion for CaseKeyWhen") {
-    ruleTest(TypeCoercion.ImplicitTypeCasts,
+    ruleTest(new TypeCoercion.ImplicitTypeCasts(conf),
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
     )
@@ -823,6 +898,114 @@ class TypeCoercionSuite extends AnalysisTest {
       Stack(Seq(Subtract(Literal(3), Literal(1)),
         Literal(1), Literal("2"),
         Literal.create(null, IntegerType), Literal.create(null, StringType))))
+  }
+
+  test("type coercion for Concat") {
+    val rule = TypeCoercion.ConcatCoercion(conf)
+
+    ruleTest(rule,
+      Concat(Seq(Literal("ab"), Literal("cde"))),
+      Concat(Seq(Literal("ab"), Literal("cde"))))
+    ruleTest(rule,
+      Concat(Seq(Literal(null), Literal("abc"))),
+      Concat(Seq(Cast(Literal(null), StringType), Literal("abc"))))
+    ruleTest(rule,
+      Concat(Seq(Literal(1), Literal("234"))),
+      Concat(Seq(Cast(Literal(1), StringType), Literal("234"))))
+    ruleTest(rule,
+      Concat(Seq(Literal("1"), Literal("234".getBytes()))),
+      Concat(Seq(Literal("1"), Cast(Literal("234".getBytes()), StringType))))
+    ruleTest(rule,
+      Concat(Seq(Literal(1L), Literal(2.toByte), Literal(0.1))),
+      Concat(Seq(Cast(Literal(1L), StringType), Cast(Literal(2.toByte), StringType),
+        Cast(Literal(0.1), StringType))))
+    ruleTest(rule,
+      Concat(Seq(Literal(true), Literal(0.1f), Literal(3.toShort))),
+      Concat(Seq(Cast(Literal(true), StringType), Cast(Literal(0.1f), StringType),
+        Cast(Literal(3.toShort), StringType))))
+    ruleTest(rule,
+      Concat(Seq(Literal(1L), Literal(0.1))),
+      Concat(Seq(Cast(Literal(1L), StringType), Cast(Literal(0.1), StringType))))
+    ruleTest(rule,
+      Concat(Seq(Literal(Decimal(10)))),
+      Concat(Seq(Cast(Literal(Decimal(10)), StringType))))
+    ruleTest(rule,
+      Concat(Seq(Literal(BigDecimal.valueOf(10)))),
+      Concat(Seq(Cast(Literal(BigDecimal.valueOf(10)), StringType))))
+    ruleTest(rule,
+      Concat(Seq(Literal(java.math.BigDecimal.valueOf(10)))),
+      Concat(Seq(Cast(Literal(java.math.BigDecimal.valueOf(10)), StringType))))
+    ruleTest(rule,
+      Concat(Seq(Literal(new java.sql.Date(0)), Literal(new Timestamp(0)))),
+      Concat(Seq(Cast(Literal(new java.sql.Date(0)), StringType),
+        Cast(Literal(new Timestamp(0)), StringType))))
+
+    withSQLConf("spark.sql.function.concatBinaryAsString" -> "true") {
+      ruleTest(rule,
+        Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
+        Concat(Seq(Cast(Literal("123".getBytes), StringType),
+          Cast(Literal("456".getBytes), StringType))))
+    }
+
+    withSQLConf("spark.sql.function.concatBinaryAsString" -> "false") {
+      ruleTest(rule,
+        Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
+        Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))))
+    }
+  }
+
+  test("type coercion for Elt") {
+    val rule = TypeCoercion.EltCoercion(conf)
+
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal("ab"), Literal("cde"))),
+      Elt(Seq(Literal(1), Literal("ab"), Literal("cde"))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1.toShort), Literal("ab"), Literal("cde"))),
+      Elt(Seq(Cast(Literal(1.toShort), IntegerType), Literal("ab"), Literal("cde"))))
+    ruleTest(rule,
+      Elt(Seq(Literal(2), Literal(null), Literal("abc"))),
+      Elt(Seq(Literal(2), Cast(Literal(null), StringType), Literal("abc"))))
+    ruleTest(rule,
+      Elt(Seq(Literal(2), Literal(1), Literal("234"))),
+      Elt(Seq(Literal(2), Cast(Literal(1), StringType), Literal("234"))))
+    ruleTest(rule,
+      Elt(Seq(Literal(3), Literal(1L), Literal(2.toByte), Literal(0.1))),
+      Elt(Seq(Literal(3), Cast(Literal(1L), StringType), Cast(Literal(2.toByte), StringType),
+        Cast(Literal(0.1), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(2), Literal(true), Literal(0.1f), Literal(3.toShort))),
+      Elt(Seq(Literal(2), Cast(Literal(true), StringType), Cast(Literal(0.1f), StringType),
+        Cast(Literal(3.toShort), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal(1L), Literal(0.1))),
+      Elt(Seq(Literal(1), Cast(Literal(1L), StringType), Cast(Literal(0.1), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal(Decimal(10)))),
+      Elt(Seq(Literal(1), Cast(Literal(Decimal(10)), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal(BigDecimal.valueOf(10)))),
+      Elt(Seq(Literal(1), Cast(Literal(BigDecimal.valueOf(10)), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal(java.math.BigDecimal.valueOf(10)))),
+      Elt(Seq(Literal(1), Cast(Literal(java.math.BigDecimal.valueOf(10)), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(2), Literal(new java.sql.Date(0)), Literal(new Timestamp(0)))),
+      Elt(Seq(Literal(2), Cast(Literal(new java.sql.Date(0)), StringType),
+        Cast(Literal(new Timestamp(0)), StringType))))
+
+    withSQLConf("spark.sql.function.eltOutputAsString" -> "true") {
+      ruleTest(rule,
+        Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
+        Elt(Seq(Literal(1), Cast(Literal("123".getBytes), StringType),
+          Cast(Literal("456".getBytes), StringType))))
+    }
+
+    withSQLConf("spark.sql.function.eltOutputAsString" -> "false") {
+      ruleTest(rule,
+        Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
+        Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
+    }
   }
 
   test("BooleanEquality type cast") {
@@ -1055,7 +1238,7 @@ class TypeCoercionSuite extends AnalysisTest {
    */
   test("make sure rules do not fire early") {
     // InConversion
-    val inConversion = TypeCoercion.InConversion
+    val inConversion = TypeCoercion.InConversion(conf)
     ruleTest(inConversion,
       In(UnresolvedAttribute("a"), Seq(Literal(1))),
       In(UnresolvedAttribute("a"), Seq(Literal(1)))
@@ -1092,22 +1275,47 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("SPARK-17117 null type coercion in divide") {
-    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
+    val rules = Seq(FunctionArgumentConversion, Division, new ImplicitTypeCasts(conf))
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
   }
 
   test("binary comparison with string promotion") {
-    ruleTest(PromoteStrings,
+    val rule = TypeCoercion.PromoteStrings(conf)
+    ruleTest(rule,
       GreaterThan(Literal("123"), Literal(1)),
       GreaterThan(Cast(Literal("123"), IntegerType), Literal(1)))
-    ruleTest(PromoteStrings,
+    ruleTest(rule,
       LessThan(Literal(true), Literal("123")),
       LessThan(Literal(true), Cast(Literal("123"), BooleanType)))
-    ruleTest(PromoteStrings,
+    ruleTest(rule,
       EqualTo(Literal(Array(1, 2)), Literal("123")),
       EqualTo(Literal(Array(1, 2)), Literal("123")))
+    ruleTest(rule,
+      GreaterThan(Literal("1.5"), Literal(BigDecimal("0.5"))),
+      GreaterThan(Cast(Literal("1.5"), DoubleType), Cast(Literal(BigDecimal("0.5")),
+        DoubleType)))
+    Seq(true, false).foreach { convertToTS =>
+      withSQLConf(
+        "spark.sql.typeCoercion.compareDateTimestampInTimestamp" -> convertToTS.toString) {
+        val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
+        val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
+        val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))
+        if (convertToTS) {
+          // `Date` should be treated as timestamp at 00:00:00 See SPARK-23549
+          ruleTest(rule, EqualTo(date0301, timestamp0301000000),
+            EqualTo(Cast(date0301, TimestampType), timestamp0301000000))
+          ruleTest(rule, LessThan(date0301, timestamp0301000001),
+            LessThan(Cast(date0301, TimestampType), timestamp0301000001))
+        } else {
+          ruleTest(rule, LessThan(date0301, timestamp0301000000),
+            LessThan(Cast(date0301, StringType), Cast(timestamp0301000000, StringType)))
+          ruleTest(rule, LessThan(date0301, timestamp0301000001),
+            LessThan(Cast(date0301, StringType), Cast(timestamp0301000001, StringType)))
+        }
+      }
+    }
   }
 
   test("cast WindowFrame boundaries to the type they operate upon") {

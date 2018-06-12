@@ -4,6 +4,11 @@ describe function extended to_json;
 select to_json(named_struct('a', 1, 'b', 2));
 select to_json(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
 select to_json(array(named_struct('a', 1, 'b', 2)));
+select to_json(map(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 2)));
+select to_json(map('a', named_struct('a', 1, 'b', 2)));
+select to_json(map('a', 1));
+select to_json(array(map('a',1)));
+select to_json(array(map('a',1), map('b',2)));
 -- Check if errors handled
 select to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'));
 select to_json(named_struct('a', 1, 'b', 2), map('mode', 1));

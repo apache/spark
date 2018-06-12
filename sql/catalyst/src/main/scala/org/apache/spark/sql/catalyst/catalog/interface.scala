@@ -21,17 +21,18 @@ import java.net.URI
 import java.util.Date
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
-import com.google.common.base.Objects
-
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 
 /**
@@ -307,7 +308,7 @@ case class CatalogTable(
 
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
-    if (owner.nonEmpty) map.put("Owner", owner)
+    if (owner != null && owner.nonEmpty) map.put("Owner", owner)
     map.put("Created Time", new Date(createTime).toString)
     map.put("Last Access", new Date(lastAccessTime).toString)
     map.put("Created By", "Spark " + createVersion)
@@ -362,22 +363,167 @@ object CatalogTable {
 case class CatalogStatistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    colStats: Map[String, ColumnStat] = Map.empty) {
+    colStats: Map[String, CatalogColumnStat] = Map.empty) {
 
   /**
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
-  def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
-    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
-    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
-      attributeStats = AttributeMap(matched))
+  def toPlanStats(planOutput: Seq[Attribute], cboEnabled: Boolean): Statistics = {
+    if (cboEnabled && rowCount.isDefined) {
+      val attrStats = AttributeMap(planOutput
+        .flatMap(a => colStats.get(a.name).map(a -> _.toPlanStat(a.name, a.dataType))))
+      // Estimate size as number of rows * row size.
+      val size = EstimationUtils.getOutputSize(planOutput, rowCount.get, attrStats)
+      Statistics(sizeInBytes = size, rowCount = rowCount, attributeStats = attrStats)
+    } else {
+      // When CBO is disabled or the table doesn't have other statistics, we apply the size-only
+      // estimation strategy and only propagate sizeInBytes in statistics.
+      Statistics(sizeInBytes = sizeInBytes)
+    }
   }
 
   /** Readable string representation for the CatalogStatistics. */
   def simpleString: String = {
     val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
     s"$sizeInBytes bytes$rowCountString"
+  }
+}
+
+/**
+ * This class of statistics for a column is used in [[CatalogTable]] to interact with metastore.
+ */
+case class CatalogColumnStat(
+    distinctCount: Option[BigInt] = None,
+    min: Option[String] = None,
+    max: Option[String] = None,
+    nullCount: Option[BigInt] = None,
+    avgLen: Option[Long] = None,
+    maxLen: Option[Long] = None,
+    histogram: Option[Histogram] = None) {
+
+  /**
+   * Returns a map from string to string that can be used to serialize the column stats.
+   * The key is the name of the column and name of the field (e.g. "colName.distinctCount"),
+   * and the value is the string representation for the value.
+   * min/max values are stored as Strings. They can be deserialized using
+   * [[CatalogColumnStat.fromExternalString]].
+   *
+   * As part of the protocol, the returned map always contains a key called "version".
+   * Any of the fields that are null (None) won't appear in the map.
+   */
+  def toMap(colName: String): Map[String, String] = {
+    val map = new scala.collection.mutable.HashMap[String, String]
+    map.put(s"${colName}.${CatalogColumnStat.KEY_VERSION}", "1")
+    distinctCount.foreach { v =>
+      map.put(s"${colName}.${CatalogColumnStat.KEY_DISTINCT_COUNT}", v.toString)
+    }
+    nullCount.foreach { v =>
+      map.put(s"${colName}.${CatalogColumnStat.KEY_NULL_COUNT}", v.toString)
+    }
+    avgLen.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_AVG_LEN}", v.toString) }
+    maxLen.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MAX_LEN}", v.toString) }
+    min.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MIN_VALUE}", v) }
+    max.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MAX_VALUE}", v) }
+    histogram.foreach { h =>
+      map.put(s"${colName}.${CatalogColumnStat.KEY_HISTOGRAM}", HistogramSerializer.serialize(h))
+    }
+    map.toMap
+  }
+
+  /** Convert [[CatalogColumnStat]] to [[ColumnStat]]. */
+  def toPlanStat(
+      colName: String,
+      dataType: DataType): ColumnStat =
+    ColumnStat(
+      distinctCount = distinctCount,
+      min = min.map(CatalogColumnStat.fromExternalString(_, colName, dataType)),
+      max = max.map(CatalogColumnStat.fromExternalString(_, colName, dataType)),
+      nullCount = nullCount,
+      avgLen = avgLen,
+      maxLen = maxLen,
+      histogram = histogram)
+}
+
+object CatalogColumnStat extends Logging {
+
+  // List of string keys used to serialize CatalogColumnStat
+  val KEY_VERSION = "version"
+  private val KEY_DISTINCT_COUNT = "distinctCount"
+  private val KEY_MIN_VALUE = "min"
+  private val KEY_MAX_VALUE = "max"
+  private val KEY_NULL_COUNT = "nullCount"
+  private val KEY_AVG_LEN = "avgLen"
+  private val KEY_MAX_LEN = "maxLen"
+  private val KEY_HISTOGRAM = "histogram"
+
+  /**
+   * Converts from string representation of data type to the corresponding Catalyst data type.
+   */
+  def fromExternalString(s: String, name: String, dataType: DataType): Any = {
+    dataType match {
+      case BooleanType => s.toBoolean
+      case DateType => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
+      case TimestampType => DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
+      case ByteType => s.toByte
+      case ShortType => s.toShort
+      case IntegerType => s.toInt
+      case LongType => s.toLong
+      case FloatType => s.toFloat
+      case DoubleType => s.toDouble
+      case _: DecimalType => Decimal(s)
+      // This version of Spark does not use min/max for binary/string types so we ignore it.
+      case BinaryType | StringType => null
+      case _ =>
+        throw new AnalysisException("Column statistics deserialization is not supported for " +
+          s"column $name of data type: $dataType.")
+    }
+  }
+
+  /**
+   * Converts the given value from Catalyst data type to string representation of external
+   * data type.
+   */
+  def toExternalString(v: Any, colName: String, dataType: DataType): String = {
+    val externalValue = dataType match {
+      case DateType => DateTimeUtils.toJavaDate(v.asInstanceOf[Int])
+      case TimestampType => DateTimeUtils.toJavaTimestamp(v.asInstanceOf[Long])
+      case BooleanType | _: IntegralType | FloatType | DoubleType => v
+      case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
+      // This version of Spark does not use min/max for binary/string types so we ignore it.
+      case _ =>
+        throw new AnalysisException("Column statistics serialization is not supported for " +
+          s"column $colName of data type: $dataType.")
+    }
+    externalValue.toString
+  }
+
+
+  /**
+   * Creates a [[CatalogColumnStat]] object from the given map.
+   * This is used to deserialize column stats from some external storage.
+   * The serialization side is defined in [[CatalogColumnStat.toMap]].
+   */
+  def fromMap(
+    table: String,
+    colName: String,
+    map: Map[String, String]): Option[CatalogColumnStat] = {
+
+    try {
+      Some(CatalogColumnStat(
+        distinctCount = map.get(s"${colName}.${KEY_DISTINCT_COUNT}").map(v => BigInt(v.toLong)),
+        min = map.get(s"${colName}.${KEY_MIN_VALUE}"),
+        max = map.get(s"${colName}.${KEY_MAX_VALUE}"),
+        nullCount = map.get(s"${colName}.${KEY_NULL_COUNT}").map(v => BigInt(v.toLong)),
+        avgLen = map.get(s"${colName}.${KEY_AVG_LEN}").map(_.toLong),
+        maxLen = map.get(s"${colName}.${KEY_MAX_LEN}").map(_.toLong),
+        histogram = map.get(s"${colName}.${KEY_HISTOGRAM}").map(HistogramSerializer.deserialize)
+      ))
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Failed to parse column statistics for column ${colName} in table $table", e)
+        None
+    }
   }
 }
 
@@ -405,6 +551,11 @@ object CatalogTypes {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+
+  /**
+   * Initialize an empty spec.
+   */
+  lazy val emptyTablePartitionSpec: TablePartitionSpec = Map.empty[String, String]
 }
 
 /**
@@ -435,16 +586,7 @@ case class HiveTableRelation(
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
-  override def equals(relation: Any): Boolean = relation match {
-    case other: HiveTableRelation => tableMeta == other.tableMeta && output == other.output
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Objects.hashCode(tableMeta.identifier, output)
-  }
-
-  override lazy val canonicalized: HiveTableRelation = copy(
+  override def doCanonicalize(): HiveTableRelation = copy(
     tableMeta = tableMeta.copy(
       storage = CatalogStorageFormat.empty,
       createTime = -1
@@ -454,10 +596,11 @@ case class HiveTableRelation(
     },
     partitionCols = partitionCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
-    })
+    }
+  )
 
   override def computeStats(): Statistics = {
-    tableMeta.stats.map(_.toPlanStats(output)).getOrElse {
+    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled)).getOrElse {
       throw new IllegalStateException("table stats must be specified.")
     }
   }

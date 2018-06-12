@@ -81,7 +81,7 @@ class AuthEngine implements Closeable {
    *
    * @return A challenge to be sent the remote side.
    */
-  ClientChallenge challenge() throws GeneralSecurityException, IOException {
+  ClientChallenge challenge() throws GeneralSecurityException {
     this.authNonce = randomBytes(conf.encryptionKeyLength() / Byte.SIZE);
     SecretKeySpec authKey = generateKey(conf.keyFactoryAlgorithm(), conf.keyFactoryIterations(),
       authNonce, conf.encryptionKeyLength());
@@ -105,7 +105,7 @@ class AuthEngine implements Closeable {
    * @return A response to be sent to the client.
    */
   ServerResponse respond(ClientChallenge clientChallenge)
-    throws GeneralSecurityException, IOException {
+    throws GeneralSecurityException {
 
     SecretKeySpec authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
       clientChallenge.nonce, clientChallenge.keyLength);

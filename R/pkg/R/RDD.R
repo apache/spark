@@ -131,7 +131,7 @@ PipelinedRDD <- function(prev, func) {
 # Return the serialization mode for an RDD.
 setGeneric("getSerializedMode", function(rdd, ...) { standardGeneric("getSerializedMode") })
 # For normal RDDs we can directly read the serializedMode
-setMethod("getSerializedMode", signature(rdd = "RDD"), function(rdd) rdd@env$serializedMode )
+setMethod("getSerializedMode", signature(rdd = "RDD"), function(rdd) rdd@env$serializedMode)
 # For pipelined RDDs if jrdd_val is set then serializedMode should exist
 # if not we return the defaultSerialization mode of "byte" as we don't know the serialization
 # mode at this point in time.
@@ -145,7 +145,7 @@ setMethod("getSerializedMode", signature(rdd = "PipelinedRDD"),
           })
 
 # The jrdd accessor function.
-setMethod("getJRDD", signature(rdd = "RDD"), function(rdd) rdd@jrdd )
+setMethod("getJRDD", signature(rdd = "RDD"), function(rdd) rdd@jrdd)
 setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
           function(rdd, serializedMode = "byte") {
             if (!is.null(rdd@env$jrdd_val)) {
@@ -893,7 +893,7 @@ setMethod("sampleRDD",
                 if (withReplacement) {
                   count <- stats::rpois(1, fraction)
                   if (count > 0) {
-                    res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
+                    res[(len + 1) : (len + count)] <- rep(list(elem), count)
                     len <- len + count
                   }
                 } else {

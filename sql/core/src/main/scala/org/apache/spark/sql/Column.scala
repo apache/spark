@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.InterfaceStability
@@ -26,7 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -44,7 +45,7 @@ private[sql] object Column {
     e match {
       case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
         a.aggregateFunction.toString
-      case expr => usePrettyExpression(expr).sql
+      case expr => toPrettySQL(expr)
     }
   }
 }
@@ -137,7 +138,7 @@ class Column(val expr: Expression) extends Logging {
     case _ => UnresolvedAttribute.quotedString(name)
   })
 
-  override def toString: String = usePrettyExpression(expr).sql
+  override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
@@ -175,7 +176,7 @@ class Column(val expr: Expression) extends Logging {
         case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
-        case other => Alias(expr, usePrettyExpression(expr).sql)()
+        case _ => Alias(expr, toPrettySQL(expr))()
       }
 
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
@@ -184,7 +185,7 @@ class Column(val expr: Expression) extends Logging {
     // Wait until the struct is resolved. This will generate a nicer looking alias.
     case struct: CreateNamedStructLike => UnresolvedAlias(struct)
 
-    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
+    case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
   /**
@@ -780,11 +781,53 @@ class Column(val expr: Expression) extends Logging {
    * A boolean expression that is evaluated to true if the value of this expression is contained
    * by the evaluated values of the arguments.
    *
+   * Note: Since the type of the elements in the list are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
    * @group expr_ops
    * @since 1.5.0
    */
   @scala.annotation.varargs
   def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group java_expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
 
   /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
@@ -1083,10 +1126,10 @@ class Column(val expr: Expression) extends Logging {
    * and null values return before non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
-   *   df.sort(df("age").asc_nulls_last)
+   *   df.sort(df("age").asc_nulls_first)
    *
    *   // Java
-   *   df.sort(df.col("age").asc_nulls_last());
+   *   df.sort(df.col("age").asc_nulls_first());
    * }}}
    *
    * @group expr_ops

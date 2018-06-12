@@ -38,12 +38,13 @@ private[spark] object ClosureCleaner extends Logging {
     // Copy data over, before delegating to ClassReader - else we can run out of open file handles.
     val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
     val resourceStream = cls.getResourceAsStream(className)
-    // todo: Fixme - continuing with earlier behavior ...
-    if (resourceStream == null) return new ClassReader(resourceStream)
-
-    val baos = new ByteArrayOutputStream(128)
-    Utils.copyStream(resourceStream, baos, true)
-    new ClassReader(new ByteArrayInputStream(baos.toByteArray))
+    if (resourceStream == null) {
+      null
+    } else {
+      val baos = new ByteArrayOutputStream(128)
+      Utils.copyStream(resourceStream, baos, true)
+      new ClassReader(new ByteArrayInputStream(baos.toByteArray))
+    }
   }
 
   // Check whether a class represents a Scala closure
@@ -81,14 +82,64 @@ private[spark] object ClosureCleaner extends Logging {
     val stack = Stack[Class[_]](obj.getClass)
     while (!stack.isEmpty) {
       val cr = getClassReader(stack.pop())
-      val set = Set.empty[Class[_]]
-      cr.accept(new InnerClosureFinder(set), 0)
-      for (cls <- set -- seen) {
-        seen += cls
-        stack.push(cls)
+      if (cr != null) {
+        val set = Set.empty[Class[_]]
+        cr.accept(new InnerClosureFinder(set), 0)
+        for (cls <- set -- seen) {
+          seen += cls
+          stack.push(cls)
+        }
       }
     }
     (seen - obj.getClass).toList
+  }
+
+  /** Initializes the accessed fields for outer classes and their super classes. */
+  private def initAccessedFields(
+      accessedFields: Map[Class[_], Set[String]],
+      outerClasses: Seq[Class[_]]): Unit = {
+    for (cls <- outerClasses) {
+      var currentClass = cls
+      assert(currentClass != null, "The outer class can't be null.")
+
+      while (currentClass != null) {
+        accessedFields(currentClass) = Set.empty[String]
+        currentClass = currentClass.getSuperclass()
+      }
+    }
+  }
+
+  /** Sets accessed fields for given class in clone object based on given object. */
+  private def setAccessedFields(
+      outerClass: Class[_],
+      clone: AnyRef,
+      obj: AnyRef,
+      accessedFields: Map[Class[_], Set[String]]): Unit = {
+    for (fieldName <- accessedFields(outerClass)) {
+      val field = outerClass.getDeclaredField(fieldName)
+      field.setAccessible(true)
+      val value = field.get(obj)
+      field.set(clone, value)
+    }
+  }
+
+  /** Clones a given object and sets accessed fields in cloned object. */
+  private def cloneAndSetFields(
+      parent: AnyRef,
+      obj: AnyRef,
+      outerClass: Class[_],
+      accessedFields: Map[Class[_], Set[String]]): AnyRef = {
+    val clone = instantiateClass(outerClass, parent)
+
+    var currentClass = outerClass
+    assert(currentClass != null, "The outer class can't be null.")
+
+    while (currentClass != null) {
+      setAccessedFields(currentClass, clone, obj, accessedFields)
+      currentClass = currentClass.getSuperclass()
+    }
+
+    clone
   }
 
   /**
@@ -156,7 +207,7 @@ private[spark] object ClosureCleaner extends Logging {
       accessedFields: Map[Class[_], Set[String]]): Unit = {
 
     if (!isClosure(func.getClass)) {
-      logWarning("Expected a closure; got " + func.getClass.getName)
+      logDebug(s"Expected a closure; got ${func.getClass.getName}")
       return
     }
 
@@ -202,9 +253,8 @@ private[spark] object ClosureCleaner extends Logging {
       logDebug(s" + populating accessed fields because this is the starting closure")
       // Initialize accessed fields with the outer classes first
       // This step is needed to associate the fields to the correct classes later
-      for (cls <- outerClasses) {
-        accessedFields(cls) = Set.empty[String]
-      }
+      initAccessedFields(accessedFields, outerClasses)
+
       // Populate accessed fields by visiting all fields and methods accessed by this and
       // all of its inner closures. If transitive cleaning is enabled, this may recursively
       // visits methods that belong to other classes in search of transitively referenced fields.
@@ -250,13 +300,8 @@ private[spark] object ClosureCleaner extends Logging {
       // required fields from the original object. We need the parent here because the Java
       // language specification requires the first constructor parameter of any closure to be
       // its enclosing object.
-      val clone = instantiateClass(cls, parent)
-      for (fieldName <- accessedFields(cls)) {
-        val field = cls.getDeclaredField(fieldName)
-        field.setAccessible(true)
-        val value = field.get(obj)
-        field.set(clone, value)
-      }
+      val clone = cloneAndSetFields(parent, obj, cls, accessedFields)
+
       // If transitive cleaning is enabled, we recursively clean any enclosing closure using
       // the already populated accessed fields map of the starting closure
       if (cleanTransitively && isClosure(clone.getClass)) {
@@ -324,7 +369,8 @@ private[spark] class ReturnStatementInClosureException
 private class ReturnStatementFinder extends ClassVisitor(ASM5) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    if (name.contains("apply")) {
+    // $anonfun$ covers Java 8 lambdas
+    if (name.contains("apply") || name.contains("$anonfun$")) {
       new MethodVisitor(ASM5) {
         override def visitTypeInsn(op: Int, tp: String) {
           if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl")) {
@@ -395,8 +441,15 @@ private[util] class FieldAccessFinder(
             if (!visitedMethods.contains(m)) {
               // Keep track of visited methods to avoid potential infinite cycles
               visitedMethods += m
-              ClosureCleaner.getClassReader(cl).accept(
-                new FieldAccessFinder(fields, findTransitively, Some(m), visitedMethods), 0)
+
+              var currentClass = cl
+              assert(currentClass != null, "The outer class can't be null.")
+
+              while (currentClass != null) {
+                ClosureCleaner.getClassReader(currentClass).accept(
+                  new FieldAccessFinder(fields, findTransitively, Some(m), visitedMethods), 0)
+                currentClass = currentClass.getSuperclass()
+              }
             }
           }
         }

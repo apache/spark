@@ -19,7 +19,7 @@ struct<>
 
 
 -- !query 2
-CREATE TABLE showcolumn1 (col1 int, `col 2` int) USING parquet
+CREATE TABLE showcolumn1 (col1 int, `col 2` int) USING json
 -- !query 2 schema
 struct<>
 -- !query 2 output
@@ -35,7 +35,7 @@ struct<>
 
 
 -- !query 4
-CREATE TEMPORARY VIEW showColumn3 (col3 int, `col 4` int) USING parquet
+CREATE TEMPORARY VIEW showColumn3 (col3 int, `col 4` int) USING json
 -- !query 4 schema
 struct<>
 -- !query 4 output

@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
+import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -301,6 +302,8 @@ package object dsl {
 
       def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
 
+      def filter[T : Encoder](func: FilterFunction[T]): LogicalPlan = TypedFilter(func, logicalPlan)
+
       def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
 
       def deserialize[T : Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)
@@ -359,12 +362,12 @@ package object dsl {
 
       def generate(
         generator: Generator,
-        join: Boolean = false,
+        unrequiredChildIndex: Seq[Int] = Nil,
         outer: Boolean = false,
         alias: Option[String] = None,
         outputNames: Seq[String] = Nil): LogicalPlan =
-        Generate(generator, join = join, outer = outer, alias,
-          outputNames.map(UnresolvedAttribute(_)), logicalPlan)
+        Generate(generator, unrequiredChildIndex, outer,
+          alias, outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
         InsertIntoTable(

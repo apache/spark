@@ -77,7 +77,7 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
       count: Int,
       tpe: NativeColumnType[T],
       input: ByteBuffer): Unit = {
-    val benchmark = new Benchmark(name, iters * count)
+    val benchmark = new Benchmark(name, iters * count.toLong)
 
     schemes.filter(_.supports(tpe)).foreach { scheme =>
       val (compressFunc, compressionRatio, buf) = prepareEncodeInternal(count, tpe, scheme, input)
@@ -101,7 +101,7 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
       count: Int,
       tpe: NativeColumnType[T],
       input: ByteBuffer): Unit = {
-    val benchmark = new Benchmark(name, iters * count)
+    val benchmark = new Benchmark(name, iters * count.toLong)
 
     schemes.filter(_.supports(tpe)).foreach { scheme =>
       val (compressFunc, _, buf) = prepareEncodeInternal(count, tpe, scheme, input)

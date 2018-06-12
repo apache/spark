@@ -161,11 +161,23 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("string trim functions") {
-    val df = Seq(("  example  ", "")).toDF("a", "b")
+    val df = Seq(("  example  ", "", "example")).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
       Row("example  ", "  example", "example"))
+
+    checkAnswer(
+      df.select(ltrim($"c", "e"), rtrim($"c", "e"), trim($"c", "e")),
+      Row("xample", "exampl", "xampl"))
+
+    checkAnswer(
+      df.select(ltrim($"c", "xe"), rtrim($"c", "emlp"), trim($"c", "elxp")),
+      Row("ample", "exa", "am"))
+
+    checkAnswer(
+      df.select(trim($"c", "xyz")),
+      Row("example"))
 
     checkAnswer(
       df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
