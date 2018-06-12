@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, Unsa
 import org.apache.spark.sql.types.{BinaryType, StringType}
 
 /**
- * A simple trait for writing out data in a single Spark task, without any concerns about how
+ * Writes out data in a single Spark task, without any concerns about how
  * to commit or abort tasks. Exceptions thrown by the implementation of this class will
  * automatically trigger task aborts.
  */

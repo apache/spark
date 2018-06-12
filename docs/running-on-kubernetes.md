@@ -8,12 +8,16 @@ title: Running Spark on Kubernetes
 Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This feature makes use of native
 Kubernetes scheduler that has been added to Spark.
 
+**The Kubernetes scheduler is currently experimental.
+In future versions, there may be behavioral changes around configuration,
+container images and entrypoints.**
+
 # Prerequisites
 
 * A runnable distribution of Spark 2.3 or above.
 * A running Kubernetes cluster at version >= 1.6 with access configured to it using
 [kubectl](https://kubernetes.io/docs/user-guide/prereqs/).  If you do not already have a working Kubernetes cluster,
-you may setup a test cluster on your local machine using
+you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
   * We recommend using the latest release of minikube with the DNS addon enabled.
   * Be aware that the default minikube configuration is not enough for running Spark applications.
@@ -41,11 +45,10 @@ logs and remains in "completed" state in the Kubernetes API until it's eventuall
 
 Note that in the completed state, the driver pod does *not* use any computational or memory resources.
 
-The driver and executor pod scheduling is handled by Kubernetes. It will be possible to affect Kubernetes scheduling
-decisions for driver and executor pods using advanced primitives like
-[node selectors](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
-and [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity)
-in a future release.
+The driver and executor pod scheduling is handled by Kubernetes. It is possible to schedule the
+driver and executor pods on a subset of available nodes through a [node selector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
+using the configuration property for it. It will be possible to use more advanced
+scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
 
 # Submitting Applications to Kubernetes
 
@@ -62,8 +65,10 @@ use with the Kubernetes backend.
 
 Example usage is:
 
-    ./bin/docker-image-tool.sh -r <repo> -t my-tag build
-    ./bin/docker-image-tool.sh -r <repo> -t my-tag push
+```bash
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag build
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag push
+```
 
 ## Cluster Mode
 
@@ -94,7 +99,7 @@ must consist of lower case alphanumeric characters, `-`, and `.`  and must start
 If you have a Kubernetes cluster setup, one way to discover the apiserver URL is by executing `kubectl cluster-info`.
 
 ```bash
-kubectl cluster-info
+$ kubectl cluster-info
 Kubernetes master is running at http://127.0.0.1:6443
 ```
 
@@ -105,7 +110,7 @@ authenticating proxy, `kubectl proxy` to communicate to the Kubernetes API.
 The local proxy can be started by:
 
 ```bash
-kubectl proxy
+$ kubectl proxy
 ```
 
 If the local proxy is running at localhost:8001, `--master k8s://http://127.0.0.1:8001` can be used as the argument to
@@ -121,29 +126,6 @@ Those dependencies can be added to the classpath by referencing them with `local
 dependencies in custom-built Docker images in `spark-submit`. Note that using application dependencies from the submission
 client's local file system is currently not yet supported.
 
-
-### Using Remote Dependencies
-When there are application dependencies hosted in remote locations like HDFS or HTTP servers, the driver and executor pods
-need a Kubernetes [init-container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) for downloading
-the dependencies so the driver and executor containers can use them locally.
-
-The init-container handles remote dependencies specified in `spark.jars` (or the `--jars` option of `spark-submit`) and
-`spark.files` (or the `--files` option of `spark-submit`). It also handles remotely hosted main application resources, e.g.,
-the main application jar. The following shows an example of using remote dependencies with the `spark-submit` command:
-
-```bash
-$ bin/spark-submit \
-    --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
-    --deploy-mode cluster \
-    --name spark-pi \
-    --class org.apache.spark.examples.SparkPi \
-    --jars https://path/to/dependency1.jar,https://path/to/dependency2.jar
-    --files hdfs://host:port/path/to/file1,hdfs://host:port/path/to/file2
-    --conf spark.executor.instances=5 \
-    --conf spark.kubernetes.container.image=<spark-image> \
-    https://path/to/examples.jar
-```
-
 ## Secret Management
 Kubernetes [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) can be used to provide credentials for a
 Spark application to access secured services. To mount a user-specified secret into the driver container, users can use
@@ -158,9 +140,11 @@ namespace as that of the driver and executor pods. For example, to mount a secre
 --conf spark.kubernetes.executor.secrets.spark-secret=/etc/secrets
 ```
 
-Note that if an init-container is used, any secret mounted into the driver container will also be mounted into the
-init-container of the driver. Similarly, any secret mounted into an executor container will also be mounted into the
-init-container of the executor.
+To use a secret through an environment variable use the following options to the `spark-submit` command:
+```
+--conf spark.kubernetes.driver.secretKeyRef.ENV_NAME=name:key
+--conf spark.kubernetes.executor.secretKeyRef.ENV_NAME=name:key
+```
 
 ## Introspection and Debugging
 
@@ -173,7 +157,7 @@ Logs can be accessed using the Kubernetes API and the `kubectl` CLI. When a Spar
 to stream logs from the application using:
 
 ```bash
-kubectl -n=<namespace> logs -f <driver-pod-name>
+$ kubectl -n=<namespace> logs -f <driver-pod-name>
 ```
 
 The same logs can also be accessed through the
@@ -186,7 +170,7 @@ The UI associated with any application can be accessed locally using
 [`kubectl port-forward`](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/#forward-a-local-port-to-a-port-on-the-pod).
 
 ```bash
-kubectl port-forward <driver-pod-name> 4040:4040
+$ kubectl port-forward <driver-pod-name> 4040:4040
 ```
 
 Then, the Spark driver UI can be accessed on `http://localhost:4040`.
@@ -200,13 +184,13 @@ are errors during the running of the application, often, the best way to investi
 To get some basic information about the scheduling decisions made around the driver pod, you can run:
 
 ```bash
-kubectl describe pod <spark-driver-pod>
+$ kubectl describe pod <spark-driver-pod>
 ```
 
 If the pod has encountered a runtime error, the status can be probed further using:
 
 ```bash
-kubectl logs <spark-driver-pod>
+$ kubectl logs <spark-driver-pod>
 ```
 
 Status and logs of failed executor pods can be checked in similar ways. Finally, deleting the driver pod will clean up the entire spark
@@ -243,7 +227,7 @@ that allows driver pods to create pods and services under the default Kubernetes
 [RBAC](https://kubernetes.io/docs/admin/authorization/rbac/) policies. Sometimes users may need to specify a custom
 service account that has the right role granted. Spark on Kubernetes supports specifying a custom service account to
 be used by the driver pod through the configuration property
-`spark.kubernetes.authenticate.driver.serviceAccountName=<service account name>`. For example to make the driver pod
+`spark.kubernetes.authenticate.driver.serviceAccountName=<service account name>`. For example, to make the driver pod
 use the `spark` service account, a user simply adds the following option to the `spark-submit` command:
 
 ```
@@ -254,7 +238,7 @@ To create a custom service account, a user can use the `kubectl create serviceac
 following command creates a service account named `spark`:
 
 ```bash
-kubectl create serviceaccount spark
+$ kubectl create serviceaccount spark
 ```
 
 To grant a service account a `Role` or `ClusterRole`, a `RoleBinding` or `ClusterRoleBinding` is needed. To create
@@ -263,7 +247,7 @@ for `ClusterRoleBinding`) command. For example, the following command creates an
 namespace and grants it to the `spark` service account created above:
 
 ```bash
-kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount=default:spark --namespace=default
+$ kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount=default:spark --namespace=default
 ```
 
 Note that a `Role` can only be used to grant access to resources (like pods) within a single namespace, whereas a
@@ -286,7 +270,6 @@ future versions of the spark-kubernetes integration.
 
 Some of these include:
 
-* PySpark
 * R
 * Dynamic Executor Scaling
 * Local File Dependency Management
@@ -341,6 +324,13 @@ specific to Spark on Kubernetes.
   <td><code>IfNotPresent</code></td>
   <td>
     Container image pull policy used when pulling images within Kubernetes.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.container.image.pullSecrets</code></td>
+  <td><code></code></td>
+  <td>
+    Comma separated list of Kubernetes secrets used to pull images from private image registries.
   </td>
 </tr>
 <tr>
@@ -544,14 +534,6 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.podNamePrefix</code></td>
-  <td>(none)</td>
-  <td>
-    Prefix for naming the executor pods.
-    If not set, the executor pod name is set to driver pod name suffixed by an integer.
-  </td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.executor.lostCheck.maxAttempts</code></td>
   <td><code>10</code></td>
   <td>
@@ -579,14 +561,23 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.driver.limit.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the driver pod.
+    Specify a hard cpu [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the driver pod.
   </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.request.cores</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the cpu request for each executor pod. Values conform to the Kubernetes [convention](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu). 
+    Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in [CPU units](https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units).   
+    This is distinct from <code>spark.executor.cores</code>: it is only used and takes precedence over <code>spark.executor.cores</code> for specifying the executor pod cpu request if set. Task 
+    parallelism, e.g., number of tasks an executor can run concurrently is not affected by this.
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.limit.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for each executor pod launched for the Spark Application.
+    Specify a hard cpu [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for each executor pod launched for the Spark Application.
   </td>
 </tr>
 <tr>
@@ -608,50 +599,11 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.mountDependencies.jarsDownloadDir</code></td>
-  <td><code>/var/spark-data/spark-jars</code></td>
-  <td>
-    Location to download jars to in the driver and executors.
-    This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.mountDependencies.filesDownloadDir</code></td>
-  <td><code>/var/spark-data/spark-files</code></td>
-  <td>
-    Location to download jars to in the driver and executors.
-    This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.mountDependencies.timeout</code></td>
-  <td>300s</td>
-  <td>
-   Timeout in seconds before aborting the attempt to download and unpack dependencies from remote locations into
-   the driver and executor pods.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.mountDependencies.maxSimultaneousDownloads</code></td>
-  <td>5</td>
-  <td>
-   Maximum number of remote dependencies to download simultaneously in a driver or executor pod.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.initContainer.image</code></td>
-  <td><code>(value of spark.kubernetes.container.image)</code></td>
-  <td>
-   Custom container image for the init container of both driver and executors.
-  </td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
   <td>(none)</td>
   <td>
    Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the driver pod on the path specified in the value. For example,
-   <code>spark.kubernetes.driver.secrets.spark-secret=/etc/secrets</code>. Note that if an init-container is used,
-   the secret will also be added to the init-container in the driver pod.
+   <code>spark.kubernetes.driver.secrets.spark-secret=/etc/secrets</code>.
   </td>
 </tr>
 <tr>
@@ -659,8 +611,38 @@ specific to Spark on Kubernetes.
   <td>(none)</td>
   <td>
    Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the executor pod on the path specified in the value. For example,
-   <code>spark.kubernetes.executor.secrets.spark-secret=/etc/secrets</code>. Note that if an init-container is used,
-   the secret will also be added to the init-container in the executor pod.
+   <code>spark.kubernetes.executor.secrets.spark-secret=/etc/secrets</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.secretKeyRef.[EnvName]</code></td>
+  <td>(none)</td>
+  <td>
+   Add as an environment variable to the driver container with name EnvName (case sensitive), the value referenced by key <code> key </code> in the data of the referenced <a href="https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables">Kubernetes Secret</a>. For example,
+   <code>spark.kubernetes.driver.secretKeyRef.ENV_VAR=spark-secret:key</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.secretKeyRef.[EnvName]</code></td>
+  <td>(none)</td>
+  <td>
+   Add as an environment variable to the executor container with name EnvName (case sensitive), the value referenced by key <code> key </code> in the data of the referenced <a href="https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables">Kubernetes Secret</a>. For example,
+   <code>spark.kubernetes.executor.secrets.ENV_VAR=spark-secret:key</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
+  <td><code>0.1</code></td>
+  <td>
+    This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, and various systems processes. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
+    This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This prempts this error with a higher default. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.pyspark.pythonversion</code></td>
+  <td><code>"2"</code></td>
+  <td>
+   This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
   </td>
 </tr>
 </table>

@@ -22,6 +22,7 @@ import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -65,9 +66,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
-        case Limit(IntegerLiteral(limit), Sort(order, true, child)) =>
+        case Limit(IntegerLiteral(limit), Sort(order, true, child))
+            if limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-        case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child))) =>
+        case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
+            if limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), child) =>
           // With whole stage codegen, Spark releases resources only when all the output data of the
@@ -78,9 +81,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           CollectLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
         case other => planLater(other) :: Nil
       }
-      case Limit(IntegerLiteral(limit), Sort(order, true, child)) =>
+      case Limit(IntegerLiteral(limit), Sort(order, true, child))
+          if limit < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child))) =>
+      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
+          if limit < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
       case _ => Nil
     }
@@ -90,23 +95,58 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Select the proper physical plan for join based on joining keys and size of logical plan.
    *
    * At first, uses the [[ExtractEquiJoinKeys]] pattern to find joins where at least some of the
-   * predicates can be evaluated by matching join keys. If found,  Join implementations are chosen
+   * predicates can be evaluated by matching join keys. If found, join implementations are chosen
    * with the following precedence:
    *
-   * - Broadcast: We prefer to broadcast the join side with an explicit broadcast hint(e.g. the
-   *     user applied the [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame).
-   *     If both sides have the broadcast hint, we prefer to broadcast the side with a smaller
-   *     estimated physical size. If neither one of the sides has the broadcast hint,
-   *     we only broadcast the join side if its estimated physical size that is smaller than
-   *     the user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold.
+   * - Broadcast hash join (BHJ):
+   *     BHJ is not supported for full outer join. For right outer join, we only can broadcast the
+   *     left side. For left outer, left semi, left anti and the internal join type ExistenceJoin,
+   *     we only can broadcast the right side. For inner like join, we can broadcast both sides.
+   *     Normally, BHJ can perform faster than the other join algorithms when the broadcast side is
+   *     small. However, broadcasting tables is a network-intensive operation. It could cause OOM
+   *     or perform worse than the other join algorithms, especially when the build/broadcast side
+   *     is big.
+   *
+   *     For the supported cases, users can specify the broadcast hint (e.g. the user applied the
+   *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame) and session-based
+   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold to adjust whether BHJ is used and
+   *     which join side is broadcast.
+   *
+   *     1) Broadcast the join side with the broadcast hint, even if the size is larger than
+   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]]. If both sides have the hint (only when the type
+   *     is inner like join), the side with a smaller estimated physical size will be broadcast.
+   *     2) Respect the [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold and broadcast the side
+   *     whose estimated physical size is smaller than the threshold. If both sides are below the
+   *     threshold, broadcast the smaller side. If neither is smaller, BHJ is not used.
+   *
    * - Shuffle hash join: if the average size of a single partition is small enough to build a hash
    *     table.
+   *
    * - Sort merge: if the matching join keys are sortable.
    *
    * If there is no joining keys, Join implementations are chosen with the following precedence:
-   * - BroadcastNestedLoopJoin: if one side of the join could be broadcasted
-   * - CartesianProduct: for Inner join
-   * - BroadcastNestedLoopJoin
+   * - BroadcastNestedLoopJoin (BNLJ):
+   *     BNLJ supports all the join types but the impl is OPTIMIZED for the following scenarios:
+   *     For right outer join, the left side is broadcast. For left outer, left semi, left anti
+   *     and the internal join type ExistenceJoin, the right side is broadcast. For inner like
+   *     joins, either side is broadcast.
+   *
+   *     Like BHJ, users still can specify the broadcast hint and session-based
+   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold to impact which side is broadcast.
+   *
+   *     1) Broadcast the join side with the broadcast hint, even if the size is larger than
+   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]]. If both sides have the hint (i.e., just for
+   *     inner-like join), the side with a smaller estimated physical size will be broadcast.
+   *     2) Respect the [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold and broadcast the side
+   *     whose estimated physical size is smaller than the threshold. If both sides are below the
+   *     threshold, broadcast the smaller side. If neither is smaller, BNLJ is not used.
+   *
+   * - CartesianProduct: for inner like join, CartesianProduct is the fallback option.
+   *
+   * - BroadcastNestedLoopJoin (BNLJ):
+   *     For the other join types, BNLJ is the fallback option. Here, we just pick the broadcast
+   *     side with the broadcast hint. If neither side has a hint, we broadcast the side with
+   *     the smaller estimated physical size.
    */
   object JoinSelection extends Strategy with PredicateHelper {
 
@@ -139,8 +179,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def canBuildRight(joinType: JoinType): Boolean = joinType match {
-      case _: InnerLike | LeftOuter | LeftSemi | LeftAnti => true
-      case j: ExistenceJoin => true
+      case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }
 
@@ -243,7 +282,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // --- Without joining keys ------------------------------------------------------------
 
-      // Pick BroadcastNestedLoopJoin if one side could be broadcasted
+      // Pick BroadcastNestedLoopJoin if one side could be broadcast
       case j @ logical.Join(left, right, joinType, condition)
           if canBroadcastByHints(joinType, left, right) =>
         val buildSide = broadcastSideByHints(joinType, left, right)
@@ -288,9 +327,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
+        if (aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF)) {
+          throw new AnalysisException(
+            "Streaming aggregation doesn't support group aggregate pandas UDF")
+        }
+
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
-          aggregateExpressions,
+          aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
           planLater(child))
 
@@ -321,7 +365,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         case Join(left, right, _, _) if left.isStreaming && right.isStreaming =>
           throw new AnalysisException(
-            "Stream stream joins without equality predicate is not supported", plan = Some(plan))
+            "Stream-stream join without equality predicate is not supported", plan = Some(plan))
 
         case _ => Nil
       }
@@ -333,14 +377,16 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalAggregation(
-          groupingExpressions, aggregateExpressions, resultExpressions, child) =>
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+        if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
+        val aggregateExpressions = aggExpressions.map(expr =>
+          expr.asInstanceOf[AggregateExpression])
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
-        if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
+        if (functionsWithDistinct.map(_.aggregateFunction.children.toSet).distinct.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
-          // column sets. Our MultipleDistinctRewriter should take care this case.
+          // column sets. Our `RewriteDistinctAggregates` should take care this case.
           sys.error("You hit a query analyzer bug. Please report your query to " +
               "Spark user mailing list.")
         }
@@ -362,6 +408,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
 
         aggregateOperator
+
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+        if aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF]) =>
+        val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
+
+        Seq(execution.python.AggregateInPandasExec(
+          groupingExpressions,
+          udfExpressions,
+          resultExpressions,
+          planLater(child)))
+
+      case PhysicalAggregation(_, _, _, _) =>
+        // If cannot match the two cases above, then it's an error
+        throw new AnalysisException(
+          "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
 
       case _ => Nil
     }

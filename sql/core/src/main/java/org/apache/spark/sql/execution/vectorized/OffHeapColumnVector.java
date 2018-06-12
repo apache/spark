@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.OffHeapMemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -60,7 +61,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   private long nulls;
   private long data;
 
-  // Set iff the type is array.
+  // Only set if type is Array or Map.
   private long lengthData;
   private long offsetData;
 
@@ -123,7 +124,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (numNulls == 0) return;
+    if (!hasNull()) return;
     long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 0);
@@ -206,7 +207,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
-    return UTF8String.fromAddress(null, data + rowId, count);
+    return new UTF8String(new OffHeapMemoryBlock(data + rowId, count));
   }
 
   //
@@ -530,7 +531,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   protected void reserveInternal(int newCapacity) {
     int oldCapacity = (nulls == 0L) ? 0 : capacity;
-    if (isArray()) {
+    if (isArray() || type instanceof MapType) {
       this.lengthData =
           Platform.reallocateMemory(lengthData, oldCapacity * 4, newCapacity * 4);
       this.offsetData =

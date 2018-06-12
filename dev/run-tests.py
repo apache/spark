@@ -204,7 +204,7 @@ def run_scala_style_checks():
 
 def run_java_style_checks():
     set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-java")])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle")])
 
 
 def run_python_style_checks():
@@ -574,11 +574,16 @@ def main():
                                 or f.endswith("checkstyle.xml")
                                 or f.endswith("checkstyle-suppressions.xml")
                                 for f in changed_files):
-        # run_java_style_checks()
-        pass
-    if not changed_files or any(f.endswith(".py") for f in changed_files):
+        run_java_style_checks()
+    if not changed_files or any(f.endswith("lint-python")
+                                or f.endswith("tox.ini")
+                                or f.endswith(".py")
+                                for f in changed_files):
         run_python_style_checks()
-    if not changed_files or any(f.endswith(".R") for f in changed_files):
+    if not changed_files or any(f.endswith(".R")
+                                or f.endswith("lint-r")
+                                or f.endswith(".lintr")
+                                for f in changed_files):
         run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
@@ -615,7 +620,7 @@ def _test():
     import doctest
     failure_count = doctest.testmod()[0]
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

@@ -139,7 +139,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
-      CreateDataSourceTableAsSelectCommand(tableDesc, mode, query)
+      CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output)
 
     case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _, _),
         parts, query, overwrite, false) if parts.isEmpty =>
@@ -310,18 +310,6 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         None) :: Nil
 
     case _ => Nil
-  }
-
-  // Get the bucket ID based on the bucketing values.
-  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
-  def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-    val mutableRow = new SpecificInternalRow(Seq(bucketColumn.dataType))
-    mutableRow(0) = cast(Literal(value), bucketColumn.dataType).eval(null)
-    val bucketIdGeneration = UnsafeProjection.create(
-      HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
-      bucketColumn :: Nil)
-
-    bucketIdGeneration(mutableRow).getInt(0)
   }
 
   // Based on Public API.

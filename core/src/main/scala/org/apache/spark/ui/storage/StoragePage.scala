@@ -31,18 +31,33 @@ import org.apache.spark.util.Utils
 private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val content = rddTable(store.rddList()) ++ receiverBlockTables(store.streamBlocksList())
-    UIUtils.headerSparkPage("Storage", content, parent)
+    val content = rddTable(request, store.rddList()) ++
+      receiverBlockTables(store.streamBlocksList())
+    UIUtils.headerSparkPage(request, "Storage", content, parent)
   }
 
-  private[storage] def rddTable(rdds: Seq[v1.RDDStorageInfo]): Seq[Node] = {
+  private[storage] def rddTable(
+      request: HttpServletRequest,
+      rdds: Seq[v1.RDDStorageInfo]): Seq[Node] = {
     if (rdds.isEmpty) {
       // Don't show the rdd table if there is no RDD persisted.
       Nil
     } else {
       <div>
-        <h4>RDDs</h4>
-        {UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))}
+        <span class="collapse-aggregated-rdds collapse-table"
+            onClick="collapseTable('collapse-aggregated-rdds','aggregated-rdds')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>RDDs</a>
+          </h4>
+        </span>
+        <div class="aggregated-rdds collapsible-table">
+          {UIUtils.listingTable(
+            rddHeader,
+            rddRow(request, _: v1.RDDStorageInfo),
+            rdds,
+            id = Some("storage-by-rdd-table"))}
+        </div>
       </div>
     }
   }
@@ -58,12 +73,13 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
     "Size on Disk")
 
   /** Render an HTML row representing an RDD */
-  private def rddRow(rdd: v1.RDDStorageInfo): Seq[Node] = {
+  private def rddRow(request: HttpServletRequest, rdd: v1.RDDStorageInfo): Seq[Node] = {
     // scalastyle:off
     <tr>
       <td>{rdd.id}</td>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(
+          UIUtils.prependBaseUri(request, parent.basePath), rdd.id)}>
           {rdd.name}
         </a>
       </td>

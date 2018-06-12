@@ -103,7 +103,7 @@ case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with Cas
           castedExpr.eval()
         } catch {
           case NonFatal(ex) =>
-            table.failAnalysis(s"failed to evaluate expression ${e.sql}: ${ex.getMessage}")
+            table.failAnalysis(s"failed to evaluate expression ${e.sql}: ${ex.getMessage}", ex)
         }
       })
     }

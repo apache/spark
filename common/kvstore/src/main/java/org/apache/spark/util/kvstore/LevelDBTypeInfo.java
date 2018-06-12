@@ -493,7 +493,7 @@ class LevelDBTypeInfo {
         byte[] key = new byte[bytes * 2 + 2];
         long longValue = ((Number) value).longValue();
         key[0] = prefix;
-        key[1] = longValue > 0 ? POSITIVE_MARKER : NEGATIVE_MARKER;
+        key[1] = longValue >= 0 ? POSITIVE_MARKER : NEGATIVE_MARKER;
 
         for (int i = 0; i < key.length - 2; i++) {
           int masked = (int) ((longValue >>> (4 * i)) & 0xF);

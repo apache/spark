@@ -19,18 +19,17 @@ package org.apache.spark.sql.streaming.sources
 
 import java.util.Optional
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{LongOffset, RateStreamOffset}
+import org.apache.spark.sql.execution.streaming.{RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
-import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
-import org.apache.spark.sql.sources.v2.reader.ReadTask
-import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, ContinuousWriteSupport, MicroBatchReadSupport, MicroBatchWriteSupport}
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, MicroBatchReader, Offset, PartitionOffset}
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
-import org.apache.spark.sql.sources.v2.writer.DataSourceV2Writer
-import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest, Trigger}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, MicroBatchReadSupport, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.reader.InputPartition
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, MicroBatchReader, Offset, PartitionOffset}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -43,9 +42,9 @@ case class FakeReader() extends MicroBatchReader with ContinuousReader {
   def readSchema(): StructType = StructType(Seq())
   def stop(): Unit = {}
   def mergeOffsets(offsets: Array[PartitionOffset]): Offset = RateStreamOffset(Map())
-  def setOffset(start: Optional[Offset]): Unit = {}
+  def setStartOffset(start: Optional[Offset]): Unit = {}
 
-  def createReadTasks(): java.util.ArrayList[ReadTask[Row]] = {
+  def planInputPartitions(): java.util.ArrayList[InputPartition[Row]] = {
     throw new IllegalStateException("fake source - cannot actually read")
   }
 }
@@ -54,33 +53,22 @@ trait FakeMicroBatchReadSupport extends MicroBatchReadSupport {
   override def createMicroBatchReader(
       schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceV2Options): MicroBatchReader = FakeReader()
+      options: DataSourceOptions): MicroBatchReader = FakeReader()
 }
 
 trait FakeContinuousReadSupport extends ContinuousReadSupport {
   override def createContinuousReader(
       schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceV2Options): ContinuousReader = FakeReader()
+      options: DataSourceOptions): ContinuousReader = FakeReader()
 }
 
-trait FakeMicroBatchWriteSupport extends MicroBatchWriteSupport {
-  def createMicroBatchWriter(
-      queryId: String,
-      epochId: Long,
-      schema: StructType,
-      mode: OutputMode,
-      options: DataSourceV2Options): Optional[DataSourceV2Writer] = {
-    throw new IllegalStateException("fake sink - cannot actually write")
-  }
-}
-
-trait FakeContinuousWriteSupport extends ContinuousWriteSupport {
-  def createContinuousWriter(
+trait FakeStreamWriteSupport extends StreamWriteSupport {
+  override def createStreamWriter(
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): Optional[ContinuousWriter] = {
+      options: DataSourceOptions): StreamWriter = {
     throw new IllegalStateException("fake sink - cannot actually write")
   }
 }
@@ -102,22 +90,35 @@ class FakeReadNeitherMode extends DataSourceRegister {
   override def shortName(): String = "fake-read-neither-mode"
 }
 
-class FakeWriteMicroBatchOnly extends DataSourceRegister with FakeMicroBatchWriteSupport {
-  override def shortName(): String = "fake-write-microbatch-only"
-}
-
-class FakeWriteContinuousOnly extends DataSourceRegister with FakeContinuousWriteSupport {
-  override def shortName(): String = "fake-write-continuous-only"
-}
-
-class FakeWriteBothModes extends DataSourceRegister
-    with FakeMicroBatchWriteSupport with FakeContinuousWriteSupport {
+class FakeWrite extends DataSourceRegister with FakeStreamWriteSupport {
   override def shortName(): String = "fake-write-microbatch-continuous"
 }
 
-class FakeWriteNeitherMode extends DataSourceRegister {
+class FakeNoWrite extends DataSourceRegister {
   override def shortName(): String = "fake-write-neither-mode"
 }
+
+
+case class FakeWriteV1FallbackException() extends Exception
+
+class FakeSink extends Sink {
+  override def addBatch(batchId: Long, data: DataFrame): Unit = {}
+}
+
+class FakeWriteV1Fallback extends DataSourceRegister
+  with FakeStreamWriteSupport with StreamSinkProvider {
+
+  override def createSink(
+    sqlContext: SQLContext,
+    parameters: Map[String, String],
+    partitionColumns: Seq[String],
+    outputMode: OutputMode): Sink = {
+    new FakeSink()
+  }
+
+  override def shortName(): String = "fake-write-v1-fallback"
+}
+
 
 class StreamingDataSourceV2Suite extends StreamTest {
 
@@ -133,8 +134,6 @@ class StreamingDataSourceV2Suite extends StreamTest {
     "fake-read-microbatch-continuous",
     "fake-read-neither-mode")
   val writeFormats = Seq(
-    "fake-write-microbatch-only",
-    "fake-write-continuous-only",
     "fake-write-microbatch-continuous",
     "fake-write-neither-mode")
   val triggers = Seq(
@@ -151,6 +150,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       .trigger(trigger)
       .start()
     query.stop()
+    query
   }
 
   private def testNegativeCase(
@@ -184,6 +184,24 @@ class StreamingDataSourceV2Suite extends StreamTest {
     }
   }
 
+  test("disabled v2 write") {
+    // Ensure the V2 path works normally and generates a V2 sink..
+    val v2Query = testPositiveCase(
+      "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once())
+    assert(v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
+      .isInstanceOf[FakeWriteV1Fallback])
+
+    // Ensure we create a V1 sink with the config. Note the config is a comma separated
+    // list, including other fake entries.
+    val fullSinkName = "org.apache.spark.sql.streaming.sources.FakeWriteV1Fallback"
+    withSQLConf(SQLConf.DISABLED_V2_STREAMING_WRITERS.key -> s"a,b,c,test,$fullSinkName,d,e") {
+      val v1Query = testPositiveCase(
+        "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once())
+      assert(v1Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
+        .isInstanceOf[FakeSink])
+    }
+  }
+
   // Get a list of (read, write, trigger) tuples for test cases.
   val cases = readFormats.flatMap { read =>
     writeFormats.flatMap { write =>
@@ -199,12 +217,12 @@ class StreamingDataSourceV2Suite extends StreamTest {
       val writeSource = DataSource.lookupDataSource(write, spark.sqlContext.conf).newInstance()
       (readSource, writeSource, trigger) match {
         // Valid microbatch queries.
-        case (_: MicroBatchReadSupport, _: MicroBatchWriteSupport, t)
+        case (_: MicroBatchReadSupport, _: StreamWriteSupport, t)
           if !t.isInstanceOf[ContinuousTrigger] =>
           testPositiveCase(read, write, trigger)
 
         // Valid continuous queries.
-        case (_: ContinuousReadSupport, _: ContinuousWriteSupport, _: ContinuousTrigger) =>
+        case (_: ContinuousReadSupport, _: StreamWriteSupport, _: ContinuousTrigger) =>
           testPositiveCase(read, write, trigger)
 
         // Invalid - can't read at all
@@ -214,31 +232,18 @@ class StreamingDataSourceV2Suite extends StreamTest {
           testNegativeCase(read, write, trigger,
             s"Data source $read does not support streamed reading")
 
-        // Invalid - trigger is continuous but writer is not
-        case (_, w, _: ContinuousTrigger) if !w.isInstanceOf[ContinuousWriteSupport] =>
-          testNegativeCase(read, write, trigger,
-            s"Data source $write does not support continuous writing")
-
-        // Invalid - can't write at all
-        case (_, w, _)
-            if !w.isInstanceOf[MicroBatchWriteSupport]
-              && !w.isInstanceOf[ContinuousWriteSupport] =>
+        // Invalid - can't write
+        case (_, w, _) if !w.isInstanceOf[StreamWriteSupport] =>
           testNegativeCase(read, write, trigger,
             s"Data source $write does not support streamed writing")
 
-        // Invalid - trigger and writer are continuous but reader is not
-        case (r, _: ContinuousWriteSupport, _: ContinuousTrigger)
+        // Invalid - trigger is continuous but reader is not
+        case (r, _: StreamWriteSupport, _: ContinuousTrigger)
             if !r.isInstanceOf[ContinuousReadSupport] =>
           testNegativeCase(read, write, trigger,
             s"Data source $read does not support continuous processing")
 
-        // Invalid - trigger is microbatch but writer is not
-        case (_, w, t)
-            if !w.isInstanceOf[MicroBatchWriteSupport] && !t.isInstanceOf[ContinuousTrigger] =>
-          testNegativeCase(read, write, trigger,
-            s"Data source $write does not support streamed writing")
-
-        // Invalid - trigger and writer are microbatch but reader is not
+        // Invalid - trigger is microbatch but reader is not
         case (r, _, t)
            if !r.isInstanceOf[MicroBatchReadSupport] && !t.isInstanceOf[ContinuousTrigger] =>
           testPostCreationNegativeCase(read, write, trigger,

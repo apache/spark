@@ -16,6 +16,7 @@
 #
 
 from math import exp
+import sys
 import warnings
 
 import numpy
@@ -761,7 +762,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

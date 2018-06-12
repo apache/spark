@@ -46,18 +46,27 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     }
 
     plan.transform {
-      case Except(left, right) if isEligible(left, right) =>
-        Distinct(Filter(Not(transformCondition(left, skipProject(right))), left))
+      case e @ Except(left, right) if isEligible(left, right) =>
+        val newCondition = transformCondition(left, skipProject(right))
+        newCondition.map { c =>
+          Distinct(Filter(Not(c), left))
+        }.getOrElse {
+          e
+        }
     }
   }
 
-  private def transformCondition(left: LogicalPlan, right: LogicalPlan): Expression = {
+  private def transformCondition(left: LogicalPlan, right: LogicalPlan): Option[Expression] = {
     val filterCondition =
       InferFiltersFromConstraints(combineFilters(right)).asInstanceOf[Filter].condition
 
     val attributeNameMap: Map[String, Attribute] = left.output.map(x => (x.name, x)).toMap
 
-    filterCondition.transform { case a : AttributeReference => attributeNameMap(a.name) }
+    if (filterCondition.references.forall(r => attributeNameMap.contains(r.name))) {
+      Some(filterCondition.transform { case a: AttributeReference => attributeNameMap(a.name) })
+    } else {
+      None
+    }
   }
 
   // TODO: This can be further extended in the future.

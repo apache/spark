@@ -15,9 +15,11 @@
 # limitations under the License.
 #
 
+import sys
+import warnings
+
 import numpy as np
 from numpy import array
-import warnings
 
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
@@ -837,7 +839,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

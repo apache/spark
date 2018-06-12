@@ -22,15 +22,19 @@ import logging
 from optparse import OptionParser
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 from threading import Thread, Lock
 import time
+import uuid
 if sys.version < '3':
     import Queue
 else:
     import queue as Queue
+from distutils.version import LooseVersion
+from multiprocessing import Manager
 
 
 # Append `SPARK_HOME/dev` to the Python path so that we can import the sparktestsupport module
@@ -39,7 +43,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../de
 
 from sparktestsupport import SPARK_HOME  # noqa (suppress pep8 warnings)
 from sparktestsupport.shellutils import which, subprocess_check_output  # noqa
-from sparktestsupport.modules import all_modules  # noqa
+from sparktestsupport.modules import all_modules, pyspark_sql  # noqa
 
 
 python_modules = dict((m.name, m) for m in all_modules if m.python_test_goals if m.name != 'root')
@@ -49,6 +53,7 @@ def print_red(text):
     print('\033[31m' + text + '\033[0m')
 
 
+SKIPPED_TESTS = Manager().dict()
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
@@ -65,7 +70,7 @@ else:
     raise Exception("Cannot find assembly build directory, please build Spark first.")
 
 
-def run_individual_python_test(test_name, pyspark_python):
+def run_individual_python_test(target_dir, test_name, pyspark_python):
     env = dict(os.environ)
     env.update({
         'SPARK_DIST_CLASSPATH': SPARK_DIST_CLASSPATH,
@@ -74,6 +79,23 @@ def run_individual_python_test(test_name, pyspark_python):
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
     })
+
+    # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
+    # recognized by the tempfile module to override the default system temp directory.
+    tmp_dir = os.path.join(target_dir, str(uuid.uuid4()))
+    while os.path.isdir(tmp_dir):
+        tmp_dir = os.path.join(target_dir, str(uuid.uuid4()))
+    os.mkdir(tmp_dir)
+    env["TMPDIR"] = tmp_dir
+
+    # Also override the JVM's temp directory by setting driver and executor options.
+    spark_args = [
+        "--conf", "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        "pyspark-shell"
+    ]
+    env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
+
     LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
@@ -81,6 +103,7 @@ def run_individual_python_test(test_name, pyspark_python):
         retcode = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
+        shutil.rmtree(tmp_dir, ignore_errors=True)
     except:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
@@ -108,8 +131,34 @@ def run_individual_python_test(test_name, pyspark_python):
             # this code is invoked from a thread other than the main thread.
             os._exit(-1)
     else:
-        per_test_output.close()
-        LOGGER.info("Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
+        skipped_counts = 0
+        try:
+            per_test_output.seek(0)
+            # Here expects skipped test output from unittest when verbosity level is
+            # 2 (or --verbose option is enabled).
+            decoded_lines = map(lambda line: line.decode(), iter(per_test_output))
+            skipped_tests = list(filter(
+                lambda line: re.search('test_.* \(pyspark\..*\) ... skipped ', line),
+                decoded_lines))
+            skipped_counts = len(skipped_tests)
+            if skipped_counts > 0:
+                key = (pyspark_python, test_name)
+                SKIPPED_TESTS[key] = skipped_tests
+            per_test_output.close()
+        except:
+            import traceback
+            print_red("\nGot an exception while trying to store "
+                      "skipped test output:\n%s" % traceback.format_exc())
+            # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
+            # this code is invoked from a thread other than the main thread.
+            os._exit(-1)
+        if skipped_counts != 0:
+            LOGGER.info(
+                "Finished test(%s): %s (%is) ... %s tests were skipped", pyspark_python, test_name,
+                duration, skipped_counts)
+        else:
+            LOGGER.info(
+                "Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
 
 
 def get_default_python_executables():
@@ -151,6 +200,19 @@ def parse_opts():
     return opts
 
 
+def _check_coverage(python_exec):
+    # Make sure if coverage is installed.
+    try:
+        subprocess_check_output(
+            [python_exec, "-c", "import coverage"],
+            stderr=open(os.devnull, 'w'))
+    except:
+        print_red("Coverage is not installed in Python executable '%s' "
+                  "but 'COVERAGE_PROCESS_START' environment variable is set, "
+                  "exiting." % python_exec)
+        sys.exit(-1)
+
+
 def main():
     opts = parse_opts()
     if (opts.verbose):
@@ -175,6 +237,11 @@ def main():
 
     task_queue = Queue.PriorityQueue()
     for python_exec in python_execs:
+        # Check if the python executable has coverage installed when 'COVERAGE_PROCESS_START'
+        # environmental variable is set.
+        if "COVERAGE_PROCESS_START" in os.environ:
+            _check_coverage(python_exec)
+
         python_implementation = subprocess_check_output(
             [python_exec, "-c", "import platform; print(platform.python_implementation())"],
             universal_newlines=True).strip()
@@ -191,6 +258,11 @@ def main():
                         priority = 100
                     task_queue.put((priority, (python_exec, test_goal)))
 
+    # Create the target directory before starting tasks to avoid races.
+    target_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'target'))
+    if not os.path.isdir(target_dir):
+        os.mkdir(target_dir)
+
     def process_queue(task_queue):
         while True:
             try:
@@ -198,7 +270,7 @@ def main():
             except Queue.Empty:
                 break
             try:
-                run_individual_python_test(test_goal, python_exec)
+                run_individual_python_test(target_dir, test_goal, python_exec)
             finally:
                 task_queue.task_done()
 
@@ -214,6 +286,12 @@ def main():
         sys.exit(-1)
     total_duration = time.time() - start_time
     LOGGER.info("Tests passed in %i seconds", total_duration)
+
+    for key, lines in sorted(SKIPPED_TESTS.items()):
+        pyspark_python, test_name = key
+        LOGGER.info("\nSkipped tests in %s with %s:" % (test_name, pyspark_python))
+        for line in lines:
+            LOGGER.info("    %s" % line.rstrip())
 
 
 if __name__ == "__main__":

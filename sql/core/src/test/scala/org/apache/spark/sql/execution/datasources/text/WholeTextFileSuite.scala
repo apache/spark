@@ -95,7 +95,7 @@ class WholeTextFileSuite extends QueryTest with SharedSQLContext {
       df1.write.option("compression", "gzip").mode("overwrite").text(path)
       // On reading through wholetext mode, one file will be read as a single row, i.e. not
       // delimited by "next line" character.
-      val expected = Row(Range(0, 1000).mkString("", "\n", "\n"))
+      val expected = Row(df1.collect().map(_.getString(0)).mkString("", "\n", "\n"))
       Seq(10, 100, 1000).foreach { bytes =>
         withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> bytes.toString) {
           val df2 = spark.read.option("wholetext", "true").format("text").load(path)

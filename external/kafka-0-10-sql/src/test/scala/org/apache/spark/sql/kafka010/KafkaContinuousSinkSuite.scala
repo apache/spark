@@ -18,16 +18,14 @@
 package org.apache.spark.sql.kafka010
 
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.time.SpanSugar._
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
-import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{BinaryType, DataType}
 import org.apache.spark.util.Utils
@@ -81,7 +79,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
       .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
-      .as[(Int, Int)]
+      .as[(Option[Int], Int)]
       .map(_._2)
 
     try {
@@ -121,7 +119,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
       .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
-      .as[(Int, Int)]
+      .as[(Option[Int], Int)]
       .map(_._2)
 
     try {
@@ -169,7 +167,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .selectExpr("CAST(key AS INT)", "CAST(value AS INT)")
-      .as[(Int, Int)]
+      .as[(Option[Int], Int)]
       .map(_._2)
 
     try {
@@ -362,7 +360,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     } finally {
       writer.stop()
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("job aborted"))
+    assert(ex.getCause.getCause.getMessage.toLowerCase(Locale.ROOT).contains("job aborted"))
   }
 
   test("streaming - exception on config serializer") {
@@ -424,7 +422,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     options.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, classOf[ByteArraySerializer].getName)
     val inputSchema = Seq(AttributeReference("value", BinaryType)())
     val data = new Array[Byte](15000) // large value
-    val writeTask = new KafkaContinuousDataWriter(Some(topic), options.asScala.toMap, inputSchema)
+    val writeTask = new KafkaStreamDataWriter(Some(topic), options.asScala.toMap, inputSchema)
     try {
       val fieldTypes: Array[DataType] = Array(BinaryType)
       val converter = UnsafeProjection.create(fieldTypes)
