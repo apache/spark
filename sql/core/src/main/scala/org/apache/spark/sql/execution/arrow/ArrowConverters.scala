@@ -59,6 +59,7 @@ private[sql] class ArrowBatchStreamWriter(
 
   def close(): Unit = {
     // Write End of Stream
+    // TODO: this could be a static function in ArrowStreamWriter
     writeChannel.writeIntLittleEndian(0)
   }
 }
