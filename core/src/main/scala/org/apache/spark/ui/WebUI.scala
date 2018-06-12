@@ -91,12 +91,7 @@ private[spark] abstract class WebUI(
   /** Attach a handler to this UI. */
   def attachHandler(handler: ServletContextHandler) {
     handlers += handler
-    serverInfo.foreach { sInfo =>
-      sInfo.addHandler(handler)
-      // If the UI has already been bound, we need to add the filters to the newly attached
-      // handlers. Otherwise, they will be attached when binding.
-      addFilters(Seq(handler), conf)
-    }
+    serverInfo.foreach(_.addHandler(handler))
   }
 
   /** Detach a handler from this UI. */
