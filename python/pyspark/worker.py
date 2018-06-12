@@ -125,15 +125,15 @@ def read_single_udf(pickleSer, infile, eval_type):
 
     # make sure StopIteration's raised in the user code are not ignored
     # when they are processed in a for loop, raise them as RuntimeError's instead
-    row_func = fail_on_stopiteration(row_func)
+    func = fail_on_stopiteration(row_func)
 
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        return arg_offsets, wrap_scalar_pandas_udf(row_func, return_type)
+        return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        return arg_offsets, wrap_grouped_map_pandas_udf(row_func, return_type)
+        return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type)
     else:
-        return arg_offsets, wrap_udf(row_func, return_type)
+        return arg_offsets, wrap_udf(func, return_type)
 
 
 def read_udfs(pickleSer, infile, eval_type):
