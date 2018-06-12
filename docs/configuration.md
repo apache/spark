@@ -1629,11 +1629,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.blacklist.killBlacklistedExecutors</code></td>
   <td>false</td>
   <td>
-    (Experimental) If set to "true", allow Spark to automatically kill the
-    executors when they are blacklisted on fetch failure or blacklisted for the entire application, 
-    as controlled by spark.blacklist.application.*.  
-    Note that, when an entire node is added to the blacklist,
-    all of the executors on that node will be killed.
+    (Experimental) If set to "true", allow Spark to automatically kill the executors 
+    when they are blacklisted on fetch failure or blacklisted for the entire application, 
+    as controlled by spark.blacklist.application.*. Note that, when an entire node is added 
+    to the blacklist, all of the executors on that node will be killed.
   </td>
 </tr>
 <tr>
