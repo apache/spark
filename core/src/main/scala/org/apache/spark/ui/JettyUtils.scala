@@ -263,7 +263,7 @@ private[spark] object JettyUtils extends Logging {
     filters.foreach {
       case filter : String =>
         if (!filter.isEmpty) {
-          logInfo("Adding filter: " + filter)
+          logInfo(s"Adding filter $filter to ${handlers.map(_.getContextPath).mkString(", ")}.")
           val holder : FilterHolder = new FilterHolder()
           holder.setClassName(filter)
           // Get any parameters for each filter
@@ -406,7 +406,7 @@ private[spark] object JettyUtils extends Logging {
       }
 
       pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
-      ServerInfo(server, httpPort, securePort, collection)
+      ServerInfo(server, httpPort, securePort, conf, collection)
     } catch {
       case e: Exception =>
         server.stop()
@@ -506,10 +506,12 @@ private[spark] case class ServerInfo(
     server: Server,
     boundPort: Int,
     securePort: Option[Int],
+    conf: SparkConf,
     private val rootHandler: ContextHandlerCollection) {
 
-  def addHandler(handler: ContextHandler): Unit = {
+  def addHandler(handler: ServletContextHandler): Unit = {
     handler.setVirtualHosts(JettyUtils.toVirtualHosts(JettyUtils.SPARK_CONNECTOR_NAME))
+    JettyUtils.addFilters(Seq(handler), conf)
     rootHandler.addHandler(handler)
     if (!handler.isStarted()) {
       handler.start()
