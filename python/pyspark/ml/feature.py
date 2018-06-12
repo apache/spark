@@ -2589,7 +2589,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
                  locale=None):
         """
-        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false,
+        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
         locale=None)
         """
         super(StopWordsRemover, self).__init__()
@@ -2605,7 +2605,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
                   locale=None):
         """
-        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false,
+        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
         locale=None)
         Sets params for this StopWordRemover.
         """
