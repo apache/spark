@@ -26,6 +26,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -109,6 +110,8 @@ abstract class DataType extends AbstractDataType {
  */
 @InterfaceStability.Stable
 object DataType {
+
+  def fromDDL(ddl: String): DataType = CatalystSqlParser.parseDataType(ddl)
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
