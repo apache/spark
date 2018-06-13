@@ -485,4 +485,22 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     // this should fail because at least one of inputCol and inputCols must be set
     ParamsSuite.testExclusiveParams(new QuantileDiscretizer, df, ("outputCol", "feature1"))
   }
+
+  test("Setting inputCol without setting outputCol") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+      .map(Tuple1.apply).toDF("input")
+    val numBuckets = 2
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setNumBuckets(numBuckets)
+    val model = discretizer.fit(df)
+    val result = model.transform(df)
+
+    val observedNumBuckets = result.select(discretizer.getOutputCol).distinct.count
+    assert(observedNumBuckets === numBuckets,
+      "Observed number of buckets does not equal expected number of buckets.")
+  }
 }
