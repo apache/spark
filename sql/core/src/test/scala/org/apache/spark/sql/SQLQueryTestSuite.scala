@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeTableCommand}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -104,11 +105,34 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
                       // We should ignore this file from processing.
   )
 
+  private val configsAllJoinTypes = Seq(Seq(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key ->
+    SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.defaultValueString),
+    Seq(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "true"),
+    Seq(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "false")) -> true
+
+  /**
+   * Maps a test with the set of configurations it has to run with and a flag indicating whether
+   * the output must be the same with different configs or it has to be different.
+   */
+  private val testConfigs: Map[String, (Seq[Seq[(String, String)]], Boolean)] = Map(
+    "typeCoercion/native/decimalArithmeticOperations.sql" ->
+      (Seq(Seq(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "true"),
+        Seq(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "false")) -> false),
+    "subquery/in-subquery/in-joins.sql" -> configsAllJoinTypes,
+    "subquery/in-subquery/not-in-joins.sql" -> configsAllJoinTypes,
+    "subquery/exists-subquery/exists-joins-and-set-ops.sql" -> configsAllJoinTypes,
+    "join-empty-relation.sql" -> configsAllJoinTypes,
+    "natural-join.sql" -> configsAllJoinTypes,
+    "outer-join.sql" -> configsAllJoinTypes)
+
   // Create all the test cases.
   listTestCases().foreach(createScalaTestCase)
 
   /** A test case. */
-  private case class TestCase(name: String, inputFile: String, resultFile: String)
+  private case class TestCase(
+    name: String, inputFile: String, resultFile: String, configs: Seq[(String, String)])
 
   /** A single SQL query's output. */
   private case class QueryOutput(sql: String, schema: String, output: String) {
@@ -149,6 +173,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
     loadTestData(localSparkSession)
+
+    // Execute the list of set operation in order to add the desired configs
+    val setOperations = testCase.configs.map { case (key, value) => s"set $key=$value" }
+    setOperations.foreach(localSparkSession.sql)
 
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
@@ -250,11 +278,33 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   private def listTestCases(): Seq[TestCase] = {
-    listFilesRecursively(new File(inputFilePath)).map { file =>
-      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
-      val absPath = file.getAbsolutePath
-      val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
-      TestCase(testCaseName, absPath, resultFile)
+    listFilesRecursively(new File(inputFilePath)).flatMap { file =>
+      testCases(file.getAbsolutePath)
+    }
+  }
+
+  private def testCases(inputPath: String): Seq[TestCase] = {
+    val baseResultFileName = inputPath.replace(inputFilePath, goldenFilePath)
+    val testCaseName = inputPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+    testConfigs.get(testCaseName) match {
+      case None => Seq(TestCase(testCaseName, inputPath, s"$baseResultFileName.out", Seq.empty))
+      case Some((listOfConfigs, hasSameResults)) =>
+        val allTests = listOfConfigs.map { configs =>
+          val configsSuffix = configs.map { case (key, value) => s"$key-$value" }.mkString("_")
+          val resultFile = if (hasSameResults) {
+            s"$baseResultFileName.out"
+          } else {
+            s"${baseResultFileName}_$configsSuffix.out"
+          }
+          TestCase(s"${testCaseName}_$configsSuffix", inputPath, resultFile, configs)
+        }
+        // When regenerating the golden files, if the result is the same for all configs, we need
+        // to run only one of them.
+        if (regenerateGoldenFiles && hasSameResults) {
+          Seq(allTests.head)
+        } else {
+          allTests
+        }
     }
   }
 
