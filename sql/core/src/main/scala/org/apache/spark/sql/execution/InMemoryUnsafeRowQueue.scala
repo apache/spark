@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.ConcurrentModificationException
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.memory.TaskMemoryManager
