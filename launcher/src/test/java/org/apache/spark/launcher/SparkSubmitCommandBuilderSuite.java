@@ -39,6 +39,9 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   private static File dummyPropsFile;
   private static SparkSubmitOptionParser parser;
 
+  @Rule
+  public ExpectedException expectedException = ExpectedException.none();
+
   @BeforeClass
   public static void setUp() throws Exception {
     dummyPropsFile = File.createTempFile("spark", "properties");
@@ -211,13 +214,10 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     testCLIOpts(SparkSubmitCommandBuilder.RUN_EXAMPLE, parser.VERSION, null);
   }
 
-  @Rule
-  public ExpectedException testExamplesRunnerWithMasterNoMainClassEx = ExpectedException.none();
-
   @Test
   public void testExamplesRunnerWithMasterNoMainClass() throws Exception {
-    testExamplesRunnerWithMasterNoMainClassEx.expect(IllegalArgumentException.class);
-    testExamplesRunnerWithMasterNoMainClassEx.expectMessage("Missing example class name.");
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Missing example class name.");
 
     List<String> sparkSubmitArgs = Arrays.asList(
       SparkSubmitCommandBuilder.RUN_EXAMPLE,

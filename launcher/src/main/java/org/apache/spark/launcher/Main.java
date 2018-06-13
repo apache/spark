@@ -103,9 +103,10 @@ class Main {
    * Prepare spark commands with the appropriate command builder.
    * If printLaunchCommand is set then the commands will be printed to the stderr.
    */
-  private static List<String> buildCommand(AbstractCommandBuilder builder,
-                                           Map<String, String> env,
-                                           boolean printLaunchCommand)
+  private static List<String> buildCommand(
+    AbstractCommandBuilder builder,
+    Map<String, String> env,
+    boolean printLaunchCommand)
     throws IOException, IllegalArgumentException {
     List<String> cmd = builder.buildCommand(env);
     if (printLaunchCommand) {

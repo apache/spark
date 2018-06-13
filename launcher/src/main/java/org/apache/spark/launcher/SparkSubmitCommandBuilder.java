@@ -144,13 +144,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       }
 
       this.isExample = isExample;
-      if (!submitArgs.isEmpty()) {
-        OptionParser parser = new OptionParser(true);
-        parser.parse(submitArgs);
-        this.isSpecialCommand = parser.isSpecialCommand;
-      } else {
-        this.isSpecialCommand = false;
-      }
+      OptionParser parser = new OptionParser(true);
+      parser.parse(submitArgs);
+      this.isSpecialCommand = parser.isSpecialCommand;
     } else {
       this.isExample = isExample;
       this.isSpecialCommand = true;
