@@ -360,37 +360,31 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
   test("filter pushdown - decimal(ByteArrayDecimalType)") {
-    val one = new java.math.BigDecimal(1)
-    val two = new java.math.BigDecimal(2)
-    val three = new java.math.BigDecimal(3)
-    val four = new java.math.BigDecimal(4)
+    val schema = StructType.fromDDL("_1 decimal(38, 18)")
 
-    val data = Seq(one, two, three, four)
-
-    withParquetDataFrame(data.map(Tuple1(_))) { implicit df =>
+    withParquetDataFrame((1 to 4).map(d => Tuple1(new java.math.BigDecimal(d)))) { implicit df =>
+      assert(schema === df.schema)
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], data.map(i => Row.apply(i)))
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(i => Row.apply(i)))
 
-      checkFilterPredicate('_1 === one, classOf[Eq[_]], one)
-      checkFilterPredicate('_1 <=> one, classOf[Eq[_]], one)
-      checkFilterPredicate('_1 =!= one, classOf[NotEq[_]],
-        (2 to 4).map(i => Row.apply(new java.math.BigDecimal(i))))
+      checkFilterPredicate('_1 === 1, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 <=> 1, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 =!= 1, classOf[NotEq[_]], (2 to 4).map(i => Row.apply(i)))
 
-      checkFilterPredicate('_1 < two, classOf[Lt[_]], one)
-      checkFilterPredicate('_1 > three, classOf[Gt[_]], four)
-      checkFilterPredicate('_1 <= one, classOf[LtEq[_]], one)
-      checkFilterPredicate('_1 >= four, classOf[GtEq[_]], four)
+      checkFilterPredicate('_1 < 2, classOf[Lt[_]], 1)
+      checkFilterPredicate('_1 > 3, classOf[Gt[_]], 4)
+      checkFilterPredicate('_1 <= 1, classOf[LtEq[_]], 1)
+      checkFilterPredicate('_1 >= 4, classOf[GtEq[_]], 4)
 
-      checkFilterPredicate(Literal(one) === '_1, classOf[Eq[_]], one)
-      checkFilterPredicate(Literal(one) <=> '_1, classOf[Eq[_]], one)
-      checkFilterPredicate(Literal(two) > '_1, classOf[Lt[_]], one)
-      checkFilterPredicate(Literal(three) < '_1, classOf[Gt[_]], four)
-      checkFilterPredicate(Literal(one) >= '_1, classOf[LtEq[_]], one)
-      checkFilterPredicate(Literal(four) <= '_1, classOf[GtEq[_]], four)
+      checkFilterPredicate(Literal(1) === '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(1) <=> '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(2) > '_1, classOf[Lt[_]], 1)
+      checkFilterPredicate(Literal(3) < '_1, classOf[Gt[_]], 4)
+      checkFilterPredicate(Literal(1) >= '_1, classOf[LtEq[_]], 1)
+      checkFilterPredicate(Literal(4) <= '_1, classOf[GtEq[_]], 4)
 
-      checkFilterPredicate(!('_1 < four), classOf[GtEq[_]], four)
-      checkFilterPredicate('_1 < two || '_1 > three, classOf[Operators.Or],
-        Seq(Row(one), Row(four)))
+      checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
+      checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
     }
   }
 

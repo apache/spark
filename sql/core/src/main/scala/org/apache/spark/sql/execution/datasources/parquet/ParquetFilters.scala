@@ -66,7 +66,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
         Option(v).map(d => Binary.fromReusedByteArray(new Array[Byte](8) ++
-            v.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
+          d.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
   }
 
   private val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -97,7 +97,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
         Option(v).map(d => Binary.fromReusedByteArray(new Array[Byte](8) ++
-          v.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
+          d.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
   }
 
   private val makeLt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -125,7 +125,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.lt(
         binaryColumn(n),
         Option(v).map(d => Binary.fromReusedByteArray(new Array[Byte](8) ++
-          v.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
+          d.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
   }
 
   private val makeLtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -153,7 +153,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.ltEq(
         binaryColumn(n),
         Option(v).map(d => Binary.fromReusedByteArray(new Array[Byte](8) ++
-          v.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
+          d.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
   }
 
   private val makeGt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -181,7 +181,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.gt(
         binaryColumn(n),
         Option(v).map(d => Binary.fromReusedByteArray(new Array[Byte](8) ++
-          v.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
+          d.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
   }
 
   private val makeGtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -209,7 +209,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.gtEq(
         binaryColumn(n),
         Option(v).map(d => Binary.fromReusedByteArray(new Array[Byte](8) ++
-          v.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
+          d.asInstanceOf[java.math.BigDecimal].unscaledValue().toByteArray)).orNull)
   }
 
   /**
