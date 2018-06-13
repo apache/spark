@@ -62,6 +62,16 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.eq(
+        intColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+          .asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.eq(
+        longColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+          .asInstanceOf[java.lang.Long]).orNull)
   }
 
   private val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -88,6 +98,16 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.notEq(
+        intColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+          .asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.notEq(
+        longColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+          .asInstanceOf[java.lang.Long]).orNull)
   }
 
   private val makeLt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -111,6 +131,16 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.lt(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.lt(
+        intColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+          .asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.lt(
+        longColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+          .asInstanceOf[java.lang.Long]).orNull)
   }
 
   private val makeLtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -134,6 +164,16 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.ltEq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.ltEq(
+        intColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+          .asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.ltEq(
+        longColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+          .asInstanceOf[java.lang.Long]).orNull)
   }
 
   private val makeGt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -157,6 +197,16 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.gt(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.gt(
+        intColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+          .asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.gt(
+        longColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+          .asInstanceOf[java.lang.Long]).orNull)
   }
 
   private val makeGtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -180,6 +230,16 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.gtEq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.gtEq(
+        intColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+          .asInstanceOf[Integer]).orNull)
+    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.gtEq(
+        longColumn(n),
+        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+          .asInstanceOf[java.lang.Long]).orNull)
   }
 
   /**

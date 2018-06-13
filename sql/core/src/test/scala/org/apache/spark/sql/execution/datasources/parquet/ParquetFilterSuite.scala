@@ -359,6 +359,46 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+  test("filter pushdown - decimal(is32BitDecimalType & is64BitDecimalType)") {
+    def testDecimalPushDown(data: DataFrame)(f: DataFrame => Unit): Unit = {
+      withTempPath { file =>
+        data.write.parquet(file.getCanonicalPath)
+        readParquetFile(file.toString, true)(f)
+      }
+    }
+
+    Seq(s"_1 decimal(${Decimal.MAX_INT_DIGITS}, 2)", s"_1 decimal(${Decimal.MAX_LONG_DIGITS}, 2)")
+      .foreach { schemaDDL =>
+      val schema = StructType.fromDDL(schemaDDL)
+      val rdd = spark.sparkContext.parallelize((1 to 4).map(i => Row(new java.math.BigDecimal(i))))
+      val dataFrame = spark.createDataFrame(rdd, schema)
+      testDecimalPushDown(dataFrame) { implicit df =>
+        assert(df.schema === schema)
+        checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+        checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
+
+        checkFilterPredicate('_1 === 1, classOf[Eq[_]], 1)
+        checkFilterPredicate('_1 <=> 1, classOf[Eq[_]], 1)
+        checkFilterPredicate('_1 =!= 1, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
+
+        checkFilterPredicate('_1 < 2, classOf[Lt[_]], 1)
+        checkFilterPredicate('_1 > 3, classOf[Gt[_]], 4)
+        checkFilterPredicate('_1 <= 1, classOf[LtEq[_]], 1)
+        checkFilterPredicate('_1 >= 4, classOf[GtEq[_]], 4)
+
+        checkFilterPredicate(Literal(1) === '_1, classOf[Eq[_]], 1)
+        checkFilterPredicate(Literal(1) <=> '_1, classOf[Eq[_]], 1)
+        checkFilterPredicate(Literal(2) > '_1, classOf[Lt[_]], 1)
+        checkFilterPredicate(Literal(3) < '_1, classOf[Gt[_]], 4)
+        checkFilterPredicate(Literal(1) >= '_1, classOf[LtEq[_]], 1)
+        checkFilterPredicate(Literal(4) <= '_1, classOf[GtEq[_]], 4)
+
+        checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
+        checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+      }
+    }
+  }
+
   test("SPARK-6554: don't push down predicates which reference partition columns") {
     import testImplicits._
 
