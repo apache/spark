@@ -196,7 +196,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 
   /**
    * Checks if l and r are valid range conditions:
-   *   - l and r expressions should both contain a single reference to one and the same column.
+   *   - l and r expressions should both contain a single reference to one and the same column
    *   - the referenced column should not be part of joinKeys
    * If these conditions are not met, the function returns None.
    *
