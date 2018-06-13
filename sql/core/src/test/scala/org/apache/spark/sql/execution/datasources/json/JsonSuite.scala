@@ -2430,24 +2430,26 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       // arrays
       Seq(
-        """{"a":[2, 1], "b":[null, null], "c":null, "d":[[], [null]]}""",
-        """{"a":[null], "b":[null], "c":[], "d": [null, []]}""",
-        """{"a":null, "b":null, "c":[], "d": null}""")
+        """{"a":[2, 1], "b":[null, null], "c":null, "d":[[], [null]], "e":[[], null, [[]]]}""",
+        """{"a":[null], "b":[null], "c":[], "d":[null, []], "e":null}""",
+        """{"a":null, "b":null, "c":[], "d":null, "e":[null, [], null]}""")
         .toDS().write.mode("overwrite").text(path)
       df = spark.read.format("json")
         .option("dropFieldIfAllNull", true)
         .load(path)
       expectedSchema = new StructType()
         .add("a", ArrayType(LongType)).add("b", NullType).add("c", NullType).add("d", NullType)
+        .add("e", NullType)
       assert(df.schema === expectedSchema)
-      checkAnswer(df, Row(Array(2, 1), null, null, null) :: Row(Array(null), null, null, null) ::
-        Row(null, null, null, null) :: Nil)
+      checkAnswer(df, Row(Array(2, 1), null, null, null, null) ::
+        Row(Array(null), null, null, null, null) ::
+        Row(null, null, null, null, null) :: Nil)
 
       // structs
       Seq(
-        """{"a": {"a1": 1, "a2":"string"}, "b":{}}""",
-        """{"a": {"a1": 2, "a2":null}, "b":{}}""",
-        """{"a": null, "b":null}""")
+        """{"a":{"a1": 1, "a2":"string"}, "b":{}}""",
+        """{"a":{"a1": 2, "a2":null}, "b":{}}""",
+        """{"a":null, "b":null}""")
         .toDS().write.mode("overwrite").text(path)
       df = spark.read.format("json")
         .option("dropFieldIfAllNull", true)
