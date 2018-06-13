@@ -102,7 +102,6 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
 
   test("persist and then withColumn") {
     val df = Seq(("test", 1)).toDF("s", "i")
-    // We should not invalidate the cached DataFrame
     val df2 = df.withColumn("newColumn", lit(1))
 
     df.cache()
@@ -123,9 +122,9 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
 
     df.cache()
     df.count()
-
     assertCached(df2)
 
+    // udf has been evaluated during caching, and thus should not be re-evaluated here
     failAfter(5 seconds) {
       df2.collect()
     }
