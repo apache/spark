@@ -127,8 +127,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
     // file and absolute path for path with local scheme
     val file3 = File.createTempFile("someprefix3", "somesuffix3", dir)
-    val localPath = "local://" + file3.getParent + "/../" + file3.getParentFile.getName +
-      "/" + file3.getName
+    val localPath = s"local://${file3.getParent}/../${file3.getParentFile.getName}" +
+      s"/${file3.getName}"
     val absolutePath3 = file3.getAbsolutePath
 
     try {
@@ -158,12 +158,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc.addFile(file1.getAbsolutePath)
       sc.addFile(relativePath)
       sc.addFile(localPath)
-      sc.parallelize(Array(1), 1).map(x => {
+      sc.parallelize(Array(1), 1).map { x =>
         checkGottenFile(file1, absolutePath1)
         checkGottenFile(file2, absolutePath2)
         checkGottenFile(file3, absolutePath3)
         x
-      }).count()
+      }.count()
       assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 1)
     } finally {
       sc.stop()
