@@ -626,9 +626,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
 
     ev.copy(code = eval.code +
-      code"""
-        ${castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast)}
-      """)
+      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
   // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
@@ -1022,16 +1020,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   }
 
-  private[this] def decimalToTimestampCode(d: ExprValue): ExprValue =
-    JavaCode.expression(
-      s"($d.toBigDecimal().bigDecimal().multiply(new java.math.BigDecimal(1000000L))).longValue()",
-      TimestampType)
-  private[this] def longToTimeStampCode(l: ExprValue): ExprValue =
-    JavaCode.expression(s"$l * 1000000L", TimestampType)
-  private[this] def timestampToIntegerCode(ts: ExprValue): ExprValue =
-    JavaCode.expression(s"java.lang.Math.floor((double) $ts / 1000000L)", IntegerType)
-  private[this] def timestampToDoubleCode(ts: ExprValue): ExprValue =
-    JavaCode.expression(s"$ts / 1000000.0", DoubleType)
+  private[this] def decimalToTimestampCode(d: ExprValue): Block = {
+    val block = code"new java.math.BigDecimal(1000000L)"
+    code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
+  }
+  private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * 1000000L"
+  private[this] def timestampToIntegerCode(ts: ExprValue): Block =
+    code"java.lang.Math.floor((double) $ts / 1000000L)"
+  private[this] def timestampToDoubleCode(ts: ExprValue): Block =
+    code"$ts / 1000000.0"
 
   private[this] def castToBooleanCode(from: DataType): CastFunction = from match {
     case StringType =>
