@@ -21,7 +21,6 @@ import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.Partitioner
-
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.util.ThreadUtils
