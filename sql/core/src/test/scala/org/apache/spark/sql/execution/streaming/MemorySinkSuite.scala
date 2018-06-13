@@ -164,6 +164,32 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, 7 to 9)
   }
 
+  test("directly add data in Complete output mode with row limit") {
+    implicit val schema = new StructType().add(new StructField("value", IntegerType))
+
+    var optionsMap = new scala.collection.mutable.HashMap[String, String]
+    optionsMap.put(MemorySinkBase.MAX_MEMORY_SINK_ROWS, 5.toString())
+    var options = new DataSourceOptions(optionsMap.toMap.asJava)
+    val sink = new MemorySink(schema, OutputMode.Complete, options)
+
+    // Before adding data, check output
+    assert(sink.latestBatchId === None)
+    checkAnswer(sink.latestBatchData, Seq.empty)
+    checkAnswer(sink.allData, Seq.empty)
+
+    // Add batch 0 and check outputs
+    sink.addBatch(0, 1 to 3)
+    assert(sink.latestBatchId === Some(0))
+    checkAnswer(sink.latestBatchData, 1 to 3)
+    checkAnswer(sink.allData, 1 to 3)
+
+    // Add batch 1 and check outputs
+    sink.addBatch(1, 4 to 10)
+    assert(sink.latestBatchId === Some(1))
+    checkAnswer(sink.latestBatchData, 4 to 8)
+    checkAnswer(sink.allData, 4 to 8)     // new data should replace old data
+  }
+
 
   test("registering as a table in Append output mode") {
     val input = MemoryStream[Int]
