@@ -547,6 +547,40 @@ class SparkSession(object):
         df._schema = schema
         return df
 
+    @staticmethod
+    def _create_shell_session():
+        """
+        Initialize a SparkSession for a pyspark shell session. This is called from shell.py
+        to make error handling simpler without needing to declare local variables in that
+        script, which would expose those to users.
+        """
+        import py4j
+        from pyspark.conf import SparkConf
+        from pyspark.context import SparkContext
+        try:
+            # Try to access HiveConf, it will raise exception if Hive is not added
+            conf = SparkConf()
+            if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
+                SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
+                return SparkSession.builder\
+                    .enableHiveSupport()\
+                    .getOrCreate()
+            else:
+                return SparkSession.builder.getOrCreate()
+        except py4j.protocol.Py4JError:
+            if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+                warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
+                              "please make sure you build spark with hive")
+
+        try:
+            return SparkSession.builder.getOrCreate()
+        except TypeError:
+            if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+                warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
+                              "please make sure you build spark with hive")
+
+        return SparkSession.builder.getOrCreate()
+
     @since(2.0)
     @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
@@ -583,6 +617,8 @@ class SparkSession(object):
 
         .. versionchanged:: 2.1
            Added verifySchema.
+
+        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
 
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
