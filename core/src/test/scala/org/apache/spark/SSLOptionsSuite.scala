@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.File
 import javax.net.ssl.SSLContext
 
+import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.util.SparkConfWithEnv
@@ -40,6 +41,7 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
       .toSet
 
     val conf = new SparkConf
+    val hadoopConf = new Configuration()
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", keyStorePath)
     conf.set("spark.ssl.keyStorePassword", "password")
@@ -49,7 +51,7 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     conf.set("spark.ssl.enabledAlgorithms", algorithms.mkString(","))
     conf.set("spark.ssl.protocol", "TLSv1.2")
 
-    val opts = SSLOptions.parse(conf, "spark.ssl")
+    val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl")
 
     assert(opts.enabled === true)
     assert(opts.trustStore.isDefined === true)
@@ -70,6 +72,7 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
 
     val conf = new SparkConf
+    val hadoopConf = new Configuration()
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", keyStorePath)
     conf.set("spark.ssl.keyStorePassword", "password")
@@ -80,8 +83,8 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
     conf.set("spark.ssl.protocol", "SSLv3")
 
-    val defaultOpts = SSLOptions.parse(conf, "spark.ssl", defaults = None)
-    val opts = SSLOptions.parse(conf, "spark.ssl.ui", defaults = Some(defaultOpts))
+    val defaultOpts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
+    val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl.ui", defaults = Some(defaultOpts))
 
     assert(opts.enabled === true)
     assert(opts.trustStore.isDefined === true)
@@ -103,6 +106,7 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
 
     val conf = new SparkConf
+    val hadoopConf = new Configuration()
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.ui.enabled", "false")
     conf.set("spark.ssl.ui.port", "4242")
@@ -117,8 +121,8 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     conf.set("spark.ssl.ui.enabledAlgorithms", "ABC, DEF")
     conf.set("spark.ssl.protocol", "SSLv3")
 
-    val defaultOpts = SSLOptions.parse(conf, "spark.ssl", defaults = None)
-    val opts = SSLOptions.parse(conf, "spark.ssl.ui", defaults = Some(defaultOpts))
+    val defaultOpts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
+    val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl.ui", defaults = Some(defaultOpts))
 
     assert(opts.enabled === false)
     assert(opts.port === Some(4242))
@@ -139,12 +143,13 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val conf = new SparkConfWithEnv(Map(
       "ENV1" -> "val1",
       "ENV2" -> "val2"))
+    val hadoopConf = new Configuration()
 
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", "${env:ENV1}")
     conf.set("spark.ssl.trustStore", "${env:ENV2}")
 
-    val opts = SSLOptions.parse(conf, "spark.ssl", defaults = None)
+    val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
     assert(opts.keyStore === Some(new File("val1")))
     assert(opts.trustStore === Some(new File("val2")))
   }
