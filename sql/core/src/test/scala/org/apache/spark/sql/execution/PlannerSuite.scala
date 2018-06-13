@@ -681,13 +681,19 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("SPARK-24495: EnsureRequirements can return wrong plan when reusing the same key in join") {
-    withSQLConf(("spark.sql.shuffle.partitions", "1"),
-      ("spark.sql.constraintPropagation.enabled", "false"),
-      ("spark.sql.autoBroadcastJoinThreshold", "-1")) {
-      val df1 = spark.range(100).repartition(2, $"id", $"id")
-      val df2 = spark.range(100).select(($"id" * 2).as("b1"), (- $"id").as("b2"))
-      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2")
-      assert(res.collect().sameElements(Array(Row(0, 0, 0))))
+    val plan1 = DummySparkPlan(outputOrdering = Seq(orderingA),
+      outputPartitioning = HashPartitioning(exprA :: exprA :: Nil, 5))
+    val plan2 = DummySparkPlan(outputOrdering = Seq(orderingB),
+      outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+    val smjExec = SortMergeJoinExec(
+      exprA :: exprA :: Nil, exprB :: exprC :: Nil, Inner, None, plan1, plan2)
+
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    outputPlan match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _, _, _) =>
+        assert(leftKeys == Seq(exprA, exprA))
+        assert(rightKeys.contains(exprB) && rightKeys.contains(exprC))
+      case _ => fail()
     }
   }
 }
