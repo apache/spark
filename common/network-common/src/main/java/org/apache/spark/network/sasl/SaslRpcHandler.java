@@ -28,9 +28,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.StreamData;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
@@ -80,11 +80,10 @@ public class SaslRpcHandler extends RpcHandler {
   public void receive(
       TransportClient client,
       ByteBuffer message,
-      StreamData streamData,
       RpcResponseCallback callback) {
     if (isComplete) {
       // Authentication complete, delegate to base handler.
-      delegate.receive(client, message, streamData, callback);
+      delegate.receive(client, message, callback);
       return;
     }
     if (saslServer == null || !saslServer.isComplete()) {
@@ -135,6 +134,14 @@ public class SaslRpcHandler extends RpcHandler {
   @Override
   public void receive(TransportClient client, ByteBuffer message) {
     delegate.receive(client, message);
+  }
+
+  @Override
+  public StreamCallback receiveStream(
+      TransportClient client,
+      ByteBuffer message,
+      RpcResponseCallback callback) {
+    return delegate.receiveStream(client, message, callback);
   }
 
   @Override

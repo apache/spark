@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.server;
 
+import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
@@ -29,6 +30,8 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallback;
+import org.apache.spark.network.client.StreamInterceptor;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.*;
 import org.apache.spark.network.util.TransportFrameDecoder;
@@ -188,7 +191,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
           respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
         }
       };
-      rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), null, callback);
+      rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), callback);
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
@@ -217,11 +220,41 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
           channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
       ByteBuffer meta = req.meta.nioByteBuffer();
-      StreamData streamData = new StreamData(TransportRequestHandler.this, frameDecoder,
-          callback, req.bodyByteCount);
-      rpcHandler.receive(reverseClient, meta, streamData, callback);
-      if (!streamData.hasCallback()) {
-        throw new RuntimeException("Destination did not register stream handler");
+      // TODO streamId?
+      String streamId = null;
+      StreamCallback streamHandler = rpcHandler.receiveStream(reverseClient, meta, callback);
+      // TODO do something with the streamHandler
+      StreamCallback wrappedCallback = new StreamCallback() {
+        @Override
+        public void onData(String streamId, ByteBuffer buf) throws IOException {
+          streamHandler.onData(streamId, buf);
+        }
+
+        @Override
+        public void onComplete(String streamId) throws IOException {
+           try {
+             streamHandler.onComplete(streamId);
+             callback.onSuccess(ByteBuffer.allocate(0));
+           } catch (Exception ex) {
+             IOException ioExc = new IOException("Failure post-processing complete stream; failing " +
+               "this rpc and leaving channel active");
+             callback.onFailure(ioExc);
+             streamHandler.onFailure(streamId, ioExc);
+           }
+        }
+
+        @Override
+        public void onFailure(String streamId, Throwable cause) throws IOException {
+          callback.onFailure(new IOException("Destination failed while reading stream", cause));
+          streamHandler.onFailure(streamId, cause);
+        }
+      };
+      if (req.bodyByteCount > 0) {
+        StreamInterceptor interceptor = new StreamInterceptor(this, streamId, req.bodyByteCount,
+          wrappedCallback);
+        frameDecoder.setInterceptor(interceptor);
+      } else {
+        wrappedCallback.onComplete(streamId);
       }
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);

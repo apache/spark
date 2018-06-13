@@ -141,7 +141,6 @@ public class AuthIntegrationSuite {
         public void receive(
             TransportClient client,
             ByteBuffer message,
-            StreamData streamData,
             RpcResponseCallback callback) {
           assertEquals("Ping", JavaUtils.bytesToString(message));
           callback.onSuccess(JavaUtils.stringToBytes("Pong"));

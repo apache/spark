@@ -142,8 +142,7 @@ public class SparkSaslSuite {
       return null;
     })
       .when(rpcHandler)
-      .receive(any(TransportClient.class), any(ByteBuffer.class), any(StreamData.class),
-          any(RpcResponseCallback.class));
+      .receive(any(TransportClient.class), any(ByteBuffer.class), any(RpcResponseCallback.class));
 
     SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
     try {

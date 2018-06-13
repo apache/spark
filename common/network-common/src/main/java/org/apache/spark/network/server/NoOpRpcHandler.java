@@ -34,7 +34,6 @@ public class NoOpRpcHandler extends RpcHandler {
   public void receive(
       TransportClient client,
       ByteBuffer message,
-      StreamData streamData,
       RpcResponseCallback callback) {
     throw new UnsupportedOperationException("Cannot handle messages");
   }

@@ -29,11 +29,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.sasl.SaslRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.StreamData;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.TransportConf;
 
@@ -84,10 +84,9 @@ class AuthRpcHandler extends RpcHandler {
   public void receive(
       TransportClient client,
       ByteBuffer message,
-      StreamData streamData,
       RpcResponseCallback callback) {
     if (doDelegate) {
-      delegate.receive(client, message, streamData, callback);
+      delegate.receive(client, message, callback);
       return;
     }
 
@@ -105,7 +104,7 @@ class AuthRpcHandler extends RpcHandler {
         delegate = new SaslRpcHandler(conf, channel, delegate, secretKeyHolder);
         message.position(position);
         message.limit(limit);
-        delegate.receive(client, message, streamData, callback);
+        delegate.receive(client, message, callback);
         doDelegate = true;
       } else {
         LOG.debug("Unexpected challenge message from client {}, closing channel.",
@@ -152,6 +151,14 @@ class AuthRpcHandler extends RpcHandler {
   @Override
   public void receive(TransportClient client, ByteBuffer message) {
     delegate.receive(client, message);
+  }
+
+  @Override
+  public StreamCallback receiveStream(
+      TransportClient client,
+      ByteBuffer message,
+      RpcResponseCallback callback) {
+    return delegate.receiveStream(client, message, callback);
   }
 
   @Override

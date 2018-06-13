@@ -38,7 +38,6 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.StreamData;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.apache.spark.network.shuffle.protocol.*;
@@ -80,9 +79,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   public void receive(
       TransportClient client,
       ByteBuffer message,
-      StreamData streamData,
       RpcResponseCallback callback) {
-    assert(streamData == null);
     BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message);
     handleMessage(msgObj, client, callback);
   }

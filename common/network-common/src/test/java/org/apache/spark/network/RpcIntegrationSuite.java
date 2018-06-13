@@ -65,21 +65,24 @@ public class RpcIntegrationSuite {
       public void receive(
           TransportClient client,
           ByteBuffer message,
-          StreamData streamData,
           RpcResponseCallback callback) {
         String msg = JavaUtils.bytesToString(message);
-        if (streamData != null) {
-          receiveStream(msg, streamData);
-        } else {
-          String[] parts = msg.split("/");
-          if (parts[0].equals("hello")) {
-            callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
-          } else if (parts[0].equals("return error")) {
-            callback.onFailure(new RuntimeException("Returned: " + parts[1]));
-          } else if (parts[0].equals("throw error")) {
-            throw new RuntimeException("Thrown: " + parts[1]);
-          }
+        String[] parts = msg.split("/");
+        if (parts[0].equals("hello")) {
+          callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
+        } else if (parts[0].equals("return error")) {
+          callback.onFailure(new RuntimeException("Returned: " + parts[1]));
+        } else if (parts[0].equals("throw error")) {
+          throw new RuntimeException("Thrown: " + parts[1]);
         }
+      }
+
+      @Override
+      public StreamCallback receiveStream(
+          TransportClient client,
+          ByteBuffer messageHeader,
+          RpcResponseCallback callback) {
+        return null;
       }
 
       @Override
@@ -96,7 +99,7 @@ public class RpcIntegrationSuite {
     oneWayMsgs = new ArrayList<>();
   }
 
-  private static void receiveStream(String msg, StreamData streamData) {
+  private static StreamCallback receiveStream(String msg) {
     try {
       if (msg.startsWith("fail/")) {
         String[] parts = msg.split("/");
@@ -105,7 +108,7 @@ public class RpcIntegrationSuite {
             // don't register anything here, check the rpc error response is appropriate
             break;
           case "exception-ondata":
-            StreamCallback onDataExcCallback = new StreamCallback() {
+            return new StreamCallback() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
                 throw new IOException("failed to read stream data!");
@@ -119,10 +122,8 @@ public class RpcIntegrationSuite {
               public void onFailure(String streamId, Throwable cause) throws IOException {
               }
             };
-            streamData.registerStreamCallback(msg, onDataExcCallback);
-            break;
           case "exception-oncomplete":
-            StreamCallback onCompleteExcCallback = new StreamCallback() {
+            return new StreamCallback() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
               }
@@ -136,22 +137,18 @@ public class RpcIntegrationSuite {
               public void onFailure(String streamId, Throwable cause) throws IOException {
               }
             };
-            streamData.registerStreamCallback(msg, onCompleteExcCallback);
-            break;
-          case "multiple":
-            VerifyingStreamCallback streamCallback = new VerifyingStreamCallback(msg);
-            streamData.registerStreamCallback(msg, streamCallback);
-            streamData.registerStreamCallback(msg, streamCallback);
-            break;
+          default:
+            throw new IllegalArgumentException("unexpected msg: " + msg);
         }
       } else {
         VerifyingStreamCallback streamCallback = new VerifyingStreamCallback(msg);
-        streamData.registerStreamCallback(msg, streamCallback);
         streamCallbacks.put(msg, streamCallback);
+        return streamCallback;
       }
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+    throw new RuntimeException("unreachable");
   }
 
   @AfterClass
