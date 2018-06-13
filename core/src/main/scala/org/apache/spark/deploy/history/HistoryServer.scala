@@ -152,7 +152,6 @@ class HistoryServer(
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     handlers.synchronized {
       ui.getHandlers.foreach(attachHandler)
-      addFilters(ui.getHandlers, conf)
     }
   }
 

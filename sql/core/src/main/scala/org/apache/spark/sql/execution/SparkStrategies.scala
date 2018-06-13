@@ -327,7 +327,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        if (aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF)) {
+        if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
           throw new AnalysisException(
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
@@ -384,9 +384,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
-        if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
+        if (functionsWithDistinct.map(_.aggregateFunction.children.toSet).distinct.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
-          // column sets. Our MultipleDistinctRewriter should take care this case.
+          // column sets. Our `RewriteDistinctAggregates` should take care this case.
           sys.error("You hit a query analyzer bug. Please report your query to " +
               "Spark user mailing list.")
         }
@@ -423,6 +423,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // If cannot match the two cases above, then it's an error
         throw new AnalysisException(
           "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+
+      case _ => Nil
+    }
+  }
+
+  object Window extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case PhysicalWindow(
+        WindowFunctionType.SQL, windowExprs, partitionSpec, orderSpec, child) =>
+        execution.window.WindowExec(
+          windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+
+      case PhysicalWindow(
+        WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child) =>
+        execution.python.WindowInPandasExec(
+          windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
 
       case _ => Nil
     }
@@ -548,8 +564,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
-      case logical.Window(windowExprs, partitionSpec, orderSpec, child) =>
-        execution.window.WindowExec(windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _) =>

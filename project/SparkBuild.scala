@@ -57,11 +57,11 @@ object BuildCommons {
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     streamingFlumeSink, streamingFlume,
     streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
-    dockerIntegrationTests, hadoopCloud) =
+    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
     Seq("kubernetes", "mesos", "yarn",
       "streaming-flume-sink", "streaming-flume",
       "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests", "hadoop-cloud").map(ProjectRef(buildLocation, _))
+      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
     Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-0-8-assembly", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
@@ -729,7 +729,8 @@ object Unidoc {
 
     scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(
       "-groups", // Group similar methods together based on the @group annotation.
-      "-skip-packages", "org.apache.hadoop"
+      "-skip-packages", "org.apache.hadoop",
+      "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath
     ) ++ (
       // Add links to sources when generating Scaladoc for a non-snapshot release
       if (!isSnapshot.value) {

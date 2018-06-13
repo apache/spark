@@ -1071,6 +1071,17 @@ object functions {
   def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
 
   /**
+   * Creates a new map column. The array in the first column is used for keys. The array in the
+   * second column is used for values. All elements in the array for key should not be null.
+   *
+   * @group normal_funcs
+   * @since 2.4
+   */
+  def map_from_arrays(keys: Column, values: Column): Column = withExpr {
+    MapFromArrays(keys.expr, values.expr)
+  }
+
+  /**
    * Marks a DataFrame as small enough for use in broadcast joins.
    *
    * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
@@ -3170,6 +3181,15 @@ object functions {
   def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
 
   /**
+   * Remove all elements that equal to element from the given array.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_remove(column: Column, element: Any): Column = withExpr {
+    ArrayRemove(column.expr, Literal(element))
+  }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
@@ -3498,6 +3518,133 @@ object functions {
    * @since 2.4.0
    */
   def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
+
+  /**
+   * Returns a merged array of structs in which the N-th struct contains all N-th values of input
+   * arrays.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def arrays_zip(e: Column*): Column = withExpr { ArraysZip(e.map(_.expr)) }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Mask functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  /**
+   * Returns a string which is the masked representation of the input.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask(e: Column): Column = withExpr { new Mask(e.expr) }
+
+  /**
+   * Returns a string which is the masked representation of the input, using `upper`, `lower` and
+   * `digit` as replacement characters.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask(e: Column, upper: String, lower: String, digit: String): Column = withExpr {
+    Mask(e.expr, upper, lower, digit)
+  }
+
+  /**
+   * Returns a string with the first `n` characters masked.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask_first_n(e: Column, n: Int): Column = withExpr { new MaskFirstN(e.expr, Literal(n)) }
+
+  /**
+   * Returns a string with the first `n` characters masked, using `upper`, `lower` and `digit` as
+   * replacement characters.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask_first_n(
+      e: Column,
+      n: Int,
+      upper: String,
+      lower: String,
+      digit: String): Column = withExpr {
+    MaskFirstN(e.expr, n, upper, lower, digit)
+  }
+
+  /**
+   * Returns a string with the last `n` characters masked.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask_last_n(e: Column, n: Int): Column = withExpr { new MaskLastN(e.expr, Literal(n)) }
+
+  /**
+   * Returns a string with the last `n` characters masked, using `upper`, `lower` and `digit` as
+   * replacement characters.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask_last_n(
+      e: Column,
+      n: Int,
+      upper: String,
+      lower: String,
+      digit: String): Column = withExpr {
+    MaskLastN(e.expr, n, upper, lower, digit)
+  }
+
+  /**
+   * Returns a string with all but the first `n` characters masked.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask_show_first_n(e: Column, n: Int): Column = withExpr {
+    new MaskShowFirstN(e.expr, Literal(n))
+  }
+
+  /**
+   * Returns a string with all but the first `n` characters masked, using `upper`, `lower` and
+   * `digit` as replacement characters.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask_show_first_n(
+      e: Column,
+      n: Int,
+      upper: String,
+      lower: String,
+      digit: String): Column = withExpr {
+    MaskShowFirstN(e.expr, n, upper, lower, digit)
+  }
+
+  /**
+   * Returns a string with all but the last `n` characters masked.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask_show_last_n(e: Column, n: Int): Column = withExpr {
+    new MaskShowLastN(e.expr, Literal(n))
+  }
+
+  /**
+   * Returns a string with all but the last `n` characters masked, using `upper`, `lower` and
+   * `digit` as replacement characters.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask_show_last_n(
+      e: Column,
+      n: Int,
+      upper: String,
+      lower: String,
+      digit: String): Column = withExpr {
+    MaskShowLastN(e.expr, n, upper, lower, digit)
+  }
+
+  /**
+   * Returns a hashed value based on the input column.
+   * @group mask_funcs
+   * @since 2.4.0
+   */
+  def mask_hash(e: Column): Column = withExpr { MaskHash(e.expr) }
 
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number

@@ -21,8 +21,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, Repartition, Sort}
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, Repartition, Sort, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
@@ -67,6 +67,27 @@ class PlannerSuite extends SharedSQLContext {
     val query =
       testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
+  }
+
+  test("mixed aggregates with same distinct columns") {
+    def assertNoExpand(plan: SparkPlan): Unit = {
+      assert(plan.collect { case e: ExpandExec => e }.isEmpty)
+    }
+
+    withTempView("v") {
+      Seq((1, 1.0, 1.0), (1, 2.0, 2.0)).toDF("i", "j", "k").createTempView("v")
+      // one distinct column
+      val query1 = sql("SELECT sum(DISTINCT j), max(DISTINCT j) FROM v GROUP BY i")
+      assertNoExpand(query1.queryExecution.executedPlan)
+
+      // 2 distinct columns
+      val query2 = sql("SELECT corr(DISTINCT j, k), count(DISTINCT j, k) FROM v GROUP BY i")
+      assertNoExpand(query2.queryExecution.executedPlan)
+
+      // 2 distinct columns with different order
+      val query3 = sql("SELECT corr(DISTINCT j, k), count(DISTINCT k, j) FROM v GROUP BY i")
+      assertNoExpand(query3.queryExecution.executedPlan)
+    }
   }
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
@@ -657,6 +678,13 @@ class PlannerSuite extends SharedSQLContext {
       case r: RangeExec => r
     }
     assert(rangeExecInZeroPartition.head.outputPartitioning == UnknownPartitioning(0))
+  }
+
+  test("SPARK-24500: create union with stream of children") {
+    val df = Union(Stream(
+      Range(1, 1, 1, 1),
+      Range(1, 2, 1, 1)))
+    df.queryExecution.executedPlan.execute()
   }
 }
 

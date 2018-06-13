@@ -322,9 +322,14 @@ class ContinuousExecution(
       }
     }
 
-    if (minLogEntriesToMaintain < currentBatchId) {
-      offsetLog.purge(currentBatchId - minLogEntriesToMaintain)
-      commitLog.purge(currentBatchId - minLogEntriesToMaintain)
+    // Since currentBatchId increases independently in cp mode, the current committed epoch may
+    // be far behind currentBatchId. It is not safe to discard the metadata with thresholdBatchId
+    // computed based on currentBatchId. As minLogEntriesToMaintain is used to keep the minimum
+    // number of batches that must be retained and made recoverable, so we should keep the
+    // specified number of metadata that have been committed.
+    if (minLogEntriesToMaintain <= epoch) {
+      offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
+      commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()
