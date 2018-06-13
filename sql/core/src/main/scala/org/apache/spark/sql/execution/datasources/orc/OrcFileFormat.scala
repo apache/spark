@@ -59,6 +59,19 @@ private[sql] object OrcFileFormat {
   def checkFieldNames(names: Seq[String]): Unit = {
     names.foreach(checkFieldName)
   }
+
+  def getQuotedSchemaString(dataType: DataType): String = dataType match {
+    case _: AtomicType => dataType.catalogString
+    case StructType(fields) =>
+      fields.map(f => s"`${f.name}`:${getQuotedSchemaString(f.dataType)}")
+        .mkString("struct<", ",", ">")
+    case ArrayType(elementType, _) =>
+      s"array<${getQuotedSchemaString(elementType)}>"
+    case MapType(keyType, valueType, _) =>
+      s"map<${getQuotedSchemaString(keyType)},${getQuotedSchemaString(valueType)}>"
+    case _ => // UDT and others
+      dataType.catalogString
+  }
 }
 
 /**
@@ -95,7 +108,7 @@ class OrcFileFormat
 
     val conf = job.getConfiguration
 
-    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, dataSchema.catalogString)
+    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, OrcFileFormat.getQuotedSchemaString(dataSchema))
 
     conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
 
