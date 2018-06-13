@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.math.BigInteger
 import java.nio.charset.StandardCharsets
 import java.sql.Date
 
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -356,6 +356,41 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         '_1 < "2018-03-19".date || '_1 > "2018-03-20".date,
         classOf[Operators.Or],
         Seq(Row("2018-03-18".date), Row("2018-03-21".date)))
+    }
+  }
+
+  test("filter pushdown - decimal(ByteArrayDecimalType)") {
+    val one = new java.math.BigDecimal(1)
+    val two = new java.math.BigDecimal(2)
+    val three = new java.math.BigDecimal(3)
+    val four = new java.math.BigDecimal(4)
+
+    val data = Seq(one, two, three, four)
+
+    withParquetDataFrame(data.map(Tuple1(_))) { implicit df =>
+      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], data.map(i => Row.apply(i)))
+
+      checkFilterPredicate('_1 === one, classOf[Eq[_]], one)
+      checkFilterPredicate('_1 <=> one, classOf[Eq[_]], one)
+      checkFilterPredicate('_1 =!= one, classOf[NotEq[_]],
+        (2 to 4).map(i => Row.apply(new java.math.BigDecimal(i))))
+
+      checkFilterPredicate('_1 < two, classOf[Lt[_]], one)
+      checkFilterPredicate('_1 > three, classOf[Gt[_]], four)
+      checkFilterPredicate('_1 <= one, classOf[LtEq[_]], one)
+      checkFilterPredicate('_1 >= four, classOf[GtEq[_]], four)
+
+      checkFilterPredicate(Literal(one) === '_1, classOf[Eq[_]], one)
+      checkFilterPredicate(Literal(one) <=> '_1, classOf[Eq[_]], one)
+      checkFilterPredicate(Literal(two) > '_1, classOf[Lt[_]], one)
+      checkFilterPredicate(Literal(three) < '_1, classOf[Gt[_]], four)
+      checkFilterPredicate(Literal(one) >= '_1, classOf[LtEq[_]], one)
+      checkFilterPredicate(Literal(four) <= '_1, classOf[GtEq[_]], four)
+
+      checkFilterPredicate(!('_1 < four), classOf[GtEq[_]], four)
+      checkFilterPredicate('_1 < two || '_1 > three, classOf[Operators.Or],
+        Seq(Row(one), Row(four)))
     }
   }
 
