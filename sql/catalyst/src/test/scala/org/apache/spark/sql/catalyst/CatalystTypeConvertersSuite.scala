@@ -22,6 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class CatalystTypeConvertersSuite extends SparkFunSuite {
 
@@ -142,8 +143,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
 
   test("convert Char to String") {
     val chr: Char = 'X'
-    val result = CatalystTypeConverters.createToScalaConverter(StringType)(chr)
-    val expected = "X"
-    assert(result === expected)
+    val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
+    val expected = UTF8String.fromString("X")
+    assert(converter(chr) === expected)
   }
 }
