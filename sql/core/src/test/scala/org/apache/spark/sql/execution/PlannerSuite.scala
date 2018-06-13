@@ -692,7 +692,7 @@ class PlannerSuite extends SharedSQLContext {
     outputPlan match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _, _, _) =>
         assert(leftKeys == Seq(exprA, exprA))
-        assert(rightKeys.contains(exprB) && rightKeys.contains(exprC))
+        assert(rightKeys == Seq(exprB, exprC))
       case _ => fail()
     }
   }
