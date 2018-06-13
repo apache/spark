@@ -227,7 +227,7 @@ class ContinuousShuffleSuite extends StreamTest {
     }
 
     // Join to pick up assertion failures.
-    readEpochMarkerThread.join()
+    readEpochMarkerThread.join(streamingTimeout.toMillis)
   }
 
   test("reader - writer epochs non aligned") {
@@ -327,7 +327,7 @@ class ContinuousShuffleSuite extends StreamTest {
 
     // Once we write the epoch the thread should stop waiting and succeed.
     writer.write(Iterator(1))
-    readRowThread.join()
+    readRowThread.join(streamingTimeout.toMillis)
   }
 
   test("multiple writer partitions") {
@@ -379,7 +379,7 @@ class ContinuousShuffleSuite extends StreamTest {
     }
 
     writers(0).write(Iterator())
-    readEpochMarkerThread.join()
+    readEpochMarkerThread.join(streamingTimeout.toMillis)
   }
 
   test("receiver stopped with row last") {
