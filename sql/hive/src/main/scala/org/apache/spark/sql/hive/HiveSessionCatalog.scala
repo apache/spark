@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
+import org.apache.spark.util.Utils
 
 
 private[sql] class HiveSessionCatalog(
@@ -131,6 +132,8 @@ private[sql] class HiveSessionCatalog(
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
+        logWarning(s"Encounter a failure during looking up function:" +
+          s" ${Utils.exceptionString(error)}")
         if (functionRegistry.functionExists(funcName)) {
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
