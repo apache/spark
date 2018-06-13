@@ -69,19 +69,19 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar {
     val receiverAddress = RpcEndpointAddress("localhost", 54321, "test")
     val receiver = new NettyRpcEndpointRef(nettyEnv.conf, receiverAddress, nettyEnv)
 
-    val msg = new RequestMessage(senderAddress, receiver, "foo", null)
+    val msg = new RequestMessage(senderAddress, receiver, "foo")
     assertRequestMessageEquals(
       msg,
-      RequestMessage(nettyEnv, client, msg.serialize(nettyEnv), null))
+      RequestMessage(nettyEnv, client, msg.serialize(nettyEnv)))
 
-    val msg2 = new RequestMessage(null, receiver, "foo", null)
+    val msg2 = new RequestMessage(null, receiver, "foo")
     assertRequestMessageEquals(
       msg2,
-      RequestMessage(nettyEnv, client, msg2.serialize(nettyEnv), null))
+      RequestMessage(nettyEnv, client, msg2.serialize(nettyEnv)))
 
-    val msg3 = new RequestMessage(senderAddress, receiver, null, null)
+    val msg3 = new RequestMessage(senderAddress, receiver, null)
     assertRequestMessageEquals(
       msg3,
-      RequestMessage(nettyEnv, client, msg3.serialize(nettyEnv), null))
+      RequestMessage(nettyEnv, client, msg3.serialize(nettyEnv)))
   }
 }

@@ -63,7 +63,7 @@ public class ExternalShuffleBlockHandlerSuite {
 
     ExecutorShuffleInfo config = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
     ByteBuffer registerMessage = new RegisterExecutor("app0", "exec1", config).toByteBuffer();
-    handler.receive(client, registerMessage, null, callback);
+    handler.receive(client, registerMessage, callback);
     verify(blockResolver, times(1)).registerExecutor("app0", "exec1", config);
 
     verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
@@ -88,7 +88,7 @@ public class ExternalShuffleBlockHandlerSuite {
     ByteBuffer openBlocks = new OpenBlocks("app0", "exec1",
       new String[] { "shuffle_0_0_0", "shuffle_0_0_1" })
       .toByteBuffer();
-    handler.receive(client, openBlocks, null, callback);
+    handler.receive(client, openBlocks, callback);
 
     ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
     verify(callback, times(1)).onSuccess(response.capture());
@@ -129,7 +129,7 @@ public class ExternalShuffleBlockHandlerSuite {
 
     ByteBuffer unserializableMsg = ByteBuffer.wrap(new byte[] { 0x12, 0x34, 0x56 });
     try {
-      handler.receive(client, unserializableMsg, null, callback);
+      handler.receive(client, unserializableMsg, callback);
       fail("Should have thrown");
     } catch (Exception e) {
       // pass
@@ -138,7 +138,7 @@ public class ExternalShuffleBlockHandlerSuite {
     ByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1],
       new byte[2]).toByteBuffer();
     try {
-      handler.receive(client, unexpectedMsg, null, callback);
+      handler.receive(client, unexpectedMsg, callback);
       fail("Should have thrown");
     } catch (UnsupportedOperationException e) {
       // pass

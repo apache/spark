@@ -24,12 +24,12 @@ import java.nio.ByteBuffer;
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import org.apache.spark.network.client.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
+import org.apache.spark.network.client.*;
 import org.apache.spark.network.protocol.*;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
@@ -43,6 +43,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * The messages should have been processed by the pipeline setup by {@link TransportServer}.
  */
 public class TransportRequestHandler extends MessageHandler<RequestMessage> {
+
   private static final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
 
   /** The Netty channel that this handler is associated with. */
@@ -177,7 +178,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   private void processRpcRequest(final RpcRequest req) {
     try {
-      RpcResponseCallback callback = new RpcResponseCallback() {
+      rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {
           respond(new RpcResponse(req.requestId, new NioManagedBuffer(response)));
@@ -187,8 +188,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         public void onFailure(Throwable e) {
           respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
         }
-      };
-      rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), callback);
+      });
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));

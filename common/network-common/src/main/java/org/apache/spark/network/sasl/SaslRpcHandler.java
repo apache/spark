@@ -77,10 +77,7 @@ public class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(
-      TransportClient client,
-      ByteBuffer message,
-      RpcResponseCallback callback) {
+  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
     if (isComplete) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);

@@ -520,12 +520,12 @@ private[netty] class NettyRpcEndpointRef(
   override def name: String = endpointAddress.name
 
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
-    nettyEnv.ask(new RequestMessage(nettyEnv.address, this, message, null), timeout)
+    nettyEnv.ask(new RequestMessage(nettyEnv.address, this, message), timeout)
   }
 
   override def send(message: Any): Unit = {
     require(message != null, "Message is null")
-    nettyEnv.send(new RequestMessage(nettyEnv.address, this, message, null))
+    nettyEnv.send(new RequestMessage(nettyEnv.address, this, message))
   }
 
   override def toString: String = s"NettyRpcEndpointRef(${endpointAddress})"
@@ -596,10 +596,7 @@ private[netty] object RequestMessage {
     }
   }
 
-  def apply(
-      nettyEnv: NettyRpcEnv,
-      client: TransportClient,
-      bytes: ByteBuffer): RequestMessage = {
+  def apply(nettyEnv: NettyRpcEnv, client: TransportClient, bytes: ByteBuffer): RequestMessage = {
     val bis = new ByteBufferInputStream(bytes)
     val in = new DataInputStream(bis)
     try {
@@ -658,9 +655,7 @@ private[netty] class NettyRpcHandler(
     dispatcher.postOneWayMessage(messageToDispatch)
   }
 
-  private def internalReceive(
-      client: TransportClient,
-      message: ByteBuffer): RequestMessage = {
+  private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostString, addr.getPort)

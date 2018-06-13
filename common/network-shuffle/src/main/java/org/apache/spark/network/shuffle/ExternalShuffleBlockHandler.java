@@ -76,10 +76,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(
-      TransportClient client,
-      ByteBuffer message,
-      RpcResponseCallback callback) {
+  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
     BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message);
     handleMessage(msgObj, client, callback);
   }

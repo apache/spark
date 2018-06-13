@@ -39,7 +39,11 @@ import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
-import org.apache.spark.network.server.*;
+import org.apache.spark.network.server.OneForOneStreamManager;
+import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.BlockFetchingListener;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver;
@@ -260,11 +264,7 @@ public class SaslIntegrationSuite {
   /** RPC handler which simply responds with the message it received. */
   public static class TestRpcHandler extends RpcHandler {
     @Override
-    public void receive(
-        TransportClient client,
-        ByteBuffer message,
-        StreamData streamData,
-        RpcResponseCallback callback) {
+    public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
       callback.onSuccess(message);
     }
 

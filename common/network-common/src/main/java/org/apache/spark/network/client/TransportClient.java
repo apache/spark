@@ -281,7 +281,6 @@ public class TransportClient implements Closeable {
     }
   }
 
-
   /**
    * Synchronously sends an opaque message to the RpcHandler on the server-side, waiting for up to
    * a specified timeout for a response.

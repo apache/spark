@@ -31,10 +31,7 @@ public class NoOpRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(
-      TransportClient client,
-      ByteBuffer message,
-      RpcResponseCallback callback) {
+  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
     throw new UnsupportedOperationException("Cannot handle messages");
   }
 

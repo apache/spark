@@ -42,7 +42,7 @@ import org.apache.spark.network.{BlockDataManager, BlockTransferService, Transpo
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
-import org.apache.spark.network.server.{NoOpRpcHandler, StreamData, TransportServer, TransportServerBootstrap}
+import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, TempFileManager}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.network.util.TransportConf
@@ -1341,7 +1341,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         override def receive(
             client: TransportClient,
             message: ByteBuffer,
-            streamData: StreamData,
             callback: RpcResponseCallback): Unit = {
           val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
           msgObj match {

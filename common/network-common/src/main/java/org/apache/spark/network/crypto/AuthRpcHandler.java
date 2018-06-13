@@ -81,10 +81,7 @@ class AuthRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(
-      TransportClient client,
-      ByteBuffer message,
-      RpcResponseCallback callback) {
+  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
     if (doDelegate) {
       delegate.receive(client, message, callback);
       return;

@@ -37,7 +37,7 @@ public abstract class RpcHandler {
    * Receive a single RPC message. Any exception thrown while in this method will be sent back to
    * the client in string form as a standard RPC failure.
    *
-   * Neither this method nor #receiveStream will not be called in parallel for a single
+   * Neither this method nor #receiveStream will be called in parallel for a single
    * TransportClient (i.e., channel).
    *
    * @param client A channel client which enables the handler to make requests back to the sender
@@ -56,7 +56,7 @@ public abstract class RpcHandler {
    * exception thrown while in this method will be sent back to the client in string form as a
    * standard RPC failure.
    *
-   * Neither this method nor #receive will not be called in parallel for a single TransportClient
+   * Neither this method nor #receive will be called in parallel for a single TransportClient
    * (i.e., channel).
    *
    * An error while reading data from the stream
@@ -89,8 +89,8 @@ public abstract class RpcHandler {
 
   /**
    * Receives an RPC message that does not expect a reply. The default implementation will
-   * call "{@link #receive(TransportClient, ByteBuffer, RpcResponseCallback)}" and log a
-   * warning if any of the callback methods are called.
+   * call "{@link #receive(TransportClient, ByteBuffer, RpcResponseCallback)}" and log a warning if
+   * any of the callback methods are called.
    *
    * @param client A channel client which enables the handler to make requests back to the sender
    *               of this RPC. This will always be the exact same object for a particular channel.
