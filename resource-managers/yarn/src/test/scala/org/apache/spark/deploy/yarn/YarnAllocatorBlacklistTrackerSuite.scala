@@ -72,12 +72,12 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     clock.advance(BLACKLIST_TIMEOUT)
 
     // trigger synchronisation of blacklisted nodes with YARN
-    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Map())
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set())
     verify(amClientMock).updateBlacklist(Collections.emptyList(), Arrays.asList("host"))
   }
 
   test("not handling the expiry of scheduler blacklisted nodes") {
-    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Map("host1" -> 100, "host2" -> 150))
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set("host1", "host2"))
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("host1", "host2"), Collections.emptyList())
 
@@ -85,11 +85,10 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     clock.advance(200L)
 
     // expired blacklisted nodes (simulating a resource request)
-    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Map("host1" -> 100, "host2" -> 150))
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set("host1", "host2"))
     // no change is communicated to YARN regarding the blacklisting
     verify(amClientMock).updateBlacklist(Collections.emptyList(), Collections.emptyList())
   }
-
 
   test("combining scheduler and allocation blacklist") {
     (1 to MAX_FAILED_EXEC_PER_NODE_VALUE).foreach {
@@ -106,20 +105,19 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("host1"), Collections.emptyList())
 
-    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Map("host2" -> 100, "host3" -> 150))
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set("host2", "host3"))
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("host2", "host3"), Collections.emptyList())
 
     clock.advance(10L)
 
-    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Map("host3" -> 100, "host4" -> 200))
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set("host3", "host4"))
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("host4"), Arrays.asList("host2"))
   }
 
-  test("if blacklist size limit is exceeded, prefer to blacklist nodes with the latest expiry") {
-    yarnBlacklistTracker.setSchedulerBlacklistedNodes(
-      Map("host1" -> 150, "host2" -> 110, "host3" -> 200))
+  test("blacklist all available nodes") {
+    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set("host1", "host2", "host3"))
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("host1", "host2", "host3"), Collections.emptyList())
 
@@ -136,25 +134,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     // the third failure on the host triggers the blacklisting
     yarnBlacklistTracker.handleResourceAllocationFailure(Some("host4"))
 
-    // the blacklistSizeLimit is 3 as numClusterNodes is 4 and BLACKLIST_SIZE_DEFAULT_WEIGHT is 0.75
-    // this is why the 3 late expired nodes are chosen from the four nodes of
-    // "host1" -> 150, "host2" -> 110, "host3" -> 200, "host4" -> 160.
-    // So "host2" is removed from the previous state and "host4" is added
-    verify(amClientMock).updateBlacklist(Arrays.asList("host4"), Arrays.asList("host2"))
-
-    clock.advance(10L)
-    (1 to MAX_FAILED_EXEC_PER_NODE_VALUE).foreach {
-      _ => {
-        yarnBlacklistTracker.handleResourceAllocationFailure(Some("host5"))
-        verify(amClientMock, never())
-          .updateBlacklist(Arrays.asList("host5"), Collections.emptyList())
-      }
-    }
-
-    // the third failure on the host triggers the blacklisting
-    yarnBlacklistTracker.handleResourceAllocationFailure(Some("host5"))
-    // "host1" -> 150, "host2" -> 110, "host3" -> 200, "host4" -> 160, host4 -> 170
-    verify(amClientMock).updateBlacklist(Arrays.asList("host5"), Arrays.asList("host1"))
+    verify(amClientMock).updateBlacklist(Arrays.asList("host4"), Collections.emptyList())
+    assert(yarnBlacklistTracker.isAllNodeBlacklisted === true)
   }
-
 }

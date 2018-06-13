@@ -110,7 +110,7 @@ private[spark] object CoarseGrainedClusterMessages {
       requestedTotal: Int,
       localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
-      nodeBlacklistWithExpiryTimes: Map[String, Long])
+      nodeBlacklist: Set[String])
     extends CoarseGrainedClusterMessage
 
   // Check if an executor was force-killed but for a reason unrelated to the running tasks.

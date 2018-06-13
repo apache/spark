@@ -160,6 +160,8 @@ private[yarn] class YarnAllocator(
 
   def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
+  def isAllNodeBlacklisted: Boolean = allocatorBlacklistTracker.isAllNodeBlacklisted
+
   /**
    * A sequence of pending container requests that have not yet been fulfilled.
    */
@@ -183,23 +185,22 @@ private[yarn] class YarnAllocator(
    * @param localityAwareTasks number of locality aware tasks to be used as container placement hint
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
    *                             container placement hint.
-   * @param schedulerBlacklist blacklisted nodes with expiry times, which is passed in to avoid
-   *                           allocating new containers on them. It will be used to update
-   *                           the application master's blacklist.
+   * @param nodeBlacklist blacklisted nodes, which is passed in to avoid allocating new containers
+   *                      on them. It will be used to update the application master's blacklist.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
       requestedTotal: Int,
       localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
-      schedulerBlacklist: Map[String, Long]): Boolean = synchronized {
+      nodeBlacklist: Set[String]): Boolean = synchronized {
     this.numLocalityAwareTasks = localityAwareTasks
     this.hostToLocalTaskCounts = hostToLocalTaskCount
 
     if (requestedTotal != targetNumExecutors) {
       logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
       targetNumExecutors = requestedTotal
-      allocatorBlacklistTracker.setSchedulerBlacklistedNodes(schedulerBlacklist)
+      allocatorBlacklistTracker.setSchedulerBlacklistedNodes(nodeBlacklist)
       true
     } else {
       false

@@ -38,8 +38,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     }
     val ser = new JavaSerializer(sc.conf).newInstance()
     for {
-      blacklist <- IndexedSeq(Map.empty[String, Long],
-        Map("a" -> Long.MaxValue, "b" -> Long.MaxValue, "c" -> Long.MaxValue))
+      blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
       numRequested <- 0 until 10
       hostToLocalCount <- IndexedSeq(
         Map[String, Int](),
@@ -47,11 +46,11 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       )
     } {
       yarnSchedulerBackend.setHostToLocalTaskCount(hostToLocalCount)
-      when(sched.nodeBlacklistWithExpiryTimes()).thenReturn(blacklist)
+      when(sched.nodeBlacklist()).thenReturn(blacklist)
       val req = yarnSchedulerBackend.prepareRequestExecutors(numRequested)
       assert(req.requestedTotal === numRequested)
-      assert(req.nodeBlacklistWithExpiryTimes === blacklist)
-      assert(req.hostToLocalTaskCount.keySet.intersect(blacklist.keySet).isEmpty)
+      assert(req.nodeBlacklist === blacklist)
+      assert(req.hostToLocalTaskCount.keySet.intersect(blacklist).isEmpty)
       // Serialize to make sure serialization doesn't throw an error
       ser.serialize(req)
     }

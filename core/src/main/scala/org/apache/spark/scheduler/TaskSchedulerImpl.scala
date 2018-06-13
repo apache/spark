@@ -651,8 +651,8 @@ private[spark] class TaskSchedulerImpl(
    * Get a snapshot of the currently blacklisted nodes for the entire application.  This is
    * thread-safe -- it can be called without a lock on the TaskScheduler.
    */
-  def nodeBlacklistWithExpiryTimes(): Map[String, Long] = {
-    blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(Map())
+  def nodeBlacklist(): scala.collection.immutable.Set[String] = {
+    blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
   }
 
   // By default, rack is unknown

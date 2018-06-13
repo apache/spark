@@ -58,14 +58,11 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   private val maxFailuresPerHost = sparkConf.get(MAX_FAILED_EXEC_PER_NODE)
 
-  private val blacklistMaxNodeRatio =
-    sparkConf.get(YARN_BLACKLIST_MAX_NODE_BLACKLIST_RATIO)
-
   private val allocatorBlacklist = new HashMap[String, Long]()
 
   private var currentBlacklistedYarnNodes = Set.empty[String]
 
-  private var schedulerBlacklist = Map.empty[String, Long]
+  private var schedulerBlacklist = Set.empty[String]
 
   private var numClusterNodes = Int.MaxValue
 
@@ -101,35 +98,17 @@ private[spark] class YarnAllocatorBlacklistTracker(
     }
   }
 
-  def setSchedulerBlacklistedNodes(schedulerBlacklistedNodesWithExpiry: Map[String, Long]): Unit = {
+  def setSchedulerBlacklistedNodes(schedulerBlacklistedNodesWithExpiry: Set[String]): Unit = {
     this.schedulerBlacklist = schedulerBlacklistedNodesWithExpiry
     refreshBlacklistedNodes()
   }
 
+  def isAllNodeBlacklisted: Boolean = currentBlacklistedYarnNodes.size >= numClusterNodes
+
   private def refreshBlacklistedNodes(): Unit = {
     removeExpiredYarnBlacklistedNodes()
-    val limit = (numClusterNodes * blacklistMaxNodeRatio).toInt
-    val allBlacklistedNodes = schedulerBlacklist.keySet ++ allocatorBlacklist.keySet
-    val nodesToBlacklist =
-      if (allBlacklistedNodes.size > limit) {
-        mostRelevantSubsetOfBlacklistedNodes(limit)
-      } else {
-        allBlacklistedNodes
-      }
-
-    synchronizeBlacklistedNodeWithYarn(nodesToBlacklist)
-  }
-
-  private def mostRelevantSubsetOfBlacklistedNodes(limit: Int) = {
-    val allBlacklist = schedulerBlacklist ++ allocatorBlacklist
-    val relevant = allBlacklist
-       .toSeq
-       .sortBy(_._2)(Ordering[Long].reverse)
-       .take(limit)
-       .map(_._1)
-       .toSet
-    logInfo(s"blacklist size limit ($limit) is reached, total count: ${allBlacklist.size}")
-    relevant
+    val allBlacklistedNodes = schedulerBlacklist ++ allocatorBlacklist.keySet
+    synchronizeBlacklistedNodeWithYarn(allBlacklistedNodes)
   }
 
   private def synchronizeBlacklistedNodeWithYarn(nodesToBlacklist: Set[String]): Unit = {

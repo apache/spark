@@ -177,7 +177,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
         "hostA", exec = "1", index = partition, failureReason = "testing")
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist0.execToFailures)
-    assert(blacklist.nodeBlacklist().keySet === Set())
+    assert(blacklist.nodeBlacklist() === Set())
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1"))
     verify(listenerBusMock).post(SparkListenerExecutorBlacklisted(0, "1", 4))
@@ -191,7 +191,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
         "hostA", exec = "2", index = partition, failureReason = "testing")
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist1.execToFailures)
-    assert(blacklist.nodeBlacklist().keySet === Set("hostA"))
+    assert(blacklist.nodeBlacklist() === Set("hostA"))
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostA"))
     verify(listenerBusMock).post(SparkListenerNodeBlacklisted(0, "hostA", 2))
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1", "2"))
@@ -202,7 +202,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     val timeout = blacklist.BLACKLIST_TIMEOUT_MILLIS + 1
     clock.advance(timeout)
     blacklist.applyBlacklistTimeout()
-    assert(blacklist.nodeBlacklist().keySet === Set())
+    assert(blacklist.nodeBlacklist() === Set())
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
     verify(listenerBusMock).post(SparkListenerExecutorUnblacklisted(timeout, "2"))
@@ -215,7 +215,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     taskSetBlacklist2.updateBlacklistForFailedTask(
       "hostA", exec = "1", index = 0, failureReason = "testing")
     blacklist.updateBlacklistForSuccessfulTaskSet(2, 0, taskSetBlacklist2.execToFailures)
-    assert(blacklist.nodeBlacklist().keySet === Set())
+    assert(blacklist.nodeBlacklist() === Set())
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
   }

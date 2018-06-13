@@ -334,13 +334,4 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val YARN_BLACKLIST_MAX_NODE_BLACKLIST_RATIO =
-    ConfigBuilder("spark.yarn.blacklist.maxNodeBlacklistRatio")
-      .doc("The maximum fraction of the cluster nodes that will be blacklisted " +
-        "for yarn allocations, based on task & allocation failures")
-      .doubleConf
-      .checkValue(weight => weight >= 0 && weight <= 1,
-        "The value of this ratio must be in [0, 1].")
-      .createWithDefault(0.75)
-
 }

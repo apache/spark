@@ -508,6 +508,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
               finish(FinalApplicationStatus.FAILED,
                 ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
                 s"Max number of executor failures ($maxNumExecutorFailures) reached")
+            } else if (allocator.isAllNodeBlacklisted) {
+              finish(FinalApplicationStatus.FAILED,
+                ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
+                "Due to executor failures all available nodes are blacklisted")
             } else {
               logDebug("Sending progress")
               allocator.allocateResources()
@@ -729,7 +733,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         Option(allocator) match {
           case Some(a) =>
             if (a.requestTotalExecutorsWithPreferredLocalities(r.requestedTotal,
-              r.localityAwareTasks, r.hostToLocalTaskCount, r.nodeBlacklistWithExpiryTimes)) {
+              r.localityAwareTasks, r.hostToLocalTaskCount, r.nodeBlacklist)) {
               resetAllocatorInterval()
             }
             context.reply(true)
