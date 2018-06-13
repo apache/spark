@@ -548,6 +548,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Delete data from a table that matches a boolean expression.
+   */
+  override def visitDeleteFrom(ctx: DeleteFromContext): LogicalPlan = withOrigin(ctx) {
+    val tableIdent = visitTableIdentifier(ctx.tableIdentifier())
+    DeleteFrom(UnresolvedRelation(tableIdent), expression(ctx.expression()))
+  }
+
+  /**
    * Add a [[WithWindowDefinition]] operator to a logical plan.
    */
   private def withWindows(
