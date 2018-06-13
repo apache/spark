@@ -139,4 +139,11 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
     assert(exception.getMessage.contains("The value (0.1) of the type "
       + "(java.lang.Double) cannot be converted to the string type"))
   }
+
+  test("convert Char to String") {
+    val chr: Char = 'X'
+    val result = CatalystTypeConverters.createToScalaConverter(StringType)(chr)
+    val expected = "X"
+    assert(result === expected)
+  }
 }
