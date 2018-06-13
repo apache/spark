@@ -3351,11 +3351,41 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
-    def test_repr_html(self):
+    def test_repr_behaviors(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)
         df = self.spark.createDataFrame([(1, "1"), (22222, "22222")], ("key", "value"))
-        self.assertEquals(None, df._repr_html_())
+
+        # test when eager evaluation is enabled and _repr_html_ will not be called
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
+            expected1 = """+-----+-----+
+                ||  key|value|
+                |+-----+-----+
+                ||    1|    1|
+                ||22222|22222|
+                |+-----+-----+
+                |"""
+            self.assertEquals(re.sub(pattern, '', expected1), df.__repr__())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                expected2 = """+---+-----+
+                ||key|value|
+                |+---+-----+
+                ||  1|    1|
+                ||222|  222|
+                |+---+-----+
+                |"""
+                self.assertEquals(re.sub(pattern, '', expected2), df.__repr__())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    expected3 = """+---+-----+
+                    ||key|value|
+                    |+---+-----+
+                    ||  1|    1|
+                    |+---+-----+
+                    |only showing top 1 row
+                    |"""
+                    self.assertEquals(re.sub(pattern, '', expected3), df.__repr__())
+
+        # test when eager evaluation is enabled and _repr_html_ will be called
         with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
             expected1 = """<table border='1'>
                 |<tr><th>key</th><th>value</th></tr>
@@ -3380,6 +3410,18 @@ class SQLTests(ReusedSQLTestCase):
                         |only showing top 1 row
                         |"""
                     self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
+
+        # test when eager evaluation is disabled and _repr_html_ will be called
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": False}):
+            expected = "DataFrame[key: bigint, value: string]"
+            self.assertEquals(None, df._repr_html_())
+            self.assertEquals(expected, df.__repr__())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                self.assertEquals(None, df._repr_html_())
+                self.assertEquals(expected, df.__repr__())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    self.assertEquals(None, df._repr_html_())
+                    self.assertEquals(expected, df.__repr__())
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
