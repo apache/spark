@@ -67,6 +67,8 @@ private[shuffle] class RPCContinuousShuffleReader(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case r: RPCContinuousShuffleMessage =>
+      // Note that this will block a thread the shared RPC handler pool!
+      // The TCP based shuffle handler (SPARK-24541) will avoid this problem.
       queues(r.writerId).put(r)
       context.reply(())
   }
