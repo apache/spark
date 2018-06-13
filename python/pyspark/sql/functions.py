@@ -2616,10 +2616,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        The returned scalar can be either a python primitive type, e.g., `int` or `float`
        or a numpy data type, e.g., `numpy.int64` or `numpy.float64`.
 
-       :class:`ArrayType`, :class:`MapType` and :class:`StructType` are currently not supported as
-       output types.
+       :class:`MapType` and :class:`StructType` are currently not supported as output types.
 
-       Group aggregate UDFs are used with :meth:`pyspark.sql.GroupedData.agg`
+       Group aggregate UDFs are used with :meth:`pyspark.sql.GroupedData.agg` and
+       :class:`pyspark.sql.Window`
+
+       This example shows using grouped aggregated UDFs with groupby:
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> df = spark.createDataFrame(
@@ -2636,7 +2638,31 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  2|        6.0|
        +---+-----------+
 
-       .. seealso:: :meth:`pyspark.sql.GroupedData.agg`
+       This example shows using grouped aggregated UDFs as window functions. Note that only
+       unbounded window frame is supported at the moment:
+
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+       >>> from pyspark.sql import Window
+       >>> df = spark.createDataFrame(
+       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+       ...     ("id", "v"))
+       >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
+       ... def mean_udf(v):
+       ...     return v.mean()
+       >>> w = Window.partitionBy('id') \\
+       ...           .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+       >>> df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()  # doctest: +SKIP
+       +---+----+------+
+       | id|   v|mean_v|
+       +---+----+------+
+       |  1| 1.0|   1.5|
+       |  1| 2.0|   1.5|
+       |  2| 3.0|   6.0|
+       |  2| 5.0|   6.0|
+       |  2|10.0|   6.0|
+       +---+----+------+
+
+       .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
 
     .. note:: The user-defined functions are considered deterministic by default. Due to
         optimization, duplicate invocations may be eliminated or the function may even be invoked
