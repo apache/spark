@@ -53,7 +53,7 @@ class RPCContinuousShuffleWriter(
       endpoints(outputPartitioner.getPartition(row)).askSync[Unit](ReceiverRow(writerId, row))
     }
 
-    val futures = endpoints.map(_.ask[Unit](ReceiverEpochMarker(writerId)))
+    val futures = endpoints.map(_.ask[Unit](ReceiverEpochMarker(writerId))).toSeq
     implicit val ec = ThreadUtils.sameThread
     ThreadUtils.awaitResult(Future.sequence(futures), Duration.Inf)
   }
