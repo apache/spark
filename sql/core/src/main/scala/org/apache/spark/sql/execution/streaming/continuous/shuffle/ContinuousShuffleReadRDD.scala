@@ -39,7 +39,7 @@ case class ContinuousShuffleReadPartition(
     val env = SparkEnv.get.rpcEnv
     val receiver = new RPCContinuousShuffleReader(
       queueSize, numShuffleWriters, epochIntervalMs, env)
-    val endpoint = env.setupEndpoint(s"RPCContinuousShuffleReader-${UUID.randomUUID()}", receiver)
+    val endpoint = env.setupEndpoint(endpointName, receiver)
 
     TaskContext.get().addTaskCompletionListener { ctx =>
       env.stop(endpoint)
@@ -65,7 +65,7 @@ class ContinuousShuffleReadRDD(
     queueSize: Int = 1024,
     numShuffleWriters: Int = 1,
     epochIntervalMs: Long = 1000,
-    val endpointNames: Seq[String] = Seq(s"UnsafeRowReceiver-${UUID.randomUUID()}"))
+    val endpointNames: Seq[String] = Seq(s"RPCContinuousShuffleReader-${UUID.randomUUID()}"))
   extends RDD[UnsafeRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {

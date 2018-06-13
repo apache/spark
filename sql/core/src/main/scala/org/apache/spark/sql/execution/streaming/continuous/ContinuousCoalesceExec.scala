@@ -38,7 +38,7 @@ case class ContinuousCoalesceExec(numPartitions: Int, child: SparkPlan) extends 
     assert(numPartitions == 1)
 
     val childRdd = child.execute()
-    val endpointName = s"UnsafeRowReceiver-${UUID.randomUUID()}"
+    val endpointName = s"RPCContinuousShuffleReader-${UUID.randomUUID()}"
     val reader = new ContinuousShuffleReadRDD(
       sparkContext,
       numPartitions,
