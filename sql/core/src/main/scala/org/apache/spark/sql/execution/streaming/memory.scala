@@ -336,7 +336,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
     numRows = 0
   }
 
-  def truncateRowsIfNeeded(rows: Array[Row], maxRows: Int, batchId: Long): Array[Row] = {
+  private def truncateRowsIfNeeded(rows: Array[Row], maxRows: Int, batchId: Long): Array[Row] = {
     if (rows.length > maxRows) {
       logWarning(s"Truncating batch $batchId to $maxRows rows")
       rows.take(maxRows)
