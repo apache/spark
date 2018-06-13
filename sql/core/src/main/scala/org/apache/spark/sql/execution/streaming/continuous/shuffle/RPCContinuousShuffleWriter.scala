@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
+import scala.concurrent.Future
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.Partitioner
+
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A [[ContinuousShuffleWriter]] sending data to [[RPCContinuousShuffleReader]] instances.
@@ -49,6 +54,8 @@ class RPCContinuousShuffleWriter(
       endpoints(outputPartitioner.getPartition(row)).askSync[Unit](ReceiverRow(writerId, row))
     }
 
-    endpoints.foreach(_.askSync[Unit](ReceiverEpochMarker(writerId)))
+    val futures = endpoints.map(_.ask[Unit](ReceiverEpochMarker(writerId)))
+    implicit val ec = ThreadUtils.sameThread
+    ThreadUtils.awaitResult(Future.sequence(futures), Duration.Inf)
   }
 }
