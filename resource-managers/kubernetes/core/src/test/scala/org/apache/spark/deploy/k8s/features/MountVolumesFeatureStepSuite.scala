@@ -83,7 +83,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testVolume",
       "/tmp",
       false,
-      KubernetesEmptyDirVolumeConf("Memory", "6G")
+      KubernetesEmptyDirVolumeConf(Some("Memory"), Some("6G"))
     )
     val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
     val step = new MountVolumesFeatureStep(kubernetesConf)
@@ -93,6 +93,27 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val emptyDir = configuredPod.pod.getSpec.getVolumes.get(0).getEmptyDir
     assert(emptyDir.getMedium === "Memory")
     assert(emptyDir.getSizeLimit.getAmount === "6G")
+    assert(configuredPod.container.getVolumeMounts.size() === 1)
+    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
+    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
+    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
+  }
+
+  test("Mounts emptyDir with no options") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      false,
+      KubernetesEmptyDirVolumeConf(None, None)
+    )
+    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    val emptyDir = configuredPod.pod.getSpec.getVolumes.get(0).getEmptyDir
+    assert(emptyDir.getMedium === "")
+    assert(emptyDir.getSizeLimit.getAmount === null)
     assert(configuredPod.container.getVolumeMounts.size() === 1)
     assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
     assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")

@@ -66,7 +66,9 @@ private[spark] class MountVolumesFeatureStep(
 
         case KubernetesEmptyDirVolumeConf(medium, sizeLimit) =>
           new VolumeBuilder()
-            .withEmptyDir(new EmptyDirVolumeSource(medium, new Quantity(sizeLimit)))
+            .withEmptyDir(
+              new EmptyDirVolumeSource(medium.getOrElse(""),
+              new Quantity(sizeLimit.orNull)))
       }
 
       val volume = volumeBuilder.withName(spec.volumeName).build()

@@ -59,7 +59,29 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountReadOnly === true)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesEmptyDirVolumeConf] ===
-      KubernetesEmptyDirVolumeConf("medium", "5G"))
+      KubernetesEmptyDirVolumeConf(Some("medium"), Some("5G")))
+  }
+
+  test("Parses emptyDir volume options can be optional") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.emptyDir.volumeName.mount.path", "/path")
+    sparkConf.set("test.emptyDir.volumeName.mount.readOnly", "true")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head.get
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.mountReadOnly === true)
+    assert(volumeSpec.volumeConf.asInstanceOf[KubernetesEmptyDirVolumeConf] ===
+      KubernetesEmptyDirVolumeConf(None, None))
+  }
+
+  test("Defaults optional readOnly to false") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.hostPath.volumeName.mount.path", "/path")
+    sparkConf.set("test.hostPath.volumeName.options.path", "/hostPath")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head.get
+    assert(volumeSpec.mountReadOnly === false)
   }
 
   test("Gracefully fails on missing mount key") {

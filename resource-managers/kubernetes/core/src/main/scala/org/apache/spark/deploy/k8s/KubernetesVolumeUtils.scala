@@ -42,12 +42,11 @@ private[spark] object KubernetesVolumeUtils {
 
       for {
         path <- properties.getTry(pathKey)
-        readOnly <- properties.getTry(readOnlyKey)
         volumeConf <- parseVolumeSpecificConf(properties, volumeType, volumeName)
       } yield KubernetesVolumeSpec(
         volumeName = volumeName,
         mountPath = path,
-        mountReadOnly = readOnly.toBoolean,
+        mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
         volumeConf = volumeConf
       )
     }
@@ -91,10 +90,7 @@ private[spark] object KubernetesVolumeUtils {
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
         val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
-        for {
-          medium <- options.getTry(mediumKey)
-          sizeLimit <- options.getTry(sizeLimitKey)
-        } yield KubernetesEmptyDirVolumeConf(medium, sizeLimit)
+        Success(KubernetesEmptyDirVolumeConf(options.get(mediumKey), options.get(sizeLimitKey)))
 
       case _ =>
         Failure(new RuntimeException(s"Kubernetes Volume type `$volumeType` is not supported"))

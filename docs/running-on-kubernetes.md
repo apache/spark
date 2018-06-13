@@ -664,7 +664,7 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].mount.readOnly</code></td>
-  <td>(none)</td>
+  <td>false</td>
   <td>
    Specify if the mounted volume is read only or not. For example,
    <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.mount.readOnly=false</code>.
