@@ -853,22 +853,6 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
-    def test_stopiteration_in_udf(self):
-        # test for SPARK-23754
-        from pyspark.sql.functions import udf
-        from py4j.protocol import Py4JJavaError
-
-        def foo(x):
-            raise StopIteration()
-
-        with self.assertRaises(Py4JJavaError) as cm:
-            self.spark.range(0, 1000).withColumn('v', udf(foo)('id')).show()
-
-        self.assertIn(
-            "Caught StopIteration thrown from user's code; failing the task",
-            cm.exception.java_exception.toString()
-        )
-
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
         from pyspark.sql.column import _to_java_column
@@ -3916,6 +3900,44 @@ class PandasUDFTests(ReusedSQLTestCase):
                 @pandas_udf(returnType='k int, v double', functionType=PandasUDFType.GROUPED_MAP)
                 def foo(k, v):
                     return k
+
+    def test_stopiteration_in_udf(self):
+        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
+        from py4j.protocol import Py4JJavaError
+
+        def foo(x):
+            raise StopIteration()
+
+        def foofoo(x, y):
+            raise StopIteration()
+
+        exc_message = "Caught StopIteration thrown from user's code; failing the task"
+        df = self.spark.range(0, 100)
+
+        # plain udf (test for SPARK-23754)
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.withColumn('v', udf(foo)('id')).collect
+        )
+
+        # pandas scalar udf
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.withColumn(
+                'v', pandas_udf(foo, 'double', PandasUDFType.SCALAR)('id')
+            ).collect
+        )
+
+        # pandas grouped map
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.groupBy('id').apply(
+                pandas_udf(foo, df.schema, PandasUDFType.GROUPED_MAP)
+            ).collect
+        )
 
 
 @unittest.skipIf(

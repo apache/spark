@@ -1270,27 +1270,34 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
-    def test_stopiteration_in_client_code(self):
+    def test_stopiteration_in_user_code(self):
 
         def stopit(*x):
             raise StopIteration()
 
         seq_rdd = self.sc.parallelize(range(10))
         keyed_rdd = self.sc.parallelize((x % 2, x) for x in range(10))
+        msg = "Caught StopIteration thrown from user's code; failing the task"
 
-        self.assertRaises(Py4JJavaError, seq_rdd.map(stopit).collect)
-        self.assertRaises(Py4JJavaError, seq_rdd.filter(stopit).collect)
-        self.assertRaises(Py4JJavaError, seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
-        self.assertRaises(Py4JJavaError, seq_rdd.foreach, stopit)
-        self.assertRaises(Py4JJavaError, keyed_rdd.reduceByKeyLocally, stopit)
-        self.assertRaises(Py4JJavaError, seq_rdd.reduce, stopit)
-        self.assertRaises(Py4JJavaError, seq_rdd.fold, 0, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.map(stopit).collect)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.filter(stopit).collect)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.reduce, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.fold, 0, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg,
+                                seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
 
-        # the exception raised is non-deterministic
-        self.assertRaises((Py4JJavaError, RuntimeError),
-                          seq_rdd.aggregate, 0, stopit, lambda *x: 1)
-        self.assertRaises((Py4JJavaError, RuntimeError),
-                          seq_rdd.aggregate, 0, lambda *x: 1, stopit)
+        # these methods call the user function both in the driver and in the executor
+        # the exception raised is different according to where the StopIteration happens
+        # RuntimeError is raised if in the driver
+        # Py4JJavaError is raised if in the executor (wraps the RuntimeError raised in the worker)
+        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
+                                keyed_rdd.reduceByKeyLocally, stopit)
+        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
+                                seq_rdd.aggregate, 0, stopit, lambda *x: 1)
+        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
+                                seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
 
 class ProfilerTests(PySparkTestCase):
