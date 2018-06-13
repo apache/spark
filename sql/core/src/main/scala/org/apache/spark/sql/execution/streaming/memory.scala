@@ -303,8 +303,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
           var rowsToAdd = data.collect()
           synchronized {
             if (sinkCapacity.isDefined) {
-              val rowsRemaining = sinkCapacity.get - numRows
-              rowsToAdd = truncateRowsIfNeeded(rowsToAdd, rowsRemaining, batchId)
+              rowsToAdd = truncateRowsIfNeeded(rowsToAdd, sinkCapacity.get - numRows, batchId)
             }
             val rows = AddedData(batchId, rowsToAdd)
             batches += rows

@@ -96,8 +96,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
           synchronized {
             var rowsToAdd = newRows
             if (sinkCapacity.isDefined) {
-              val rowsRemaining = sinkCapacity.get - numRows
-              rowsToAdd = truncateRowsIfNeeded(rowsToAdd, rowsRemaining, batchId)
+              rowsToAdd = truncateRowsIfNeeded(rowsToAdd, sinkCapacity.get - numRows, batchId)
             }
             val rows = AddedData(batchId, rowsToAdd)
             batches += rows
