@@ -88,8 +88,12 @@ class UDFXPathUtilSuite extends SparkFunSuite {
     FileUtils.writeStringToFile(tempFile, secretValue)
 
     val xml =
-      "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" + "<!DOCTYPE test [ \n" +
-      "    <!ENTITY embed SYSTEM \"" + fname + "\"> \n" + "]>\n" + "<foo>&embed;</foo>"
+      s"""<?xml version="1.0" encoding="utf-8"?>
+        |<!DOCTYPE test [
+        |    <!ENTITY embed SYSTEM "$fname">
+        |]>
+        |<foo>&embed;</foo>
+      """.stripMargin
     val evaled = new UDFXPathUtil().evalString(xml, "/foo")
     assert(evaled.isEmpty)
   }

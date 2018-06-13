@@ -79,7 +79,8 @@ public class UDFXPathUtil {
         initializeDocumentBuilderFactory();
         builder = dbf.newDocumentBuilder();
       } catch (ParserConfigurationException e) {
-        throw new RuntimeException("Error instantiating DocumentBuilder, cannot build xml parser", e);
+        throw new RuntimeException(
+          "Error instantiating DocumentBuilder, cannot build xml parser", e);
       }
     }
 
