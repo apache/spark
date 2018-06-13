@@ -67,16 +67,16 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
 
   test("microbatch writer") {
     val sink = new MemorySinkV2
-    new MemoryWriter(sink, 0, OutputMode.Append(), DataSourceOptions.empty())
-      .commit(Array(
+    new MemoryWriter(sink, 0, OutputMode.Append(), DataSourceOptions.empty()).commit(
+      Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
         MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
         MemoryWriterCommitMessage(2, Seq(Row(6), Row(7)))
       ))
     assert(sink.latestBatchId.contains(0))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    new MemoryWriter(sink, 19, OutputMode.Append(), DataSourceOptions.empty())
-      .commit(Array(
+    new MemoryWriter(sink, 19, OutputMode.Append(), DataSourceOptions.empty()).commit(
+      Array(
         MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
         MemoryWriterCommitMessage(0, Seq(Row(33)))
       ))
