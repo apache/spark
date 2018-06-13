@@ -18,5 +18,5 @@
 package org.apache.spark.network.client;
 
 public interface StreamCallbackWithID extends StreamCallback {
-  public String getID();
+  String getID();
 }
