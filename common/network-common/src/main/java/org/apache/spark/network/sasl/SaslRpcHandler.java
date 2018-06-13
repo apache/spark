@@ -28,7 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.StreamCallback;
+import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
@@ -137,7 +137,7 @@ public class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
-  public StreamCallback receiveStream(
+  public StreamCallbackWithID receiveStream(
       TransportClient client,
       ByteBuffer message,
       RpcResponseCallback callback) {

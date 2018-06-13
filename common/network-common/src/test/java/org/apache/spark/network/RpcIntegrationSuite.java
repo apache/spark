@@ -36,10 +36,7 @@ import static org.junit.Assert.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
-import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.StreamCallback;
-import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.client.*;
 import org.apache.spark.network.server.*;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
@@ -78,11 +75,11 @@ public class RpcIntegrationSuite {
       }
 
       @Override
-      public StreamCallback receiveStream(
+      public StreamCallbackWithID receiveStream(
           TransportClient client,
           ByteBuffer messageHeader,
           RpcResponseCallback callback) {
-        return null;
+        return receiveStreamHelper(JavaUtils.bytesToString(messageHeader));
       }
 
       @Override
@@ -99,16 +96,13 @@ public class RpcIntegrationSuite {
     oneWayMsgs = new ArrayList<>();
   }
 
-  private static StreamCallback receiveStream(String msg) {
+  private static StreamCallbackWithID receiveStreamHelper(String msg) {
     try {
       if (msg.startsWith("fail/")) {
         String[] parts = msg.split("/");
         switch (parts[1]) {
-          case "no callback":
-            // don't register anything here, check the rpc error response is appropriate
-            break;
           case "exception-ondata":
-            return new StreamCallback() {
+            return new StreamCallbackWithID() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
                 throw new IOException("failed to read stream data!");
@@ -121,9 +115,14 @@ public class RpcIntegrationSuite {
               @Override
               public void onFailure(String streamId, Throwable cause) throws IOException {
               }
+
+              @Override
+              public String getID() {
+                return msg;
+              }
             };
           case "exception-oncomplete":
-            return new StreamCallback() {
+            return new StreamCallbackWithID() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
               }
@@ -135,6 +134,11 @@ public class RpcIntegrationSuite {
 
               @Override
               public void onFailure(String streamId, Throwable cause) throws IOException {
+              }
+
+              @Override
+              public String getID() {
+                return msg;
               }
             };
           default:
@@ -148,7 +152,6 @@ public class RpcIntegrationSuite {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
-    throw new RuntimeException("unreachable");
   }
 
   @AfterClass
@@ -330,7 +333,7 @@ public class RpcIntegrationSuite {
       streams[i] = StreamTestHelper.STREAMS[i % StreamTestHelper.STREAMS.length];
     }
     RpcResult res = sendRpcWithStream(streams);
-    assertEquals(res.successMessages, Sets.newHashSet(StreamTestHelper.STREAMS));
+    assertEquals(Sets.newHashSet(StreamTestHelper.STREAMS), res.successMessages);
     assertTrue(res.errorMessages.isEmpty());
   }
 
@@ -338,13 +341,6 @@ public class RpcIntegrationSuite {
   public void sendRpcWithStreamFailures() throws Exception {
     // when there is a failure reading stream data, we don't try to keep the channel usable,
     // just send back a decent error msg.
-    RpcResult noCallbackResult = sendRpcWithStream("fail/no callback/smallBuffer", "smallBuffer");
-    assertErrorAndClosed(noCallbackResult, "Destination did not register stream handler");
-
-
-    RpcResult multiCallbackResult = sendRpcWithStream("fail/multiple/smallBuffer", "smallBuffer");
-    assertErrorAndClosed(multiCallbackResult, "Cannot register more than one stream callback");
-
     RpcResult exceptionInCallbackResult =
         sendRpcWithStream("fail/exception-ondata/smallBuffer", "smallBuffer");
     assertErrorAndClosed(exceptionInCallbackResult, "Destination failed while reading stream");
@@ -411,7 +407,7 @@ public class RpcIntegrationSuite {
     return new ImmutablePair<>(remainingErrors, notFound);
   }
 
-  private static class VerifyingStreamCallback implements StreamCallback {
+  private static class VerifyingStreamCallback implements StreamCallbackWithID {
     final String streamId;
     final StreamSuite.TestCallback helper;
     final OutputStream out;
@@ -460,6 +456,11 @@ public class RpcIntegrationSuite {
     @Override
     public void onFailure(String streamId, Throwable cause) throws IOException {
       helper.onFailure(streamId, cause);
+    }
+
+    @Override
+    public String getID() {
+      return streamId;
     }
   }
 }

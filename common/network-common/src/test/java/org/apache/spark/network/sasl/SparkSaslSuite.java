@@ -136,7 +136,7 @@ public class SparkSaslSuite {
     RpcHandler rpcHandler = mock(RpcHandler.class);
     doAnswer(invocation -> {
       ByteBuffer message = (ByteBuffer) invocation.getArguments()[1];
-      RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[3];
+      RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
       assertEquals("Ping", JavaUtils.bytesToString(message));
       cb.onSuccess(JavaUtils.stringToBytes("Pong"));
       return null;

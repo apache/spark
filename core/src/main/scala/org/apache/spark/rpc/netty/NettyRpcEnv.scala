@@ -546,14 +546,11 @@ private[netty] class NettyRpcEndpointRef(
  *                      `NettyRpcEnv`.
  * @param receiver the receiver of this message.
  * @param content the message content.
- * @param streamData optional stream of data.  May be null.  If present,
-  *                   streamData.registerStreamCallback *must* be called.
  */
 private[netty] class RequestMessage(
     val senderAddress: RpcAddress,
     val receiver: NettyRpcEndpointRef,
-    val content: Any,
-    val streamData: StreamData) {
+    val content: Any) {
 
   /** Manually serialize [[RequestMessage]] to minimize the size. */
   def serialize(nettyEnv: NettyRpcEnv): ByteBuffer = {
@@ -602,8 +599,7 @@ private[netty] object RequestMessage {
   def apply(
       nettyEnv: NettyRpcEnv,
       client: TransportClient,
-      bytes: ByteBuffer,
-      streamData: StreamData): RequestMessage = {
+      bytes: ByteBuffer): RequestMessage = {
     val bis = new ByteBufferInputStream(bytes)
     val in = new DataInputStream(bis)
     try {
@@ -615,8 +611,7 @@ private[netty] object RequestMessage {
         senderAddress,
         ref,
         // The remaining bytes in `bytes` are the message content.
-        nettyEnv.deserialize(client, bytes),
-        streamData)
+        nettyEnv.deserialize(client, bytes))
     } finally {
       in.close()
     }
@@ -651,30 +646,28 @@ private[netty] class NettyRpcHandler(
   override def receive(
       client: TransportClient,
       message: ByteBuffer,
-      streamData: StreamData,
       callback: RpcResponseCallback): Unit = {
-    val messageToDispatch = internalReceive(client, message, streamData)
+    val messageToDispatch = internalReceive(client, message)
     dispatcher.postRemoteMessage(messageToDispatch, callback)
   }
 
   override def receive(
       client: TransportClient,
       message: ByteBuffer): Unit = {
-    val messageToDispatch = internalReceive(client, message, null)
+    val messageToDispatch = internalReceive(client, message)
     dispatcher.postOneWayMessage(messageToDispatch)
   }
 
   private def internalReceive(
       client: TransportClient,
-      message: ByteBuffer,
-      streamData: StreamData): RequestMessage = {
+      message: ByteBuffer): RequestMessage = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
-    val requestMessage = RequestMessage(nettyEnv, client, message, streamData)
+    val requestMessage = RequestMessage(nettyEnv, client, message)
     if (requestMessage.senderAddress == null) {
       // Create a new message with the socket address of the client as the sender.
-      new RequestMessage(clientAddr, requestMessage.receiver, requestMessage.content, streamData)
+      new RequestMessage(clientAddr, requestMessage.receiver, requestMessage.content)
     } else {
       // The remote RpcEnv listens to some port, we should also fire a RemoteProcessConnected for
       // the listening address

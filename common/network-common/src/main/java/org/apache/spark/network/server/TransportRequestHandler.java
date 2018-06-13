@@ -24,15 +24,12 @@ import java.nio.ByteBuffer;
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import org.apache.spark.network.client.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
-import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.StreamCallback;
-import org.apache.spark.network.client.StreamInterceptor;
-import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.*;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
@@ -220,11 +217,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
           channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
       ByteBuffer meta = req.meta.nioByteBuffer();
-      // TODO streamId?
-      String streamId = null;
-      StreamCallback streamHandler = rpcHandler.receiveStream(reverseClient, meta, callback);
-      // TODO do something with the streamHandler
-      StreamCallback wrappedCallback = new StreamCallback() {
+      StreamCallbackWithID streamHandler = rpcHandler.receiveStream(reverseClient, meta, callback);
+      StreamCallbackWithID wrappedCallback = new StreamCallbackWithID() {
         @Override
         public void onData(String streamId, ByteBuffer buf) throws IOException {
           streamHandler.onData(streamId, buf);
@@ -248,13 +242,18 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
           callback.onFailure(new IOException("Destination failed while reading stream", cause));
           streamHandler.onFailure(streamId, cause);
         }
+
+        @Override
+        public String getID() {
+          return streamHandler.getID();
+        }
       };
       if (req.bodyByteCount > 0) {
-        StreamInterceptor interceptor = new StreamInterceptor(this, streamId, req.bodyByteCount,
-          wrappedCallback);
+        StreamInterceptor interceptor = new StreamInterceptor(this, wrappedCallback.getID(),
+          req.bodyByteCount, wrappedCallback);
         frameDecoder.setInterceptor(interceptor);
       } else {
-        wrappedCallback.onComplete(streamId);
+        wrappedCallback.onComplete(wrappedCallback.getID());
       }
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
