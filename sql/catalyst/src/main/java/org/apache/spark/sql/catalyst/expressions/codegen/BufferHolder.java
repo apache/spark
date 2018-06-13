@@ -61,16 +61,15 @@ final class BufferHolder {
    * Grows the buffer by at least neededSize and points the row to the buffer.
    */
   void grow(int neededSize) {
-    if (neededSize < 0) {
+    assert neededSize < 0 :
+      "Cannot grow BufferHolder by size " + neededSize + " because the size is negative";
+    int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(neededSize);
+    if (roundedSize > ARRAY_MAX - totalSize()) {
       throw new UnsupportedOperationException(
-        "Cannot grow BufferHolder by size " + neededSize + " because the size is negative");
-    }
-    if (neededSize > ARRAY_MAX - totalSize()) {
-      throw new UnsupportedOperationException(
-        "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
+        "Cannot grow BufferHolder by size " + roundedSize + " because the size after growing " +
           "exceeds size limitation " + ARRAY_MAX);
     }
-    final int length = totalSize() + neededSize;
+    final int length = totalSize() + roundedSize;
     if (buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
       int newLength = length < ARRAY_MAX / 2 ? length * 2 : ARRAY_MAX;

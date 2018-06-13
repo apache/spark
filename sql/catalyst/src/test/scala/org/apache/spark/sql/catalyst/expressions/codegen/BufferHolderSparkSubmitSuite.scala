@@ -55,21 +55,22 @@ object BufferHolderSparkSubmitSuite {
 
     val ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
-    val holder = new BufferHolder(new UnsafeRow(1000))
+    val unsafeRow = new UnsafeRow(1000)
+    val holder = new BufferHolder(unsafeRow)
 
     holder.reset()
 
     // while to reuse a buffer may happen, this test checks whether the buffer can be grown
-    holder.grow(roundToWord(ARRAY_MAX / 2))
+    holder.grow(ARRAY_MAX / 2)
+    assert(unsafeRow.getSizeInBytes % 8 == 0)
 
-    holder.grow(roundToWord(ARRAY_MAX / 2 + 8))
+    holder.grow(ARRAY_MAX / 2 + 8)
+    assert(unsafeRow.getSizeInBytes % 8 == 0)
 
-    holder.grow(roundToWord(Integer.MAX_VALUE / 2))
+    holder.grow(Integer.MAX_VALUE / 2)
+    assert(unsafeRow.getSizeInBytes % 8 == 0)
 
-    holder.grow(roundToWord(Integer.MAX_VALUE))
-  }
-
-  private def roundToWord(len: Int): Int = {
-    ByteArrayMethods.roundNumberOfBytesToNearestWord(len)
+    holder.grow(ARRAY_MAX - 8192)
+    assert(unsafeRow.getSizeInBytes % 8 == 0)
   }
 }
