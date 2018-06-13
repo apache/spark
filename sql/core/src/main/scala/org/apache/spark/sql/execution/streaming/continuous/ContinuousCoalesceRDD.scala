@@ -49,8 +49,8 @@ class ContinuousCoalesceRDD(var reader: ContinuousShuffleReadRDD, var prev: RDD[
           override def run(): Unit = {
             TaskContext.setTaskContext(context)
 
-            val writer: ContinuousShuffleWriter =
-              new UnsafeRowWriter(prevSplit.index, outputPartitioner, endpointRefs.toArray)
+            val writer: ContinuousShuffleWriter = new RPCContinuousShuffleWriter(
+              prevSplit.index, outputPartitioner, endpointRefs.toArray)
 
             EpochTracker.initializeCurrentEpoch(
               context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)

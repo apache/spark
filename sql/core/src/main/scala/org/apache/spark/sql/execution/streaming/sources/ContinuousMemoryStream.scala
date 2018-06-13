@@ -218,7 +218,7 @@ class ContinuousMemoryStreamInputPartitionReader(
 case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])
   extends Offset {
   private implicit val formats = Serialization.formats(NoTypeHints)
-  override def json(): String = Serialization.write(SortedMap(partitionNums.toArray: _*))
+  override def json(): String = Serialization.write(partitionNums)
 }
 
 case class ContinuousMemoryStreamPartitionOffset(partition: Int, numProcessed: Int)

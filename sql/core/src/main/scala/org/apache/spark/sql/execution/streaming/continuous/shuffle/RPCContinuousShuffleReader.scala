@@ -98,7 +98,7 @@ private[shuffle] class RPCContinuousShuffleReader(
       override def getNext(): UnsafeRow = {
         var nextRow: UnsafeRow = null
         while (!finished && nextRow == null) {
-          completion.poll(epochIntervalMs * 10, TimeUnit.MILLISECONDS) match {
+          completion.poll(epochIntervalMs, TimeUnit.MILLISECONDS) match {
             case null =>
               // Try again if the poll didn't wait long enough to get a real result.
               // But we should be getting at least an epoch marker every checkpoint interval.

@@ -64,7 +64,6 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
           logInfo(s"Writer for partition ${context.partitionId()} " +
             s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")
           val msg = dataWriter.commit()
-
           epochCoordinator.send(
             CommitPartitionEpoch(
               context.partitionId(),

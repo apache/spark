@@ -265,8 +265,6 @@ class ContinuousExecution(
         logInfo(s"Query $id ignoring exception from reconfiguring: $t")
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
-
       epochEndpoint.askSync[Unit](StopContinuousExecutionWrites)
       SparkEnv.get.rpcEnv.stop(epochEndpoint)
 
@@ -274,6 +272,7 @@ class ContinuousExecution(
       epochUpdateThread.join()
 
       stopSources()
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
     }
   }
 
