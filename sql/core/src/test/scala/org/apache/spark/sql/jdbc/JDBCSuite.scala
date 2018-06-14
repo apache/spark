@@ -1208,34 +1208,27 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SPARK-24327 quotes a partition column name if `quotePartitionColumnNames` is true") {
-    // A `isAlreadyQuoted` case is to check if `JDBCDialect` wrongly does not quote
-    // a partition column name again.
-    Seq(true, false).foreach { isAlreadyQuoted =>
-      Seq(true, false).foreach { quotePartitionColumnName =>
-        val partColName = "THEID"
-        val quotedPrtColName = testH2Dialect.quoteIdentifier(partColName)
-        val df = spark.read.format("jdbc")
-          .option("url", urlWithUserAndPass)
-          .option("dbtable", "TEST.PEOPLE")
-          .option("partitionColumn", if (isAlreadyQuoted) quotedPrtColName else partColName)
-          .option("lowerBound", 1)
-          .option("upperBound", 4)
-          .option("numPartitions", 3)
-          .option("quotePartitionColumnName", quotePartitionColumnName)
-          .load()
-        val expectedColName = if (quotePartitionColumnName || isAlreadyQuoted) {
-          quotedPrtColName
-        } else {
-          partColName
-        }
-        df.logicalPlan match {
-          case LogicalRelation(JDBCRelation(parts, _), _, _, _) =>
-            val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
-            assert(whereClauses === Set(
-              s"$expectedColName < 2 or $expectedColName is null",
-              s"$expectedColName >= 2 AND $expectedColName < 3",
-              s"$expectedColName >= 3"))
-        }
+    Seq(true, false).foreach { quotePartitionColumnName =>
+      val df = spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", "TEST.PEOPLE")
+        .option("partitionColumn", "THEID")
+        .option("lowerBound", 1)
+        .option("upperBound", 4)
+        .option("numPartitions", 3)
+        .option("quotePartitionColumnName", quotePartitionColumnName)
+        .load()
+      val colName = if (quotePartitionColumnName) {
+        testH2Dialect.quoteIdentifier("THEID")
+      } else {
+        "THEID"
+      }
+      df.logicalPlan match {
+        case LogicalRelation(JDBCRelation(parts, _), _, _, _) =>
+          val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+          assert(whereClauses === Set(
+            s"$colName < 2 or $colName is null", s"$colName >= 2 AND $colName < 3",
+            s"$colName >= 3"))
       }
     }
   }

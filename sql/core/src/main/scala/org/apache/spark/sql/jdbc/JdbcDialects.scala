@@ -85,20 +85,13 @@ abstract class JdbcDialect extends Serializable {
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
-  protected def doQuoteIdentifier(quoteMark: Char, colName: String): String = {
-    val q = String.valueOf(quoteMark)
-    if (colName.startsWith(q) && colName.endsWith(q)) {
-      colName
-    } else {
-      s"$q$colName$q"
-    }
-  }
-
   /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
-  def quoteIdentifier(colName: String): String = doQuoteIdentifier('"', colName)
+  def quoteIdentifier(colName: String): String = {
+    s""""$colName""""
+  }
 
   /**
    * Get the SQL query that should be used to find if the given table exists. Dialects can

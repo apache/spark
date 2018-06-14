@@ -37,7 +37,9 @@ private case object MySQLDialect extends JdbcDialect {
     } else None
   }
 
-  override def quoteIdentifier(colName: String): String = doQuoteIdentifier('`', colName)
+  override def quoteIdentifier(colName: String): String = {
+    s"`$colName`"
+  }
 
   override def getTableExistsQuery(table: String): String = {
     s"SELECT 1 FROM $table LIMIT 1"
