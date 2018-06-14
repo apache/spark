@@ -1466,6 +1466,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
     intercept[NullPointerException](ds.as[(Int, Int)].collect())
   }
+
+  test("filtering of string values by char literal") {
+    val df = Seq("1", "B", "X").toDF("prefix")
+    checkAnswer(df.where('prefix === 'X'), Seq(Row("X")))
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
