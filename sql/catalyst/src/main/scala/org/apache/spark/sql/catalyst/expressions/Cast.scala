@@ -697,7 +697,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
          |}
        """.stripMargin)}"
 
-    val loopIndex = ctx.freshName("loopIndex", IntegerType)
+    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
     code"""
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
@@ -740,7 +740,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
     val keyToStringFunc = inline"${dataToStringFunc("keyToString", kt)}"
     val valueToStringFunc = inline"${dataToStringFunc("valueToString", vt)}"
-    val loopIndex = ctx.freshName("loopIndex", IntegerType)
+    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
     val mapKeyArray = JavaCode.expression(s"$map.keyArray()", classOf[ArrayData])
     val mapValueArray = JavaCode.expression(s"$map.valueArray()", classOf[ArrayData])
     val getMapFirstKey = CodeGenerator.getValue(mapKeyArray, kt, JavaCode.literal("0", IntegerType))
@@ -778,8 +778,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       ctx: CodegenContext): Block = {
     val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
       val fieldToStringCode = castToStringCode(ft, ctx)
-      val field = ctx.freshName("field", ft)
-      val fieldStr = ctx.freshName("fieldStr", StringType)
+      val field = ctx.freshVariable("field", ft)
+      val fieldStr = ctx.freshVariable("fieldStr", StringType)
       val javaType = JavaCode.javaType(ft)
       code"""
          |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
@@ -821,7 +821,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
-          val buffer = ctx.freshName("buffer", classOf[UTF8StringBuilder])
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.className(classOf[UTF8StringBuilder])
           val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
           code"""
@@ -832,7 +832,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
       case MapType(kt, vt, _) =>
         (c, evPrim, evNull) => {
-          val buffer = ctx.freshName("buffer", classOf[UTF8StringBuilder])
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.className(classOf[UTF8StringBuilder])
           val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
           code"""
@@ -843,8 +843,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
       case StructType(fields) =>
         (c, evPrim, evNull) => {
-          val row = ctx.freshName("row", classOf[InternalRow])
-          val buffer = ctx.freshName("buffer", classOf[UTF8StringBuilder])
+          val row = ctx.freshVariable("row", classOf[InternalRow])
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.className(classOf[UTF8StringBuilder])
           val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
           code"""
@@ -874,7 +874,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val intOpt = ctx.freshName("intOpt", classOf[Option[Integer]])
+      val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
       (c, evPrim, evNull) => code"""
         scala.Option<Integer> $intOpt =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c);
@@ -907,7 +907,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       target: DecimalType,
       ctx: CodegenContext): CastFunction = {
-    val tmp = ctx.freshName("tmpDecimal", classOf[Decimal])
+    val tmp = ctx.freshVariable("tmpDecimal", classOf[Decimal])
     from match {
       case StringType =>
         (c, evPrim, evNull) =>
@@ -967,7 +967,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
-      val longOpt = ctx.freshName("longOpt", classOf[Option[Long]])
+      val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         code"""
           scala.Option<Long> $longOpt =
@@ -1056,7 +1056,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("intWrapper", classOf[UTF8String.IntWrapper])
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
@@ -1083,7 +1083,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("intWrapper", classOf[UTF8String.IntWrapper])
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
@@ -1108,7 +1108,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("intWrapper", classOf[UTF8String.IntWrapper])
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
@@ -1133,7 +1133,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("longWrapper", classOf[UTF8String.LongWrapper])
+      val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
 
       (c, evPrim, evNull) =>
         code"""
@@ -1205,13 +1205,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       fromType: DataType, toType: DataType, ctx: CodegenContext): CastFunction = {
     val elementCast = nullSafeCastFunction(fromType, toType, ctx)
     val arrayClass = JavaCode.className(classOf[GenericArrayData])
-    val fromElementNull = ctx.isNullFreshName("feNull")
-    val fromElementPrim = ctx.freshName("fePrim", fromType)
-    val toElementNull = ctx.isNullFreshName("teNull")
-    val toElementPrim = ctx.freshName("tePrim", toType)
-    val size = ctx.freshName("n", IntegerType)
-    val j = ctx.freshName("j", IntegerType)
-    val values = ctx.freshName("values", classOf[Array[Object]])
+    val fromElementNull = ctx.freshVariable("feNull", BooleanType)
+    val fromElementPrim = ctx.freshVariable("fePrim", fromType)
+    val toElementNull = ctx.freshVariable("teNull", BooleanType)
+    val toElementPrim = ctx.freshVariable("tePrim", toType)
+    val size = ctx.freshVariable("n", IntegerType)
+    val j = ctx.freshVariable("j", IntegerType)
+    val values = ctx.freshVariable("values", classOf[Array[Object]])
     val javaType = JavaCode.javaType(fromType)
 
     (c, evPrim, evNull) =>
@@ -1244,13 +1244,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
     val mapClass = JavaCode.className(classOf[ArrayBasedMapData])
 
-    val keys = ctx.freshName("keys", ArrayType(from.keyType))
-    val convertedKeys = ctx.freshName("convertedKeys", ArrayType(to.keyType))
-    val convertedKeysNull = ctx.isNullFreshName("convertedKeysNull")
+    val keys = ctx.freshVariable("keys", ArrayType(from.keyType))
+    val convertedKeys = ctx.freshVariable("convertedKeys", ArrayType(to.keyType))
+    val convertedKeysNull = ctx.freshVariable("convertedKeysNull", BooleanType)
 
-    val values = ctx.freshName("values", ArrayType(from.valueType))
-    val convertedValues = ctx.freshName("convertedValues", ArrayType(to.valueType))
-    val convertedValuesNull = ctx.isNullFreshName("convertedValuesNull")
+    val values = ctx.freshVariable("values", ArrayType(from.valueType))
+    val convertedValues = ctx.freshVariable("convertedValues", ArrayType(to.valueType))
+    val convertedValuesNull = ctx.freshVariable("convertedValuesNull", BooleanType)
 
     (c, evPrim, evNull) =>
       code"""
@@ -1271,15 +1271,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val fieldsCasts = from.fields.zip(to.fields).map {
       case (fromField, toField) => nullSafeCastFunction(fromField.dataType, toField.dataType, ctx)
     }
-    val tmpResult = ctx.freshName("tmpResult", classOf[GenericInternalRow])
+    val tmpResult = ctx.freshVariable("tmpResult", classOf[GenericInternalRow])
     val rowClass = JavaCode.className(classOf[GenericInternalRow])
-    val tmpInput = ctx.freshName("tmpInput", classOf[InternalRow])
+    val tmpInput = ctx.freshVariable("tmpInput", classOf[InternalRow])
 
     val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) =>
-      val fromFieldPrim = ctx.freshName("ffp", from.fields(i).dataType)
-      val fromFieldNull = ctx.isNullFreshName("ffn")
-      val toFieldPrim = ctx.freshName("tfp", to.fields(i).dataType)
-      val toFieldNull = ctx.isNullFreshName("tfn")
+      val fromFieldPrim = ctx.freshVariable("ffp", from.fields(i).dataType)
+      val fromFieldNull = ctx.freshVariable("ffn", BooleanType)
+      val toFieldPrim = ctx.freshVariable("tfp", to.fields(i).dataType)
+      val toFieldNull = ctx.freshVariable("tfn", BooleanType)
       val fromType = JavaCode.javaType(from.fields(i).dataType)
       val setColumn = CodeGenerator.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)
       code"""
