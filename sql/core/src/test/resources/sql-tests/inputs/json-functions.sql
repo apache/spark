@@ -35,3 +35,6 @@ DROP VIEW IF EXISTS jsonTable;
 -- from_json - complex types
 select from_json('{"a":1, "b":2}', 'map<string, int>');
 select from_json('{"a":1, "b":"2"}', 'struct<a:int,b:string>');
+select from_json('[1, 2, 3]', 'array<int>');
+select from_json('[{"a": 1}, {"a":2}]', 'array<struct<a:int>>');
+select from_json('[{"a": 1}, {"b":2}]', 'array<map<string,int>>');
