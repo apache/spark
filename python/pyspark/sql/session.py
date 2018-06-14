@@ -162,7 +162,6 @@ class SparkSession(object):
             >>> s1.conf.get("k2") == s2.conf.get("k2")
             True
             """
-
             with self._lock:
                 from pyspark.context import SparkContext
                 from pyspark.conf import SparkConf
@@ -558,7 +557,6 @@ class SparkSession(object):
         import py4j
         from pyspark.conf import SparkConf
         from pyspark.context import SparkContext
-
         try:
             # Try to access HiveConf, it will raise exception if Hive is not added
             conf = SparkConf()
