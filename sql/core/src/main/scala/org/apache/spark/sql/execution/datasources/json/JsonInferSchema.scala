@@ -126,13 +126,9 @@ private[sql] object JsonInferSchema {
             nullable = true)
         }
         val fields: Array[StructField] = builder.result()
-        if (configOptions.dropFieldIfAllNull && fields.isEmpty) {
-          NullType
-        } else {
-          // Note: other code relies on this sorting for correctness, so don't remove it!
-          java.util.Arrays.sort(fields, structFieldComparator)
-          StructType(fields)
-        }
+        // Note: other code relies on this sorting for correctness, so don't remove it!
+        java.util.Arrays.sort(fields, structFieldComparator)
+        StructType(fields)
 
       case START_ARRAY =>
         // If this JSON array is empty, we use NullType as a placeholder.
@@ -144,11 +140,7 @@ private[sql] object JsonInferSchema {
             elementType, inferField(parser, configOptions))
         }
 
-        if (configOptions.dropFieldIfAllNull && elementType == NullType) {
-          NullType
-        } else {
-          ArrayType(elementType)
-        }
+        ArrayType(elementType)
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) if configOptions.primitivesAsString => StringType
 
@@ -184,14 +176,23 @@ private[sql] object JsonInferSchema {
   }
 
   /**
-   * Convert NullType to StringType and remove StructTypes with no fields
+   * Canonicalize inferred types, e.g., convert NullType to StringType and remove StructTypes
+   * with no fields.
    */
   private def canonicalizeType(tpe: DataType, options: JSONOptions): Option[DataType] = tpe match {
     case at @ ArrayType(elementType, _) =>
-      for {
+      val canonicalizeArrayOption = for {
         canonicalType <- canonicalizeType(elementType, options)
       } yield {
         at.copy(canonicalType)
+      }
+
+      canonicalizeArrayOption.map { array =>
+        if (options.dropFieldIfAllNull && array.elementType == NullType) {
+          NullType
+        } else {
+          array
+        }
       }
 
     case StructType(fields) =>
@@ -205,6 +206,8 @@ private[sql] object JsonInferSchema {
 
       if (canonicalFields.length > 0) {
         Some(StructType(canonicalFields))
+      } else if (options.dropFieldIfAllNull) {
+        Some(NullType)
       } else {
         // per SPARK-8093: empty structs should be deleted
         None
