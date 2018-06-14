@@ -29,7 +29,7 @@ import warnings
 
 from pyspark import copy_func, since, _NoValue
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import ArrowSerializer, BatchedSerializer, PickleSerializer, \
+from pyspark.serializers import ArrowStreamSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -2153,7 +2153,7 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(sock_info, ArrowSerializer()))
+        return list(_load_from_socket(sock_info, ArrowStreamSerializer()))
 
     ##########################################################################################
     # Pandas compatibility

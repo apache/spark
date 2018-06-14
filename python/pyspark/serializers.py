@@ -184,7 +184,7 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
-class ArrowSerializer(Serializer):
+class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a stream.
     """
@@ -208,7 +208,7 @@ class ArrowSerializer(Serializer):
             yield batch
 
     def __repr__(self):
-        return "ArrowSerializer"
+        return "ArrowStreamSerializer"
 
 
 def _create_batch(series, timezone):
