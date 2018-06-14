@@ -70,9 +70,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   }
 
   override def outputPartitioning: Partitioning = child.outputPartitioning match {
-    case h: HashPartitioning => h.copy(expressions = h.expressions.map(updateAttr))
-    case r: RangePartitioning =>
-      r.copy(ordering = r.ordering.map(updateAttr(_).asInstanceOf[SortOrder]))
+    case e: Expression => updateAttr(e).asInstanceOf[Partitioning]
     case other => other
   }
 

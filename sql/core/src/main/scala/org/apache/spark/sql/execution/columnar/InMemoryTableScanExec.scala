@@ -169,10 +169,8 @@ case class InMemoryTableScanExec(
   // But the cached version could alias output, so we need to replace output.
   override def outputPartitioning: Partitioning = {
     relation.cachedPlan.outputPartitioning match {
-      case h: HashPartitioning => updateAttribute(h).asInstanceOf[HashPartitioning]
-      case r: RangePartitioning =>
-        r.copy(ordering = r.ordering.map(updateAttribute(_).asInstanceOf[SortOrder]))
-      case _ => relation.cachedPlan.outputPartitioning
+      case e: Expression => updateAttribute(e).asInstanceOf[Partitioning]
+      case other => other
     }
   }
 
