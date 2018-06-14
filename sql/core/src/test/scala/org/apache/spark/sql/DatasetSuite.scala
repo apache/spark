@@ -1470,6 +1470,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("filtering of string values by char literal") {
     val df = Seq("1", "B", "X").toDF("prefix")
     checkAnswer(df.where('prefix === 'X'), Seq(Row("X")))
+    checkAnswer(df.where('prefix === new java.lang.Character('X')), Seq(Row("X")))
   }
 }
 
