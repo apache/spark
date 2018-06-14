@@ -50,7 +50,10 @@ private[sql] object JDBCRelation extends Logging {
    * Null value predicate is added to the first partition where clause to include
    * the rows with null value for the partitions column.
    *
+   * @param schema resolved schema of a JDBC table
    * @param partitioning partition information to generate the where clause for each partition
+   * @param resolver function used to determine if two identifiers are equal
+   * @param jdbcOptions JDBC options that contains url
    * @return an array of partitions with where clause for each partition
    */
   def columnPartition(
@@ -85,15 +88,8 @@ private[sql] object JDBCRelation extends Logging {
     // Here we get a little roundoff, but that's (hopefully) OK.
     val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
 
-    // Verify and normalize a partition column based on the JDBC resolved schema
-    val dialect = JdbcDialects.get(jdbcOptions.url)
-    val column = schema.map(_.name).find { fieldName =>
-      resolver(fieldName, partitioning.column) ||
-        resolver(dialect.quoteIdentifier(fieldName), partitioning.column)
-    }.map(dialect.quoteIdentifier).getOrElse {
-      throw new AnalysisException(s"User-defined partition column ${partitioning.column} not " +
-        s"found in the JDBC relation: ${schema.simpleString(Utils.maxNumToStringFields)}")
-    }
+    val column = verifyAndGetNormalizedColumnName(
+      schema, partitioning.column, resolver, jdbcOptions)
 
     var i: Int = 0
     var currentValue: Long = lowerBound
@@ -116,7 +112,32 @@ private[sql] object JDBCRelation extends Logging {
     ans.toArray
   }
 
-  def getSchema(jdbcOptions: JDBCOptions, resolver: Resolver): StructType = {
+  // Verify column name based on the JDBC resolved schema
+  private def verifyAndGetNormalizedColumnName(
+      schema: StructType,
+      columnName: String,
+      resolver: Resolver,
+      jdbcOptions: JDBCOptions): String = {
+    val dialect = JdbcDialects.get(jdbcOptions.url)
+    schema.map(_.name).find { fieldName =>
+      resolver(fieldName, columnName) ||
+        resolver(dialect.quoteIdentifier(fieldName), columnName)
+    }.map(dialect.quoteIdentifier).getOrElse {
+      throw new AnalysisException(s"User-defined partition column $columnName not " +
+        s"found in the JDBC relation: ${schema.simpleString(Utils.maxNumToStringFields)}")
+    }
+  }
+
+  /**
+   * Takes a (schema, table) specification and returns the table's Catalyst schema.
+   * If `customSchema` defined in the JDBC options, replaces the schema's dataType with the
+   * custom schema's type.
+   *
+   * @param resolver function used to determine if two identifiers are equal
+   * @param jdbcOptions JDBC options that contains url, table and other information.
+   * @return resolved Catalyst schema of a JDBC table
+   */
+  def getSchema(resolver: Resolver, jdbcOptions: JDBCOptions): StructType = {
     val tableSchema = JDBCRDD.resolveTable(jdbcOptions)
     jdbcOptions.customSchema match {
       case Some(customSchema) => JdbcUtils.getCustomSchema(
