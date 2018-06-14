@@ -231,14 +231,19 @@ trait MemorySinkBase extends BaseStreamingSink with Logging {
   /**
    * Truncates the given rows to return at most maxRows rows.
    * @param rows The data that may need to be truncated.
-   * @param maxRows Number of rows to truncate to keep.
+   * @param batchLimit Number of rows to keep in this batch; the rest will be truncated
+   * @param sinkLimit Total number of rows kept in this sink, for logging purposes.
    * @param batchId The ID of the batch that sent these rows, for logging purposes.
    * @return Truncated rows.
    */
-  protected def truncateRowsIfNeeded(rows: Array[Row], maxRows: Int, batchId: Long): Array[Row] = {
-    if (rows.length > maxRows && maxRows >= 0) {
-      logWarning(s"Truncating batch $batchId to $maxRows rows")
-      rows.take(maxRows)
+  protected def truncateRowsIfNeeded(
+      rows: Array[Row],
+      batchLimit: Int,
+      sinkLimit: Int,
+      batchId: Long): Array[Row] = {
+    if (rows.length > batchLimit && batchLimit >= 0) {
+      logWarning(s"Truncating batch $batchId to $batchLimit rows because of sink limit $sinkLimit")
+      rows.take(batchLimit)
     } else {
       rows
     }
@@ -249,7 +254,7 @@ trait MemorySinkBase extends BaseStreamingSink with Logging {
  * Companion object to MemorySinkBase.
  */
 object MemorySinkBase {
-  val MAX_MEMORY_SINK_ROWS = "maxMemorySinkRows"
+  val MAX_MEMORY_SINK_ROWS = "maxRows"
   val MAX_MEMORY_SINK_ROWS_DEFAULT = -1
 
   /**
@@ -258,12 +263,11 @@ object MemorySinkBase {
    * @param options Options for writing from which we get the max rows option
    * @return The maximum number of rows a memorySink should store, or None for no limit.
    */
-  def getMemorySinkCapacity(options: DataSourceOptions): Option[Int] = {
+  def getMemorySinkCapacity(options: DataSourceOptions): Int = {
     val maxRows = options.getInt(MAX_MEMORY_SINK_ROWS, MAX_MEMORY_SINK_ROWS_DEFAULT)
-    if (maxRows >= 0) Some(maxRows) else None
+    if (maxRows >= 0) maxRows else Int.MaxValue - 10
   }
 }
-
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
@@ -282,7 +286,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
   private var numRows = 0
 
   /** The capacity in rows of this sink. */
-  val sinkCapacity: Option[Int] = MemorySinkBase.getMemorySinkCapacity(options)
+  val sinkCapacity: Int = MemorySinkBase.getMemorySinkCapacity(options)
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
@@ -318,9 +322,8 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
         case Append | Update =>
           var rowsToAdd = data.collect()
           synchronized {
-            if (sinkCapacity.isDefined) {
-              rowsToAdd = truncateRowsIfNeeded(rowsToAdd, sinkCapacity.get - numRows, batchId)
-            }
+            rowsToAdd =
+              truncateRowsIfNeeded(rowsToAdd, sinkCapacity - numRows, sinkCapacity, batchId)
             val rows = AddedData(batchId, rowsToAdd)
             batches += rows
             numRows += rowsToAdd.length
@@ -329,9 +332,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
         case Complete =>
           var rowsToAdd = data.collect()
           synchronized {
-            if (sinkCapacity.isDefined) {
-              rowsToAdd = truncateRowsIfNeeded(rowsToAdd, sinkCapacity.get, batchId)
-            }
+            rowsToAdd = truncateRowsIfNeeded(rowsToAdd, sinkCapacity, sinkCapacity, batchId)
             val rows = AddedData(batchId, rowsToAdd)
             batches.clear()
             batches += rows

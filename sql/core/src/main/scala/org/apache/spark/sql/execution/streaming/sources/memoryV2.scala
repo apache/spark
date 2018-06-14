@@ -84,8 +84,11 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
     }.mkString("\n")
   }
 
-  def write(batchId: Long, outputMode: OutputMode, newRows: Array[Row], sinkCapacity: Option[Int])
-  : Unit = {
+  def write(
+      batchId: Long,
+      outputMode: OutputMode,
+      newRows: Array[Row],
+      sinkCapacity: Int): Unit = {
     val notCommitted = synchronized {
       latestBatchId.isEmpty || batchId > latestBatchId.get
     }
@@ -94,10 +97,8 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
       outputMode match {
         case Append | Update =>
           synchronized {
-            var rowsToAdd = newRows
-            if (sinkCapacity.isDefined) {
-              rowsToAdd = truncateRowsIfNeeded(rowsToAdd, sinkCapacity.get - numRows, batchId)
-            }
+            val rowsToAdd =
+              truncateRowsIfNeeded(newRows, sinkCapacity - numRows, sinkCapacity, batchId)
             val rows = AddedData(batchId, rowsToAdd)
             batches += rows
             numRows += rowsToAdd.length
@@ -105,10 +106,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
 
         case Complete =>
           synchronized {
-            var rowsToAdd = newRows
-            if (sinkCapacity.isDefined) {
-              rowsToAdd = truncateRowsIfNeeded(rowsToAdd, sinkCapacity.get, batchId)
-            }
+            val rowsToAdd = truncateRowsIfNeeded(newRows, sinkCapacity, sinkCapacity, batchId)
             val rows = AddedData(batchId, rowsToAdd)
             batches.clear()
             batches += rows
@@ -141,7 +139,7 @@ class MemoryWriter(
     options: DataSourceOptions)
   extends DataSourceWriter with Logging {
 
-  val sinkCapacity: Option[Int] = MemorySinkBase.getMemorySinkCapacity(options)
+  val sinkCapacity: Int = MemorySinkBase.getMemorySinkCapacity(options)
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
@@ -163,7 +161,7 @@ class MemoryStreamWriter(
     options: DataSourceOptions)
   extends StreamWriter {
 
-  val sinkCapacity: Option[Int] = MemorySinkBase.getMemorySinkCapacity(options)
+  val sinkCapacity: Int = MemorySinkBase.getMemorySinkCapacity(options)
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
