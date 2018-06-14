@@ -1113,6 +1113,20 @@ object SparkSession extends Logging {
   private[spark] def hiveClassesArePresent: Boolean = {
     try {
       Utils.classForName(HIVE_SESSION_STATE_BUILDER_CLASS_NAME)
+
+      // Weird hack to avoid "Unrecognized Hadoop major version number: 3.x.x". The error is
+      // thrown when creating the Hadoop shims instance. Note that it is cached and private.
+      // So, it manually creates the shims and inject it to be cached, and to avoid version check
+      // for now. It's just in order to run the tests against Hadoop 3 for now.
+      val shimLoaderClazz = Utils.classForName("org.apache.hadoop.hive.shims.ShimLoader")
+      val hadoopShims = shimLoaderClazz.getDeclaredField("hadoopShims")
+      val wasAccessible = hadoopShims.isAccessible
+      hadoopShims.setAccessible(true)
+      hadoopShims.set(
+        null,
+        Utils.classForName("org.apache.hadoop.hive.shims.Hadoop23Shims").newInstance())
+      hadoopShims.setAccessible(wasAccessible)
+
       Utils.classForName("org.apache.hadoop.hive.conf.HiveConf")
       true
     } catch {
