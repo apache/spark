@@ -627,7 +627,7 @@ class AutoSerializer(FramedSerializer):
         elif _type == b'P':
             return pickle.loads(obj[1:])
         else:
-            raise ValueError("invalid sevialization type: %s" % _type)
+            raise ValueError("invalid serialization type: %s" % _type)
 
 
 class CompressedSerializer(FramedSerializer):
