@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, CharArrayWriter, InputStreamReader, StringWriter}
 
+import scala.util.control.NonFatal
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
@@ -615,7 +616,7 @@ case class JsonToStructs(
     }
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def sql: String = schema match {
     case _: MapType => "entries"
@@ -747,8 +748,13 @@ case class StructsToJson(
 
 object JsonExprUtils {
 
-  def validateSchemaLiteral(exp: Expression): StructType = exp match {
-    case Literal(s, StringType) => CatalystSqlParser.parseTableSchema(s.toString)
+  def validateSchemaLiteral(exp: Expression): DataType = exp match {
+    case Literal(s, StringType) =>
+      try {
+        DataType.fromJson(s.toString)
+      } catch {
+        case NonFatal(_) => StructType.fromDDL(s.toString)
+      }
     case e => throw new AnalysisException(s"Expected a string literal instead of $e")
   }
 
