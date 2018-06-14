@@ -808,8 +808,6 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
 }
 
 abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAll with Logging {
-  Utils.hiveShimsHack()
-
   def mode: ServerMode.Value
 
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")

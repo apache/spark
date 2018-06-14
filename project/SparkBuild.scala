@@ -317,7 +317,7 @@ object SparkBuild extends PomBuild {
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++ ExcludeDependencies.settings ++
+    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
       ExcludedDependencies.settings ++ Checkstyle.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
@@ -465,14 +465,6 @@ object DockerIntegrationTests {
 object DependencyOverrides {
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
-}
-
-/**
-  * Exclusions to work around sbt's dependency resolution being different from Maven's.
-  */
-object ExcludeDependencies {
-  lazy val settings = Seq(
-    excludeDependencies += "javax.ws.rs" % "jsr311-api")
 }
 
 /**
