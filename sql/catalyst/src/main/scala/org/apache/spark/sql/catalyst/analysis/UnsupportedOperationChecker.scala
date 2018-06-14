@@ -350,7 +350,14 @@ object UnsupportedOperationChecker {
               _: TypedFilter) =>
         case node if node.nodeName == "StreamingRelationV2" =>
         case node =>
-          throwError(s"Continuous processing does not support ${node.nodeName} operations.")
+          val aboveSinglePartitionCoalesce = node.find {
+            case Repartition(1, false, _) => true
+            case _ => false
+          }.isDefined
+
+          if (!aboveSinglePartitionCoalesce) {
+            throwError(s"Continuous processing does not support ${node.nodeName} operations.")
+          }
       }
 
       subPlan.expressions.foreach { e =>
