@@ -45,7 +45,7 @@ class UnivocityParser(
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
-  private val tokenizer = {
+  val tokenizer = {
     val parserSetting = options.asParserSettings
     if (options.columnPruning && requiredSchema.length < dataSchema.length) {
       val tokenIndexArr = requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f)))
@@ -250,14 +250,15 @@ private[csv] object UnivocityParser {
       inputStream: InputStream,
       shouldDropHeader: Boolean,
       parser: UnivocityParser,
-      schema: StructType): Iterator[InternalRow] = {
+      schema: StructType,
+      checkHeader: Array[String] => Unit): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
       input => Seq(parser.convert(input)),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
-    convertStream(inputStream, shouldDropHeader, tokenizer) { tokens =>
+    convertStream(inputStream, shouldDropHeader, tokenizer, checkHeader) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
@@ -265,11 +266,14 @@ private[csv] object UnivocityParser {
   private def convertStream[T](
       inputStream: InputStream,
       shouldDropHeader: Boolean,
-      tokenizer: CsvParser)(convert: Array[String] => T) = new Iterator[T] {
+      tokenizer: CsvParser,
+      checkHeader: Array[String] => Unit = _ => ())(
+      convert: Array[String] => T) = new Iterator[T] {
     tokenizer.beginParsing(inputStream)
     private var nextRecord = {
       if (shouldDropHeader) {
-        tokenizer.parseNext()
+        val firstRecord = tokenizer.parseNext()
+        checkHeader(firstRecord)
       }
       tokenizer.parseNext()
     }
@@ -291,21 +295,11 @@ private[csv] object UnivocityParser {
    */
   def parseIterator(
       lines: Iterator[String],
-      shouldDropHeader: Boolean,
       parser: UnivocityParser,
       schema: StructType): Iterator[InternalRow] = {
     val options = parser.options
 
-    val linesWithoutHeader = if (shouldDropHeader) {
-      // Note that if there are only comments in the first block, the header would probably
-      // be not dropped.
-      CSVUtils.dropHeaderLine(lines, options)
-    } else {
-      lines
-    }
-
-    val filteredLines: Iterator[String] =
-      CSVUtils.filterCommentAndEmpty(linesWithoutHeader, options)
+    val filteredLines: Iterator[String] = CSVUtils.filterCommentAndEmpty(lines, options)
 
     val safeParser = new FailureSafeParser[String](
       input => Seq(parser.parse(input)),

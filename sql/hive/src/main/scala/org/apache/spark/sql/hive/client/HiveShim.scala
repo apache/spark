@@ -24,7 +24,6 @@ import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, S
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -657,17 +656,31 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
 
+    object ExtractAttribute {
+      def unapply(expr: Expression): Option[Attribute] = {
+        expr match {
+          case attr: Attribute => Some(attr)
+          case Cast(child, dt, _) if !Cast.mayTruncate(child.dataType, dt) => unapply(child)
+          case _ => None
+        }
+      }
+    }
+
     def convert(expr: Expression): Option[String] = expr match {
-      case In(NonVarcharAttribute(name), ExtractableLiterals(values)) if useAdvanced =>
+      case In(ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiterals(values))
+          if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case InSet(NonVarcharAttribute(name), ExtractableValues(values)) if useAdvanced =>
+      case InSet(ExtractAttribute(NonVarcharAttribute(name)), ExtractableValues(values))
+          if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case op @ SpecialBinaryComparison(NonVarcharAttribute(name), ExtractableLiteral(value)) =>
+      case op @ SpecialBinaryComparison(
+          ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiteral(value)) =>
         Some(s"$name ${op.symbol} $value")
 
-      case op @ SpecialBinaryComparison(ExtractableLiteral(value), NonVarcharAttribute(name)) =>
+      case op @ SpecialBinaryComparison(
+          ExtractableLiteral(value), ExtractAttribute(NonVarcharAttribute(name))) =>
         Some(s"$value ${op.symbol} $name")
 
       case And(expr1, expr2) if useAdvanced =>
