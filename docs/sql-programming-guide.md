@@ -1350,13 +1350,6 @@ the following case-insensitive options:
   </tr>
 
   <tr>
-    <td><code>quotePartitionColumnName</code></td>
-    <td>
-      Whether to quote a partition column name when reading the table. It defaults to <code>false</code>.
-    </td>
-  </tr>
-
-  <tr>
     <td><code>fetchsize</code></td>
     <td>
       The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows). This option applies only to reading.
