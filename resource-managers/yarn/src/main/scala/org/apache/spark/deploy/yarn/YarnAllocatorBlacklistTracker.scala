@@ -27,6 +27,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.scheduler.BlacklistTracker
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -49,10 +50,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
     failureTracker: FailureTracker)
   extends Logging {
 
-  private val defaultTimeout = "1h"
-
-  private val blacklistTimeoutMillis =
-    sparkConf.get(BLACKLIST_TIMEOUT_CONF).getOrElse(Utils.timeStringAsMs(defaultTimeout))
+  private val blacklistTimeoutMillis = BlacklistTracker.getBlacklistTimeout(sparkConf)
 
   private val launchBlacklistEnabled = sparkConf.get(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED)
 
@@ -151,9 +149,9 @@ private[spark] class FailureTracker(
   private def updateAndCountFailures(failedExecutorsWithTimeStamps: mutable.Queue[Long]): Int = {
     val endTime = clock.getTimeMillis()
     while (executorFailuresValidityInterval > 0 &&
-      failedExecutorsWithTimeStamps.nonEmpty &&
-      failedExecutorsWithTimeStamps.head < endTime - executorFailuresValidityInterval) {
-      failedExecutorsWithTimeStamps.dequeue()
+        failedExecutorsWithTimeStamps.nonEmpty &&
+        failedExecutorsWithTimeStamps.head < endTime - executorFailuresValidityInterval) {
+        failedExecutorsWithTimeStamps.dequeue()
     }
     failedExecutorsWithTimeStamps.size
   }
