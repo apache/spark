@@ -209,10 +209,11 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Read a file as an Arrow stream and return an RDD of serialized ArrowRecordBatches.
+   * Read a file as an Arrow stream and parallelize as an RDD of serialized ArrowRecordBatches.
    */
-  private[sql] def readArrowStreamFromFile(sqlContext: SQLContext, filename: String):
-  JavaRDD[Array[Byte]] = {
+  private[sql] def readArrowStreamFromFile(
+      sqlContext: SQLContext,
+      filename: String): JavaRDD[Array[Byte]] = {
     val fileStream = new FileInputStream(filename)
     try {
       // Create array so that we can safely close the file

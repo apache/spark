@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.api.python
 
-import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
@@ -34,22 +33,6 @@ private[sql] object PythonSQLUtils {
   }
 
   /**
-   * Python callable function to convert an RDD of serialized ArrowRecordBatches into
-   * a [[DataFrame]].
-   *
-   * @param arrowBatchRDD A JavaRDD of serialized ArrowRecordBatches.
-   * @param schemaString JSON Formatted Spark schema for Arrow batches.
-   * @param sqlContext The active [[SQLContext]].
-   * @return The converted [[DataFrame]].
-   */
-  def arrowStreamToDataFrame(
-      arrowBatchRDD: JavaRDD[Array[Byte]],
-      schemaString: String,
-      sqlContext: SQLContext): DataFrame = {
-    ArrowConverters.toDataFrame(arrowBatchRDD, schemaString, sqlContext)
-  }
-
-  /**
    * Python callable function to read a file in Arrow stream format and create a [[DataFrame]]
    * using each serialized ArrowRecordBatch as a partition.
    *
@@ -62,8 +45,7 @@ private[sql] object PythonSQLUtils {
       sqlContext: SQLContext,
       filename: String,
       schemaString: String): DataFrame = {
-    JavaSparkContext.fromSparkContext(sqlContext.sparkContext)
     val jrdd = ArrowConverters.readArrowStreamFromFile(sqlContext, filename)
-    arrowStreamToDataFrame(jrdd, schemaString, sqlContext)
+    ArrowConverters.toDataFrame(jrdd, schemaString, sqlContext)
   }
 }

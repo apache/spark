@@ -1354,11 +1354,11 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
     // Write batches to Arrow stream format as a byte array
     val out = new ByteArrayOutputStream()
-    val dataOut = new DataOutputStream(out)
-    val writer = new ArrowBatchStreamWriter(schema, dataOut, null)
-    writer.writeBatches(batchIter)
-    writer.end()
-    out.close()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
 
     // Read Arrow stream into batches, then convert back to rows
     val in = new ByteArrayReadableSeekableByteChannel(out.toByteArray)
