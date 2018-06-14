@@ -104,10 +104,9 @@ class Main {
    * If printLaunchCommand is set then the commands will be printed to the stderr.
    */
   private static List<String> buildCommand(
-    AbstractCommandBuilder builder,
-    Map<String, String> env,
-    boolean printLaunchCommand)
-    throws IOException, IllegalArgumentException {
+      AbstractCommandBuilder builder,
+      Map<String, String> env,
+      boolean printLaunchCommand) throws IOException, IllegalArgumentException {
     List<String> cmd = builder.buildCommand(env);
     if (printLaunchCommand) {
       System.err.println("Spark Command: " + join(" ", cmd));
