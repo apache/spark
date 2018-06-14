@@ -249,23 +249,20 @@ private[sql] object ArrowConverters {
           return null
         }
 
-        loadMessageBuffer(readMessageBuffer(messageLength), messageLength)
+        loadMessageOverride(messageLength, ByteBuffer.allocate(messageLength))
       }
 
-      protected def readMessageBuffer(messageLength: Int): ByteBuffer = {
-        // Read the message size. There is an i32 little endian prefix.
-        val buffer = ByteBuffer.allocate(messageLength)
+      protected def loadMessage(messageLength: Int, buffer: ByteBuffer): Message = {
         if (in.readFully(buffer) != messageLength) {
           throw new java.io.IOException(
             "Unexpected end of stream trying to read message.")
         }
         buffer.rewind()
-        buffer
+        Message.getRootAsMessage(buffer)
       }
 
-      // Load a Message, if it is a RecordBatch then read body and store as serialized bytes
-      protected def loadMessageBuffer(buffer: ByteBuffer, messageLength: Int): Message = {
-        val msg = Message.getRootAsMessage(buffer)
+      protected def loadMessageOverride(messageLength: Int, buffer: ByteBuffer): Message = {
+        val msg = loadMessage(messageLength, buffer)
         val bodyLength = msg.bodyLength().asInstanceOf[Int]
 
         if (msg.headerType() == MessageHeader.RecordBatch) {
