@@ -1819,6 +1819,25 @@ def create_map(*cols):
     return Column(jc)
 
 
+@since(2.4)
+def map_from_arrays(col1, col2):
+    """Creates a new map from two arrays.
+
+    :param col1: name of column containing a set of keys. All elements should not be null
+    :param col2: name of column containing a set of values
+
+    >>> df = spark.createDataFrame([([2, 5], ['a', 'b'])], ['k', 'v'])
+    >>> df.select(map_from_arrays(df.k, df.v).alias("map")).show()
+    +----------------+
+    |             map|
+    +----------------+
+    |[2 -> a, 5 -> b]|
+    +----------------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_from_arrays(_to_java_column(col1), _to_java_column(col2)))
+
+
 @since(1.4)
 def array(*cols):
     """Creates a new array column.
@@ -2414,6 +2433,23 @@ def array_repeat(col, count):
     return Column(sc._jvm.functions.array_repeat(_to_java_column(col), count))
 
 
+@since(2.4)
+def arrays_zip(*cols):
+    """
+    Collection function: Returns a merged array of structs in which the N-th struct contains all
+    N-th values of input arrays.
+
+    :param cols: columns of arrays to be merged.
+
+    >>> from pyspark.sql.functions import arrays_zip
+    >>> df = spark.createDataFrame([(([1, 2, 3], [2, 3, 4]))], ['vals1', 'vals2'])
+    >>> df.select(arrays_zip(df.vals1, df.vals2).alias('zipped')).collect()
+    [Row(zipped=[Row(vals1=1, vals2=2), Row(vals1=2, vals2=3), Row(vals1=3, vals2=4)])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 class PandasUDFType(object):
@@ -2600,10 +2636,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        The returned scalar can be either a python primitive type, e.g., `int` or `float`
        or a numpy data type, e.g., `numpy.int64` or `numpy.float64`.
 
-       :class:`ArrayType`, :class:`MapType` and :class:`StructType` are currently not supported as
-       output types.
+       :class:`MapType` and :class:`StructType` are currently not supported as output types.
 
-       Group aggregate UDFs are used with :meth:`pyspark.sql.GroupedData.agg`
+       Group aggregate UDFs are used with :meth:`pyspark.sql.GroupedData.agg` and
+       :class:`pyspark.sql.Window`
+
+       This example shows using grouped aggregated UDFs with groupby:
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> df = spark.createDataFrame(
@@ -2620,7 +2658,31 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  2|        6.0|
        +---+-----------+
 
-       .. seealso:: :meth:`pyspark.sql.GroupedData.agg`
+       This example shows using grouped aggregated UDFs as window functions. Note that only
+       unbounded window frame is supported at the moment:
+
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+       >>> from pyspark.sql import Window
+       >>> df = spark.createDataFrame(
+       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+       ...     ("id", "v"))
+       >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
+       ... def mean_udf(v):
+       ...     return v.mean()
+       >>> w = Window.partitionBy('id') \\
+       ...           .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+       >>> df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()  # doctest: +SKIP
+       +---+----+------+
+       | id|   v|mean_v|
+       +---+----+------+
+       |  1| 1.0|   1.5|
+       |  1| 2.0|   1.5|
+       |  2| 3.0|   6.0|
+       |  2| 5.0|   6.0|
+       |  2|10.0|   6.0|
+       +---+----+------+
+
+       .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
 
     .. note:: The user-defined functions are considered deterministic by default. Due to
         optimization, duplicate invocations may be eliminated or the function may even be invoked
