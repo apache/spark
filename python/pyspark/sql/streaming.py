@@ -914,7 +914,10 @@ class DataStreamWriter(object):
         .. note:: Evolving.
 
         >>> # Print every row using a function
-        >>> writer = sdf.writeStream.foreach(lambda x: print(x))
+        >>> def print_row(row):
+        ...     print(row)
+        ...
+        >>> writer = sdf.writeStream.foreach(print_row)
         >>> # Print every row using a object with process() method
         >>> class RowPrinter:
         ...     def open(self, partition_id, epoch_id):
