@@ -1938,6 +1938,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+  test("SPARK-17796 Support wildcard '?'char in middle as part of local file path") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t1") {
+        sql("CREATE TABLE load_t1 (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000?' INTO TABLE load_t1")
+        checkAnswer(sql("SELECT * FROM load_t1"), Seq(Row("1"), Row("2"), Row("3")))
+      }
+    }
+  }
+
+  test("SPARK-17796 Support wildcard '?'char in start as part of local file path") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t2") {
+        sql("CREATE TABLE load_t2 (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$path/?art-r-00001' INTO TABLE load_t2")
+        checkAnswer(sql("SELECT * FROM load_t2"), Seq(Row("1")))
+      }
+    }
+  }
 
   test("Insert overwrite with partition") {
     withTable("tableWithPartition") {

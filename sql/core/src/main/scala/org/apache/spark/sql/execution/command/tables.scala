@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileContext, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -303,63 +303,41 @@ case class LoadDataCommand(
           s"partitioned, but a partition spec was provided.")
       }
     }
-
     val loadPath = {
       if (isLocal) {
-        val uri = Utils.resolveURI(path)
-        uri
-      }
-      else {
-        val uri = new URI(path)
-        if (uri.getScheme() != null && uri.getAuthority() != null) {
-          uri
+        val localFS = FileContext.getLocalFSFileContext()
+        localFS.makeQualified(new Path(path))
+      } else {
+        val loadPath = new Path(path)
+        // Follow Hive's behavior:
+        // If no schema or authority is provided with non-local inpath,
+        // we will use hadoop configuration "fs.defaultFS".
+        val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
+        val defaultFS = if (defaultFSConf == null) {
+          new URI("")
         } else {
-          // Follow Hive's behavior:
-          // If no schema or authority is provided with non-local inpath,
-          // we will use hadoop configuration "fs.defaultFS".
-          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
-          val defaultFS = if (defaultFSConf == null) {
-            new URI("")
-          } else {
-            new URI(defaultFSConf)
-          }
-
-          val scheme = if (uri.getScheme() != null) {
-            uri.getScheme()
-          } else {
-            defaultFS.getScheme()
-          }
-          val authority = if (uri.getAuthority() != null) {
-            uri.getAuthority()
-          } else {
-            defaultFS.getAuthority()
-          }
-
-          if (scheme == null) {
-            throw new AnalysisException(
-              s"LOAD DATA: URI scheme is required for non-local input paths: '$path'")
-          }
-          // Follow Hive's behavior:
-          // If LOCAL is not specified, and the path is relative,
-          // then the path is interpreted relative to "/user/<username>"
-          val uriPath = uri.getPath()
-          val absolutePath = if (uriPath != null && uriPath.startsWith("/")) {
-            uriPath
-          } else {
-            s"/user/${System.getProperty("user.name")}/$uriPath"
-          }
-          new URI(scheme, authority, absolutePath, uri.getQuery(), uri.getFragment())
+          new URI(defaultFSConf)
         }
+
+        // Follow Hive's behavior:
+        // If LOCAL is not specified, and the path is relative,
+        // then the path is interpreted relative to "/user/<username>"
+        val uriPath = new Path(s"/user/${System.getProperty("user.name")}/")
+        // makeQualified() will ignore the query parameter part while creating a Path, so the
+        // entire path string will be considered while making a Path instance,this is mainly done
+        // by considering the wild card scenario in mind.as per old logic query param  is
+        // been considered while creating uri instance and if path contains wild card char '?'
+        // the remaining charecters after '?' will be removedwhile forming URI instance
+        loadPath.makeQualified(defaultFS, uriPath)
       }
     }
-    val srcPath = new Path(loadPath)
-    val fs = srcPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    // This handling is because while reoslving the invalid urls starting with file:///
+    val fs = loadPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    // This handling is because while resolving the invalid urls starting with file:///
     // system throws IllegalArgumentException from globStatus api,so inorder to handle
     // such scenarios this code is added in try catch block and after catching the
     // run time exception a generic error will be displayed to the user.
     try {
-      if (null == fs.globStatus(srcPath) || fs.globStatus(srcPath).isEmpty) {
+      if (null == fs.globStatus(loadPath) || fs.globStatus(loadPath).isEmpty) {
         throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
       }
     }
@@ -368,7 +346,6 @@ case class LoadDataCommand(
         log.warn(s"Exception while validating the load path $path ", e)
         throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
     }
-
     if (partition.nonEmpty) {
       catalog.loadPartition(
         targetTable.identifier,
