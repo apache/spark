@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning}
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized._
 import org.apache.spark.sql.types._
@@ -170,6 +170,8 @@ case class InMemoryTableScanExec(
   override def outputPartitioning: Partitioning = {
     relation.cachedPlan.outputPartitioning match {
       case h: HashPartitioning => updateAttribute(h).asInstanceOf[HashPartitioning]
+      case r: RangePartitioning =>
+        r.copy(ordering = r.ordering.map(updateAttribute(_).asInstanceOf[SortOrder]))
       case _ => relation.cachedPlan.outputPartitioning
     }
   }

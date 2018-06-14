@@ -2270,4 +2270,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val mapWithBinaryKey = map(lit(Array[Byte](1.toByte)), lit(1))
     checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
   }
+
+  test("SPARK-24556: ReusedExchange should rewrite output partitioning for RangePartitioning") {
+    val df = Seq(1 -> "a").toDF("i", "j")
+    val df1 = df.as("t1")
+    val df2 = df.as("t2")
+    val shuffles = df1.orderBy("j").join(df2.orderBy("j"), $"t1.i" === $"t2.i", "right")
+      .cache().orderBy($"t2.j").queryExecution.executedPlan.collect {
+      case e: ShuffleExchangeExec => e
+    }
+    assert(shuffles.isEmpty)
+  }
 }

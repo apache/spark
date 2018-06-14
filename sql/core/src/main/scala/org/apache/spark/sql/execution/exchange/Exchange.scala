@@ -24,7 +24,7 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
@@ -71,6 +71,8 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
 
   override def outputPartitioning: Partitioning = child.outputPartitioning match {
     case h: HashPartitioning => h.copy(expressions = h.expressions.map(updateAttr))
+    case r: RangePartitioning =>
+      r.copy(ordering = r.ordering.map(updateAttr(_).asInstanceOf[SortOrder]))
     case other => other
   }
 
