@@ -192,7 +192,7 @@ public class TransportClient implements Closeable {
       logger.trace("Sending RPC to {}", getRemoteAddress(channel));
     }
 
-    long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
+    long requestId = requestId();
     handler.addRpcRequest(requestId, callback);
 
     channel.writeAndFlush(new RpcRequest(requestId, new NioManagedBuffer(message)))
@@ -221,7 +221,7 @@ public class TransportClient implements Closeable {
       logger.trace("Sending RPC to {}", getRemoteAddress(channel));
     }
 
-    long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
+    long requestId = requestId();
     handler.addRpcRequest(requestId, callback);
 
     channel.writeAndFlush(new UploadStream(requestId, meta, data))
@@ -262,6 +262,10 @@ public class TransportClient implements Closeable {
     }
 
     void handleFailure(String errorMsg, Throwable cause) throws Exception {}
+  }
+
+  private static long requestId() {
+    return Math.abs(UUID.randomUUID().getLeastSignificantBits());
   }
 
   private class RpcChannelListener extends StdChannelListener {
