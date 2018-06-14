@@ -309,8 +309,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
     }
-    val schema = JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, options)
-    val relation = JDBCRelation(schema, parts, options)(sparkSession)
+    val relation = JDBCRelation(parts, options)(sparkSession)
     sparkSession.baseRelationToDataFrame(relation)
   }
 

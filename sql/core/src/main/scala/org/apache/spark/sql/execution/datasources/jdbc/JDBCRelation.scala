@@ -145,6 +145,17 @@ private[sql] object JDBCRelation extends Logging {
       case None => tableSchema
     }
   }
+
+  /**
+   * Resolves a Catalyst schema of a JDBC table and returns [[JDBCRelation]] with the schema.
+   */
+  def apply(
+      parts: Array[Partition],
+      jdbcOptions: JDBCOptions)(
+      sparkSession: SparkSession): JDBCRelation = {
+    val schema = JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
+    JDBCRelation(schema, parts, jdbcOptions)(sparkSession)
+  }
 }
 
 private[sql] case class JDBCRelation(
