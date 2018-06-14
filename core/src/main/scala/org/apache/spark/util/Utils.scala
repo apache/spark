@@ -2781,6 +2781,23 @@ private[spark] object Utils extends Logging {
       }
     }
   }
+
+  /**
+   * Weird hack to avoid "Unrecognized Hadoop major version number: 3.x.x". The error is
+   * thrown when creating the Hadoop shims instance. Note that it is cached and private.
+   * So, it manually creates the shims and inject it to be cached, and to avoid version check.
+   * It's just in order to run the tests against Hadoop 3 for now.
+   */
+  def hiveShimsHack(): Unit = {
+    val shimLoaderClazz = Utils.classForName("org.apache.hadoop.hive.shims.ShimLoader")
+    val hadoopShims = shimLoaderClazz.getDeclaredField("hadoopShims")
+    val wasAccessible = hadoopShims.isAccessible
+    hadoopShims.setAccessible(true)
+    hadoopShims.set(
+      null,
+      Utils.classForName("org.apache.hadoop.hive.shims.Hadoop23Shims").newInstance())
+    hadoopShims.setAccessible(wasAccessible)
+  }
 }
 
 private[util] object CallerContext extends Logging {
