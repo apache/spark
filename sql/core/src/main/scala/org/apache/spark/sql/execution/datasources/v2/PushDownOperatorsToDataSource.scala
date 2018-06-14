@@ -17,50 +17,118 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet}
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsPushDownCatalystFilters, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 
 object PushDownOperatorsToDataSource extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // PhysicalOperation guarantees that filters are deterministic; no need to check
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
-      assert(relation.filters.isEmpty, "data source v2 should do push down only once.")
-
-      val projectAttrs = project.map(_.toAttribute)
-      val projectSet = AttributeSet(project.flatMap(_.references))
-      val filterSet = AttributeSet(filters.flatMap(_.references))
-
-      val projection = if (filterSet.subsetOf(projectSet) &&
-          AttributeSet(projectAttrs) == projectSet) {
-        // When the required projection contains all of the filter columns and column pruning alone
-        // can produce the required projection, push the required projection.
-        // A final projection may still be needed if the data source produces a different column
-        // order or if it cannot prune all of the nested columns.
-        projectAttrs
-      } else {
-        // When there are filter columns not already in the required projection or when the required
-        // projection is more complicated than column pruning, base column pruning on the set of
-        // all columns needed by both.
-        (projectSet ++ filterSet).toSeq
-      }
+      val newReader = relation.createFreshReader
+      // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
+      // `postScanFilters` need to be evaluated after the scan.
+      // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
+      val (pushedFilters, postScanFilters) = pushFilters(newReader, filters)
+      val newOutput = pruneColumns(newReader, relation, project ++ postScanFilters)
+      logInfo(
+        s"""
+           |Pushing operators to ${relation.source.getClass}
+           |Pushed Filters: ${pushedFilters.mkString(", ")}
+           |Post-Scan Filters: ${postScanFilters.mkString(",")}
+           |Output: ${newOutput.mkString(", ")}
+         """.stripMargin)
 
       val newRelation = relation.copy(
-        projection = projection.asInstanceOf[Seq[AttributeReference]],
-        filters = Some(filters))
+        output = newOutput,
+        pushedFilters = pushedFilters,
+        optimizedReader = Some(newReader))
 
-      // Add a Filter for any filters that need to be evaluated after scan.
-      val postScanFilterCond = newRelation.postScanFilters.reduceLeftOption(And)
-      val filtered = postScanFilterCond.map(Filter(_, newRelation)).getOrElse(newRelation)
-
-      // Add a Project to ensure the output matches the required projection
-      if (newRelation.output != projectAttrs) {
-        Project(project, filtered)
+      val filterCondition = postScanFilters.reduceLeftOption(And)
+      val withFilter = filterCondition.map(Filter(_, newRelation)).getOrElse(newRelation)
+      if (withFilter.output == project) {
+        withFilter
       } else {
-        filtered
+        Project(project, withFilter)
       }
 
     case other => other.mapChildren(apply)
+  }
+
+  /**
+   * Pushes down filters to the data source reader
+   *
+   * @return pushed filter and post-scan filters.
+   */
+  private def pushFilters(
+      reader: DataSourceReader,
+      filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    reader match {
+      case r: SupportsPushDownCatalystFilters =>
+        val postScanFilters = r.pushCatalystFilters(filters.toArray)
+        val pushedFilters = r.pushedCatalystFilters()
+        (pushedFilters, postScanFilters)
+
+      case r: SupportsPushDownFilters =>
+        // A map from translated data source filters to original catalyst filter expressions.
+        val translatedFilterToExpr = mutable.HashMap.empty[sources.Filter, Expression]
+        // Catalyst filter expression that can't be translated to data source filters.
+        val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
+
+        for (filterExpr <- filters) {
+          val translated = DataSourceStrategy.translateFilter(filterExpr)
+          if (translated.isDefined) {
+            translatedFilterToExpr(translated.get) = filterExpr
+          } else {
+            untranslatableExprs += filterExpr
+          }
+        }
+
+        // Data source filters that need to be evaluated again after scanning. which means
+        // the data source cannot guarantee the rows returned can pass these filters.
+        // As a result we must return it so Spark can plan an extra filter operator.
+        val postScanFilters = r.pushFilters(translatedFilterToExpr.keys.toArray)
+          .map(translatedFilterToExpr)
+        // The filters which are marked as pushed to this data source
+        val pushedFilters = r.pushedFilters().map(translatedFilterToExpr)
+        (pushedFilters, untranslatableExprs ++ postScanFilters)
+
+      case _ => (Nil, filters)
+    }
+  }
+
+  /**
+   * Applies column pruning to the data source, w.r.t. the references of the given expressions.
+   *
+   * @return new output attributes after column pruning.
+   */
+  // TODO: nested column pruning.
+  private def pruneColumns(
+      reader: DataSourceReader,
+      relation: DataSourceV2Relation,
+      exprs: Seq[Expression]): Seq[AttributeReference] = {
+    reader match {
+      case r: SupportsPushDownRequiredColumns =>
+        val requiredColumns = AttributeSet(exprs.flatMap(_.references))
+        val neededOutput = relation.output.filter(requiredColumns.contains)
+        if (neededOutput != relation.output) {
+          r.pruneColumns(neededOutput.toStructType)
+          val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
+          r.readSchema().toAttributes.map {
+            // We have to keep the attribute id during transformation.
+            a => a.withExprId(nameToAttr(a.name).exprId)
+          }
+        } else {
+          relation.output
+        }
+
+      case _ => relation.output
+    }
   }
 }
