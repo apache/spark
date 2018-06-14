@@ -1753,7 +1753,7 @@ class DAGScheduler(
     messageScheduler.shutdownNow()
     eventProcessLoop.stop()
     taskScheduler.stop()
-   }
+  }
 
   eventProcessLoop.start()
 }

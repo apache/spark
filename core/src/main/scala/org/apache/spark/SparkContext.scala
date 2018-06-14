@@ -305,11 +305,6 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = ds
   }
 
-  private[spark] def heartbeater: Heartbeater = _heartbeater
-  private[spark] def heartbeater_=(hb: Heartbeater): Unit = {
-    _heartbeater = hb
-  }
-
   /**
    * A unique identifier for the Spark application.
    * Its format depends on the scheduler implementation.

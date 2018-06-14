@@ -23,6 +23,7 @@ import scala.xml.{NodeSeq, Text}
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
+import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 
@@ -113,26 +114,21 @@ class MemoryMetrics private[spark](
     val totalOffHeapStorageMemory: Long)
 
 /** deserialzer for peakMemoryMetrics: convert to array ordered by metric name */
-class PeakMemoryMetricsDeserializer extends JsonDeserializer[Option[Array[Long]]] {
+class PeakMemoryMetricsDeserializer private[spark] extends JsonDeserializer[Option[Array[Long]]] {
   override def deserialize(
       jsonParser: JsonParser,
       deserializationContext: DeserializationContext): Option[Array[Long]] = {
-    val metricsMap = jsonParser.readValueAs(classOf[Option[Map[String, Object]]])
+    val metricsMap = jsonParser.readValueAs[Option[Map[String, Long]]](
+      new TypeReference[Option[Map[String, java.lang.Long]]] {})
     metricsMap match {
       case Some(metrics) =>
-        Some(MetricGetter.values.map { m =>
-          metrics.getOrElse (m.name, 0L) match {
-            case intVal: Int => intVal.toLong
-            case longVal: Long => longVal
-          }
-        }.toArray)
+        Some(MetricGetter.values.map(m => metrics.getOrElse(m.name, 0L)).toArray)
       case None => None
     }
   }
 }
-
 /** serializer for peakMemoryMetrics: convert array to map with metric name as key */
-class PeakMemoryMetricsSerializer extends JsonSerializer[Option[Array[Long]]] {
+class PeakMemoryMetricsSerializer private[spark] extends JsonSerializer[Option[Array[Long]]] {
   override def serialize(
       metrics: Option[Array[Long]],
       jsonGenerator: JsonGenerator,

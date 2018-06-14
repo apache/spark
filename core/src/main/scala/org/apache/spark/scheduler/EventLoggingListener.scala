@@ -96,7 +96,7 @@ private[spark] class EventLoggingListener(
   // Visible for tests only.
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
-  // map of live stages, to peak executor metrics for the stage
+  // map of (stageId, stageAttempt), to peak executor metrics for the stage
   private val liveStageExecutorMetrics = HashMap[(Int, Int), HashMap[String, PeakExecutorMetrics]]()
 
   /**
@@ -197,6 +197,9 @@ private[spark] class EventLoggingListener(
       executorMap.foreach {
        executorEntry => {
           for ((executorId, peakExecutorMetrics) <- executorEntry) {
+            // -1 timestamp indicates that the ExecutorMetricsUpdate event is being read from the
+            // history log, and contains the peak metrics for the stage whose StageCompleted event
+            // immediately follows
             val executorMetrics = new ExecutorMetrics(-1, peakExecutorMetrics.metrics)
             val executorUpdate = new SparkListenerExecutorMetricsUpdate(
               executorId, accumUpdates, Some(executorMetrics))
