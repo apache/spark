@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.scalactic.source
-import org.scalatest.Matchers._
 import org.scalatest.Tag
 
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
