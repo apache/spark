@@ -172,9 +172,14 @@ final class OneVsRestModel private[ml] (
     val origCols = dataset.schema.map(f => col(f.name))
 
     // add an accumulator column to store predictions of all the models
-    val accColName = "mbc$acc" + UUID.randomUUID().toString
+    val accColName = "acc_" + UUID.randomUUID().toString
     val initUDF = udf { () => Map[Int, Double]() }
     val newDataset = dataset.withColumn(accColName, initUDF())
+
+    // temporary column to store intermediate raw prediction
+    val tmpRawPredictionColName = "rawPrediction_" + UUID.randomUUID().toString
+
+    val columns = origCols ++ List(col(tmpRawPredictionColName), col(accColName))
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = !dataset.isStreaming && dataset.storageLevel == StorageLevel.NONE
@@ -185,19 +190,21 @@ final class OneVsRestModel private[ml] (
     // update the accumulator column with the result of prediction of models
     val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
       case (df, (model, index)) =>
-        val rawPredictionCol = model.getRawPredictionCol
-        val columns = origCols ++ List(col(rawPredictionCol), col(accColName))
-
         // add temporary column to store intermediate scores and update
-        val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
+        val tmpColName = "update_" + UUID.randomUUID().toString
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
           predictions + ((index, prediction(1)))
         }
 
         model.setFeaturesCol($(featuresCol))
+        val rawPredictionColName = model.getRawPredictionCol
+        // set rawPredictionColName to a temporary column to avoid column conflict
+        model.setRawPredictionCol(tmpRawPredictionColName)
         val transformedDataset = model.transform(df).select(columns: _*)
+        model.setRawPredictionCol(rawPredictionColName)
+
         val updatedDataset = transformedDataset
-          .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
+          .withColumn(tmpColName, updateUDF(col(accColName), col(tmpRawPredictionColName)))
         val newColumns = origCols ++ List(col(tmpColName))
 
         // switch out the intermediate column with the accumulator column
