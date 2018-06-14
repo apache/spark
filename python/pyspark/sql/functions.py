@@ -2168,8 +2168,7 @@ def from_json(col, schema, options={}):
     [Row(json=Row(a=1))]
     >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
     [Row(json=Row(a=1))]
-    >>> schema = MapType(StringType(), IntegerType())
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    >>> df.select(from_json(df.value, "MAP<STRING,INT>").alias("json")).collect()
     [Row(json={u'a': 1})]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
