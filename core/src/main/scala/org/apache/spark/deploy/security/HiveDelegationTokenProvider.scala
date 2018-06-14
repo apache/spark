@@ -46,6 +46,7 @@ private[spark] class HiveDelegationTokenProvider
 
   private def hiveConf(hadoopConf: Configuration): Configuration = {
     try {
+      Utils.hiveShimsHack()
       new HiveConf(hadoopConf, classOf[HiveConf])
     } catch {
       case NonFatal(e) =>
