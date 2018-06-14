@@ -23,11 +23,13 @@ SELF=$(cd $(dirname $0) && pwd)
 
 WORKDIR=
 IMGTAG=latest
-while getopts "d:n:t:" opt; do
+JAVA=
+while getopts "d:j:nt:" opt; do
   case $opt in
     d) WORKDIR="$OPTARG" ;;
     n) DRY_RUN=1 ;;
     t) IMGTAG="$OPTARG" ;;
+    j) JAVA="$OPTARG" ;;
     ?) error "Invalid option: $OPTARG" ;;
   esac
 done
@@ -93,8 +95,15 @@ ASF_PASSWORD=$ASF_PASSWORD
 GPG_PASSPHRASE=$GPG_PASSPHRASE
 EOF
 
+JAVA_VOL=
+if [ -n "$JAVA" ]; then
+  echo "JAVA_HOME=/opt/spark-java" >> $ENVFILE
+  JAVA_VOL="--volume $JAVA:/opt/spark-java"
+fi
+
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
-docker run \
+docker run -ti \
   --env-file "$ENVFILE" \
-  --volume "$WORKDIR":/opt/spark-rm \
+  --volume "$WORKDIR:/opt/spark-rm" \
+  $JAVA_VOL \
   "spark-rm:$IMGTAG"

@@ -47,27 +47,35 @@ function parse_version {
 
 function run_silent {
   local BANNER="$1"
-  shift
-  local LOG_FILE="$1"
-  shift
+  local LOG_FILE="$2"
+  shift 2
 
-  echo "=================================="
+  echo "========================"
   echo "= $BANNER"
   echo "Command: $@"
   echo "Log file: $LOG_FILE"
 
-  if [ $DRY_RUN = 0 ]; then
-    "$@" 1>"$LOG_FILE" 2>&1
-  else
-    echo "$@"
-    touch "$LOG_FILE"
-  fi
+  "$@" 1>"$LOG_FILE" 2>&1
 
   local EC=$?
   if [ $EC != 0 ]; then
     echo "Command FAILED. Check full logs for details."
     tail "$LOG_FILE"
-    return $EC
+    exit $EC
+  fi
+}
+
+function maybe_run {
+  if is_dry_run; then
+    local BANNER="$1"
+    local LOG_FILE="$2"
+    shift 2
+    echo "======= DRY RUN ======="
+    echo "= $BANNER"
+    echo "Command: $@"
+    echo "Log file: $LOG_FILE"
+  else
+    run_silent "$@"
   fi
 }
 
@@ -149,8 +157,15 @@ function get_release_info {
     SKIP_TAG=1
   fi
 
+
   export RELEASE_TAG
-  export GIT_REF="$RELEASE_TAG"
+
+  GIT_REF="$RELEASE_TAG"
+  if is_dry_run; then
+    echo "This is a dry run. Please confirm the ref that will be built for testing."
+    GIT_REF=$(read_config "Ref" "$GIT_REF")
+  fi
+  export GIT_REF
   export SPARK_PACKAGE_VERSION="$RELEASE_TAG"
 
   # Gather some user information.
@@ -183,13 +198,22 @@ EOF
     exit 1
   fi
 
-  if [ -z "$ASF_PASSWORD" ]; then
-    stty -echo && printf "ASF password: " && read ASF_PASSWORD && printf '\n' && stty echo
-    export ASF_PASSWORD
+  if ! is_dry_run; then
+    if [ -z "$ASF_PASSWORD" ]; then
+      stty -echo && printf "ASF password: " && read ASF_PASSWORD && printf '\n' && stty echo
+    fi
+  else
+    ASF_PASSWORD="***INVALID***"
   fi
 
   if [ -z "$GPG_PASSPHRASE" ]; then
     stty -echo && printf "GPG passphrase: " && read GPG_PASSPHRASE && printf '\n' && stty echo
-    export GPG_PASSPHRASE
   fi
+
+  export ASF_PASSWORD
+  export GPG_PASSPHRASE
+}
+
+function is_dry_run {
+  [[ $DRY_RUN = 1 ]]
 }

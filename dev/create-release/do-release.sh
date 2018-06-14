@@ -28,18 +28,24 @@ while getopts "bn" opt; do
   esac
 done
 
-set -e
-
 if [ "$RUNNING_IN_DOCKER" = "1" ]; then
   # Inside docker, need to import the GPG key stored in the current directory.
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 "$SELF/gpg.key"
+  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --import "$SELF/gpg.key"
+
+  # We may need to adjust the path since JAVA_HOME may be overridden by the driver script.
+  if [ -n "$JAVA_HOME" ]; then
+    export PATH="$JAVA_HOME/bin:$PATH"
+  else
+    # JAVA_HOME for the openjdk package.
+    export JAVA_HOME=/usr
+  fi
 else
   # Outside docker, need to ask for information about the release.
   get_release_info
 fi
 
 if [ $SKIP_TAG = 0 ]; then
-  run_silent "Creating release tag $RELEASE_TAG..." "tag.log" \
+  maybe_run "Creating release tag $RELEASE_TAG..." "tag.log" \
     "$SELF/release-tag.sh"
 else
   echo "Skipping tag creation for $RELEASE_TAG."
@@ -49,5 +55,5 @@ run_silent "Building Spark..." "build.log" \
   "$SELF/release-build.sh" package
 run_silent "Building documentation..." "docs.log" \
   "$SELF/release-build.sh" docs
-run_silent "Publishing release" "publish.log" \
+maybe_run "Publishing release" "publish.log" \
   "$SELF/release-build.sh" publish-release
