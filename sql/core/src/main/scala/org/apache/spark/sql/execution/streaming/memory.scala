@@ -222,11 +222,27 @@ class MemoryStreamInputPartition(records: Array[UnsafeRow])
 }
 
 /** A common trait for MemorySinks with methods used for testing */
-trait MemorySinkBase extends BaseStreamingSink {
+trait MemorySinkBase extends BaseStreamingSink with Logging {
   def allData: Seq[Row]
   def latestBatchData: Seq[Row]
   def dataSinceBatch(sinceBatchId: Long): Seq[Row]
   def latestBatchId: Option[Long]
+
+  /**
+   * Truncates the given rows to return at most maxRows rows.
+   * @param rows The data that may need to be truncated.
+   * @param maxRows Number of rows to truncate to keep.
+   * @param batchId The ID of the batch that sent these rows, for logging purposes.
+   * @return Truncated rows.
+   */
+  protected def truncateRowsIfNeeded(rows: Array[Row], maxRows: Int, batchId: Long): Array[Row] = {
+    if (rows.length > maxRows && maxRows >= 0) {
+      logWarning(s"Truncating batch $batchId to $maxRows rows")
+      rows.take(maxRows)
+    } else {
+      rows
+    }
+  }
 }
 
 /**
@@ -334,15 +350,6 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
   def clear(): Unit = synchronized {
     batches.clear()
     numRows = 0
-  }
-
-  private def truncateRowsIfNeeded(rows: Array[Row], maxRows: Int, batchId: Long): Array[Row] = {
-    if (rows.length > maxRows && maxRows >= 0) {
-      logWarning(s"Truncating batch $batchId to $maxRows rows")
-      rows.take(maxRows)
-    } else {
-      rows
-    }
   }
 
   override def toString(): String = "MemorySink"

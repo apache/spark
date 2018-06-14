@@ -129,15 +129,6 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
     numRows = 0
   }
 
-  private def truncateRowsIfNeeded(rows: Array[Row], maxRows: Int, batchId: Long): Array[Row] = {
-    if (rows.length > maxRows && maxRows >= 0) {
-      logWarning(s"Truncating batch $batchId to $maxRows rows")
-      rows.take(maxRows)
-    } else {
-      rows
-    }
-  }
-
   override def toString(): String = "MemorySinkV2"
 }
 
