@@ -162,6 +162,7 @@ class SparkSession(object):
             >>> s1.conf.get("k2") == s2.conf.get("k2")
             True
             """
+
             with self._lock:
                 from pyspark.context import SparkContext
                 from pyspark.conf import SparkConf
@@ -557,6 +558,7 @@ class SparkSession(object):
         import py4j
         from pyspark.conf import SparkConf
         from pyspark.context import SparkContext
+
         try:
             # Try to access HiveConf, it will raise exception if Hive is not added
             conf = SparkConf()
@@ -567,14 +569,7 @@ class SparkSession(object):
                     .getOrCreate()
             else:
                 return SparkSession.builder.getOrCreate()
-        except py4j.protocol.Py4JError:
-            if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
-                warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
-                              "please make sure you build spark with hive")
-
-        try:
-            return SparkSession.builder.getOrCreate()
-        except TypeError:
+        except (py4j.protocol.Py4JError, TypeError):
             if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
                 warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
                               "please make sure you build spark with hive")
