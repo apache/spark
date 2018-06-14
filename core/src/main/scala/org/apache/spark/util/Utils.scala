@@ -2794,8 +2794,8 @@ private[spark] object Utils extends Logging {
     val wasAccessible = hadoopShims.isAccessible
     hadoopShims.setAccessible(true)
     hadoopShims.set(
-    null,
-    Utils.classForName("org.apache.hadoop.hive.shims.Hadoop23Shims").newInstance())
+      null,
+      Utils.classForName("org.apache.hadoop.hive.shims.Hadoop23Shims").newInstance())
     hadoopShims.setAccessible(wasAccessible)
   }
 }
