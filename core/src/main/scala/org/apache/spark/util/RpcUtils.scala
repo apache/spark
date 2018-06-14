@@ -39,7 +39,7 @@ private[spark] object RpcUtils {
 
   /** Returns the configured number of milliseconds to wait on each retry */
   def retryWaitMs(conf: SparkConf): Long = {
-    conf.getTimeAsMs("spark.rpc.retry.wait", "3s")
+    conf.getTimeAsSeconds("spark.rpc.retry.wait", "3s") * 1000L
   }
 
   /** Returns the default Spark timeout to use for RPC ask operations. */

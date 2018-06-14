@@ -85,7 +85,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private val taskLabels = conf.get("spark.mesos.task.labels", "")
 
   private[this] val shutdownTimeoutMS =
-    conf.getTimeAsMs("spark.mesos.coarse.shutdownTimeout", "10s")
+    (conf.getTimeAsSeconds("spark.mesos.coarse.shutdownTimeout", "10s") * 1000L)
       .ensuring(_ >= 0, "spark.mesos.coarse.shutdownTimeout must be >= 0")
 
   // Synchronization protected by stateLock
@@ -635,7 +635,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             externalShufflePort,
             sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
               s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L}ms"),
-            sc.conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
+            sc.conf.getTimeAsSeconds("spark.executor.heartbeatInterval", "10s") * 1000L)
         slave.shuffleRegistered = true
       }
 

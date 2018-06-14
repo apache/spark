@@ -613,7 +613,7 @@ private[spark] class Executor(
     private[this] val taskId: Long = taskRunner.taskId
 
     private[this] val killPollingIntervalMs: Long =
-      conf.getTimeAsMs("spark.task.reaper.pollingInterval", "10s")
+      conf.getTimeAsSeconds("spark.task.reaper.pollingInterval", "10s") * 1000L
 
     private[this] val killTimeoutMs: Long = conf.getTimeAsMs("spark.task.reaper.killTimeout", "-1")
 
@@ -820,7 +820,7 @@ private[spark] class Executor(
    * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
    */
   private def startDriverHeartbeater(): Unit = {
-    val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
+    val intervalMs = conf.getTimeAsSeconds("spark.executor.heartbeatInterval", "10s") * 1000L
 
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]

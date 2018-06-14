@@ -80,7 +80,7 @@ private[spark] class TaskSchedulerImpl(
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
 
   // Threshold above which we warn user initial TaskSet may be starved
-  val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
+  val STARVATION_TIMEOUT_MS = conf.getTimeAsSeconds("spark.starvation.timeout", "15s") * 1000L
 
   // CPUs to request per task
   val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)

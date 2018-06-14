@@ -34,7 +34,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   private val CR = '\r'
   // Update period of progress bar, in milliseconds
   private val updatePeriodMSec =
-    sc.getConf.getTimeAsMs("spark.ui.consoleProgress.update.interval", "200")
+    sc.getConf.getTimeAsMs("spark.ui.consoleProgress.update.interval", "200ms")
   // Delay to show up a progress bar, in milliseconds
   private val firstDelayMSec = 500L
 
