@@ -25,6 +25,28 @@ import scala.collection.mutable
 
 import org.apache.spark.util.{ThreadUtils, Utils}
 
+/**
+ * Controls the propagation of the Spark application's executor pods state to subscribers that
+ * react to that state.
+ * <br>
+ * Roughly follows a producer-consumer model. Producers report states of executor pods, and these
+ * states are then published to consumers that can perform any actions in response to these states.
+ * <br>
+ * Producers push updates in one of two ways. An incremental update sent by updatePod() represents
+ * a known new state of a single executor pod. A full sync sent by replaceSnapshot() indicates that
+ * the passed pods are all of the most up to date states of all executor pods for the application.
+ * The combination of the states of all executor pods for the application is collectively known as
+ * a snapshot. The store keeps track of the most up to date snapshot, and applies updates to that
+ * most recent snapshot - either by incrementally updating the snapshot with a single new pod state,
+ * or by replacing the snapshot entirely on a full sync.
+ * <br>
+ * Consumers, or subscribers, register that they want to be informed about all snapshots of the
+ * executor pods. Every time the store replaces its most up to date snapshot from either an
+ * incremental update or a full sync, the most recent snapshot after the update is posted to the
+ * subscriber's buffer. Subscribers receive blocks of snapshots produced by the producers in
+ * time-windowed chunks. Each subscriber can choose to receive their snapshot chunks at different
+ * time intervals.
+ */
 private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: ScheduledExecutorService)
   extends ExecutorPodsSnapshotsStore {
 
@@ -41,6 +63,9 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
       (onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit): Unit = {
     val newSubscriber = SnapshotsSubscriber(
         new LinkedBlockingQueue[ExecutorPodsSnapshot](), onNewSnapshots)
+    SNAPSHOT_LOCK.synchronized {
+      newSubscriber.snapshotsBuffer.add(currentSnapshot)
+    }
     subscribers += newSubscriber
     pollingTasks += subscribersExecutor.scheduleWithFixedDelay(
       toRunnable(() => callSubscriber(newSubscriber)),

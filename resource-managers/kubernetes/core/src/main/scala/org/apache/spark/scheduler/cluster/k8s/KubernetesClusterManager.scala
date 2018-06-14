@@ -61,9 +61,10 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
       "kubernetes-executor-requests")
 
-    val bufferSnapshotsExecutor = ThreadUtils
-      .newDaemonSingleThreadScheduledExecutor("kubernetes-executor-snapshots-buffer")
-    val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(bufferSnapshotsExecutor)
+    val subscribersExecutor = ThreadUtils
+      .newDaemonThreadPoolScheduledExecutor(
+        "kubernetes-executor-snapshots-subscribers", 2)
+    val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor)
     val removedExecutorsCache = CacheBuilder.newBuilder()
       .expireAfterWrite(3, TimeUnit.MINUTES)
       .build[java.lang.Long, java.lang.Long]()

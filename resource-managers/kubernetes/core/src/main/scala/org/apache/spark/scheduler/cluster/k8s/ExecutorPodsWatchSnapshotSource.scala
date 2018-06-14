@@ -34,6 +34,8 @@ private[spark] class ExecutorPodsWatchSnapshotSource(
 
   def start(applicationId: String): Unit = {
     require(watchConnection == null, "Cannot start the watcher twice.")
+    logDebug(s"Starting watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
+      s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
     watchConnection = kubernetesClient.pods()
       .withLabel(SPARK_APP_ID_LABEL, applicationId)
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
@@ -51,6 +53,8 @@ private[spark] class ExecutorPodsWatchSnapshotSource(
 
   private class ExecutorPodsWatcher extends Watcher[Pod] {
     override def eventReceived(action: Action, pod: Pod): Unit = {
+      val podName = pod.getMetadata.getName
+      logDebug(s"Received executor pod update for pod named $podName, action $action")
       snapshotsStore.updatePod(pod)
     }
 

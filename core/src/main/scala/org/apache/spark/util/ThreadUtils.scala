@@ -103,6 +103,22 @@ private[spark] object ThreadUtils {
   }
 
   /**
+   * Wrapper over ScheduledThreadPoolExecutor.
+   */
+  def newDaemonThreadPoolScheduledExecutor(threadNamePrefix: String, numThreads: Int)
+      : ScheduledExecutorService = {
+    val threadFactory = new ThreadFactoryBuilder()
+      .setDaemon(true)
+      .setNameFormat(s"$threadNamePrefix-%d")
+      .build()
+    val executor = new ScheduledThreadPoolExecutor(numThreads, threadFactory)
+    // By default, a cancelled task is not automatically removed from the work queue until its delay
+    // elapses. We have to enable it manually.
+    executor.setRemoveOnCancelPolicy(true)
+    executor
+  }
+
+  /**
    * Run a piece of code in a new thread and return the result. Exception in the new thread is
    * thrown in the caller thread with an adjusted stack trace that removes references to this
    * method for clarity. The exception stack traces will be like the following

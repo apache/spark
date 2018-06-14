@@ -75,7 +75,8 @@ private[spark] class ExecutorPodsAllocator(
     // both the creation and deletion events. In either case, delete the missing pod
     // if possible, and mark such a pod to be rescheduled below.
     newlyCreatedExecutors.foreach { case (execId, timeCreated) =>
-      if (clock.getTimeMillis() - timeCreated > podCreationTimeout) {
+      val currentTime = clock.getTimeMillis()
+      if (currentTime - timeCreated > podCreationTimeout) {
         logWarning(s"Executor with id $execId was not detected in the Kubernetes" +
           s" cluster after $podCreationTimeout milliseconds despite the fact that a" +
           " previous allocation attempt tried to create it. The executor may have been" +
@@ -87,6 +88,9 @@ private[spark] class ExecutorPodsAllocator(
             .delete()
         }
         newlyCreatedExecutors -= execId
+      } else {
+        logDebug(s"Executor with id $execId was not found in the Kubernetes cluster since it" +
+          s" was created ${currentTime - timeCreated} milliseconds ago.")
       }
     }
 
@@ -103,6 +107,9 @@ private[spark] class ExecutorPodsAllocator(
         case _ => false
       }
       val currentTotalExpectedExecutors = totalExpectedExecutors.get
+      logDebug(s"Currently have $currentRunningExecutors running executors and" +
+        s" $currentPendingExecutors pending executors. $newlyCreatedExecutors executors" +
+        s" have been requested but are pending appearance in the cluster.")
       if (newlyCreatedExecutors.isEmpty
         && currentPendingExecutors == 0
         && currentRunningExecutors < currentTotalExpectedExecutors) {
@@ -124,6 +131,7 @@ private[spark] class ExecutorPodsAllocator(
             .build()
           kubernetesClient.pods().create(podWithAttachedContainer)
           newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
+          logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
         }
       } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
         // TODO handle edge cases if we end up with more running executors than expected.
