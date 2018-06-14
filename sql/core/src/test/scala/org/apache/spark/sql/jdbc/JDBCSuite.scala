@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -237,6 +237,11 @@ class JDBCSuite extends SparkFunSuite
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST."mixedCaseCols"', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement("CREATE TABLE test.partition (THEID INTEGER, `THE ID` INTEGER) " +
+      "AS SELECT 1, 1")
+      .executeUpdate()
+    conn.commit()
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
@@ -1205,5 +1210,48 @@ class JDBCSuite extends SparkFunSuite
       df.collect()
     }.getMessage
     assert(errMsg.contains("Statement was canceled or the session timed out"))
+  }
+
+  test("SPARK-24327 verify and normalize a partition column based on a JDBC resolved schema") {
+    def testJdbcParitionColumn(partColName: String, expectedColumnName: String): Unit = {
+      val df = spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", "TEST.PARTITION")
+        .option("partitionColumn", partColName)
+        .option("lowerBound", 1)
+        .option("upperBound", 4)
+        .option("numPartitions", 3)
+        .load()
+
+      val quotedPrtColName = testH2Dialect.quoteIdentifier(expectedColumnName)
+      df.logicalPlan match {
+        case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+          val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+          assert(whereClauses === Set(
+            s"$quotedPrtColName < 2 or $quotedPrtColName is null",
+            s"$quotedPrtColName >= 2 AND $quotedPrtColName < 3",
+            s"$quotedPrtColName >= 3"))
+      }
+    }
+
+    testJdbcParitionColumn("THEID", "THEID")
+    testJdbcParitionColumn("\"THEID\"", "THEID")
+    withSQLConf("spark.sql.caseSensitive" -> "false") {
+      testJdbcParitionColumn("ThEiD", "THEID")
+    }
+    testJdbcParitionColumn("THE ID", "THE ID")
+
+    def testIncorrectJdbcPartitionColumn(partColName: String): Unit = {
+      val errMsg = intercept[AnalysisException] {
+        testJdbcParitionColumn(partColName, "THEID")
+      }.getMessage
+      assert(errMsg.contains(s"User-defined partition column $partColName not found " +
+        "in the JDBC relation:"))
+    }
+
+    testIncorrectJdbcPartitionColumn("NoExistingColumn")
+    withSQLConf("spark.sql.caseSensitive" -> "true") {
+      testIncorrectJdbcPartitionColumn(testH2Dialect.quoteIdentifier("ThEiD"))
+    }
   }
 }

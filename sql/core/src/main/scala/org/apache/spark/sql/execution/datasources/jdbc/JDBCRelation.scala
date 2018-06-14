@@ -22,10 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Instructions on how to partition the table among workers.
@@ -51,7 +53,11 @@ private[sql] object JDBCRelation extends Logging {
    * @param partitioning partition information to generate the where clause for each partition
    * @return an array of partitions with where clause for each partition
    */
-  def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
+  def columnPartition(
+      schema: StructType,
+      partitioning: JDBCPartitioningInfo,
+      resolver: Resolver,
+      jdbcOptions: JDBCOptions): Array[Partition] = {
     if (partitioning == null || partitioning.numPartitions <= 1 ||
       partitioning.lowerBound == partitioning.upperBound) {
       return Array[Partition](JDBCPartition(null, 0))
@@ -78,7 +84,17 @@ private[sql] object JDBCRelation extends Logging {
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
     val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
-    val column = partitioning.column
+
+    // Verify and normalize a partition column based on the JDBC resolved schema
+    val dialect = JdbcDialects.get(jdbcOptions.url)
+    val column = schema.map(_.name).find { fieldName =>
+      resolver(fieldName, partitioning.column) ||
+        resolver(dialect.quoteIdentifier(fieldName), partitioning.column)
+    }.map(dialect.quoteIdentifier).getOrElse {
+      throw new AnalysisException(s"User-defined partition column ${partitioning.column} not " +
+        s"found in the JDBC relation: ${schema.simpleString(Utils.maxNumToStringFields)}")
+    }
+
     var i: Int = 0
     var currentValue: Long = lowerBound
     val ans = new ArrayBuffer[Partition]()
@@ -99,10 +115,21 @@ private[sql] object JDBCRelation extends Logging {
     }
     ans.toArray
   }
+
+  def getSchema(jdbcOptions: JDBCOptions, resolver: Resolver): StructType = {
+    val tableSchema = JDBCRDD.resolveTable(jdbcOptions)
+    jdbcOptions.customSchema match {
+      case Some(customSchema) => JdbcUtils.getCustomSchema(
+        tableSchema, customSchema, resolver)
+      case None => tableSchema
+    }
+  }
 }
 
 private[sql] case class JDBCRelation(
-    parts: Array[Partition], jdbcOptions: JDBCOptions)(@transient val sparkSession: SparkSession)
+    override val schema: StructType,
+    parts: Array[Partition],
+    jdbcOptions: JDBCOptions)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
@@ -110,15 +137,6 @@ private[sql] case class JDBCRelation(
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override val needConversion: Boolean = false
-
-  override val schema: StructType = {
-    val tableSchema = JDBCRDD.resolveTable(jdbcOptions)
-    jdbcOptions.customSchema match {
-      case Some(customSchema) => JdbcUtils.getCustomSchema(
-        tableSchema, customSchema, sparkSession.sessionState.conf.resolver)
-      case None => tableSchema
-    }
-  }
 
   // Check if JDBCRDD.compileFilter can accept input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {

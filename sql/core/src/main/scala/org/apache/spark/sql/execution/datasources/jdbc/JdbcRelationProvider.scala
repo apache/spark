@@ -48,8 +48,10 @@ class JdbcRelationProvider extends CreatableRelationProvider
       JDBCPartitioningInfo(
         partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
-    val parts = JDBCRelation.columnPartition(partitionInfo)
-    JDBCRelation(parts, jdbcOptions)(sqlContext.sparkSession)
+    val resolver = sqlContext.conf.resolver
+    val schema = JDBCRelation.getSchema(jdbcOptions, resolver)
+    val parts = JDBCRelation.columnPartition(schema, partitionInfo, resolver, jdbcOptions)
+    JDBCRelation(schema, parts, jdbcOptions)(sqlContext.sparkSession)
   }
 
   override def createRelation(
