@@ -27,6 +27,10 @@ case class ContinuousCoalesceRDDPartition(index: Int) extends Partition {
   private[continuous] var writersInitialized: Boolean = false
 }
 
+/**
+ * RDD for continuous coalescing. Asynchronously writes all partitions of `prev` into a local
+ * continuous shuffle, and then reads them in the task thread using `reader`.
+ */
 class ContinuousCoalesceRDD(var reader: ContinuousShuffleReadRDD, var prev: RDD[InternalRow])
   extends RDD[InternalRow](reader.context, Nil) {
 

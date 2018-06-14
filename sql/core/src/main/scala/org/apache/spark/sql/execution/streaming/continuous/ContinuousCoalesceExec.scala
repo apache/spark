@@ -27,6 +27,11 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartiti
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.continuous.shuffle.{ContinuousShuffleReadPartition, ContinuousShuffleReadRDD}
 
+/**
+ * Physical plan for coalescing a continuous processing plan.
+ *
+ * Currently, only coalesces to a single partition are supported. `numPartitions` must be 1.
+ */
 case class ContinuousCoalesceExec(numPartitions: Int, child: SparkPlan) extends SparkPlan {
   override def output: Seq[Attribute] = child.output
 
