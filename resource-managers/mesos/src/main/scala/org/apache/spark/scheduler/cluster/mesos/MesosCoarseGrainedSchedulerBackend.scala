@@ -650,7 +650,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           gpusByTaskId -= taskId
         }
         if (TaskState.isFailed(state)) {
-          logError(s"Task $taskId failed on Mesos slave $slaveId.")
+          logError(s"Mesos task $taskId failed on Mesos slave $slaveId.")
         }
         executorTerminated(d, slaveId, taskId, s"Executor finished with state $state")
         // In case we'd rejected everything before but have now lost a node
