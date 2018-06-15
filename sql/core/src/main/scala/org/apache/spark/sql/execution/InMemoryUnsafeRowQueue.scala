@@ -31,7 +31,7 @@ import org.apache.spark.storage.BlockManager
 /**
  * A queue which implements a moving window used for sort-merge join inner range optimization.
  * Unlike [[ExternalAppendOnlyUnsafeRowArray]] this class currently does not spill over to disk.
- * In case [[numRowsInMemoryBufferThreshold]] is reached, only a warning will be logged
+ * In case [[numRowsInMemoryBufferThreshold]] is reached, only a warning will be logged.
  */
 private[sql] class InMemoryUnsafeRowQueue(
     taskMemoryManager: TaskMemoryManager,
