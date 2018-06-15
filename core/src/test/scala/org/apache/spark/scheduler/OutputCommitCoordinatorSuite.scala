@@ -153,7 +153,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("Job should not complete if all commits are denied") {
     // Create a mock OutputCommitCoordinator that denies all attempts to commit
     doReturn(false).when(outputCommitCoordinator).handleAskPermissionToCommit(
-      Matchers.any(), Matchers.any(), Matchers.any())
+      Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any())
     val rdd: RDD[Int] = sc.parallelize(Seq(1), 1)
     def resultHandler(x: Int, y: Unit): Unit = {}
     val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
@@ -169,45 +169,61 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Only authorized committer failures can clear the authorized committer lock (SPARK-6614)") {
     val stage: Int = 1
+    val stageAttempt: Int = 1
     val partition: Int = 2
     val authorizedCommitter: Int = 3
     val nonAuthorizedCommitter: Int = 100
     outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
 
-    assert(outputCommitCoordinator.canCommit(stage, partition, authorizedCommitter))
-    assert(!outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter))
+    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, authorizedCommitter))
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter))
     // The non-authorized committer fails
-    outputCommitCoordinator.taskCompleted(
-      stage, partition, attemptNumber = nonAuthorizedCommitter, reason = TaskKilled("test"))
+    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
+      attemptNumber = nonAuthorizedCommitter, reason = TaskKilled("test"))
     // New tasks should still not be able to commit because the authorized committer has not failed
-    assert(
-      !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 1))
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 1))
     // The authorized committer now fails, clearing the lock
-    outputCommitCoordinator.taskCompleted(
-      stage, partition, attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
+    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
+      attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
     // A new task should now be allowed to become the authorized committer
-    assert(
-      outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 2))
+    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 2))
     // There can only be one authorized committer
-    assert(
-      !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 3))
-  }
-
-  test("Duplicate calls to canCommit from the authorized committer gets idempotent responses.") {
-    val rdd = sc.parallelize(Seq(1), 1)
-    sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).callCanCommitMultipleTimes _,
-       0 until rdd.partitions.size)
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 3))
   }
 
   test("SPARK-19631: Do not allow failed attempts to be authorized for committing") {
     val stage: Int = 1
+    val stageAttempt: Int = 1
     val partition: Int = 1
     val failedAttempt: Int = 0
     outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
-    outputCommitCoordinator.taskCompleted(stage, partition, attemptNumber = failedAttempt,
+    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
+      attemptNumber = failedAttempt,
       reason = ExecutorLostFailure("0", exitCausedByApp = true, None))
-    assert(!outputCommitCoordinator.canCommit(stage, partition, failedAttempt))
-    assert(outputCommitCoordinator.canCommit(stage, partition, failedAttempt + 1))
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition, failedAttempt))
+    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, failedAttempt + 1))
+  }
+
+  test("SPARK-24552: Differentiate tasks from different stage attempts") {
+    var stage = 1
+    val taskAttempt = 1
+    val partition = 1
+
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
+    assert(!outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
+
+    // Fail the task in the first attempt, the task in the second attempt should succeed.
+    stage += 1
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
+      ExecutorLostFailure("0", exitCausedByApp = true, None))
+    assert(!outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
+    assert(outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
   }
 }
 
@@ -241,16 +257,6 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     val ctx = TaskContext.get()
     runCommitWithProvidedCommitter(ctx, iter,
       if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
-  }
-
-  // Receiver should be idempotent for AskPermissionToCommitOutput
-  def callCanCommitMultipleTimes(iter: Iterator[Int]): Unit = {
-    val ctx = TaskContext.get()
-    val canCommit1 = SparkEnv.get.outputCommitCoordinator
-      .canCommit(ctx.stageId(), ctx.partitionId(), ctx.attemptNumber())
-    val canCommit2 = SparkEnv.get.outputCommitCoordinator
-      .canCommit(ctx.stageId(), ctx.partitionId(), ctx.attemptNumber())
-    assert(canCommit1 && canCommit2)
   }
 
   private def runCommitWithProvidedCommitter(
