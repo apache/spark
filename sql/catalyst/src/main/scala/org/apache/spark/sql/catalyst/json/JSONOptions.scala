@@ -140,17 +140,10 @@ private[sql] class JSONOptionsInRead(
   }
 
   protected override def checkedEncoding(enc: String): String = {
-    // The following encodings are not supported in per-line mode (multiline is false)
-    // because they cause some problems in reading files with BOM which is supposed to
-    // present in the files with such encodings. After splitting input files by lines,
-    // only the first lines will have the BOM which leads to impossibility for reading
-    // the rest lines. Besides of that, the lineSep option must have the BOM in such
-    // encodings which can never present between lines.
-    val blacklist = Seq(Charset.forName("UTF-16"), Charset.forName("UTF-32"))
-    val isBlacklisted = blacklist.contains(Charset.forName(enc))
+    val isBlacklisted = JSONOptionsInRead.blacklist.contains(Charset.forName(enc))
     require(multiLine || !isBlacklisted,
       s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
-         |Blacklist: ${blacklist.mkString(", ")}""".stripMargin)
+         |Blacklist: ${JSONOptionsInRead.blacklist.mkString(", ")}""".stripMargin)
 
     val isLineSepRequired =
         multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
@@ -158,4 +151,17 @@ private[sql] class JSONOptionsInRead(
 
     enc
   }
+}
+
+private[sql] object JSONOptionsInRead {
+  // The following encodings are not supported in per-line mode (multiline is false)
+  // because they cause some problems in reading files with BOM which is supposed to
+  // present in the files with such encodings. After splitting input files by lines,
+  // only the first lines will have the BOM which leads to impossibility for reading
+  // the rest lines. Besides of that, the lineSep option must have the BOM in such
+  // encodings which can never present between lines.
+  val blacklist = Seq(
+    Charset.forName("UTF-16"),
+    Charset.forName("UTF-32")
+  )
 }
