@@ -259,9 +259,10 @@ object MemorySinkBase {
 
   /**
    * Gets the max number of rows a MemorySink should store. This number is based on the memory
-   * sink row limit if it is set. If not, there is no limit.
+   * sink row limit option if it is set. If not, we use a large value so that data truncates
+   * rather than causing out of memory errors.
    * @param options Options for writing from which we get the max rows option
-   * @return The maximum number of rows a memorySink should store, or None for no limit.
+   * @return The maximum number of rows a memorySink should store.
    */
   def getMemorySinkCapacity(options: DataSourceOptions): Int = {
     val maxRows = options.getInt(MAX_MEMORY_SINK_ROWS, MAX_MEMORY_SINK_ROWS_DEFAULT)
