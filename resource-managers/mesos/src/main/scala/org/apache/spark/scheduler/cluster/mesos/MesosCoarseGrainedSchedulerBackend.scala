@@ -568,6 +568,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
       numExecutors < executorLimit &&
+      // nodeBlacklist() currently only gets updated based on failures in spark tasks.
+      // If a mesos task fails to even start -- that is,
+      // if a spark executor fails to launch on a node -- nodeBlacklist does not get updated
+      // see SPARK-24567 for details
       !scheduler.nodeBlacklist().contains(offerHostname) &&
       meetsPortRequirements &&
       satisfiesLocality(offerHostname)
