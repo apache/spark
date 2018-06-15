@@ -2720,11 +2720,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-21743: top-most limit should not cause memory leak") {
-    // In unit test, Spark will fail the query if memory leak detected.
-    spark.range(100).groupBy("id").count().limit(1).collect()
-  }
-
   test("SPARK-21652: rule confliction of InferFiltersFromConstraints and ConstantPropagation") {
     withTempView("t1", "t2") {
       Seq((1, 1)).toDF("col1", "col2").createOrReplaceTempView("t1")
