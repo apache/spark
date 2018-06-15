@@ -99,7 +99,8 @@ private[sql] class JSONOptions(
   /**
    * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
    * If the encoding is not specified (None) in read, it will be detected automatically
-   * when the multiLine option is set to `true`.
+   * when the multiLine option is set to `true`. If encoding is not specified in write,
+   * UTF-8 is used by default.
    */
   val encoding: Option[String] = parameters.get("encoding")
     .orElse(parameters.get("charset")).map(checkedEncoding)
