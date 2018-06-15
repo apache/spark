@@ -146,8 +146,13 @@ def do_server_auth(conn, auth_secret):
         conn.close()
         raise Exception("Unexpected reply from iterator server.")
 
+
 def ensure_callback_server_started(gw):
-    # start callback server if not already started
+    """
+    Start callback server if not already started. The callback server is needed if the Java
+    driver process needs to callback into the Python driver process to execute Python code.
+    """
+
     # getattr will fallback to JVM, so we cannot test by hasattr()
     if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
         gw.callback_server_parameters.eager_load = True
