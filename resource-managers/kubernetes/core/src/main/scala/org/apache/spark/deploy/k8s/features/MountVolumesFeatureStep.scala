@@ -21,7 +21,7 @@ import io.fabric8.kubernetes.api.model._
 import org.apache.spark.deploy.k8s._
 
 private[spark] class MountVolumesFeatureStep(
-  kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
+    kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
   extends KubernetesFeatureConfigStep {
 
   override def configurePod(pod: SparkPod): SparkPod = {

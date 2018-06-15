@@ -19,14 +19,17 @@ package org.apache.spark.deploy.k8s
 private[spark] sealed trait KubernetesVolumeSpecificConf
 
 private[spark] case class KubernetesHostPathVolumeConf(
-    hostPath: String) extends KubernetesVolumeSpecificConf
+    hostPath: String)
+  extends KubernetesVolumeSpecificConf
 
 private[spark] case class KubernetesPVCVolumeConf(
-    claimName: String) extends KubernetesVolumeSpecificConf
+    claimName: String)
+  extends KubernetesVolumeSpecificConf
 
 private[spark] case class KubernetesEmptyDirVolumeConf(
     medium: Option[String],
-    sizeLimit: Option[String]) extends KubernetesVolumeSpecificConf
+    sizeLimit: Option[String])
+  extends KubernetesVolumeSpecificConf
 
 private[spark] case class KubernetesVolumeSpec[T <: KubernetesVolumeSpecificConf](
     volumeName: String,
