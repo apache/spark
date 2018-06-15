@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters(pushDownDate: Boolean) {
+private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownDecimal: Boolean) {
 
   private def dateToDays(date: Date): SQLDate = {
     DateTimeUtils.fromJavaDate(date)
@@ -62,12 +62,12 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.eq(
         longColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
@@ -98,12 +98,12 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.notEq(
         longColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
@@ -131,12 +131,12 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.lt(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.lt(
         intColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.lt(
         longColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
@@ -164,12 +164,12 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.ltEq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.ltEq(
         intColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.ltEq(
         longColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
@@ -197,12 +197,12 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       (n: String, v: Any) => FilterApi.gt(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.gt(
         intColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
       (n: String, v: Any) => FilterApi.gt(
         longColumn(n),
         Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()

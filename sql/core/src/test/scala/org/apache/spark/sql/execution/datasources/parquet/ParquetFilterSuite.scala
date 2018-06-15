@@ -24,6 +24,7 @@ import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 
+import org.apache.spark.DebugFilesystem
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -55,7 +56,8 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
-  private lazy val parquetFilters = new ParquetFilters(conf.parquetFilterPushDownDate)
+  private lazy val parquetFilters =
+    new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownDecimal)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -82,6 +84,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withSQLConf(
       SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED.key -> "true",
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         val query = df
           .select(output.map(e => Column(e)): _*)
@@ -138,6 +141,13 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Array[Byte])
       (implicit df: DataFrame): Unit = {
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
+  }
+
+  private def testDecimalPushDown(data: DataFrame)(f: DataFrame => Unit): Unit = {
+    withTempPath { file =>
+      data.write.parquet(file.getCanonicalPath)
+      readParquetFile(file.toString)(f)
+    }
   }
 
   test("filter pushdown - boolean") {
@@ -360,15 +370,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
   test("filter pushdown - decimal(is32BitDecimalType & is64BitDecimalType)") {
-    def testDecimalPushDown(data: DataFrame)(f: DataFrame => Unit): Unit = {
-      withTempPath { file =>
-        data.write.parquet(file.getCanonicalPath)
-        readParquetFile(file.toString, true)(f)
-      }
-    }
-
-    Seq(s"_1 decimal(${Decimal.MAX_INT_DIGITS}, 2)", s"_1 decimal(${Decimal.MAX_LONG_DIGITS}, 2)")
-      .foreach { schemaDDL =>
+    Seq(s"_1 decimal(${Decimal.MAX_INT_DIGITS}, 2)",
+      s"_1 decimal(${Decimal.MAX_LONG_DIGITS}, 2)").foreach { schemaDDL =>
       val schema = StructType.fromDDL(schemaDDL)
       val rdd = spark.sparkContext.parallelize((1 to 4).map(i => Row(new java.math.BigDecimal(i))))
       val dataFrame = spark.createDataFrame(rdd, schema)
@@ -396,6 +399,29 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
         checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
       }
+    }
+  }
+
+  test("32BitDecimalType & 64BitDecimalType filter pushdown doesn't support legacy format") {
+    withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
+      Seq(s"_1 decimal(${Decimal.MAX_INT_DIGITS}, 2)",
+        s"_1 decimal(${Decimal.MAX_LONG_DIGITS}, 2)").foreach { schemaDDL =>
+        val schema = StructType.fromDDL(schemaDDL)
+        val rdd =
+          spark.sparkContext.parallelize((1 to 4).map(i => Row(new java.math.BigDecimal(i))))
+        val dataFrame = spark.createDataFrame(rdd, schema)
+        testDecimalPushDown(dataFrame) { implicit df =>
+          assert(df.schema === schema)
+          val e = intercept[org.apache.spark.SparkException] {
+            checkFilterPredicate('_1 === 1, classOf[Eq[_]], 1)
+          }
+          // Clear open streams, otherwise throw: There are 8 possibly leaked file streams
+          DebugFilesystem.clearOpenStreams()
+          assert(e.getMessage.contains("does not match the schema found in file metadata. " +
+            "Column _1 is of type: FIXED_LEN_BYTE_ARRAY\nValid types for this column are: " +
+            "[class org.apache.parquet.io.api.Binary]"))
+          }
+        }
     }
   }
 
