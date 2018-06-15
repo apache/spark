@@ -131,7 +131,7 @@ object PythonForeachWriter {
 
       if (count > 0) {
         val row = queue.remove()
-        assert(row != null, s"HybridRowQueue.remove() returned null " +
+        assert(row != null, "HybridRowQueue.remove() returned null " +
           s"[count = $count, allAdded = $allAdded, exception = $exception]")
         count -= 1
         logTrace(s"Removed $row, $count left")

@@ -985,10 +985,8 @@ class DataStreamWriter(object):
                     if should_process:
                         for x in iterator:
                             f.process(x)
-
                 except Exception as ex:
                     error = ex
-
                 finally:
                     if close_exists:
                         f.close(error)

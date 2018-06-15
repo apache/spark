@@ -2018,7 +2018,7 @@ class SQLTests(ReusedSQLTestCase):
 
         self.assertEqual(len(tester.open_events()), 2)
 
-        self.assertEqual(len(tester.process_events()), 0)   # no row was processed
+        self.assertEqual(len(tester.process_events()), 0)  # no row was processed
 
         close_events = tester.close_events()
         self.assertEqual(len(close_events), 2)
@@ -2035,7 +2035,7 @@ class SQLTests(ReusedSQLTestCase):
                 tester.write_close_event(error)
 
         tester.run_streaming_query_on_writer(ForeachWriter(), 2)
-        self.assertEqual(len(tester.open_events()), 0)      # no open events
+        self.assertEqual(len(tester.open_events()), 0)  # no open events
         self.assertEqual(len(tester.process_events()), 2)
         self.assertEqual(len(tester.close_events()), 2)
 
@@ -2063,7 +2063,7 @@ class SQLTests(ReusedSQLTestCase):
                 tester.write_process_event(row)
 
         tester.run_streaming_query_on_writer(ForeachWriter(), 2)
-        self.assertEqual(len(tester.open_events()), 0)      # no open events
+        self.assertEqual(len(tester.open_events()), 0)  # no open events
         self.assertEqual(len(tester.process_events()), 2)
         self.assertEqual(len(tester.close_events()), 0)
 
@@ -2081,7 +2081,7 @@ class SQLTests(ReusedSQLTestCase):
 
         try:
             tester.run_streaming_query_on_writer(ForeachWriter(), 1)
-            self.fail("bad writer did not fail the query")   # this is not expected
+            self.fail("bad writer did not fail the query")  # this is not expected
         except StreamingQueryException as e:
             # TODO: Verify whether original error message is inside the exception
             pass
