@@ -151,7 +151,7 @@ private[spark] class FailureTracker(
     while (executorFailuresValidityInterval > 0 &&
         failedExecutorsWithTimeStamps.nonEmpty &&
         failedExecutorsWithTimeStamps.head < endTime - executorFailuresValidityInterval) {
-        failedExecutorsWithTimeStamps.dequeue()
+      failedExecutorsWithTimeStamps.dequeue()
     }
     failedExecutorsWithTimeStamps.size
   }
