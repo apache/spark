@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 import scala.concurrent.Future
 
 import org.apache.spark.internal.Logging
@@ -76,9 +77,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   // "milliseconds"
   private val slaveTimeoutMs =
     sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
-      s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L}ms")
+      s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s").seconds.toMillis}ms")
   private val executorTimeoutMs =
-    sc.conf.getTimeAsSeconds("spark.network.timeout", s"${slaveTimeoutMs}ms") * 1000
+    sc.conf.getTimeAsSeconds("spark.network.timeout", s"${slaveTimeoutMs}ms").seconds.toMillis
 
   // "spark.network.timeoutInterval" uses "seconds", while
   // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"
