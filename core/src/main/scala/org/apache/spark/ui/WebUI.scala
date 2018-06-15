@@ -103,10 +103,10 @@ private[spark] abstract class WebUI(
   }
 
   /**
-    * Detaches the content handler at `path` URI.
-    *
-    * @param path Path in UI to unmount.
-    */
+   * Detaches the content handler at `path` URI.
+   *
+   * @param path Path in UI to unmount.
+   */
   def detachHandler(path: String): Unit = {
     handlers.find(_.getContextPath() == path).foreach(detachHandler)
   }
