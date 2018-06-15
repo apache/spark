@@ -72,7 +72,7 @@ public final class UnsafeArrayData extends ArrayData {
   private long elementOffset;
 
   private long getElementOffset(int ordinal, int elementSize) {
-    return elementOffset + ordinal * elementSize;
+    return elementOffset + ordinal * (long)elementSize;
   }
 
   public Object getBaseObject() { return baseObject; }
@@ -402,7 +402,7 @@ public final class UnsafeArrayData extends ArrayData {
   public short[] toShortArray() {
     short[] values = new short[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.SHORT_ARRAY_OFFSET, numElements * 2);
+      baseObject, elementOffset, values, Platform.SHORT_ARRAY_OFFSET, numElements * 2L);
     return values;
   }
 
@@ -410,7 +410,7 @@ public final class UnsafeArrayData extends ArrayData {
   public int[] toIntArray() {
     int[] values = new int[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.INT_ARRAY_OFFSET, numElements * 4);
+      baseObject, elementOffset, values, Platform.INT_ARRAY_OFFSET, numElements * 4L);
     return values;
   }
 
@@ -418,7 +418,7 @@ public final class UnsafeArrayData extends ArrayData {
   public long[] toLongArray() {
     long[] values = new long[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.LONG_ARRAY_OFFSET, numElements * 8);
+      baseObject, elementOffset, values, Platform.LONG_ARRAY_OFFSET, numElements * 8L);
     return values;
   }
 
@@ -426,7 +426,7 @@ public final class UnsafeArrayData extends ArrayData {
   public float[] toFloatArray() {
     float[] values = new float[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4);
+      baseObject, elementOffset, values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4L);
     return values;
   }
 
@@ -434,14 +434,14 @@ public final class UnsafeArrayData extends ArrayData {
   public double[] toDoubleArray() {
     double[] values = new double[numElements];
     Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8);
+      baseObject, elementOffset, values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8L);
     return values;
   }
 
   private static UnsafeArrayData fromPrimitiveArray(
        Object arr, int offset, int length, int elementSize) {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
-    final long valueRegionInBytes = elementSize * length;
+    final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +

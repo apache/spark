@@ -343,7 +343,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 
   override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
-    conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000
+    conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000L
   }
 
   override def loadPartition(
