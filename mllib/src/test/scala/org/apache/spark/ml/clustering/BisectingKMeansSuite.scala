@@ -17,16 +17,20 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import scala.language.existentials
+
+import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.DistanceMeasure
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
 
-class BisectingKMeansSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   final val k = 5
   @transient var dataset: Dataset[_] = _
@@ -65,10 +69,13 @@ class BisectingKMeansSuite
 
     // Verify fit does not fail on very sparse data
     val model = bkm.fit(sparseDataset)
-    val result = model.transform(sparseDataset)
-    val numClusters = result.select("prediction").distinct().collect().length
-    // Verify we hit the edge case
-    assert(numClusters < k && numClusters > 1)
+
+    testTransformerByGlobalCheckFunc[Tuple1[Vector]](sparseDataset.toDF(), model, "prediction") {
+      rows =>
+        val numClusters = rows.distinct.length
+        // Verify we hit the edge case
+        assert(numClusters < k && numClusters > 1)
+    }
   }
 
   test("setter/getter") {
@@ -101,18 +108,15 @@ class BisectingKMeansSuite
     val bkm = new BisectingKMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
     val model = bkm.fit(dataset)
     assert(model.clusterCenters.length === k)
-
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", predictionColName)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
-    val clusters =
-      transformed.select(predictionColName).rdd.map(_.getInt(0)).distinct().collect().toSet
-    assert(clusters.size === k)
-    assert(clusters === Set(0, 1, 2, 3, 4))
     assert(model.computeCost(dataset) < 0.1)
     assert(model.hasParent)
+
+    testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataset.toDF(), model,
+      "features", predictionColName) { rows =>
+      val clusters = rows.map(_.getAs[Int](predictionColName)).toSet
+      assert(clusters.size === k)
+      assert(clusters === Set(0, 1, 2, 3, 4))
+    }
 
     // Check validity of model summary
     val numRows = dataset.count()
@@ -181,6 +185,22 @@ class BisectingKMeansSuite
       predictionsMap(Vectors.dense(-100.0, 90.0)))
 
     model.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+  }
+
+  test("BisectingKMeans with Array input") {
+    def trainAndComputeCost(dataset: Dataset[_]): Double = {
+      val model = new BisectingKMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
+      model.computeCost(dataset)
+    }
+
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val trueCost = trainAndComputeCost(newDataset)
+    val doubleArrayCost = trainAndComputeCost(newDatasetD)
+    val floatArrayCost = trainAndComputeCost(newDatasetF)
+
+    // checking the cost is fine enough as a sanity check
+    assert(trueCost ~== doubleArrayCost absTol 1e-6)
+    assert(trueCost ~== floatArrayCost absTol 1e-6)
   }
 }
 

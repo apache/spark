@@ -73,6 +73,8 @@ private[spark] class TaskSetManager(
   val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks
+  private[scheduler] val partitionToIndex = tasks.zipWithIndex
+    .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
 
@@ -153,7 +155,7 @@ private[spark] class TaskSetManager(
   private[scheduler] val speculatableTasks = new HashSet[Int]
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
-  private val taskInfos = new HashMap[Long, TaskInfo]
+  private[scheduler] val taskInfos = new HashMap[Long, TaskInfo]
 
   // Use a MedianHeap to record durations of successful tasks so we know when to launch
   // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
@@ -754,6 +756,9 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
+    // There may be multiple tasksets for this stage -- we let all of them know that the partition
+    // was completed.  This may result in some of the tasksets getting completed.
+    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -762,6 +767,19 @@ private[spark] class TaskSetManager(
     // here "result.value()" just returns the value and won't block other threads.
     sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates, info)
     maybeFinishTaskSet()
+  }
+
+  private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
+    partitionToIndex.get(partitionId).foreach { index =>
+      if (!successful(index)) {
+        tasksSuccessful += 1
+        successful(index) = true
+        if (tasksSuccessful == numTasks) {
+          isZombie = true
+        }
+        maybeFinishTaskSet()
+      }
+    }
   }
 
   /**
@@ -833,13 +851,19 @@ private[spark] class TaskSetManager(
         }
         ef.exception
 
+      case tk: TaskKilled =>
+        // TaskKilled might have accumulator updates
+        accumUpdates = tk.accums
+        logWarning(failureReason)
+        None
+
       case e: ExecutorLostFailure if !e.exitCausedByApp =>
         logInfo(s"Task $tid failed because while it was being computed, its executor " +
           "exited for a reason unrelated to the task. Not counting this failure towards the " +
           "maximum number of failures for the task.")
         None
 
-      case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
+      case e: TaskFailedReason =>  // TaskResultLost and others
         logWarning(failureReason)
         None
     }

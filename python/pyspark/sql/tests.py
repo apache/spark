@@ -3033,8 +3033,83 @@ class SQLTests(ReusedSQLTestCase):
             .json(rdd).schema
         self.assertEquals(schema, StructType([StructField("a", LongType(), True)]))
 
+    def test_csv_sampling_ratio(self):
+        rdd = self.spark.sparkContext.range(0, 100, 1, 1) \
+            .map(lambda x: '0.1' if x == 1 else str(x))
+        schema = self.spark.read.option('inferSchema', True)\
+            .csv(rdd, samplingRatio=0.5).schema
+        self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
+
+    def test_checking_csv_header(self):
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+        try:
+            self.spark.createDataFrame([[1, 1000], [2000, 2]])\
+                .toDF('f1', 'f2').write.option("header", "true").csv(path)
+            schema = StructType([
+                StructField('f2', IntegerType(), nullable=True),
+                StructField('f1', IntegerType(), nullable=True)])
+            df = self.spark.read.option('header', 'true').schema(schema)\
+                .csv(path, enforceSchema=False)
+            self.assertRaisesRegexp(
+                Exception,
+                "CSV header does not conform to the schema",
+                lambda: df.collect())
+        finally:
+            shutil.rmtree(path)
+
+    def test_repr_html(self):
+        import re
+        pattern = re.compile(r'^ *\|', re.MULTILINE)
+        df = self.spark.createDataFrame([(1, "1"), (22222, "22222")], ("key", "value"))
+        self.assertEquals(None, df._repr_html_())
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
+            expected1 = """<table border='1'>
+                |<tr><th>key</th><th>value</th></tr>
+                |<tr><td>1</td><td>1</td></tr>
+                |<tr><td>22222</td><td>22222</td></tr>
+                |</table>
+                |"""
+            self.assertEquals(re.sub(pattern, '', expected1), df._repr_html_())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                expected2 = """<table border='1'>
+                    |<tr><th>key</th><th>value</th></tr>
+                    |<tr><td>1</td><td>1</td></tr>
+                    |<tr><td>222</td><td>222</td></tr>
+                    |</table>
+                    |"""
+                self.assertEquals(re.sub(pattern, '', expected2), df._repr_html_())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    expected3 = """<table border='1'>
+                        |<tr><th>key</th><th>value</th></tr>
+                        |<tr><td>1</td><td>1</td></tr>
+                        |</table>
+                        |only showing top 1 row
+                        |"""
+                    self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
+
+    @classmethod
+    def setUpClass(cls):
+        # get a SparkContext to check for availability of Hive
+        sc = SparkContext('local[4]', cls.__name__)
+        cls.hive_available = True
+        try:
+            sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        except py4j.protocol.Py4JError:
+            cls.hive_available = False
+        except TypeError:
+            cls.hive_available = False
+        finally:
+            # we don't need this SparkContext for the test
+            sc.stop()
+
+    def setUp(self):
+        super(HiveSparkSubmitTests, self).setUp()
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     def test_hivecontext(self):
         # This test checks that HiveContext is using Hive metastore (SPARK-16224).
@@ -3065,8 +3140,8 @@ class HiveSparkSubmitTests(SparkSubmitTests):
             |print(hive_context.sql("show databases").collect())
             """)
         proc = subprocess.Popen(
-            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]",
-             "--driver-class-path", hive_site_dir, script],
+            self.sparkSubmit + ["--master", "local-cluster[1,1,1024]",
+                                "--driver-class-path", hive_site_dir, script],
             stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -4053,6 +4128,61 @@ class PandasUDFTests(ReusedSQLTestCase):
                 def foo(k, v, w):
                     return k
 
+    def test_stopiteration_in_udf(self):
+        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
+        from py4j.protocol import Py4JJavaError
+
+        def foo(x):
+            raise StopIteration()
+
+        def foofoo(x, y):
+            raise StopIteration()
+
+        exc_message = "Caught StopIteration thrown from user's code; failing the task"
+        df = self.spark.range(0, 100)
+
+        # plain udf (test for SPARK-23754)
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.withColumn('v', udf(foo)('id')).collect
+        )
+
+        # pandas scalar udf
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.withColumn(
+                'v', pandas_udf(foo, 'double', PandasUDFType.SCALAR)('id')
+            ).collect
+        )
+
+        # pandas grouped map
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.groupBy('id').apply(
+                pandas_udf(foo, df.schema, PandasUDFType.GROUPED_MAP)
+            ).collect
+        )
+
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.groupBy('id').apply(
+                pandas_udf(foofoo, df.schema, PandasUDFType.GROUPED_MAP)
+            ).collect
+        )
+
+        # pandas grouped agg
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.groupBy('id').agg(
+                pandas_udf(foo, 'double', PandasUDFType.GROUPED_AGG)('id')
+            ).collect
+        )
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
@@ -4653,6 +4783,26 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected2, result2)
         self.assertPandasEqual(expected3, result3)
 
+    def test_array_type_correct(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
+
+        df = self.data.withColumn("arr", array(col("id"))).repartition(1, "id")
+
+        output_schema = StructType(
+            [StructField('id', LongType()),
+             StructField('v', IntegerType()),
+             StructField('arr', ArrayType(LongType()))])
+
+        udf = pandas_udf(
+            lambda pdf: pdf,
+            output_schema,
+            PandasUDFType.GROUPED_MAP
+        )
+
+        result = df.groupby('id').apply(udf).sort('id').toPandas()
+        expected = df.toPandas().groupby('id').apply(udf.func).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
     def test_register_grouped_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
@@ -5192,8 +5342,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         expected2 = df.groupby().agg(sum(df.v))
 
         # groupby one column and one sql expression
-        result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v))
-        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v))
+        result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v)).orderBy(df.id, df.v % 2)
+        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v)).orderBy(df.id, df.v % 2)
 
         # groupby one python UDF
         result4 = df.groupby(plus_one(df.id)).agg(sum_udf(df.v))
@@ -5304,6 +5454,15 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
             expected1 = df.groupby(df.id).agg(sum(df.v))
             self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
+    def test_array_type(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        df = self.data
+
+        array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
+        result1 = df.groupby('id').agg(array_udf(df['v']).alias('v2'))
+        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+
     def test_invalid_args(self):
         from pyspark.sql.functions import mean
 
@@ -5328,6 +5487,235 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                     AnalysisException,
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
+
+
+@unittest.skipIf(
+    not _have_pandas or not _have_pyarrow,
+    _pandas_requirement_message or _pyarrow_requirement_message)
+class WindowPandasUDFTests(ReusedSQLTestCase):
+    @property
+    def data(self):
+        from pyspark.sql.functions import array, explode, col, lit
+        return self.spark.range(10).toDF('id') \
+            .withColumn("vs", array([lit(i * 1.0) + col('id') for i in range(20, 30)])) \
+            .withColumn("v", explode(col('vs'))) \
+            .drop('vs') \
+            .withColumn('w', lit(1.0))
+
+    @property
+    def python_plus_one(self):
+        from pyspark.sql.functions import udf
+        return udf(lambda v: v + 1, 'double')
+
+    @property
+    def pandas_scalar_time_two(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        return pandas_udf(lambda v: v * 2, 'double')
+
+    @property
+    def pandas_agg_mean_udf(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def avg(v):
+            return v.mean()
+        return avg
+
+    @property
+    def pandas_agg_max_udf(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def max(v):
+            return v.max()
+        return max
+
+    @property
+    def pandas_agg_min_udf(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def min(v):
+            return v.min()
+        return min
+
+    @property
+    def unbounded_window(self):
+        return Window.partitionBy('id') \
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+
+    @property
+    def ordered_window(self):
+        return Window.partitionBy('id').orderBy('v')
+
+    @property
+    def unpartitioned_window(self):
+        return Window.partitionBy()
+
+    def test_simple(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType, percent_rank, mean, max
+
+        df = self.data
+        w = self.unbounded_window
+
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('mean_v', mean_udf(df['v']).over(w))
+        expected1 = df.withColumn('mean_v', mean(df['v']).over(w))
+
+        result2 = df.select(mean_udf(df['v']).over(w))
+        expected2 = df.select(mean(df['v']).over(w))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+
+    def test_multiple_udfs(self):
+        from pyspark.sql.functions import max, min, mean
+
+        df = self.data
+        w = self.unbounded_window
+
+        result1 = df.withColumn('mean_v', self.pandas_agg_mean_udf(df['v']).over(w)) \
+                    .withColumn('max_v', self.pandas_agg_max_udf(df['v']).over(w)) \
+                    .withColumn('min_w', self.pandas_agg_min_udf(df['w']).over(w))
+
+        expected1 = df.withColumn('mean_v', mean(df['v']).over(w)) \
+                      .withColumn('max_v', max(df['v']).over(w)) \
+                      .withColumn('min_w', min(df['w']).over(w))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+
+    def test_replace_existing(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w = self.unbounded_window
+
+        result1 = df.withColumn('v', self.pandas_agg_mean_udf(df['v']).over(w))
+        expected1 = df.withColumn('v', mean(df['v']).over(w))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+
+    def test_mixed_sql(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w = self.unbounded_window
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('v', mean_udf(df['v'] * 2).over(w) + 1)
+        expected1 = df.withColumn('v', mean(df['v'] * 2).over(w) + 1)
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+
+    def test_mixed_udf(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w = self.unbounded_window
+
+        plus_one = self.python_plus_one
+        time_two = self.pandas_scalar_time_two
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn(
+            'v2',
+            plus_one(mean_udf(plus_one(df['v'])).over(w)))
+        expected1 = df.withColumn(
+            'v2',
+            plus_one(mean(plus_one(df['v'])).over(w)))
+
+        result2 = df.withColumn(
+            'v2',
+            time_two(mean_udf(time_two(df['v'])).over(w)))
+        expected2 = df.withColumn(
+            'v2',
+            time_two(mean(time_two(df['v'])).over(w)))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+
+    def test_without_partitionBy(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w = self.unpartitioned_window
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('v2', mean_udf(df['v']).over(w))
+        expected1 = df.withColumn('v2', mean(df['v']).over(w))
+
+        result2 = df.select(mean_udf(df['v']).over(w))
+        expected2 = df.select(mean(df['v']).over(w))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+
+    def test_mixed_sql_and_udf(self):
+        from pyspark.sql.functions import max, min, rank, col
+
+        df = self.data
+        w = self.unbounded_window
+        ow = self.ordered_window
+        max_udf = self.pandas_agg_max_udf
+        min_udf = self.pandas_agg_min_udf
+
+        result1 = df.withColumn('v_diff', max_udf(df['v']).over(w) - min_udf(df['v']).over(w))
+        expected1 = df.withColumn('v_diff', max(df['v']).over(w) - min(df['v']).over(w))
+
+        # Test mixing sql window function and window udf in the same expression
+        result2 = df.withColumn('v_diff', max_udf(df['v']).over(w) - min(df['v']).over(w))
+        expected2 = expected1
+
+        # Test chaining sql aggregate function and udf
+        result3 = df.withColumn('max_v', max_udf(df['v']).over(w)) \
+                    .withColumn('min_v', min(df['v']).over(w)) \
+                    .withColumn('v_diff', col('max_v') - col('min_v')) \
+                    .drop('max_v', 'min_v')
+        expected3 = expected1
+
+        # Test mixing sql window function and udf
+        result4 = df.withColumn('max_v', max_udf(df['v']).over(w)) \
+                    .withColumn('rank', rank().over(ow))
+        expected4 = df.withColumn('max_v', max(df['v']).over(w)) \
+                      .withColumn('rank', rank().over(ow))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+        self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
+        self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
+
+    def test_array_type(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        df = self.data
+        w = self.unbounded_window
+
+        array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
+        result1 = df.withColumn('v2', array_udf(df['v']).over(w))
+        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+
+    def test_invalid_args(self):
+        from pyspark.sql.functions import mean, pandas_udf, PandasUDFType
+
+        df = self.data
+        w = self.unbounded_window
+        ow = self.ordered_window
+        mean_udf = self.pandas_agg_mean_udf
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    '.*not supported within a window function'):
+                foo_udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUPED_MAP)
+                df.withColumn('v2', foo_udf(df['v']).over(w))
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    '.*Only unbounded window frame is supported.*'):
+                df.withColumn('mean_v', mean_udf(df['v']).over(ow))
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
