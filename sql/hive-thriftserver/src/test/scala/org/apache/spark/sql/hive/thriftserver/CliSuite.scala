@@ -39,7 +39,6 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * Hive metastore and warehouse.
  */
 class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
-  Utils.hiveShimsHack()
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
