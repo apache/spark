@@ -27,7 +27,12 @@ import org.apache.spark.util.Utils
 
 
 trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
-  Utils.hiveShimsHack()
+  try {
+    Utils.hiveShimsHack()
+  } catch {
+    case _: Throwable => // ignore
+  }
+
   override protected val enableAutoThreadAudit = false
   protected val spark: SparkSession = TestHive.sparkSession
   protected val hiveContext: TestHiveContext = TestHive
