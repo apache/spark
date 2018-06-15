@@ -36,9 +36,11 @@ import org.apache.spark.util.{Benchmark, Utils}
 object FilterPushdownBenchmark {
   val conf = new SparkConf()
     .setAppName("FilterPushdownBenchmark")
-    .setIfMissing("spark.master", "local[1]")
+    // Since `spark.master` always exists, overrides this value
+    .set("spark.master", "local[1]")
     .setIfMissing("spark.driver.memory", "3g")
     .setIfMissing("spark.executor.memory", "3g")
+    .setIfMissing("spark.ui.enabled", "false")
     .setIfMissing("orc.compression", "snappy")
     .setIfMissing("spark.sql.parquet.compression.codec", "snappy")
 
