@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{File, FileOutputStream, StringWriter}
+import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
@@ -27,8 +27,8 @@ import com.fasterxml.jackson.core.JsonFactory
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
-
 import org.apache.spark.{SparkException, TestUtils}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
@@ -2293,10 +2293,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .options(Map("encoding" -> encoding))
           .json(path.getCanonicalPath)
       }
-    }.getCause.getCause.getCause
+    }
 
-    assert(exception.isInstanceOf[java.nio.charset.UnsupportedCharsetException])
-    assert(exception.getMessage == encoding)
+    val baos = new ByteArrayOutputStream()
+    val ps = new PrintStream(baos, true, "UTF-8")
+    exception.printStackTrace(ps)
+    ps.flush()
+
+    assert(baos.toString.contains(
+      "java.nio.charset.UnsupportedCharsetException: UTF-128"))
   }
 
   test("SPARK-23723: read back json in UTF-16LE") {
