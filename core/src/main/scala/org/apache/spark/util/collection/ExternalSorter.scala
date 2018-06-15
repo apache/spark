@@ -369,7 +369,8 @@ private[spark] class ExternalSorter[K, V, C](
     type Iter = BufferedIterator[Product2[K, C]]
     val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
       // Use the reverse of comparator.compare because PriorityQueue dequeues the max
-      override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head._1, y.head._1)
+      // avoid false positive of RV_NEGATING_RESULT_OF_COMPARETO by SpotBugs
+      override def compare(x: Iter, y: Iter): Int = -1 * comparator.compare(x.head._1, y.head._1)
     })
     heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
     new Iterator[Product2[K, C]] {

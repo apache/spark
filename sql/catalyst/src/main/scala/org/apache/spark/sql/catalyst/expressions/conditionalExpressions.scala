@@ -294,7 +294,8 @@ object CaseWhen {
       case cond :: value :: Nil => Some((cond, value))
       case value :: Nil => None
     }.toArray.toSeq  // force materialization to make the seq serializable
-    val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
+    // avoid false positive of IM_BAD_CHECK_FOR_ODD by SpotBugs
+    val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }
 }
@@ -309,7 +310,8 @@ object CaseKeyWhen {
       case Seq(cond, value) => Some((EqualTo(key, cond), value))
       case Seq(value) => None
     }.toArray.toSeq  // force materialization to make the seq serializable
-    val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
+    // avoid false positive of IM_BAD_CHECK_FOR_ODD by SpotBugs
+    val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }
 }
