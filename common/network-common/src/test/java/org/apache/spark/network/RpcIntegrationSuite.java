@@ -214,6 +214,10 @@ public class RpcIntegrationSuite {
       ManagedBuffer data = testData.openStream(conf, streamName);
       client.uploadStream(meta, data, new RpcStreamCallback(stream, res, sem));
     }
+
+    if (!sem.tryAcquire(streams.length, 5, TimeUnit.SECONDS)) {
+      fail("Timeout getting response from the server");
+    }
     streamCallbacks.values().forEach(streamCallback -> {
       try {
         streamCallback.waitForCompletionAndVerify(TimeUnit.SECONDS.toMillis(5));
@@ -221,11 +225,6 @@ public class RpcIntegrationSuite {
         throw new RuntimeException(e);
       }
     });
-
-
-    if (!sem.tryAcquire(streams.length, 5, TimeUnit.SECONDS)) {
-      fail("Timeout getting response from the server");
-    }
     client.close();
     return res;
   }

@@ -260,7 +260,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
       // We choose to totally fail the channel, rather than trying to recover as we do in other
       // cases.  We don't know how many bytes of the stream the client has already sent for the
-      // stream, its not worth trying to recover.
+      // stream, it's not worth trying to recover.
       channel.pipeline().fireExceptionCaught(e);
     } finally {
       req.meta.release();

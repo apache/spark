@@ -19,6 +19,7 @@ package org.apache.spark.network;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
@@ -27,17 +28,18 @@ import com.google.common.io.Files;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 class StreamTestHelper {
   static final String[] STREAMS = { "largeBuffer", "smallBuffer", "emptyBuffer", "file" };
 
   final File testFile;
-  File tempDir;
+  final File tempDir;
 
-  ByteBuffer emptyBuffer;
-  ByteBuffer smallBuffer;
-  ByteBuffer largeBuffer;
+  final ByteBuffer emptyBuffer;
+  final ByteBuffer smallBuffer;
+  final ByteBuffer largeBuffer;
 
   private static ByteBuffer createBuffer(int bufSize) {
     ByteBuffer buf = ByteBuffer.allocate(bufSize);
@@ -90,13 +92,13 @@ class StreamTestHelper {
     }
   }
 
-
   void cleanup() {
     if (tempDir != null) {
-      for (File f : tempDir.listFiles()) {
-        f.delete();
+      try {
+        JavaUtils.deleteRecursively(tempDir);
+      } catch (IOException io) {
+        throw new RuntimeException(io);
       }
-      tempDir.delete();
     }
   }
 }
