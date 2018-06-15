@@ -636,7 +636,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             externalShufflePort,
             sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
               s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s").seconds.toMillis}ms"),
-            sc.conf.getTimeAsSeconds("spark.executor.heartbeatInterval", "10s") * 1000L)
+            sc.conf.getTimeAsSeconds("spark.executor.heartbeatInterval", "10s").seconds.toMillis)
         slave.shuffleRegistered = true
       }
 
