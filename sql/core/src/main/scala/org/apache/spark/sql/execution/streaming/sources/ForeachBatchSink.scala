@@ -52,7 +52,7 @@ trait PythonForeachBatchFunction {
 
 object PythonForeachBatchHelper {
   def callForeachBatch(dsw: DataStreamWriter[Row], pythonFunc: PythonForeachBatchFunction): Unit = {
-    dsw.foreachBatch(pythonFunc.call)
+    dsw.foreachBatch(pythonFunc.call _)
   }
 }
 

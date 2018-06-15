@@ -152,6 +152,7 @@ def require_minimum_pyarrow_version():
         raise ImportError("PyArrow >= %s must be installed; however, "
                           "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
 
+
 class ForeachBatchFunction(object):
     """
     This is the Python implementation of Java interface 'ForeachBatchFunction'. This wraps

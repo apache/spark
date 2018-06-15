@@ -21,7 +21,8 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.{InterfaceStability, Since}
+import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -280,9 +281,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         useTempCheckpointLocation = true,
         trigger = trigger)
     } else if (source == "foreachBatch") {
-      assertNotPartitioned("foreach")
+      assertNotPartitioned("foreachBatch")
       if (trigger.isInstanceOf[ContinuousTrigger]) {
-        throw new AnalysisException(s"'foreachBatch' is not supported with continuous trigger")
+        throw new AnalysisException("'foreachBatch' is not supported with continuous trigger")
       }
       val sink = new ForeachBatchSink[T](foreachBatchWriter, ds.exprEnc)
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
@@ -377,11 +378,43 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this
   }
 
-  def foreachBatch(writer: (Dataset[T], Long) => Unit): DataStreamWriter[T] = {
+  /**
+   * :: Experimental ::
+   *
+   * (Scala-specific) Sets the output of the streaming query to be processed using the provided
+   * function. This is supported only the in the micro-batch execution modes (that is, when the
+   * trigger is not continuous). In every micro-batch, the provided function will be called in
+   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
+   * The batchId can be used deduplicate and transactionally write the output
+   * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
+   * to exactly same for the same batchId (assuming all operations are deterministic in the query).
+   *
+   * @since 2.4.0
+   */
+  @InterfaceStability.Evolving
+  def foreachBatch(function: (Dataset[T], Long) => Unit): DataStreamWriter[T] = {
     this.source = "foreachBatch"
-    if (writer == null) throw new IllegalArgumentException("foreachBatch writer cannot be null")
-    this.foreachBatchWriter = writer
+    if (function == null) throw new IllegalArgumentException("foreachBatch function cannot be null")
+    this.foreachBatchWriter = function
     this
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * (Java-specific) Sets the output of the streaming query to be processed using the provided
+   * function. This is supported only the in the micro-batch execution modes (that is, when the
+   * trigger is not continuous). In every micro-batch, the provided function will be called in
+   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
+   * The batchId can be used deduplicate and transactionally write the output
+   * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
+   * to exactly same for the same batchId (assuming all operations are deterministic in the query).
+   *
+   * @since 2.4.0
+   */
+  @InterfaceStability.Evolving
+  def foreachBatch(function: VoidFunction2[Dataset[T], Long]): DataStreamWriter[T] = {
+    foreachBatch((batchDs: Dataset[T], batchId: Long) => function.call(batchDs, batchId))
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>

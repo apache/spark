@@ -234,7 +234,7 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
                "\n\nResult:\n%s\n%s" % (result, result.dtypes))
         self.assertTrue(expected.equals(result), msg=msg)
 
-'''
+
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
     def test_data_type_eq(self):
@@ -269,7 +269,6 @@ class DataTypeTests(unittest.TestCase):
         struct_field = StructField("a", IntegerType())
         self.assertRaises(TypeError, struct_field.typeName)
 
-'''
 
 class SQLTests(ReusedSQLTestCase):
 
