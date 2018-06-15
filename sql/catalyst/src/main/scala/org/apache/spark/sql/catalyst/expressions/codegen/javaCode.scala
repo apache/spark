@@ -171,8 +171,7 @@ object Block {
   val CODE_BLOCK_BUFFER_LENGTH: Int = 512
 
   /**
-   * A custom string interpolator which inlines all types of input arguments into a string without
-   * tracking any reference of `JavaCode` instances.
+   * A custom string interpolator which inlines a string into code block.
    */
   implicit class InlineHelper(val sc: StringContext) extends AnyVal {
     def inline(args: Any*): Block = {
@@ -284,6 +283,10 @@ object EmptyBlock extends Block with Serializable {
   override def + (other: Block): Block = other
 }
 
+/**
+ * A block inlines all types of input arguments into a string without
+ * tracking any reference of `JavaCode` instances.
+ */
 case class InlineBlock(block: String) extends Block {
   override val code: String = block
   override val exprValues: Set[ExprValue] = Set.empty
