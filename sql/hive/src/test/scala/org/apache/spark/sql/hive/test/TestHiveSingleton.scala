@@ -23,16 +23,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.util.Utils
 
 
 trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
-  try {
-    Utils.hiveShimsHack()
-  } catch {
-    case _: Throwable => // ignore
-  }
-
   override protected val enableAutoThreadAudit = false
   protected val spark: SparkSession = TestHive.sparkSession
   protected val hiveContext: TestHiveContext = TestHive
