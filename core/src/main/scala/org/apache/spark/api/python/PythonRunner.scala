@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -354,7 +355,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     extends Thread(s"Worker Monitor for $pythonExec") {
 
     /** How long to wait before killing the python worker if a task cannot be interrupted. */
-    private val taskKillTimeout = env.conf.getTimeAsSeconds("spark.python.task.killTimeout", "2s") * 1000L
+    private val taskKillTimeoutMs = env.conf.getTimeAsSeconds("spark.python.task.killTimeout", "2s").seconds.toMillis
 
     setDaemon(true)
 
@@ -365,7 +366,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         Thread.sleep(2000)
       }
       if (!context.isCompleted) {
-        Thread.sleep(taskKillTimeout)
+        Thread.sleep(taskKillTimeoutMs)
         if (!context.isCompleted) {
           try {
             // Mimic the task name used in `Executor` to help the user find out the task to blame.

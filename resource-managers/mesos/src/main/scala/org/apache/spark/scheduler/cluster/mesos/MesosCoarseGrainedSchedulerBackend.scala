@@ -24,6 +24,7 @@ import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.concurrent.duration._
 import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
@@ -85,7 +86,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private val taskLabels = conf.get("spark.mesos.task.labels", "")
 
   private[this] val shutdownTimeoutMS =
-    (conf.getTimeAsSeconds("spark.mesos.coarse.shutdownTimeout", "10s") * 1000L)
+    conf.getTimeAsSeconds("spark.mesos.coarse.shutdownTimeout", "10s").seconds.toMillis
       .ensuring(_ >= 0, "spark.mesos.coarse.shutdownTimeout must be >= 0")
 
   // Synchronization protected by stateLock
@@ -634,7 +635,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             slave.hostname,
             externalShufflePort,
             sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
-              s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L}ms"),
+              s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s").seconds.toMillis}ms"),
             sc.conf.getTimeAsSeconds("spark.executor.heartbeatInterval", "10s") * 1000L)
         slave.shuffleRegistered = true
       }

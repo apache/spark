@@ -28,6 +28,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -613,7 +614,7 @@ private[spark] class Executor(
     private[this] val taskId: Long = taskRunner.taskId
 
     private[this] val killPollingIntervalMs: Long =
-      conf.getTimeAsSeconds("spark.task.reaper.pollingInterval", "10s") * 1000L
+      conf.getTimeAsSeconds("spark.task.reaper.pollingInterval", "10s").seconds.toMillis
 
     private[this] val killTimeoutMs: Long = conf.getTimeAsMs("spark.task.reaper.killTimeout", "-1")
 
@@ -820,7 +821,7 @@ private[spark] class Executor(
    * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
    */
   private def startDriverHeartbeater(): Unit = {
-    val intervalMs = conf.getTimeAsSeconds("spark.executor.heartbeatInterval", "10s") * 1000L
+    val intervalMs = conf.getTimeAsSeconds("spark.executor.heartbeatInterval", "10s").seconds.toMillis
 
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]

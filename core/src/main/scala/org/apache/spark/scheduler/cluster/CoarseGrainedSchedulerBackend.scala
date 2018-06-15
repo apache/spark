@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.concurrent.duration._
 import scala.concurrent.Future
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
@@ -58,7 +59,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Submit tasks after maxRegisteredWaitingTime milliseconds
   // if minRegisteredRatio has not yet been reached
   private val maxRegisteredWaitingTimeMs =
-    conf.getTimeAsSeconds("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s") * 1000L
+    conf.getTimeAsSeconds("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s").seconds.toMillis
   private val createTime = System.currentTimeMillis()
 
   // Accessing `executorDataMap` in `DriverEndpoint.receive/receiveAndReply` doesn't need any
@@ -108,7 +109,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def onStart() {
       // Periodically revive offers to allow delay scheduling to work
-      val reviveIntervalMs = conf.getTimeAsSeconds("spark.scheduler.revive.interval", "1s") * 1000L
+      val reviveIntervalMs = conf.getTimeAsSeconds("spark.scheduler.revive.interval", "1s").seconds.toMillis
 
       reviveThread.scheduleAtFixedRate(new Runnable {
         override def run(): Unit = Utils.tryLogNonFatalError {

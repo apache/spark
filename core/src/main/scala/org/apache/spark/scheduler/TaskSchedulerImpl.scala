@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.Set
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.concurrent.duration._
 import scala.util.Random
 
 import org.apache.spark._
@@ -80,7 +81,7 @@ private[spark] class TaskSchedulerImpl(
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
 
   // Threshold above which we warn user initial TaskSet may be starved
-  val STARVATION_TIMEOUT_MS = conf.getTimeAsSeconds("spark.starvation.timeout", "15s") * 1000L
+  val STARVATION_TIMEOUT_MS = conf.getTimeAsSeconds("spark.starvation.timeout", "15s").seconds.toMillis
 
   // CPUs to request per task
   val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
