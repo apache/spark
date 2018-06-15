@@ -64,13 +64,10 @@ object BufferHolderSparkSubmitSuite {
     holder.grow(ARRAY_MAX / 2)
     assert(unsafeRow.getSizeInBytes % 8 == 0)
 
-    holder.grow(ARRAY_MAX / 2 + 8)
+    holder.grow(ARRAY_MAX / 2 + 7)
     assert(unsafeRow.getSizeInBytes % 8 == 0)
 
     holder.grow(Integer.MAX_VALUE / 2)
-    assert(unsafeRow.getSizeInBytes % 8 == 0)
-
-    holder.grow(Integer.MAX_VALUE / 2 + 7)
     assert(unsafeRow.getSizeInBytes % 8 == 0)
 
     holder.grow(ARRAY_MAX - holder.totalSize())
