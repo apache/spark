@@ -115,8 +115,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     }
 
     // Extract distinct aggregate expressions.
-    val distincgAggExpressions = aggExpressions.filter(_.isDistinct)
-    val distinctAggGroups = distincgAggExpressions.groupBy { e =>
+    val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
         val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
         if (unfoldableChildren.nonEmpty) {
           // Only expand the unfoldable children
@@ -133,7 +132,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     }
 
     // Aggregation strategy can handle queries with a single distinct group.
-    if (distincgAggExpressions.size > 1) {
+    if (distinctAggGroups.size > 1) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = AttributeReference("gid", IntegerType, nullable = false)()
       val groupByMap = a.groupingExpressions.collect {
@@ -152,7 +151,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }
 
       // Setup unique distinct aggregate children.
-      val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq
+      val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
       val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
 

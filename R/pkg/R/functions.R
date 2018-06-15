@@ -221,7 +221,9 @@ NULL
 #' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
 #' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
 #' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
-#' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))}
+#' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))
+#' tmp5 <- mutate(df, v6 = create_array(df$model, df$model))
+#' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))}
 NULL
 
 #' Window functions for Column operations
@@ -3007,6 +3009,27 @@ setMethod("array_contains",
           })
 
 #' @details
+#' \code{array_join}: Concatenates the elements of column using the delimiter.
+#' Null values are replaced with nullReplacement if set, otherwise they are ignored.
+#'
+#' @param delimiter a character string that is used to concatenate the elements of column.
+#' @param nullReplacement an optional character string that is used to replace the Null values.
+#' @rdname column_collection_functions
+#' @aliases array_join array_join,Column-method
+#' @note array_join since 2.4.0
+setMethod("array_join",
+         signature(x = "Column", delimiter = "character"),
+         function(x, delimiter, nullReplacement = NULL) {
+           jc <- if (is.null(nullReplacement)) {
+             callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter)
+           } else {
+             callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter,
+                         as.character(nullReplacement))
+           }
+           column(jc)
+         })
+
+#' @details
 #' \code{array_max}: Returns the maximum value of the array.
 #'
 #' @rdname column_collection_functions
@@ -3197,8 +3220,8 @@ setMethod("size",
 #' (or starting from the end if start is negative) with the specified length.
 #'
 #' @rdname column_collection_functions
-#' @param start an index indicating the first element occuring in the result.
-#' @param length a number of consecutive elements choosen to the result.
+#' @param start an index indicating the first element occurring in the result.
+#' @param length a number of consecutive elements chosen to the result.
 #' @aliases slice slice,Column-method
 #' @note slice since 2.4.0
 setMethod("slice",
