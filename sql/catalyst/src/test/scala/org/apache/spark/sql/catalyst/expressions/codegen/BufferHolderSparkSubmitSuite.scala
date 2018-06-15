@@ -75,13 +75,5 @@ object BufferHolderSparkSubmitSuite {
 
     holder.grow(ARRAY_MAX - holder.totalSize())
     assert(unsafeRow.getSizeInBytes % 8 == 0)
-
-    try {
-      holder.grow(ARRAY_MAX + 1 - holder.totalSize())
-      assert(false)
-    } catch {
-        case _: UnsupportedOperationException => assert(true)
-        case _ => assert(false)
-    }
   }
 }
