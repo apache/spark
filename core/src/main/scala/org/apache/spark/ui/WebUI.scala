@@ -61,24 +61,24 @@ private[spark] abstract class WebUI(
   def getSecurityManager: SecurityManager = securityManager
 
   /** Attaches a tab to this UI, along with all of its attached pages. */
-  def attachTab(tab: WebUITab) {
+  def attachTab(tab: WebUITab): Unit = {
     tab.pages.foreach(attachPage)
     tabs += tab
   }
 
-  /** Detaches a tab from this UI. */
-  def detachTab(tab: WebUITab) {
+  /** Detaches a tab from this UI, along with all of its attached pages. */
+  def detachTab(tab: WebUITab): Unit = {
     tab.pages.foreach(detachPage)
     tabs -= tab
   }
 
-  /** Detaches a page from this UI. */
-  def detachPage(page: WebUIPage) {
+  /** Detaches a page from this UI, along with all of its attached handlers. */
+  def detachPage(page: WebUIPage): Unit = {
     pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }
 
   /** Attaches a page to this UI. */
-  def attachPage(page: WebUIPage) {
+  def attachPage(page: WebUIPage): Unit = {
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
       (request: HttpServletRequest) => page.render(request), securityManager, conf, basePath)
@@ -91,15 +91,24 @@ private[spark] abstract class WebUI(
   }
 
   /** Attaches a handler to this UI. */
-  def attachHandler(handler: ServletContextHandler) {
+  def attachHandler(handler: ServletContextHandler): Unit = {
     handlers += handler
     serverInfo.foreach(_.addHandler(handler))
   }
 
   /** Detaches a handler from this UI. */
-  def detachHandler(handler: ServletContextHandler) {
+  def detachHandler(handler: ServletContextHandler): Unit = {
     handlers -= handler
     serverInfo.foreach(_.removeHandler(handler))
+  }
+
+  /**
+    * Detaches the content handler at `path` URI.
+    *
+    * @param path Path in UI to unmount.
+    */
+  def detachHandler(path: String): Unit = {
+    handlers.find(_.getContextPath() == path).foreach(detachHandler)
   }
 
   /**
@@ -112,16 +121,7 @@ private[spark] abstract class WebUI(
     attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
   }
 
-  /**
-   * Removes a static content handler.
-   *
-   * @param path Path in UI to unmount.
-   */
-  def removeStaticHandler(path: String): Unit = {
-    handlers.find(_.getContextPath() == path).foreach(detachHandler)
-  }
-
-  /** Initializes all components of the server. */
+  /** A hook to initialize components of the UI */
   def initialize(): Unit
 
   /** Binds to the HTTP server behind this web interface. */
@@ -141,14 +141,14 @@ private[spark] abstract class WebUI(
   /** @return The url of web interface. Only valid after [[bind]]. */
   def webUrl: String = s"http://$publicHostName:$boundPort"
 
-  /** @return The actual port to which this server is bound. Only valid after bind(). */
+  /** @return The actual port to which this server is bound. Only valid after [[bind]]. */
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
   /** Stops the server behind this web interface. Only valid after [[bind]]. */
   def stop(): Unit = {
     assert(serverInfo.isDefined,
       s"Attempted to stop $className before binding to a server!")
-    serverInfo.get.stop()
+    serverInfo.foreach(_.stop())
   }
 }
 
