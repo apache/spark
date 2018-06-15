@@ -229,7 +229,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putShorts(int rowId, int count, short[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.SHORT_ARRAY_OFFSET + srcIndex * 2,
+    Platform.copyMemory(src, Platform.SHORT_ARRAY_OFFSET + srcIndex * 2L,
         null, data + 2L * rowId, count * 2L);
   }
 
@@ -450,7 +450,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putDouble(int rowId, double value) {
-    Platform.putDouble(null, data + rowId * 8, value);
+    Platform.putDouble(null, data + rowId * 8L, value);
   }
 
   @Override
