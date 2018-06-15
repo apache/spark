@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
@@ -313,6 +314,91 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq[String](null), ArrayType(StringType)),
       Literal(","),
       Some(Literal.create(null, StringType))), null)
+  }
+
+  test("ArraysZip") {
+    val literals = Seq(
+      Literal.create(Seq(9001, 9002, 9003, null), ArrayType(IntegerType)),
+      Literal.create(Seq(null, 1L, null, 4L, 11L), ArrayType(LongType)),
+      Literal.create(Seq(-1, -3, 900, null), ArrayType(IntegerType)),
+      Literal.create(Seq("a", null, "c"), ArrayType(StringType)),
+      Literal.create(Seq(null, false, true), ArrayType(BooleanType)),
+      Literal.create(Seq(1.1, null, 1.3, null), ArrayType(DoubleType)),
+      Literal.create(Seq(), ArrayType(NullType)),
+      Literal.create(Seq(null), ArrayType(NullType)),
+      Literal.create(Seq(192.toByte), ArrayType(ByteType)),
+      Literal.create(
+        Seq(Seq(1, 2, 3), null, Seq(4, 5), Seq(1, null, 3)), ArrayType(ArrayType(IntegerType))),
+      Literal.create(Seq(Array[Byte](1.toByte, 5.toByte)), ArrayType(BinaryType))
+    )
+
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(1))),
+      List(Row(9001, null), Row(9002, 1L), Row(9003, null), Row(null, 4L), Row(null, 11L)))
+
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(2))),
+      List(Row(9001, -1), Row(9002, -3), Row(9003, 900), Row(null, null)))
+
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(3))),
+      List(Row(9001, "a"), Row(9002, null), Row(9003, "c"), Row(null, null)))
+
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(4))),
+      List(Row(9001, null), Row(9002, false), Row(9003, true), Row(null, null)))
+
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(5))),
+      List(Row(9001, 1.1), Row(9002, null), Row(9003, 1.3), Row(null, null)))
+
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(6))),
+      List(Row(9001, null), Row(9002, null), Row(9003, null), Row(null, null)))
+
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(7))),
+      List(Row(9001, null), Row(9002, null), Row(9003, null), Row(null, null)))
+
+    checkEvaluation(ArraysZip(Seq(literals(0), literals(1), literals(2), literals(3))),
+      List(
+        Row(9001, null, -1, "a"),
+        Row(9002, 1L, -3, null),
+        Row(9003, null, 900, "c"),
+        Row(null, 4L, null, null),
+        Row(null, 11L, null, null)))
+
+    checkEvaluation(ArraysZip(Seq(literals(4), literals(5), literals(6), literals(7), literals(8))),
+      List(
+        Row(null, 1.1, null, null, 192.toByte),
+        Row(false, null, null, null, null),
+        Row(true, 1.3, null, null, null),
+        Row(null, null, null, null, null)))
+
+    checkEvaluation(ArraysZip(Seq(literals(9), literals(0))),
+      List(
+        Row(List(1, 2, 3), 9001),
+        Row(null, 9002),
+        Row(List(4, 5), 9003),
+        Row(List(1, null, 3), null)))
+
+    checkEvaluation(ArraysZip(Seq(literals(7), literals(10))),
+      List(Row(null, Array[Byte](1.toByte, 5.toByte))))
+
+    val longLiteral =
+      Literal.create((0 to 1000).toSeq, ArrayType(IntegerType))
+
+    checkEvaluation(ArraysZip(Seq(literals(0), longLiteral)),
+      List(Row(9001, 0), Row(9002, 1), Row(9003, 2)) ++
+      (3 to 1000).map { Row(null, _) }.toList)
+
+    val manyLiterals = (0 to 1000).map { _ =>
+      Literal.create(Seq(1), ArrayType(IntegerType))
+    }.toSeq
+
+    val numbers = List(
+      Row(Seq(9001) ++ (0 to 1000).map { _ => 1 }.toSeq: _*),
+      Row(Seq(9002) ++ (0 to 1000).map { _ => null }.toSeq: _*),
+      Row(Seq(9003) ++ (0 to 1000).map { _ => null }.toSeq: _*),
+      Row(Seq(null) ++ (0 to 1000).map { _ => null }.toSeq: _*))
+    checkEvaluation(ArraysZip(Seq(literals(0)) ++ manyLiterals),
+      List(numbers(0), numbers(1), numbers(2), numbers(3)))
+
+    checkEvaluation(ArraysZip(Seq(literals(0), Literal.create(null, ArrayType(IntegerType)))), null)
+    checkEvaluation(ArraysZip(Seq()), List())
   }
 
   test("Array Min") {
