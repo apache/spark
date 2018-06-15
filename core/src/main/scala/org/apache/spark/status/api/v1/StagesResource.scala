@@ -22,6 +22,7 @@ import javax.ws.rs.core.MediaType
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.StageInfo
+import org.apache.spark.status.AppStatusUtils
 import org.apache.spark.status.api.v1.StageStatus._
 import org.apache.spark.status.api.v1.TaskSorting._
 import org.apache.spark.ui.SparkUI
@@ -40,8 +41,26 @@ private[v1] class StagesResource extends BaseAppResource {
       @PathParam("stageId") stageId: Int,
       @QueryParam("details") @DefaultValue("true") details: Boolean): Seq[StageData] = {
     withUI { ui =>
-      val ret = ui.store.stageData(stageId, details = details)
+      var ret = ui.store.stageData(stageId, details = details)
       if (ret.nonEmpty) {
+        for (i <- 0 to (ret.length - 1)) {
+          val executorIdArray = ret(i).executorSummary.get.keys.toArray
+          for (execId <- executorIdArray) {
+            val executorLogs = ui.store.executorSummary(execId).executorLogs
+            val hostPort = ui.store.executorSummary(execId).hostPort
+            val taskDataArray = ret(i).tasks.get.keys.toArray
+            val executorStageSummaryArray = ret(i).executorSummary.get.keys.toArray
+            for (taskData <- taskDataArray) {
+              ret(i).tasks.get.get(taskData).get.executorLogs = executorLogs
+              ret(i).tasks.get.get(taskData).get.schedulerDelay = AppStatusUtils.schedulerDelay(ret(i).tasks.get.get(taskData).get)
+              ret(i).tasks.get.get(taskData).get.gettingResultTime = AppStatusUtils.gettingResultTime(ret(i).tasks.get.get(taskData).get)
+            }
+            for (executorStageSummary <- executorStageSummaryArray) {
+              ret(i).executorSummary.get.get(executorStageSummary).get.executorLogs = executorLogs
+              ret(i).executorSummary.get.get(executorStageSummary).get.hostPort = hostPort
+            }
+          }
+        }
         ret
       } else {
         throw new NotFoundException(s"unknown stage: $stageId")

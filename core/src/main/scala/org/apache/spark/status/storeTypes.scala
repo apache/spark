@@ -283,7 +283,10 @@ private[spark] class TaskDataWrapper(
       speculative,
       accumulatorUpdates,
       errorMessage,
-      metrics)
+      metrics,
+      null,
+      0L,
+      0L)
   }
 
   @JsonIgnore @KVIndex(TaskIndexNames.STAGE)

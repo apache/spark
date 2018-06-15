@@ -339,7 +339,9 @@ private class LiveExecutorStageSummary(
       metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
-      isBlacklisted)
+      isBlacklisted,
+      null,
+      null)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
 

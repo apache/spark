@@ -109,10 +109,11 @@ $(document).ready(function () {
         $.getJSON(endPoint, function(response, status, jqXHR) {
 
             // prepare data for tasks table
+            console.log("hereeeeeeeeee 1 "+JSON.stringify(response[0].tasks[0]));
             var indices = Object.keys(response[0].tasks);
             var task_table = [];
             indices.forEach(function (ix) {
-               task_table.push(response[0].tasks[ix]);
+               task_table.push(response[0].tasks[parseInt(ix)]);
             });
 
             // prepare data for task aggregated metrics table
@@ -249,7 +250,7 @@ $(document).ready(function () {
                     "columns": [
                         {data : "id"},
                         {data : "executorLogs", render: formatLogsCells},
-                        {data : "host"},
+                        {data : "hostPort"},
                         {
                             data : function (row, type) {
                                 return type === 'display' ? formatDuration(row.taskTime) : row.taskTime;
@@ -264,7 +265,7 @@ $(document).ready(function () {
                         {data : "failedTasks"},
                         {data : "killedTasks"},
                         {data : "succeededTasks"},
-                        {data : "blacklisted"},
+                        {data : "isBlacklistedForStage"},
                         {
                             data : function (row, type) {
                                 return row.inputRecords != 0 ? formatBytes(row.inputBytes/row.inputRecords) : 0;
@@ -327,7 +328,7 @@ $(document).ready(function () {
                         },
                         {data : "taskId"},
                         {data : "attempt"},
-                        {data : "taskState"},
+                        {data : "status"},
                         {data : "taskLocality"},
                         {
                             data : function (row, type) {
