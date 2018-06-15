@@ -2434,12 +2434,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-24190: restrictions for JSONOptions in read") {
-    val exception = intercept[IllegalArgumentException] {
-      spark.read
-        .option("encoding", "UTF-16")
-        .json(testFile("test-data/utf16LE.json"))
-        .count()
+    for (encoding <- Set("UTF-16", "UTF-32")) {
+      val exception = intercept[IllegalArgumentException] {
+        spark.read
+          .option("encoding", encoding)
+          .option("multiLine", false)
+          .json(testFile("test-data/utf16LE.json"))
+          .count()
+      }
+      assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
     }
-    assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
   }
 }
