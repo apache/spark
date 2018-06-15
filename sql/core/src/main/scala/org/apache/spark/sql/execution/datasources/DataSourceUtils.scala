@@ -25,7 +25,15 @@ import org.apache.spark.sql.types._
 object DataSourceUtils {
 
   /**
-   * Verify if the schema is supported in datasource.
+   * Verify if the schema is supported in datasource. This verification should be done
+   * in a driver side, e.g., `prepareWrite`, `buildReader`, and `buildReaderWithPartitionValues`
+   * in `FileFormat`.
+   *
+   * Unsupported data types of csv, json, orc, and parquet are as follows;
+   *  csv -> Interval, Null, Array, Map, Struct
+   *  json -> Interval
+   *  orc -> Interval, Null
+   *  parquet -> Interval, Null
    */
   def verifySchema(format: FileFormat, schema: StructType): Unit = {
     def throwUnsupportedException(dataType: DataType): Unit = {
