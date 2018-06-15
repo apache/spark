@@ -38,10 +38,10 @@ fi
 
 SPARK_K8S_CMD="$1"
 if [ -z "$SPARK_K8S_CMD" ]; then
-  echo "No command to execute has been provided." 1>&2
-  exit 1
+  echo "No command to execute has been provided. Ignoring spark-on-k8s workflow..." 1>&2
+else
+  shift 1
 fi
-shift 1
 
 SPARK_CLASSPATH="$SPARK_CLASSPATH:${SPARK_HOME}/jars/*"
 env | grep SPARK_JAVA_OPT_ | sort -t_ -k4 -n | sed 's/[^=]*=\(.*\)/\1/g' > /tmp/java_opts.txt
@@ -110,8 +110,7 @@ case "$SPARK_K8S_CMD" in
     ;;
 
   *)
-    echo "Unknown command: $SPARK_K8S_CMD" 1>&2
-    exit 1
+    CMD=("$@")
 esac
 
 # Execute the container CMD under tini for better hygiene
