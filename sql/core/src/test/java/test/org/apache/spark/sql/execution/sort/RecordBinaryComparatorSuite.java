@@ -118,7 +118,7 @@ public class RecordBinaryComparatorSuite {
   private long relativeOffset(int numFields) {
     // All the UnsafeRows in this suite contains less than 64 columns, so the bitSetSize shall
     // always be 8.
-    return 8 + numFields * Long.BYTES;
+    return 8 + numFields * 8;
   }
 
   @Test
@@ -127,12 +127,12 @@ public class RecordBinaryComparatorSuite {
 
     UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
-    row1.pointTo(data1, computeSizeInBytes(numFields * Long.BYTES));
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
     row1.setInt(0, 11);
 
     UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
-    row2.pointTo(data2, computeSizeInBytes(numFields * Long.BYTES));
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
     row2.setInt(0, 42);
 
     insertRow(row1);
@@ -148,14 +148,14 @@ public class RecordBinaryComparatorSuite {
 
     UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
-    row1.pointTo(data1, computeSizeInBytes(numFields * Double.BYTES));
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
     for (int i = 0; i < numFields; i++) {
       row1.setDouble(i, i * 3.14);
     }
 
     UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
-    row2.pointTo(data2, computeSizeInBytes(numFields * Double.BYTES));
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
     for (int i = 0; i < numFields; i++) {
       row2.setDouble(i, 198.7 / (i + 1));
     }
@@ -174,7 +174,7 @@ public class RecordBinaryComparatorSuite {
     UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
     UnsafeArrayData arrayData1 = UnsafeArrayData.fromPrimitiveArray(new int[]{11, 42, -1});
-    row1.pointTo(data1, computeSizeInBytes(numFields * Long.BYTES + arrayData1.getSizeInBytes()));
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8 + arrayData1.getSizeInBytes()));
     row1.setLong(0, (relativeOffset(numFields) << 32) | (long) arrayData1.getSizeInBytes());
     Platform.copyMemory(arrayData1.getBaseObject(), arrayData1.getBaseOffset(), data1,
         row1.getBaseOffset() + relativeOffset(numFields), arrayData1.getSizeInBytes());
@@ -182,7 +182,7 @@ public class RecordBinaryComparatorSuite {
     UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
     UnsafeArrayData arrayData2 = UnsafeArrayData.fromPrimitiveArray(new int[]{22});
-    row2.pointTo(data2, computeSizeInBytes(numFields * Long.BYTES + arrayData2.getSizeInBytes()));
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8 + arrayData2.getSizeInBytes()));
     row2.setLong(0, (relativeOffset(numFields) << 32) | (long) arrayData2.getSizeInBytes());
     Platform.copyMemory(arrayData2.getBaseObject(), arrayData2.getBaseOffset(), data2,
         row2.getBaseOffset() + relativeOffset(numFields), arrayData2.getSizeInBytes());
@@ -201,7 +201,7 @@ public class RecordBinaryComparatorSuite {
     UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
     UTF8String str1 = UTF8String.fromString("Milk tea");
-    row1.pointTo(data1, computeSizeInBytes(numFields * Long.BYTES + str1.numBytes()));
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8 + str1.numBytes()));
     row1.setInt(0, 11);
     row1.setDouble(1, 3.14);
     row1.setInt(2, -1);
@@ -212,7 +212,7 @@ public class RecordBinaryComparatorSuite {
     UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
     UTF8String str2 = UTF8String.fromString("Java");
-    row2.pointTo(data2, computeSizeInBytes(numFields * Long.BYTES + str2.numBytes()));
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8 + str2.numBytes()));
     row2.setInt(0, 11);
     row2.setDouble(1, 3.14);
     row2.setInt(2, -1);
@@ -233,14 +233,14 @@ public class RecordBinaryComparatorSuite {
 
     UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
-    row1.pointTo(data1, computeSizeInBytes(numFields * Double.BYTES));
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
     for (int i = 0; i < numFields; i++) {
       row1.setNullAt(i);
     }
 
     UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
-    row2.pointTo(data2, computeSizeInBytes(numFields * Double.BYTES));
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
     for (int i = 0; i < numFields - 1; i++) {
       row2.setNullAt(i);
     }
