@@ -114,16 +114,25 @@ public class RecordBinaryComparatorSuite {
     return 8 + (originalSize + 7) / 8 * 8;
   }
 
+  // Compute the relative offset of variable-length values.
+  private long relativeOffset(int numFields) {
+    // All the UnsafeRows in this suite contains less than 64 columns, so the bitSetSize shall
+    // always be 8.
+    return 8 + numFields * Long.BYTES;
+  }
+
   @Test
   public void testBinaryComparatorForSingleColumnRow() throws Exception {
-    UnsafeRow row1 = new UnsafeRow(1);
+    int numFields = 1;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
-    row1.pointTo(data1, computeSizeInBytes(Integer.BYTES));
+    row1.pointTo(data1, computeSizeInBytes(numFields * Long.BYTES));
     row1.setInt(0, 11);
 
-    UnsafeRow row2 = new UnsafeRow(1);
+    UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
-    row2.pointTo(data2, computeSizeInBytes(Integer.BYTES));
+    row2.pointTo(data2, computeSizeInBytes(numFields * Long.BYTES));
     row2.setInt(0, 42);
 
     insertRow(row1);
@@ -135,17 +144,19 @@ public class RecordBinaryComparatorSuite {
 
   @Test
   public void testBinaryComparatorForMultipleColumnRow() throws Exception {
-    UnsafeRow row1 = new UnsafeRow(5);
+    int numFields = 5;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
-    row1.pointTo(data1, computeSizeInBytes(5 * Double.BYTES));
-    for (int i = 0; i < 5; i++) {
+    row1.pointTo(data1, computeSizeInBytes(numFields * Double.BYTES));
+    for (int i = 0; i < numFields; i++) {
       row1.setDouble(i, i * 3.14);
     }
 
-    UnsafeRow row2 = new UnsafeRow(5);
+    UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
-    row2.pointTo(data2, computeSizeInBytes(5 * Double.BYTES));
-    for (int i = 0; i < 5; i++) {
+    row2.pointTo(data2, computeSizeInBytes(numFields * Double.BYTES));
+    for (int i = 0; i < numFields; i++) {
       row2.setDouble(i, 198.7 / (i + 1));
     }
 
@@ -158,21 +169,23 @@ public class RecordBinaryComparatorSuite {
 
   @Test
   public void testBinaryComparatorForArrayColumn() throws Exception {
-    UnsafeRow row1 = new UnsafeRow(1);
+    int numFields = 1;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
     UnsafeArrayData arrayData1 = UnsafeArrayData.fromPrimitiveArray(new int[]{11, 42, -1});
-    row1.pointTo(data1, computeSizeInBytes(Long.BYTES + arrayData1.getSizeInBytes()));
-    row1.setLong(0, (arrayData1.getBaseOffset() << 32) | (long) arrayData1.getSizeInBytes());
+    row1.pointTo(data1, computeSizeInBytes(numFields * Long.BYTES + arrayData1.getSizeInBytes()));
+    row1.setLong(0, (relativeOffset(numFields) << 32) | (long) arrayData1.getSizeInBytes());
     Platform.copyMemory(arrayData1.getBaseObject(), arrayData1.getBaseOffset(), data1,
-        row1.getBaseOffset() + 8 + Long.BYTES, arrayData1.getSizeInBytes());
+        row1.getBaseOffset() + relativeOffset(numFields), arrayData1.getSizeInBytes());
 
-    UnsafeRow row2 = new UnsafeRow(1);
+    UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
-    UnsafeArrayData arrayData2 = UnsafeArrayData.fromPrimitiveArray(new int[]{22, 22, 22});
-    row2.pointTo(data2, computeSizeInBytes(Long.BYTES + arrayData2.getSizeInBytes()));
-    row2.setLong(0, (arrayData2.getBaseOffset() << 32) | (long) arrayData2.getSizeInBytes());
+    UnsafeArrayData arrayData2 = UnsafeArrayData.fromPrimitiveArray(new int[]{22});
+    row2.pointTo(data2, computeSizeInBytes(numFields * Long.BYTES + arrayData2.getSizeInBytes()));
+    row2.setLong(0, (relativeOffset(numFields) << 32) | (long) arrayData2.getSizeInBytes());
     Platform.copyMemory(arrayData2.getBaseObject(), arrayData2.getBaseOffset(), data2,
-        row2.getBaseOffset() + 8 + Long.BYTES, arrayData2.getSizeInBytes());
+        row2.getBaseOffset() + relativeOffset(numFields), arrayData2.getSizeInBytes());
 
     insertRow(row1);
     insertRow(row2);
@@ -183,30 +196,29 @@ public class RecordBinaryComparatorSuite {
 
   @Test
   public void testBinaryComparatorForMixedColumns() throws Exception {
-    UnsafeRow row1 = new UnsafeRow(4);
+    int numFields = 4;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
     UTF8String str1 = UTF8String.fromString("Milk tea");
-    row1.pointTo(data1,
-        computeSizeInBytes(2 * Integer.BYTES + Double.BYTES + Long.BYTES + str1.numBytes()));
+    row1.pointTo(data1, computeSizeInBytes(numFields * Long.BYTES + str1.numBytes()));
     row1.setInt(0, 11);
     row1.setDouble(1, 3.14);
     row1.setInt(2, -1);
-    row1.setLong(3, ((str1.getBaseOffset() << 32) | (long) str1.numBytes()));
+    row1.setLong(3, (relativeOffset(numFields) << 32) | (long) str1.numBytes());
     Platform.copyMemory(str1.getBaseObject(), str1.getBaseOffset(), data1,
-        row1.getBaseOffset() + 8 + 4 * 8, str1.numBytes());
+        row1.getBaseOffset() + relativeOffset(numFields), str1.numBytes());
 
-
-    UnsafeRow row2 = new UnsafeRow(4);
+    UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
     UTF8String str2 = UTF8String.fromString("Java");
-    row2.pointTo(data2,
-        computeSizeInBytes(2 * Integer.BYTES + Double.BYTES + Long.BYTES + str2.numBytes()));
+    row2.pointTo(data2, computeSizeInBytes(numFields * Long.BYTES + str2.numBytes()));
     row2.setInt(0, 11);
     row2.setDouble(1, 3.14);
     row2.setInt(2, -1);
-    row2.setLong(3, ((str2.getBaseOffset() << 32) | (long) str2.numBytes()));
+    row2.setLong(3, (relativeOffset(numFields) << 32) | (long) str2.numBytes());
     Platform.copyMemory(str2.getBaseObject(), str2.getBaseOffset(), data2,
-        row2.getBaseOffset() + 8 + 4 * 8, str2.numBytes());
+        row2.getBaseOffset() + relativeOffset(numFields), str2.numBytes());
 
     insertRow(row1);
     insertRow(row2);
@@ -217,20 +229,22 @@ public class RecordBinaryComparatorSuite {
 
   @Test
   public void testBinaryComparatorForNullColumns() throws Exception {
-    UnsafeRow row1 = new UnsafeRow(3);
+    int numFields = 3;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
-    row1.pointTo(data1, computeSizeInBytes(3 * Double.BYTES));
-    for (int i = 0; i < 3; i++) {
+    row1.pointTo(data1, computeSizeInBytes(numFields * Double.BYTES));
+    for (int i = 0; i < numFields; i++) {
       row1.setNullAt(i);
     }
 
-    UnsafeRow row2 = new UnsafeRow(3);
+    UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
-    row2.pointTo(data2, computeSizeInBytes(3 * Double.BYTES));
-    for (int i = 0; i < 2; i++) {
+    row2.pointTo(data2, computeSizeInBytes(numFields * Double.BYTES));
+    for (int i = 0; i < numFields - 1; i++) {
       row2.setNullAt(i);
     }
-    row2.setDouble(2, 3.14);
+    row2.setDouble(numFields - 1, 3.14);
 
     insertRow(row1);
     insertRow(row2);
