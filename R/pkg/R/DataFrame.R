@@ -2297,6 +2297,8 @@ setMethod("rename",
 
 setClassUnion("characterOrColumn", c("character", "Column"))
 
+setClassUnion("numericOrColumn", c("numeric", "Column"))
+
 #' Arrange Rows by Variables
 #'
 #' Sort a SparkDataFrame by the specified column(s).

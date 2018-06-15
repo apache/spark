@@ -211,14 +211,12 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
     try {
       inputData.addData(10, 11, 12)
       query.processAllAvailable()
-      inputData.addData(25) // Advance watermark to 15 seconds
-      query.processAllAvailable()
       inputData.addData(25) // Evict items less than previous watermark
       query.processAllAvailable()
 
       // There should be 3 batches and only does the last batch contain a value.
       val allEvents = ForeachWriterSuite.allEvents()
-      assert(allEvents.size === 3)
+      assert(allEvents.size === 4)
       val expectedEvents = Seq(
         Seq(
           ForeachWriterSuite.Open(partition = 0, version = 0),
@@ -230,6 +228,10 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
         ),
         Seq(
           ForeachWriterSuite.Open(partition = 0, version = 2),
+          ForeachWriterSuite.Close(None)
+        ),
+        Seq(
+          ForeachWriterSuite.Open(partition = 0, version = 3),
           ForeachWriterSuite.Process(value = 3),
           ForeachWriterSuite.Close(None)
         )

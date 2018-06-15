@@ -62,6 +62,36 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(row.getMap[Int, String](0) === Map(2 -> "a"))
   }
 
+  test("map with arrays") {
+    val df1 = Seq((Seq(1, 2), Seq("a", "b"))).toDF("k", "v")
+    val expectedType = MapType(IntegerType, StringType, valueContainsNull = true)
+    val row = df1.select(map_from_arrays($"k", $"v")).first()
+    assert(row.schema(0).dataType === expectedType)
+    assert(row.getMap[Int, String](0) === Map(1 -> "a", 2 -> "b"))
+    checkAnswer(df1.select(map_from_arrays($"k", $"v")), Seq(Row(Map(1 -> "a", 2 -> "b"))))
+
+    val df2 = Seq((Seq(1, 2), Seq(null, "b"))).toDF("k", "v")
+    checkAnswer(df2.select(map_from_arrays($"k", $"v")), Seq(Row(Map(1 -> null, 2 -> "b"))))
+
+    val df3 = Seq((null, null)).toDF("k", "v")
+    checkAnswer(df3.select(map_from_arrays($"k", $"v")), Seq(Row(null)))
+
+    val df4 = Seq((1, "a")).toDF("k", "v")
+    intercept[AnalysisException] {
+      df4.select(map_from_arrays($"k", $"v"))
+    }
+
+    val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
+    intercept[RuntimeException] {
+      df5.select(map_from_arrays($"k", $"v")).collect
+    }
+
+    val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
+    intercept[RuntimeException] {
+      df6.select(map_from_arrays($"k", $"v")).collect
+    }
+  }
+
   test("struct with column name") {
     val df = Seq((1, "str")).toDF("a", "b")
     val row = df.select(struct("a", "b")).first()
@@ -276,7 +306,114 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("sort_array function") {
+  test("mask functions") {
+    val df = Seq("TestString-123", "", null).toDF("a")
+    checkAnswer(df.select(mask($"a")), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_first_n($"a", 4)), Seq(Row("XxxxString-123"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_last_n($"a", 4)), Seq(Row("TestString-nnn"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_show_first_n($"a", 4)),
+      Seq(Row("TestXxxxxx-nnn"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_show_last_n($"a", 4)),
+      Seq(Row("XxxxXxxxxx-123"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_hash($"a")),
+      Seq(Row("dd78d68ad1b23bde126812482dd70ac6"),
+        Row("d41d8cd98f00b204e9800998ecf8427e"),
+        Row(null)))
+
+    checkAnswer(df.select(mask($"a", "U", "l", "#")),
+      Seq(Row("UlllUlllll-###"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_first_n($"a", 4, "U", "l", "#")),
+      Seq(Row("UlllString-123"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_last_n($"a", 4, "U", "l", "#")),
+      Seq(Row("TestString-###"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_show_first_n($"a", 4, "U", "l", "#")),
+      Seq(Row("TestUlllll-###"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_show_last_n($"a", 4, "U", "l", "#")),
+      Seq(Row("UlllUlllll-123"), Row(""), Row(null)))
+
+    checkAnswer(
+      df.selectExpr("mask(a)", "mask(a, 'U')", "mask(a, 'U', 'l')", "mask(a, 'U', 'l', '#')"),
+      Seq(Row("XxxxXxxxxx-nnn", "UxxxUxxxxx-nnn", "UlllUlllll-nnn", "UlllUlllll-###"),
+        Row("", "", "", ""),
+        Row(null, null, null, null)))
+    checkAnswer(sql("select mask(null)"), Row(null))
+    checkAnswer(sql("select mask('AAaa11', null, null, null)"), Row("XXxxnn"))
+    intercept[AnalysisException] {
+      checkAnswer(df.selectExpr("mask(a, a)"), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
+    }
+
+    checkAnswer(
+      df.selectExpr(
+        "mask_first_n(a)",
+        "mask_first_n(a, 6)",
+        "mask_first_n(a, 6, 'U')",
+        "mask_first_n(a, 6, 'U', 'l')",
+        "mask_first_n(a, 6, 'U', 'l', '#')"),
+      Seq(Row("XxxxString-123", "XxxxXxring-123", "UxxxUxring-123", "UlllUlring-123",
+        "UlllUlring-123"),
+        Row("", "", "", "", ""),
+        Row(null, null, null, null, null)))
+    checkAnswer(sql("select mask_first_n(null)"), Row(null))
+    checkAnswer(sql("select mask_first_n('A1aA1a', null, null, null, null)"), Row("XnxX1a"))
+    intercept[AnalysisException] {
+      checkAnswer(spark.range(1).selectExpr("mask_first_n('A1aA1a', id)"), Row("XnxX1a"))
+    }
+
+    checkAnswer(
+      df.selectExpr(
+        "mask_last_n(a)",
+        "mask_last_n(a, 6)",
+        "mask_last_n(a, 6, 'U')",
+        "mask_last_n(a, 6, 'U', 'l')",
+        "mask_last_n(a, 6, 'U', 'l', '#')"),
+      Seq(Row("TestString-nnn", "TestStrixx-nnn", "TestStrixx-nnn", "TestStrill-nnn",
+        "TestStrill-###"),
+        Row("", "", "", "", ""),
+        Row(null, null, null, null, null)))
+    checkAnswer(sql("select mask_last_n(null)"), Row(null))
+    checkAnswer(sql("select mask_last_n('A1aA1a', null, null, null, null)"), Row("A1xXnx"))
+    intercept[AnalysisException] {
+      checkAnswer(spark.range(1).selectExpr("mask_last_n('A1aA1a', id)"), Row("A1xXnx"))
+    }
+
+    checkAnswer(
+      df.selectExpr(
+        "mask_show_first_n(a)",
+        "mask_show_first_n(a, 6)",
+        "mask_show_first_n(a, 6, 'U')",
+        "mask_show_first_n(a, 6, 'U', 'l')",
+        "mask_show_first_n(a, 6, 'U', 'l', '#')"),
+      Seq(Row("TestXxxxxx-nnn", "TestStxxxx-nnn", "TestStxxxx-nnn", "TestStllll-nnn",
+        "TestStllll-###"),
+        Row("", "", "", "", ""),
+        Row(null, null, null, null, null)))
+    checkAnswer(sql("select mask_show_first_n(null)"), Row(null))
+    checkAnswer(sql("select mask_show_first_n('A1aA1a', null, null, null, null)"), Row("A1aAnx"))
+    intercept[AnalysisException] {
+      checkAnswer(spark.range(1).selectExpr("mask_show_first_n('A1aA1a', id)"), Row("A1aAnx"))
+    }
+
+    checkAnswer(
+      df.selectExpr(
+        "mask_show_last_n(a)",
+        "mask_show_last_n(a, 6)",
+        "mask_show_last_n(a, 6, 'U')",
+        "mask_show_last_n(a, 6, 'U', 'l')",
+        "mask_show_last_n(a, 6, 'U', 'l', '#')"),
+      Seq(Row("XxxxXxxxxx-123", "XxxxXxxxng-123", "UxxxUxxxng-123", "UlllUlllng-123",
+        "UlllUlllng-123"),
+        Row("", "", "", "", ""),
+        Row(null, null, null, null, null)))
+    checkAnswer(sql("select mask_show_last_n(null)"), Row(null))
+    checkAnswer(sql("select mask_show_last_n('A1aA1a', null, null, null, null)"), Row("XnaA1a"))
+    intercept[AnalysisException] {
+      checkAnswer(spark.range(1).selectExpr("mask_show_last_n('A1aA1a', id)"), Row("XnaA1a"))
+    }
+
+    checkAnswer(sql("select mask_hash(null)"), Row(null))
+  }
+
+  test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
       (Array.empty[Int], Array.empty[String]),
@@ -286,28 +423,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(sort_array($"a"), sort_array($"b")),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.select(sort_array($"a", false), sort_array($"b", false)),
       Seq(
         Row(Seq(3, 2, 1), Seq("c", "b", "a")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.selectExpr("sort_array(a)", "sort_array(b)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.selectExpr("sort_array(a, true)", "sort_array(b, false)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("c", "b", "a")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
 
@@ -323,6 +460,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df3 = Seq(("xxx", "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {
       df3.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("only supports array input"))
+
+    checkAnswer(
+      df.select(array_sort($"a"), array_sort($"b")),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("array_sort(a)", "array_sort(b)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+
+    checkAnswer(
+      df2.selectExpr("array_sort(a)"),
+      Seq(Row(Seq[Seq[Int]](Seq(1), Seq(2), Seq(2, 4), null)))
+    )
+
+    assert(intercept[AnalysisException] {
+      df3.selectExpr("array_sort(a)").collect()
     }.getMessage().contains("only supports array input"))
   }
 
@@ -341,6 +502,58 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("size(a)"),
       Seq(Row(2), Row(0), Row(3), Row(-1))
     )
+
+    checkAnswer(
+      df.selectExpr("cardinality(a)"),
+      Seq(Row(2L), Row(0L), Row(3L), Row(-1L))
+    )
+  }
+
+  test("dataframe arrays_zip function") {
+    val df1 = Seq((Seq(9001, 9002, 9003), Seq(4, 5, 6))).toDF("val1", "val2")
+    val df2 = Seq((Seq("a", "b"), Seq(true, false), Seq(10, 11))).toDF("val1", "val2", "val3")
+    val df3 = Seq((Seq("a", "b"), Seq(4, 5, 6))).toDF("val1", "val2")
+    val df4 = Seq((Seq("a", "b", null), Seq(4L))).toDF("val1", "val2")
+    val df5 = Seq((Seq(-1), Seq(null), Seq(), Seq(null, null))).toDF("val1", "val2", "val3", "val4")
+    val df6 = Seq((Seq(192.toByte, 256.toByte), Seq(1.1), Seq(), Seq(null, null)))
+      .toDF("v1", "v2", "v3", "v4")
+    val df7 = Seq((Seq(Seq(1, 2, 3), Seq(4, 5)), Seq(1.1, 2.2))).toDF("v1", "v2")
+    val df8 = Seq((Seq(Array[Byte](1.toByte, 5.toByte)), Seq(null))).toDF("v1", "v2")
+
+    val expectedValue1 = Row(Seq(Row(9001, 4), Row(9002, 5), Row(9003, 6)))
+    checkAnswer(df1.select(arrays_zip($"val1", $"val2")), expectedValue1)
+    checkAnswer(df1.selectExpr("arrays_zip(val1, val2)"), expectedValue1)
+
+    val expectedValue2 = Row(Seq(Row("a", true, 10), Row("b", false, 11)))
+    checkAnswer(df2.select(arrays_zip($"val1", $"val2", $"val3")), expectedValue2)
+    checkAnswer(df2.selectExpr("arrays_zip(val1, val2, val3)"), expectedValue2)
+
+    val expectedValue3 = Row(Seq(Row("a", 4), Row("b", 5), Row(null, 6)))
+    checkAnswer(df3.select(arrays_zip($"val1", $"val2")), expectedValue3)
+    checkAnswer(df3.selectExpr("arrays_zip(val1, val2)"), expectedValue3)
+
+    val expectedValue4 = Row(Seq(Row("a", 4L), Row("b", null), Row(null, null)))
+    checkAnswer(df4.select(arrays_zip($"val1", $"val2")), expectedValue4)
+    checkAnswer(df4.selectExpr("arrays_zip(val1, val2)"), expectedValue4)
+
+    val expectedValue5 = Row(Seq(Row(-1, null, null, null), Row(null, null, null, null)))
+    checkAnswer(df5.select(arrays_zip($"val1", $"val2", $"val3", $"val4")), expectedValue5)
+    checkAnswer(df5.selectExpr("arrays_zip(val1, val2, val3, val4)"), expectedValue5)
+
+    val expectedValue6 = Row(Seq(
+      Row(192.toByte, 1.1, null, null), Row(256.toByte, null, null, null)))
+    checkAnswer(df6.select(arrays_zip($"v1", $"v2", $"v3", $"v4")), expectedValue6)
+    checkAnswer(df6.selectExpr("arrays_zip(v1, v2, v3, v4)"), expectedValue6)
+
+    val expectedValue7 = Row(Seq(
+      Row(Seq(1, 2, 3), 1.1), Row(Seq(4, 5), 2.2)))
+    checkAnswer(df7.select(arrays_zip($"v1", $"v2")), expectedValue7)
+    checkAnswer(df7.selectExpr("arrays_zip(v1, v2)"), expectedValue7)
+
+    val expectedValue8 = Row(Seq(
+      Row(Array[Byte](1.toByte, 5.toByte), null)))
+    checkAnswer(df8.select(arrays_zip($"v1", $"v2")), expectedValue8)
+    checkAnswer(df8.selectExpr("arrays_zip(v1, v2)"), expectedValue8)
   }
 
   test("map size function") {
@@ -374,6 +587,50 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("map_values(a)"),
       Seq(Row(Seq(100, 200)), Row(Seq.empty), Row(Seq(100, 200, 300)))
     )
+  }
+
+  test("map_entries") {
+    val dummyFilter = (c: Column) => c.isNotNull || c.isNull
+
+    // Primitive-type elements
+    val idf = Seq(
+      Map[Int, Int](1 -> 100, 2 -> 200, 3 -> 300),
+      Map[Int, Int](),
+      null
+    ).toDF("m")
+    val iExpected = Seq(
+      Row(Seq(Row(1, 100), Row(2, 200), Row(3, 300))),
+      Row(Seq.empty),
+      Row(null)
+    )
+
+    checkAnswer(idf.select(map_entries('m)), iExpected)
+    checkAnswer(idf.selectExpr("map_entries(m)"), iExpected)
+    checkAnswer(idf.filter(dummyFilter('m)).select(map_entries('m)), iExpected)
+    checkAnswer(
+      spark.range(1).selectExpr("map_entries(map(1, null, 2, null))"),
+      Seq(Row(Seq(Row(1, null), Row(2, null)))))
+    checkAnswer(
+      spark.range(1).filter(dummyFilter('id)).selectExpr("map_entries(map(1, null, 2, null))"),
+      Seq(Row(Seq(Row(1, null), Row(2, null)))))
+
+    // Non-primitive-type elements
+    val sdf = Seq(
+      Map[String, String]("a" -> "f", "b" -> "o", "c" -> "o"),
+      Map[String, String]("a" -> null, "b" -> null),
+      Map[String, String](),
+      null
+    ).toDF("m")
+    val sExpected = Seq(
+      Row(Seq(Row("a", "f"), Row("b", "o"), Row("c", "o"))),
+      Row(Seq(Row("a", null), Row("b", null))),
+      Row(Seq.empty),
+      Row(null)
+    )
+
+    checkAnswer(sdf.select(map_entries('m)), sExpected)
+    checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
+    checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
   }
 
   test("array contains function") {
@@ -411,6 +668,51 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+  }
+
+  test("arrays_overlap function") {
+    val df = Seq(
+      (Seq[Option[Int]](Some(1), Some(2)), Seq[Option[Int]](Some(-1), Some(10))),
+      (Seq[Option[Int]](Some(1), Some(2)), Seq[Option[Int]](Some(-1), None)),
+      (Seq[Option[Int]](Some(3), Some(2)), Seq[Option[Int]](Some(1), Some(2)))
+    ).toDF("a", "b")
+
+    val answer = Seq(Row(false), Row(null), Row(true))
+
+    checkAnswer(df.select(arrays_overlap(df("a"), df("b"))), answer)
+    checkAnswer(df.selectExpr("arrays_overlap(a, b)"), answer)
+
+    checkAnswer(
+      Seq((Seq(1, 2, 3), Seq(2.0, 2.5))).toDF("a", "b").selectExpr("arrays_overlap(a, b)"),
+      Row(true))
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(array(1, 2, 3), array('a', 'b', 'c'))")
+    }
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(null, null)")
+    }
+
+    intercept[AnalysisException] {
+      sql("select arrays_overlap(map(1, 2), map(3, 4))")
+    }
+  }
+
+  test("slice function") {
+    val df = Seq(
+      Seq(1, 2, 3),
+      Seq(4, 5)
+    ).toDF("x")
+
+    val answer = Seq(Row(Seq(2, 3)), Row(Seq(5)))
+
+    checkAnswer(df.select(slice(df("x"), 2, 2)), answer)
+    checkAnswer(df.selectExpr("slice(x, 2, 2)"), answer)
+
+    val answerNegative = Seq(Row(Seq(3)), Row(Seq(5)))
+    checkAnswer(df.select(slice(df("x"), -1, 1)), answerNegative)
+    checkAnswer(df.selectExpr("slice(x, -1, 1)"), answerNegative)
   }
 
   test("array_join function") {
@@ -590,6 +892,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
       Seq(Row(1L), Row(1L))
     )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
+    }
+    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
   }
 
   test("element_at function") {
@@ -638,6 +945,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("element_at(a, -1)"),
       Seq(Row("3"), Row(""), Row(null))
     )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
+    }
+    assert(e.message.contains(
+      "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
   }
 
   test("concat function - arrays") {
@@ -712,6 +1025,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       df.selectExpr("concat(i1, array(i1, i2))")
     }
+
+    val e = intercept[AnalysisException] {
+      df.selectExpr("concat(map(1, 2), map(3, 4))")
+    }
+    assert(e.getMessage.contains("string, binary or array"))
   }
 
   test("flatten function") {
@@ -791,6 +1109,111 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       oneRowDF.selectExpr("flatten(null)")
     }
+  }
+
+  test("array_repeat function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
+    val strDF = Seq(
+      ("hi", 2),
+      (null, 2)
+    ).toDF("a", "b")
+
+    val strDFTwiceResult = Seq(
+      Row(Seq("hi", "hi")),
+      Row(Seq(null, null))
+    )
+
+    checkAnswer(strDF.select(array_repeat($"a", 2)), strDFTwiceResult)
+    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), strDFTwiceResult)
+    checkAnswer(strDF.select(array_repeat($"a", $"b")), strDFTwiceResult)
+    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), strDFTwiceResult)
+    checkAnswer(strDF.selectExpr("array_repeat(a, 2)"), strDFTwiceResult)
+    checkAnswer(strDF.selectExpr("array_repeat(a, b)"), strDFTwiceResult)
+
+    val intDF = {
+      val schema = StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType)))
+      val data = Seq(
+        Row(3, 2),
+        Row(null, 2)
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val intDFTwiceResult = Seq(
+      Row(Seq(3, 3)),
+      Row(Seq(null, null))
+    )
+
+    checkAnswer(intDF.select(array_repeat($"a", 2)), intDFTwiceResult)
+    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), intDFTwiceResult)
+    checkAnswer(intDF.select(array_repeat($"a", $"b")), intDFTwiceResult)
+    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), intDFTwiceResult)
+    checkAnswer(intDF.selectExpr("array_repeat(a, 2)"), intDFTwiceResult)
+    checkAnswer(intDF.selectExpr("array_repeat(a, b)"), intDFTwiceResult)
+
+    val nullCountDF = {
+      val schema = StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType)))
+      val data = Seq(
+        Row("hi", null),
+        Row(null, null)
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    checkAnswer(
+      nullCountDF.select(array_repeat($"a", $"b")),
+      Seq(
+        Row(null),
+        Row(null)
+      )
+    )
+
+    // Error test cases
+    val invalidTypeDF = Seq(("hi", "1")).toDF("a", "b")
+
+    intercept[AnalysisException] {
+      invalidTypeDF.select(array_repeat($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      invalidTypeDF.select(array_repeat($"a", lit("1")))
+    }
+    intercept[AnalysisException] {
+      invalidTypeDF.selectExpr("array_repeat(a, 1.0)")
+    }
+
+  }
+
+  test("array remove") {
+    val df = Seq(
+      (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", "")),
+      (Array.empty[Int], Array.empty[String], Array.empty[String]),
+      (null, null, null)
+    ).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(array_remove($"a", 2), array_remove($"b", "a"), array_remove($"c", "")),
+      Seq(
+        Row(Seq(1, 3), Seq("b", "c"), Seq.empty[String]),
+        Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),
+        Row(null, null, null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_remove(a, 2)", "array_remove(b, \"a\")",
+        "array_remove(c, \"\")"),
+      Seq(
+        Row(Seq(1, 3), Seq("b", "c"), Seq.empty[String]),
+        Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),
+        Row(null, null, null))
+    )
+
+    val e = intercept[AnalysisException] {
+      Seq(("a string element", "a")).toDF().selectExpr("array_remove(_1, _2)")
+    }
+    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

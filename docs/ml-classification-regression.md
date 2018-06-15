@@ -455,11 +455,29 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 ## Naive Bayes
 
 [Naive Bayes classifiers](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple 
-probabilistic classifiers based on applying Bayes' theorem with strong (naive) independence 
-assumptions between the features. The `spark.ml` implementation currently supports both [multinomial
-naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
+probabilistic, multiclass classifiers based on applying Bayes' theorem with strong (naive) independence 
+assumptions between every pair of features.
+
+Naive Bayes can be trained very efficiently. With a single pass over the training data,
+it computes the conditional probability distribution of each feature given each label.
+For prediction, it applies Bayes' theorem to compute the conditional probability distribution
+of each label given an observation.
+
+MLlib supports both [multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
 and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
-More information can be found in the section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
+
+*Input data*:
+These models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+Within that context, each observation is a document and each feature represents a term.
+A feature's value is the frequency of the term (in multinomial Naive Bayes) or
+a zero or one indicating whether the term was found in the document (in Bernoulli Naive Bayes).
+Feature values must be *non-negative*. The model type is selected with an optional parameter
+"multinomial" or "bernoulli" with "multinomial" as the default.
+For document classification, the input feature vectors should usually be sparse vectors.
+Since the training data is only used once, it is not necessary to cache it.
+
+[Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
+setting the parameter $\lambda$ (default to $1.0$). 
 
 **Examples**
 

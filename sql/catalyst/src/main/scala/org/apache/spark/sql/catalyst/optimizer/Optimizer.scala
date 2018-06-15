@@ -621,12 +621,15 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 /**
  * Collapse Adjacent Window Expression.
  * - If the partition specs and order specs are the same and the window expression are
- *   independent, collapse into the parent.
+ *   independent and are of the same window function type, collapse into the parent.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
-        if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty =>
+        if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty &&
+          // This assumes Window contains the same type of window expressions. This is ensured
+          // by ExtractWindowFunctions.
+          WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
   }
 }
@@ -1182,12 +1185,14 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _)
         if isCartesianProduct(j) =>
           throw new AnalysisException(
-            s"""Detected cartesian product for ${j.joinType.sql} join between logical plans
+            s"""Detected implicit cartesian product for ${j.joinType.sql} join between logical plans
                |${left.treeString(false).trim}
                |and
                |${right.treeString(false).trim}
                |Join condition is missing or trivial.
-               |Use the CROSS JOIN syntax to allow cartesian products between these relations."""
+               |Either: use the CROSS JOIN syntax to allow cartesian products between these
+               |relations, or: enable implicit cartesian products by setting the configuration
+               |variable spark.sql.crossJoin.enabled=true"""
             .stripMargin)
     }
 }
