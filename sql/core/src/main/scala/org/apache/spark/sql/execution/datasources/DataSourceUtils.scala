@@ -19,10 +19,25 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.types._
 
 
 object DataSourceUtils {
+
+  /**
+   * Verify if the schema is supported in datasource in write path.
+   */
+  def verifyWriteSchema(format: FileFormat, schema: StructType): Unit = {
+    verifySchema(format, schema, isReadPath = false)
+  }
+
+  /**
+   * Verify if the schema is supported in datasource in read path.
+   */
+  def verifyReadSchema(format: FileFormat, schema: StructType): Unit = {
+    verifySchema(format, schema, isReadPath = true)
+  }
 
   /**
    * Verify if the schema is supported in datasource. This verification should be done
@@ -31,11 +46,11 @@ object DataSourceUtils {
    *
    * Unsupported data types of csv, json, orc, and parquet are as follows;
    *  csv -> R/W: Interval, Null, Array, Map, Struct
-   *  json -> R/W: Interval
-   *  orc -> R/W: Interval, Null
+   *  json -> W: Interval
+   *  orc -> W: Interval, Null
    *  parquet -> R/W: Interval, Null
    */
-  def verifySchema(format: FileFormat, schema: StructType): Unit = {
+  private def verifySchema(format: FileFormat, schema: StructType, isReadPath: Boolean): Unit = {
     def throwUnsupportedException(dataType: DataType): Unit = {
       throw new UnsupportedOperationException(
         s"$format data source does not support ${dataType.simpleString} data type.")
@@ -56,10 +71,14 @@ object DataSourceUtils {
         verifyType(keyType)
         verifyType(valueType)
 
+      case _: CalendarIntervalType if isReadPath && format.isInstanceOf[JsonFileFormat] ||
+        isReadPath && format.isInstanceOf[OrcFileFormat] =>
+
       case udt: UserDefinedType[_] => verifyType(udt.sqlType)
 
       // For JSON backward-compatibility
-      case NullType if format.isInstanceOf[JsonFileFormat] =>
+      case NullType if format.isInstanceOf[JsonFileFormat] ||
+        (isReadPath && format.isInstanceOf[OrcFileFormat]) =>
 
       case _ => throwUnsupportedException(dataType)
     }

@@ -207,8 +207,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
 
   // Unsupported data types of csv, json, orc, and parquet are as follows;
   //  csv -> R/W: Interval, Null, Array, Map, Struct
-  //  json -> R/W: Interval
-  //  orc -> R/W: Interval, Null
+  //  json -> W: Interval
+  //  orc -> W: Interval, Null
   //  parquet -> R/W: Interval, Null
   test("SPARK-24204 error handling for unsupported data types") {
     withTempDir { dir =>
@@ -267,7 +267,39 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
 
-      Seq("parquet", "orc", "json", "csv").foreach { format =>
+       Seq("orc", "json").foreach { format =>
+        // write path
+        var msg = intercept[AnalysisException] {
+          sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.contains("Cannot save interval data type into external storage."))
+
+        msg = intercept[UnsupportedOperationException] {
+          spark.udf.register("testType", () => new IntervalData())
+          sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support calendarinterval data type."))
+
+        // read path
+        // We expect the types below should be passed for backward-compatibility
+
+        // Interval type
+        var schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
+
+        // UDT having interval data
+        schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
+      }
+    }
+
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+
+      Seq("parquet", "csv").foreach { format =>
         // write path
         var msg = intercept[AnalysisException] {
           sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
@@ -299,7 +331,36 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           .contains(s"$format data source does not support calendarinterval data type."))
       }
 
-      Seq("parquet", "orc", "csv").foreach { format =>
+      Seq("orc").foreach { format =>
+        // write path
+        var msg = intercept[UnsupportedOperationException] {
+          sql("select null").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support null data type."))
+
+        msg = intercept[UnsupportedOperationException] {
+          spark.udf.register("testType", () => new NullData())
+          sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support null data type."))
+
+        // read path
+        // We expect the types below should be passed for backward-compatibility
+
+        // Null type
+        var schema = StructType(StructField("a", NullType, true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
+
+        // UDT having null data
+        schema = StructType(StructField("a", new NullUDT(), true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
+      }
+
+      Seq("parquet", "csv").foreach { format =>
         // write path
         var msg = intercept[UnsupportedOperationException] {
           sql("select null").write.format(format).mode("overwrite").save(tempDir)
