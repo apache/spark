@@ -123,7 +123,7 @@
     <flume.version>1.6.0</flume.version>
     <zookeeper.version>3.4.6</zookeeper.version>
     <curator.version>2.6.0</curator.version>
-    <hive.group>org.spark-project.hive</hive.group>
+    <hive.group>com.github.hyukjinkwon</hive.group>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>1.2.1.spark2</hive.version>
     <!-- Version used for internal directory structure -->
