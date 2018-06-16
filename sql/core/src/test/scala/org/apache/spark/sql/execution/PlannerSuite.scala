@@ -680,6 +680,23 @@ class PlannerSuite extends SharedSQLContext {
     assert(rangeExecInZeroPartition.head.outputPartitioning == UnknownPartitioning(0))
   }
 
+  test("SPARK-24495: EnsureRequirements can return wrong plan when reusing the same key in join") {
+    val plan1 = DummySparkPlan(outputOrdering = Seq(orderingA),
+      outputPartitioning = HashPartitioning(exprA :: exprA :: Nil, 5))
+    val plan2 = DummySparkPlan(outputOrdering = Seq(orderingB),
+      outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+    val smjExec = SortMergeJoinExec(
+      exprA :: exprA :: Nil, exprB :: exprC :: Nil, Inner, None, plan1, plan2)
+
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    outputPlan match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _, _, _) =>
+        assert(leftKeys == Seq(exprA, exprA))
+        assert(rightKeys == Seq(exprB, exprC))
+      case _ => fail()
+    }
+  }
+
   test("SPARK-24500: create union with stream of children") {
     val df = Union(Stream(
       Range(1, 1, 1, 1),
