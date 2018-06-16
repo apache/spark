@@ -17,17 +17,23 @@
 
 package org.apache.spark.util.collection
 
+import java.util.Objects
+
 import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
-
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.util.CompletionIterator
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
+
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
 
-class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
+class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext with Eventually with Matchers{
   import TestUtils.{assertNotSpilled, assertSpilled}
 
   private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS
@@ -444,9 +450,16 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
     // it'd be nice to use something like
     // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
     // (lines 69-89)
-    assert(map.currentMap == null)
-    System.gc()
-    assert(underlyingMapRef.get.isEmpty)
+    //assert(map.currentMap == null)
+//    eventually (Timeout(FiniteDuration(500, scala.concurrent.duration.SECONDS))){
+//      System.gc()
+//      underlyingMapRef.get should be (empty)
+//    }
+    while(underlyingMapRef.get.nonEmpty){
+      System.gc()
+      Thread.sleep(5000)
+    }
+
 
     val next50Keys = for ( _ <- 0 until 50) yield {
       val (k, vs) = it.next
@@ -468,17 +481,12 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
     map.insertAll((0 until size).iterator.map(i => (i / 10, i)))
     assert(map.numSpills == 0, "map was not supposed to spill")
 
+    val underlyingMapRef = WeakReference(map.currentMap)
+    assert(underlyingMapRef.get.nonEmpty)
+
     val it = map.iterator
     assert( it.isInstanceOf[CompletionIterator[_, _]])
-    val underlyingIt = map.readingIterator
-    assert( underlyingIt != null )
-    val underlyingMapIterator = underlyingIt.upstream
-    assert(underlyingMapIterator != null)
-    val underlyingMapIteratorClass = underlyingMapIterator.getClass
-    assert(underlyingMapIteratorClass.getEnclosingClass == classOf[AppendOnlyMap[_, _]])
 
-    val underlyingMap = map.currentMap
-    assert(underlyingMap != null)
 
     val keys = it.map{
       case (k, vs) =>
@@ -498,9 +506,18 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext{
     // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
     // (lines 69-89)
     assert(map.currentMap == null)
-    assert(underlyingIt.upstream ne underlyingMapIterator)
-    assert(underlyingIt.upstream.getClass != underlyingMapIteratorClass)
-    assert(underlyingIt.upstream.getClass.getEnclosingClass != classOf[AppendOnlyMap[_, _]])
+
+//    eventually(Timeout(FiniteDuration(5, scala.concurrent.duration.SECONDS))){
+//      System.gc()
+//      underlyingMapRef.get should be (empty)
+//    }
+
+    while(underlyingMapRef.get.nonEmpty){
+      System.gc()
+      Thread.sleep(5000)
+    }
+
+    assert(it.toList.isEmpty)
   }
 
   test("external aggregation updates peak execution memory") {
