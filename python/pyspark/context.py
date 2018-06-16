@@ -406,6 +406,20 @@ class SparkContext(object):
         """
         return self._jsc.sc().defaultMinPartitions()
 
+    @property
+    def coresCount(self):
+        """
+        Total number of CPU cores of all executors in the cluster
+        """
+        return self._jsc.sc().coresCount()
+
+    @property
+    def executorsCount(self):
+        """
+        Total number of executors in the cluster
+        """
+        return self._jsc.sc().executorsCount()
+
     def stop(self):
         """
         Shut down the SparkContext.

@@ -519,6 +519,14 @@ class TaskContextTests(PySparkTestCase):
         # Allow retries even though they are normally disabled in local mode
         self.sc = SparkContext('local[4, 2]', class_name)
 
+    def test_cores_count(self):
+        """Test for number of cores in the cluster"""
+        self.assertEqual(self.sc.coresCount, 4)
+
+    def test_executors_count(self):
+        """Test for number of executors in the cluster"""
+        self.assertEqual(self.sc.executorsCount, 1)
+
     def test_stage_id(self):
         """Test the stage ids are available and incrementing as expected."""
         rdd = self.sc.parallelize(range(10))
