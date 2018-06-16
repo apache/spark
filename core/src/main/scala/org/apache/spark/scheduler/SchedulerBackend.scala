@@ -29,6 +29,8 @@ private[spark] trait SchedulerBackend {
   def stop(): Unit
   def reviveOffers(): Unit
   def defaultParallelism(): Int
+  def coresCount(): Int
+  def executorsCount(): Int
 
   /**
    * Requests that an executor kills a running task.

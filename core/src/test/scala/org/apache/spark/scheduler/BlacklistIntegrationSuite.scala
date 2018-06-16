@@ -144,7 +144,11 @@ class MultiExecutorMockBackend(
     }.toMap
   }
 
-  override def defaultParallelism(): Int = nHosts * nExecutorsPerHost * nCoresPerExecutor
+  override def defaultParallelism(): Int = coresCount
+
+  override def coresCount(): Int = nHosts * nExecutorsPerHost * nCoresPerExecutor
+  override def executorsCount(): Int = nHosts * nExecutorsPerHost
+
 }
 
 class MockRDDWithLocalityPrefs(

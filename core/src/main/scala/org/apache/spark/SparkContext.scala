@@ -2336,6 +2336,16 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 
+  /**
+   * Total number of CPU cores of all executors in the cluster
+   */
+  def coresCount: Int = taskScheduler.coresCount
+
+  /**
+   * Total number of executors in the cluster
+   */
+  def executorsCount: Int = taskScheduler.executorsCount
+
   private val nextShuffleId = new AtomicInteger(0)
 
   private[spark] def newShuffleId(): Int = nextShuffleId.getAndIncrement()

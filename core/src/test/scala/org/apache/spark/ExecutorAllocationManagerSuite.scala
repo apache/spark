@@ -1376,6 +1376,9 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
 
   override def defaultParallelism(): Int = sb.defaultParallelism()
 
+  override def coresCount(): Int = sb.coresCount()
+  override def executorsCount(): Int = sb.executorsCount()
+
   override def killExecutorsOnHost(host: String): Boolean = {
     false
   }

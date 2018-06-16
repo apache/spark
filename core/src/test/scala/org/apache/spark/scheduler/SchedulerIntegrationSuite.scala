@@ -430,6 +430,8 @@ private[spark] class SingleCoreMockBackend(
   val cores = 1
 
   override def defaultParallelism(): Int = conf.getInt("spark.default.parallelism", cores)
+  override def coresCount(): Int = cores
+  override def executorsCount(): Int = 1
 
   freeCores = cores
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
