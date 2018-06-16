@@ -706,6 +706,7 @@ class PlannerSuite extends SharedSQLContext {
       val reusedExchange = df.queryExecution.executedPlan.collect {
         case r: ReusedExchangeExec => r
       }
+      assert(reusedExchange.size == 1)
       checkOutputPartitioningRewrite(reusedExchange, expectedPartitioningClass)
     }
 
@@ -715,6 +716,7 @@ class PlannerSuite extends SharedSQLContext {
       val inMemoryScans = df.queryExecution.executedPlan.collect {
         case m: InMemoryTableScanExec => m
       }
+      assert(inMemoryScans.size == 2)
       checkOutputPartitioningRewrite(inMemoryScans, expectedPartitioningClass)
     }
 
@@ -734,8 +736,8 @@ class PlannerSuite extends SharedSQLContext {
     checkInMemoryTableScanOutputPartitioningRewrite(df5.union(df6), classOf[HashPartitioning])
 
     // InMemoryTableScan is RangePartitioning
-    val df7 = df3.persist()
-    val df8 = df4.persist()
+    val df7 = spark.range(1, 100, 1, 10).toDF().persist()
+    val df8 = spark.range(1, 100, 1, 10).toDF().persist()
     checkInMemoryTableScanOutputPartitioningRewrite(df7.union(df8), classOf[RangePartitioning])
 
     // InMemoryTableScan is PartitioningCollection
