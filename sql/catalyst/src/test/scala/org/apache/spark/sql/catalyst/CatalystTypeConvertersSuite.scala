@@ -141,7 +141,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
       + "(java.lang.Double) cannot be converted to the string type"))
   }
 
-  test("convert Char to String") {
+  test("SPARK-24571: convert Char to String") {
     val chr: Char = 'X'
     val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
     val expected = UTF8String.fromString("X")

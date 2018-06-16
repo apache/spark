@@ -220,7 +220,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkUnsupportedTypeInLiteral(("mike", 29, 1.0))
   }
 
-  test("char literals") {
+  test("SPARK-24571: char literals") {
     checkEvaluation(Literal('X'), "X")
     checkEvaluation(Literal.create('0'), "0")
     checkEvaluation(Literal('\u0000'), "\u0000")

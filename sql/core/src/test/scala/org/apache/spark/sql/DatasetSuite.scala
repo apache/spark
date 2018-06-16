@@ -1467,7 +1467,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     intercept[NullPointerException](ds.as[(Int, Int)].collect())
   }
 
-  test("filtering of string values by char literal") {
+  test("SPARK-24571: filtering of string values by char literal") {
     val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
     checkAnswer(df.where('city === 'X'), Seq(Row("X")))
     checkAnswer(
