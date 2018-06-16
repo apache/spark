@@ -206,10 +206,10 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   // Unsupported data types of csv, json, orc, and parquet are as follows;
-  //  csv -> Interval, Null, Array, Map, Struct
-  //  json -> Interval
-  //  orc -> Interval, Null
-  //  parquet -> Interval, Null
+  //  csv -> R/W: Interval, Null, Array, Map, Struct
+  //  json -> R/W: Interval
+  //  orc -> R/W: Interval, Null
+  //  parquet -> R/W: Interval, Null
   test("SPARK-24204 error handling for unsupported data types") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
@@ -219,24 +219,46 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       assert(msg.contains("CSV data source does not support struct<a:int,b:string> data type"))
 
       msg = intercept[UnsupportedOperationException] {
-        Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.csv(csvDir)
+        val schema = StructType.fromDDL("a struct<b: Int>")
+        spark.range(1).write.mode("overwrite").csv(csvDir)
+        spark.read.schema(schema).csv(csvDir).collect()
+      }.getMessage
+      assert(msg.contains("CSV data source does not support struct<b:int> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.mode("overwrite").csv(csvDir)
       }.getMessage
       assert(msg.contains("CSV data source does not support map<string,int> data type"))
 
       msg = intercept[UnsupportedOperationException] {
-        Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands").write.csv(csvDir)
+        val schema = StructType.fromDDL("a map<int, int>")
+        spark.range(1).write.mode("overwrite").csv(csvDir)
+        spark.read.schema(schema).csv(csvDir).collect()
+      }.getMessage
+      assert(msg.contains("CSV data source does not support map<int,int> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands")
+          .write.mode("overwrite").csv(csvDir)
       }.getMessage
       assert(msg.contains("CSV data source does not support array<string> data type"))
 
       msg = intercept[UnsupportedOperationException] {
+         val schema = StructType.fromDDL("a array<int>")
+         spark.range(1).write.mode("overwrite").csv(csvDir)
+         spark.read.schema(schema).csv(csvDir).collect()
+       }.getMessage
+      assert(msg.contains("CSV data source does not support array<int> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
         Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
-          .write.csv(csvDir)
+          .write.mode("overwrite").csv(csvDir)
       }.getMessage
       assert(msg.contains("CSV data source does not support array<double> data type"))
 
       msg = intercept[UnsupportedOperationException] {
         val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
-        spark.range(1).write.csv(csvDir)
+        spark.range(1).write.mode("overwrite").csv(csvDir)
         spark.read.schema(schema).csv(csvDir).collect()
       }.getMessage
       assert(msg.contains("CSV data source does not support array<double> data type."))

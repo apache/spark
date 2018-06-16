@@ -30,10 +30,10 @@ object DataSourceUtils {
    * in `FileFormat`.
    *
    * Unsupported data types of csv, json, orc, and parquet are as follows;
-   *  csv -> Interval, Null, Array, Map, Struct
-   *  json -> Interval
-   *  orc -> Interval, Null
-   *  parquet -> Interval, Null
+   *  csv -> R/W: Interval, Null, Array, Map, Struct
+   *  json -> R/W: Interval
+   *  orc -> R/W: Interval, Null
+   *  parquet -> R/W: Interval, Null
    */
   def verifySchema(format: FileFormat, schema: StructType): Unit = {
     def throwUnsupportedException(dataType: DataType): Unit = {
