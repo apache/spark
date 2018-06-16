@@ -821,7 +821,8 @@ private[spark] class Executor(
    * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
    */
   private def startDriverHeartbeater(): Unit = {
-    val intervalMs = conf.getTimeAsSeconds("spark.executor.heartbeatInterval", "10s").seconds.toMillis
+    val intervalMs = conf.getTimeAsSeconds("spark.executor.heartbeatInterval",
+      "10s").seconds.toMillis
 
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]

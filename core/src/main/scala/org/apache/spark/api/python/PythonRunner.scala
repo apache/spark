@@ -355,7 +355,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     extends Thread(s"Worker Monitor for $pythonExec") {
 
     /** How long to wait before killing the python worker if a task cannot be interrupted. */
-    private val taskKillTimeoutMs = env.conf.getTimeAsSeconds("spark.python.task.killTimeout", "2s").seconds.toMillis
+    private val taskKillTimeoutMs = env.conf.getTimeAsSeconds("spark.python.task.killTimeout",
+      "2s").seconds.toMillis
 
     setDaemon(true)
 

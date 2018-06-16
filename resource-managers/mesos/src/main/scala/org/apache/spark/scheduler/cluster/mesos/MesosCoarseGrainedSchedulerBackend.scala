@@ -24,8 +24,8 @@ import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.concurrent.duration._
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
