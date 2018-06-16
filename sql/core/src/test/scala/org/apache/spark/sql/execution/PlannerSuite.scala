@@ -687,8 +687,8 @@ class PlannerSuite extends SharedSQLContext {
     df.queryExecution.executedPlan.execute()
   }
 
-  test("SPARK-24556: always rewrite output partitioning in InMemoryTableScanExec" +
-    "and ReusedExchangeExec") {
+  test("SPARK-24556: always rewrite output partitioning in ReusedExchangeExec" +
+    "and InMemoryTableScanExec") {
     def checkOutputPartitioningRewrite(
         plans: Seq[SparkPlan],
         expectedPartitioningClass: Class[_]): Unit = {
@@ -700,15 +700,6 @@ class PlannerSuite extends SharedSQLContext {
       }
     }
 
-    def checkInMemoryTableScanOutputPartitioningRewrite(
-        df: DataFrame,
-        expectedPartitioningClass: Class[_]): Unit = {
-      val inMemoryScans = df.queryExecution.executedPlan.collect {
-        case m: InMemoryTableScanExec => m
-      }
-      checkOutputPartitioningRewrite(inMemoryScans, expectedPartitioningClass)
-    }
-
     def checkReusedExchangeOutputPartitioningRewrite(
         df: DataFrame,
         expectedPartitioningClass: Class[_]): Unit = {
@@ -718,35 +709,44 @@ class PlannerSuite extends SharedSQLContext {
       checkOutputPartitioningRewrite(reusedExchange, expectedPartitioningClass)
     }
 
-    // InMemoryTableScan is HashPartitioning
-    val df1 = Seq(1 -> "a").toDF("i", "j").repartition($"i").persist()
-    val df2 = Seq(1 -> "a").toDF("i", "j").repartition($"i").persist()
-    checkInMemoryTableScanOutputPartitioningRewrite(df1.union(df2), classOf[HashPartitioning])
-
-    // InMemoryTableScan is RangePartitioning
-    val df3 = Seq(1 -> "a").toDF("i", "j").orderBy($"i").persist()
-    val df4 = Seq(1 -> "a").toDF("i", "j").orderBy($"i").persist()
-    checkInMemoryTableScanOutputPartitioningRewrite(df3.union(df4), classOf[RangePartitioning])
-
-    // InMemoryTableScan is PartitioningCollection
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
-      val df5 =
-        Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m").persist()
-      val df6 =
-        Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m").persist()
-      checkInMemoryTableScanOutputPartitioningRewrite(
-        df5.union(df6), classOf[PartitioningCollection])
+    def checkInMemoryTableScanOutputPartitioningRewrite(
+        df: DataFrame,
+        expectedPartitioningClass: Class[_]): Unit = {
+      val inMemoryScans = df.queryExecution.executedPlan.collect {
+        case m: InMemoryTableScanExec => m
+      }
+      checkOutputPartitioningRewrite(inMemoryScans, expectedPartitioningClass)
     }
 
     // ReusedExchange is HashPartitioning
-    val df7 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
-    val df8 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
-    checkReusedExchangeOutputPartitioningRewrite(df7.union(df8), classOf[HashPartitioning])
+    val df1 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
+    val df2 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
+    checkReusedExchangeOutputPartitioningRewrite(df1.union(df2), classOf[HashPartitioning])
 
     // ReusedExchange is RangePartitioning
-    val df9 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
-    val df10 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
-    checkReusedExchangeOutputPartitioningRewrite(df9.union(df10), classOf[RangePartitioning])
+    val df3 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
+    val df4 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
+    checkReusedExchangeOutputPartitioningRewrite(df3.union(df4), classOf[RangePartitioning])
+
+    // InMemoryTableScan is HashPartitioning
+    val df5 = df1.persist()
+    val df6 = df2.persist()
+    checkInMemoryTableScanOutputPartitioningRewrite(df5.union(df6), classOf[HashPartitioning])
+
+    // InMemoryTableScan is RangePartitioning
+    val df7 = df3.persist()
+    val df8 = df4.persist()
+    checkInMemoryTableScanOutputPartitioningRewrite(df7.union(df8), classOf[RangePartitioning])
+
+    // InMemoryTableScan is PartitioningCollection
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 =
+        Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m").persist()
+      val df2 =
+        Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m").persist()
+      checkInMemoryTableScanOutputPartitioningRewrite(
+        df1.union(df2), classOf[PartitioningCollection])
+    }
   }
 }
 
