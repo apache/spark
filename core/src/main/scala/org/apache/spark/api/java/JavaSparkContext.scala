@@ -128,6 +128,12 @@ class JavaSparkContext(val sc: SparkContext)
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   def defaultMinPartitions: java.lang.Integer = sc.defaultMinPartitions
 
+  /** Total number of CPU cores of all executors in the cluster */
+  def coresCount: java.lang.Integer = sc.coresCount
+
+  /** Total number of executors in the cluster */
+  def executorsCount: java.lang.Integer = sc.executorsCount
+
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
