@@ -234,11 +234,6 @@ class JacksonParser(
     case udt: UserDefinedType[_] =>
       makeConverter(udt.sqlType)
 
-    case _: NullType if options.dropFieldIfAllNull =>
-      (parser: JsonParser) => parseJsonToken[Null](parser, dataType) {
-        case _ => null
-      }
-
     case _ =>
       (parser: JsonParser) =>
         // Here, we pass empty `PartialFunction` so that this case can be

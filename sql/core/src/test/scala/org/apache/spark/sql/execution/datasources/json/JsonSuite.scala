@@ -2423,10 +2423,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .option("dropFieldIfAllNull", true)
         .load(path)
       var expectedSchema = new StructType()
-        .add("a", NullType).add("b", LongType).add("c", StringType)
+        .add("b", LongType).add("c", StringType)
       assert(df.schema === expectedSchema)
-      checkAnswer(df, Row(null, 1, "3.0") :: Row(null, null, "string") :: Row(null, null, null)
-        :: Nil)
+      checkAnswer(df, Row(1, "3.0") :: Row(null, "string") :: Row(null, null) :: Nil)
 
       // arrays
       Seq(
@@ -2438,17 +2437,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .option("dropFieldIfAllNull", true)
         .load(path)
       expectedSchema = new StructType()
-        .add("a", ArrayType(LongType)).add("b", NullType).add("c", NullType).add("d", NullType)
-        .add("e", NullType)
+        .add("a", ArrayType(LongType))
       assert(df.schema === expectedSchema)
-      checkAnswer(df, Row(Array(2, 1), null, null, null, null) ::
-        Row(Array(null), null, null, null, null) ::
-        Row(null, null, null, null, null) :: Nil)
+      checkAnswer(df, Row(Array(2, 1)) :: Row(Array(null)) ::  Row(null) :: Nil)
 
       // structs
       Seq(
         """{"a":{"a1": 1, "a2":"string"}, "b":{}}""",
-        """{"a":{"a1": 2, "a2":null}, "b":{}}""",
+        """{"a":{"a1": 2, "a2":null}, "b":{"b1":[null]}}""",
         """{"a":null, "b":null}""")
         .toDS().write.mode("overwrite").text(path)
       df = spark.read.format("json")
@@ -2457,10 +2453,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       expectedSchema = new StructType()
         .add("a", StructType(StructField("a1", LongType) :: StructField("a2", StringType)
           :: Nil))
-        .add("b", NullType)
       assert(df.schema === expectedSchema)
-      checkAnswer(df, Row(Row(1, "string"), null) :: Row(Row(2, null), null) ::
-        Row(null, null) :: Nil)
+      checkAnswer(df, Row(Row(1, "string")) :: Row(Row(2, null)) :: Row(null) :: Nil)
     }
   }
 }
