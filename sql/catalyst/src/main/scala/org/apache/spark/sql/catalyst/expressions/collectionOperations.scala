@@ -2593,7 +2593,7 @@ case class ArrayDistinct(child: Expression)
            |${ev.value} = new $arrayClass($distinctArray);
         """.stripMargin
       } else {
-        val setValueForbruteForce = setValueForBruteForceEval(false, i, j,
+        val setValueForBruteForce = setValueForBruteForceEval(false, i, j,
             inputArray, distinctArray, pos, getValue1, isEqual, "")
         s"""
            |int $pos = 0;
@@ -2603,7 +2603,7 @@ case class ArrayDistinct(child: Expression)
            |  if ($inputArray.isNullAt($i)) {
            |    $setNullForNonPrimitive;
            |  } else {
-           |    $setValueForbruteForce;
+           |    $setValueForBruteForce;
            |  }
            |}
            |${ev.value} = new $arrayClass($distinctArray);
