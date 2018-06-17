@@ -558,9 +558,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("array contains function") {
     val df = Seq(
-      (Seq[Int](1, 2), "x"),
-      (Seq[Int](), "x")
-    ).toDF("a", "b")
+      (Seq[Int](1, 2), "x", 1),
+      (Seq[Int](), "x", 1)
+    ).toDF("a", "b", "c")
 
     // Simple test cases
     checkAnswer(
@@ -569,6 +569,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
     checkAnswer(
       df.selectExpr("array_contains(a, 1)"),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df.select(array_contains(df("a"), df("c"))),
       Seq(Row(true), Row(false))
     )
 
