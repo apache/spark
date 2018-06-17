@@ -62,7 +62,6 @@ def capture_sql_exception(f):
         try:
             return f(*a, **kw)
         except py4j.protocol.Py4JJavaError as e:
-            print(str(e))
             s = e.java_exception.toString()
             stackTrace = '\n\t at '.join(map(lambda x: x.toString(),
                                              e.java_exception.getStackTrace()))
