@@ -19,7 +19,7 @@ package org.apache.spark.sql;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * SaveMode is used to specify the expected behavior of saving a DataFrame to a data source
+ * SaveMode is used to specify the expected behavior of saving a DataFrame to a data source.......................................
  *
  * @since 1.3.0
  */
