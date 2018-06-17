@@ -1918,7 +1918,7 @@ class SQLTests(ReusedSQLTestCase):
                 self.fail("invalid writer %s did not fail the query" % str(writer))  # not expected
             except Exception as e:
                 if msg:
-                    self.assertTrue(msg in str(e), "%s not in %s" % (msg, str(e)))
+                    assert(msg in str(e), "%s not in %s" % (msg, str(e)))
 
             finally:
                 self.stop_all()
