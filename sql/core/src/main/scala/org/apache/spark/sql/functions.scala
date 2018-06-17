@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Functions available for DataFrame operations.
+ * [[Functions]] available for DataFrame operations.
  *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
