@@ -2374,7 +2374,7 @@ case class ArrayDistinct(child: Expression)
 
   override def dataType: DataType = child.dataType
 
-  lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  @transient lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(elementType)
@@ -2442,21 +2442,15 @@ case class ArrayDistinct(child: Expression)
            |$openHashSet $hs = new $openHashSet($classTag);
            |for (int $i = 0; $i < $array.numElements(); $i++) {
            |  if ($array.isNullAt($i)) {
-           |     if (!($foundNullElement)) {
-           |       $foundNullElement = true;
-           |     }
-           |  }
-           |  else {
-           |    if (!($hs.contains($getValue1))) {
-           |      $hs.add($getValue1);
-           |    }
+           |    $foundNullElement = true;
+           |  } else {
+           |    $hs.add($getValue1);
            |  }
            |}
            |$sizeOfDistinctArray = $hs.size() + ($foundNullElement ? 1 : 0);
            |${genCodeForResult(ctx, ev, array, sizeOfDistinctArray)}
          """.stripMargin
-      }
-      else {
+      } else {
         s"""
            |int $sizeOfDistinctArray = 0;
            |boolean $foundNullElement = false;
@@ -2466,12 +2460,12 @@ case class ArrayDistinct(child: Expression)
            |       $sizeOfDistinctArray = $sizeOfDistinctArray + 1;
            |       $foundNullElement = true;
            |     }
-           |  }
-           |  else {
+           |  } else {
            |    int $j;
            |    for ($j = 0; $j < $i; $j++) {
-           |      if (!$array.isNullAt($j) && ${ctx.genEqual(elementType, getValue1, getValue2)})
+           |      if (!$array.isNullAt($j) && ${ctx.genEqual(elementType, getValue1, getValue2)}) {
            |        break;
+           |      }
            |    }
            |    if ($i == $j) {
            |     $sizeOfDistinctArray = $sizeOfDistinctArray + 1;
@@ -2492,15 +2486,9 @@ case class ArrayDistinct(child: Expression)
       pos: String): String = {
     val setNullValue =
       if (!isPrimitive) {
-        s"""
-           |$distinctArray[$pos] = null;
-        """.
-          stripMargin
+        s"$distinctArray[$pos] = null";
       } else {
-        s"""
-           |$distinctArray.setNullAt($pos);
-        """.
-          stripMargin
+        s"$distinctArray.setNullAt($pos)";
       }
 
     s"""
@@ -2518,13 +2506,9 @@ case class ArrayDistinct(child: Expression)
       getValue1: String,
       primitiveValueTypeName: String): String = {
     if (!isPrimitive) {
-      s"""
-         |$distinctArray[$pos] = $getValue1;
-      """.stripMargin
+      s"$distinctArray[$pos] = $getValue1";
     } else {
-      s"""
-         |$distinctArray.set$primitiveValueTypeName($pos, $getValue1);
-      """.stripMargin
+      s"$distinctArray.set$primitiveValueTypeName($pos, $getValue1)";
     }
   }
 
@@ -2546,7 +2530,7 @@ case class ArrayDistinct(child: Expression)
     """.stripMargin
   }
 
-  private def setValueForbruteForceEval(
+  private def setValueForBruteForceEval(
       isPrimitive: Boolean,
       i: String,
       j: String,
@@ -2561,13 +2545,14 @@ case class ArrayDistinct(child: Expression)
     s"""
        |int $j;
        |for ($j = 0; $j < $i; $j ++) {
-       |  if (!$inputArray.isNullAt($j) && $isEqual)
+       |  if (!$inputArray.isNullAt($j) && $isEqual) {
        |    break;
        |  }
-       |  if ($i == $j) {
-       |    $setValue;
-       |    $pos = $pos + 1;
-       |  }
+       |}
+       |if ($i == $j) {
+       |  $setValue;
+       |  $pos = $pos + 1;
+       |}
     """.stripMargin
   }
 
@@ -2601,17 +2586,15 @@ case class ArrayDistinct(child: Expression)
            |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
            |  if ($inputArray.isNullAt($i)) {
            |    $setNullForNonPrimitive;
-           |  }
-           |  else {
+           |  } else {
            |    $setValueForFast;
            |  }
            |}
            |${ev.value} = new $arrayClass($distinctArray);
         """.stripMargin
-      }
-      else {
-        val setValueForbruteForce = setValueForbruteForceEval(false, i, j,
-                      inputArray, distinctArray, pos, getValue1: String, isEqual, "")
+      } else {
+        val setValueForbruteForce = setValueForBruteForceEval(false, i, j,
+            inputArray, distinctArray, pos, getValue1, isEqual, "")
         s"""
            |int $pos = 0;
            |Object[] $distinctArray = new Object[$size];
@@ -2619,8 +2602,7 @@ case class ArrayDistinct(child: Expression)
            |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
            |  if ($inputArray.isNullAt($i)) {
            |    $setNullForNonPrimitive;
-           |  }
-           |  else {
+           |  } else {
            |    $setValueForbruteForce;
            |  }
            |}
@@ -2632,41 +2614,21 @@ case class ArrayDistinct(child: Expression)
       val setNullForPrimitive = setNull(true, foundNullElement, distinctArray, pos)
       val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$primitiveValueTypeName()"
       val setValueForFast =
-              setValueForFastEval(true, hs, distinctArray, pos, getValue1, primitiveValueTypeName)
-      if (elementTypeSupportEquals) {
-        s"""
-           |${ctx.createUnsafeArray(distinctArray, size, elementType, s" $prettyName failed.")}
-           |int $pos = 0;
-           |boolean $foundNullElement = false;
-           |$openHashSet $hs = new $openHashSet($classTag);
-           |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-           |  if ($inputArray.isNullAt($i)) {
-           |     $setNullForPrimitive;
-           |  }
-           |  else {
-           |    $setValueForFast;
-           |  }
-           |}
-           |${ev.value} = $distinctArray;
-        """.stripMargin
-      } else {
-        val setValueForbruteForce = setValueForbruteForceEval(true, i, j,
-          inputArray, distinctArray, pos, getValue1: String, isEqual, primitiveValueTypeName)
-        s"""
-           |${ctx.createUnsafeArray(distinctArray, size, elementType, s" $prettyName failed.")}
-           |int $pos = 0;
-           |boolean $foundNullElement = false;
-           |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-           |  if ($inputArray.isNullAt($i)) {
-           |    $setNullForPrimitive;
-           |  }
-           |  else {
-           |    $setValueForbruteForce;
-           |  }
-           |}
-           |${ev.value} = $distinctArray;
-        """.stripMargin
-      }
+          setValueForFastEval(true, hs, distinctArray, pos, getValue1, primitiveValueTypeName)
+      s"""
+        |${ctx.createUnsafeArray(distinctArray, size, elementType, s" $prettyName failed.")}
+        |int $pos = 0;
+        |boolean $foundNullElement = false;
+        |$openHashSet $hs = new $openHashSet($classTag);
+        |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
+        |  if ($inputArray.isNullAt($i)) {
+        |     $setNullForPrimitive;
+        |  } else {
+        |    $setValueForFast;
+        |  }
+        |}
+        |${ev.value} = $distinctArray;
+      """.stripMargin
     }
   }
 
