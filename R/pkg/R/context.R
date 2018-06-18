@@ -25,6 +25,22 @@ getMinPartitions <- function(sc, minPartitions) {
   as.integer(minPartitions)
 }
 
+#' Total number of CPU cores of all executors registered in the cluster at the moment.
+#'
+#' @param sc SparkContext to use
+#' @return current number of cores in the cluster.
+numCores <- function(sc) {
+  callJMethod(sc, "numCores")
+}
+
+#' Total number of executors registered in the cluster at the moment.
+#'
+#' @param sc SparkContext to use
+#' @return current number of executors in the cluster.
+numExecutors <- function(sc) {
+  callJMethod(sc, "numExecutors")
+}
+
 #' Create an RDD from a text file.
 #'
 #' This function reads a text file from HDFS, a local file system (available on all
