@@ -789,9 +789,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("array position function") {
     val df = Seq(
-      (Seq[Int](1, 2), "x"),
-      (Seq[Int](), "x")
-    ).toDF("a", "b")
+      (Seq[Int](1, 2), "x", 1),
+      (Seq[Int](), "x", 1)
+    ).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(array_position(df("a"), 1)),
@@ -801,7 +801,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_position(a, 1)"),
       Seq(Row(1L), Row(0L))
     )
-
+    checkAnswer(
+      df.select(array_position(df("a"), df("c"))),
+      Seq(Row(1L), Row(0L))
+    )
     checkAnswer(
       df.select(array_position(df("a"), null)),
       Seq(Row(null), Row(null))

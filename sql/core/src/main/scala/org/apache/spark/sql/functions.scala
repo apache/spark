@@ -3150,7 +3150,10 @@ object functions {
    * @since 2.4.0
    */
   def array_position(column: Column, value: Any): Column = withExpr {
-    ArrayPosition(column.expr, Literal(value))
+    value match {
+      case c: Column => ArrayPosition(column.expr, c.expr)
+      case _ => ArrayPosition(column.expr, Literal(value))
+    }
   }
 
   /**
