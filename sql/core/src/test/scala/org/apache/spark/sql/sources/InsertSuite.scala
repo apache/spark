@@ -20,11 +20,46 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+class SimpleInsertSource extends SchemaRelationProvider {
+  override def createRelation(
+    sqlContext: SQLContext,
+    parameters: Map[String, String],
+    schema: StructType): BaseRelation = {
+    SimpleInsert(schema)(sqlContext.sparkSession)
+  }
+}
+
+case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSession: SparkSession)
+  extends BaseRelation with InsertableRelation {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
+
+  override def schema: StructType = userSpecifiedSchema
+
+  override def insert(input: DataFrame, overwrite: Boolean): Unit = {
+    input.foreach { row =>
+      schema.fields.zipWithIndex.filter(!_._1.nullable).foreach { field =>
+        if (row.get(field._2) == null) {
+          throw new NotNullableViolationException(field._1.name)
+        }
+      }
+    }
+  }
+}
+
+class NotNullableViolationException(val message: String)
+  extends Exception(message) with Serializable {
+  override def getMessage: String = s"Value for column '$message' cannot be null."
+}
 
 class InsertSuite extends DataSourceTest with SharedSQLContext {
   import testImplicits._
@@ -518,6 +553,50 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
         checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-24583 Wrong schema type in InsertIntoDataSourceCommand") {
+    withTable("test_table") {
+      val schema = new StructType()
+        .add("i", IntegerType, false)
+        .add("s", StringType, false)
+      val newTable = CatalogTable(
+        identifier = TableIdentifier("test_table", None),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serde = None,
+          compressed = false,
+          properties = Map.empty),
+        schema = schema,
+        provider = Some("org.apache.spark.sql.sources.SimpleInsertSource"))
+
+      spark.sessionState.catalog.createTable(newTable, false)
+
+      def verifyException(e: Exception, column: String): Unit = {
+        var ex = e.getCause
+        while (ex != null &&
+          !ex.isInstanceOf[NotNullableViolationException]) {
+          ex = ex.getCause
+        }
+        if (ex == null) {
+          fail(s"Expected a NotNullableViolationException but got '${e.getMessage}'.")
+        }
+        assert(ex.getMessage.contains(s"Value for column '$column' cannot be null."))
+      }
+
+      sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
+      verifyException(
+        intercept[SparkException] {
+          sql("INSERT INTO TABLE test_table SELECT null, 'b'")
+        }, "i")
+      verifyException(
+        intercept[SparkException] {
+          sql("INSERT INTO TABLE test_table SELECT 2, null")
+        }, "s")
     }
   }
 }
