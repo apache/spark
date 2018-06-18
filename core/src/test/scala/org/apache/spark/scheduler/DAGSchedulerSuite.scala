@@ -132,9 +132,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     override def killTaskAttempt(
       taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
-    override def defaultParallelism() = coresCount
-    override def coresCount(): Int = 2
-    override def executorsCount(): Int = 1
+    override def defaultParallelism() = numCores
+    override def numCores(): Int = 2
+    override def numExecutors(): Int = 1
 
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
@@ -633,9 +633,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
         throw new UnsupportedOperationException
       }
       override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
-      override def defaultParallelism(): Int = coresCount
-      override def coresCount(): Int = 2
-      override def executorsCount(): Int = 1
+      override def defaultParallelism(): Int = numCores
+      override def numCores(): Int = 2
+      override def numExecutors(): Int = 1
       override def executorHeartbeatReceived(
           execId: String,
           accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],

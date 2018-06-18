@@ -457,8 +457,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.getInt("spark.default.parallelism", math.max(totalCoreCount.get(), 2))
   }
 
-  override def coresCount(): Int = totalCoreCount.get()
-  override def executorsCount(): Int = totalRegisteredExecutors.get()
+  override def numCores(): Int = totalCoreCount.get()
+  override def numExecutors(): Int = totalRegisteredExecutors.get()
 
   /**
    * Called by subclasses when notified of a lost worker. It just fires the message and returns

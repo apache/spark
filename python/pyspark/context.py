@@ -407,20 +407,20 @@ class SparkContext(object):
         return self._jsc.sc().defaultMinPartitions()
 
     @property
-    def coresCount(self):
+    def numCores(self):
         """
         Total number of CPU cores of all executors registered in the cluster at the moment.
         The number reflects current status of the cluster and can change in the future.
         """
-        return self._jsc.sc().coresCount()
+        return self._jsc.sc().numCores()
 
     @property
-    def executorsCount(self):
+    def numExecutors(self):
         """
         Total number of executors registered in the cluster at the moment.
         The number reflects current status of the cluster and can change in the future.
         """
-        return self._jsc.sc().executorsCount()
+        return self._jsc.sc().numExecutors()
 
     def stop(self):
         """

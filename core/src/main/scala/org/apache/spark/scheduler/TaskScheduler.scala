@@ -67,9 +67,9 @@ private[spark] trait TaskScheduler {
   // Get the default level of parallelism to use in the cluster, as a hint for sizing jobs.
   def defaultParallelism(): Int
 
-  def coresCount(): Int
+  def numCores(): Int
 
-  def executorsCount(): Int
+  def numExecutors(): Int
 
   /**
    * Update metrics for in-progress tasks and let the master know that the BlockManager is still

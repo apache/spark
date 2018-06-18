@@ -2340,13 +2340,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * Total number of CPU cores of all executors registered in the cluster at the moment.
    * The number reflects current status of the cluster and can change in the future.
    */
-  def coresCount: Int = taskScheduler.coresCount
+  def numCores: Int = taskScheduler.numCores
 
   /**
    * Total number of executors registered in the cluster at the moment.
    * The number reflects current status of the cluster and can change in the future.
    */
-  def executorsCount: Int = taskScheduler.executorsCount
+  def numExecutors: Int = taskScheduler.numExecutors
 
   private val nextShuffleId = new AtomicInteger(0)
 

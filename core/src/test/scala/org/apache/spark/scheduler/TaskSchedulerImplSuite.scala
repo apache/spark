@@ -36,8 +36,8 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def stop() {}
   def reviveOffers() {}
   def defaultParallelism(): Int = 1
-  def coresCount(): Int = 1
-  def executorsCount(): Int = 1
+  def numCores(): Int = 1
+  def numExecutors(): Int = 1
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach

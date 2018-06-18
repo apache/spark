@@ -144,10 +144,10 @@ class MultiExecutorMockBackend(
     }.toMap
   }
 
-  override def defaultParallelism(): Int = coresCount
+  override def defaultParallelism(): Int = numCores
 
-  override def coresCount(): Int = nHosts * nExecutorsPerHost * nCoresPerExecutor
-  override def executorsCount(): Int = nHosts * nExecutorsPerHost
+  override def numCores(): Int = nHosts * nExecutorsPerHost * nCoresPerExecutor
+  override def numExecutors(): Int = nHosts * nExecutorsPerHost
 
 }
 
