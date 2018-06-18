@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.submit
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
+import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
@@ -30,6 +30,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val SECRETS_STEP_TYPE = "mount-secrets"
   private val JAVA_STEP_TYPE = "java-bindings"
   private val PYSPARK_STEP_TYPE = "pyspark-bindings"
+  private val R_STEP_TYPE = "r-bindings"
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
@@ -53,6 +54,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val pythonStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     PYSPARK_STEP_TYPE, classOf[PythonDriverFeatureStep])
 
+  private val rStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    R_STEP_TYPE, classOf[RDriverFeatureStep])
+
   private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
 
@@ -65,7 +69,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => envSecretsStep,
       _ => localDirsStep,
       _ => javaStep,
-      _ => pythonStep)
+      _ => pythonStep,
+      _ => rStep)
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
@@ -167,6 +172,31 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
       PYSPARK_STEP_TYPE)
+  }
+
+  test("Apply R step if main resource is R.") {
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        Some(RMainAppResource("example.R")),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      R_STEP_TYPE)
   }
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)

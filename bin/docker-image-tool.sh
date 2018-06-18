@@ -69,6 +69,7 @@ function build {
   )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
+  local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/spark/bindings/R/Dockerfile"}
 
   docker build "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
@@ -77,10 +78,16 @@ function build {
     docker build "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-py) \
     -f "$PYDOCKERFILE" .
+
+    docker build "${BINDING_BUILD_ARGS[@]}" \
+    -t $(image_ref spark-r) \
+    -f "$RDOCKERFILE" .
 }
 
 function push {
   docker push "$(image_ref spark)"
+  docker push "$(image_ref spark-py)"
+  docker push "$(image_ref spark-r)"
 }
 
 function usage {
@@ -96,6 +103,7 @@ Commands:
 Options:
   -f file     Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
   -p file     Dockerfile with Python baked in. By default builds the Dockerfile shipped with Spark.
+  -R file     Dockerfile with R baked in. By default builds the Dockerfile shipped with Spark.
   -r repo     Repository address.
   -t tag      Tag to apply to the built image, or to identify the image to be pushed.
   -m          Use minikube's Docker daemon.
@@ -127,12 +135,14 @@ REPO=
 TAG=
 BASEDOCKERFILE=
 PYDOCKERFILE=
+RDOCKERFILE=
 while getopts f:mr:t: option
 do
  case "${option}"
  in
  f) BASEDOCKERFILE=${OPTARG};;
  p) PYDOCKERFILE=${OPTARG};;
+ R) RDOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  m)

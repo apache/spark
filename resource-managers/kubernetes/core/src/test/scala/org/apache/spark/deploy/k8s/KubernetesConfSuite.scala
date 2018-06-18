@@ -122,6 +122,28 @@ class KubernetesConfSuite extends SparkFunSuite {
       === Array("local:///opt/spark/example4.py", mainResourceFile) ++ inputPyFiles)
   }
 
+  test("Creating driver conf with a r primary file") {
+    val mainResourceFile = "local:///opt/spark/main.R"
+    val sparkConf = new SparkConf(false)
+      .setJars(Seq("local:///opt/spark/jar1.jar"))
+      .set("spark.files", "local:///opt/spark/example2.R")
+    val mainAppResource = Some(RMainAppResource(mainResourceFile))
+    val kubernetesConfWithMainResource = KubernetesConf.createDriverConf(
+      sparkConf,
+      APP_NAME,
+      RESOURCE_NAME_PREFIX,
+      APP_ID,
+      mainAppResource,
+      MAIN_CLASS,
+      APP_ARGS,
+      maybePyFiles = None)
+    assert(kubernetesConfWithMainResource.sparkConf.get("spark.jars").split(",")
+      === Array("local:///opt/spark/jar1.jar"))
+    assert(kubernetesConfWithMainResource.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.4)
+    assert(kubernetesConfWithMainResource.sparkFiles
+      === Array("local:///opt/spark/example2.R", mainResourceFile))
+  }
+
   test("Testing explicit setting of memory overhead on non-JVM tasks") {
     val sparkConf = new SparkConf(false)
       .set(MEMORY_OVERHEAD_FACTOR, 0.3)

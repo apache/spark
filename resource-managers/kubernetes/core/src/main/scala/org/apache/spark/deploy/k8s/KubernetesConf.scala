@@ -77,6 +77,9 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
   def pySparkPythonVersion(): String = sparkConf
       .get(PYSPARK_MAJOR_PYTHON_VERSION)
 
+  def sparkRMainResource(): Option[String] = sparkConf
+    .get(KUBERNETES_R_MAIN_APP_RESOURCE)
+
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
   def imagePullSecrets(): Seq[LocalObjectReference] = {
@@ -124,7 +127,7 @@ private[spark] object KubernetesConf {
             sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
           }
         // The function of this outer match is to account for multiple nonJVM
-        // bindings that will all have increased MEMORY_OVERHEAD_FACTOR to 0.4
+        // bindings that will all have increased default MEMORY_OVERHEAD_FACTOR to 0.4
         case nonJVM: NonJVMResource =>
           nonJVM match {
             case PythonMainAppResource(res) =>
@@ -132,6 +135,9 @@ private[spark] object KubernetesConf {
               maybePyFiles.foreach{maybePyFiles =>
                 additionalFiles.appendAll(maybePyFiles.split(","))}
               sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
+            case RMainAppResource(res) =>
+              additionalFiles += res
+              sparkConfWithMainAppJar.set(KUBERNETES_R_MAIN_APP_RESOURCE, res)
           }
           sparkConfWithMainAppJar.setIfMissing(MEMORY_OVERHEAD_FACTOR, 0.4)
     }
