@@ -187,8 +187,10 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${ctx.initPartition()}
         }
 
-        public java.lang.Object apply(java.lang.Object _i) {
-          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+        $janinoCompatibilityCode
+
+        public InternalRow apply(InternalRow _i) {
+          InternalRow ${ctx.INPUT_ROW} = _i;
           $allExpressions
           return mutableRow;
         }

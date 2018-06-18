@@ -17,35 +17,29 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import java.io.ByteArrayInputStream
-import java.util.{Map => JavaMap}
+import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
-import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
-import org.codehaus.janino.util.ClassFile
 
-import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
-import org.apache.spark.executor.InputMetrics
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.expressions.codegen.compiler.{CompilerBase, JaninoCompiler, JdkCompiler}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.{ParentClassLoader, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -1170,6 +1164,19 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected val genericMutableRowType: String = classOf[GenericInternalRow].getName
 
+  // In janino, Scala.Function1 need this. But, name clashes happen in JDK compilers
+  // because of type erasure. Probably, it seems this issue is related to a topic below;
+  //  - https://stackoverflow.com/questions/12206181/generic-class-compiles-in-java-6-but-not-java-7
+  // I do not look into this issue, so we need to revisit this.
+  protected lazy val janinoCompatibilityCode = if (CodeGenerator.janinoCompilerEnabled) {
+    s"""public java.lang.Object apply(java.lang.Object row) {
+       |  return apply((InternalRow) row);
+       |}
+     """.stripMargin
+  } else {
+    ""
+  }
+
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
    * already available.
@@ -1229,6 +1236,17 @@ object CodeGenerator extends Logging {
   // bytecode instruction
   final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
+  private lazy val compilerImpl: CompilerBase =
+    SparkEnv.get.conf.get("spark.sql.javaCompiler", "jdk").toLowerCase(Locale.ROOT) match {
+      case "janino" => JaninoCompiler
+      case "jdk" => JdkCompiler
+      case unknown => throw new IllegalArgumentException(s"Unknown compiler found: $unknown")
+    }
+
+  lazy val janinoCompilerEnabled: Boolean = {
+    compilerImpl == JaninoCompiler
+  }
+
   /**
    * Compile the Java source code into a Java class, using Janino.
    *
@@ -1248,110 +1266,7 @@ object CodeGenerator extends Logging {
    * Compile the Java source code into a Java class, using Janino.
    */
   private[this] def doCompile(code: CodeAndComment): (GeneratedClass, Int) = {
-    val evaluator = new ClassBodyEvaluator()
-
-    // A special classloader used to wrap the actual parent classloader of
-    // [[org.codehaus.janino.ClassBodyEvaluator]] (see CodeGenerator.doCompile). This classloader
-    // does not throw a ClassNotFoundException with a cause set (i.e. exception.getCause returns
-    // a null). This classloader is needed because janino will throw the exception directly if
-    // the parent classloader throws a ClassNotFoundException with cause set instead of trying to
-    // find other possible classes (see org.codehaus.janinoClassLoaderIClassLoader's
-    // findIClass method). Please also see https://issues.apache.org/jira/browse/SPARK-15622 and
-    // https://issues.apache.org/jira/browse/SPARK-11636.
-    val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
-    evaluator.setParentClassLoader(parentClassLoader)
-    // Cannot be under package codegen, or fail with java.lang.InstantiationException
-    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
-    evaluator.setDefaultImports(
-      classOf[Platform].getName,
-      classOf[InternalRow].getName,
-      classOf[UnsafeRow].getName,
-      classOf[UTF8String].getName,
-      classOf[Decimal].getName,
-      classOf[CalendarInterval].getName,
-      classOf[ArrayData].getName,
-      classOf[UnsafeArrayData].getName,
-      classOf[MapData].getName,
-      classOf[UnsafeMapData].getName,
-      classOf[Expression].getName,
-      classOf[TaskContext].getName,
-      classOf[TaskKilledException].getName,
-      classOf[InputMetrics].getName
-    )
-    evaluator.setExtendedClass(classOf[GeneratedClass])
-
-    logDebug({
-      // Only add extra debugging info to byte code when we are going to print the source code.
-      evaluator.setDebuggingInformation(true, true, false)
-      s"\n${CodeFormatter.format(code)}"
-    })
-
-    val maxCodeSize = try {
-      evaluator.cook("generated.java", code.body)
-      updateAndGetCompilationStats(evaluator)
-    } catch {
-      case e: InternalCompilerException =>
-        val msg = s"failed to compile: $e"
-        logError(msg, e)
-        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
-        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
-        throw new InternalCompilerException(msg, e)
-      case e: CompileException =>
-        val msg = s"failed to compile: $e"
-        logError(msg, e)
-        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
-        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
-        throw new CompileException(msg, e.getLocation)
-    }
-
-    (evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
-  }
-
-  /**
-   * Returns the max bytecode size of the generated functions by inspecting janino private fields.
-   * Also, this method updates the metrics information.
-   */
-  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): Int = {
-    // First retrieve the generated classes.
-    val classes = {
-      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
-      resultField.setAccessible(true)
-      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
-      val classesField = loader.getClass.getDeclaredField("classes")
-      classesField.setAccessible(true)
-      classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
-    }
-
-    // Then walk the classes to get at the method bytecode.
-    val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
-    val codeAttrField = codeAttr.getDeclaredField("code")
-    codeAttrField.setAccessible(true)
-    val codeSizes = classes.flatMap { case (_, classBytes) =>
-      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
-      try {
-        val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-        val stats = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes().filter(_.getClass eq codeAttr).map { a =>
-            val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
-
-            if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logInfo("Generated method too long to be JIT compiled: " +
-                s"${cf.getThisClassName}.${method.getName} is $byteCodeSize bytes")
-            }
-
-            byteCodeSize
-          }
-        }
-        Some(stats)
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Error calculating stats of compiled class.", e)
-          None
-      }
-    }.flatten
-
-    codeSizes.max
+    compilerImpl.compile(code)
   }
 
   /**

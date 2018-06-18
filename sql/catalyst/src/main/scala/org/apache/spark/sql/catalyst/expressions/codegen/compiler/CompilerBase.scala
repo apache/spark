@@ -15,26 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.sql.catalyst.expressions.codegen.compiler
 
-/**
- * A class loader which makes some protected methods in ClassLoader accessible.
- */
-private[spark] class ParentClassLoader(parent: ClassLoader) extends ClassLoader(parent) {
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, GeneratedClass}
 
-  override def findClass(name: String): Class[_] = {
-    super.findClass(name)
-  }
 
-  override def loadClass(name: String): Class[_] = {
-    super.loadClass(name)
-  }
+abstract class CompilerBase {
 
-  override def loadClass(name: String, resolve: Boolean): Class[_] = {
-    super.loadClass(name, resolve)
-  }
-
-  def loadClass(name: String, b: Array[Byte], off: Int, length: Int): Class[_] = {
-    super.defineClass(name, b, off, length)
-  }
+  def compile (code: CodeAndComment): (GeneratedClass, Int)
 }

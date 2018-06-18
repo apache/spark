@@ -127,8 +127,10 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           return (InternalRow) mutableRow;
         }
 
-        public java.lang.Object apply(java.lang.Object _i) {
-          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+        $janinoCompatibilityCode
+
+        public InternalRow apply(InternalRow _i) {
+          InternalRow ${ctx.INPUT_ROW} = _i;
           $evalSubexpr
           $allProjections
           // copy all the results into MutableRow
