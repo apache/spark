@@ -3182,7 +3182,10 @@ object functions {
    * @since 2.4.0
    */
   def array_remove(column: Column, element: Any): Column = withExpr {
-    ArrayRemove(column.expr, Literal(element))
+    element match {
+      case c: Column => ArrayRemove(column.expr, c.expr)
+      case _ => ArrayRemove(column.expr, Literal(element))
+    }
   }
 
   /**

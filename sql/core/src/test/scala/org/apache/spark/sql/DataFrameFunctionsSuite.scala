@@ -1119,16 +1119,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("array remove") {
     val df = Seq(
-      (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", "")),
-      (Array.empty[Int], Array.empty[String], Array.empty[String]),
-      (null, null, null)
-    ).toDF("a", "b", "c")
+      (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", ""), 2),
+      (Array.empty[Int], Array.empty[String], Array.empty[String], 2),
+      (null, null, null, 2)
+    ).toDF("a", "b", "c", "d")
     checkAnswer(
       df.select(array_remove($"a", 2), array_remove($"b", "a"), array_remove($"c", "")),
       Seq(
         Row(Seq(1, 3), Seq("b", "c"), Seq.empty[String]),
         Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),
         Row(null, null, null))
+    )
+
+    checkAnswer(
+      df.select(array_remove($"a", $"d")),
+      Seq(
+        Row(Seq(1, 3)),
+        Row(Seq.empty[Int]),
+        Row(null))
     )
 
     checkAnswer(
