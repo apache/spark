@@ -17,25 +17,54 @@
 # limitations under the License.
 #
 
+#
+# Creates a Spark release candidate. The script will update versions, tag the branch,
+# build Spark binary packages and documentation, and upload maven artifacts to a staging
+# repository. There is also a dry run mode where only local builds are performed, and
+# nothing is uploaded to the ASF repos.
+#
+# Run with "-h" for options.
+#
+
 set -e
 SELF=$(cd $(dirname $0) && pwd)
 . "$SELF/release-util.sh"
 
+function usage {
+  local NAME=$(basename $0)
+  cat <<EOF
+Usage: $NAME [options]
+
+This script runs the release scripts inside a docker image. The image is hardcoded to be called
+"spark-rm" and will be re-generated (as needed) on every invocation of this script.
+
+Options are:
+
+  -d [path]   : required: working directory (output will be written to an "output" directory in
+                the working directory).
+  -n          : dry run mode. Performs checks and local builds, but do not upload anything.
+  -t [tag]    : tag for the spark-rm docker image to use for building (default: "latest").
+  -j [path]   : path to local JDK installation to use for building. By default the script will
+                use openjdk8 installed in the docker image.
+EOF
+}
+
 WORKDIR=
 IMGTAG=latest
 JAVA=
-while getopts "d:j:nt:" opt; do
+while getopts "d:hj:nt:" opt; do
   case $opt in
     d) WORKDIR="$OPTARG" ;;
     n) DRY_RUN=1 ;;
     t) IMGTAG="$OPTARG" ;;
     j) JAVA="$OPTARG" ;;
-    ?) error "Invalid option: $OPTARG" ;;
+    h) usage ;;
+    ?) error "Invalid option. Run with -h for help." ;;
   esac
 done
 
 if [ -z "$WORKDIR" ] || [ ! -d "$WORKDIR" ]; then
-  error "Work directory (-d) must be defined and exist."
+  error "Work directory (-d) must be defined and exist. Run with -h for help."
 fi
 
 if [ -d "$WORKDIR/output" ]; then

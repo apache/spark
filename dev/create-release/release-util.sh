@@ -137,7 +137,7 @@ function get_release_info {
     fi
   else
     REV=$((REV + 1))
-    NEXT_VERSION="${SHORT_VERSION}-${REV}-SNAPSHOT"
+    NEXT_VERSION="${SHORT_VERSION}.${REV}-SNAPSHOT"
     RC_COUNT=1
   fi
 
@@ -149,7 +149,7 @@ function get_release_info {
   # Check if the RC already exists, and if re-creating the RC, skip tag creation.
   RELEASE_TAG="v${RELEASE_VERSION}-rc${RC_COUNT}"
   SKIP_TAG=0
-  if check_for_tag "RELEASE_TAG"; then
+  if check_for_tag "$RELEASE_TAG"; then
     read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " ANSWER
     if [ "$ANSWER" != "y" ]; then
       error "Exiting."
