@@ -86,4 +86,4 @@ ARG UID
 RUN useradd -m -s /bin/bash -p spark-rm -u $UID spark-rm
 USER spark-rm:spark-rm
 
-ENTRYPOINT [ "/opt/spark-rm/do-release.sh", "-n" ]
+ENTRYPOINT [ "/opt/spark-rm/do-release.sh" ]
