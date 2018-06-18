@@ -87,6 +87,7 @@ for f in "$SELF"/*; do
     cp "$f" "$WORKDIR"
   fi
 done
+
 GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"
 $GPG --export-secret-key --armor "$GPG_KEY" > "$GPG_KEY_FILE"

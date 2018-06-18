@@ -90,7 +90,15 @@ NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
 
-MVN="build/mvn --force"
+MVN="build/mvn -B"
+
+java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
+MVN_EXTRA_OPTS=
+if [[ $java_version < "1.8." ]]; then
+  # Needed for maven central when using Java 7.
+  MVN_EXTRA_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
+  MVN="$MVN $MVN_EXTRA_OPTS"
+fi
 
 rm -rf spark
 git clone https://git-wip-us.apache.org/repos/asf/spark.git
@@ -100,8 +108,11 @@ git_hash=`git rev-parse --short HEAD`
 echo "Checked out Spark git hash $git_hash"
 
 if [ -z "$SPARK_VERSION" ]; then
-  SPARK_VERSION=$($MVN help:evaluate -Dexpression=project.version \
-    | grep -v INFO | grep -v WARNING | grep -v Download)
+  # Run $MVN in a separate command so that 'set -e' does the right thing.
+  TMP=$(mktemp)
+  $MVN help:evaluate -Dexpression=project.version > $TMP
+  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -v Download)
+  rm $TMP
 fi
 
 # Depending on the version being built, certain extra profiles need to be activated, and
@@ -131,8 +142,6 @@ if [ -z "$JAVA_HOME" ]; then
   echo "Please set JAVA_HOME."
   exit 1
 fi
-
-java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
 
 if [[ ! $SPARK_VERSION < "2.2." ]]; then
   if [[ $java_version < "1.8." ]]; then
@@ -259,19 +268,20 @@ if [[ "$1" == "package" ]]; then
       spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
   }
 
-  # TODO: Check exit codes of children here:
-  # http://stackoverflow.com/questions/1570262/shell-get-exit-code-of-background-process
-
   # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
   # share the same Zinc server.
-  make_binary_release "hadoop2.6" "-Phadoop-2.6 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3035" "withr" &
-
+  if ! make_binary_release "hadoop2.6" "$MVN_EXTRA_OPTS -B -Phadoop-2.6 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3035" "withr"; then
+    error "Failed to build hadoop2.6 package. Check logs for details."
+  fi
   if ! is_dry_run; then
-    make_binary_release "hadoop2.7" "-Phadoop-2.7 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3036" "withpip" &
-    make_binary_release "without-hadoop" "-Phadoop-provided $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3038" &
+    if ! make_binary_release "hadoop2.7" "$MVN_EXTRA_OPTS -B -Phadoop-2.7 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3036" "withpip"; then
+      error "Failed to build hadoop2.7 package. Check logs for details."
+    fi
+    if ! make_binary_release "without-hadoop" "$MVN_EXTRA_OPTS -B -Phadoop-provided $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3037"; then
+      error "Failed to build without-hadoop package. Check logs for details."
+    fi
   fi
 
-  wait
   rm -rf spark-$SPARK_VERSION-bin-*/
 
   if ! is_dry_run; then
@@ -384,7 +394,7 @@ if [[ "$1" == "publish-release" ]]; then
 
   if [[ $PUBLISH_SCALA_2_10 = 1 ]]; then
     ./dev/change-scala-version.sh 2.10
-    $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Dscala-2.10 \
+    $MVN -DzincPort=$((ZINC_PORT + 1)) -Dmaven.repo.local=$tmp_repo -Dscala-2.10 \
       -DskipTests $PUBLISH_PROFILES $SCALA_2_10_PROFILES clean install
   fi
 
