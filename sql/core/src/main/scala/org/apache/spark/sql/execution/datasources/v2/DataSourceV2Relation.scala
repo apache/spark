@@ -105,36 +105,39 @@ case class StreamingDataSourceV2Relation(
 }
 
 object DataSourceV2Relation {
-
   private implicit class SourceHelpers(source: DataSourceV2) {
-
-    private def asReadSupport: ReadSupport = source match {
-      case support: ReadSupport =>
-        support
-      case _: ReadSupportWithSchema =>
-        // this method is only called if there is no user-supplied schema. if there is no
-        // user-supplied schema and ReadSupport was not implemented, throw a helpful exception.
-        throw new AnalysisException(s"Data source requires a user-supplied schema: $name")
-      case _ =>
-        throw new AnalysisException(s"Data source is not readable: $name")
+    private def asReadSupport: ReadSupport = {
+      source match {
+        case support: ReadSupport =>
+          support
+        case _: ReadSupportWithSchema =>
+          // this method is only called if there is no user-supplied schema. if there is no
+          // user-supplied schema and ReadSupport was not implemented, throw a helpful exception.
+          throw new AnalysisException(s"Data source requires a user-supplied schema: $name")
+        case _ =>
+          throw new AnalysisException(s"Data source is not readable: $name")
+      }
     }
 
-    private def asReadSupportWithSchema: ReadSupportWithSchema = source match {
-      case support: ReadSupportWithSchema =>
-        support
-      case _: ReadSupport =>
-        throw new AnalysisException(
-          s"Data source does not support user-supplied schema: $name")
-      case _ =>
-        throw new AnalysisException(s"Data source is not readable: $name")
+    private def asReadSupportWithSchema: ReadSupportWithSchema = {
+      source match {
+        case support: ReadSupportWithSchema =>
+          support
+        case _: ReadSupport =>
+          throw new AnalysisException(
+            s"Data source does not support user-supplied schema: $name")
+        case _ =>
+          throw new AnalysisException(s"Data source is not readable: $name")
+      }
     }
 
-
-    private def name: String = source match {
-      case registered: DataSourceRegister =>
-        registered.shortName()
-      case _ =>
-        source.getClass.getSimpleName
+    private def name: String = {
+      source match {
+        case registered: DataSourceRegister =>
+          registered.shortName()
+        case _ =>
+          source.getClass.getSimpleName
+      }
     }
 
     def createReader(
