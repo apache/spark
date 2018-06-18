@@ -129,7 +129,7 @@ function get_release_info {
     if check_for_tag "$PREV_REL_TAG"; then
       RC_COUNT=1
       REV=$((REV + 1))
-      NEXT_VERSION="${SHORT_VERSION}-${REV}-SNAPSHOT"
+      NEXT_VERSION="${SHORT_VERSION}.${REV}-SNAPSHOT"
     else
       RELEASE_VERSION="${SHORT_VERSION}.${PREV_REL_REV}"
       RC_COUNT=$(git ls-remote --tags "$ASF_REPO" "v${RELEASE_VERSION}-rc*" | wc -l)
