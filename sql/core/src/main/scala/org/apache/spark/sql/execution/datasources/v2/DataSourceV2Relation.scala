@@ -106,7 +106,7 @@ case class StreamingDataSourceV2Relation(
 
 object DataSourceV2Relation {
   private implicit class SourceHelpers(source: DataSourceV2) {
-    private def asReadSupport: ReadSupport = {
+    def asReadSupport: ReadSupport = {
       source match {
         case support: ReadSupport =>
           support
@@ -119,7 +119,7 @@ object DataSourceV2Relation {
       }
     }
 
-    private def asReadSupportWithSchema: ReadSupportWithSchema = {
+    def asReadSupportWithSchema: ReadSupportWithSchema = {
       source match {
         case support: ReadSupportWithSchema =>
           support
@@ -131,7 +131,7 @@ object DataSourceV2Relation {
       }
     }
 
-    private def name: String = {
+    def name: String = {
       source match {
         case registered: DataSourceRegister =>
           registered.shortName()
