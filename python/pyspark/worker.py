@@ -224,8 +224,13 @@ def read_udfs(pickleSer, infile, eval_type):
                      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF):
-        timezone = utf8_deserializer.loads(infile)
-        ser = ArrowStreamPandasSerializer(timezone)
+        runner_conf = {}
+        num_conf = read_int(infile)
+        for i in range(num_conf):
+            k = utf8_deserializer.loads(infile)
+            v = utf8_deserializer.loads(infile)
+            runner_conf[k] = v
+        ser = ArrowStreamPandasSerializer(runner_conf.get("spark.sql.session.timeZone", None))
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 

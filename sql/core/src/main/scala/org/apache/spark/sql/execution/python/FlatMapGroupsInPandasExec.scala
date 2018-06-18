@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -137,12 +138,23 @@ case class FlatMapGroupsInPandasExec(
       }
 
       val context = TaskContext.get()
+      val timeZoneConf = if (pandasRespectSessionTimeZone) {
+        Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionLocalTimeZone)
+      } else {
+        Nil
+      }
+      val runnerConfEntries = Seq() ++ timeZoneConf
+      val runnerConf = Map(runnerConfEntries: _*)
 
       val columnarBatchIter = new ArrowPythonRunner(
-        chainedFunc, bufferSize, reuseWorker,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF, argOffsets, dedupSchema,
-        sessionLocalTimeZone, pandasRespectSessionTimeZone)
-          .compute(grouped, context.partitionId(), context)
+        chainedFunc,
+        bufferSize,
+        reuseWorker,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        argOffsets,
+        dedupSchema,
+        sessionLocalTimeZone,
+        runnerConf).compute(grouped, context.partitionId(), context)
 
       columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
     }

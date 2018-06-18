@@ -24,6 +24,7 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -79,11 +80,23 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
     // DO NOT use iter.grouped(). See BatchIterator.
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
+    val timeZoneConf = if (pandasRespectSessionTimeZone) {
+      Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionLocalTimeZone)
+    } else {
+      Nil
+    }
+    val runnerConfEntries = Seq() ++ timeZoneConf
+    val runnerConf = Map(runnerConfEntries: _*)
+
     val columnarBatchIter = new ArrowPythonRunner(
-        funcs, bufferSize, reuseWorker,
-        PythonEvalType.SQL_SCALAR_PANDAS_UDF, argOffsets, schema,
-        sessionLocalTimeZone, pandasRespectSessionTimeZone)
-      .compute(batchIter, context.partitionId(), context)
+      funcs,
+      bufferSize,
+      reuseWorker,
+      PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      argOffsets,
+      schema,
+      sessionLocalTimeZone,
+      runnerConf).compute(batchIter, context.partitionId(), context)
 
     new Iterator[InternalRow] {
 

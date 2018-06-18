@@ -45,7 +45,7 @@ class ArrowPythonRunner(
     argOffsets: Array[Array[Int]],
     schema: StructType,
     timeZoneId: String,
-    respectTimeZone: Boolean)
+    conf: Map[String, String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
     funcs, bufferSize, reuseWorker, evalType, argOffsets) {
 
@@ -59,17 +59,17 @@ class ArrowPythonRunner(
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
-        if (respectTimeZone) {
-          PythonRDD.writeUTF(timeZoneId, dataOut)
-        } else {
-          dataOut.writeInt(SpecialLengths.NULL)
+        dataOut.writeInt(conf.size)
+        for ((k, v) <- conf) {
+          PythonRDD.writeUTF(k, dataOut)
+          PythonRDD.writeUTF(v, dataOut)
         }
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec", 0, Long.MaxValue)
+        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {

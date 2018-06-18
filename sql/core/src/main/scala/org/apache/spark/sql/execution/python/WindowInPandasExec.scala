@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -153,12 +154,23 @@ case class WindowInPandasExec(
         }
       }
 
+      val timeZoneConf = if (pandasRespectSessionTimeZone) {
+        Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionLocalTimeZone)
+      } else {
+        Nil
+      }
+      val runnerConfEntries = Seq() ++ timeZoneConf
+      val runnerConf = Map(runnerConfEntries: _*)
+
       val windowFunctionResult = new ArrowPythonRunner(
-        pyFuncs, bufferSize, reuseWorker,
+        pyFuncs,
+        bufferSize,
+        reuseWorker,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-        argOffsets, windowInputSchema,
-        sessionLocalTimeZone, pandasRespectSessionTimeZone)
-        .compute(pythonInput, context.partitionId(), context)
+        argOffsets,
+        windowInputSchema,
+        sessionLocalTimeZone,
+        runnerConf).compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
       val resultProj = createResultProjection(expressions)
