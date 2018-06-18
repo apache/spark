@@ -68,6 +68,21 @@ case object AllTuples extends Distribution {
   }
 }
 
+abstract class ClusteredDistributionBase(exprs: Seq[Expression]) extends Distribution {
+  require(
+    exprs.nonEmpty,
+    s"The clustering expressions of a ${getClass.getSimpleName} should not be empty. " +
+      "An AllTuples should be used to represent a distribution that only has " +
+      "a single partition.")
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
+      s"This ${getClass.getSimpleName} requires ${requiredNumPartitions.get} partitions, but " +
+        s"the actual number of partitions is $numPartitions.")
+    HashPartitioning(exprs, numPartitions)
+  }
+}
+
 /**
  * Represents data where tuples that share the same values for the `clustering`
  * [[Expression Expressions]] will be co-located. Based on the context, this
@@ -76,42 +91,19 @@ case object AllTuples extends Distribution {
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
-    requiredNumPartitions: Option[Int] = None) extends Distribution {
-  require(
-    clustering != Nil,
-    "The clustering expressions of a ClusteredDistribution should not be Nil. " +
-      "An AllTuples should be used to represent a distribution that only has " +
-      "a single partition.")
-
-  override def createPartitioning(numPartitions: Int): Partitioning = {
-    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
-      s"This ClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
-        s"the actual number of partitions is $numPartitions.")
-    HashPartitioning(clustering, numPartitions)
-  }
-}
+    requiredNumPartitions: Option[Int] = None) extends ClusteredDistributionBase(clustering)
 
 /**
- * Represents data where tuples have been clustered according to the hash of the given
- * `expressions`. The hash function is defined as `HashPartitioning.partitionIdExpression`, so only
+ * Represents data where tuples have been clustered according to the hash of the given expressions.
+ * The hash function is defined as [[HashPartitioning.partitionIdExpression]], so only
  * [[HashPartitioning]] can satisfy this distribution.
  *
  * This is a strictly stronger guarantee than [[ClusteredDistribution]]. Given a tuple and the
  * number of partitions, this distribution strictly requires which partition the tuple should be in.
  */
-case class HashClusteredDistribution(expressions: Seq[Expression]) extends Distribution {
-  require(
-    expressions != Nil,
-    "The expressions for hash of a HashPartitionedDistribution should not be Nil. " +
-      "An AllTuples should be used to represent a distribution that only has " +
-      "a single partition.")
-
-  override def requiredNumPartitions: Option[Int] = None
-
-  override def createPartitioning(numPartitions: Int): Partitioning = {
-    HashPartitioning(expressions, numPartitions)
-  }
-}
+case class HashClusteredDistribution(
+    hashExprs: Seq[Expression],
+    requiredNumPartitions: Option[Int] = None) extends ClusteredDistributionBase(hashExprs)
 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
@@ -207,15 +199,18 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override def satisfies(required: Distribution): Boolean = {
     super.satisfies(required) || {
-      required match {
-        case h: HashClusteredDistribution =>
-          expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
-            case (l, r) => l.semanticEquals(r)
-          }
-        case ClusteredDistribution(requiredClustering, requiredNumPartitions) =>
-          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
-            (requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions)
-        case _ => false
+      val satisfyNumPartitions = required.requiredNumPartitions.isEmpty ||
+        required.requiredNumPartitions.get == numPartitions
+      satisfyNumPartitions && {
+        required match {
+          case h: HashClusteredDistribution =>
+            expressions.length == h.hashExprs.length && expressions.zip(h.hashExprs).forall {
+              case (l, r) => l.semanticEquals(r)
+            }
+          case c: ClusteredDistribution =>
+            expressions.forall(x => c.clustering.exists(_.semanticEquals(x)))
+          case _ => false
+        }
       }
     }
   }
