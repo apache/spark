@@ -57,6 +57,7 @@ function build {
   else
     # Not passed as an argument to docker, but used to validate the Spark directory.
     IMG_PATH="kubernetes/dockerfiles"
+    BUILD_ARGS=()
   fi
 
   if [ ! -d "$IMG_PATH" ]; then
