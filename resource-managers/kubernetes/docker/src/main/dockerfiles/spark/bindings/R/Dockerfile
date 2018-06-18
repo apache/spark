@@ -27,4 +27,3 @@ ENV R_HOME /usr/lib/R
 
 WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
-`
