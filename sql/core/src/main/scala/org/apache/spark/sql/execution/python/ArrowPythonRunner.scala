@@ -67,9 +67,9 @@ class ArrowPythonRunner(
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec", 0, Long.MaxValue)
-        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {
