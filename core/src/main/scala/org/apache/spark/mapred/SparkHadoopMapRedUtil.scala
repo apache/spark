@@ -81,7 +81,8 @@ object SparkHadoopMapRedUtil extends Logging {
           logInfo(message)
           // We need to abort the task so that the driver can reschedule new attempts, if necessary
           committer.abortTask(mrTaskContext)
-          throw new CommitDeniedException(message, ctx.stageId(), splitId, ctx.attemptNumber())
+          throw new CommitDeniedException(message, ctx.stageId(), ctx.stageAttemptNumber(),
+            splitId, ctx.attemptNumber())
         }
       } else {
         // Speculation is disabled or a user has chosen to manually bypass the commit coordination
