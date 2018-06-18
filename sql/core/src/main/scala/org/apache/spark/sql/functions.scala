@@ -3164,7 +3164,10 @@ object functions {
    * @since 2.4.0
    */
   def element_at(column: Column, value: Any): Column = withExpr {
-    ElementAt(column.expr, Literal(value))
+    value match {
+      case c: Column => ElementAt(column.expr, c.expr)
+      case _ => ElementAt(column.expr, Literal(value))
+    }
   }
 
   /**

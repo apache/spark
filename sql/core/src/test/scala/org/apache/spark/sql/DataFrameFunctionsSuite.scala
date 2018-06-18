@@ -831,10 +831,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("element_at function") {
     val df = Seq(
-      (Seq[String]("1", "2", "3")),
-      (Seq[String](null, "")),
-      (Seq[String]())
-    ).toDF("a")
+      (Seq[String]("1", "2", "3"), 1),
+      (Seq[String](null, ""), -1),
+      (Seq[String](), 2)
+    ).toDF("a", "b")
 
     intercept[Exception] {
       checkAnswer(
@@ -851,6 +851,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(element_at(df("a"), 4)),
       Seq(Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(element_at(df("a"), df("b"))),
+      Seq(Row("1"), Row(""), Row(null))
     )
 
     checkAnswer(
