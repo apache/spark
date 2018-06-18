@@ -4449,7 +4449,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     def test_vectorized_udf_wrong_return_type(self):
         from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
@@ -5120,6 +5119,22 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 grouped_df.apply(column_name_typo).collect()
             with self.assertRaisesRegexp(Exception, "No cast implemented"):
                 grouped_df.apply(invalid_positional_types).collect()
+
+    def test_positional_assignment_conf(self):
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        with self.sql_conf({"spark.sql.execution.pandas.groupedMap.assignColumnsByPosition": True}):
+
+            @pandas_udf("a string, b float", PandasUDFType.GROUPED_MAP)
+            def foo(_):
+                return pd.DataFrame([('hi', 1)], columns=['x', 'y'])
+
+            df = self.data
+            result = df.groupBy('id').apply(foo).select('a', 'b').collect()
+            for r in result:
+                self.assertEqual(r.a, 'hi')
+                self.assertEqual(r.b, 1)
 
 
 @unittest.skipIf(

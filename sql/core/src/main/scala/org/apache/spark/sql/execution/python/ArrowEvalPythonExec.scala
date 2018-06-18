@@ -24,7 +24,7 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -64,7 +64,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
+  private val runnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
@@ -79,14 +79,6 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
     // DO NOT use iter.grouped(). See BatchIterator.
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
-
-    val timeZoneConf = if (pandasRespectSessionTimeZone) {
-      Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionLocalTimeZone)
-    } else {
-      Nil
-    }
-    val runnerConfEntries = Seq() ++ timeZoneConf
-    val runnerConf = Map(runnerConfEntries: _*)
 
     val columnarBatchIter = new ArrowPythonRunner(
       funcs,

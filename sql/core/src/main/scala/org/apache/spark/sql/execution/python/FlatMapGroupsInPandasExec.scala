@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -78,7 +78,7 @@ case class FlatMapGroupsInPandasExec(
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
+    val runnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     // Deduplicate the grouping attributes.
     // If a grouping attribute also appears in data attributes, then we don't need to send the
@@ -138,13 +138,6 @@ case class FlatMapGroupsInPandasExec(
       }
 
       val context = TaskContext.get()
-      val timeZoneConf = if (pandasRespectSessionTimeZone) {
-        Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionLocalTimeZone)
-      } else {
-        Nil
-      }
-      val runnerConfEntries = Seq() ++ timeZoneConf
-      val runnerConf = Map(runnerConfEntries: _*)
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc,

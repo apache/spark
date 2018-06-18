@@ -58,12 +58,12 @@ class ArrowPythonRunner(
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
         dataOut.writeInt(conf.size)
         for ((k, v) <- conf) {
           PythonRDD.writeUTF(k, dataOut)
           PythonRDD.writeUTF(v, dataOut)
         }
+        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {

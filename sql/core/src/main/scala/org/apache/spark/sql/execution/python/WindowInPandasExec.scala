@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -98,7 +98,7 @@ case class WindowInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
+    val runnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     // Extract window expressions and window functions
     val expressions = windowExpression.flatMap(_.collect { case e: WindowExpression => e })
@@ -153,14 +153,6 @@ case class WindowInPandasExec(
           inputProj(row)
         }
       }
-
-      val timeZoneConf = if (pandasRespectSessionTimeZone) {
-        Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionLocalTimeZone)
-      } else {
-        Nil
-      }
-      val runnerConfEntries = Seq() ++ timeZoneConf
-      val runnerConf = Map(runnerConfEntries: _*)
 
       val windowFunctionResult = new ArrowPythonRunner(
         pyFuncs,

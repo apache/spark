@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -82,7 +82,7 @@ case class AggregateInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
+    val runnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
 
@@ -134,14 +134,6 @@ case class AggregateInPandasExec(
         queue.add(groupingKey.asInstanceOf[UnsafeRow])
         rows
       }
-
-      val timeZoneConf = if (pandasRespectSessionTimeZone) {
-        Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionLocalTimeZone)
-      } else {
-        Nil
-      }
-      val runnerConfEntries = Seq() ++ timeZoneConf
-      val runnerConf = Map(runnerConfEntries: _*)
 
       val columnarBatchIter = new ArrowPythonRunner(
         pyFuncs,

@@ -1161,6 +1161,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_POSITION =
+    buildConf("spark.sql.execution.pandas.groupedMap.assignColumnsByPosition")
+      .internal()
+      .doc("When true, a grouped map Pandas UDF will assign columns from the returned " +
+        "Pandas DataFrame based on position, regardless of column label type. When false, " +
+        "columns will be looked up by name if labeled with a string and fallback to use" +
+        "position if not.")
+      .booleanConf
+      .createWithDefault(false)
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -1646,6 +1656,9 @@ class SQLConf extends Serializable with Logging {
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
+
+  def pandasGroupedMapAssignColumnssByPosition: Boolean =
+    getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_POSITION)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
