@@ -133,7 +133,7 @@ class CodegenContext {
   def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    val clsName = Option(className).getOrElse(obj.getClass.getCanonicalName)
     s"(($clsName) references[$idx] /* $objName */)"
   }
 
@@ -1624,7 +1624,7 @@ object CodeGenerator extends Logging {
     case _: MapType => "MapData"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
-    case ObjectType(cls) => cls.getName
+    case ObjectType(cls) => Option(cls.getCanonicalName).getOrElse(cls.getName)
     case _ => "Object"
   }
 

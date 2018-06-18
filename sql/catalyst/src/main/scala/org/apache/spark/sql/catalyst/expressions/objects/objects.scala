@@ -219,8 +219,8 @@ case class StaticInvoke(
     propagateNull: Boolean = true,
     returnNullable: Boolean = true) extends InvokeLike {
 
-  val objectName = staticObject.getName.stripSuffix("$")
-  val cls = if (staticObject.getName == objectName) {
+  val objectName = staticObject.getCanonicalName.stripSuffix("$")
+  val cls = if (staticObject.getCanonicalName == objectName) {
     staticObject
   } else {
     Utils.classForName(objectName)
@@ -434,7 +434,7 @@ case class NewInstance(
     propagateNull: Boolean,
     dataType: DataType,
     outerPointer: Option[() => AnyRef]) extends InvokeLike {
-  private val className = cls.getName
+  private val className = cls.getCanonicalName
 
   override def nullable: Boolean = needNullCheck
 
@@ -1335,7 +1335,7 @@ case class ExternalMapToCatalyst private(
     val (defineEntries, defineKeyValue) = child.dataType match {
       case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
         val javaIteratorCls = classOf[java.util.Iterator[_]].getName
-        val javaMapEntryCls = classOf[java.util.Map.Entry[_, _]].getName
+        val javaMapEntryCls = classOf[java.util.Map.Entry[_, _]].getCanonicalName
 
         val defineEntries =
           s"final $javaIteratorCls $entries = ${inputMap.value}.entrySet().iterator();"
@@ -1585,6 +1585,9 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Resolves setters before compilation
+    require(resolvedSetters.nonEmpty)
+
     val instanceGen = beanInstance.genCode(ctx)
 
     val javaBeanInstance = ctx.freshName("javaBean")

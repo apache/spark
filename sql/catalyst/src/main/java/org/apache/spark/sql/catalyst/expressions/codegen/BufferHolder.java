@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
  * for each incoming record, we should call `reset` of BufferHolder instance before write the record
  * and reuse the data buffer.
  */
-final class BufferHolder {
+public final class BufferHolder {
 
   private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 

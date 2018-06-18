@@ -318,7 +318,8 @@ case class SampleExec(
         v => s"""
           | $v = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
           | $v.setSeed(${seed}L + partitionIndex);
-         """.stripMargin.trim)
+         """.stripMargin.trim,
+        forceInline = true)
 
       s"""
          | if ($sampler.sample() != 0) {

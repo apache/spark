@@ -79,7 +79,7 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode wi
 
     ctx.addNewFunction("stopEarly", s"""
       @Override
-      protected boolean stopEarly() {
+      public boolean stopEarly() {
         return $stopEarly;
       }
     """, inlineToOuterClass = true)

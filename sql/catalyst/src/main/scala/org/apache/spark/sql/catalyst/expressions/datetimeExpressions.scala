@@ -1048,7 +1048,7 @@ case class StringToTimestampWithoutTimezone(child: Expression, timeZoneId: Optio
        |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = true;
        |${CodeGenerator.JAVA_LONG} ${ev.value} = ${CodeGenerator.defaultValue(TimestampType)};
        |if (!${eval.isNull}) {
-       |  scala.Option<Long> $longOpt = $dtu.stringToTimestamp(${eval.value}, $tz, true);
+       |  scala.Option<Object> $longOpt = $dtu.stringToTimestamp(${eval.value}, $tz, true);
        |  if ($longOpt.isDefined()) {
        |    ${ev.value} = ((Long) $longOpt.get()).longValue();
        |    ${ev.isNull} = false;
