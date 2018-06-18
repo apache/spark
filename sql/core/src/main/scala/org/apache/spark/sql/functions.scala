@@ -3077,8 +3077,7 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns null if the array is null, true if the array contains `value` or the content of
-   * `value` if it is of type Column, and false otherwise.
+   * Returns null if the array is null, true if the array contains `value`, and false otherwise.
    * @group collection_funcs
    * @since 1.5.0
    */
