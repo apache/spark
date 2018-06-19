@@ -90,19 +90,11 @@ NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
 
-MVN="build/mvn -B"
-
-java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
-MVN_EXTRA_OPTS=
-if [[ $java_version < "1.8." ]]; then
-  # Needed for maven central when using Java 7.
-  export SBT_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
-  MVN_EXTRA_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
-  MVN="$MVN $MVN_EXTRA_OPTS"
-fi
+init_java
+init_maven_sbt
 
 rm -rf spark
-git clone https://git-wip-us.apache.org/repos/asf/spark.git
+git clone "$ASF_REPO"
 cd spark
 git checkout $GIT_REF
 git_hash=`git rev-parse --short HEAD`
@@ -138,22 +130,16 @@ PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-a
 # Profiles for building binary releases
 BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
-# Verify we have the right java version set
-if [ -z "$JAVA_HOME" ]; then
-  echo "Please set JAVA_HOME."
-  exit 1
-fi
-
 if [[ ! $SPARK_VERSION < "2.2." ]]; then
-  if [[ $java_version < "1.8." ]]; then
-    echo "Java version $java_version is less than required 1.8 for 2.2+"
+  if [[ $JAVA_VERSION < "1.8." ]]; then
+    echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
     echo "Please set JAVA_HOME correctly."
     exit 1
   fi
 else
-  if ! [[ $java_version =~ 1\.7\..* ]]; then
+  if ! [[ $JAVA_VERSION =~ 1\.7\..* ]]; then
     if [ -z "$JAVA_7_HOME" ]; then
-      echo "Java version $java_version is higher than required 1.7 for pre-2.2"
+      echo "Java version $JAVA_VERSION is higher than required 1.7 for pre-2.2"
       echo "Please set JAVA_HOME correctly."
       exit 1
     else
@@ -378,13 +364,15 @@ if [[ "$1" == "publish-release" ]]; then
 
   # Using Nexus API documented here:
   # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
-  echo "Creating Nexus staging repository"
-  repo_request="<promoteRequest><data><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-  out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
-    -H "Content-Type:application/xml" -v \
-    $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
-  staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
-  echo "Created Nexus staging repository: $staged_repo_id"
+  if ! is_dry_run; then
+    echo "Creating Nexus staging repository"
+    repo_request="<promoteRequest><data><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
+    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+      -H "Content-Type:application/xml" -v \
+      $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
+    staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
+    echo "Created Nexus staging repository: $staged_repo_id"
+  fi
 
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
@@ -393,7 +381,7 @@ if [[ "$1" == "publish-release" ]]; then
 
   $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
 
-  if [[ $PUBLISH_SCALA_2_10 = 1 ]]; then
+  if ! is_dry_run && [[ $PUBLISH_SCALA_2_10 = 1 ]]; then
     ./dev/change-scala-version.sh 2.10
     $MVN -DzincPort=$((ZINC_PORT + 1)) -Dmaven.repo.local=$tmp_repo -Dscala-2.10 \
       -DskipTests $PUBLISH_PROFILES $SCALA_2_10_PROFILES clean install
@@ -429,23 +417,26 @@ if [[ "$1" == "publish-release" ]]; then
     sha1sum $file | cut -f1 -d' ' > $file.sha1
   done
 
-  nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
-  echo "Uplading files to $nexus_upload"
-  for file in $(find . -type f)
-  do
-    # strip leading ./
-    file_short=$(echo $file | sed -e "s/\.\///")
-    dest_url="$nexus_upload/org/apache/spark/$file_short"
-    echo "  Uploading $file_short"
-    curl -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
-  done
+  if ! is_dry_run; then
+    nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
+    echo "Uplading files to $nexus_upload"
+    for file in $(find . -type f)
+    do
+      # strip leading ./
+      file_short=$(echo $file | sed -e "s/\.\///")
+      dest_url="$nexus_upload/org/apache/spark/$file_short"
+      echo "  Uploading $file_short"
+      curl -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
+    done
 
-  echo "Closing nexus staging repository"
-  repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-  out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
-    -H "Content-Type:application/xml" -v \
-    $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
-  echo "Closed Nexus staging repository: $staged_repo_id"
+    echo "Closing nexus staging repository"
+    repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
+    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+      -H "Content-Type:application/xml" -v \
+      $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
+    echo "Closed Nexus staging repository: $staged_repo_id"
+  fi
+
   popd
   rm -rf $tmp_repo
   cd ..

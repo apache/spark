@@ -65,20 +65,6 @@ function run_silent {
   fi
 }
 
-function maybe_run {
-  if is_dry_run; then
-    local BANNER="$1"
-    local LOG_FILE="$2"
-    shift 2
-    echo "======= DRY RUN ======="
-    echo "= $BANNER"
-    echo "Command: $@"
-    echo "Log file: $LOG_FILE"
-  else
-    run_silent "$@"
-  fi
-}
-
 function fcreate_secure {
   local FPATH="$1"
   rm -f "$FPATH"
@@ -216,4 +202,27 @@ EOF
 
 function is_dry_run {
   [[ $DRY_RUN = 1 ]]
+}
+
+# Initializes JAVA_VERSION to the version of the JVM in use.
+function init_java {
+  if [ -z "$JAVA_HOME" ]; then
+    error "JAVA_HOME is not set."
+  fi
+  JAVA_VERSION=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
+  export JAVA_VERSION
+}
+
+# Initializes MVN_EXTRA_OPTS and SBT_OPTS depending on the JAVA_VERSION in use. Requires init_java.
+function init_maven_sbt {
+  MVN="build/mvn -B"
+  MVN_EXTRA_OPTS=
+  SBT_OPTS=
+  if [[ $JAVA_VERSION < "1.8." ]]; then
+    # Needed for maven central when using Java 7.
+    SBT_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
+    MVN_EXTRA_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
+    MVN="$MVN $MVN_EXTRA_OPTS"
+  fi
+  export MVN MVN_EXTRA_OPTS SBT_OPTS
 }
