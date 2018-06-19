@@ -2126,6 +2126,42 @@ class SQLTests(ReusedSQLTestCase):
         tester.assert_invalid_writer(WriterWithNonCallableClose(),
                                      "'close' in provided object is not callable")
 
+    def test_streaming_foreachBatch(self):
+        q = None
+        collected = dict()
+
+        def collectBatch(batch_df, batch_id):
+            collected[batch_id] = batch_df.collect()
+
+        try:
+            df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+            q = df.writeStream.foreachBatch(collectBatch).start()
+            q.processAllAvailable()
+            self.assertTrue(0 in collected)
+            self.assertTrue(len(collected[0]), 2)
+        finally:
+            if q:
+                q.stop()
+
+    def test_streaming_foreachBatch_propagates_python_errors(self):
+        from pyspark.sql.utils import StreamingQueryException
+
+        q = None
+
+        def collectBatch(df, id):
+            raise Exception("this should fail the query")
+
+        try:
+            df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+            q = df.writeStream.foreachBatch(collectBatch).start()
+            q.processAllAvailable()
+            self.fail("Expected a failure")
+        except StreamingQueryException as e:
+            self.assertTrue("this should fail" in str(e))
+        finally:
+            if q:
+                q.stop()
+
     def test_help_command(self):
         # Regression test for SPARK-5464
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
