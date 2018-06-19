@@ -803,6 +803,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(cachedData.collect === Seq(1001))
   }
 
+  test("SPARK-24596 Non-cascading Cache Invalidation - uncache") {
+    withView("t1", "t2") {
+      sql("CACHE TABLE t1 AS SELECT * FROM testData WHERE key > 1")
+      sql("CACHE TABLE t2 as SELECT * FROM t1 WHERE value > 1")
+
+      assertCached(spark.table("t1"))
+      assertCached(spark.table("t2"))
+      sql("UNCACHE TABLE t1")
+      assertCached(spark.table("t1"), 0)
+      assertCached(spark.table("t2"))
+    }
+  }
+
   test("SPARK-24596 Non-cascading Cache Invalidation - drop temporary view") {
     withView("t1", "t2") {
       sql("CACHE TABLE t1 AS SELECT * FROM testData WHERE key > 1")
@@ -812,6 +825,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       assertCached(spark.table("t2"))
       sql("DROP VIEW t1")
       assertCached(spark.table("t2"))
+    }
+  }
+
+  test("SPARK-24596 Non-cascading Cache Invalidation - drop persistent view") {
+    withTable("t") {
+      spark.range(1, 10).toDF("key").withColumn("value", 'key * 2)
+        .write.format("json").saveAsTable("t")
+      withView("t1", "t2") {
+        sql("CREATE VIEW t1 AS SELECT * FROM t WHERE key > 1")
+
+        sql("CACHE TABLE t1")
+        sql("CACHE TABLE t2 AS SELECT * FROM t1 WHERE value > 1")
+
+        assertCached(spark.table("t1"))
+        assertCached(spark.table("t2"))
+        sql("DROP VIEW t1")
+        assertCached(spark.table("t2"), 0)
+      }
     }
   }
 }
