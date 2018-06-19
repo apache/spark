@@ -44,7 +44,12 @@ else
   get_release_info
 fi
 
-if [ $SKIP_TAG = 0 ]; then
+function should_build {
+  local WHAT=$1
+  [ -n "$RELEASE_STEP" ] && [ "$WHAT" = "$RELEASE_STEP" ]
+}
+
+if should_build "docs" && [ $SKIP_TAG = 0 ]; then
   maybe_run "Creating release tag $RELEASE_TAG..." "tag.log" \
     "$SELF/release-tag.sh"
   echo "It may take some time for the tag to be synchronized to github."
@@ -54,9 +59,23 @@ else
   echo "Skipping tag creation for $RELEASE_TAG."
 fi
 
-run_silent "Building Spark..." "build.log" \
-  "$SELF/release-build.sh" package
-run_silent "Building documentation..." "docs.log" \
-  "$SELF/release-build.sh" docs
-maybe_run "Publishing release" "publish.log" \
-  "$SELF/release-build.sh" publish-release
+if should_build "build"; then
+  run_silent "Building Spark..." "build.log" \
+    "$SELF/release-build.sh" package
+else
+  echo "Skipping build step."
+fi
+
+if should_build "docs"; then
+  run_silent "Building documentation..." "docs.log" \
+    "$SELF/release-build.sh" docs
+else
+  echo "Skipping docs step."
+fi
+
+if should_build "publish"; then
+  maybe_run "Publishing release" "publish.log" \
+    "$SELF/release-build.sh" publish-release
+else
+  echo "Skipping publish step."
+fi

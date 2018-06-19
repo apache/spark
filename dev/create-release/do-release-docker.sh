@@ -46,18 +46,21 @@ Options are:
   -t [tag]    : tag for the spark-rm docker image to use for building (default: "latest").
   -j [path]   : path to local JDK installation to use for building. By default the script will
                 use openjdk8 installed in the docker image.
+  -s [step]   : runs a single step of the process; valid steps are: tag, build, docs, publish
 EOF
 }
 
 WORKDIR=
 IMGTAG=latest
 JAVA=
-while getopts "d:hj:nt:" opt; do
+RELEASE_STEP=
+while getopts "d:hj:ns:t:" opt; do
   case $opt in
     d) WORKDIR="$OPTARG" ;;
     n) DRY_RUN=1 ;;
     t) IMGTAG="$OPTARG" ;;
     j) JAVA="$OPTARG" ;;
+    s) RELEASE_STEP="$OPTARG" ;;
     h) usage ;;
     ?) error "Invalid option. Run with -h for help." ;;
   esac
@@ -123,6 +126,7 @@ GIT_EMAIL=$GIT_EMAIL
 GPG_KEY=$GPG_KEY
 ASF_PASSWORD=$ASF_PASSWORD
 GPG_PASSPHRASE=$GPG_PASSPHRASE
+RELEASE_STEP=$RELEASE_STEP
 EOF
 
 JAVA_VOL=

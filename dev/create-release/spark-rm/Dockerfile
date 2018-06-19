@@ -29,9 +29,15 @@ FROM ubuntu:16.04
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
+ARG BASE_PIP_PKGS="setuptools wheel virtualenv"
+ARG PIP_PKGS="pyopenssl pypandoc numpy pygments sphinx"
+
 # Install extra needed repos and refresh.
 # - CRAN repo
 # - Ruby repo (for doc generation)
+#
+# This is all in a single "RUN" command so that if anything changes, "apt update" is run to fetch
+# the most current package versions (instead of potentially using old versions cached by docker).
 RUN echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu xenial/' >> /etc/apt/sources.list && \
   gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9 && \
   gpg -a --export E084DAB9 | apt-key add - && \
@@ -41,41 +47,33 @@ RUN echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu xenial/' >> /etc/apt
   apt-get update && \
   $APT_INSTALL software-properties-common && \
   apt-add-repository -y ppa:brightbox/ruby-ng && \
-  apt-get update
-
-# Install openjdk 8.
-RUN $APT_INSTALL openjdk-8-jdk && \
-  update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
-
-# Install build / source control tools
-RUN $APT_INSTALL curl wget git maven ivy subversion make gcc libffi-dev \
+  apt-get update && \
+  # Install openjdk 8.
+  $APT_INSTALL openjdk-8-jdk && \
+  update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java && \
+  # Install build / source control tools
+  $APT_INSTALL curl wget git maven ivy subversion make gcc lsof libffi-dev \
     pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev && \
   ln -s -T /usr/share/java/ivy.jar /usr/share/ant/lib/ivy.jar && \
   curl -sL https://deb.nodesource.com/setup_4.x | bash && \
-  $APT_INSTALL nodejs
-
-# Install needed python packages. Use pip for installing packages (for consistency).
-ARG BASE_PIP_PKGS="setuptools wheel virtualenv"
-ARG PIP_PKGS="pyopenssl pypandoc numpy pygments sphinx"
-
-RUN $APT_INSTALL libpython2.7-dev libpython3-dev python-pip python3-pip && \
+  $APT_INSTALL nodejs && \
+  # Install needed python packages. Use pip for installing packages (for consistency).
+  $APT_INSTALL libpython2.7-dev libpython3-dev python-pip python3-pip && \
   pip install $BASE_PIP_PKGS && \
   pip install $PIP_PKGS && \
   cd && \
   virtualenv -p python3 p35 && \
   . p35/bin/activate && \
   pip install $BASE_PIP_PKGS && \
-  pip install $PIP_PKGS
-
-# Install R packages and dependencies used when building.
-# R depends on pandoc*, libssl (which are installed above).
-RUN $APT_INSTALL r-base r-base-dev && \
+  pip install $PIP_PKGS && \
+  # Install R packages and dependencies used when building.
+  # R depends on pandoc*, libssl (which are installed above).
+  $APT_INSTALL r-base r-base-dev && \
   $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf && \
   Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='http://cran.us.r-project.org/')" && \
-  Rscript -e "devtools::install_github('jimhester/lintr')"
-
-# Install tools needed to build the documentation.
-RUN $APT_INSTALL ruby2.3 ruby2.3-dev && \
+  Rscript -e "devtools::install_github('jimhester/lintr')" && \
+  # Install tools needed to build the documentation.
+  $APT_INSTALL ruby2.3 ruby2.3-dev && \
   gem install jekyll --no-rdoc --no-ri && \
   gem install jekyll-redirect-from && \
   gem install pygments.rb

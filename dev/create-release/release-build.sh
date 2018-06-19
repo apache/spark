@@ -96,6 +96,7 @@ java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
 MVN_EXTRA_OPTS=
 if [[ $java_version < "1.8." ]]; then
   # Needed for maven central when using Java 7.
+  export SBT_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
   MVN_EXTRA_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
   MVN="$MVN $MVN_EXTRA_OPTS"
 fi
