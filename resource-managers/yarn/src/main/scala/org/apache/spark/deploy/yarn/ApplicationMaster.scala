@@ -43,8 +43,9 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.AMCredentialRenewer
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnClusterSchedulerSource, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
 
@@ -66,6 +67,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
   }
 
   private val securityMgr = new SecurityManager(sparkConf)
+
+  private[spark] val failureTracker = new FailureTracker(sparkConf, new SystemClock)
+
+  private val metricsSystem: MetricsSystem =
+    MetricsSystem.createMetricsSystem("yarn", sparkConf, securityMgr)
+
+  metricsSystem.registerSource(new YarnClusterSchedulerSource(failureTracker))
+  metricsSystem.start()
 
   // Set system properties for each config entry. This covers two use cases:
   // - The default configuration stored by the SparkHadoopUtil class
@@ -309,6 +318,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + StringUtils.stringifyException(e))
+    } finally {
+      metricsSystem.report()
+      metricsSystem.stop()
     }
   }
 
@@ -424,7 +436,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       driverUrl,
       driverRef,
       securityMgr,
-      localResources)
+      localResources,
+      failureTracker)
 
     credentialRenewer.foreach(_.setDriverRef(driverRef))
 
@@ -770,6 +783,7 @@ object ApplicationMaster extends Logging {
   private val EXIT_EARLY = 16
 
   private var master: ApplicationMaster = _
+
 
   def main(args: Array[String]): Unit = {
     SignalUtils.registerLogger(log)

@@ -67,7 +67,7 @@ private[yarn] class YarnAllocator(
     securityMgr: SecurityManager,
     localResources: Map[String, LocalResource],
     resolver: SparkRackResolver,
-    clock: Clock = new SystemClock)
+    failureTracker: FailureTracker)
   extends Logging {
 
   import YarnAllocator._
@@ -102,8 +102,6 @@ private[yarn] class YarnAllocator(
    */
   private var executorIdCounter: Int =
     driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
-
-  private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
 
   private val allocatorBlacklistTracker =
     new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
