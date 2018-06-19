@@ -561,7 +561,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
           compressed = false,
           properties = Map.empty),
         schema = schema,
-        provider = Some("org.apache.spark.sql.sources.SimpleInsertSource"))
+        provider = Some(classOf[SimpleInsertSource].getName))
 
       spark.sessionState.catalog.createTable(newTable, false)
 
