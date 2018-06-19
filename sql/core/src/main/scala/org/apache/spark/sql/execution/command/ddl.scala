@@ -189,8 +189,9 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val isTempTable = catalog.isTemporaryTable(tableName)
 
-    if (!catalog.isTemporaryTable(tableName) && catalog.tableExists(tableName)) {
+    if (!isTempTable && catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
@@ -204,9 +205,10 @@ case class DropTableCommand(
       }
     }
 
-    if (catalog.isTemporaryTable(tableName) || catalog.tableExists(tableName)) {
+    if (isTempTable || catalog.tableExists(tableName)) {
       try {
-        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
+        sparkSession.sharedState.cacheManager.uncacheQuery(
+          sparkSession.table(tableName), !isTempTable)
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }

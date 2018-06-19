@@ -2971,7 +2971,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def unpersist(blocking: Boolean): this.type = {
-    sparkSession.sharedState.cacheManager.uncacheQuery(this, blocking)
+    sparkSession.sharedState.cacheManager.uncacheQuery(this, false, blocking)
     this
   }
 

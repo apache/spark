@@ -107,22 +107,36 @@ class CacheManager extends Logging {
   /**
    * Un-cache all the cache entries that refer to the given plan.
    */
-  def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Unit = writeLock {
-    uncacheQuery(query.sparkSession, query.logicalPlan, blocking)
+  def uncacheQuery(query: Dataset[_],
+    cascade: Boolean, blocking: Boolean = true): Unit = writeLock {
+    uncacheQuery(query.sparkSession, query.logicalPlan, cascade, blocking)
   }
 
   /**
    * Un-cache all the cache entries that refer to the given plan.
    */
-  def uncacheQuery(spark: SparkSession, plan: LogicalPlan, blocking: Boolean): Unit = writeLock {
+  def uncacheQuery(spark: SparkSession, plan: LogicalPlan,
+    cascade: Boolean, blocking: Boolean): Unit = writeLock {
     val it = cachedData.iterator()
+    val needToRecache = scala.collection.mutable.ArrayBuffer.empty[CachedData]
     while (it.hasNext) {
       val cd = it.next()
       if (cd.plan.find(_.sameResult(plan)).isDefined) {
-        cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
-        it.remove()
+        if (cascade || cd.plan.sameResult(plan)) {
+          cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
+          it.remove()
+        } else {
+          it.remove()
+          val plan = spark.sessionState.executePlan(cd.plan).executedPlan
+          val newCache = InMemoryRelation(
+            cacheBuilder = cd.cachedRepresentation.cacheBuilder.withCachedPlan(plan),
+            logicalPlan = cd.plan)
+          needToRecache += cd.copy(cachedRepresentation = newCache)
+        }
       }
     }
+
+    needToRecache.foreach(cachedData.add)
   }
 
   /**

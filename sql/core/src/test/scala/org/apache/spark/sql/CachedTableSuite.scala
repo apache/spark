@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
@@ -819,5 +820,41 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       spark.range(1002).filter('id > 1000).orderBy('id.desc).cache()
     }
     assert(cachedData.collect === Seq(1001))
+  }
+
+  test("non-cascading delete") {
+    val x1 = Seq(1).toDF()
+    x1.persist
+    x1.count
+    assert(x1.storageLevel.useMemory)
+
+    val x11 = x1.select($"value" * 2)
+    x11.persist
+    x11.count
+    assert(x11.storageLevel.useMemory)
+
+    x1.unpersist
+
+    assert(!x1.storageLevel.useMemory)
+    assert(x11.storageLevel.useMemory)
+    x11.count
+  }
+
+  test("non-cascading delete 2") {
+    val rows = Seq(Row("p1", 30), Row("p2", 20), Row("p3", 25),
+      Row("p4", 10), Row("p5", 40), Row("p6", 15))
+    val schema = new StructType().add("name", StringType).add("age", IntegerType)
+
+    val rowRDD = spark.sparkContext.parallelize(rows, 3)
+    val df = spark.createDataFrame(rowRDD, schema)
+    df.createOrReplaceTempView("ods_table")
+
+    spark.sql("cache table dwd_table1 as select * from ods_table where age>=25")
+    spark.sql("cache table dwd_table2 as select * from dwd_table1 where name='p1'")
+    val df2 = spark.table("dwd_table2")
+    df2.count
+    assert(df2.storageLevel.useMemory)
+    spark.catalog.dropTempView("dwd_table1")
+    assert(df2.storageLevel.useMemory)
   }
 }
