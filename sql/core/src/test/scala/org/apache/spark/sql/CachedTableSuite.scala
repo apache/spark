@@ -803,24 +803,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(cachedData.collect === Seq(1001))
   }
 
-  test("non-cascading delete") {
-    val df1 = testData.filter('key > 1)
-    df1.cache()
-    df1.count()
-    assertCached(df1)
-
-    val df3 = df1.select('key)
-    df3.cache()
-    df3.count()
-    assertCached(df3)
-
-    df1.unpersist(blocking = true)
-
-    assertCached(testData.filter('key > 1), 0)
-    assertCached(testData.filter('key > 1).select('key))
-  }
-
-  test("non-cascading delete 2") {
+  test("SPARK-24596 Non-cascading Cache Invalidation") {
     withTempView("t1", "t2", "t3") {
       val rows = Seq(
         Row("p1", 30), Row("p2", 20), Row("p3", 25),
