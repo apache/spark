@@ -92,9 +92,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
   private def testHiveVersion(hiveVersion: String, title: String)(func: => Unit): Unit = {
     test(title) {
-      val hadoopVersion = VersionInfo.getVersion
       assume(
-        hadoopVersion < "3.0.0" || hiveVersion >= "2.3",
+        VersionInfo.getVersion < "3.0.0" || hiveVersion >= "2.3",
         "Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
       func
     }
