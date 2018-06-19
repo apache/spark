@@ -110,14 +110,22 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   }
 
   /**
-   * Called by the DAGScheduler when a stage starts.
+   * Called by the DAGScheduler when a stage starts. Initializes the stage's state if it hasn't
+   * yet been initialized.
    *
    * @param stage the stage id.
    * @param maxPartitionId the maximum partition id that could appear in this stage's tasks (i.e.
    *                       the maximum possible value of `context.partitionId`).
    */
   private[scheduler] def stageStart(stage: Int, maxPartitionId: Int): Unit = synchronized {
-    stageStates(stage) = new StageState(maxPartitionId + 1)
+    stageStates.get(stage) match {
+      case Some(state) =>
+        require(state.authorizedCommitters.length == maxPartitionId + 1)
+        logInfo(s"Reusing state from previous attempt of stage $stage.")
+
+      case _ =>
+        stageStates(stage) = new StageState(maxPartitionId + 1)
+    }
   }
 
   // Called by DAGScheduler

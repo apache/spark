@@ -21,12 +21,13 @@ import java.io.File
 import java.util.Date
 import java.util.concurrent.TimeoutException
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
-import org.mockito.Matchers
+import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -35,6 +36,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark._
 import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapRedCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -208,7 +210,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, failedAttempt + 1))
   }
 
-  test("SPARK-24552: Differentiate tasks from different stage attempts") {
+  test("SPARK-24589: Differentiate tasks from different stage attempts") {
     var stage = 1
     val taskAttempt = 1
     val partition = 1
@@ -224,6 +226,37 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       ExecutorLostFailure("0", exitCausedByApp = true, None))
     assert(!outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
     assert(outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
+  }
+
+  test("SPARK-24589: Make sure stage state is cleaned up") {
+    // Normal application without stage failures.
+    sc.parallelize(1 to 100, 100)
+      .map { i => (i % 10, i) }
+      .reduceByKey(_ + _)
+      .collect()
+
+    assert(sc.dagScheduler.outputCommitCoordinator.isEmpty)
+
+    // Force failures in a few tasks so that a stage is retried. Collect the ID of the failing
+    // stage so that we can check the state of the output committer.
+    val retriedStage = sc.parallelize(1 to 100, 10)
+      .map { i => (i % 10, i) }
+      .reduceByKey { case (_, _) =>
+        val ctx = TaskContext.get()
+        if (ctx.stageAttemptNumber() == 0) {
+          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 1, 1, 1,
+            new Exception("Failure for test."))
+        } else {
+          ctx.stageId()
+        }
+      }
+      .collect()
+      .map { case (k, v) => v }
+      .toSet
+
+    assert(retriedStage.size === 1)
+    assert(sc.dagScheduler.outputCommitCoordinator.isEmpty)
+    verify(sc.env.outputCommitCoordinator).stageEnd(Matchers.eq(retriedStage.head))
   }
 }
 
