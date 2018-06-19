@@ -157,7 +157,7 @@ function get_release_info {
   # Gather some user information.
   export ASF_USERNAME=$(read_config "ASF user" "$LOGNAME")
 
-  GIT_NAME=$(git config user.name)
+  GIT_NAME=$(git config user.name || echo "")
   export GIT_NAME=$(read_config "Full name" "$GIT_NAME")
 
   export GIT_EMAIL="$ASF_USERNAME@apache.org"
