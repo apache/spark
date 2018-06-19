@@ -74,10 +74,7 @@ class HiveClientSuite(version: String)
     }
   }
 
-  override def beforeAll() {
-    super.beforeAll()
-    client = init(true)
-  }
+  private lazy val client: HiveClient = init(true)
 
   test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {
     val client = init(false)

@@ -27,7 +27,6 @@ import org.apache.spark.sql.hive.HiveUtils
 
 private[client] abstract class HiveVersionSuite(version: String) extends SparkFunSuite {
   override protected val enableAutoThreadAudit = false
-  protected var client: HiveClient = null
 
   protected def buildClient(
       hadoopConf: Configuration,
