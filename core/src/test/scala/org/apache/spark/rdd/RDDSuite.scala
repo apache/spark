@@ -157,8 +157,11 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   test("SPARK-23778: empty RDD in union should not produce a UnionRDD") {
     val rddWithPartitioner = sc.parallelize(Seq(1 -> true)).partitionBy(new HashPartitioner(1))
     val emptyRDD = sc.emptyRDD[(Int, Boolean)]
-    val unionRdd = sc.union(emptyRDD, rddWithPartitioner)
-    assert(unionRdd.isInstanceOf[PartitionerAwareUnionRDD[_]])
+    val unionRDD = sc.union(emptyRDD, rddWithPartitioner)
+    assert(unionRDD.isInstanceOf[PartitionerAwareUnionRDD[_]])
+    val unionAllEmptyRDD = sc.union(emptyRDD, emptyRDD)
+    assert(unionAllEmptyRDD.isInstanceOf[UnionRDD[_]])
+    assert(unionAllEmptyRDD.collect().isEmpty)
   }
 
   test("partitioner aware union") {
