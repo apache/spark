@@ -59,6 +59,7 @@ case class CreateHiveTableAsSelectCommand(
 
       InsertIntoHiveTable(
         tableDesc,
+        None,
         Map.empty,
         query,
         overwrite = false,
@@ -78,6 +79,7 @@ case class CreateHiveTableAsSelectCommand(
         val partition = createdTableMeta.partitionColumnNames.map(_ -> None).toMap
         InsertIntoHiveTable(
           createdTableMeta,
+          None,
           partition,
           query,
           overwrite = true,

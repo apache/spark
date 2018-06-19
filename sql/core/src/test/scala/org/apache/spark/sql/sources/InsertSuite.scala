@@ -520,4 +520,135 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       }
     }
   }
+
+  test("INSERT INTO using without column names") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    sql(
+      s"""
+         |INSERT INTO TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin).explain(true)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+    )
+  }
+
+  test("INSERT INTO colnames matching order strings only") {
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW jsonTable (a string, b string)
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '${path.toURI.toString}'
+         |)
+      """.stripMargin)
+    val ds = (1 to 10).map(i => s"""{"a":"strA$i", "b":"strB$i"}""").toDS()
+    spark.read.json(ds).createOrReplaceTempView("jt")
+
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    sql(
+      s"""
+         |INSERT INTO TABLE jsonTable (a, b) SELECT a, b FROM jt
+    """.stripMargin).explain(true)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+    )
+  }
+
+  test("INSERT INTO using column names matching order") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    sql(
+      s"""
+         |INSERT INTO TABLE jsonTable (a, b) SELECT a, b FROM jt
+    """.stripMargin).explain()
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+    )
+  }
+
+  test("INSERT INTO using column names in reverse order") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    sql(
+      s"""
+         |INSERT INTO TABLE jsonTable (b, a) SELECT b, a FROM jt
+    """.stripMargin).explain()
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+    )
+  }
+
+  test("INSERT INTO having less columns") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    val message = intercept[AnalysisException] {
+      sql("INSERT INTO TABLE jsonTable (b) SELECT b, a FROM jt")
+    }.getMessage
+    // Mismatch should describe that the specified number of columns is 1
+    // as opposed to the total of 2
+    assert(message.contains("1"))
+    assert(message.contains("2"))
+  }
+
+  test("INSERT INTO using column names with values") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    sql(
+      s"""
+         |INSERT INTO TABLE jsonTable VALUES (33, 'str33')
+    """.stripMargin).explain()
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").union(Seq((33, "str33")).toDF)
+    )
+  }
+
 }
