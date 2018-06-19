@@ -46,19 +46,8 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   override def schema: StructType = userSpecifiedSchema
 
   override def insert(input: DataFrame, overwrite: Boolean): Unit = {
-    input.foreach { row =>
-      schema.fields.zipWithIndex.filter(!_._1.nullable).foreach { field =>
-        if (row.get(field._2) == null) {
-          throw new NotNullableViolationException(field._1.name)
-        }
-      }
-    }
+    input.collect
   }
-}
-
-class NotNullableViolationException(val message: String)
-  extends Exception(message) with Serializable {
-  override def getMessage: String = s"Value for column '$message' cannot be null."
 }
 
 class InsertSuite extends DataSourceTest with SharedSQLContext {
@@ -559,7 +548,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
   test("SPARK-24583 Wrong schema type in InsertIntoDataSourceCommand") {
     withTable("test_table") {
       val schema = new StructType()
-        .add("i", IntegerType, false)
+        .add("i", LongType, false)
         .add("s", StringType, false)
       val newTable = CatalogTable(
         identifier = TableIdentifier("test_table", None),
@@ -576,27 +565,8 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
       spark.sessionState.catalog.createTable(newTable, false)
 
-      def verifyException(e: Exception, column: String): Unit = {
-        var ex = e.getCause
-        while (ex != null &&
-          !ex.isInstanceOf[NotNullableViolationException]) {
-          ex = ex.getCause
-        }
-        if (ex == null) {
-          fail(s"Expected a NotNullableViolationException but got '${e.getMessage}'.")
-        }
-        assert(ex.getMessage.contains(s"Value for column '$column' cannot be null."))
-      }
-
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      verifyException(
-        intercept[SparkException] {
-          sql("INSERT INTO TABLE test_table SELECT null, 'b'")
-        }, "i")
-      verifyException(
-        intercept[SparkException] {
-          sql("INSERT INTO TABLE test_table SELECT 2, null")
-        }, "s")
+      sql("INSERT INTO TABLE test_table SELECT 2, null")
     }
   }
 }
