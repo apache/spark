@@ -137,28 +137,11 @@ class MessageWithHeader extends AbstractFileRegion {
   }
 
   private int copyByteBuf(ByteBuf buf, WritableByteChannel target) throws IOException {
-    ByteBuffer buffer = buf.nioBuffer();
-    int written = (buffer.remaining() <= NIO_BUFFER_LIMIT) ?
-      target.write(buffer) : writeNioBuffer(target, buffer);
+    ByteBuffer buffer =
+      buf.nioBuffer(buf.readerIndex(), Math.min(buf.readableBytes(), NIO_BUFFER_LIMIT));
+    int written = target.write(buffer);
     buf.skipBytes(written);
     return written;
-  }
-
-  private int writeNioBuffer(
-      WritableByteChannel writeCh,
-      ByteBuffer buf) throws IOException {
-    int originalLimit = buf.limit();
-    int ret = 0;
-
-    try {
-      int ioSize = Math.min(buf.remaining(), NIO_BUFFER_LIMIT);
-      buf.limit(buf.position() + ioSize);
-      ret = writeCh.write(buf);
-    } finally {
-      buf.limit(originalLimit);
-    }
-
-    return ret;
   }
 
   @Override
