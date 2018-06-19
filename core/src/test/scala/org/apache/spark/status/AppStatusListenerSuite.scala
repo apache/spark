@@ -357,7 +357,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     // Start a new attempt and finish it with TaskCommitDenied, make sure it's handled like a kill.
     time += 1
     val denied = newAttempt(killed, nextTaskId())
-    val denyReason = TaskCommitDenied(1, 1, 1, 1)
+    val denyReason = TaskCommitDenied(1, 1, 1)
     listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptNumber,
       denied))
 

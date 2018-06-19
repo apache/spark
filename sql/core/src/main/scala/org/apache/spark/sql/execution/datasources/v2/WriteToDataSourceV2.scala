@@ -133,7 +133,7 @@ object DataWritingSparkTask extends Logging {
             s"task $partId.$attemptId: driver did not authorize commit"
           logInfo(message)
           // throwing CommitDeniedException will trigger the catch block for abort
-          throw new CommitDeniedException(message, stageId, stageAttempt, partId, attemptId)
+          throw new CommitDeniedException(message, stageId, partId, attemptId)
         }
 
       } else {

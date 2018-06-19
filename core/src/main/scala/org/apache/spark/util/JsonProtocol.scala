@@ -399,8 +399,7 @@ private[spark] object JsonProtocol {
         ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
         ("Accumulator Updates" -> accumUpdates)
       case taskCommitDenied: TaskCommitDenied =>
-        ("Job ID" -> taskCommitDenied.stageID) ~
-        ("Job Attempt Number" -> taskCommitDenied.stageAttempt) ~
+        ("Job ID" -> taskCommitDenied.jobID) ~
         ("Partition ID" -> taskCommitDenied.partitionID) ~
         ("Attempt Number" -> taskCommitDenied.attemptNumber)
       case ExecutorLostFailure(executorId, exitCausedByApp, reason) =>
@@ -929,10 +928,9 @@ private[spark] object JsonProtocol {
         // de/serialization logic was not added until 1.5.1. To provide backward compatibility
         // for reading those logs, we need to provide default values for all the fields.
         val jobId = jsonOption(json \ "Job ID").map(_.extract[Int]).getOrElse(-1)
-        val jobAttemptNo = jsonOption(json \ "Job Attempt Number").map(_.extract[Int]).getOrElse(-1)
         val partitionId = jsonOption(json \ "Partition ID").map(_.extract[Int]).getOrElse(-1)
         val attemptNo = jsonOption(json \ "Attempt Number").map(_.extract[Int]).getOrElse(-1)
-        TaskCommitDenied(jobId, jobAttemptNo, partitionId, attemptNo)
+        TaskCommitDenied(jobId, partitionId, attemptNo)
       case `executorLostFailure` =>
         val exitCausedByApp = jsonOption(json \ "Exit Caused By App").map(_.extract[Boolean])
         val executorId = jsonOption(json \ "Executor ID").map(_.extract[String])

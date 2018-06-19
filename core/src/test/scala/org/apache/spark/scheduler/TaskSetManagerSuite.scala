@@ -1250,7 +1250,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     tsmSpy.handleFailedTask(taskDescs(1).taskId, TaskState.FAILED,
       ExecutorLostFailure(taskDescs(1).executorId, exitCausedByApp = false, reason = None))
     tsmSpy.handleFailedTask(taskDescs(2).taskId, TaskState.FAILED,
-      TaskCommitDenied(0, 1, 2, 0))
+      TaskCommitDenied(0, 2, 0))
     tsmSpy.handleFailedTask(taskDescs(3).taskId, TaskState.KILLED, TaskKilled("test"))
 
     // Make sure that the blacklist ignored all of the task failures above, since they aren't

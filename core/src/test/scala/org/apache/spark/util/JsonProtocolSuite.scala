@@ -169,7 +169,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(exceptionFailure)
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled("test"))
-    testTaskEndReason(TaskCommitDenied(2, 1, 3, 4))
+    testTaskEndReason(TaskCommitDenied(2, 3, 4))
     testTaskEndReason(ExecutorLostFailure("100", true, Some("Induced failure")))
     testTaskEndReason(UnknownReason)
 
@@ -369,21 +369,13 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   // `TaskCommitDenied` was added in 1.3.0 but JSON de/serialization logic was added in 1.5.1
   test("TaskCommitDenied backward compatibility") {
-    val denied = TaskCommitDenied(1, 1, 2, 3)
+    val denied = TaskCommitDenied(1, 2, 3)
     val oldDenied = JsonProtocol.taskEndReasonToJson(denied)
       .removeField({ _._1 == "Job ID" })
-      .removeField({ _._1 == "Job Attempt Number" })
       .removeField({ _._1 == "Partition ID" })
       .removeField({ _._1 == "Attempt Number" })
-    val expectedDenied = TaskCommitDenied(-1, -1, -1, -1)
+    val expectedDenied = TaskCommitDenied(-1, -1, -1)
     assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
-
-    // Job (actually, stage) attempt number was added in SPARK-24552.
-    val noJobAttempt = JsonProtocol.taskEndReasonToJson(denied)
-      .removeField({ _._1 == "Job Attempt Number" })
-    val expectedDenied2 = TaskCommitDenied(denied.stageID, -1, denied.partitionID,
-      denied.attemptNumber)
-    assertEquals(expectedDenied2, JsonProtocol.taskEndReasonFromJson(noJobAttempt))
   }
 
   test("AccumulableInfo backward compatibility") {
@@ -690,10 +682,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case (TaskResultLost, TaskResultLost) =>
       case (r1: TaskKilled, r2: TaskKilled) =>
         assert(r1.reason == r2.reason)
-      case (TaskCommitDenied(jobId1, jobAttempt1, partitionId1, attemptNumber1),
-          TaskCommitDenied(jobId2, jobAttempt2, partitionId2, attemptNumber2)) =>
+      case (TaskCommitDenied(jobId1, partitionId1, attemptNumber1),
+          TaskCommitDenied(jobId2, partitionId2, attemptNumber2)) =>
         assert(jobId1 === jobId2)
-        assert(jobAttempt1 === jobAttempt2)
         assert(partitionId1 === partitionId2)
         assert(attemptNumber1 === attemptNumber2)
       case (ExecutorLostFailure(execId1, exit1CausedByApp, reason1),

@@ -24,14 +24,10 @@ import org.apache.spark.TaskCommitDenied
  */
 private[spark] class CommitDeniedException(
     msg: String,
-    stageID: Int,
-    stageAttempt: Int,
+    jobID: Int,
     splitID: Int,
     attemptNumber: Int)
   extends Exception(msg) {
 
-  def toTaskCommitDeniedReason: TaskCommitDenied = {
-    TaskCommitDenied(stageID, stageAttempt, splitID, attemptNumber)
-  }
-
+  def toTaskCommitDeniedReason: TaskCommitDenied = TaskCommitDenied(jobID, splitID, attemptNumber)
 }
