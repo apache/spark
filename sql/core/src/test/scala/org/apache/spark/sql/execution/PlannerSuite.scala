@@ -692,12 +692,12 @@ class PlannerSuite extends SharedSQLContext {
     def checkOutputPartitioningRewrite(
         plans: Seq[SparkPlan],
         expectedPartitioningClass: Class[_]): Unit = {
-      plans.foreach { plan =>
-        val partitioning = plan.outputPartitioning
-        assert(partitioning.getClass == expectedPartitioningClass)
-        val partitionedAttrs = partitioning.asInstanceOf[Expression].references
-        assert(partitionedAttrs.subsetOf(plan.outputSet))
-      }
+      assert(plans.size == 1)
+      val plan = plans.head
+      val partitioning = plan.outputPartitioning
+      assert(partitioning.getClass == expectedPartitioningClass)
+      val partitionedAttrs = partitioning.asInstanceOf[Expression].references
+      assert(partitionedAttrs.subsetOf(plan.outputSet))
     }
 
     def checkReusedExchangeOutputPartitioningRewrite(
@@ -706,7 +706,6 @@ class PlannerSuite extends SharedSQLContext {
       val reusedExchange = df.queryExecution.executedPlan.collect {
         case r: ReusedExchangeExec => r
       }
-      assert(reusedExchange.size == 1)
       checkOutputPartitioningRewrite(reusedExchange, expectedPartitioningClass)
     }
 
@@ -716,7 +715,6 @@ class PlannerSuite extends SharedSQLContext {
       val inMemoryScan = df.queryExecution.executedPlan.collect {
         case m: InMemoryTableScanExec => m
       }
-      assert(inMemoryScan.size == 1)
       checkOutputPartitioningRewrite(inMemoryScan, expectedPartitioningClass)
     }
 
@@ -731,8 +729,9 @@ class PlannerSuite extends SharedSQLContext {
     checkReusedExchangeOutputPartitioningRewrite(df3.union(df4), classOf[RangePartitioning])
 
     // InMemoryTableScan is HashPartitioning
-    df1.persist()
-    checkInMemoryTableScanOutputPartitioningRewrite(df2, classOf[HashPartitioning])
+    Seq(1 -> "a").toDF("i", "j").repartition($"i").persist()
+    checkInMemoryTableScanOutputPartitioningRewrite(
+      Seq(1 -> "a").toDF("i", "j").repartition($"i"), classOf[HashPartitioning])
 
     // InMemoryTableScan is RangePartitioning
     spark.range(1, 100, 1, 10).toDF().persist()
