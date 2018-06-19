@@ -87,7 +87,7 @@ class HistoryServer(
       if (!loadAppUi(appId, None) && (!attemptId.isDefined || !loadAppUi(appId, attemptId))) {
         val msg = <div class="row-fluid">Application {appId} not found.</div>
         res.setStatus(HttpServletResponse.SC_NOT_FOUND)
-        UIUtils.basicSparkPage(msg, "Not Found").foreach { n =>
+        UIUtils.basicSparkPage(req, msg, "Not Found").foreach { n =>
           res.getWriter().write(n.toString)
         }
         return
@@ -124,7 +124,7 @@ class HistoryServer(
 
     attachHandler(ApiRootResource.getServletHandler(this))
 
-    attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
+    addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
 
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
@@ -150,14 +150,17 @@ class HistoryServer(
       ui: SparkUI,
       completed: Boolean) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
-    ui.getHandlers.foreach(attachHandler)
-    addFilters(ui.getHandlers, conf)
+    handlers.synchronized {
+      ui.getHandlers.foreach(attachHandler)
+    }
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
   override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
-    ui.getHandlers.foreach(detachHandler)
+    handlers.synchronized {
+      ui.getHandlers.foreach(detachHandler)
+    }
     provider.onUIDetached(appId, attemptId, ui)
   }
 

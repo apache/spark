@@ -648,6 +648,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("fetch hcfs dir") {
     val tempDir = Utils.createTempDir()
     val sourceDir = new File(tempDir, "source-dir")
+    sourceDir.mkdir()
     val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
     val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
     val targetDir = new File(tempDir, "target-dir")
@@ -1166,6 +1167,22 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     intercept[IllegalArgumentException] {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
+  }
+
+  object MalformedClassObject {
+    class MalformedClass
+  }
+
+  test("Safe getSimpleName") {
+    // getSimpleName on class of MalformedClass will result in error: Malformed class name
+    // Utils.getSimpleName works
+    val err = intercept[java.lang.InternalError] {
+      classOf[MalformedClassObject.MalformedClass].getSimpleName
+    }
+    assert(err.getMessage === "Malformed class name")
+
+    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
+      "UtilsSuite$MalformedClassObject$MalformedClass")
   }
 }
 

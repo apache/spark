@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
@@ -66,10 +67,10 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     val falseEval = falseValue.genCode(ctx)
 
     val code =
-      s"""
+      code"""
          |${condEval.code}
          |boolean ${ev.isNull} = false;
-         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${condEval.isNull} && ${condEval.value}) {
          |  ${trueEval.code}
          |  ${ev.isNull} = ${trueEval.isNull};
@@ -191,7 +192,9 @@ case class CaseWhen(
     // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
     // We won't go on anymore on the computation.
     val resultState = ctx.freshName("caseWhenResultState")
-    ev.value = ctx.addMutableState(ctx.javaType(dataType), ev.value)
+    ev.value = JavaCode.global(
+      ctx.addMutableState(CodeGenerator.javaType(dataType), ev.value),
+      dataType)
 
     // these blocks are meant to be inside a
     // do {
@@ -244,10 +247,10 @@ case class CaseWhen(
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = allConditions,
       funcName = "caseWhen",
-      returnType = ctx.JAVA_BYTE,
+      returnType = CodeGenerator.JAVA_BYTE,
       makeSplitFunction = func =>
         s"""
-           |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
+           |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
            |do {
            |  $func
            |} while (false);
@@ -263,8 +266,8 @@ case class CaseWhen(
       }.mkString)
 
     ev.copy(code =
-      s"""
-         |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
+      code"""
+         |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
          |do {
          |  $codes
          |} while (false);

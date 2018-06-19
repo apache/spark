@@ -65,7 +65,10 @@ case class KafkaStreamWriterFactory(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
   extends DataWriterFactory[InternalRow] {
 
-  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
+  override def createDataWriter(
+      partitionId: Int,
+      attemptNumber: Int,
+      epochId: Long): DataWriter[InternalRow] = {
     new KafkaStreamDataWriter(topic, producerParams, schema.toAttributes)
   }
 }

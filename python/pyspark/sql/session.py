@@ -547,6 +547,33 @@ class SparkSession(object):
         df._schema = schema
         return df
 
+    @staticmethod
+    def _create_shell_session():
+        """
+        Initialize a SparkSession for a pyspark shell session. This is called from shell.py
+        to make error handling simpler without needing to declare local variables in that
+        script, which would expose those to users.
+        """
+        import py4j
+        from pyspark.conf import SparkConf
+        from pyspark.context import SparkContext
+        try:
+            # Try to access HiveConf, it will raise exception if Hive is not added
+            conf = SparkConf()
+            if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
+                SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
+                return SparkSession.builder\
+                    .enableHiveSupport()\
+                    .getOrCreate()
+            else:
+                return SparkSession.builder.getOrCreate()
+        except (py4j.protocol.Py4JError, TypeError):
+            if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+                warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
+                              "please make sure you build spark with hive")
+
+        return SparkSession.builder.getOrCreate()
+
     @since(2.0)
     @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
@@ -583,6 +610,8 @@ class SparkSession(object):
 
         .. versionchanged:: 2.1
            Added verifySchema.
+
+        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
 
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
@@ -646,6 +675,9 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
+            from pyspark.sql.utils import require_minimum_pandas_version
+            require_minimum_pandas_version()
+
             if self.conf.get("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
                == "true":
                 timezone = self.conf.get("spark.sql.session.timeZone")
@@ -663,8 +695,27 @@ class SparkSession(object):
                 try:
                     return self._create_from_pandas_with_arrow(data, schema, timezone)
                 except Exception as e:
-                    warnings.warn("Arrow will not be used in createDataFrame: %s" % str(e))
-                    # Fallback to create DataFrame without arrow if raise some exception
+                    from pyspark.util import _exception_message
+
+                    if self.conf.get("spark.sql.execution.arrow.fallback.enabled", "true") \
+                            .lower() == "true":
+                        msg = (
+                            "createDataFrame attempted Arrow optimization because "
+                            "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                            "failed by the reason below:\n  %s\n"
+                            "Attempting non-optimization as "
+                            "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                            "true." % _exception_message(e))
+                        warnings.warn(msg)
+                    else:
+                        msg = (
+                            "createDataFrame attempted Arrow optimization because "
+                            "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                            "the error below and will not continue because automatic fallback "
+                            "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                            "false.\n  %s" % _exception_message(e))
+                        warnings.warn(msg)
+                        raise
             data = self._convert_from_pandas(data, schema, timezone)
 
         if isinstance(schema, StructType):
@@ -809,7 +860,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

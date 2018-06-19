@@ -17,18 +17,16 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, BinaryAttribute, NominalAttribute}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 
-class OneHotEncoderEstimatorSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class OneHotEncoderEstimatorSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -57,13 +55,10 @@ class OneHotEncoderEstimatorSuite
     assert(encoder.getDropLast === true)
     encoder.setDropLast(false)
     assert(encoder.getDropLast === false)
-
     val model = encoder.fit(df)
-    val encoded = model.transform(df)
-    encoded.select("output", "expected").rdd.map { r =>
-      (r.getAs[Vector](0), r.getAs[Vector](1))
-    }.collect().foreach { case (vec1, vec2) =>
-      assert(vec1 === vec2)
+    testTransformer[(Double, Vector)](df, model, "output", "expected") {
+      case Row(output: Vector, expected: Vector) =>
+        assert(output === expected)
     }
   }
 
@@ -87,11 +82,9 @@ class OneHotEncoderEstimatorSuite
       .setOutputCols(Array("output"))
 
     val model = encoder.fit(df)
-    val encoded = model.transform(df)
-    encoded.select("output", "expected").rdd.map { r =>
-      (r.getAs[Vector](0), r.getAs[Vector](1))
-    }.collect().foreach { case (vec1, vec2) =>
-      assert(vec1 === vec2)
+    testTransformer[(Double, Vector)](df, model, "output", "expected") {
+      case Row(output: Vector, expected: Vector) =>
+        assert(output === expected)
     }
   }
 
@@ -103,11 +96,12 @@ class OneHotEncoderEstimatorSuite
       .setInputCols(Array("size"))
       .setOutputCols(Array("encoded"))
     val model = encoder.fit(df)
-    val output = model.transform(df)
-    val group = AttributeGroup.fromStructField(output.schema("encoded"))
-    assert(group.size === 2)
-    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("small").withIndex(0))
-    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("medium").withIndex(1))
+    testTransformerByGlobalCheckFunc[(Double)](df, model, "encoded") { rows =>
+        val group = AttributeGroup.fromStructField(rows.head.schema("encoded"))
+        assert(group.size === 2)
+        assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("small").withIndex(0))
+        assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("medium").withIndex(1))
+    }
   }
 
   test("input column without ML attribute") {
@@ -116,11 +110,12 @@ class OneHotEncoderEstimatorSuite
       .setInputCols(Array("index"))
       .setOutputCols(Array("encoded"))
     val model = encoder.fit(df)
-    val output = model.transform(df)
-    val group = AttributeGroup.fromStructField(output.schema("encoded"))
-    assert(group.size === 2)
-    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("0").withIndex(0))
-    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("1").withIndex(1))
+    testTransformerByGlobalCheckFunc[(Double)](df, model, "encoded") { rows =>
+      val group = AttributeGroup.fromStructField(rows.head.schema("encoded"))
+      assert(group.size === 2)
+      assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("0").withIndex(0))
+      assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("1").withIndex(1))
+    }
   }
 
   test("read/write") {
@@ -151,29 +146,30 @@ class OneHotEncoderEstimatorSuite
 
     val df = spark.createDataFrame(sc.parallelize(data), schema)
 
-    val dfWithTypes = df
-      .withColumn("shortInput", df("input").cast(ShortType))
-      .withColumn("longInput", df("input").cast(LongType))
-      .withColumn("intInput", df("input").cast(IntegerType))
-      .withColumn("floatInput", df("input").cast(FloatType))
-      .withColumn("decimalInput", df("input").cast(DecimalType(10, 0)))
+    class NumericTypeWithEncoder[A](val numericType: NumericType)
+      (implicit val encoder: Encoder[(A, Vector)])
 
-    val cols = Array("input", "shortInput", "longInput", "intInput",
-      "floatInput", "decimalInput")
-    for (col <- cols) {
-      val encoder = new OneHotEncoderEstimator()
-        .setInputCols(Array(col))
+    val types = Seq(
+      new NumericTypeWithEncoder[Short](ShortType),
+      new NumericTypeWithEncoder[Long](LongType),
+      new NumericTypeWithEncoder[Int](IntegerType),
+      new NumericTypeWithEncoder[Float](FloatType),
+      new NumericTypeWithEncoder[Byte](ByteType),
+      new NumericTypeWithEncoder[Double](DoubleType),
+      new NumericTypeWithEncoder[Decimal](DecimalType(10, 0))(ExpressionEncoder()))
+
+    for (t <- types) {
+      val dfWithTypes = df.select(col("input").cast(t.numericType), col("expected"))
+      val estimator = new OneHotEncoderEstimator()
+        .setInputCols(Array("input"))
         .setOutputCols(Array("output"))
         .setDropLast(false)
 
-      val model = encoder.fit(dfWithTypes)
-      val encoded = model.transform(dfWithTypes)
-
-      encoded.select("output", "expected").rdd.map { r =>
-        (r.getAs[Vector](0), r.getAs[Vector](1))
-      }.collect().foreach { case (vec1, vec2) =>
-        assert(vec1 === vec2)
-      }
+      val model = estimator.fit(dfWithTypes)
+      testTransformer(dfWithTypes, model, "output", "expected") {
+        case Row(output: Vector, expected: Vector) =>
+          assert(output === expected)
+      }(t.encoder)
     }
   }
 
@@ -202,12 +198,16 @@ class OneHotEncoderEstimatorSuite
     assert(encoder.getDropLast === false)
 
     val model = encoder.fit(df)
-    val encoded = model.transform(df)
-    encoded.select("output1", "expected1", "output2", "expected2").rdd.map { r =>
-      (r.getAs[Vector](0), r.getAs[Vector](1), r.getAs[Vector](2), r.getAs[Vector](3))
-    }.collect().foreach { case (vec1, vec2, vec3, vec4) =>
-      assert(vec1 === vec2)
-      assert(vec3 === vec4)
+    testTransformer[(Double, Vector, Double, Vector)](
+      df,
+      model,
+      "output1",
+      "output2",
+      "expected1",
+      "expected2") {
+      case Row(output1: Vector, output2: Vector, expected1: Vector, expected2: Vector) =>
+        assert(output1 === expected1)
+        assert(output2 === expected2)
     }
   }
 
@@ -233,12 +233,16 @@ class OneHotEncoderEstimatorSuite
       .setOutputCols(Array("output1", "output2"))
 
     val model = encoder.fit(df)
-    val encoded = model.transform(df)
-    encoded.select("output1", "expected1", "output2", "expected2").rdd.map { r =>
-      (r.getAs[Vector](0), r.getAs[Vector](1), r.getAs[Vector](2), r.getAs[Vector](3))
-    }.collect().foreach { case (vec1, vec2, vec3, vec4) =>
-      assert(vec1 === vec2)
-      assert(vec3 === vec4)
+    testTransformer[(Double, Vector, Double, Vector)](
+      df,
+      model,
+      "output1",
+      "output2",
+      "expected1",
+      "expected2") {
+      case Row(output1: Vector, output2: Vector, expected1: Vector, expected2: Vector) =>
+        assert(output1 === expected1)
+        assert(output2 === expected2)
     }
   }
 
@@ -253,10 +257,12 @@ class OneHotEncoderEstimatorSuite
       .setOutputCols(Array("encoded"))
 
     val model = encoder.fit(trainingDF)
-    val err = intercept[SparkException] {
-      model.transform(testDF).show
-    }
-    err.getMessage.contains("Unseen value: 3.0. To handle unseen values")
+    testTransformerByInterceptingException[(Int, Int)](
+      testDF,
+      model,
+      expectedMessagePart = "Unseen value: 3.0. To handle unseen values",
+      firstResultCol = "encoded")
+
   }
 
   test("Can't transform on negative input") {
@@ -268,10 +274,11 @@ class OneHotEncoderEstimatorSuite
       .setOutputCols(Array("encoded"))
 
     val model = encoder.fit(trainingDF)
-    val err = intercept[SparkException] {
-      model.transform(testDF).collect()
-    }
-    err.getMessage.contains("Negative value: -1.0. Input can't be negative")
+    testTransformerByInterceptingException[(Int, Int)](
+      testDF,
+      model,
+      expectedMessagePart = "Negative value: -1.0. Input can't be negative",
+      firstResultCol = "encoded")
   }
 
   test("Keep on invalid values: dropLast = false") {
@@ -295,11 +302,9 @@ class OneHotEncoderEstimatorSuite
       .setDropLast(false)
 
     val model = encoder.fit(trainingDF)
-    val encoded = model.transform(testDF)
-    encoded.select("output", "expected").rdd.map { r =>
-      (r.getAs[Vector](0), r.getAs[Vector](1))
-    }.collect().foreach { case (vec1, vec2) =>
-      assert(vec1 === vec2)
+    testTransformer[(Double, Vector)](testDF, model, "output", "expected") {
+      case Row(output: Vector, expected: Vector) =>
+        assert(output === expected)
     }
   }
 
@@ -324,11 +329,9 @@ class OneHotEncoderEstimatorSuite
       .setDropLast(true)
 
     val model = encoder.fit(trainingDF)
-    val encoded = model.transform(testDF)
-    encoded.select("output", "expected").rdd.map { r =>
-      (r.getAs[Vector](0), r.getAs[Vector](1))
-    }.collect().foreach { case (vec1, vec2) =>
-      assert(vec1 === vec2)
+    testTransformer[(Double, Vector)](testDF, model, "output", "expected") {
+      case Row(output: Vector, expected: Vector) =>
+        assert(output === expected)
     }
   }
 
@@ -355,19 +358,15 @@ class OneHotEncoderEstimatorSuite
     val model = encoder.fit(df)
 
     model.setDropLast(false)
-    val encoded1 = model.transform(df)
-    encoded1.select("output", "expected1").rdd.map { r =>
-      (r.getAs[Vector](0), r.getAs[Vector](1))
-    }.collect().foreach { case (vec1, vec2) =>
-      assert(vec1 === vec2)
+    testTransformer[(Double, Vector, Vector)](df, model, "output", "expected1") {
+      case Row(output: Vector, expected1: Vector) =>
+        assert(output === expected1)
     }
 
     model.setDropLast(true)
-    val encoded2 = model.transform(df)
-    encoded2.select("output", "expected2").rdd.map { r =>
-      (r.getAs[Vector](0), r.getAs[Vector](1))
-    }.collect().foreach { case (vec1, vec2) =>
-      assert(vec1 === vec2)
+    testTransformer[(Double, Vector, Vector)](df, model, "output", "expected2") {
+      case Row(output: Vector, expected2: Vector) =>
+        assert(output === expected2)
     }
   }
 
@@ -392,13 +391,14 @@ class OneHotEncoderEstimatorSuite
     val model = encoder.fit(trainingDF)
     model.setHandleInvalid("error")
 
-    val err = intercept[SparkException] {
-      model.transform(testDF).collect()
-    }
-    err.getMessage.contains("Unseen value: 3.0. To handle unseen values")
+    testTransformerByInterceptingException[(Double, Vector)](
+      testDF,
+      model,
+      expectedMessagePart = "Unseen value: 3.0. To handle unseen values",
+      firstResultCol = "output")
 
     model.setHandleInvalid("keep")
-    model.transform(testDF).collect()
+    testTransformerByGlobalCheckFunc[(Double, Vector)](testDF, model, "output") { _ => }
   }
 
   test("Transforming on mismatched attributes") {
@@ -413,9 +413,10 @@ class OneHotEncoderEstimatorSuite
     val testAttr = NominalAttribute.defaultAttr.withValues("tiny", "small", "medium", "large")
     val testDF = Seq(0.0, 1.0, 2.0, 3.0).map(Tuple1.apply).toDF("size")
       .select(col("size").as("size", testAttr.toMetadata()))
-    val err = intercept[Exception] {
-      model.transform(testDF).collect()
-    }
-    err.getMessage.contains("OneHotEncoderModel expected 2 categorical values")
+    testTransformerByInterceptingException[(Double)](
+      testDF,
+      model,
+      expectedMessagePart = "OneHotEncoderModel expected 2 categorical values",
+      firstResultCol = "encoded")
   }
 }
