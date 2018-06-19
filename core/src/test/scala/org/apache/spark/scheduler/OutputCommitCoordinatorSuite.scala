@@ -21,7 +21,6 @@ import java.io.File
 import java.util.Date
 import java.util.concurrent.TimeoutException
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
