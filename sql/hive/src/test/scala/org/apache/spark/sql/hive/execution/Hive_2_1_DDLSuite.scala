@@ -41,7 +41,6 @@ import org.apache.spark.util.Utils
 @ExtendedHiveTest
 class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with BeforeAndAfterEach
   with BeforeAndAfterAll {
-  assume(VersionInfo.getVersion < "3.0.0", "Only Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
 
   // Create a custom HiveExternalCatalog instance with the desired configuration. We cannot
   // use SparkSession here since there's already an active on managed by the TestHive object.
@@ -83,7 +82,12 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
     }
   }
 
-  test("SPARK-21617: ALTER TABLE for non-compatible DataSource tables") {
+  private def test_2_1(title: String)(func: => Unit): Unit = test(title) {
+    assume(VersionInfo.getVersion < "3.0.0", "Only Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
+    func
+  }
+
+  test_2_1("SPARK-21617: ALTER TABLE for non-compatible DataSource tables") {
     testAlterTable(
       "t1",
       "CREATE TABLE t1 (c1 int) USING json",
@@ -91,21 +95,21 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
       hiveCompatible = false)
   }
 
-  test("SPARK-21617: ALTER TABLE for Hive-compatible DataSource tables") {
+  test_2_1("SPARK-21617: ALTER TABLE for Hive-compatible DataSource tables") {
     testAlterTable(
       "t1",
       "CREATE TABLE t1 (c1 int) USING parquet",
       StructType(Array(StructField("c1", IntegerType), StructField("c2", IntegerType))))
   }
 
-  test("SPARK-21617: ALTER TABLE for Hive tables") {
+  test_2_1("SPARK-21617: ALTER TABLE for Hive tables") {
     testAlterTable(
       "t1",
       "CREATE TABLE t1 (c1 int) STORED AS parquet",
       StructType(Array(StructField("c1", IntegerType), StructField("c2", IntegerType))))
   }
 
-  test("SPARK-21617: ALTER TABLE with incompatible schema on Hive-compatible table") {
+  test_2_1("SPARK-21617: ALTER TABLE with incompatible schema on Hive-compatible table") {
     val exception = intercept[AnalysisException] {
       testAlterTable(
         "t1",

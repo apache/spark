@@ -50,9 +50,11 @@ private[client] abstract class HiveVersionSuite(version: String) extends SparkFu
 
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
-    assume(
-      VersionInfo.getVersion < "3.0.0" || version >= "2.3",
-      "Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
-    super.test(s"$version: $testName", testTags: _*)(testFun)
+    super.test(s"$version: $testName", testTags: _*) {
+      assume(
+        VersionInfo.getVersion < "3.0.0" || version >= "2.3",
+        "Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
+      testFun
+    }
   }
 }
