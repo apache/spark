@@ -1486,7 +1486,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
-  }  
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
