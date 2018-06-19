@@ -823,38 +823,40 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("non-cascading delete") {
-    val x1 = Seq(1).toDF()
-    x1.persist
-    x1.count
-    assert(x1.storageLevel.useMemory)
+    val df1 = testData.filter('key > 1)
+    df1.cache()
+    df1.count()
+    assertCached(df1)
 
-    val x11 = x1.select($"value" * 2)
-    x11.persist
-    x11.count
-    assert(x11.storageLevel.useMemory)
+    val df3 = df1.select('key)
+    df3.cache()
+    df3.count()
+    assertCached(df3)
 
-    x1.unpersist
+    df1.unpersist(blocking = true)
 
-    assert(!x1.storageLevel.useMemory)
-    assert(x11.storageLevel.useMemory)
-    x11.count
+    assertCached(testData.filter('key > 1), 0)
+    assertCached(testData.filter('key > 1).select('key))
   }
 
   test("non-cascading delete 2") {
-    val rows = Seq(Row("p1", 30), Row("p2", 20), Row("p3", 25),
-      Row("p4", 10), Row("p5", 40), Row("p6", 15))
-    val schema = new StructType().add("name", StringType).add("age", IntegerType)
+    withTempView("t1", "t2", "t3") {
+      val rows = Seq(
+        Row("p1", 30), Row("p2", 20), Row("p3", 25),
+        Row("p4", 10), Row("p5", 40), Row("p6", 15))
+      val schema = new StructType().add("name", StringType).add("age", IntegerType)
 
-    val rowRDD = spark.sparkContext.parallelize(rows, 3)
-    val df = spark.createDataFrame(rowRDD, schema)
-    df.createOrReplaceTempView("ods_table")
+      val rdd = spark.sparkContext.parallelize(rows, 3)
+      val df = spark.createDataFrame(rdd, schema)
+      df.createOrReplaceTempView("t1")
 
-    spark.sql("cache table dwd_table1 as select * from ods_table where age>=25")
-    spark.sql("cache table dwd_table2 as select * from dwd_table1 where name='p1'")
-    val df2 = spark.table("dwd_table2")
-    df2.count
-    assert(df2.storageLevel.useMemory)
-    spark.catalog.dropTempView("dwd_table1")
-    assert(df2.storageLevel.useMemory)
+      spark.sql("cache table t2 as select * from t1 where age >= 25")
+      spark.sql("cache table t3 as select * from t2 where name = 'p1'")
+
+      assertCached(spark.table("t2"))
+      assertCached(spark.table("t3"))
+      spark.catalog.dropTempView("t2")
+      assertCached(spark.table("t3"))
+    }
   }
 }

@@ -122,11 +122,10 @@ class CacheManager extends Logging {
     while (it.hasNext) {
       val cd = it.next()
       if (cd.plan.find(_.sameResult(plan)).isDefined) {
+        it.remove()
         if (cascade || cd.plan.sameResult(plan)) {
           cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
-          it.remove()
         } else {
-          it.remove()
           val plan = spark.sessionState.executePlan(cd.plan).executedPlan
           val newCache = InMemoryRelation(
             cacheBuilder = cd.cachedRepresentation.cacheBuilder.withCachedPlan(plan),
