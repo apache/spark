@@ -141,6 +141,8 @@ public class RpcIntegrationSuite {
                 return msg;
               }
             };
+          case "null":
+            return null;
           default:
             throw new IllegalArgumentException("unexpected msg: " + msg);
         }
@@ -220,7 +222,7 @@ public class RpcIntegrationSuite {
     }
     streamCallbacks.values().forEach(streamCallback -> {
       try {
-        streamCallback.waitForCompletionAndVerify(TimeUnit.SECONDS.toMillis(5));
+        streamCallback.verify();
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -344,6 +346,10 @@ public class RpcIntegrationSuite {
         sendRpcWithStream("fail/exception-ondata/smallBuffer", "smallBuffer");
     assertErrorAndClosed(exceptionInCallbackResult, "Destination failed while reading stream");
 
+    RpcResult nullStreamHandler =
+        sendRpcWithStream("fail/null/smallBuffer", "smallBuffer");
+    assertErrorAndClosed(exceptionInCallbackResult, "Destination failed while reading stream");
+
     // OTOH, if there is a failure during onComplete, the channel should still be fine
     RpcResult exceptionInOnComplete =
         sendRpcWithStream("fail/exception-oncomplete/smallBuffer", "smallBuffer");
@@ -423,8 +429,7 @@ public class RpcIntegrationSuite {
       helper = new StreamSuite.TestCallback(out);
     }
 
-    void waitForCompletionAndVerify(long timeoutMs) throws IOException {
-      helper.waitForCompletion(timeoutMs);
+    void verify() throws IOException {
       if (streamId.equals("file")) {
         assertTrue("File stream did not match.", Files.equal(testData.testFile, outFile));
       } else {
@@ -438,7 +443,6 @@ public class RpcIntegrationSuite {
         base.get(expected);
         assertEquals(expected.length, result.length);
         assertTrue("buffers don't match", Arrays.equals(expected, result));
-
       }
     }
 

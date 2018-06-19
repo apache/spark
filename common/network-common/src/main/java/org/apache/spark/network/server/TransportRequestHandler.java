@@ -218,6 +218,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
           channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
       ByteBuffer meta = req.meta.nioByteBuffer();
       StreamCallbackWithID streamHandler = rpcHandler.receiveStream(reverseClient, meta, callback);
+      if (streamHandler == null) {
+        throw new NullPointerException("rpcHandler returned a null streamHandler");
+      }
       StreamCallbackWithID wrappedCallback = new StreamCallbackWithID() {
         @Override
         public void onData(String streamId, ByteBuffer buf) throws IOException {

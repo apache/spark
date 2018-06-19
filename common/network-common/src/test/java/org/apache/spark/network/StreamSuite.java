@@ -252,9 +252,6 @@ public class StreamSuite {
         throw error;
       }
     }
-
-
-
   }
 
   static class TestCallback implements StreamCallback {
@@ -309,7 +306,6 @@ public class StreamSuite {
       assertTrue("Timed out waiting for stream.", completed);
       assertNull(error);
     }
-
   }
 
 }
