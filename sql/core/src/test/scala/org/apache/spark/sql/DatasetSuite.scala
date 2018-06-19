@@ -1467,13 +1467,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     intercept[NullPointerException](ds.as[(Int, Int)].collect())
   }
 
+  test("SPARK-24548: Dataset with tuple encoders should have correct schema") {
+    val encoder = Encoders.tuple(newStringEncoder,
+      Encoders.tuple(newStringEncoder, newStringEncoder))
+
+    val data = Seq(("a", ("1", "2")), ("b", ("3", "4")))
+    val rdd = sparkContext.parallelize(data)
+
+    val ds1 = spark.createDataset(rdd)
+    val ds2 = spark.createDataset(rdd)(encoder)
+    assert(ds1.schema == ds2.schema)
+    checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
+  }
+
   test("SPARK-24571: filtering of string values by char literal") {
     val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
     checkAnswer(df.where('city === 'X'), Seq(Row("X")))
     checkAnswer(
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
-  }
+  }  
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)

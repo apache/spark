@@ -23,10 +23,9 @@ import org.apache.spark.annotation.InterfaceStability;
  * A mix in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to report statistics to Spark.
  *
- * Statistics are reported to the optimizer before a projection or any filters are pushed to the
- * DataSourceReader. Implementations that return more accurate statistics based on projection and
- * filters will not improve query performance until the planner can push operators before getting
- * stats.
+ * Statistics are reported to the optimizer before any operator is pushed to the DataSourceReader.
+ * Implementations that return more accurate statistics based on pushed operators will not improve
+ * query performance until the planner can push operators before getting stats.
  */
 @InterfaceStability.Evolving
 public interface SupportsReportStatistics extends DataSourceReader {
