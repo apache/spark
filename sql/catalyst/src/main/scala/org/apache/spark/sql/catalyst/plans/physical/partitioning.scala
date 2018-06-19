@@ -162,8 +162,10 @@ trait Partitioning {
   def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case AllTuples => numPartitions == 1
-    case _ => false
+    case _ => required.requiredNumPartitions.forall(_ == numPartitions) && satisfies0(required)
   }
+
+  protected def satisfies0(required: Distribution): Boolean = false
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning
@@ -178,9 +180,8 @@ case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
-  override def satisfies(required: Distribution): Boolean = required match {
+  override def satisfies0(required: Distribution): Boolean = required match {
     case _: BroadcastDistribution => false
-    case ClusteredDistribution(_, Some(requiredNumPartitions)) => requiredNumPartitions == 1
     case _ => true
   }
 }
@@ -197,21 +198,15 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  override def satisfies(required: Distribution): Boolean = {
-    super.satisfies(required) || {
-      val satisfyNumPartitions = required.requiredNumPartitions.isEmpty ||
-        required.requiredNumPartitions.get == numPartitions
-      satisfyNumPartitions && {
-        required match {
-          case h: HashClusteredDistribution =>
-            expressions.length == h.hashExprs.length && expressions.zip(h.hashExprs).forall {
-              case (l, r) => l.semanticEquals(r)
-            }
-          case c: ClusteredDistribution =>
-            expressions.forall(x => c.clustering.exists(_.semanticEquals(x)))
-          case _ => false
+  override def satisfies0(required: Distribution): Boolean = {
+    required match {
+      case h: HashClusteredDistribution =>
+        expressions.length == h.hashExprs.length && expressions.zip(h.hashExprs).forall {
+          case (l, r) => l.semanticEquals(r)
         }
-      }
+      case c: ClusteredDistribution =>
+        expressions.forall(x => c.clustering.exists(_.semanticEquals(x)))
+      case _ => false
     }
   }
 
@@ -241,17 +236,14 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  override def satisfies(required: Distribution): Boolean = {
-    super.satisfies(required) || {
-      required match {
-        case OrderedDistribution(requiredOrdering) =>
-          val minSize = Seq(requiredOrdering.size, ordering.size).min
-          requiredOrdering.take(minSize) == ordering.take(minSize)
-        case ClusteredDistribution(requiredClustering, requiredNumPartitions) =>
-          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
-            (requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions)
-        case _ => false
-      }
+  override def satisfies0(required: Distribution): Boolean = {
+    required match {
+      case OrderedDistribution(requiredOrdering) =>
+        val minSize = Seq(requiredOrdering.size, ordering.size).min
+        requiredOrdering.take(minSize) == ordering.take(minSize)
+      case ClusteredDistribution(requiredClustering, _) =>
+        ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+      case _ => false
     }
   }
 }
