@@ -317,7 +317,7 @@ object SparkBuild extends PomBuild {
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
+    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++ ExcludeDependencies.settings ++
       ExcludedDependencies.settings ++ Checkstyle.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
@@ -464,7 +464,20 @@ object DockerIntegrationTests {
  */
 object DependencyOverrides {
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
+    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1",
+    dependencyOverrides += "com.fasterxml.jackson.core" % "jackson-annotations" % "2.6.7",
+    dependencyOverrides += "com.fasterxml.jackson.core" % "jackson-core" % "2.6.7",
+    dependencyOverrides += "com.fasterxml.jackson.core" % "jackson-module-jaxb-annotations" % "2.6.7",
+    dependencyOverrides += "com.fasterxml.jackson.core" % "jackson-databind" % "2.6.7")
+}
+
+/**
+  * Exclusions to work around sbt's dependency resolution being different from Maven's.
+  */
+object ExcludeDependencies {
+  lazy val settings = Seq(
+    excludeDependencies += "com.fasterxml.jackson.jaxrs" % "jackson-jaxrs-json-provider",
+    excludeDependencies += "javax.ws.rs" % "jsr311-api")
 }
 
 /**

@@ -22,6 +22,7 @@ import java.io.{BufferedWriter, File, FileWriter}
 import scala.tools.nsc.Properties
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.VersionInfo
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark._
@@ -123,6 +124,7 @@ class HiveSparkSubmitSuite
   }
 
   test("SPARK-8020: set sql conf in spark conf") {
+    assume(VersionInfo.getVersion < "3.0.0", "Only Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SparkSQLConfTest.getClass.getName.stripSuffix("$"),

@@ -121,7 +121,7 @@
       <artifactId>avro</artifactId>
     </dependency>
     <!-- use the build matching the hadoop api of avro-mapred (i.e. no classifier for hadoop 1 API,
-    hadoop2 classifier for hadoop 2 API. avro-mapred is a dependency of org.spark-project.hive:hive-serde -->
+    hadoop2 classifier for hadoop 2 API. avro-mapred is a dependency of com.github.hyukjinkwon:hive-serde -->
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-mapred</artifactId>
