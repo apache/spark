@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import scala.language.existentials
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.util.VersionInfo
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -40,6 +41,7 @@ import org.apache.spark.util.Utils
 @ExtendedHiveTest
 class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with BeforeAndAfterEach
   with BeforeAndAfterAll {
+  assume(VersionInfo.getVersion < "3.0.0", "Only Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
 
   // Create a custom HiveExternalCatalog instance with the desired configuration. We cannot
   // use SparkSession here since there's already an active on managed by the TestHive object.
