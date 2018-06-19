@@ -46,7 +46,8 @@ public class JavaSparkContextSuite implements Serializable {
     new JavaSparkContext("local", "name", "sparkHome", jars).stop();
     new JavaSparkContext("local", "name", "sparkHome", jars, environment).stop();
 
-    JavaSparkContext sc = new JavaSparkContext(new SparkConf().setMaster("local[2]").setAppName("name"));
+    SparkConf conf = new SparkConf().setMaster("local[2]").setAppName("name");
+    JavaSparkContext sc = new JavaSparkContext(conf);
     assert sc.numCores() == 2;
     assert sc.numExecutors() == 1;
     sc.stop();
