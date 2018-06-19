@@ -30,6 +30,7 @@ import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.collection.unsafe.sort.*;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -118,7 +119,7 @@ public class RecordBinaryComparatorSuite {
   private long relativeOffset(int numFields) {
     // All the UnsafeRows in this suite contains less than 64 columns, so the bitSetSize shall
     // always be 8.
-    return 8 + numFields * 8;
+    return 8 + numFields * 8L;
   }
 
   @Test
