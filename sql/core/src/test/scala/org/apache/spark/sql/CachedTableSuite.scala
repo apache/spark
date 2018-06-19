@@ -803,24 +803,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(cachedData.collect === Seq(1001))
   }
 
-  test("SPARK-24596 Non-cascading Cache Invalidation") {
-    withTempView("t1", "t2", "t3") {
-      val rows = Seq(
-        Row("p1", 30), Row("p2", 20), Row("p3", 25),
-        Row("p4", 10), Row("p5", 40), Row("p6", 15))
-      val schema = new StructType().add("name", StringType).add("age", IntegerType)
+  test("SPARK-24596 Non-cascading Cache Invalidation - drop temporary view") {
+    withView("t1", "t2") {
+      sql("CACHE TABLE t1 AS SELECT * FROM testData WHERE key > 1")
+      sql("CACHE TABLE t2 as SELECT * FROM t1 WHERE value > 1")
 
-      val rdd = spark.sparkContext.parallelize(rows, 3)
-      val df = spark.createDataFrame(rdd, schema)
-      df.createOrReplaceTempView("t1")
-
-      spark.sql("cache table t2 as select * from t1 where age >= 25")
-      spark.sql("cache table t3 as select * from t2 where name = 'p1'")
-
+      assertCached(spark.table("t1"))
       assertCached(spark.table("t2"))
-      assertCached(spark.table("t3"))
-      spark.catalog.dropTempView("t2")
-      assertCached(spark.table("t3"))
+      sql("DROP VIEW t1")
+      assertCached(spark.table("t2"))
     }
   }
 }
