@@ -255,6 +255,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     assert(retriedStage.size === 1)
     assert(sc.dagScheduler.outputCommitCoordinator.isEmpty)
+    verify(sc.env.outputCommitCoordinator, times(2))
+      .stageStart(Matchers.eq(retriedStage.head), Matchers.any())
     verify(sc.env.outputCommitCoordinator).stageEnd(Matchers.eq(retriedStage.head))
   }
 }
