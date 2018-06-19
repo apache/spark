@@ -31,9 +31,9 @@ import org.apache.spark.util.Utils
 
 class SimpleInsertSource extends SchemaRelationProvider {
   override def createRelation(
-    sqlContext: SQLContext,
-    parameters: Map[String, String],
-    schema: StructType): BaseRelation = {
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: StructType): BaseRelation = {
     SimpleInsert(schema)(sqlContext.sparkSession)
   }
 }
