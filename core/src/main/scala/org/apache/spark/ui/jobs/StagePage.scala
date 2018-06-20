@@ -231,9 +231,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         }
       </script>
 
-    val metricsSummary = store.taskSummary(stageData.stageId, stageData.attemptId,
-      Array(0, 0.25, 0.5, 0.75, 1.0))
-
     val content =
       summary ++
       dagViz ++ <div id="showAdditionalMetrics"></div> ++

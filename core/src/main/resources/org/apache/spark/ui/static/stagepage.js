@@ -68,7 +68,16 @@ function stageEndPoint(appId) {
 }
 
 function sortNumber(a,b) {
-    return a - b;
+  return a - b;
+}
+
+function sortRecords(a,b) {
+  var aSplit = a.split("/");
+  var bSplit = b.split("/");
+  if (aSplit[0] == bSplit[0]) {
+    return aSplit[1] - bSplit[1];
+  }
+  return aSplit[0] - bSplit[0];
 }
 
 function quantile(array, percentile) {
@@ -109,7 +118,6 @@ $(document).ready(function () {
         $.getJSON(endPoint, function(response, status, jqXHR) {
 
             // prepare data for tasks table
-            console.log("hereeeeeeeeee 1 "+JSON.stringify(response[0].tasks[0]));
             var indices = Object.keys(response[0].tasks);
             var task_table = [];
             indices.forEach(function (ix) {
@@ -132,15 +140,38 @@ $(document).ready(function () {
             var resultSerializationTimeSummary = [];
             var gettingResultTimeSummary = [];
             var peakExecutionMemorySummary = [];
+            var inputSizeRecordsSummary = [];
+            var outputSizeRecordsSummary = [];
+            var shuffleWriteSizeRecordsSummary = [];
+            var shuffleSpillMemorySummary = [];
+            var shuffleSpillDiskSummary = [];
 
+            console.log("hereeeeeeeeee 1 "+task_table.length);
             task_table.forEach(function (x){
-                durationSummary.push(x.taskMetrics.executorRunTime);
+                if ("taskMetrics" in x) {
+                  durationSummary.push(x.taskMetrics.executorRunTime);
+                  taskDeserializationSummary.push(x.taskMetrics.executorDeserializeTime);
+                  resultSerializationTimeSummary.push(x.taskMetrics.resultSerializationTime);
+                  gcTimeSummary.push(x.taskMetrics.jvmGcTime);
+                  peakExecutionMemorySummary.push(x.taskMetrics.peakExecutionMemory);
+                  if (x.taskMetrics.inputMetrics.bytesRead > 0) {
+                    inputSizeRecordsSummary.push(x.taskMetrics.inputMetrics.bytesRead + "/" + x.taskMetrics.inputMetrics.recordsRead);
+                  }
+                  if (x.taskMetrics.outputMetrics.bytesWritten > 0) {
+                    outputSizeRecordsSummary.push(x.taskMetrics.outputMetrics.bytesWritten + "/" + x.taskMetrics.outputMetrics.recordsWritten);
+                  }
+                  if (x.taskMetrics.shuffleWriteMetrics.bytesWritten > 0) {
+                    shuffleWriteSizeRecordsSummary.push(x.taskMetrics.shuffleWriteMetrics.bytesWritten + "/" + x.taskMetrics.shuffleWriteMetrics.recordsWritten);
+                  }
+                  if (x.taskMetrics.memoryBytesSpilled > 0) {
+                    shuffleSpillMemorySummary.push(x.taskMetrics.memoryBytesSpilled);
+                  }
+                  if (x.taskMetrics.diskBytesSpilled > 0) {
+                    shuffleSpillDiskSummary.push(x.taskMetrics.diskBytesSpilled);
+                  }
+                }
                 schedulerDelaySummary.push(x.schedulerDelay);
-                taskDeserializationSummary.push(x.taskMetrics.executorDeserializeTime);
-                gcTimeSummary.push(x.taskMetrics.jvmGcTime);
-                resultSerializationTimeSummary.push(x.taskMetrics.resultSerializationTime);
                 gettingResultTimeSummary.push(x.gettingResultTime);
-                peakExecutionMemorySummary.push(x.taskMetrics.peakExecutionMemory);
             });
 
             var task_metrics_table = [];
@@ -154,18 +185,44 @@ $(document).ready(function () {
             task_metrics_table_all.push(resultSerializationTimeSummary);
             task_metrics_table_all.push(gettingResultTimeSummary);
             task_metrics_table_all.push(peakExecutionMemorySummary);
+            if (inputSizeRecordsSummary.length > 0) {
+              task_metrics_table_all.push(inputSizeRecordsSummary);
+              task_metrics_table_col.push("Input Size / Records");
+            }
+            if (outputSizeRecordsSummary.length > 0) {
+              task_metrics_table_all.push(outputSizeRecordsSummary);
+              task_metrics_table_col.push("Output Size / Records");
+            }
+            if (shuffleWriteSizeRecordsSummary.length > 0) {
+              task_metrics_table_all.push(shuffleWriteSizeRecordsSummary);
+              task_metrics_table_col.push("Shuffle Write Size / Records");
+            }
+            if (shuffleSpillMemorySummary.length > 0) {
+              task_metrics_table_all.push(shuffleSpillMemorySummary);
+              task_metrics_table_col.push("Shuffle spill (memory)");
+            }
+            if (shuffleSpillDiskSummary.length > 0) {
+              task_metrics_table_all.push(shuffleSpillDiskSummary);
+              task_metrics_table_col.push("Shuffle spill (disk)");
+            }
 
             for(i = 0; i < task_metrics_table_col.length; i++){
-                var task_sort_table = (task_metrics_table_all[i]).sort(sortNumber);
-                var row = {
-                    "metric": task_metrics_table_col[i],
-                    "p0": quantile(task_sort_table, 0),
-                    "p25": quantile(task_sort_table, 25),
-                    "p50": quantile(task_sort_table, 50),
-                    "p75": quantile(task_sort_table, 75),
-                    "p100": quantile(task_sort_table, 100)
-                };
-                task_metrics_table.push(row);
+              var task_sort_table;
+              if (task_metrics_table_col[i] == 'Input Size / Records' || task_metrics_table_col[i] == 'Output Size / Records'
+                  || task_metrics_table_col[i] == 'Shuffle Write Size / Records') {
+                task_sort_table = (task_metrics_table_all[i]).sort(sortRecords);
+              } else {
+                task_sort_table = (task_metrics_table_all[i]).sort(sortNumber);
+              }
+              var row = {
+                  "metric": task_metrics_table_col[i],
+                  "p0": quantile(task_sort_table, 0),
+                  "p25": quantile(task_sort_table, 25),
+                  "p50": quantile(task_sort_table, 50),
+                  "p75": quantile(task_sort_table, 75),
+                  "p100": quantile(task_sort_table, 100)
+              };
+              task_metrics_table.push(row);
             }
 
             // prepare data for accumulatorUpdates
@@ -206,27 +263,67 @@ $(document).ready(function () {
                         {data : 'metric'},
                         {
                             data: function (row, type) {
-                                return row.metric != 'Peak Execution Memory' ? (formatDuration(row.p0)) : formatBytes(row.p0, type);
+                                if (row.metric == 'Input Size / Records' || row.metric == 'Output Size / Records'
+                                    || row.metric == 'Shuffle Write Size / Records') {
+                                  var strarray = row.p0.split("/");
+                                  var str = formatBytes(strarray[0], type) + " / " + strarray[1];
+                                  return str;
+                                } else {
+                                  return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
+                                      || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.p0, type) : (formatDuration(row.p0));
+                                }
                             }
                         },
                         {
                             data: function (row, type) {
-                                return row.metric != 'Peak Execution Memory' ? (formatDuration(row.p25)) : formatBytes(row.p25, type);
+                                if (row.metric == 'Input Size / Records' || row.metric == 'Output Size / Records'
+                                    || row.metric == 'Shuffle Write Size / Records') {
+                                  var strarray = row.p25.split("/");
+                                  var str = formatBytes(strarray[0], type) + " / " + strarray[1];
+                                  return str;
+                                } else {
+                                  return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
+                                      || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.p25, type) : (formatDuration(row.p25));
+                                }
                             }
                         },
                         {
                             data: function (row, type) {
-                                return row.metric != 'Peak Execution Memory' ? (formatDuration(row.p50)) : formatBytes(row.p50, type);
+                                if (row.metric == 'Input Size / Records' || row.metric == 'Output Size / Records'
+                                    || row.metric == 'Shuffle Write Size / Records') {
+                                  var strarray = row.p50.split("/");
+                                  var str = formatBytes(strarray[0], type) + " / " + strarray[1];
+                                  return str;
+                                } else {
+                                  return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
+                                      || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.p50, type) : (formatDuration(row.p50));
+                                }
                             }
                         },
                         {
                             data: function (row, type) {
-                                return row.metric != 'Peak Execution Memory' ? (formatDuration(row.p75)) : formatBytes(row.p75, type);
+                                if (row.metric == 'Input Size / Records' || row.metric == 'Output Size / Records'
+                                    || row.metric == 'Shuffle Write Size / Records') {
+                                  var strarray = row.p75.split("/");
+                                  var str = formatBytes(strarray[0], type) + " / " + strarray[1];
+                                  return str;
+                                } else {
+                                  return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
+                                      || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.p75, type) : (formatDuration(row.p75));
+                                }
                             }
                         },
                         {
                             data: function (row, type) {
-                                return row.metric != 'Peak Execution Memory' ? (formatDuration(row.p100)) : formatBytes(row.p100, type);
+                                if (row.metric == 'Input Size / Records' || row.metric == 'Output Size / Records'
+                                    || row.metric == 'Shuffle Write Size / Records') {
+                                  var strarray = row.p100.split("/");
+                                  var str = formatBytes(strarray[0], type) + " / " + strarray[1];
+                                  return str;
+                                } else {
+                                  return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
+                                      || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.p100, type) : (formatDuration(row.p100));
+                                }
                             }
                         }
                     ],
@@ -268,32 +365,32 @@ $(document).ready(function () {
                         {data : "isBlacklistedForStage"},
                         {
                             data : function (row, type) {
-                                return row.inputRecords != 0 ? formatBytes(row.inputBytes/row.inputRecords) : 0;
+                                return row.inputRecords != 0 ? formatBytes(row.inputBytes, type) + " / " + row.inputRecords : 0;
                             }
                         },
                         {
                             data : function (row, type) {
-                                return row.outputRecords != 0 ? formatBytes(row.outputBytes/row.outputRecords) : 0;
+                                return row.outputRecords != 0 ? formatBytes(row.outputBytes, type) + " / " + row.outputRecords : 0;
                             }
                         },
                         {
                             data : function (row, type) {
-                                return row.shuffleReadRecords != 0 ? formatBytes(row.shuffleRead/row.shuffleReadRecords) : 0;
+                                return row.shuffleReadRecords != 0 ? formatBytes(row.shuffleRead, type) + " / " + row.shuffleReadRecords : 0;
                             }
                         },
                         {
                             data : function (row, type) {
-                                return row.shuffleWriteRecords != 0 ? formatBytes(row.shuffleWrite/row.shuffleWriteRecords) : 0;
+                                return row.shuffleWriteRecords != 0 ? formatBytes(row.shuffleWrite, type) + " / " + row.shuffleWriteRecords : 0;
                             }
                         },
                         {
                             data : function (row, type) {
-                                return typeof row.memoryBytesSpilled != 'undefined' ? formatBytes(row.memoryBytesSpilled) : "";
+                                return typeof row.memoryBytesSpilled != 'undefined' ? formatBytes(row.memoryBytesSpilled, type) : "";
                             }
                         },
                         {
                             data : function (row, type) {
-                                return typeof row.diskBytesSpilled != 'undefined' ? formatBytes(row.diskBytesSpilled) : "";
+                                return typeof row.diskBytesSpilled != 'undefined' ? formatBytes(row.diskBytesSpilled, type) : "";
                             }
                         }
                     ],
@@ -321,6 +418,8 @@ $(document).ready(function () {
                 var taskTable = "#active-tasks-table";
                 var task_conf = {
                     "data": task_table,
+                    //"serverSide": true,
+                    //"ajax": stageEndPoint(appId) + "/taskTable",
                     "columns": [
                         {data: function (row, type) {
                             return type !== 'display' ? (isNaN(row.index) ? 0 : row.index ) : row.index;
@@ -339,12 +438,20 @@ $(document).ready(function () {
                         {data : "launchTime", render: formatDate},
                         {
                             data : function (row, type) {
-                                return type === 'display' ? formatDuration(row.taskMetrics.executorRunTime) : row.taskMetrics.executorRunTime;
+                                if ("taskMetrics" in row) {
+                                    return type === 'display' ? formatDuration(row.taskMetrics.executorRunTime) : row.taskMetrics.executorRunTime;
+                                } else {
+                                    return "N/A";
+                                }
                             }
                         },
                         {
                             data : function (row, type) {
-                                return type === 'display' ? formatDuration(row.taskMetrics.jvmGcTime) : row.taskMetrics.jvmGcTime;
+                                if ("taskMetrics" in row) {
+                                    return type === 'display' ? formatDuration(row.taskMetrics.jvmGcTime) : row.taskMetrics.jvmGcTime;
+                                } else {
+                                    return "N/A";
+                                }
                             }
                         },
                         {
@@ -354,22 +461,38 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                return type === 'display' ? formatDuration(row.taskMetrics.executorDeserializeTime) : row.taskMetrics.executorDeserializeTime;
+                                if ("taskMetrics" in row) {
+                                    return type === 'display' ? formatDuration(row.taskMetrics.executorDeserializeTime) : row.taskMetrics.executorDeserializeTime;
+                                } else {
+                                    return "N/A";
+                                }
                             }
                         },
                         {
                             data : function (row, type) {
-                                return type === 'display' ? formatDuration(row.taskMetrics.shuffleReadMetrics.fetchWaitTime) : row.taskMetrics.shuffleReadMetrics.fetchWaitTime;
+                                if ("taskMetrics" in row) {
+                                    return type === 'display' ? formatDuration(row.taskMetrics.shuffleReadMetrics.fetchWaitTime) : row.taskMetrics.shuffleReadMetrics.fetchWaitTime;
+                                } else {
+                                    return "N/A";
+                                }
                             }
                         },
                         {
                             data : function (row, type) {
-                                return type === 'display' ? formatBytes(row.taskMetrics.shuffleReadMetrics.remoteBytesRead, type) : row.taskMetrics.shuffleReadMetrics.remoteBytesRead;
+                                if ("taskMetrics" in row) {
+                                    return type === 'display' ? formatBytes(row.taskMetrics.shuffleReadMetrics.remoteBytesRead, type) : row.taskMetrics.shuffleReadMetrics.remoteBytesRead;
+                                } else {
+                                    return "N/A";
+                                }
                             }
                         },
                         {
                             data : function (row, type) {
-                                return type === 'display' ? formatDuration(row.taskMetrics.resultSerializationTime) : row.taskMetrics.resultSerializationTime;
+                                if ("taskMetrics" in row) {
+                                    return type === 'display' ? formatDuration(row.taskMetrics.resultSerializationTime) : row.taskMetrics.resultSerializationTime;
+                                } else {
+                                    return "N/A";
+                                }
                             }
                         },
                         {
@@ -379,13 +502,107 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                return type === 'display' ? formatBytes(row.taskMetrics.peakExecutionMemory, type) : row.taskMetrics.peakExecutionMemory;
+                                if ("taskMetrics" in row) {
+                                    return type === 'display' ? formatBytes(row.taskMetrics.peakExecutionMemory, type) : row.taskMetrics.peakExecutionMemory;
+                                } else {
+                                    return "N/A";
+                                }
                             }
                         },
                         {
                             data : function (row, type) {
                                 if (accumulator_table.length > 0 && row.accumulatorUpdates.length > 0) {
                                     return row.accumulatorUpdates[0].name + ' : ' + row.accumulatorUpdates[0].update;
+                                } else {
+                                    return "";
+                                }
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                if ("taskMetrics" in row) {
+                                    if (row.taskMetrics.inputMetrics.bytesRead > 0) {
+                                        if (type === 'display') {
+                                            return formatBytes(row.taskMetrics.inputMetrics.bytesRead, type) + " / " + row.taskMetrics.inputMetrics.recordsRead;
+                                        } else {
+                                            return row.taskMetrics.inputMetrics.bytesRead + " / " + row.taskMetrics.inputMetrics.recordsRead;
+                                        }
+                                    } else {
+                                        return "";
+                                    }
+                                } else {
+                                    return "";
+                                }
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                if ("taskMetrics" in row) {
+                                    if (row.taskMetrics.outputMetrics.bytesWritten > 0) {
+                                        if (type === 'display') {
+                                            return formatBytes(row.taskMetrics.outputMetrics.bytesWritten, type) + " / " + row.taskMetrics.outputMetrics.recordsWritten;
+                                        } else {
+                                            return row.taskMetrics.outputMetrics.bytesWritten + " / " + row.taskMetrics.outputMetrics.recordsWritten;
+                                        }
+                                    } else {
+                                        return "";
+                                    }
+                                } else {
+                                    return "";
+                                }
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                if ("taskMetrics" in row) {
+                                    if (row.taskMetrics.shuffleWriteMetrics.writeTime > 0) {
+                                        return type === 'display' ? formatDuration(row.taskMetrics.shuffleWriteMetrics.writeTime) : row.taskMetrics.shuffleWriteMetrics.writeTime;
+                                    } else {
+                                        return "";
+                                    }
+                                } else {
+                                    return "";
+                                }
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                if ("taskMetrics" in row) {
+                                    if (row.taskMetrics.shuffleWriteMetrics.bytesWritten > 0) {
+                                        if (type === 'display') {
+                                            return formatBytes(row.taskMetrics.shuffleWriteMetrics.bytesWritten, type) + " / " + row.taskMetrics.shuffleWriteMetrics.recordsWritten;
+                                        } else {
+                                            return row.taskMetrics.shuffleWriteMetrics.bytesWritten + " / " + row.taskMetrics.shuffleWriteMetrics.recordsWritten;
+                                        }
+                                    } else {
+                                        return "";
+                                    }
+                                } else {
+                                    return "";
+                                }
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                if ("taskMetrics" in row) {
+                                    if (row.taskMetrics.memoryBytesSpilled > 0) {
+                                        return type === 'display' ? formatBytes(row.taskMetrics.memoryBytesSpilled, type) : row.taskMetrics.memoryBytesSpilled;
+                                    } else {
+                                        return "";
+                                    }
+                                } else {
+                                    return "";
+                                }
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                if ("taskMetrics" in row) {
+                                    if (row.taskMetrics.diskBytesSpilled > 0) {
+                                        return type === 'display' ? formatBytes(row.taskMetrics.diskBytesSpilled, type) : row.taskMetrics.diskBytesSpilled;
+                                    } else {
+                                        return "";
+                                    }
                                 } else {
                                     return "";
                                 }
@@ -413,7 +630,13 @@ $(document).ready(function () {
                         { "visible": false, "targets": 14 },
                         { "visible": false, "targets": 15 },
                         { "visible": false, "targets": 16 },
-                        { "visible": false, "targets": 17 }
+                        { "visible": false, "targets": 17 },
+                        { "visible": false, "targets": 18 },
+                        { "visible": false, "targets": 19 },
+                        { "visible": false, "targets": 20 },
+                        { "visible": false, "targets": 21 },
+                        { "visible": false, "targets": 22 },
+                        { "visible": false, "targets": 23 }
                     ],
                     "order": [[0, "asc"]]
                 };
@@ -453,8 +676,8 @@ $(document).ready(function () {
                 });
 
                 // title number and toggle list
-                $("#summaryMetricsTitle").html("Summary Metrics for " + "<a href='#tasksTitle'>" + task_table.length + " Completed Tasks" + "</a>");
-                $("#tasksTitle").html("Task (" + task_table.length + ")");
+                $("#summaryMetricsTitle").html("Summary Metrics for " + "<a href='#tasksTitle'>" + response[0].numCompleteTasks + " Completed Tasks" + "</a>");
+                $("#tasksTitle").html("Task (" + response[0].numCompleteTasks + ")");
 
                 // hide or show the accumulate update table
                 if (accumulator_table.length == 0) {
@@ -462,6 +685,25 @@ $(document).ready(function () {
                 } else {
                     taskTableSelector.column(17).visible(true);
                     $("#accumulator-update-table").show();
+                }
+
+                if (inputSizeRecordsSummary.length > 0) {
+                    taskTableSelector.column(18).visible(true);
+                }
+                if (outputSizeRecordsSummary.length > 0) {
+                    taskTableSelector.column(19).visible(true);
+                }
+                if (shuffleWriteSizeRecordsSummary.length > 0) {
+                    taskTableSelector.column(20).visible(true);
+                }
+                if (shuffleWriteSizeRecordsSummary.length > 0) {
+                    taskTableSelector.column(21).visible(true);
+                }
+                if (shuffleSpillMemorySummary.length > 0) {
+                    taskTableSelector.column(22).visible(true);
+                }
+                if (shuffleSpillDiskSummary.length > 0) {
+                    taskTableSelector.column(23).visible(true);
                 }
             });
         });

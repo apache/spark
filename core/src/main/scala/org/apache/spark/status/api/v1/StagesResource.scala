@@ -44,20 +44,18 @@ private[v1] class StagesResource extends BaseAppResource {
       var ret = ui.store.stageData(stageId, details = details)
       if (ret.nonEmpty) {
         for (i <- 0 to (ret.length - 1)) {
-          val executorIdArray = ret(i).executorSummary.get.keys.toArray
+          var executorIdArray = ret(i).executorSummary.get.keys.toArray
           for (execId <- executorIdArray) {
-            val executorLogs = ui.store.executorSummary(execId).executorLogs
-            val hostPort = ui.store.executorSummary(execId).hostPort
-            val taskDataArray = ret(i).tasks.get.keys.toArray
-            val executorStageSummaryArray = ret(i).executorSummary.get.keys.toArray
+            var executorLogs = ui.store.executorSummary(execId).executorLogs
+            var hostPort = ui.store.executorSummary(execId).hostPort
+            var taskDataArray = ret(i).tasks.get.keys.toArray
+            var executorStageSummaryArray = ret(i).executorSummary.get.keys.toArray
+            ret(i).executorSummary.get.get(execId).get.executorLogs = executorLogs
+            ret(i).executorSummary.get.get(execId).get.hostPort = hostPort
             for (taskData <- taskDataArray) {
               ret(i).tasks.get.get(taskData).get.executorLogs = executorLogs
               ret(i).tasks.get.get(taskData).get.schedulerDelay = AppStatusUtils.schedulerDelay(ret(i).tasks.get.get(taskData).get)
               ret(i).tasks.get.get(taskData).get.gettingResultTime = AppStatusUtils.gettingResultTime(ret(i).tasks.get.get(taskData).get)
-            }
-            for (executorStageSummary <- executorStageSummaryArray) {
-              ret(i).executorSummary.get.get(executorStageSummary).get.executorLogs = executorLogs
-              ret(i).executorSummary.get.get(executorStageSummary).get.hostPort = hostPort
             }
           }
         }
@@ -120,5 +118,40 @@ private[v1] class StagesResource extends BaseAppResource {
       @DefaultValue("ID") @QueryParam("sortBy") sortBy: TaskSorting): Seq[TaskData] = {
     withUI(_.store.taskList(stageId, stageAttemptId, offset, length, sortBy))
   }
+
+  /*@GET
+  @Path("{stageId: \\d+}/taskTable")
+  def taskTable(
+    @PathParam("stageId") stageId: Int,
+    @QueryParam("details") @DefaultValue("true") details: Boolean): Map[String, TaskData] = {
+    withUI { ui =>
+      var ret = ui.store.stageData(stageId, details = details)
+      if (ret.nonEmpty) {
+        for (i <- 0 to (ret.length - 1)) {
+          var executorIdArray = ret(i).executorSummary.get.keys.toArray
+          for (execId <- executorIdArray) {
+            var executorLogs = ui.store.executorSummary(execId).executorLogs
+            var hostPort = ui.store.executorSummary(execId).hostPort
+            var taskDataArray = ret(i).tasks.get.keys.toArray
+            var executorStageSummaryArray = ret(i).executorSummary.get.keys.toArray
+            ret(i).executorSummary.get.get(execId).get.executorLogs = executorLogs
+            ret(i).executorSummary.get.get(execId).get.hostPort = hostPort
+            for (taskData <- taskDataArray) {
+              ret(i).tasks.get.get(taskData).get.executorLogs = executorLogs
+              ret(i).tasks.get.get(taskData).get.schedulerDelay = AppStatusUtils.schedulerDelay(ret(i).tasks.get.get(taskData).get)
+              ret(i).tasks.get.get(taskData).get.gettingResultTime = AppStatusUtils.gettingResultTime(ret(i).tasks.get.get(taskData).get)
+            }
+          }
+        }
+        var ret1:Map[String, TaskData] = Map()
+        ret(0).tasks.get.keys.foreach({ i =>
+            ret1 += (i.toString -> ret(0).tasks.get(i))
+        })
+        ret1
+      } else {
+        throw new NotFoundException(s"unknown stage: $stageId")
+      }
+    }
+  }*/
 
 }
