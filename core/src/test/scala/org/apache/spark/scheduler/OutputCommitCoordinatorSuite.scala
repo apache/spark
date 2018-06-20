@@ -225,6 +225,18 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       ExecutorLostFailure("0", exitCausedByApp = true, None))
     assert(!outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
     assert(outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
+
+    // Commit the 1st attempt, fail the 2nd attempt, make sure 3rd attempt cannot commit,
+    // then fail the 1st attempt and make sure the 4th one can commit again.
+    stage += 1
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
+    outputCommitCoordinator.taskCompleted(stage, 2, partition, taskAttempt,
+      ExecutorLostFailure("0", exitCausedByApp = true, None))
+    assert(!outputCommitCoordinator.canCommit(stage, 3, partition, taskAttempt))
+    outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
+      ExecutorLostFailure("0", exitCausedByApp = true, None))
+    assert(outputCommitCoordinator.canCommit(stage, 4, partition, taskAttempt))
   }
 
   test("SPARK-24589: Make sure stage state is cleaned up") {
