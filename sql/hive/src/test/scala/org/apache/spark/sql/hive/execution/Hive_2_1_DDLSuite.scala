@@ -67,13 +67,6 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
     new HiveExternalCatalog(sparkConf, hadoopConf)
   }
 
-  override def afterEach: Unit = {
-    catalog.listTables("default").foreach { t =>
-      catalog.dropTable("default", t, true, false)
-    }
-    spark.sessionState.catalog.reset()
-  }
-
   override def afterAll(): Unit = {
     try {
       catalog = null
@@ -84,7 +77,14 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
 
   private def test_2_1(title: String)(func: => Unit): Unit = test(title) {
     assume(VersionInfo.getVersion < "3.0.0", "Only Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
-    func
+    try {
+      func
+    } finally {
+      catalog.listTables("default").foreach { t =>
+        catalog.dropTable("default", t, true, false)
+      }
+      spark.sessionState.catalog.reset()
+    }
   }
 
   test_2_1("SPARK-21617: ALTER TABLE for non-compatible DataSource tables") {

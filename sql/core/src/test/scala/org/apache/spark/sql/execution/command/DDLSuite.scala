@@ -22,6 +22,7 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.VersionInfo
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
@@ -2697,6 +2698,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
 
     test(s"basic DDL using locale tr - caseSensitive $caseSensitive") {
+      // There seems a bug about dealing with non-ascii compatible characters in file names
+      // for the usage of File.toPath() in few specific JDKs, which looks updated in HADOOP-12045
+      // for local file systems specifically. This affects Hadoop 2.8.0+ per the JIRA.
+      // See https://stackoverflow.com/questions/37409379/invalidpathexception-for-chinese-filename
+      assume(VersionInfo.getVersion < "2.8.0")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
         withLocale("tr") {
           val dbName = "DaTaBaSe_I"

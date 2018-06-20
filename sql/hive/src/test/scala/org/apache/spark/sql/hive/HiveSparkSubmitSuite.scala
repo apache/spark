@@ -161,6 +161,7 @@ class HiveSparkSubmitSuite
   }
 
   test("SPARK-9757 Persist Parquet relation with decimal column") {
+    assume(VersionInfo.getVersion < "3.0.0", "Only Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
@@ -252,6 +253,7 @@ class HiveSparkSubmitSuite
   }
 
   test("SPARK-16901: set javax.jdo.option.ConnectionURL") {
+    assume(VersionInfo.getVersion < "3.0.0", "Only Hive 2.3+ supports Hadoop 3+. See HIVE-16081.")
     // In this test, we set javax.jdo.option.ConnectionURL and set metastore version to
     // 0.13. This test will make sure that javax.jdo.option.ConnectionURL will not be
     // overridden by hive's default settings when we create a HiveConf object inside
