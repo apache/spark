@@ -316,13 +316,13 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
   }
 
   /**
-    * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
-    * consistent result regardless of the evaluation method we use. If an exception is thrown,
-    * it checks that both modes throw the same exception.
-    *
-    * This method test against binary expressions by feeding them arbitrary literals of `dataType1`
-    * and `dataType2`.
-    */
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use. If an exception is thrown,
+   * it checks that both modes throw the same exception.
+   *
+   * This method test against binary expressions by feeding them arbitrary literals of `dataType1`
+   * and `dataType2`.
+   */
   def checkConsistencyBetweenInterpretedAndCodegenAllowingException(
       c: (Expression, Expression) => Expression,
       dataType1: DataType,
