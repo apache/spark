@@ -431,6 +431,12 @@ object CatalystTypeConverters {
         map,
         (key: Any) => convertToCatalyst(key),
         (value: Any) => convertToCatalyst(value))
+    case (keys: Array[_], values: Array[_]) =>
+      // case for mapdata with duplicate keys
+      new ArrayBasedMapData(
+        new GenericArrayData(keys.map(convertToCatalyst)),
+        new GenericArrayData(values.map(convertToCatalyst))
+      )
     case other => other
   }
 

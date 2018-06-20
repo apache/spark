@@ -508,13 +508,15 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
  * Returns the union of all the given maps.
  */
 @ExpressionDescription(
-usage = "_FUNC_(map, ...) - Returns the union of all the given maps",
-examples = """
+  usage = "_FUNC_(map, ...) - Returns the union of all the given maps",
+  examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
-       [[1 -> "a"], [2 -> "c"], [3 -> "d"]
+       [[1 -> "a"], [2 -> "b"], [2 -> "c"], [3 -> "d"]]
   """, since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends Expression {
+
+  private val MAX_MAP_SIZE: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
   override def checkInputDataTypes(): TypeCheckResult = {
     // check key types and value types separately to allow valueContainsNull to vary
@@ -522,14 +524,6 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
       TypeCheckResult.TypeCheckFailure(
         s"The given input of function $prettyName should all be of type map, " +
           "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else if (children.map(_.dataType.asInstanceOf[MapType].keyType)
-      .exists(_.isInstanceOf[MapType])) {
-      // map_concat needs to pick a winner when multiple maps contain the same key. map_concat
-      // can do that only if it can detect when two keys are the same. SPARK-9415 states "map type
-      // should not support equality, hash". As a result, map_concat does not support a map type
-      // as a key
-      TypeCheckResult.TypeCheckFailure(
-        s"The given input maps of function $prettyName cannot have a map type as a key")
     } else if (children.map(_.dataType.asInstanceOf[MapType].keyType).distinct.length > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The given input maps of function $prettyName should all be the same type, " +
@@ -549,120 +543,177 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
         .map(_.dataType.asInstanceOf[MapType].keyType).getOrElse(StringType),
       valueType = children.headOption
         .map(_.dataType.asInstanceOf[MapType].valueType).getOrElse(StringType),
-      valueContainsNull = children.map { c =>
-        c.dataType.asInstanceOf[MapType]
-      }.exists(_.valueContainsNull)
+      valueContainsNull = children.map(_.dataType.asInstanceOf[MapType])
+        .exists(_.valueContainsNull)
     )
   }
 
   override def nullable: Boolean = children.exists(_.nullable)
 
   override def eval(input: InternalRow): Any = {
-    val union = new util.LinkedHashMap[Any, Any]()
-    children.map(_.eval(input)).foreach { raw =>
-      if (raw == null) {
-        return null
-      }
-      val map = raw.asInstanceOf[MapData]
-      map.foreach(dataType.keyType, dataType.valueType, (k, v) =>
-        union.put(k, v)
-      )
+    val maps = children.map(_.eval(input))
+    if (maps.contains(null)) {
+      return null
     }
-    ArrayBasedMapData(union, (k: Any) => k, (v: Any) => v)
+    val keyArrayDatas = maps.map(_.asInstanceOf[MapData].keyArray())
+    val valueArrayDatas = maps.map(_.asInstanceOf[MapData].valueArray())
+
+    val numElements = keyArrayDatas.foldLeft(0L)((sum, ad) => sum + ad.numElements())
+    if (numElements > MAX_MAP_SIZE) {
+      throw new RuntimeException(s"Unsuccessful attempt to concat maps with $numElements" +
+        s" elements due to exceeding the map size limit" +
+        s" $MAX_MAP_SIZE.")
+    }
+    val finalKeyArray = new Array[AnyRef](numElements.toInt)
+    val finalValueArray = new Array[AnyRef](numElements.toInt)
+    var position = 0
+    for (i <- keyArrayDatas.indices) {
+      val keyArray = keyArrayDatas(i).toObjectArray(dataType.keyType)
+      val valueArray = valueArrayDatas(i).toObjectArray(dataType.valueType)
+      Array.copy(keyArray, 0, finalKeyArray, position, keyArray.length)
+      Array.copy(valueArray, 0, finalValueArray, position, valueArray.length)
+      position += keyArray.length
+    }
+
+    new ArrayBasedMapData(new GenericArrayData(finalKeyArray),
+      new GenericArrayData(finalValueArray))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val mapCodes = children.map(c => c.genCode(ctx))
+    val mapCodes = children.map(_.genCode(ctx))
     val keyType = dataType.keyType
     val valueType = dataType.valueType
-    val mapRefArrayName = ctx.freshName("mapRefArray")
-    val unionMapName = ctx.freshName("union")
+    val argsName = ctx.freshName("args")
+    val keyArgsName = ctx.freshName("keyArgs")
+    val valArgsName = ctx.freshName("valArgs")
 
     val mapDataClass = classOf[MapData].getName
     val arrayBasedMapDataClass = classOf[ArrayBasedMapData].getName
     val arrayDataClass = classOf[ArrayData].getName
-    val genericArrayDataClass = classOf[GenericArrayData].getName
-    val hashMapClass = classOf[util.LinkedHashMap[Any, Any]].getName
-    val entryClass = classOf[util.Map.Entry[Any, Any]].getName
 
     val init =
       s"""
-        |$mapDataClass[] $mapRefArrayName = new $mapDataClass[${mapCodes.size}];
+        |$mapDataClass[] $argsName = new $mapDataClass[${mapCodes.size}];
+        |$arrayDataClass[] $keyArgsName = new $arrayDataClass[${mapCodes.size}];
+        |$arrayDataClass[] $valArgsName = new $arrayDataClass[${mapCodes.size}];
         |boolean ${ev.isNull} = false;
         |$mapDataClass ${ev.value} = null;
       """.stripMargin
 
     val assignments = mapCodes.zipWithIndex.map { case (m, i) =>
-      val initCode = m.code
-      val valueVarName = m.value.code
       s"""
-         |$initCode
-         |$mapRefArrayName[$i] = $valueVarName;
+         |${m.code}
+         |$argsName[$i] = ${m.value.code};
        """.stripMargin
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignments,
       funcName = "mapConcat",
-      extraArguments = (s"${mapDataClass}[]", mapRefArrayName) :: Nil)
+      extraArguments = (s"${mapDataClass}[]", argsName) :: Nil)
 
-    val index1Name = ctx.freshName("idx1")
-    val index2Name = ctx.freshName("idx2")
-    val mapDataName = ctx.freshName("m")
-    val kaName = ctx.freshName("ka")
-    val vaName = ctx.freshName("va")
-    val keyName = ctx.freshName("key")
-    val valueName = ctx.freshName("value")
+    val idxName = ctx.freshName("idx")
+    val numElementsName = ctx.freshName("numElems")
+    val finKeysName = ctx.freshName("finalKeys")
+    val finValsName = ctx.freshName("finalValues")
+
+    val keyConcatenator = if (CodeGenerator.isPrimitiveType(keyType)) {
+      genCodeForPrimitiveArrays(ctx, keyType)
+    } else {
+      genCodeForNonPrimitiveArrays(ctx, keyType)
+    }
+
+    val valueConcatenator = if (CodeGenerator.isPrimitiveType(valueType)) {
+      genCodeForPrimitiveArrays(ctx, valueType)
+    } else {
+      genCodeForNonPrimitiveArrays(ctx, valueType)
+    }
 
     val mapMerge =
       s"""
-        |$hashMapClass<Object, Object> $unionMapName = new $hashMapClass<Object, Object>();
-        |for (int $index1Name = 0; $index1Name < $mapRefArrayName.length; $index1Name++) {
-        |  $mapDataClass $mapDataName = $mapRefArrayName[$index1Name];
-        |  if ($mapDataName == null) {
+        |long $numElementsName = 0;
+        |for (int $idxName = 0; $idxName < $argsName.length; $idxName++) {
+        |  if ($argsName[$idxName] == null) {
         |    ${ev.isNull} = true;
         |    break;
         |  }
-        |  $arrayDataClass $kaName = $mapDataName.keyArray();
-        |  $arrayDataClass $vaName = $mapDataName.valueArray();
-        |  for (int $index2Name = 0; $index2Name < $kaName.numElements(); $index2Name++) {
-        |    Object $keyName = ${CodeGenerator.getValue(kaName, keyType, index2Name)};
-        |    Object $valueName = null;
-        |    if (!${vaName}.isNullAt($index2Name)) {
-        |      $valueName = ${CodeGenerator.getValue(vaName, valueType, index2Name)};
-        |    }
-        |    $unionMapName.put($keyName, $valueName);
+        |  $keyArgsName[$idxName] = $argsName[$idxName].keyArray();
+        |  $valArgsName[$idxName] = $argsName[$idxName].valueArray();
+        |  $numElementsName += $argsName[$idxName].numElements();
+        |}
+        |
+        |if (!${ev.isNull}) {
+        |  if ($numElementsName > $MAX_MAP_SIZE) {
+        |    throw new RuntimeException("Unsuccessful attempt to concat maps with " +
+        |       $numElementsName + " elements due to exceeding the map size limit $MAX_MAP_SIZE.");
         |  }
+        |  $arrayDataClass $finKeysName = $keyConcatenator.concat($keyArgsName,
+        |    (int) $numElementsName);
+        |  $arrayDataClass $finValsName = $valueConcatenator.concat($valArgsName,
+        |    (int) $numElementsName);
+        |  ${ev.value} = new $arrayBasedMapDataClass($finKeysName, $finValsName);
         |}
       """.stripMargin
 
-    val mergedKeyArrayName = ctx.freshName("keyArray")
-    val mergedValueArrayName = ctx.freshName("valueArray")
-    val entrySetName = ctx.freshName("entrySet")
-    val createMapData =
-      s"""
-        |Object[] $entrySetName = $unionMapName.entrySet().toArray();
-        |Object[] $mergedKeyArrayName = new Object[$entrySetName.length];
-        |Object[] $mergedValueArrayName = new Object[$entrySetName.length];
-        |for (int $index1Name = 0; $index1Name < $entrySetName.length; $index1Name++) {
-        |  $entryClass<Object, Object> entry =
-        |     ($entryClass<Object, Object>) $entrySetName[$index1Name];
-        |  $mergedKeyArrayName[$index1Name] = entry.getKey();
-        |  $mergedValueArrayName[$index1Name] = entry.getValue();
-        |}
-        |${ev.value} =
-        |  new $arrayBasedMapDataClass(new $genericArrayDataClass($mergedKeyArrayName),
-        |  new $genericArrayDataClass($mergedValueArrayName));
-      """.stripMargin
     ev.copy(
       code = code"""
         |$init
         |$codes
         |$mapMerge
-        |if (!${ev.isNull}) {
-        |  $createMapData
-        |}
       """.stripMargin)
+  }
+
+  private def genCodeForPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
+    val counter = ctx.freshName("counter")
+    val arrayData = ctx.freshName("arrayData")
+    val argsName = ctx.freshName("args")
+    val numElemName = ctx.freshName("numElements")
+    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+
+    s"""
+       |new Object() {
+       |  public ArrayData concat(${classOf[ArrayData].getName}[] $argsName, int $numElemName) {
+       |    ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
+       |    int $counter = 0;
+       |    for (int y = 0; y < ${children.length}; y++) {
+       |      for (int z = 0; z < $argsName[y].numElements(); z++) {
+       |        if ($argsName[y].isNullAt(z)) {
+       |          $arrayData.setNullAt($counter);
+       |        } else {
+       |          $arrayData.set$primitiveValueTypeName(
+       |            $counter,
+       |            ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")}
+       |          );
+       |        }
+       |        $counter++;
+       |      }
+       |    }
+       |    return $arrayData;
+       |  }
+       |}""".stripMargin.stripPrefix("\n")
+  }
+
+  private def genCodeForNonPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
+    val genericArrayClass = classOf[GenericArrayData].getName
+    val arrayData = ctx.freshName("arrayObjects")
+    val counter = ctx.freshName("counter")
+    val argsName = ctx.freshName("args")
+    val numElemName = ctx.freshName("numElements")
+
+    s"""
+       |new Object() {
+       |  public ArrayData concat(${classOf[ArrayData].getName}[] $argsName, int $numElemName) {;
+       |    Object[] $arrayData = new Object[$numElemName];
+       |    int $counter = 0;
+       |    for (int y = 0; y < ${children.length}; y++) {
+       |      for (int z = 0; z < $argsName[y].numElements(); z++) {
+       |        $arrayData[$counter] = ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")};
+       |        $counter++;
+       |      }
+       |    }
+       |    return new $genericArrayClass($arrayData);
+       |  }
+       |}""".stripMargin.stripPrefix("\n")
   }
 
   override def prettyName: String = "map_concat"
