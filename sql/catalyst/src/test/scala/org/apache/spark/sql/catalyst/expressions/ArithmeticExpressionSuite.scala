@@ -59,7 +59,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Add, tpe, tpe)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(Add, tpe, tpe)
     }
   }
 
@@ -100,7 +100,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Subtract, tpe, tpe)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(Subtract, tpe, tpe)
     }
   }
 
@@ -118,7 +118,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Multiply(positiveLongLit, negativeLongLit), positiveLong * negativeLong)
 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Multiply, tpe, tpe)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(Multiply, tpe, tpe)
     }
   }
 
@@ -353,5 +353,23 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     val ctx2 = new CodegenContext()
     Greatest(Seq(Literal(1), Literal(1))).genCode(ctx2)
     assert(ctx2.inlinedMutableStates.size == 1)
+  }
+
+  test("SPARK-24598: overflow on BigInt returns wrong result") {
+    val maxLongLiteral = Literal(Long.MaxValue)
+    val minLongLiteral = Literal(Long.MinValue)
+    checkExceptionInExpression[ArithmeticException](
+      Add(maxLongLiteral, Literal(1L)), "caused overflow")
+    checkExceptionInExpression[ArithmeticException](
+      Subtract(maxLongLiteral, Literal(-1L)), "caused overflow")
+    checkExceptionInExpression[ArithmeticException](
+      Multiply(maxLongLiteral, Literal(2L)), "caused overflow")
+
+    checkExceptionInExpression[ArithmeticException](
+      Add(minLongLiteral, minLongLiteral), "caused overflow")
+    checkExceptionInExpression[ArithmeticException](
+      Subtract(minLongLiteral, maxLongLiteral), "caused overflow")
+    checkExceptionInExpression[ArithmeticException](
+      Multiply(minLongLiteral, minLongLiteral), "caused overflow")
   }
 }

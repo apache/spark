@@ -128,17 +128,31 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
   def calendarIntervalMethod: String =
     sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
 
+  def checkOverflowCode(result: String, op1: String, op2: String): String =
+    sys.error("BinaryArithmetics must override either checkOverflowCode or genCode")
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
     case CalendarIntervalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$calendarIntervalMethod($eval2)")
+    // In the following cases, overflow can happen, so we need to check the result is valid.
+    // Otherwise we throw an ArithmeticException
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
-      defineCodeGen(ctx, ev,
-        (eval1, eval2) => s"(${CodeGenerator.javaType(dataType)})($eval1 $symbol $eval2)")
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+           |${ev.value} = (${CodeGenerator.javaType(dataType)})($eval1 $symbol $eval2);
+           |${checkOverflowCode(ev.value, eval1, eval2)}
+         """.stripMargin
+      })
     case _ =>
-      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+           |${ev.value} = $eval1 $symbol $eval2;
+           |${checkOverflowCode(ev.value, eval1, eval2)}
+         """.stripMargin
+      })
   }
 }
 
@@ -169,8 +183,24 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
     if (dataType.isInstanceOf[CalendarIntervalType]) {
       input1.asInstanceOf[CalendarInterval].add(input2.asInstanceOf[CalendarInterval])
     } else {
-      numeric.plus(input1, input2)
+      val result = numeric.plus(input1, input2)
+      val resSignum = numeric.signum(result)
+      val input1Signum = numeric.signum(input1)
+      val input2Signum = numeric.signum(input2)
+      if (resSignum != -1 && input1Signum == -1 && input2Signum == -1
+          || resSignum != 1 && input1Signum == 1 && input2Signum == 1) {
+        throw new ArithmeticException(s"$input1 + $input2 caused overflow.")
+      }
+      result
     }
+  }
+
+  override def checkOverflowCode(result: String, op1: String, op2: String): String = {
+    s"""
+       |if ($result >= 0 && $op1 < 0 && $op2 < 0 || $result <= 0 && $op1 > 0 && $op2 > 0) {
+       |  throw new ArithmeticException($op1 + " + " + $op2 + " caused overflow.");
+       |}
+     """.stripMargin
   }
 }
 
@@ -197,8 +227,24 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
     if (dataType.isInstanceOf[CalendarIntervalType]) {
       input1.asInstanceOf[CalendarInterval].subtract(input2.asInstanceOf[CalendarInterval])
     } else {
-      numeric.minus(input1, input2)
+      val result = numeric.minus(input1, input2)
+      val resSignum = numeric.signum(result)
+      val input1Signum = numeric.signum(input1)
+      val input2Signum = numeric.signum(input2)
+      if (resSignum != 1 && input1Signum == 1 && input2Signum == -1
+          || resSignum != -1 && input1Signum == -1 && input2Signum == 1) {
+        throw new ArithmeticException(s"$input1 - $input2 caused overflow.")
+      }
+      result
     }
+  }
+
+  override def checkOverflowCode(result: String, op1: String, op2: String): String = {
+    s"""
+       |if ($result <= 0 && $op1 > 0 && $op2 < 0 || $result >= 0 && $op1 < 0 && $op2 > 0) {
+       |  throw new ArithmeticException($op1 + " - " + $op2 + " caused overflow.");
+       |}
+     """.stripMargin
   }
 }
 
@@ -218,7 +264,21 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val result = numeric.times(input1, input2)
+    if (numeric.signum(result) != numeric.signum(input1) * numeric.signum(input2)) {
+      throw new ArithmeticException(s"$input1 * $input2 caused overflow.")
+    }
+    result
+  }
+
+  override def checkOverflowCode(result: String, op1: String, op2: String): String = {
+    s"""
+       |if (Math.signum($result) != Math.signum($op1) * Math.signum($op2)) {
+       |  throw new ArithmeticException($op1 + " * " + $op2 + " caused overflow.");
+       |}
+     """.stripMargin
+  }
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
