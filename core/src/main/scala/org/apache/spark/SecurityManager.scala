@@ -328,7 +328,6 @@ private[spark] class SecurityManager(
         .orElse(Option(secretKey))
         .orElse(Option(sparkConf.getenv(ENV_AUTH_SECRET)))
         .orElse(sparkConf.getOption(SPARK_AUTH_SECRET_CONF))
-        .orElse(Option(hadoopConf.getPassword(SPARK_AUTH_SECRET_CONF)).map(new String(_)))
         .getOrElse {
           throw new IllegalArgumentException(
             s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config")

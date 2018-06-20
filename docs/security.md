@@ -177,7 +177,7 @@ ACLs can be configured for either users or groups. Configuration entries accept 
 lists as input, meaning multiple users or groups can be given the desired privileges. This can be
 used if you run on a shared cluster and have a set of administrators or developers who need to
 monitor applications they may not have started themselves. A wildcard (`*`) added to specific ACL
-means that all users will have the respective pivilege. By default, only the user submitting the
+means that all users will have the respective privilege. By default, only the user submitting the
 application is added to the ACLs.
 
 Group membership is established by using a configurable group mapping provider. The mapper is
@@ -445,6 +445,18 @@ replaced with one of the above namespaces.
     <td>The type of the trust store.</td>
   </tr>
 </table>
+
+Spark also supports retrieving `${ns}.keyPassword`, `${ns}.keyStorePassword` and `${ns}.trustStorePassword` from
+[Hadoop Credential Providers](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/CredentialProviderAPI.html).
+User could store password into credential file and make it accessible by different components, like:
+
+```
+hadoop credential create spark.ssl.keyPassword -value password \
+    -provider jceks://hdfs@nn1.example.com:9001/user/backup/ssl.jceks
+```
+
+In the meantime, adding configuration "hadoop.security.credential.provider.path=jceks://hdfs@nn1.example.com:9001/user/backup/ssl.jceks"
+into Spark's Hadoop configuration to make it aware of credential provider path.
 
 ## Preparing the key stores
 

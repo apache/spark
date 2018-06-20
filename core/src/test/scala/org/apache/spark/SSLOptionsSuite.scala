@@ -18,9 +18,11 @@
 package org.apache.spark
 
 import java.io.File
+import java.util.UUID
 import javax.net.ssl.SSLContext
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.alias.{CredentialProvider, CredentialProviderFactory}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.util.SparkConfWithEnv
@@ -154,4 +156,60 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(opts.trustStore === Some(new File("val2")))
   }
 
+  test("get password from Hadoop credential provider") {
+    val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
+    val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
+
+    val conf = new SparkConf
+    val hadoopConf = new Configuration()
+    val tmpPath = s"localjceks://file${sys.props("java.io.tmpdir")}/test-" +
+      s"${UUID.randomUUID().toString}.jceks"
+    val provider = createCredentialProvider(tmpPath, hadoopConf)
+
+    conf.set("spark.ssl.enabled", "true")
+    conf.set("spark.ssl.keyStore", keyStorePath)
+    storePassword(provider, "spark.ssl.keyStorePassword", "password")
+    storePassword(provider, "spark.ssl.keyPassword", "password")
+    conf.set("spark.ssl.trustStore", trustStorePath)
+    storePassword(provider, "spark.ssl.trustStorePassword", "password")
+    conf.set("spark.ssl.enabledAlgorithms",
+      "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
+    conf.set("spark.ssl.protocol", "SSLv3")
+
+    val defaultOpts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
+    val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl.ui", defaults = Some(defaultOpts))
+
+    assert(opts.enabled === true)
+    assert(opts.trustStore.isDefined === true)
+    assert(opts.trustStore.get.getName === "truststore")
+    assert(opts.trustStore.get.getAbsolutePath === trustStorePath)
+    assert(opts.keyStore.isDefined === true)
+    assert(opts.keyStore.get.getName === "keystore")
+    assert(opts.keyStore.get.getAbsolutePath === keyStorePath)
+    assert(opts.trustStorePassword === Some("password"))
+    assert(opts.keyStorePassword === Some("password"))
+    assert(opts.keyPassword === Some("password"))
+    assert(opts.protocol === Some("SSLv3"))
+    assert(opts.enabledAlgorithms ===
+      Set("TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA"))
+  }
+
+  private def createCredentialProvider(tmpPath: String, conf: Configuration): CredentialProvider = {
+    conf.set(CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH, tmpPath)
+
+    val provider = CredentialProviderFactory.getProviders(conf).get(0)
+    if (provider == null) {
+      throw new IllegalStateException(s"Fail to get credential provider with path $tmpPath")
+    }
+
+    provider
+  }
+
+  private def storePassword(
+      provider: CredentialProvider,
+      passwordKey: String,
+      password: String): Unit = {
+    provider.createCredentialEntry(passwordKey, password.toCharArray)
+    provider.flush()
+  }
 }
