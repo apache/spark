@@ -3272,64 +3272,9 @@ object ArraySetLike {
   }
 
   def throwUnionLengthOverflowException(length: Int): Unit = {
-    throw new RuntimeException(s"Unsuccessful try to union arrays with ${length}" +
+    throw new RuntimeException(s"Unsuccessful try to union arrays with $length " +
       s"elements due to exceeding the array size limit " +
       s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
-  }
-
-  def evalUnionContainsNull(
-      array1: ArrayData,
-      array2: ArrayData,
-      elementType: DataType,
-      ordering: Ordering[Any]): ArrayData = {
-    if (ordering == null) {
-      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-      val hs = new mutable.HashSet[Any]
-      Seq(array1, array2).foreach(array => {
-        var i = 0
-        while (i < array.numElements()) {
-          val elem = array.get(i, elementType)
-          if (hs.add(elem)) {
-            if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-              throwUnionLengthOverflowException(arrayBuffer.length)
-            }
-            arrayBuffer += elem
-          }
-          i += 1
-        }
-      })
-      new GenericArrayData(arrayBuffer)
-    } else {
-      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-      var alreadyIncludeNull = false
-      Seq(array1, array2).foreach(_.foreach(elementType, (_, elem) => {
-        var found = false
-        if (elem == null) {
-          if (alreadyIncludeNull) {
-            found = true
-          } else {
-            alreadyIncludeNull = true
-          }
-        } else {
-          // check elem is already stored in arrayBuffer or not?
-          var j = 0
-          while (!found && j < arrayBuffer.size) {
-            val va = arrayBuffer(j)
-            if (va != null && ordering.equiv(va, elem)) {
-              found = true
-            }
-            j = j + 1
-          }
-        }
-        if (!found) {
-          if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-            throwUnionLengthOverflowException(arrayBuffer.length)
-          }
-          arrayBuffer += elem
-        }
-      }))
-      new GenericArrayData(arrayBuffer)
-    }
   }
 }
 
@@ -3380,7 +3325,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
     val array1 = input1.asInstanceOf[ArrayData]
     val array2 = input2.asInstanceOf[ArrayData]
 
-    if (!cn) {
+    if (elementTypeSupportEquals && !cn) {
       elementType match {
         case IntegerType =>
           // avoid boxing of primitive int array elements
@@ -3396,17 +3341,17 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
               i += 1
             }
           })
-          // store elements into array
+          // store elements into resultArray
           val resultArray = new Array[Int](hsSize.size)
           val hs = new OpenHashSet[Int]
           var pos = 0
           Seq(array1, array2).foreach(array => {
             var i = 0
-            while (i < array.numElements () ) {
-              val elem = array.getInt (i)
-              if (!hs.contains (elem) ) {
-                resultArray (pos) = elem
-                hs.add (elem)
+            while (i < array.numElements()) {
+              val elem = array.getInt(i)
+              if (!hs.contains(elem)) {
+                resultArray(pos) = elem
+                hs.add(elem)
                 pos += 1
               }
               i += 1
@@ -3431,7 +3376,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
               i += 1
             }
           })
-          // store elements into array
+          // store elements into resultArray
           val resultArray = new Array[Long](hsSize.size)
           val hs = new OpenHashSet[Long]
           var pos = 0
@@ -3472,7 +3417,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
           new GenericArrayData(arrayBuffer)
       }
     } else {
-      ArraySetLike.evalUnionContainsNull(array1, array2, elementType,
+      ArrayUnion.evalUnionContainsNull(array1, array2, elementType,
         if (elementTypeSupportEquals) null else ordering)
     }
   }
@@ -3483,31 +3428,33 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
     val value = ctx.freshName("value")
     val size = ctx.freshName("size")
     val genericArrayData = classOf[GenericArrayData].getName
-    val (postFix, classTag, getter, setter, javaTypeName, arrayBuilder) = if (!cn) {
-      val ptName = CodeGenerator.primitiveTypeName(elementType)
-      elementType match {
-        case ByteType | ShortType | IntegerType | LongType =>
-          val unsafeArray = ctx.freshName("unsafeArray")
-          (if (elementType == LongType) s"$$mcJ$$sp" else s"$$mcI$$sp",
-            s"scala.reflect.ClassTag$$.MODULE$$.$ptName()",
-            s"get$ptName($i)", s"set$ptName($pos, $value)", CodeGenerator.javaType(elementType),
-            s"""
-              |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
-              |${ev.value} = $unsafeArray;
+    val (postFix, classTag, getter, setter, javaTypeName, arrayBuilder) =
+      if (elementTypeSupportEquals && !cn) {
+        elementType match {
+          case ByteType | ShortType | IntegerType | LongType =>
+            val ptName = CodeGenerator.primitiveTypeName(elementType)
+            val unsafeArray = ctx.freshName("unsafeArray")
+            (if (elementType == LongType) s"$$mcJ$$sp" else s"$$mcI$$sp",
+              s"scala.reflect.ClassTag$$.MODULE$$.$ptName()",
+              s"get$ptName($i)", s"set$ptName($pos, $value)", CodeGenerator.javaType(elementType),
+              s"""
+                 |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
+                 |${ev.value} = $unsafeArray;
            """.stripMargin)
-        case _ =>
-          val et = ctx.addReferenceObj("elementType", elementType)
-          ("", s"scala.reflect.ClassTag$$.MODULE$$.Object()",
-            s"get($i, $et)", s"update($pos, $value)", "Object",
-            s"${ev.value} = new $genericArrayData(new Object[$size]);")
+          case _ =>
+            val et = ctx.addReferenceObj("elementType", elementType)
+            ("", s"scala.reflect.ClassTag$$.MODULE$$.Object()",
+              s"get($i, $et)", s"update($pos, $value)", "Object",
+              s"${ev.value} = new $genericArrayData(new Object[$size]);")
+        }
+      } else {
+        ("", "", "", "", "", "")
       }
-    } else {
-      ("", "", "", "", "", "")
-    }
 
     val hs = ctx.freshName("hs")
     nullSafeCodeGen(ctx, ev, (array1, array2) => {
       if (classTag != "") {
+        // Here, we ensure elementTypeSupportEquals && !array1.containsNull && !array2.containsNull
         val openHashSet = classOf[OpenHashSet[_]].getName
         s"""
            |$openHashSet $hs = new $openHashSet$postFix($classTag);
@@ -3539,15 +3486,72 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
            |}
          """.stripMargin
       } else {
-        val arraySetLike = "org.apache.spark.sql.catalyst.expressions.ArraySetLike"
+        val arrayUnion = classOf[ArrayUnion].getName
         val et = ctx.addReferenceObj("elementTypeUnion", elementType)
         val order = if (elementTypeSupportEquals) "null"
           else ctx.addReferenceObj("orderingUnion", ordering)
         val method = "evalUnionContainsNull"
-        s"${ev.value} = $arraySetLike$$.MODULE$$.$method($array1, $array2, $et, $order);"
+        s"${ev.value} = $arrayUnion$$.MODULE$$.$method($array1, $array2, $et, $order);"
       }
     })
   }
 
   override def prettyName: String = "array_union"
+}
+
+object ArrayUnion {
+  def evalUnionContainsNull(
+      array1: ArrayData,
+      array2: ArrayData,
+      elementType: DataType,
+      ordering: Ordering[Any]): ArrayData = {
+    if (ordering == null) {
+      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+      val hs = new mutable.HashSet[Any]
+      Seq(array1, array2).foreach(array => {
+        var i = 0
+        while (i < array.numElements()) {
+          val elem = array.get(i, elementType)
+          if (hs.add(elem)) {
+            if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+              ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.length)
+            }
+            arrayBuffer += elem
+          }
+          i += 1
+        }
+      })
+      new GenericArrayData(arrayBuffer)
+    } else {
+      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+      var alreadyIncludeNull = false
+      Seq(array1, array2).foreach(_.foreach(elementType, (_, elem) => {
+        var found = false
+        if (elem == null) {
+          if (alreadyIncludeNull) {
+            found = true
+          } else {
+            alreadyIncludeNull = true
+          }
+        } else {
+          // check elem is already stored in arrayBuffer or not?
+          var j = 0
+          while (!found && j < arrayBuffer.size) {
+            val va = arrayBuffer(j)
+            if (va != null && ordering.equiv(va, elem)) {
+              found = true
+            }
+            j = j + 1
+          }
+        }
+        if (!found) {
+          if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+            ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.length)
+          }
+          arrayBuffer += elem
+        }
+      }))
+      new GenericArrayData(arrayBuffer)
+    }
+  }
 }

@@ -1194,6 +1194,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayUnion(a00, a01), UnsafeArrayData.fromPrimitiveArray(Array(1, 2, 3, 4)))
     checkEvaluation(ArrayUnion(a01, a02), Seq(4, 2, 1, 3))
     checkEvaluation(ArrayUnion(a03, a04), Seq(1, 2, null, 4, 5, -5, -3, -1))
+    checkEvaluation(ArrayUnion(a04, a03), Seq(-5, 4, -3, 2, -1, 1, null, 5))
     checkEvaluation(ArrayUnion(a03, a05), Seq(1, 2, null, 4, 5))
 
     checkEvaluation(
@@ -1213,7 +1214,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
       ArrayType(BinaryType))
     val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
-      ArrayType(BinaryType))
+      ArrayType(BinaryType, false))
     val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](4, 3)),
       ArrayType(BinaryType))
     val b3 = Literal.create(Seq[Array[Byte]](
@@ -1227,6 +1228,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq(Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](2, 1), Array[Byte](4, 3)))
     checkEvaluation(ArrayUnion(b0, b2),
       Seq(Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](4, 3)))
+    checkEvaluation(ArrayUnion(b1, b1), Seq(Array[Byte](2, 1), Array[Byte](4, 3)))
     checkEvaluation(ArrayUnion(b2, b4), Seq(Array[Byte](1, 2), Array[Byte](4, 3), null))
     checkEvaluation(ArrayUnion(b3, b0),
       Seq(Array[Byte](1, 2), Array[Byte](4, 3), Array[Byte](5, 6)))
