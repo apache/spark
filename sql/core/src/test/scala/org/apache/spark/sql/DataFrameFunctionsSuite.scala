@@ -501,13 +501,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("array size function - legacy") {
-    withSQLConf("spark.sql.legacy.sizeOfNull" -> "true") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
       testSizeOfArray(sizeOfNull = -1)
     }
   }
 
   test("array size function") {
-    withSQLConf("spark.sql.legacy.sizeOfNull" -> "false") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
       testSizeOfArray(sizeOfNull = null)
     }
   }
@@ -572,13 +572,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("map size function - legacy") {
-    withSQLConf("spark.sql.legacy.sizeOfNull" -> "true") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
       testSizeOfMap(sizeOfNull = -1: Int)
     }
   }
 
   test("map size function") {
-    withSQLConf("spark.sql.legacy.sizeOfNull" -> "false") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
       testSizeOfMap(sizeOfNull = null)
     }
   }
