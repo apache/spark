@@ -19,12 +19,13 @@ package org.apache.spark.input
 
 import java.io.{DataOutputStream, File, FileOutputStream}
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import scala.collection.immutable.IndexedSeq
+
 import org.scalatest.BeforeAndAfterAll
 
-import scala.collection.immutable.IndexedSeq
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
 /**
  * Tests the correctness of
