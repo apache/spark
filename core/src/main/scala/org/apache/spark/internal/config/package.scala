@@ -554,6 +554,7 @@ package object config {
 
   private[spark] val SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS =
     ConfigBuilder("spark.shuffle.minNumPartitionsToHighlyCompress")
+      .internal()
       .doc("Number of partitions to determine if MapStatus should use HighlyCompressedMapStatus")
       .intConf
       .checkValue(v => v > 0, "The value should be a positive integer.")
