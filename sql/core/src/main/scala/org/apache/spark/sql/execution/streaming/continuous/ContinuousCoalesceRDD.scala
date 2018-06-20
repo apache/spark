@@ -93,12 +93,6 @@ class ContinuousCoalesceRDD(
     readerRDD.compute(readerRDD.partitions(split.index), context)
   }
 
-  override def getDependencies: Seq[Dependency[_]] = {
-    Seq(new NarrowDependency(prev) {
-      def getParents(id: Int): Seq[Int] = Seq(0)
-    })
-  }
-
   override def clearDependencies(): Unit = {
     throw new IllegalStateException("Continuous RDDs cannot be checkpointed")
   }
