@@ -523,8 +523,7 @@ trait ArraySortLike extends ExpectsInputTypes {
         } else if (o2 == null) {
           nullOrder
         } else {
-          // avoid false positive of RV_NEGATING_RESULT_OF_COMPARETO by SpotBugs
-          -1 * ordering.compare(o1, o2)
+          ordering.compare(o2, o1)
         }
       }
     }
