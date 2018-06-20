@@ -31,7 +31,8 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
       testStream(input.toDF().agg(max('value)), OutputMode.Complete)()
     }
 
-    assert(ex.getMessage.contains("Continuous processing does not support Aggregate operations"))
+    assert(ex.getMessage.contains(
+      "In continuous processing mode, coalesce(1) must be called before aggregate operation"))
   }
 
   test("basic") {
@@ -50,7 +51,7 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
     }
   }
 
-  test("basic 2part") {
+  test("multiple partitions with coalesce") {
     val input = ContinuousMemoryStream[Int]
 
     val df = input.toDF().coalesce(1).agg(max('value))
@@ -58,6 +59,26 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
     testStream(df, OutputMode.Complete)(
       AddData(input, 0, 1, 2),
       CheckAnswer(2),
+      StopStream,
+      AddData(input, 3, 4, 5),
+      StartStream(),
+      CheckAnswer(5),
+      AddData(input, -1, -2, -3),
+      CheckAnswer(5))
+  }
+
+  test("multiple partitions with coalesce - multiple transformations") {
+    val input = ContinuousMemoryStream[Int]
+
+    val df = input.toDF()
+      .coalesce(1)
+      .select('value as 'copy, 'value)
+      .where('copy =!= 2)
+      .agg(max('value))
+
+    testStream(df, OutputMode.Complete)(
+      AddData(input, 0, 1, 2),
+      CheckAnswer(1),
       StopStream,
       AddData(input, 3, 4, 5),
       StartStream(),

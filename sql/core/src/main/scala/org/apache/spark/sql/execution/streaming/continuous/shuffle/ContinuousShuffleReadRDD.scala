@@ -33,7 +33,6 @@ case class ContinuousShuffleReadPartition(
       numShuffleWriters: Int,
       epochIntervalMs: Long)
     extends Partition {
-
   // Initialized only on the executor, and only once even as we call compute() multiple times.
   lazy val (reader: ContinuousShuffleReader, endpoint) = {
     val env = SparkEnv.get.rpcEnv
