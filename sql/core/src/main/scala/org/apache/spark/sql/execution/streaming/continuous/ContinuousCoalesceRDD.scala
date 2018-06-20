@@ -22,6 +22,7 @@ import org.apache.spark.rdd.{CoalescedRDDPartition, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.continuous.shuffle._
+import org.apache.spark.util.ThreadUtils
 
 case class ContinuousCoalesceRDDPartition(index: Int) extends Partition {
   private[continuous] var writersInitialized: Boolean = false
@@ -50,6 +51,10 @@ class ContinuousCoalesceRDD(
     epochIntervalMs,
     Seq(readerEndpointName))
 
+  private lazy val threadPool = ThreadUtils.newDaemonFixedThreadPool(
+    prev.getNumPartitions,
+    this.name)
+
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     assert(split.index == 0)
     // lazy initialize endpoint so writer can send to it
@@ -62,8 +67,8 @@ class ContinuousCoalesceRDD(
           rpcEnv.setupEndpointRef(rpcEnv.address, endpointName)
       }
 
-      val threads = prev.partitions.map { prevSplit =>
-        new Thread() {
+      val runnables = prev.partitions.map { prevSplit =>
+        new Runnable() {
           override def run(): Unit = {
             TaskContext.setTaskContext(context)
 
@@ -83,11 +88,12 @@ class ContinuousCoalesceRDD(
       }
 
       context.addTaskCompletionListener { ctx =>
-        threads.foreach(_.interrupt())
+        threadPool.shutdownNow()
       }
 
       split.asInstanceOf[ContinuousCoalesceRDDPartition].writersInitialized = true
-      threads.foreach(_.start())
+
+      runnables.foreach(threadPool.execute)
     }
 
     readerRDD.compute(readerRDD.partitions(split.index), context)
