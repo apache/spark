@@ -24,25 +24,37 @@ import org.apache.spark.sql.types._
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("Array and Map Size") {
+  def testSize(legacySizeOfNull: Boolean, sizeOfNull: Any): Unit = {
     val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
     val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
     val a2 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
 
-    checkEvaluation(Size(a0), 3)
-    checkEvaluation(Size(a1), 0)
-    checkEvaluation(Size(a2), 2)
+    checkEvaluation(Size(a0, legacySizeOfNull), 3)
+    checkEvaluation(Size(a1, legacySizeOfNull), 0)
+    checkEvaluation(Size(a2, legacySizeOfNull), 2)
 
     val m0 = Literal.create(Map("a" -> "a", "b" -> "b"), MapType(StringType, StringType))
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
     val m2 = Literal.create(Map("a" -> "a"), MapType(StringType, StringType))
 
-    checkEvaluation(Size(m0), 2)
-    checkEvaluation(Size(m1), 0)
-    checkEvaluation(Size(m2), 1)
+    checkEvaluation(Size(m0, legacySizeOfNull), 2)
+    checkEvaluation(Size(m1, legacySizeOfNull), 0)
+    checkEvaluation(Size(m2, legacySizeOfNull), 1)
 
-    checkEvaluation(Size(Literal.create(null, MapType(StringType, StringType))), -1)
-    checkEvaluation(Size(Literal.create(null, ArrayType(StringType))), -1)
+    checkEvaluation(
+      Size(Literal.create(null, MapType(StringType, StringType)), legacySizeOfNull),
+      expected = sizeOfNull)
+    checkEvaluation(
+      Size(Literal.create(null, ArrayType(StringType)), legacySizeOfNull),
+      expected = sizeOfNull)
+  }
+
+  test("Array and Map Size - legacy") {
+    testSize(legacySizeOfNull = true, sizeOfNull = -1)
+  }
+
+  test("Array and Map Size") {
+    testSize(legacySizeOfNull = false, sizeOfNull = null)
   }
 
   test("MapKeys/MapValues") {
