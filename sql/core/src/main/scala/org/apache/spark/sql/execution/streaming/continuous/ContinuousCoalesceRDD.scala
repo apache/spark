@@ -31,20 +31,34 @@ case class ContinuousCoalesceRDDPartition(index: Int) extends Partition {
  * RDD for continuous coalescing. Asynchronously writes all partitions of `prev` into a local
  * continuous shuffle, and then reads them in the task thread using `reader`.
  */
-class ContinuousCoalesceRDD(var reader: ContinuousShuffleReadRDD, var prev: RDD[InternalRow])
-  extends RDD[InternalRow](reader.context, Nil) {
+class ContinuousCoalesceRDD(
+    context: SparkContext,
+    numPartitions: Int,
+    readerQueueSize: Int,
+    epochIntervalMs: Long,
+    readerEndpointName: String,
+    prev: RDD[InternalRow])
+  extends RDD[InternalRow](context, Nil) {
 
   override def getPartitions: Array[Partition] = Array(ContinuousCoalesceRDDPartition(0))
+
+ val readerRDD = new ContinuousShuffleReadRDD(
+    sparkContext,
+    numPartitions,
+    readerQueueSize,
+    prev.getNumPartitions,
+    epochIntervalMs,
+    Seq(readerEndpointName))
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     assert(split.index == 0)
     // lazy initialize endpoint so writer can send to it
-    reader.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    readerRDD.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
 
     if (!split.asInstanceOf[ContinuousCoalesceRDDPartition].writersInitialized) {
       val rpcEnv = SparkEnv.get.rpcEnv
       val outputPartitioner = new HashPartitioner(1)
-      val endpointRefs = reader.endpointNames.map { endpointName =>
+      val endpointRefs = readerRDD.endpointNames.map { endpointName =>
           rpcEnv.setupEndpointRef(rpcEnv.address, endpointName)
       }
 
@@ -76,7 +90,7 @@ class ContinuousCoalesceRDD(var reader: ContinuousShuffleReadRDD, var prev: RDD[
       threads.foreach(_.start())
     }
 
-    reader.compute(reader.partitions(split.index), context)
+    readerRDD.compute(readerRDD.partitions(split.index), context)
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
@@ -85,9 +99,7 @@ class ContinuousCoalesceRDD(var reader: ContinuousShuffleReadRDD, var prev: RDD[
     })
   }
 
-  override def clearDependencies() {
-    super.clearDependencies()
-    reader = null
-    prev = null
+  override def clearDependencies(): Unit = {
+    throw new IllegalStateException("Continuous RDDs cannot be checkpointed")
   }
 }
