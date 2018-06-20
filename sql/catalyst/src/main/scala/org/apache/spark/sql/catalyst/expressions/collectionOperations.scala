@@ -2400,7 +2400,7 @@ case class ArrayDistinct(child: Expression)
     } else {
       var foundNullElement = false
       var pos = 0
-      for(i <- 0 until data.length) {
+      for (i <- 0 until data.length) {
         if (data(i) == null) {
           if (!foundNullElement) {
             foundNullElement = true
@@ -2415,7 +2415,7 @@ case class ArrayDistinct(child: Expression)
             }
             j = j + 1
           }
-          if (i == j-1) {
+          if (i == j - 1) {
             pos = pos + 1
           }
         }
@@ -2435,12 +2435,12 @@ case class ArrayDistinct(child: Expression)
       val openHashSet = classOf[OpenHashSet[_]].getName
       val hs = ctx.freshName("hs")
       val classTag = s"scala.reflect.ClassTag$$.MODULE$$.Object()"
-      if(elementTypeSupportEquals) {
+      if (elementTypeSupportEquals) {
         s"""
            |int $sizeOfDistinctArray = 0;
            |boolean $foundNullElement = false;
            |$openHashSet $hs = new $openHashSet($classTag);
-           |for (int $i = 0; $i < $array.numElements(); $i++) {
+           |for (int $i = 0; $i < $array.numElements(); $i ++) {
            |  if ($array.isNullAt($i)) {
            |    $foundNullElement = true;
            |  } else {
@@ -2462,7 +2462,7 @@ case class ArrayDistinct(child: Expression)
            |     }
            |  } else {
            |    int $j;
-           |    for ($j = 0; $j < $i; $j++) {
+           |    for ($j = 0; $j < $i; $j ++) {
            |      if (!$array.isNullAt($j) && ${ctx.genEqual(elementType, getValue1, getValue2)}) {
            |        break;
            |      }
@@ -2593,8 +2593,8 @@ case class ArrayDistinct(child: Expression)
            |${ev.value} = new $arrayClass($distinctArray);
         """.stripMargin
       } else {
-        val setValueForBruteForce = setValueForBruteForceEval(false, i, j,
-            inputArray, distinctArray, pos, getValue1, isEqual, "")
+        val setValueForBruteForce = setValueForBruteForceEval(
+          false, i, j, inputArray, distinctArray, pos, getValue1, isEqual, "")
         s"""
            |int $pos = 0;
            |Object[] $distinctArray = new Object[$size];
@@ -2614,20 +2614,20 @@ case class ArrayDistinct(child: Expression)
       val setNullForPrimitive = setNull(true, foundNullElement, distinctArray, pos)
       val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$primitiveValueTypeName()"
       val setValueForFast =
-          setValueForFastEval(true, hs, distinctArray, pos, getValue1, primitiveValueTypeName)
+        setValueForFastEval(true, hs, distinctArray, pos, getValue1, primitiveValueTypeName)
       s"""
-        |${ctx.createUnsafeArray(distinctArray, size, elementType, s" $prettyName failed.")}
-        |int $pos = 0;
-        |boolean $foundNullElement = false;
-        |$openHashSet $hs = new $openHashSet($classTag);
-        |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-        |  if ($inputArray.isNullAt($i)) {
-        |     $setNullForPrimitive;
-        |  } else {
-        |    $setValueForFast;
-        |  }
-        |}
-        |${ev.value} = $distinctArray;
+         |${ctx.createUnsafeArray(distinctArray, size, elementType, s" $prettyName failed.")}
+         |int $pos = 0;
+         |boolean $foundNullElement = false;
+         |$openHashSet $hs = new $openHashSet($classTag);
+         |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
+         |  if ($inputArray.isNullAt($i)) {
+         |    $setNullForPrimitive;
+         |  } else {
+         |    $setValueForFast;
+         |  }
+         |}
+         |${ev.value} = $distinctArray;
       """.stripMargin
     }
   }
