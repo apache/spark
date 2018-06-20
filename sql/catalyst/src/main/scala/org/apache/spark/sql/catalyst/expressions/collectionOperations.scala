@@ -96,6 +96,8 @@ case class Size(
     } else child.dataType match {
       case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
       case _: MapType => value.asInstanceOf[MapData].numElements()
+      case other => throw new UnsupportedOperationException(
+        s"The size function doesn't support the operand type ${other.getClass.getCanonicalName}")
     }
   }
 
@@ -109,8 +111,9 @@ case class Size(
         (${childGen.value}).numElements();""", isNull = FalseLiteral)
     } else {
       child.dataType match {
-        case _: ArrayType => defineCodeGen(ctx, ev, c => s"($c).numElements()")
-        case _: MapType => defineCodeGen(ctx, ev, c => s"($c).numElements()")
+        case _: ArrayType | _: MapType => defineCodeGen(ctx, ev, c => s"($c).numElements()")
+        case other => throw new UnsupportedOperationException(
+          s"The size function doesn't support the operand type ${other.getClass.getCanonicalName}")
       }
     }
   }
