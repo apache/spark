@@ -98,6 +98,10 @@ class ContinuousDataSourceRDD(
   override def getPreferredLocations(split: Partition): Seq[String] = {
     split.asInstanceOf[ContinuousDataSourceRDDPartition].inputPartition.preferredLocations()
   }
+
+  override def clearDependencies(): Unit = {
+    throw new IllegalStateException("Continuous RDDs cannot be checkpointed")
+  }
 }
 
 object ContinuousDataSourceRDD {
