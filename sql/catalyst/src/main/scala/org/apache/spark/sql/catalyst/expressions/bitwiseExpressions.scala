@@ -51,6 +51,8 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
   }
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = and(input1, input2)
+
+  override def checkOverflowCode(result: String, op1: String, op2: String): String = ""
 }
 
 /**
@@ -83,6 +85,8 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   }
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = or(input1, input2)
+
+  override def checkOverflowCode(result: String, op1: String, op2: String): String = ""
 }
 
 /**
@@ -115,6 +119,8 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
   }
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = xor(input1, input2)
+
+  override def checkOverflowCode(result: String, op1: String, op2: String): String = ""
 }
 
 /**
