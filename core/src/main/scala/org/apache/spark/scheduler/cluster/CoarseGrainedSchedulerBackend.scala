@@ -361,8 +361,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
 
       if (shouldDisable) {
-        logInfo(s"Disabling executor $executorId.")
-        scheduler.executorLost(executorId, LossReasonPending)
+        if(SparkEnv.get.conf.getBoolean("spark.alluxio.shuffle.enabled",false))
+          scheduler.executorLost(executorId, ExecutorKilled)
+        else
+          scheduler.executorLost(executorId, LossReasonPending)
       }
 
       shouldDisable

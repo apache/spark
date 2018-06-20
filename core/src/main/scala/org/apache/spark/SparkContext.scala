@@ -514,6 +514,10 @@ class SparkContext(config: SparkConf) extends Logging {
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    if (_conf.getBoolean("spark.alluxio.shuffle.enabled", false)){
+      logInfo("Test-log: Init AlluxioBlockMaster")
+      _env.blockManager.master.init()
+    }
     if (_conf.getBoolean("spark.ui.reverseProxy", false)) {
       System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
     }

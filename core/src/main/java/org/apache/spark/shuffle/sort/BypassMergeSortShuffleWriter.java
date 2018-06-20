@@ -90,6 +90,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private FileSegment[] partitionWriterSegments;
   @Nullable private MapStatus mapStatus;
   private long[] partitionLengths;
+  private boolean useAlluxio;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -108,6 +109,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
+    this.useAlluxio = conf.getBoolean("spark.alluxio.shuffle.enabled",false);
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
@@ -162,6 +164,11 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       partitionLengths = writePartitionedFile(tmp);
       shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
+      if(useAlluxio) {
+        logger.info("shuffle block id " + new ShuffleDataBlockId(shuffleId, mapId, 0).name() + "\nfile path is "
+                + output.getPath() + "\nfile name is " + output.getName() + "file size is " + output.length());
+        blockManager.externalBlockStore().externalBlockManager().get().putFile(shuffleId, new ShuffleDataBlockId(shuffleId, mapId, 0), output);
+      }
     } finally {
       if (tmp.exists() && !tmp.delete()) {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());

@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, IOException}
+import java.io.{DataInputStream, File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 import javax.annotation.concurrent.GuardedBy
@@ -25,12 +25,16 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 
-import org.apache.spark.{SparkException, TaskContext}
+import com.google.common.io.ByteStreams
+
+import org.apache.spark.{AlluxioManagedBuffer, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempFileManager}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
-import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.Utils
+import org.apache.spark.shuffle.{FetchFailedException, IndexShuffleBlockResolver}
+import org.apache.spark.util.{ByteBufferInputStream, Utils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
@@ -212,8 +216,15 @@ final class ShuffleBlockFetcherIterator(
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
-        logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-        results.put(new FailureFetchResult(BlockId(blockId), address, e))
+
+        if (!SparkEnv.get.conf.getBoolean("spark.alluxio.shuffle.enabled", false)) {
+          logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
+          results.put(new FailureFetchResult(BlockId(blockId), address, e))
+        } else {
+          results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId),
+            getAlluxioBlocks(BlockId(blockId).asInstanceOf[ShuffleBlockId]),
+            remainingBlocks.isEmpty))
+        }
       }
     }
 
@@ -230,6 +241,30 @@ final class ShuffleBlockFetcherIterator(
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
         blockFetchingListener, null)
+    }
+  }
+
+  private[this] def getAlluxioBlocks(blockId: ShuffleBlockId): ManagedBuffer = {
+
+    val indexFileByteBuffer = blockManager.externalBlockStore.externalBlockManager.get
+      .getBytes(ShuffleIndexBlockId(blockId.shuffleId, blockId.mapId,
+                  IndexShuffleBlockResolver.NOOP_REDUCE_ID))
+    val in = new DataInputStream(new ByteBufferInputStream(indexFileByteBuffer.get))
+    try {
+      ByteStreams.skipFully(in, blockId.reduceId * 8)
+      val offset = in.readLong()
+      val nextOffset = in.readLong()
+      new AlluxioManagedBuffer(
+        SparkTransportConf.fromSparkConf(blockManager.conf, "shuffle"),
+        blockManager.externalBlockStore.externalBlockManager.get.getFile(
+          ShuffleDataBlockId(blockId.shuffleId, blockId.mapId,
+            IndexShuffleBlockResolver.NOOP_REDUCE_ID)),
+        offset,
+        nextOffset - offset,
+        blockManager.externalBlockStore.externalBlockManager.get
+      )
+    } finally {
+      in.close()
     }
   }
 

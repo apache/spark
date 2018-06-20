@@ -35,6 +35,11 @@ class BlockManagerMaster(
   extends Logging {
 
   val timeout = RpcUtils.askRpcTimeout(conf)
+  lazy val alluxioBlockManagerMaster = new AlluxioBlockManagerMaster
+
+  def init(): Unit = {
+    alluxioBlockManagerMaster.init(conf)
+  }
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String) {
@@ -232,6 +237,10 @@ class BlockManagerMaster(
     if (driverEndpoint != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverEndpoint = null
+      if(conf.getBoolean("spark.alluxio.shuffle.enabled",false)){
+        logInfo("Test log: AlluxioBlockManagerMaster delete tmp file")
+        alluxioBlockManagerMaster.delete()
+      }
       logInfo("BlockManagerMaster stopped")
     }
   }

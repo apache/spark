@@ -182,6 +182,12 @@ private[spark] class IndexShuffleBlockResolver(
           if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
             throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
           }
+          if(SparkEnv.get.conf.getBoolean("spark.alluxio.shuffle.enabled",false)){
+            logInfo("Testlog: write index file" + indexFile.getName + " indexfile blockid "
+              + ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+            blockManager.externalBlockStore.externalBlockManager.get.putFile(shuffleId, ShuffleIndexBlockId(shuffleId,
+              mapId, NOOP_REDUCE_ID), indexFile)
+          }
         }
       }
     } finally {
