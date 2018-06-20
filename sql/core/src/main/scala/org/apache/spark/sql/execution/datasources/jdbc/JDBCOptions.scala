@@ -84,16 +84,16 @@ class JDBCOptions(
   )
 
   // table name or a table expression.
-  val tableExpression = tableName.map(_.trim).getOrElse {
+  val tableOrQuery = tableName.map(_.trim).getOrElse {
     // We have ensured in the code above that either dbtable or query is specified.
     query.get match {
-      case subq if subq.nonEmpty => s"(${subq}) spark_gen_${curId.getAndIncrement()}"
-      case subq => subq
+      case subQuery if subQuery.nonEmpty => s"(${subQuery}) spark_gen_${curId.getAndIncrement()}"
+      case subQuery => subQuery
     }
   }
 
-  require(tableExpression.nonEmpty,
-    s"One of the option `$JDBC_TABLE_NAME` or `$JDBC_QUERY_STRING` should not be empty string."
+  require(tableOrQuery.nonEmpty,
+    s"Empty string is not allowed in either '$JDBC_TABLE_NAME' or '${JDBC_QUERY_STRING}' options"
   )
 
 

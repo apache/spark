@@ -1099,7 +1099,7 @@ class JDBCSuite extends QueryTest
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
     def testJdbcOptions(options: JDBCOptions): Unit = {
       // Spark JDBC data source options are case-insensitive
-      assert(options.tableExpression == "t1")
+      assert(options.tableOrQuery == "t1")
       // When we convert it to properties, it should be case-sensitive.
       assert(options.asProperties.size == 3)
       assert(options.asProperties.get("customkey") == null)
@@ -1293,7 +1293,7 @@ class JDBCSuite extends QueryTest
         .option("query", "")
         .load()
     }.getMessage
-    assert(e4.contains("One of the option `dbtable` or `query` should not be empty string."))
+    assert(e4.contains("Empty string is not allowed in either 'dbtable' or 'query' options"))
 
     // Option query and partitioncolumn are not allowed together.
     val expectedErrorMsg =

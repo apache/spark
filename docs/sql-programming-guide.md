@@ -1304,7 +1304,8 @@ the following case-insensitive options:
     <td>
       The JDBC table that should be read from or written into. Note that when using it in the read
       path anything that is valid in a <code>FROM</code> clause of a SQL query can be used.
-      For example, instead of a full table you could also use a subquery in parentheses.
+      For example, instead of a full table you could also use a subquery in parentheses. Its not
+      allowed to specify `dbtable` and `query` options at the same time.
     </td>
   </tr>
   <tr>
@@ -1312,8 +1313,9 @@ the following case-insensitive options:
     <td>
       A query that will be used to read data into Spark. The specified query will be parenthesized and used
       as a subquery in the <code>FROM</code> clause. Spark will also assign a alias to the subquery clause.
-      As an example, spark will issue a query of the following form to the datasource.<br>
-      <code> SELECT &lt;columns&gt; FROM (&lt;user_specified_query&gt;) spark_generated_alias
+      As an example, spark will issue a query of the following form to the datasource.<br><br>
+      <code> SELECT &lt;columns&gt; FROM (&lt;user_specified_query&gt;) spark_gen_alias</code><br><br>
+      Its not allowed to specify `dbtable` and `query` options at the same time.
     </td>
   </tr>
 
