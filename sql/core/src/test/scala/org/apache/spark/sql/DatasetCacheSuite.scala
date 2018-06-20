@@ -132,4 +132,19 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     df.unpersist()
     assert(df.storageLevel == StorageLevel.NONE)
   }
+
+  test("SPARK-24613 Cache with UDF could not be matched with subsequent dependent caches") {
+    val expensiveUDF = udf({x: Int => Thread.sleep(10000); x})
+    val df = spark.range(0, 10).toDF("a").withColumn("b", expensiveUDF($"a"))
+    val df2 = df.agg(sum(df("b")))
+
+    df.cache()
+    df.count()
+    df2.cache()
+
+    // udf has been evaluated during caching, and thus should not be re-evaluated here
+    failAfter(5 seconds) {
+      df2.collect()
+    }
+  }
 }
