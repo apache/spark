@@ -71,9 +71,10 @@ object JSONBenchmarks extends SQLHelper {
 
       JSON schema inferring:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       ---------------------------------------------------------------------------------------------
-      No encoding                              47112 / 48041          2.1         471.1       1.0X
-      UTF-8 is set                             72261 / 73600          1.4         722.6       0.7X
+      No encoding                              45908 / 46480          2.2         459.1       1.0X
+      UTF-8 is set                             68469 / 69762          1.5         684.7       0.7X
       */
+      benchmark.run()
     }
   }
 
@@ -112,8 +113,8 @@ object JSONBenchmarks extends SQLHelper {
 
       JSON per-line parsing:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       ---------------------------------------------------------------------------------------------
-      No encoding                              11511 / 11761          8.7         115.1       1.0X
-      UTF-8 is set                             19286 / 19839          5.2         192.9       0.6X
+      No encoding                               9982 / 10237         10.0          99.8       1.0X
+      UTF-8 is set                             16373 / 16806          6.1         163.7       0.6X
       */
       benchmark.run()
     }
@@ -161,8 +162,8 @@ object JSONBenchmarks extends SQLHelper {
 
       JSON parsing of wide lines:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       ---------------------------------------------------------------------------------------------
-      No encoding                              25436 / 25467          0.4        2543.6       1.0X
-      UTF-8 is set                             29687 / 30002          0.3        2968.7       0.9X
+      No encoding                              26038 / 26386          0.4        2603.8       1.0X
+      UTF-8 is set                             28343 / 28557          0.4        2834.3       0.9X
       */
       benchmark.run()
     }
