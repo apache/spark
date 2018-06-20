@@ -105,7 +105,11 @@ class CacheManager extends Logging {
   }
 
   /**
-   * Un-cache all the cache entries that refer to the given plan.
+   * Un-cache the given plan or all the cache entries that refer to the given plan.
+   * @param query     The [[Dataset]] to be un-cached.
+   * @param cascade   If true, un-cache all the cache entries that refer to the given
+   *                  [[Dataset]]; otherwise un-cache the given [[Dataset]] only.
+   * @param blocking  Whether to block until all blocks are deleted.
    */
   def uncacheQuery(query: Dataset[_],
     cascade: Boolean, blocking: Boolean = true): Unit = writeLock {
@@ -113,19 +117,37 @@ class CacheManager extends Logging {
   }
 
   /**
-   * Un-cache all the cache entries that refer to the given plan.
+   * Un-cache the given plan or all the cache entries that refer to the given plan.
+   * @param spark     The Spark session.
+   * @param plan      The plan to be un-cached.
+   * @param cascade   If true, un-cache all the cache entries that refer to the given
+   *                  plan; otherwise un-cache the given plan only.
+   * @param blocking  Whether to block until all blocks are deleted.
    */
   def uncacheQuery(spark: SparkSession, plan: LogicalPlan,
     cascade: Boolean, blocking: Boolean): Unit = writeLock {
+    val condition: LogicalPlan => Boolean =
+      if (cascade) {
+        _.find(_.sameResult(plan)).isDefined
+      } else {
+        _.sameResult(plan)
+      }
     val it = cachedData.iterator()
-    val needToRecache = scala.collection.mutable.ArrayBuffer.empty[CachedData]
     while (it.hasNext) {
       val cd = it.next()
-      if (cd.plan.find(_.sameResult(plan)).isDefined) {
+      if (condition(cd.plan)) {
+        cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
         it.remove()
-        if (cascade || cd.plan.sameResult(plan)) {
-          cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
-        } else {
+      }
+    }
+    // Re-compile dependent cached queries after removing the cached query.
+    if (!cascade) {
+      val it = cachedData.iterator()
+      val needToRecache = scala.collection.mutable.ArrayBuffer.empty[CachedData]
+      while (it.hasNext) {
+        val cd = it.next()
+        if (cd.plan.find(_.sameResult(plan)).isDefined) {
+          it.remove()
           val plan = spark.sessionState.executePlan(cd.plan).executedPlan
           val newCache = InMemoryRelation(
             cacheBuilder = cd.cachedRepresentation.cacheBuilder.withCachedPlan(plan),
@@ -133,9 +155,8 @@ class CacheManager extends Logging {
           needToRecache += cd.copy(cachedRepresentation = newCache)
         }
       }
+      needToRecache.foreach(cachedData.add)
     }
-
-    needToRecache.foreach(cachedData.add)
   }
 
   /**

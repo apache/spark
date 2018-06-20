@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.storage.StorageLevel
@@ -134,6 +135,29 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
   }
 
   test("SPARK-24596 Non-cascading Cache Invalidation") {
+    val df = Seq(("a", 1), ("b", 2)).toDF("s", "i")
+    val df2 = df.filter('i > 1)
+    val df3 = df.filter('i < 2)
+
+    df2.cache()
+    df.cache()
+    df.count()
+    df3.cache()
+
+    df.unpersist()
+
+    def verifyCacheRemoved(df: DataFrame): Unit = {
+      val plan = df.queryExecution.withCachedData
+      assert(plan.isInstanceOf[InMemoryRelation])
+      val internalPlan = plan.asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
+      assert(internalPlan.find(_.isInstanceOf[InMemoryTableScanExec]).isEmpty)
+    }
+
+    verifyCacheRemoved(df2)
+    verifyCacheRemoved(df3)
+  }
+
+  test("SPARK-24596 Non-cascading Cache Invalidation - verify cached data reuse") {
     val expensiveUDF = udf({x: Int => Thread.sleep(10000); x})
     val df = spark.range(0, 10).toDF("a")
     val df1 = df.withColumn("b", expensiveUDF($"a"))
