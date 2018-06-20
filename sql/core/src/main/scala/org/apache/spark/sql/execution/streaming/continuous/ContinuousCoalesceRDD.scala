@@ -25,6 +25,9 @@ import org.apache.spark.sql.execution.streaming.continuous.shuffle._
 import org.apache.spark.util.ThreadUtils
 
 case class ContinuousCoalesceRDDPartition(index: Int) extends Partition {
+  // This flag will be flipped on the executors to indicate that the threads processing
+  // partitions of the write-side RDD have been started. These will run indefinitely
+  // asynchronously as epochs of the coalesce RDD complete on the read side.
   private[continuous] var writersInitialized: Boolean = false
 }
 
