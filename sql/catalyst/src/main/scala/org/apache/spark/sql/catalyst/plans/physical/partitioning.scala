@@ -155,17 +155,26 @@ trait Partitioning {
    * i.e. the current dataset does not need to be re-partitioned for the `required`
    * Distribution (it is possible that tuples within a partition need to be reorganized).
    *
-   * By default a [[Partitioning]] can satisfy [[UnspecifiedDistribution]], and [[AllTuples]] if
-   * the [[Partitioning]] only have one partition. Implementations can overwrite this method with
-   * special logic.
+   * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` does't match
+   * [[Distribution.requiredNumPartitions]].
    */
-  def satisfies(required: Distribution): Boolean = required match {
-    case UnspecifiedDistribution => true
-    case AllTuples => numPartitions == 1
-    case _ => required.requiredNumPartitions.forall(_ == numPartitions) && satisfies0(required)
+  final def satisfies(required: Distribution): Boolean = {
+    required.requiredNumPartitions.forall(_ == numPartitions) && satisfies0(required)
   }
 
-  protected def satisfies0(required: Distribution): Boolean = false
+  /**
+   * The actual method that defines whether this [[Partitioning]] can satisfy the given
+   * [[Distribution]], after the `numPartitions` check.
+   *
+   * By default a [[Partitioning]] can satisfy [[UnspecifiedDistribution]], and [[AllTuples]] if
+   * the [[Partitioning]] only have one partition. Implementations can also overwrite this method
+   * with special logic.
+   */
+  protected def satisfies0(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
+    case AllTuples => numPartitions == 1
+    case _ => false
+  }
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning
@@ -199,14 +208,16 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def dataType: DataType = IntegerType
 
   override def satisfies0(required: Distribution): Boolean = {
-    required match {
-      case h: HashClusteredDistribution =>
-        expressions.length == h.hashExprs.length && expressions.zip(h.hashExprs).forall {
-          case (l, r) => l.semanticEquals(r)
-        }
-      case c: ClusteredDistribution =>
-        expressions.forall(x => c.clustering.exists(_.semanticEquals(x)))
-      case _ => false
+    super.satisfies0(required) || {
+      required match {
+        case d: HashClusteredDistribution =>
+          expressions.length == d.hashExprs.length && expressions.zip(d.hashExprs).forall {
+            case (l, r) => l.semanticEquals(r)
+          }
+        case ClusteredDistribution(requiredClustering, _) =>
+          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case _ => false
+      }
     }
   }
 
@@ -237,13 +248,15 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override def dataType: DataType = IntegerType
 
   override def satisfies0(required: Distribution): Boolean = {
-    required match {
-      case OrderedDistribution(requiredOrdering) =>
-        val minSize = Seq(requiredOrdering.size, ordering.size).min
-        requiredOrdering.take(minSize) == ordering.take(minSize)
-      case ClusteredDistribution(requiredClustering, _) =>
-        ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
-      case _ => false
+    super.satisfies0(required) || {
+      required match {
+        case OrderedDistribution(requiredOrdering) =>
+          val minSize = Seq(requiredOrdering.size, ordering.size).min
+          requiredOrdering.take(minSize) == ordering.take(minSize)
+        case ClusteredDistribution(requiredClustering, _) =>
+          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case _ => false
+      }
     }
   }
 }
@@ -282,7 +295,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
    * Returns true if any `partitioning` of this collection satisfies the given
    * [[Distribution]].
    */
-  override def satisfies(required: Distribution): Boolean =
+  override def satisfies0(required: Distribution): Boolean =
     partitionings.exists(_.satisfies(required))
 
   override def toString: String = {
@@ -297,7 +310,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
   override val numPartitions: Int = 1
 
-  override def satisfies(required: Distribution): Boolean = required match {
+  override def satisfies0(required: Distribution): Boolean = required match {
     case BroadcastDistribution(m) if m == mode => true
     case _ => false
   }
