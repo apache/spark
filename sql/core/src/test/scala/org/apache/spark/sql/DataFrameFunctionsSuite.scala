@@ -575,6 +575,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(array_contains(df("a"), df("c"))),
       Seq(Row(true), Row(false))
     )
+    checkAnswer(
+      df.selectExpr("array_contains(a, c)"),
+      Seq(Row(true), Row(false))
+    )
 
     // In hive, this errors because null has no type information
     intercept[AnalysisException] {
@@ -802,6 +806,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1L), Row(0L))
     )
     checkAnswer(
+      df.selectExpr("array_position(a, c)"),
+      Seq(Row(1L), Row(0L))
+    )
+    checkAnswer(
       df.select(array_position(df("a"), df("c"))),
       Seq(Row(1L), Row(0L))
     )
@@ -854,6 +862,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
     checkAnswer(
       df.select(element_at(df("a"), df("b"))),
+      Seq(Row("1"), Row(""), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("element_at(a, b)"),
       Seq(Row("1"), Row(""), Row(null))
     )
 
@@ -1137,6 +1149,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(array_remove($"a", $"d")),
+      Seq(
+        Row(Seq(1, 3)),
+        Row(Seq.empty[Int]),
+        Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_remove(a, d)"),
       Seq(
         Row(Seq(1, 3)),
         Row(Seq.empty[Int]),

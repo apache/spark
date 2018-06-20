@@ -3083,7 +3083,7 @@ object functions {
    */
   def array_contains(column: Column, value: Any): Column = withExpr {
     value match {
-      case c: Column => ArrayContains(column.expr, c.expr)
+      case c: Column => ArrayContains(column.expr, lit(c).expr)
       case _ => ArrayContains(column.expr, Literal(value))
     }
   }
@@ -3150,7 +3150,7 @@ object functions {
    */
   def array_position(column: Column, value: Any): Column = withExpr {
     value match {
-      case c: Column => ArrayPosition(column.expr, c.expr)
+      case c: Column => ArrayPosition(column.expr, lit(c).expr)
       case _ => ArrayPosition(column.expr, Literal(value))
     }
   }
@@ -3164,7 +3164,7 @@ object functions {
    */
   def element_at(column: Column, value: Any): Column = withExpr {
     value match {
-      case c: Column => ElementAt(column.expr, c.expr)
+      case c: Column => ElementAt(column.expr, lit(c).expr)
       case _ => ElementAt(column.expr, Literal(value))
     }
   }
@@ -3185,7 +3185,7 @@ object functions {
    */
   def array_remove(column: Column, element: Any): Column = withExpr {
     element match {
-      case c: Column => ArrayRemove(column.expr, c.expr)
+      case c: Column => ArrayRemove(column.expr, lit(c).expr)
       case _ => ArrayRemove(column.expr, Literal(element))
     }
   }
