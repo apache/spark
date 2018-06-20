@@ -28,10 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
@@ -803,16 +801,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(cachedData.collect === Seq(1001))
   }
 
-  test("SPARK-24596 Non-cascading Cache Invalidation - uncache") {
+  test("SPARK-24596 Non-cascading Cache Invalidation - uncache temporary view") {
     withView("t1", "t2") {
       sql("CACHE TABLE t1 AS SELECT * FROM testData WHERE key > 1")
       sql("CACHE TABLE t2 as SELECT * FROM t1 WHERE value > 1")
 
-      assertCached(spark.table("t1"))
-      assertCached(spark.table("t2"))
+      assert(spark.catalog.isCached("t1"))
+      assert(spark.catalog.isCached("t2"))
       sql("UNCACHE TABLE t1")
-      assertCached(spark.table("t1"), 0)
-      assertCached(spark.table("t2"))
+      assert(!spark.catalog.isCached("t1"))
+      assert(spark.catalog.isCached("t2"))
     }
   }
 
@@ -821,10 +819,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       sql("CACHE TABLE t1 AS SELECT * FROM testData WHERE key > 1")
       sql("CACHE TABLE t2 as SELECT * FROM t1 WHERE value > 1")
 
-      assertCached(spark.table("t1"))
-      assertCached(spark.table("t2"))
+      assert(spark.catalog.isCached("t1"))
+      assert(spark.catalog.isCached("t2"))
       sql("DROP VIEW t1")
-      assertCached(spark.table("t2"))
+      assert(spark.catalog.isCached("t2"))
     }
   }
 
@@ -838,10 +836,30 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         sql("CACHE TABLE t1")
         sql("CACHE TABLE t2 AS SELECT * FROM t1 WHERE value > 1")
 
-        assertCached(spark.table("t1"))
-        assertCached(spark.table("t2"))
+        assert(spark.catalog.isCached("t1"))
+        assert(spark.catalog.isCached("t2"))
         sql("DROP VIEW t1")
-        assertCached(spark.table("t2"), 0)
+        assert(!spark.catalog.isCached("t2"))
+      }
+    }
+  }
+
+  test("SPARK-24596 Non-cascading Cache Invalidation - uncache table") {
+    withTable("t") {
+      spark.range(1, 10).toDF("key").withColumn("value", 'key * 2)
+        .write.format("json").saveAsTable("t")
+      withView("t1", "t2") {
+        sql("CACHE TABLE t")
+        sql("CACHE TABLE t1 AS SELECT * FROM t WHERE key > 1")
+        sql("CACHE TABLE t2 AS SELECT * FROM t1 WHERE value > 1")
+
+        assert(spark.catalog.isCached("t"))
+        assert(spark.catalog.isCached("t1"))
+        assert(spark.catalog.isCached("t2"))
+        sql("UNCACHE TABLE t")
+        assert(!spark.catalog.isCached("t"))
+        assert(!spark.catalog.isCached("t1"))
+        assert(!spark.catalog.isCached("t2"))
       }
     }
   }
