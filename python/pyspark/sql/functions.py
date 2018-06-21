@@ -1999,6 +1999,20 @@ def array_remove(col, element):
     return Column(sc._jvm.functions.array_remove(_to_java_column(col), element))
 
 
+@since(2.4)
+def array_distinct(col):
+    """
+    Collection function: removes duplicate values from the array.
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([1, 2, 3, 2],), ([4, 5, 5, 4],)], ['data'])
+    >>> df.select(array_distinct(df.data)).collect()
+    [Row(array_distinct(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
@@ -2168,8 +2182,7 @@ def from_json(col, schema, options={}):
     [Row(json=Row(a=1))]
     >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
     [Row(json=Row(a=1))]
-    >>> schema = MapType(StringType(), IntegerType())
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    >>> df.select(from_json(df.value, "MAP<STRING,INT>").alias("json")).collect()
     [Row(json={u'a': 1})]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))

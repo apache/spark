@@ -766,4 +766,49 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayRemove(c1, dataToRemove2), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
     checkEvaluation(ArrayRemove(c2, dataToRemove2), Seq[Seq[Int]](null, Seq[Int](2, 1)))
   }
+
+  test("Array Distinct") {
+    val a0 = Literal.create(Seq(2, 1, 2, 3, 4, 4, 5), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
+    val a2 = Literal.create(Seq("b", "a", "a", "c", "b"), ArrayType(StringType))
+    val a3 = Literal.create(Seq("b", null, "a", null, "a", null), ArrayType(StringType))
+    val a4 = Literal.create(Seq(null, null, null), ArrayType(NullType))
+    val a5 = Literal.create(Seq(true, false, false, true), ArrayType(BooleanType))
+    val a6 = Literal.create(Seq(1.123, 0.1234, 1.121, 1.123, 1.1230, 1.121, 0.1234),
+      ArrayType(DoubleType))
+    val a7 = Literal.create(Seq(1.123f, 0.1234f, 1.121f, 1.123f, 1.1230f, 1.121f, 0.1234f),
+      ArrayType(FloatType))
+
+    checkEvaluation(new ArrayDistinct(a0), Seq(2, 1, 3, 4, 5))
+    checkEvaluation(new ArrayDistinct(a1), Seq.empty[Integer])
+    checkEvaluation(new ArrayDistinct(a2), Seq("b", "a", "c"))
+    checkEvaluation(new ArrayDistinct(a3), Seq("b", null, "a"))
+    checkEvaluation(new ArrayDistinct(a4), Seq(null))
+    checkEvaluation(new ArrayDistinct(a5), Seq(true, false))
+    checkEvaluation(new ArrayDistinct(a6), Seq(1.123, 0.1234, 1.121))
+    checkEvaluation(new ArrayDistinct(a7), Seq(1.123f, 0.1234f, 1.121f))
+
+    // complex data types
+    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2),
+      Array[Byte](1, 2), Array[Byte](5, 6)), ArrayType(BinaryType))
+    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null),
+      ArrayType(BinaryType))
+    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), null, Array[Byte](1, 2),
+      null, Array[Byte](5, 6), null), ArrayType(BinaryType))
+
+    checkEvaluation(ArrayDistinct(b0), Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)))
+    checkEvaluation(ArrayDistinct(b1), Seq[Array[Byte]](Array[Byte](2, 1), null))
+    checkEvaluation(ArrayDistinct(b2), Seq[Array[Byte]](Array[Byte](5, 6), null,
+      Array[Byte](1, 2)))
+
+    val c0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](1, 2),
+      Seq[Int](3, 4), Seq[Int](1, 2)), ArrayType(ArrayType(IntegerType)))
+    val c1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
+      ArrayType(ArrayType(IntegerType)))
+    val c2 = Literal.create(Seq[Seq[Int]](null, Seq[Int](2, 1), null, null, Seq[Int](2, 1), null),
+      ArrayType(ArrayType(IntegerType)))
+    checkEvaluation(ArrayDistinct(c0), Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)))
+    checkEvaluation(ArrayDistinct(c1), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
+    checkEvaluation(ArrayDistinct(c2), Seq[Seq[Int]](null, Seq[Int](2, 1)))
+  }
 }
