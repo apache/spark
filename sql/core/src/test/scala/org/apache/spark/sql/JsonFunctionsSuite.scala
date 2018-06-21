@@ -354,8 +354,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-24027: from_json - map<string, map<string, int>>") {
     val in = Seq("""{"a": {"b": 1}}""").toDS()
-    val schema = MapType(StringType, MapType(StringType, IntegerType))
-    val out = in.select(from_json($"value", schema))
+    val schema = "map<string, map<string, int>>"
+    val out = in.select(from_json($"value", schema, Map.empty[String, String]))
 
     checkAnswer(out, Row(Map("a" -> Map("b" -> 1))))
   }

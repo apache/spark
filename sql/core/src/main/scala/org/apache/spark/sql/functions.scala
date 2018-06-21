@@ -3093,7 +3093,7 @@ object functions {
    * @since 1.5.0
    */
   def array_contains(column: Column, value: Any): Column = withExpr {
-    ArrayContains(column.expr, Literal(value))
+    ArrayContains(column.expr, lit(value).expr)
   }
 
   /**
@@ -3157,7 +3157,7 @@ object functions {
    * @since 2.4.0
    */
   def array_position(column: Column, value: Any): Column = withExpr {
-    ArrayPosition(column.expr, Literal(value))
+    ArrayPosition(column.expr, lit(value).expr)
   }
 
   /**
@@ -3168,7 +3168,7 @@ object functions {
    * @since 2.4.0
    */
   def element_at(column: Column, value: Any): Column = withExpr {
-    ElementAt(column.expr, Literal(value))
+    ElementAt(column.expr, lit(value).expr)
   }
 
   /**
@@ -3186,8 +3186,15 @@ object functions {
    * @since 2.4.0
    */
   def array_remove(column: Column, element: Any): Column = withExpr {
-    ArrayRemove(column.expr, Literal(element))
+    ArrayRemove(column.expr, lit(element).expr)
   }
+
+  /**
+   * Removes duplicate values from the array.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_distinct(e: Column): Column = withExpr { ArrayDistinct(e.expr) }
 
   /**
    * Creates a new row for each element in the given array or map column.
@@ -3369,7 +3376,7 @@ object functions {
     val dataType = try {
       DataType.fromJson(schema)
     } catch {
-      case NonFatal(_) => StructType.fromDDL(schema)
+      case NonFatal(_) => DataType.fromDDL(schema)
     }
     from_json(e, dataType, options)
   }
