@@ -130,6 +130,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
           "df.filter($\"_corrupt_record\".isNotNull).count()."
       )
     }
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
@@ -137,7 +138,13 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         parsedOptions)
-      CSVDataSource(parsedOptions).readFile(conf, file, parser, requiredSchema)
+      CSVDataSource(parsedOptions).readFile(
+        conf,
+        file,
+        parser,
+        requiredSchema,
+        dataSchema,
+        caseSensitive)
     }
   }
 
