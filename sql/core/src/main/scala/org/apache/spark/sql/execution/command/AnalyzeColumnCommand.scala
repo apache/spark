@@ -47,7 +47,7 @@ case class AnalyzeColumnCommand(
     if (tableMeta.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
-    val sizeInBytes = CommandUtils.calculateTotalSize(sessionState, tableMeta)
+    val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
 
     // Compute stats for each column
     val (rowCount, newColStats) = computeColumnStats(sparkSession, tableIdentWithDB, columnNames)

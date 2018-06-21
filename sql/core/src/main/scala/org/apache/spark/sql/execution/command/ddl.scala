@@ -449,9 +449,13 @@ case class AlterTableAddPartitionCommand(
 
     if (table.stats.nonEmpty) {
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+        val hadoopConf = sparkSession.sessionState.newHadoopConf()
+        val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+        val stagingDir = sparkSession.sessionState.conf
+          .getConfString("hive.exec.stagingdir", ".hive-staging")
         val addedSize = parts.map { part =>
-          CommandUtils.calculateLocationSize(sparkSession.sessionState, table.identifier,
-            part.storage.locationUri)
+          CommandUtils.calculateLocationSize(serializableConfiguration, table.identifier,
+            part.storage.locationUri, stagingDir)
         }.sum
         if (addedSize > 0) {
           val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)

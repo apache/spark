@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition}
-import org.apache.spark.sql.internal.SessionState
+import org.apache.spark.util.SerializableConfiguration
 
 
 object CommandUtils extends Logging {
@@ -38,7 +38,7 @@ object CommandUtils extends Logging {
       val catalog = sparkSession.sessionState.catalog
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
         val newTable = catalog.getTableMetadata(table.identifier)
-        val newSize = CommandUtils.calculateTotalSize(sparkSession.sessionState, newTable)
+        val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
         val newStats = CatalogStatistics(sizeInBytes = newSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
       } else {
@@ -47,22 +47,40 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSize(sessionState: SessionState, catalogTable: CatalogTable): BigInt = {
+  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
+
+    // Need to revisit the following vars :
+    val sessionState = spark.sessionState
+    val hadoopConf = sessionState.newHadoopConf()
+    val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+    val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+
     if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
+      calculateLocationSize(serializableConfiguration, catalogTable.identifier,
+          catalogTable.storage.locationUri, stagingDir)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
-      partitions.map { p =>
-        calculateLocationSize(sessionState, catalogTable.identifier, p.storage.locationUri)
-      }.sum
+      val startTime = System.currentTimeMillis()
+      val numParallelism = Math.min(partitions.size,
+        Math.min(spark.sparkContext.defaultParallelism, 10000))
+      val test = spark.sparkContext.parallelize(partitions, numParallelism).mapPartitions {
+        part => part.map(p =>
+          calculateLocationSize(serializableConfiguration, catalogTable.identifier,
+            p.storage.locationUri, stagingDir)
+        )
+      }.reduce(_ + _)
+      val endTime = System.currentTimeMillis()
+      logDebug(s"time taken to send SQL Analysis metrics: ${endTime - startTime}ms")
+      test
     }
   }
 
   def calculateLocationSize(
-      sessionState: SessionState,
+      hadoopConfSerialized: SerializableConfiguration,
       identifier: TableIdentifier,
-      locationUri: Option[URI]): Long = {
+      locationUri: Option[URI],
+      stagingDir: String): Long = {
     // This method is mainly based on
     // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
     // in Hive 0.13 (except that we do not use fs.getContentSummary).
@@ -71,7 +89,7 @@ object CommandUtils extends Logging {
     // Can we use fs.getContentSummary in future?
     // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
     // countFileSize to count the table size.
-    val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+
 
     def getPathSize(fs: FileSystem, path: Path): Long = {
       val fileStatus = fs.getFileStatus(path)
@@ -96,7 +114,7 @@ object CommandUtils extends Logging {
     val size = locationUri.map { p =>
       val path = new Path(p)
       try {
-        val fs = path.getFileSystem(sessionState.newHadoopConf())
+        val fs = path.getFileSystem(hadoopConfSerialized.value)
         getPathSize(fs, path)
       } catch {
         case NonFatal(e) =>
