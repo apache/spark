@@ -78,6 +78,9 @@ class DataFrame(object):
         self.is_cached = False
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
+        # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
+        # by __repr__ and _repr_html_ while eager evaluation opened.
+        self._support_repr_html = False
 
     @property
     @since(1.3)
@@ -351,8 +354,68 @@ class DataFrame(object):
         else:
             print(self._jdf.showString(n, int(truncate), vertical))
 
+    @property
+    def _eager_eval(self):
+        """Returns true if the eager evaluation enabled.
+        """
+        return self.sql_ctx.getConf(
+            "spark.sql.repl.eagerEval.enabled", "false").lower() == "true"
+
+    @property
+    def _max_num_rows(self):
+        """Returns the max row number for eager evaluation.
+        """
+        return int(self.sql_ctx.getConf(
+            "spark.sql.repl.eagerEval.maxNumRows", "20"))
+
+    @property
+    def _truncate(self):
+        """Returns the truncate length for eager evaluation.
+        """
+        return int(self.sql_ctx.getConf(
+            "spark.sql.repl.eagerEval.truncate", "20"))
+
     def __repr__(self):
-        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+        if not self._support_repr_html and self._eager_eval:
+            vertical = False
+            return self._jdf.showString(
+                self._max_num_rows, self._truncate, vertical)
+        else:
+            return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    def _repr_html_(self):
+        """Returns a dataframe with html code when you enabled eager evaluation
+        by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
+        using support eager evaluation with HTML.
+        """
+        import cgi
+        if not self._support_repr_html:
+            self._support_repr_html = True
+        if self._eager_eval:
+            max_num_rows = max(self._max_num_rows, 0)
+            vertical = False
+            sock_info = self._jdf.getRowsToPython(
+                max_num_rows, self._truncate, vertical)
+            rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+            head = rows[0]
+            row_data = rows[1:]
+            has_more_data = len(row_data) > max_num_rows
+            row_data = row_data[:max_num_rows]
+
+            html = "<table border='1'>\n"
+            # generate table head
+            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
+            # generate table rows
+            for row in row_data:
+                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
+                    map(lambda x: cgi.escape(x), row))
+            html += "</table>\n"
+            if has_more_data:
+                html += "only showing top %d %s\n" % (
+                    max_num_rows, "row" if max_num_rows == 1 else "rows")
+            return html
+        else:
+            return None
 
     @since(2.1)
     def checkpoint(self, eager=True):
@@ -463,8 +526,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+            sock_info = self._jdf.collectToPython()
+        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -477,8 +540,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.toPythonIterator()
-        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
+            sock_info = self._jdf.toPythonIterator()
+        return _load_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -1975,6 +2038,8 @@ class DataFrame(object):
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
+        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
@@ -2087,8 +2152,8 @@ class DataFrame(object):
         .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(port, ArrowSerializer()))
+            sock_info = self._jdf.collectAsArrowToPython()
+        return list(_load_from_socket(sock_info, ArrowSerializer()))
 
     ##########################################################################################
     # Pandas compatibility

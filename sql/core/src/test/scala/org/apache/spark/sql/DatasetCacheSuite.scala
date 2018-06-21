@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.storage.StorageLevel
 
 
-class DatasetCacheSuite extends QueryTest with SharedSQLContext {
+class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits {
   import testImplicits._
 
   test("get storage level") {
@@ -95,5 +98,38 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
     agged.unpersist()
     assert(agged.storageLevel == StorageLevel.NONE, "The Dataset agged should not be cached.")
+  }
+
+  test("persist and then withColumn") {
+    val df = Seq(("test", 1)).toDF("s", "i")
+    val df2 = df.withColumn("newColumn", lit(1))
+
+    df.cache()
+    assertCached(df)
+    assertCached(df2)
+
+    df.count()
+    assertCached(df2)
+
+    df.unpersist()
+    assert(df.storageLevel == StorageLevel.NONE)
+  }
+
+  test("cache UDF result correctly") {
+    val expensiveUDF = udf({x: Int => Thread.sleep(10000); x})
+    val df = spark.range(0, 10).toDF("a").withColumn("b", expensiveUDF($"a"))
+    val df2 = df.agg(sum(df("b")))
+
+    df.cache()
+    df.count()
+    assertCached(df2)
+
+    // udf has been evaluated during caching, and thus should not be re-evaluated here
+    failAfter(5 seconds) {
+      df2.collect()
+    }
+
+    df.unpersist()
+    assert(df.storageLevel == StorageLevel.NONE)
   }
 }

@@ -23,11 +23,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{BooleanType, LongType}
 import org.apache.spark.util.TaskCompletionListener
 
 /**
@@ -183,7 +184,7 @@ case class BroadcastHashJoinExec(
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
         val javaType = CodeGenerator.javaType(a.dataType)
-        val code = s"""
+        val code = code"""
           |boolean $isNull = true;
           |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
           |if ($matched != null) {
@@ -192,7 +193,7 @@ case class BroadcastHashJoinExec(
           |  $value = ${ev.value};
           |}
          """.stripMargin
-        ExprCode(code, isNull, value)
+        ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType))
       }
     }
   }
@@ -487,7 +488,8 @@ case class BroadcastHashJoinExec(
       s"$existsVar = true;"
     }
 
-    val resultVar = input ++ Seq(ExprCode("", "false", existsVar))
+    val resultVar = input ++ Seq(ExprCode.forNonNullValue(
+      JavaCode.variable(existsVar, BooleanType)))
     if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side

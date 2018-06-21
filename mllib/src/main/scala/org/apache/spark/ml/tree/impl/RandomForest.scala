@@ -108,9 +108,11 @@ private[spark] object RandomForest extends Logging {
       case Some(instrumentation) =>
         instrumentation.logNumFeatures(metadata.numFeatures)
         instrumentation.logNumClasses(metadata.numClasses)
+        instrumentation.logNumExamples(metadata.numExamples)
       case None =>
         logInfo("numFeatures: " + metadata.numFeatures)
         logInfo("numClasses: " + metadata.numClasses)
+        logInfo("numExamples: " + metadata.numExamples)
     }
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
@@ -224,23 +226,23 @@ private[spark] object RandomForest extends Logging {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(uid, rootNode.toNode(prune), numFeatures,
-              strategy.getNumClasses)
+            new DecisionTreeClassificationModel(uid, rootNode.toClassificationNode(prune),
+              numFeatures, strategy.getNumClasses)
           }
         } else {
           topNodes.map { rootNode =>
-            new DecisionTreeRegressionModel(uid, rootNode.toNode(prune), numFeatures)
+            new DecisionTreeRegressionModel(uid, rootNode.toRegressionNode(prune), numFeatures)
           }
         }
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(rootNode.toNode(prune), numFeatures,
+            new DecisionTreeClassificationModel(rootNode.toClassificationNode(prune), numFeatures,
               strategy.getNumClasses)
           }
         } else {
           topNodes.map(rootNode =>
-            new DecisionTreeRegressionModel(rootNode.toNode(prune), numFeatures))
+            new DecisionTreeRegressionModel(rootNode.toRegressionNode(prune), numFeatures))
         }
     }
   }

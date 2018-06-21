@@ -133,9 +133,8 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.am.waitTime</code></td>
   <td><code>100s</code></td>
   <td>
-    In <code>cluster</code> mode, time for the YARN Application Master to wait for the
-    SparkContext to be initialized. In <code>client</code> mode, time for the YARN Application Master to wait
-    for the driver to connect to it.
+    Only used in <code>cluster</code> mode. Time for the YARN Application Master to wait for the
+    SparkContext to be initialized.
   </td>
 </tr>
 <tr>
@@ -418,16 +417,19 @@ To use a custom metrics.properties for the application master and executors, upd
 
 - Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
 - In `cluster` mode, the local directories used by the Spark executors and the Spark driver will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored. In `client` mode, the Spark executors will use the local directories configured for YARN while the Spark driver will use those defined in `spark.local.dir`. This is because the Spark driver does not run on the YARN cluster in `client` mode, only the Spark executors do.
-- The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named `localtest.txt` into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
+- The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example, you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named `localtest.txt` into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
 - The `--jars` option allows the `SparkContext.addJar` function to work if you are using it with local files and running in `cluster` mode. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.
 
 # Kerberos
 
 Standard Kerberos support in Spark is covered in the [Security](security.html#kerberos) page.
 
-In YARN mode, when accessing Hadoop file systems, aside from the service hosting the user's home
-directory, Spark will also automatically obtain delegation tokens for the service hosting the
-staging directory of the Spark application.
+In YARN mode, when accessing Hadoop filesystems, Spark will automatically obtain delegation tokens
+for:
+
+- the filesystem hosting the staging directory of the Spark application (which is the default
+  filesystem if `spark.yarn.stagingDir` is not set);
+- if Hadoop federation is enabled, all the federated filesystems in the configuration.
 
 If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
 explicitly provided to Spark at launch time. This is done by listing them in the

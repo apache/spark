@@ -289,7 +289,8 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
   }
 
   private def createRawHiveTable(ddl: String): Unit = {
-    hiveContext.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client.runSqlHive(ddl)
+    hiveContext.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+      .client.runSqlHive(ddl)
   }
 
   private def checkCreateTable(table: String): Unit = {

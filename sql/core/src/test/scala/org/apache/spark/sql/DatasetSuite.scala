@@ -1425,6 +1425,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23627: provide isEmpty in DataSet") {
+    val ds1 = spark.emptyDataset[Int]
+    val ds2 = Seq(1, 2, 3).toDS()
+
+    assert(ds1.isEmpty == true)
+    assert(ds2.isEmpty == false)
+  }
+
   test("SPARK-22472: add null check for top-level primitive values") {
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
@@ -1452,6 +1460,24 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val group1 = cached.groupBy("x").agg(min(col("y")) as "value")
     val group2 = cached.groupBy("x").agg(min(col("z")) as "value")
     checkAnswer(group1.union(group2), Row(4, 5) :: Row(1, 2) :: Row(4, 6) :: Row(1, 3) :: Nil)
+  }
+
+  test("SPARK-23835: null primitive data type should throw NullPointerException") {
+    val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
+    intercept[NullPointerException](ds.as[(Int, Int)].collect())
+  }
+
+  test("SPARK-24548: Dataset with tuple encoders should have correct schema") {
+    val encoder = Encoders.tuple(newStringEncoder,
+      Encoders.tuple(newStringEncoder, newStringEncoder))
+
+    val data = Seq(("a", ("1", "2")), ("b", ("3", "4")))
+    val rdd = sparkContext.parallelize(data)
+
+    val ds1 = spark.createDataset(rdd)
+    val ds2 = spark.createDataset(rdd)(encoder)
+    assert(ds1.schema == ds2.schema)
+    checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
   }
 }
 
