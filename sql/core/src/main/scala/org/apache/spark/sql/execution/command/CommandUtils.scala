@@ -47,12 +47,10 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
+    def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
 
-    // Need to revisit the following vars :
     val sessionState = spark.sessionState
-    val hadoopConf = sessionState.newHadoopConf()
-    val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+    val serializableConfiguration = new SerializableConfiguration(sessionState.newHadoopConf())
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
     if (catalogTable.partitionColumnNames.isEmpty) {
@@ -61,18 +59,14 @@ object CommandUtils extends Logging {
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
-      val startTime = System.currentTimeMillis()
       val numParallelism = Math.min(partitions.size,
         Math.min(spark.sparkContext.defaultParallelism, 10000))
-      val test = spark.sparkContext.parallelize(partitions, numParallelism).mapPartitions {
+      spark.sparkContext.parallelize(partitions, numParallelism).mapPartitions {
         part => part.map(p =>
           calculateLocationSize(serializableConfiguration, catalogTable.identifier,
             p.storage.locationUri, stagingDir)
         )
       }.reduce(_ + _)
-      val endTime = System.currentTimeMillis()
-      logDebug(s"time taken to send SQL Analysis metrics: ${endTime - startTime}ms")
-      test
     }
   }
 
