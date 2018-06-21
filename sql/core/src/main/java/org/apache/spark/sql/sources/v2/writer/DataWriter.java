@@ -40,13 +40,13 @@ import org.apache.spark.annotation.InterfaceStability;
  * writers. If this data writer fails(one record fails to write or {@link #commit()} fails), an
  * exception will be sent to the driver side, and Spark may retry this writing task a few times.
  * In each retry, {@link DataWriterFactory#createDataWriter(int, int, long)} will receive a
- * different `attemptNumber`. Spark will call {@link DataSourceWriter#abort(WriterCommitMessage[])}
+ * different `taskId`. Spark will call {@link DataSourceWriter#abort(WriterCommitMessage[])}
  * when the configured number of retries is exhausted.
  *
  * Besides the retry mechanism, Spark may launch speculative tasks if the existing writing task
  * takes too long to finish. Different from retried tasks, which are launched one by one after the
  * previous one fails, speculative tasks are running simultaneously. It's possible that one input
- * RDD partition has multiple data writers with different `attemptNumber` running at the same time,
+ * RDD partition has multiple data writers with different `taskId` running at the same time,
  * and data sources should guarantee that these data writers don't conflict and can work together.
  * Implementations can coordinate with driver during {@link #commit()} to make sure only one of
  * these data writers can commit successfully. Or implementations can allow all of them to commit
