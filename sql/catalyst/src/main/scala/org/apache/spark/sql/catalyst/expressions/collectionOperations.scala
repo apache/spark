@@ -500,6 +500,8 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
 
   private def nullEntries: Boolean = dataTypeDetails.get._3
 
+  override def nullable: Boolean = child.nullable || nullEntries
+
   override def dataType: MapType = dataTypeDetails.get._1
 
   override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
@@ -510,24 +512,26 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
 
   override protected def nullSafeEval(input: Any): Any = {
     val arrayData = input.asInstanceOf[ArrayData]
-    val length = arrayData.numElements()
-    val numEntries = if (nullEntries) (0 until length).count(!arrayData.isNullAt(_)) else length
+    val numEntries = arrayData.numElements()
+    var i = 0
+    if(nullEntries) {
+      while (i < numEntries) {
+        if (arrayData.isNullAt(i)) return null
+        i += 1
+      }
+    }
     val keyArray = new Array[AnyRef](numEntries)
     val valueArray = new Array[AnyRef](numEntries)
-    var i = 0
-    var j = 0
-    while (i < length) {
-      if (!arrayData.isNullAt(i)) {
-        val entry = arrayData.getStruct(i, 2)
-        val key = entry.get(0, dataType.keyType)
-        if (key == null) {
-          throw new RuntimeException("The first field from a struct (key) can't be null.")
-        }
-        keyArray.update(j, key)
-        val value = entry.get(1, dataType.valueType)
-        valueArray.update(j, value)
-        j += 1
+    i = 0
+    while (i < numEntries) {
+      val entry = arrayData.getStruct(i, 2)
+      val key = entry.get(0, dataType.keyType)
+      if (key == null) {
+        throw new RuntimeException("The first field from a struct (key) can't be null.")
       }
+      keyArray.update(i, key)
+      val value = entry.get(1, dataType.valueType)
+      valueArray.update(i, value)
       i += 1
     }
     ArrayBasedMapData(keyArray, valueArray)
@@ -535,46 +539,33 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
-      val length = ctx.freshName("length")
       val numEntries = ctx.freshName("numEntries")
       val isKeyPrimitive = CodeGenerator.isPrimitiveType(dataType.keyType)
       val isValuePrimitive = CodeGenerator.isPrimitiveType(dataType.valueType)
       val code = if (isKeyPrimitive && isValuePrimitive) {
-        genCodeForPrimitiveElements(ctx, c, ev.value, length, numEntries)
+        genCodeForPrimitiveElements(ctx, c, ev.value, numEntries)
       } else {
-        genCodeForAnyElements(ctx, c, ev.value, length, numEntries)
+        genCodeForAnyElements(ctx, c, ev.value, numEntries)
       }
-      val numEntriesAssignment = if (nullEntries) {
-        val idx = ctx.freshName("idx")
+      ctx.nullArrayElementsSaveExec(nullEntries, ev.isNull, c) {
         s"""
-           |int $numEntries = 0;
-           |for (int $idx = 0; $idx < $length; $idx++) {
-           |  if (!$c.isNullAt($idx)) $numEntries++;
-           |}
+           |final int $numEntries = $c.numElements();
+           |$code
          """.stripMargin
-      } else {
-        s"final int $numEntries = $length;"
       }
-
-      s"""
-         |final int $length = $c.numElements();
-         |$numEntriesAssignment
-         |$code
-       """.stripMargin
     })
   }
 
   private def genCodeForAssignmentLoop(
       ctx: CodegenContext,
       childVariable: String,
-      length: String,
+      mapData: String,
+      numEntries: String,
       keyAssignment: (String, String) => String,
       valueAssignment: (String, String) => String): String = {
     val entry = ctx.freshName("entry")
     val i = ctx.freshName("idx")
-    val j = ctx.freshName("idx")
 
-    val nullEntryCheck = if (nullEntries) s"if ($childVariable.isNullAt($i)) continue;" else ""
     val nullKeyCheck = if (dataTypeDetails.get._2) {
       s"""
          |if ($entry.isNullAt(0)) {
@@ -586,13 +577,11 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     }
 
     s"""
-       |for (int $i = 0, $j = 0; $i < $length; $i++) {
-       |  $nullEntryCheck
+       |for (int $i = 0; $i < $numEntries; $i++) {
        |  InternalRow $entry = $childVariable.getStruct($i, 2);
        |  $nullKeyCheck
-       |  ${keyAssignment(CodeGenerator.getValue(entry, dataType.keyType, "0"), j)}
-       |  ${valueAssignment(entry, j)}
-       |  $j++;
+       |  ${keyAssignment(CodeGenerator.getValue(entry, dataType.keyType, "0"), i)}
+       |  ${valueAssignment(entry, i)}
        |}
      """.stripMargin
   }
@@ -601,7 +590,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       ctx: CodegenContext,
       childVariable: String,
       mapData: String,
-      length: String,
       numEntries: String): String = {
     val byteArraySize = ctx.freshName("byteArraySize")
     val keySectionSize = ctx.freshName("keySectionSize")
@@ -638,7 +626,8 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     val assignmentLoop = genCodeForAssignmentLoop(
       ctx,
       childVariable,
-      length,
+      mapData,
+      numEntries,
       keyAssignment,
       valueAssignment
     )
@@ -648,7 +637,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
        |final long $valueSectionSize = $vByteSize;
        |final long $byteArraySize = 8 + $keySectionSize + $valueSectionSize;
        |if ($byteArraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  ${genCodeForAnyElements(ctx, childVariable, mapData, length, numEntries)}
+       |  ${genCodeForAnyElements(ctx, childVariable, mapData, numEntries)}
        |} else {
        |  final byte[] $data = new byte[(int)$byteArraySize];
        |  UnsafeMapData $unsafeMapData = new UnsafeMapData();
@@ -668,7 +657,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       ctx: CodegenContext,
       childVariable: String,
       mapData: String,
-      length: String,
       numEntries: String): String = {
     val keys = ctx.freshName("keys")
     val values = ctx.freshName("values")
@@ -687,7 +675,8 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     val assignmentLoop = genCodeForAssignmentLoop(
       ctx,
       childVariable,
-      length,
+      mapData,
+      numEntries,
       keyAssignment,
       valueAssignment)
 
@@ -2218,22 +2207,8 @@ case class Flatten(child: Expression) extends UnaryExpression {
       } else {
         genCodeForFlattenOfNonPrimitiveElements(ctx, c, ev.value)
       }
-      if (childDataType.containsNull) nullElementsProtection(ev, c, code) else code
+      ctx.nullArrayElementsSaveExec(childDataType.containsNull, ev.isNull, c)(code)
     })
-  }
-
-  private def nullElementsProtection(
-      ev: ExprCode,
-      childVariableName: String,
-      coreLogic: String): String = {
-    s"""
-    |for (int z = 0; !${ev.isNull} && z < $childVariableName.numElements(); z++) {
-    |  ${ev.isNull} |= $childVariableName.isNullAt(z);
-    |}
-    |if (!${ev.isNull}) {
-    |  $coreLogic
-    |}
-    """.stripMargin
   }
 
   private def genCodeForNumberOfElements(

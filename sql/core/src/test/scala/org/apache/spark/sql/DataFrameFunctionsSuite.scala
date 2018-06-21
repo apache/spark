@@ -646,7 +646,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("a")
     val iExpected = Seq(
       Row(Map(1 -> 10, 2 -> 20, 3 -> 10)),
-      Row(Map(1 -> 10, 2 -> 20)),
+      Row(null),
       Row(Map.empty),
       Row(null))
 
@@ -673,7 +673,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("a")
     val sExpected = Seq(
       Row(Map("a" -> "aa", "b" -> "bb", "c" -> "aa")),
-      Row(Map("a" -> "aa", "b" -> "bb")),
+      Row(null),
       Row(Map("a" -> null, "b" -> null)),
       Row(Map.empty),
       Row(null))
