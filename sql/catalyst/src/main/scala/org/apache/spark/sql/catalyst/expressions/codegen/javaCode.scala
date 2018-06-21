@@ -117,7 +117,7 @@ object JavaCode {
   /**
    * Create an `InlineBlock` for Java Class name.
    */
-  def className(javaClass: Class[_]): InlineBlock = InlineBlock(javaClass.getName)
+  def javaType(javaClass: Class[_]): InlineBlock = InlineBlock(javaClass.getName)
 
   /**
    * Create an `InlineBlock` for Java Type name.

@@ -822,7 +822,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.className(classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
           val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
           code"""
              |$bufferClass $buffer = new $bufferClass();
@@ -833,7 +833,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case MapType(kt, vt, _) =>
         (c, evPrim, evNull) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.className(classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
           val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
           code"""
              |$bufferClass $buffer = new $bufferClass();
@@ -845,7 +845,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         (c, evPrim, evNull) => {
           val row = ctx.freshVariable("row", classOf[InternalRow])
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.className(classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
           val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
           code"""
              |InternalRow $row = $c;
@@ -1204,7 +1204,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castArrayCode(
       fromType: DataType, toType: DataType, ctx: CodegenContext): CastFunction = {
     val elementCast = nullSafeCastFunction(fromType, toType, ctx)
-    val arrayClass = JavaCode.className(classOf[GenericArrayData])
+    val arrayClass = JavaCode.javaType(classOf[GenericArrayData])
     val fromElementNull = ctx.freshVariable("feNull", BooleanType)
     val fromElementPrim = ctx.freshVariable("fePrim", fromType)
     val toElementNull = ctx.freshVariable("teNull", BooleanType)
@@ -1242,7 +1242,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val keysCast = castArrayCode(from.keyType, to.keyType, ctx)
     val valuesCast = castArrayCode(from.valueType, to.valueType, ctx)
 
-    val mapClass = JavaCode.className(classOf[ArrayBasedMapData])
+    val mapClass = JavaCode.javaType(classOf[ArrayBasedMapData])
 
     val keys = ctx.freshVariable("keys", ArrayType(from.keyType))
     val convertedKeys = ctx.freshVariable("convertedKeys", ArrayType(to.keyType))
@@ -1272,7 +1272,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case (fromField, toField) => nullSafeCastFunction(fromField.dataType, toField.dataType, ctx)
     }
     val tmpResult = ctx.freshVariable("tmpResult", classOf[GenericInternalRow])
-    val rowClass = JavaCode.className(classOf[GenericInternalRow])
+    val rowClass = JavaCode.javaType(classOf[GenericInternalRow])
     val tmpInput = ctx.freshVariable("tmpInput", classOf[InternalRow])
 
     val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) =>
