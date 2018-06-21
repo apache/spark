@@ -109,7 +109,8 @@ object DataWritingSparkTask extends Logging {
     val stageId = context.stageId()
     val stageAttempt = context.stageAttemptNumber()
     val partId = context.partitionId()
-    val taskId = context.taskAttemptId().toInt
+    val taskId = context.taskAttemptId()
+    val attemptId = context.attemptNumber()
     val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
     val dataWriter = writeTask.createDataWriter(partId, taskId, epochId.toLong)
 
@@ -121,18 +122,17 @@ object DataWritingSparkTask extends Logging {
 
       val msg = if (useCommitCoordinator) {
         val coordinator = SparkEnv.get.outputCommitCoordinator
-        val commitAuthorized = coordinator.canCommit(stageId, stageAttempt, partId,
-          context.attemptNumber())
+        val commitAuthorized = coordinator.canCommit(stageId, stageAttempt, partId, attemptId)
         if (commitAuthorized) {
           logInfo(s"Writer for stage $stageId.$stageAttempt, " +
-            s"task $partId.$taskId is authorized to commit.")
+            s"task $partId.$attemptId is authorized to commit.")
           dataWriter.commit()
         } else {
           val message = s"Stage $stageId.$stageAttempt, " +
-            s"task $partId.$taskId: driver did not authorize commit"
+            s"task $partId.$attemptId: driver did not authorize commit"
           logInfo(message)
           // throwing CommitDeniedException will trigger the catch block for abort
-          throw new CommitDeniedException(message, stageId, partId, taskId)
+          throw new CommitDeniedException(message, stageId, partId, attemptId)
         }
 
       } else {
@@ -140,15 +140,15 @@ object DataWritingSparkTask extends Logging {
         dataWriter.commit()
       }
 
-      logInfo(s"Writer for stage $stageId, part $partId (TID $taskId) committed.")
+      logInfo(s"Writer for stage $stageId, task $partId.$attemptId committed.")
 
       msg
 
     })(catchBlock = {
       // If there is an error, abort this writer
-      logError(s"Writer for stage $stageId, part $partId (TID $taskId) is aborting.")
+      logError(s"Writer for stage $stageId, task $partId.$attemptId is aborting.")
       dataWriter.abort()
-      logError(s"Writer for stage $stageId, part $partId (TID $taskId) aborted.")
+      logError(s"Writer for stage $stageId, task $partId.$attemptId aborted.")
     })
   }
 }
@@ -159,10 +159,10 @@ class InternalRowDataWriterFactory(
 
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
     new InternalRowDataWriter(
-      rowWriterFactory.createDataWriter(partitionId, attemptNumber, epochId),
+      rowWriterFactory.createDataWriter(partitionId, taskId, epochId),
       RowEncoder.apply(schema).resolveAndBind())
   }
 }

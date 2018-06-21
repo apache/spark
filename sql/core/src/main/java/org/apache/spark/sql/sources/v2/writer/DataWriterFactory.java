@@ -49,5 +49,5 @@ public interface DataWriterFactory<T> extends Serializable {
    *                discrete periods of execution. For non-streaming queries,
    *                this ID will always be 0.
    */
-  DataWriter<T> createDataWriter(int partitionId, int taskId, long epochId);
+  DataWriter<T> createDataWriter(int partitionId, long taskId, long epochId);
 }

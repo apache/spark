@@ -22,7 +22,7 @@ import java.io.IOException;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A data writer returned by {@link DataWriterFactory#createDataWriter(int, int, long)} and is
+ * A data writer returned by {@link DataWriterFactory#createDataWriter(int, long, long)} and is
  * responsible for writing data for an input RDD partition.
  *
  * One Spark task has one exclusive data writer, so there is no thread-safe concern.
@@ -39,7 +39,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * {@link DataSourceWriter#commit(WriterCommitMessage[])} with commit messages from other data
  * writers. If this data writer fails(one record fails to write or {@link #commit()} fails), an
  * exception will be sent to the driver side, and Spark may retry this writing task a few times.
- * In each retry, {@link DataWriterFactory#createDataWriter(int, int, long)} will receive a
+ * In each retry, {@link DataWriterFactory#createDataWriter(int, long, long)} will receive a
  * different `taskId`. Spark will call {@link DataSourceWriter#abort(WriterCommitMessage[])}
  * when the configured number of retries is exhausted.
  *
