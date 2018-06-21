@@ -140,15 +140,15 @@ object DataWritingSparkTask extends Logging {
         dataWriter.commit()
       }
 
-      logInfo(s"Writer for stage $stageId, task $partId (TID $taskId) committed.")
+      logInfo(s"Writer for stage $stageId, part $partId (TID $taskId) committed.")
 
       msg
 
     })(catchBlock = {
       // If there is an error, abort this writer
-      logError(s"Writer for stage $stageId, task $partId (TID $taskId) is aborting.")
+      logError(s"Writer for stage $stageId, part $partId (TID $taskId) is aborting.")
       dataWriter.abort()
-      logError(s"Writer for stage $stageId, task $partId (TID $taskId) aborted.")
+      logError(s"Writer for stage $stageId, part $partId (TID $taskId) aborted.")
     })
   }
 }
