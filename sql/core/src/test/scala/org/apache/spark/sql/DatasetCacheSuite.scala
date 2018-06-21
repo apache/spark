@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.storage.StorageLevel
@@ -131,5 +132,20 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
 
     df.unpersist()
     assert(df.storageLevel == StorageLevel.NONE)
+  }
+
+  test("SPARK-24613 Cache with UDF could not be matched with subsequent dependent caches") {
+    val udf1 = udf({x: Int => x + 1})
+    val df = spark.range(0, 10).toDF("a").withColumn("b", udf1($"a"))
+    val df2 = df.agg(sum(df("b")))
+
+    df.cache()
+    df.count()
+    df2.cache()
+
+    val plan = df2.queryExecution.withCachedData
+    assert(plan.isInstanceOf[InMemoryRelation])
+    val internalPlan = plan.asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
+    assert(internalPlan.find(_.isInstanceOf[InMemoryTableScanExec]).isDefined)
   }
 }
