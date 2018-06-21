@@ -374,25 +374,19 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("SPARK-24566") {
     val conf = new SparkConf()
-    conf.set("spark.network.timeout", "110")
-    val defaultSlaveTimeoutMs =
-      conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
-        s"${conf.getTimeAsSeconds("spark.network.timeout", "120s").seconds.toMillis}ms")
-    assert(defaultSlaveTimeoutMs === 110000)
     conf.set("spark.storage.blockManagerSlaveTimeoutMs", "13000ms")
-    val slaveTimeoutMs =
-      conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
-        s"${conf.getTimeAsSeconds("spark.network.timeout", "120s").seconds.toMillis}ms")
-    assert(slaveTimeoutMs === 13000)
-    conf.remove("spark.network.timeout")
+    conf.set("spark.storage.blockManagerTimeoutIntervalMs", "13000ms")
+
     val executorTimeoutMs =
-      conf.getTimeAsSeconds("spark.network.timeout", s"${slaveTimeoutMs}ms").seconds.toMillis
+      conf.getTimeAsSeconds("spark.network.timeout",
+        s"${conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
+          "120s")}ms").seconds.toMillis
     assert(executorTimeoutMs === 13000)
-    val timeoutIntervalMs = 60000
-    conf.set("spark.network.timeoutInterval", "130")
-    val checkTimeoutIntervalMs = conf.getTimeAsSeconds("spark.network.timeoutInterval",
-      s"${timeoutIntervalMs}ms").seconds.toMillis
-    assert(checkTimeoutIntervalMs === 130000)
+    val checkTimeoutIntervalMs =
+      conf.getTimeAsSeconds("spark.network.timeoutInterval",
+        s"${conf.getTimeAsMs("spark.storage.blockManagerTimeoutIntervalMs",
+          "60s")}ms").seconds.toMillis
+    assert(checkTimeoutIntervalMs === 13000)
   }
 }
 
