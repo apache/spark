@@ -29,10 +29,8 @@ import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.{MicroBatchExecution, StreamExecution}
-import org.apache.spark.sql.execution.streaming.continuous.{CommitPartitionEpoch, ContinuousExecution, EpochCoordinatorRef, SetWriterPartitions}
+import org.apache.spark.sql.execution.streaming.MicroBatchExecution
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -110,7 +108,7 @@ object DataWritingSparkTask extends Logging {
       useCommitCoordinator: Boolean): WriterCommitMessage = {
     val stageId = context.stageId()
     val partId = context.partitionId()
-    val attemptId = context.attemptNumber()
+    val attemptId = context.taskAttemptId().toInt
     val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
     val dataWriter = writeTask.createDataWriter(partId, attemptId, epochId.toLong)
 
@@ -124,10 +122,12 @@ object DataWritingSparkTask extends Logging {
         val coordinator = SparkEnv.get.outputCommitCoordinator
         val commitAuthorized = coordinator.canCommit(context.stageId(), partId, attemptId)
         if (commitAuthorized) {
-          logInfo(s"Writer for stage $stageId, task $partId.$attemptId is authorized to commit.")
+          logInfo(
+            s"Writer for stage $stageId, task $partId (TID $attemptId) is authorized to commit.")
           dataWriter.commit()
         } else {
-          val message = s"Stage $stageId, task $partId.$attemptId: driver did not authorize commit"
+          val message =
+            s"Stage $stageId, task $partId (TID $attemptId): driver did not authorize commit"
           logInfo(message)
           // throwing CommitDeniedException will trigger the catch block for abort
           throw new CommitDeniedException(message, stageId, partId, attemptId)
@@ -138,15 +138,15 @@ object DataWritingSparkTask extends Logging {
         dataWriter.commit()
       }
 
-      logInfo(s"Writer for stage $stageId, task $partId.$attemptId committed.")
+      logInfo(s"Writer for stage $stageId, task $partId (TID $attemptId) committed.")
 
       msg
 
     })(catchBlock = {
       // If there is an error, abort this writer
-      logError(s"Writer for stage $stageId, task $partId.$attemptId is aborting.")
+      logError(s"Writer for stage $stageId, task $partId (TID $attemptId) is aborting.")
       dataWriter.abort()
-      logError(s"Writer for stage $stageId, task $partId.$attemptId aborted.")
+      logError(s"Writer for stage $stageId, task $partId (TID $attemptId) aborted.")
     })
   }
 }
