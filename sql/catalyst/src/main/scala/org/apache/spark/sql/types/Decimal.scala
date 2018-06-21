@@ -215,7 +215,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null)) {
       longVal / POW_10(_scale)
     } else {
-      decimalVal.longValue()
+      // This will throw an exception if overflow occurs
+      decimalVal.toLongExact
     }
   }
 

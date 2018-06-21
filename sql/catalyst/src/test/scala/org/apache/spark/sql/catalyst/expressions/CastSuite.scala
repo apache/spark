@@ -922,4 +922,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
     checkEvaluation(ret6, "[1, [1 -> a, 2 -> b, 3 -> c]]")
   }
+
+  test("SPARK-24598: Cast to long should fail on overflow") {
+    checkExceptionInExpression[ArithmeticException](
+      cast(Literal.create(Decimal(Long.MaxValue) + Decimal(1)), LongType), "Overflow")
+    checkEvaluation(cast(Literal.create(Decimal(Long.MaxValue)), LongType), Long.MaxValue)
+  }
 }

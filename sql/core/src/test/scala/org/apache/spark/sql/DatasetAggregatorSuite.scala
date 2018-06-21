@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -332,5 +333,13 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.groupBy($"i").agg(VeryComplexResultAgg.toColumn),
       Row(1, Row(Row(1, "a"), Row(1, "a"))) :: Row(2, Row(Row(2, "bc"), Row(2, "bc"))) :: Nil)
+  }
+
+  test("SPARK-24598: sum throws exception instead of silently overflow") {
+    val df1 = Seq(Long.MinValue, -10, Long.MaxValue).toDF("i")
+    checkAnswer(df1.agg(sum($"i")), Row(-11))
+    val df2 = Seq(Long.MinValue, -10, 8).toDF("i")
+    val e = intercept[SparkException](df2.agg(sum($"i")).collect())
+    assert(e.getCause.isInstanceOf[ArithmeticException])
   }
 }
