@@ -120,12 +120,12 @@ object SparkHadoopWriter extends Logging {
       jobTrackerId: String,
       commitJobId: Int,
       sparkPartitionId: Int,
-      sparkTaskId: Long,
+      sparkTaskId: Int,
       committer: FileCommitProtocol,
       iterator: Iterator[(K, V)]): TaskCommitMessage = {
     // Set up a task.
     val taskContext = config.createTaskAttemptContext(
-      jobTrackerId, commitJobId, sparkPartitionId, sparkTaskId.toInt)
+      jobTrackerId, commitJobId, sparkPartitionId, sparkTaskId)
     committer.setupTask(taskContext)
 
     val (outputMetrics, callback) = initHadoopOutputMetrics(context)
