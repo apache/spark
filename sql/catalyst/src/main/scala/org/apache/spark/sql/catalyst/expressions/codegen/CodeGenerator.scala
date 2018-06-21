@@ -820,15 +820,15 @@ class CodegenContext {
   }
 
   /**
-    * Generates code to do null safe execution when accessing properties of complex
-    * ArrayData elements.
-    *
-    * @param nullElements used to decide whether the ArrayData might contain null or not.
-    * @param isNull a variable indicating whether the result will be evaluated to null or not.
-    * @param arrayData a variable name representing the ArrayData.
-    * @param execute the code that should be executed only if the ArrayData doesn't contain
-    *                any null.
-    */
+   * Generates code to do null safe execution when accessing properties of complex
+   * ArrayData elements.
+   *
+   * @param nullElements used to decide whether the ArrayData might contain null or not.
+   * @param isNull a variable indicating whether the result will be evaluated to null or not.
+   * @param arrayData a variable name representing the ArrayData.
+   * @param execute the code that should be executed only if the ArrayData doesn't contain
+   *                any null.
+   */
   def nullArrayElementsSaveExec(
       nullElements: Boolean,
       isNull: String,
