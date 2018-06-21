@@ -1216,6 +1216,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
   }
 
+  test("array_distinct functions") {
+    val df = Seq(
+      (Array[Int](2, 1, 3, 4, 3, 5), Array("b", "c", "a", "c", "b", "", "")),
+      (Array.empty[Int], Array.empty[String]),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(array_distinct($"a"), array_distinct($"b")),
+      Seq(
+        Row(Seq(2, 1, 3, 4, 5), Seq("b", "c", "a", "")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("array_distinct(a)", "array_distinct(b)"),
+      Seq(
+        Row(Seq(2, 1, 3, 4, 5), Seq("b", "c", "a", "")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
