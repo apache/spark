@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisBarrier, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
@@ -97,7 +97,7 @@ class CacheManager extends Logging {
       val inMemoryRelation = InMemoryRelation(
         sparkSession.sessionState.conf.useCompression,
         sparkSession.sessionState.conf.columnBatchSize, storageLevel,
-        sparkSession.sessionState.executePlan(planToCache).executedPlan,
+        sparkSession.sessionState.executePlan(AnalysisBarrier(planToCache)).executedPlan,
         tableName,
         planToCache.stats)
       cachedData.add(CachedData(planToCache, inMemoryRelation))
@@ -146,7 +146,7 @@ class CacheManager extends Logging {
           useCompression = cd.cachedRepresentation.useCompression,
           batchSize = cd.cachedRepresentation.batchSize,
           storageLevel = cd.cachedRepresentation.storageLevel,
-          child = spark.sessionState.executePlan(cd.plan).executedPlan,
+          child = spark.sessionState.executePlan(AnalysisBarrier(cd.plan)).executedPlan,
           tableName = cd.cachedRepresentation.tableName,
           statsOfPlanToCache = cd.plan.stats)
         needToRecache += cd.copy(cachedRepresentation = newCache)
