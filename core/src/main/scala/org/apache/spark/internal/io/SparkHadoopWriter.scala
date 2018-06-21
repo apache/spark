@@ -76,13 +76,29 @@ object SparkHadoopWriter extends Logging {
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
+        // Generate a positive integer task ID that is unique for the current stage. This makes a
+        // few assumptions:
+        // - the task ID is always positive
+        // - stages cannot have more than Int.MaxValue
+        // - the sum of task counts of all active stages doesn't exceed Int.MaxValue
+        //
+        // The first two are currently the case in Spark, while the last one is very unlikely to
+        // occur. If it does, two tasks IDs on a single stage could have a clashing integer value,
+        // which could lead to code that generates clashing file names for different tasks. Still,
+        // if the commit coordinator is enabled, only one task would be allowed to commit.
+        var taskId = context.taskAttemptId
+        while (taskId > Int.MaxValue) {
+          taskId -= Int.MaxValue
+        }
+        val stageTaskId = taskId.toInt
+
         executeTask(
           context = context,
           config = config,
           jobTrackerId = jobTrackerId,
           commitJobId = commitJobId,
           sparkPartitionId = context.partitionId,
-          sparkTaskId = context.taskAttemptId,
+          sparkTaskId = stageTaskId,
           committer = committer,
           iterator = iter)
       })
