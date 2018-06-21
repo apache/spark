@@ -2489,6 +2489,7 @@ def arrays_zip(*cols):
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
 
+
 @since(2.4)
 def map_concat(*cols):
     """Returns the union of all the given maps.
