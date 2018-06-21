@@ -2617,6 +2617,7 @@
           <threshold>Low</threshold>
           <xmlOutput>true</xmlOutput>
           <visitors>FindPuzzlers</visitors>
+          <fork>false</fork>
         </configuration>
         <dependencies>
           <dependency>
