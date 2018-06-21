@@ -68,21 +68,6 @@ case object AllTuples extends Distribution {
   }
 }
 
-abstract class ClusteredDistributionBase(exprs: Seq[Expression]) extends Distribution {
-  require(
-    exprs.nonEmpty,
-    s"The clustering expressions of a ${getClass.getSimpleName} should not be empty. " +
-      "An AllTuples should be used to represent a distribution that only has " +
-      "a single partition.")
-
-  override def createPartitioning(numPartitions: Int): Partitioning = {
-    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
-      s"This ${getClass.getSimpleName} requires ${requiredNumPartitions.get} partitions, but " +
-        s"the actual number of partitions is $numPartitions.")
-    HashPartitioning(exprs, numPartitions)
-  }
-}
-
 /**
  * Represents data where tuples that share the same values for the `clustering`
  * [[Expression Expressions]] will be co-located. Based on the context, this
@@ -91,19 +76,45 @@ abstract class ClusteredDistributionBase(exprs: Seq[Expression]) extends Distrib
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
-    requiredNumPartitions: Option[Int] = None) extends ClusteredDistributionBase(clustering)
+    requiredNumPartitions: Option[Int] = None) extends Distribution {
+  require(
+    clustering != Nil,
+    "The clustering expressions of a ClusteredDistribution should not be Nil. " +
+      "An AllTuples should be used to represent a distribution that only has " +
+      "a single partition.")
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
+      s"This ClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
+        s"the actual number of partitions is $numPartitions.")
+    HashPartitioning(clustering, numPartitions)
+  }
+}
 
 /**
- * Represents data where tuples have been clustered according to the hash of the given expressions.
- * The hash function is defined as [[HashPartitioning.partitionIdExpression]], so only
+ * Represents data where tuples have been clustered according to the hash of the given
+ * `expressions`. The hash function is defined as `HashPartitioning.partitionIdExpression`, so only
  * [[HashPartitioning]] can satisfy this distribution.
  *
  * This is a strictly stronger guarantee than [[ClusteredDistribution]]. Given a tuple and the
  * number of partitions, this distribution strictly requires which partition the tuple should be in.
  */
 case class HashClusteredDistribution(
-    hashExprs: Seq[Expression],
-    requiredNumPartitions: Option[Int] = None) extends ClusteredDistributionBase(hashExprs)
+    expressions: Seq[Expression],
+    requiredNumPartitions: Option[Int] = None) extends Distribution {
+  require(
+    expressions != Nil,
+    "The expressions for hash of a HashClusteredDistribution should not be Nil. " +
+      "An AllTuples should be used to represent a distribution that only has " +
+      "a single partition.")
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
+      s"This HashClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
+        s"the actual number of partitions is $numPartitions.")
+    HashPartitioning(expressions, numPartitions)
+  }
+}
 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
@@ -210,8 +221,8 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
       required match {
-        case d: HashClusteredDistribution =>
-          expressions.length == d.hashExprs.length && expressions.zip(d.hashExprs).forall {
+        case h: HashClusteredDistribution =>
+          expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
         case ClusteredDistribution(requiredClustering, _) =>
