@@ -455,8 +455,17 @@ hadoop credential create spark.ssl.keyPassword -value password \
     -provider jceks://hdfs@nn1.example.com:9001/user/backup/ssl.jceks
 ```
 
-In the meantime, adding configuration "hadoop.security.credential.provider.path=jceks://hdfs@nn1.example.com:9001/user/backup/ssl.jceks"
-into Spark's Hadoop configuration to make it aware of credential provider path.
+To configure the location of the credential provider, set the `hadoop.security.credential.provider.path`
+config option in the Hadoop configuration used by Spark, like:
+
+```
+  <property>
+    <name>hadoop.security.credential.provider.path</name>
+    <value>jceks://hdfs@nn1.example.com:9001/user/backup/ssl.jceks</value>
+  </property>
+```
+
+Or via SparkConf "spark.hadoop.hadoop.security.credential.provider.path=jceks://hdfs@nn1.example.com:9001/user/backup/ssl.jceks".
 
 ## Preparing the key stores
 
