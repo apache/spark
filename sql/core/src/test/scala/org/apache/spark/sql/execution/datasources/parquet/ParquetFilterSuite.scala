@@ -685,8 +685,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       parquetFilters.createFilter(schema, sources.In("a", Array(10, 20, 30)))
     }
 
-    assert(parquetFilters.createFilter(schema, sources.In("a", Range(1, 100).toArray)).isDefined)
-    assert(parquetFilters.createFilter(schema, sources.In("a", Range(1, 101).toArray)).isEmpty)
+    assert(parquetFilters.createFilter(schema, sources.In("a", Range(1, 20).toArray)).isDefined)
+    assert(parquetFilters.createFilter(schema, sources.In("a", Range(1, 21).toArray)).isEmpty)
   }
 }
 
