@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.charset.StandardCharsets
 import java.sql.Date
 
-import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
+import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 
@@ -659,6 +659,34 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       // Will return 0 rows if PARQUET-1217 is not fixed.
       assert(df.where("col > 0").count() === 2)
     }
+  }
+
+  test("SPARK-17091: Convert IN predicate to Parquet filter push-down") {
+    val schema = StructType(Seq(
+      StructField("a", IntegerType, nullable = false)
+    ))
+
+    assertResult(Some(FilterApi.eq(intColumn("a"), 10: Integer))) {
+      parquetFilters.createFilter(schema, sources.In("a", Array(10)))
+    }
+
+    assertResult(Some(or(
+      FilterApi.eq(intColumn("a"), 10: Integer),
+      FilterApi.eq(intColumn("a"), 20: Integer)))
+    ) {
+      parquetFilters.createFilter(schema, sources.In("a", Array(10, 20)))
+    }
+
+    assertResult(Some(or(or(
+      FilterApi.eq(intColumn("a"), 10: Integer),
+      FilterApi.eq(intColumn("a"), 20: Integer)),
+      FilterApi.eq(intColumn("a"), 30: Integer)))
+    ) {
+      parquetFilters.createFilter(schema, sources.In("a", Array(10, 20, 30)))
+    }
+
+    assert(parquetFilters.createFilter(schema, sources.In("a", Range(1, 100).toArray)).isDefined)
+    assert(parquetFilters.createFilter(schema, sources.In("a", Range(1, 101).toArray)).isEmpty)
   }
 }
 
