@@ -478,7 +478,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayMax(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))), 1.123)
   }
 
-  test("Sequence") {
+  test("Sequence of numbers") {
     // test null handling
 
     checkEvaluation(new Sequence(Literal(null, LongType), Literal(1L)), null)
@@ -501,21 +501,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       new Sequence(Literal(2), Literal(1), Literal(1)), EmptyRow, "boundaries: 2 to 1 by 1")
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(1), Literal(2), Literal(-1)), EmptyRow, "boundaries: 1 to 2 by -1")
-
-    checkExceptionInExpression[IllegalArgumentException](
-      new Sequence(
-        Literal(Date.valueOf("1970-01-02")),
-        Literal(Date.valueOf("1970-01-01")),
-        Literal(CalendarInterval.fromString("interval 1 day"))),
-      EmptyRow, "sequence boundaries: 1 to 0 by 1")
-
-    checkExceptionInExpression[IllegalArgumentException](
-      new Sequence(
-        Literal(Date.valueOf("1970-01-01")),
-        Literal(Date.valueOf("1970-02-01")),
-        Literal(CalendarInterval.fromString("interval 1 month").negate())),
-      EmptyRow,
-      s"sequence boundaries: 0 to 2678400000000 by -${28 * CalendarInterval.MICROS_PER_DAY}")
 
     // test sequence with one element (zero step or equal start and stop)
 
@@ -650,7 +635,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Sequence on DST boundaries") {
-    val timeZone = TimeZone.getTimeZone("CET")
+    val timeZone = TimeZone.getTimeZone("Europe/Prague")
     val dstOffset = timeZone.getDSTSavings
 
     def noDST(t: Timestamp): Timestamp = new Timestamp(t.getTime - dstOffset)
@@ -721,6 +706,21 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Date.valueOf("2019-06-01"),
           Date.valueOf("2020-11-01"),
           Date.valueOf("2022-04-01")))
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("1970-01-02")),
+          Literal(Date.valueOf("1970-01-01")),
+          Literal(CalendarInterval.fromString("interval 1 day"))),
+        EmptyRow, "sequence boundaries: 1 to 0 by 1")
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("1970-01-01")),
+          Literal(Date.valueOf("1970-02-01")),
+          Literal(CalendarInterval.fromString("interval 1 month").negate())),
+        EmptyRow,
+        s"sequence boundaries: 0 to 2678400000000 by -${28 * CalendarInterval.MICROS_PER_DAY}")
     }
   }
 

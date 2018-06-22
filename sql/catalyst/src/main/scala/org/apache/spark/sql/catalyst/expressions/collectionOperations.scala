@@ -2650,9 +2650,9 @@ object Sequence {
   private def getSequenceLength[U](start: U, stop: U, step: U)(implicit num: Integral[U]): Int = {
     import num._
     require(
-      step > num.zero && start <= stop
-        || step < num.zero && start >= stop
-        || step == 0 && start == stop,
+      (step > num.zero && start <= stop)
+        || (step < num.zero && start >= stop)
+        || (step == 0 && start == stop),
       s"Illegal sequence boundaries: $start to $stop by $step")
 
     val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / step.toLong
@@ -2672,9 +2672,9 @@ object Sequence {
       len: String): String = {
     val longLen = ctx.freshName("longLen")
     s"""
-       |if (!($step > 0 && $start <= $stop||
-       |  $step < 0 && $start >= $stop||
-       |  $step == 0 && $start == $stop)) {
+       |if (!(($step > 0 && $start <= $stop) ||
+       |  ($step < 0 && $start >= $stop) ||
+       |  ($step == 0 && $start == $stop))) {
        |  throw new IllegalArgumentException(
        |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
        |}
