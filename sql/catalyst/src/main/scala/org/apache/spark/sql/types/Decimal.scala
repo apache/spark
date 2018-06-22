@@ -216,7 +216,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       longVal / POW_10(_scale)
     } else {
       // This will throw an exception if overflow occurs
-      decimalVal.toLongExact
+      if (decimalVal.compare(LONG_MIN_BIG_DEC) < 0 || decimalVal.compare(LONG_MAX_BIG_DEC) > 0) {
+        throw new ArithmeticException("Overflow")
+      }
+      decimalVal.longValue()
     }
   }
 
@@ -432,6 +435,9 @@ object Decimal {
 
   private val LONG_MAX_BIG_INT = BigInteger.valueOf(JLong.MAX_VALUE)
   private val LONG_MIN_BIG_INT = BigInteger.valueOf(JLong.MIN_VALUE)
+
+  private val LONG_MAX_BIG_DEC = BigDecimal.valueOf(JLong.MAX_VALUE)
+  private val LONG_MIN_BIG_DEC = BigDecimal.valueOf(JLong.MIN_VALUE)
 
   def apply(value: Double): Decimal = new Decimal().set(value)
 

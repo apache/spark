@@ -94,8 +94,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkValues(Decimal(2e18.toLong), 2e18, 2e18.toLong)
     checkValues(Decimal(Long.MaxValue), Long.MaxValue.toDouble, Long.MaxValue)
     checkValues(Decimal(Long.MinValue), Long.MinValue.toDouble, Long.MinValue)
-    checkValues(Decimal(Double.MaxValue), Double.MaxValue, 0L)
-    checkValues(Decimal(Double.MinValue), Double.MinValue, 0L)
+    assert(Decimal(Double.MaxValue).toDouble == Double.MaxValue)
+    assert(Decimal(Double.MinValue).toDouble == Double.MinValue)
   }
 
   // Accessor for the BigDecimal value of a Decimal, which will be null if it's using Longs
