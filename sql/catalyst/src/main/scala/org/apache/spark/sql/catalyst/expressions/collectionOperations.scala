@@ -2597,7 +2597,7 @@ object Sequence {
       val exclusiveItem = ctx.freshName("exclusiveItem")
       val t = ctx.freshName("t")
       val i = ctx.freshName("i")
-      val genTimeZone = ctx.freshName("timeZone")
+      val genTimeZone = ctx.addReferenceObj("timeZone", timeZone, classOf[TimeZone].getName)
 
       val sequenceLengthCode =
         s"""
@@ -2627,8 +2627,6 @@ object Sequence {
          |
          |  final int $stepSign = $stopMicros > $startMicros ? +1 : -1;
          |  final long $exclusiveItem = $stopMicros + $stepSign;
-         |  final java.util.TimeZone $genTimeZone =
-         |    java.util.TimeZone.getTimeZone("${timeZone.getID}");
          |
          |  $arr = new $elemType[$arrLength];
          |  long $t = $startMicros;
