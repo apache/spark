@@ -1,3 +1,5 @@
+-- Disable global limit parallel
+set spark.sql.limit.flatGlobalLimit=false;
 
 -- limit on various data types
 SELECT * FROM testdata LIMIT 2;
@@ -21,7 +23,7 @@ SELECT * FROM testdata LIMIT true;
 SELECT * FROM testdata LIMIT 'a';
 
 -- limit within a subquery
-SELECT * FROM (SELECT * FROM range(10) ORDER BY id LIMIT 5) t WHERE id > 3;
+SELECT * FROM (SELECT * FROM range(10) LIMIT 5) WHERE id > 3;
 
 -- limit ALL
 SELECT * FROM testdata WHERE key < 3 LIMIT ALL;
