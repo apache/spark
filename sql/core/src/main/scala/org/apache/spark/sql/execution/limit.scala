@@ -137,23 +137,21 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
     if (sumOfOutput <= limit) {
       shuffled
     } else if (!flatGlobalLimit) {
-      var numTakenRow = 0
-      val takeAmounts = new mutable.HashMap[Int, Int]()
+      var numRowTaken = 0
+      val takeAmounts = mutable.ArrayBuffer.fill[Long](numberOfOutput.length)(0L)
       numberOfOutput.zipWithIndex.foreach { case (num, index) =>
-        if (numTakenRow + num < limit) {
-          numTakenRow += num.toInt
-          takeAmounts += ((index, num.toInt))
+        if (numRowTaken + num < limit) {
+          numRowTaken += num.toInt
+          takeAmounts(index) += num.toInt
         } else {
-          val toTake = limit - numTakenRow
-          numTakenRow += toTake
-          takeAmounts += ((index, toTake))
+          val toTake = limit - numRowTaken
+          numRowTaken += toTake
+          takeAmounts(index) += toTake
         }
       }
       val broadMap = sparkContext.broadcast(takeAmounts)
       shuffled.mapPartitionsWithIndexInternal { case (index, iter) =>
-        broadMap.value.get(index).map { size =>
-          iter.take(size)
-        }.get
+        iter.take(broadMap.value(index).toInt)
       }
     } else {
       // We try to evenly require the asked limit number of rows across all child rdd's partitions.
