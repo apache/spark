@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -138,15 +136,14 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
       shuffled
     } else if (!flatGlobalLimit) {
       var numRowTaken = 0
-      val takeAmounts = mutable.ArrayBuffer.fill[Long](numberOfOutput.length)(0L)
-      numberOfOutput.zipWithIndex.foreach { case (num, index) =>
+      val takeAmounts = numberOfOutput.map { num =>
         if (numRowTaken + num < limit) {
           numRowTaken += num.toInt
-          takeAmounts(index) += num.toInt
+          num.toInt
         } else {
           val toTake = limit - numRowTaken
           numRowTaken += toTake
-          takeAmounts(index) += toTake
+          toTake
         }
       }
       val broadMap = sparkContext.broadcast(takeAmounts)
