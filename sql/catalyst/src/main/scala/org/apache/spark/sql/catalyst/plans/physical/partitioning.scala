@@ -213,7 +213,7 @@ case object SinglePartition extends Partitioning {
  */
 case class LocalPartitioning(orgPartition: Partitioning, numPartitions: Int) extends Partitioning {
   // We will perform this partitioning no matter what the data distribution is.
-  override def satisfies(required: Distribution): Boolean = false
+  override def satisfies0(required: Distribution): Boolean = false
 }
 
 /**
