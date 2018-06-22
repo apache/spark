@@ -76,9 +76,9 @@ object SparkHadoopWriter extends Logging {
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
-        // SPARK-24552: Generate a unique "task ID" based on the stage and task atempt numbers.
+        // SPARK-24552: Generate a unique "attempt ID" based on the stage and task atempt numbers.
         // Assumes that there won't be more than Short.MaxValue attempts, at least not concurrently.
-        val taskId = (context.stageAttemptNumber << 16) | context.attemptNumber
+        val attemptId = (context.stageAttemptNumber << 16) | context.attemptNumber
 
         executeTask(
           context = context,
@@ -86,7 +86,7 @@ object SparkHadoopWriter extends Logging {
           jobTrackerId = jobTrackerId,
           commitJobId = commitJobId,
           sparkPartitionId = context.partitionId,
-          sparkTaskId = taskId,
+          sparkAttemptNumber = attemptId,
           committer = committer,
           iterator = iter)
       })
@@ -108,12 +108,12 @@ object SparkHadoopWriter extends Logging {
       jobTrackerId: String,
       commitJobId: Int,
       sparkPartitionId: Int,
-      sparkTaskId: Int,
+      sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
       iterator: Iterator[(K, V)]): TaskCommitMessage = {
     // Set up a task.
     val taskContext = config.createTaskAttemptContext(
-      jobTrackerId, commitJobId, sparkPartitionId, sparkTaskId)
+      jobTrackerId, commitJobId, sparkPartitionId, sparkAttemptNumber)
     committer.setupTask(taskContext)
 
     val (outputMetrics, callback) = initHadoopOutputMetrics(context)
