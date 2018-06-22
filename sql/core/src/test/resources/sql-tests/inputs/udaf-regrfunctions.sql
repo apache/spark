@@ -47,6 +47,8 @@ CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
  (800, 7, 1, 1)
 as t1(id, px, y, x);
 
+set spark.sql.codegen.wholeStage=false;
+
 select px, var_pop(x), var_pop(y), corr(y,x), covar_samp(y,x), covar_pop(y,x), regr_count(y,x),
  regr_slope(y,x), regr_intercept(y,x), regr_r2(y,x), regr_sxx(y,x), regr_syy(y,x), regr_sxy(y,x),
  regr_avgx(y,x), regr_avgy(y,x), regr_count(y,x)
