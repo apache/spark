@@ -16,9 +16,10 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.util.{List => JList}
+import java.util
+import java.util.{Collections, Comparator, List => JList}
 import javax.ws.rs._
-import javax.ws.rs.core.MediaType
+import javax.ws.rs.core.{Context, MediaType, UriInfo}
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.StageInfo
@@ -119,13 +120,19 @@ private[v1] class StagesResource extends BaseAppResource {
     withUI(_.store.taskList(stageId, stageAttemptId, offset, length, sortBy))
   }
 
-  /*@GET
+  @GET
   @Path("{stageId: \\d+}/taskTable")
   def taskTable(
     @PathParam("stageId") stageId: Int,
-    @QueryParam("details") @DefaultValue("true") details: Boolean): Map[String, TaskData] = {
+    @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo): util.HashMap[String, util.ArrayList[TaskData]] = {
     withUI { ui =>
       var ret = ui.store.stageData(stageId, details = details)
+      var abc = uriInfo.getQueryParameters(true)
+      var iter = abc.keySet().iterator()
+      while(iter.hasNext) {
+        var ac = iter.next()
+        System.err.println("hereeeeeeeeeeee 1 " + ac+" : "+abc.get(ac))
+      }
       if (ret.nonEmpty) {
         for (i <- 0 to (ret.length - 1)) {
           var executorIdArray = ret(i).executorSummary.get.keys.toArray
@@ -143,15 +150,28 @@ private[v1] class StagesResource extends BaseAppResource {
             }
           }
         }
-        var ret1:Map[String, TaskData] = Map()
+        val ret4 = new util.ArrayList[TaskData]()
         ret(0).tasks.get.keys.foreach({ i =>
-            ret1 += (i.toString -> ret(0).tasks.get(i))
+            ret4.add(ret(0).tasks.get(i));
         })
-        ret1
+
+        Collections.sort(ret4, new Comparator[TaskData] {
+          def compare(t1: TaskData, t2: TaskData): Int = {
+            var str = "index"
+            var c = t1.getClass
+            val result = c.getField(str).get(t1)
+            if (t1.index == t2.index) return 0
+            if (t1.index < t2.index) -1
+            else 1
+          }
+        })
+        val ret5 = new util.HashMap[String, util.ArrayList[TaskData]]()
+        ret5.put("aaData", ret4)
+        ret5
       } else {
         throw new NotFoundException(s"unknown stage: $stageId")
       }
     }
-  }*/
+  }
 
 }

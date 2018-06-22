@@ -417,25 +417,36 @@ $(document).ready(function () {
                 // building tasks table
                 var taskTable = "#active-tasks-table";
                 var task_conf = {
-                    "data": task_table,
-                    //"serverSide": true,
-                    //"ajax": stageEndPoint(appId) + "/taskTable",
+                    "serverSide": true,
+                    "paging": false,
+                    "info": true,
+                    "processing": true,
+                    "ajax": {
+                        "url": stageEndPoint(appId) + "/taskTable",
+                        "dataSrc": function ( jsons ) {
+                            var jsonStr = JSON.stringify(jsons);
+                            var marrr = JSON.parse(jsonStr);
+                            return marrr.aaData;
+                        }
+                    },
                     "columns": [
                         {data: function (row, type) {
                             return type !== 'display' ? (isNaN(row.index) ? 0 : row.index ) : row.index;
-                            }
+                            },
+                            name: "Index"
                         },
-                        {data : "taskId"},
-                        {data : "attempt"},
-                        {data : "status"},
-                        {data : "taskLocality"},
+                        {data : "taskId", name: "ID"},
+                        {data : "attempt", name: "Attempt"},
+                        {data : "status", name: "Status"},
+                        {data : "taskLocality", name: "Locality Level"},
                         {
                             data : function (row, type) {
                                 return row.executorId + ' / ' + row.host;
-                            }
+                            },
+                            name: "Executor ID"
                         },
-                        {data : "executorLogs", render: formatLogsCells},
-                        {data : "launchTime", render: formatDate},
+                        {data : "executorLogs", name: "Logs", render: formatLogsCells},
+                        {data : "launchTime", name: "Launch Time", render: formatDate},
                         {
                             data : function (row, type) {
                                 if ("taskMetrics" in row) {
@@ -443,7 +454,8 @@ $(document).ready(function () {
                                 } else {
                                     return "N/A";
                                 }
-                            }
+                            },
+                            name: "Duration"
                         },
                         {
                             data : function (row, type) {
@@ -452,12 +464,14 @@ $(document).ready(function () {
                                 } else {
                                     return "N/A";
                                 }
-                            }
+                            },
+                            name: "GC Time"
                         },
                         {
                             data : function (row, type) {
                                 return type === 'display' ? formatDuration(row.schedulerDelay) : row.schedulerDelay;
-                            }
+                            },
+                            name: "Scheduler Delay"
                         },
                         {
                             data : function (row, type) {
@@ -466,16 +480,22 @@ $(document).ready(function () {
                                 } else {
                                     return "N/A";
                                 }
-                            }
+                            },
+                            name: "Task Deserialization Time"
                         },
                         {
                             data : function (row, type) {
                                 if ("taskMetrics" in row) {
-                                    return type === 'display' ? formatDuration(row.taskMetrics.shuffleReadMetrics.fetchWaitTime) : row.taskMetrics.shuffleReadMetrics.fetchWaitTime;
+                                    if (row.taskMetrics.shuffleReadMetrics !== 'undefined') {
+                                        return type === 'display' ? formatDuration(row.taskMetrics.shuffleReadMetrics.fetchWaitTime) : row.taskMetrics.shuffleReadMetrics.fetchWaitTime;
+                                    } else {
+                                        return "";
+                                    }
                                 } else {
-                                    return "N/A";
+                                    return "";
                                 }
-                            }
+                            },
+                            name: "Shuffle Read Blocked Time"
                         },
                         {
                             data : function (row, type) {
@@ -484,7 +504,8 @@ $(document).ready(function () {
                                 } else {
                                     return "N/A";
                                 }
-                            }
+                            },
+                            name: "Shuffle Remote Reads"
                         },
                         {
                             data : function (row, type) {
@@ -493,12 +514,14 @@ $(document).ready(function () {
                                 } else {
                                     return "N/A";
                                 }
-                            }
+                            },
+                            name: "Result Serialization Time"
                         },
                         {
                             data : function (row, type) {
                                 return type === 'display' ? formatDuration(row.gettingResultTime) : row.gettingResultTime;
-                            }
+                            },
+                            name: "Getting Result Time"
                         },
                         {
                             data : function (row, type) {
@@ -507,7 +530,8 @@ $(document).ready(function () {
                                 } else {
                                     return "N/A";
                                 }
-                            }
+                            },
+                            name: "Peak Execution Memory"
                         },
                         {
                             data : function (row, type) {
@@ -516,7 +540,8 @@ $(document).ready(function () {
                                 } else {
                                     return "";
                                 }
-                            }
+                            },
+                            name: "Accumulators"
                         },
                         {
                             data : function (row, type) {
@@ -533,7 +558,8 @@ $(document).ready(function () {
                                 } else {
                                     return "";
                                 }
-                            }
+                            },
+                            name: "Input Size / Records"
                         },
                         {
                             data : function (row, type) {
@@ -550,7 +576,8 @@ $(document).ready(function () {
                                 } else {
                                     return "";
                                 }
-                            }
+                            },
+                            name: "Output Size / Records"
                         },
                         {
                             data : function (row, type) {
@@ -563,7 +590,8 @@ $(document).ready(function () {
                                 } else {
                                     return "";
                                 }
-                            }
+                            },
+                            name: "Write Time"
                         },
                         {
                             data : function (row, type) {
@@ -580,7 +608,8 @@ $(document).ready(function () {
                                 } else {
                                     return "";
                                 }
-                            }
+                            },
+                            name: "Shuffle Write Size / Records"
                         },
                         {
                             data : function (row, type) {
@@ -593,7 +622,8 @@ $(document).ready(function () {
                                 } else {
                                     return "";
                                 }
-                            }
+                            },
+                            name: "Shuffle Spill (Memory)"
                         },
                         {
                             data : function (row, type) {
@@ -606,7 +636,8 @@ $(document).ready(function () {
                                 } else {
                                     return "";
                                 }
-                            }
+                            },
+                            name: "Shuffle Spill (Disk)"
                         },
                         {
                             data : function (row, type) {
@@ -619,7 +650,8 @@ $(document).ready(function () {
                                         var form_msg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
                                         return form_head + form + form_msg;
                                 }
-                            }
+                            },
+                            name: "Errors"
                         }
                     ],
                     "columnDefs": [
@@ -638,7 +670,6 @@ $(document).ready(function () {
                         { "visible": false, "targets": 22 },
                         { "visible": false, "targets": 23 }
                     ],
-                    "order": [[0, "asc"]]
                 };
                 var taskTableSelector = $(taskTable).DataTable(task_conf);
 
