@@ -158,6 +158,11 @@ private[json] class JsonOutputWriter(
     case None => StandardCharsets.UTF_8
   }
 
+  if (JSONOptionsInRead.blacklist.contains(encoding)) {
+    logWarning(s"The JSON file ($path) was written in the encoding ${encoding.displayName()}" +
+         " which can be read back by Spark only if multiLine is enabled.")
+  }
+
   private val writer = CodecStreams.createOutputStreamWriter(
     context, new Path(path), encoding)
 

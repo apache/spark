@@ -27,11 +27,12 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.util.Utils
 
@@ -95,7 +96,9 @@ object SQLConf {
 
   /**
    * Returns the active config object within the current scope. If there is an active SparkSession,
-   * the proper SQLConf associated with the thread's session is used.
+   * the proper SQLConf associated with the thread's active session is used. If it's called from
+   * tasks in the executor side, a SQLConf will be created from job local properties, which are set
+   * and propagated from the driver side.
    *
    * The way this works is a little bit convoluted, due to the fact that config was added initially
    * only for physical plans (and as a result not in sql/catalyst module).
@@ -107,7 +110,22 @@ object SQLConf {
    * run tests in parallel. At the time this feature was implemented, this was a no-op since we
    * run unit tests (that does not involve SparkSession) in serial order.
    */
-  def get: SQLConf = confGetter.get()()
+  def get: SQLConf = {
+    if (TaskContext.get != null) {
+      new ReadOnlySQLConf(TaskContext.get())
+    } else {
+      if (Utils.isTesting && SparkContext.getActive.isDefined) {
+        // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
+        // will return `fallbackConf` which is unexpected. Here we prevent it from happening.
+        val schedulerEventLoopThread =
+          SparkContext.getActive.get.dagScheduler.eventProcessLoop.eventThread
+        if (schedulerEventLoopThread.getId == Thread.currentThread().getId) {
+          throw new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+        }
+      }
+      confGetter.get()()
+    }
+  }
 
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()
@@ -377,7 +395,7 @@ object SQLConf {
     .doc("The output committer class used by Parquet. The specified class needs to be a " +
       "subclass of org.apache.hadoop.mapreduce.OutputCommitter. Typically, it's also a subclass " +
       "of org.apache.parquet.hadoop.ParquetOutputCommitter. If it is not, then metadata summaries" +
-      "will never be created, irrespective of the value of parquet.enable.summary-metadata")
+      "will never be created, irrespective of the value of parquet.summary.metadata.level")
     .internal()
     .stringConf
     .createWithDefault("org.apache.parquet.hadoop.ParquetOutputCommitter")
@@ -685,6 +703,17 @@ object SQLConf {
       " deactivating whole-stage codegen.")
     .intConf
     .createWithDefault(100)
+
+  val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
+    .doc("This config determines the fallback behavior of several codegen generators " +
+      "during tests. `FALLBACK` means trying codegen first and then fallbacking to " +
+      "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
+      "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that " +
+      "this config works only for tests.")
+    .internal()
+    .stringConf
+    .checkValues(CodegenObjectFactoryMode.values.map(_.toString))
+    .createWithDefault(CodegenObjectFactoryMode.FALLBACK.toString)
 
   val CODEGEN_FALLBACK = buildConf("spark.sql.codegen.fallback")
     .internal()
@@ -1155,8 +1184,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SQL_OPTIONS_REDACTION_PATTERN =
+    buildConf("spark.sql.redaction.options.regex")
+      .doc("Regex to decide which keys in a Spark SQL command's options map contain sensitive " +
+        "information. The values of options whose names that match this regex will be redacted " +
+        "in the explain output. This redaction is applied on top of the global redaction " +
+        s"configuration defined by ${SECRET_REDACTION_PATTERN.key}.")
+    .regexConf
+    .createWithDefault("(?i)url".r)
+
   val SQL_STRING_REDACTION_PATTERN =
-    ConfigBuilder("spark.sql.redaction.string.regex")
+    buildConf("spark.sql.redaction.string.regex")
       .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
         "information. When this regex matches a string part, that string part is replaced by a " +
         "dummy value. This is currently used to redact the output of SQL explain commands. " +
@@ -1253,6 +1291,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val TOP_K_SORT_FALLBACK_THRESHOLD =
+    buildConf("spark.sql.execution.topKSortFallbackThreshold")
+      .internal()
+      .doc("In SQL queries with a SORT followed by a LIMIT like " +
+          "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
+          " in memory, otherwise do a global sort which spills to disk if necessary.")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1260,6 +1307,13 @@ object SQLConf {
   object Replaced {
     val MAPREDUCE_JOB_REDUCES = "mapreduce.job.reduces"
   }
+
+  val CSV_PARSER_COLUMN_PRUNING = buildConf("spark.sql.csv.parser.columnPruning.enabled")
+    .internal()
+    .doc("If it is set to true, column names of the requested schema are passed to CSV parser. " +
+      "Other column values can be ignored during parsing even if they are malformed.")
+    .booleanConf
+    .createWithDefault(true)
 }
 
 /**
@@ -1274,17 +1328,11 @@ object SQLConf {
 class SQLConf extends Serializable with Logging {
   import SQLConf._
 
-  if (Utils.isTesting && SparkEnv.get != null) {
-    // assert that we're only accessing it on the driver.
-    assert(SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER,
-      "SQLConf should only be created and accessed on the driver.")
-  }
-
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
 
-  @transient private val reader = new ConfigReader(settings)
+  @transient protected val reader = new ConfigReader(settings)
 
   /** ************************ Spark SQL Params/Hints ******************* */
 
@@ -1420,9 +1468,11 @@ class SQLConf extends Serializable with Logging {
 
   def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
 
-  def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
+  def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
+
+  def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -1621,6 +1671,8 @@ class SQLConf extends Serializable with Logging {
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
+  def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -1728,13 +1780,24 @@ class SQLConf extends Serializable with Logging {
   }
 
   /**
+   * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
+   */
+  def redactOptions(options: Map[String, String]): Map[String, String] = {
+    val regexes = Seq(
+      getConf(SQL_OPTIONS_REDACTION_PATTERN),
+      SECRET_REDACTION_PATTERN.readFrom(reader))
+
+    regexes.foldLeft(options.toSeq) { case (opts, r) => Utils.redact(Some(r), opts) }.toMap
+  }
+
+  /**
    * Return whether a given key is set in this [[SQLConf]].
    */
   def contains(key: String): Boolean = {
     settings.containsKey(key)
   }
 
-  private def setConfWithCheck(key: String, value: String): Unit = {
+  protected def setConfWithCheck(key: String, value: String): Unit = {
     settings.put(key, value)
   }
 

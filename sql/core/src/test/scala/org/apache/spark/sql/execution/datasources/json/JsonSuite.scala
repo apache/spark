@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{File, FileOutputStream, StringWriter}
-import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
-import java.nio.file.{Files, Paths, StandardOpenOption}
+import java.io._
+import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
@@ -2293,10 +2293,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .options(Map("encoding" -> encoding))
           .json(path.getCanonicalPath)
       }
-    }.getCause.getCause.getCause
+    }
 
-    assert(exception.isInstanceOf[java.nio.charset.UnsupportedCharsetException])
-    assert(exception.getMessage == encoding)
+    val baos = new ByteArrayOutputStream()
+    val ps = new PrintStream(baos, true, "UTF-8")
+    exception.printStackTrace(ps)
+    ps.flush()
+
+    assert(baos.toString.contains(
+      "java.nio.charset.UnsupportedCharsetException: UTF-128"))
   }
 
   test("SPARK-23723: read back json in UTF-16LE") {
@@ -2311,6 +2316,24 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .json(path.getCanonicalPath)
 
       checkAnswer(readBack.toDF(), ds.toDF())
+    }
+  }
+
+  test("SPARK-23723: write json in UTF-16/32 with multiline off") {
+    Seq("UTF-16", "UTF-32").foreach { encoding =>
+      withTempPath { path =>
+        val ds = spark.createDataset(Seq(("a", 1))).repartition(1)
+        ds.write
+          .option("encoding", encoding)
+          .option("multiline", false)
+          .json(path.getCanonicalPath)
+        val jsonFiles = path.listFiles().filter(_.getName.endsWith("json"))
+        jsonFiles.foreach { jsonFile =>
+          val readback = Files.readAllBytes(jsonFile.toPath)
+          val expected = ("""{"_1":"a","_2":1}""" + "\n").getBytes(Charset.forName(encoding))
+          assert(readback === expected)
+        }
+      }
     }
   }
 
@@ -2410,13 +2433,65 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       Row(badJson))
   }
 
-  test("SPARK-24190: restrictions for JSONOptions in read") {
-    val exception = intercept[IllegalArgumentException] {
-      spark.read
-        .option("encoding", "UTF-16")
-        .json(testFile("test-data/utf16LE.json"))
-        .count()
+  test("SPARK-23772 ignore column of all null values or empty array during schema inference") {
+     withTempPath { tempDir =>
+      val path = tempDir.getAbsolutePath
+
+      // primitive types
+      Seq(
+        """{"a":null, "b":1, "c":3.0}""",
+        """{"a":null, "b":null, "c":"string"}""",
+        """{"a":null, "b":null, "c":null}""")
+        .toDS().write.text(path)
+      var df = spark.read.format("json")
+        .option("dropFieldIfAllNull", true)
+        .load(path)
+      var expectedSchema = new StructType()
+        .add("b", LongType).add("c", StringType)
+      assert(df.schema === expectedSchema)
+      checkAnswer(df, Row(1, "3.0") :: Row(null, "string") :: Row(null, null) :: Nil)
+
+      // arrays
+      Seq(
+        """{"a":[2, 1], "b":[null, null], "c":null, "d":[[], [null]], "e":[[], null, [[]]]}""",
+        """{"a":[null], "b":[null], "c":[], "d":[null, []], "e":null}""",
+        """{"a":null, "b":null, "c":[], "d":null, "e":[null, [], null]}""")
+        .toDS().write.mode("overwrite").text(path)
+      df = spark.read.format("json")
+        .option("dropFieldIfAllNull", true)
+        .load(path)
+      expectedSchema = new StructType()
+        .add("a", ArrayType(LongType))
+      assert(df.schema === expectedSchema)
+      checkAnswer(df, Row(Array(2, 1)) :: Row(Array(null)) ::  Row(null) :: Nil)
+
+      // structs
+      Seq(
+        """{"a":{"a1": 1, "a2":"string"}, "b":{}}""",
+        """{"a":{"a1": 2, "a2":null}, "b":{"b1":[null]}}""",
+        """{"a":null, "b":null}""")
+        .toDS().write.mode("overwrite").text(path)
+      df = spark.read.format("json")
+        .option("dropFieldIfAllNull", true)
+        .load(path)
+      expectedSchema = new StructType()
+        .add("a", StructType(StructField("a1", LongType) :: StructField("a2", StringType)
+          :: Nil))
+      assert(df.schema === expectedSchema)
+      checkAnswer(df, Row(Row(1, "string")) :: Row(Row(2, null)) :: Row(null) :: Nil)
     }
-    assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
+  }
+
+  test("SPARK-24190: restrictions for JSONOptions in read") {
+    for (encoding <- Set("UTF-16", "UTF-32")) {
+      val exception = intercept[IllegalArgumentException] {
+        spark.read
+          .option("encoding", encoding)
+          .option("multiLine", false)
+          .json(testFile("test-data/utf16LE.json"))
+          .count()
+      }
+      assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
+    }
   }
 }

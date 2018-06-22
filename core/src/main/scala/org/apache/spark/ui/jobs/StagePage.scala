@@ -112,20 +112,19 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <div id="no-info">
             <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
           </div>
-        return UIUtils.headerSparkPage(stageHeader, content, parent)
+        return UIUtils.headerSparkPage(request, stageHeader, content, parent)
       }
 
     val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
 
-    val totalTasks = stageData.numActiveTasks + stageData.numCompleteTasks +
-      stageData.numFailedTasks + stageData.numKilledTasks
+    val totalTasks = taskCount(stageData)
     if (totalTasks == 0) {
       val content =
         <div>
           <h4>Summary Metrics</h4> No tasks have started yet
           <h4>Tasks</h4> No tasks have started yet
         </div>
-      return UIUtils.headerSparkPage(stageHeader, content, parent)
+      return UIUtils.headerSparkPage(request, stageHeader, content, parent)
     }
 
     val storedTasks = store.taskCount(stageData.stageId, stageData.attemptId)
@@ -133,7 +132,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val totalTasksNumStr = if (totalTasks == storedTasks) {
       s"$totalTasks"
     } else {
-      s"$totalTasks, showing ${storedTasks}"
+      s"$storedTasks, showing ${totalTasks}"
     }
 
     val summary =
@@ -282,7 +281,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val (taskTable, taskTableHTML) = try {
       val _taskTable = new TaskPagedTable(
         stageData,
-        UIUtils.prependBaseUri(parent.basePath) +
+        UIUtils.prependBaseUri(request, parent.basePath) +
           s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
         currentTime,
         pageSize = taskPageSize,
@@ -498,7 +497,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div class="aggregated-tasks collapsible-table">
         {taskTableHTML ++ jsForScrollingDownToTaskTable}
       </div>
-    UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
+    UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true)
   }
 
   def makeTimeline(tasks: Seq[TaskData], currentTime: Long): Seq[Node] = {
@@ -686,7 +685,7 @@ private[ui] class TaskDataSource(
 
   private var _tasksToShow: Seq[TaskData] = null
 
-  override def dataSize: Int = stage.numTasks
+  override def dataSize: Int = taskCount(stage)
 
   override def sliceData(from: Int, to: Int): Seq[TaskData] = {
     if (_tasksToShow == null) {
@@ -1050,6 +1049,11 @@ private[ui] object ApiHelper {
   def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
     val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0))
     (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
+  }
+
+  def taskCount(stageData: StageData): Int = {
+    stageData.numActiveTasks + stageData.numCompleteTasks + stageData.numFailedTasks +
+      stageData.numKilledTasks
   }
 
 }
