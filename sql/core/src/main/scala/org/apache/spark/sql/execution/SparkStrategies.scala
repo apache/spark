@@ -327,7 +327,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        if (aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF)) {
+        if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
           throw new AnalysisException(
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
@@ -428,6 +428,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object Window extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case PhysicalWindow(
+        WindowFunctionType.SQL, windowExprs, partitionSpec, orderSpec, child) =>
+        execution.window.WindowExec(
+          windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+
+      case PhysicalWindow(
+        WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child) =>
+        execution.python.WindowInPandasExec(
+          windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+
+      case _ => Nil
+    }
+  }
+
   protected lazy val singleRowRdd = sparkContext.parallelize(Seq(InternalRow()), 1)
 
   object InMemoryScans extends Strategy {
@@ -478,7 +494,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
@@ -548,8 +563,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
-      case logical.Window(windowExprs, partitionSpec, orderSpec, child) =>
-        execution.window.WindowExec(windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _) =>

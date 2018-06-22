@@ -900,22 +900,6 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
-    def test_stopiteration_in_udf(self):
-        # test for SPARK-23754
-        from pyspark.sql.functions import udf
-        from py4j.protocol import Py4JJavaError
-
-        def foo(x):
-            raise StopIteration()
-
-        with self.assertRaises(Py4JJavaError) as cm:
-            self.spark.range(0, 1000).withColumn('v', udf(foo)('id')).show()
-
-        self.assertIn(
-            "Caught StopIteration thrown from user's code; failing the task",
-            cm.exception.java_exception.toString()
-        )
-
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
         from pyspark.sql.column import _to_java_column
@@ -1884,6 +1868,299 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             q.stop()
             shutil.rmtree(tmpPath)
+
+    class ForeachWriterTester:
+
+        def __init__(self, spark):
+            self.spark = spark
+
+        def write_open_event(self, partitionId, epochId):
+            self._write_event(
+                self.open_events_dir,
+                {'partition': partitionId, 'epoch': epochId})
+
+        def write_process_event(self, row):
+            self._write_event(self.process_events_dir, {'value': 'text'})
+
+        def write_close_event(self, error):
+            self._write_event(self.close_events_dir, {'error': str(error)})
+
+        def write_input_file(self):
+            self._write_event(self.input_dir, "text")
+
+        def open_events(self):
+            return self._read_events(self.open_events_dir, 'partition INT, epoch INT')
+
+        def process_events(self):
+            return self._read_events(self.process_events_dir, 'value STRING')
+
+        def close_events(self):
+            return self._read_events(self.close_events_dir, 'error STRING')
+
+        def run_streaming_query_on_writer(self, writer, num_files):
+            self._reset()
+            try:
+                sdf = self.spark.readStream.format('text').load(self.input_dir)
+                sq = sdf.writeStream.foreach(writer).start()
+                for i in range(num_files):
+                    self.write_input_file()
+                    sq.processAllAvailable()
+            finally:
+                self.stop_all()
+
+        def assert_invalid_writer(self, writer, msg=None):
+            self._reset()
+            try:
+                sdf = self.spark.readStream.format('text').load(self.input_dir)
+                sq = sdf.writeStream.foreach(writer).start()
+                self.write_input_file()
+                sq.processAllAvailable()
+                self.fail("invalid writer %s did not fail the query" % str(writer))  # not expected
+            except Exception as e:
+                if msg:
+                    assert msg in str(e), "%s not in %s" % (msg, str(e))
+
+            finally:
+                self.stop_all()
+
+        def stop_all(self):
+            for q in self.spark._wrapped.streams.active:
+                q.stop()
+
+        def _reset(self):
+            self.input_dir = tempfile.mkdtemp()
+            self.open_events_dir = tempfile.mkdtemp()
+            self.process_events_dir = tempfile.mkdtemp()
+            self.close_events_dir = tempfile.mkdtemp()
+
+        def _read_events(self, dir, json):
+            rows = self.spark.read.schema(json).json(dir).collect()
+            dicts = [row.asDict() for row in rows]
+            return dicts
+
+        def _write_event(self, dir, event):
+            import uuid
+            with open(os.path.join(dir, str(uuid.uuid4())), 'w') as f:
+                f.write("%s\n" % str(event))
+
+        def __getstate__(self):
+            return (self.open_events_dir, self.process_events_dir, self.close_events_dir)
+
+        def __setstate__(self, state):
+            self.open_events_dir, self.process_events_dir, self.close_events_dir = state
+
+    def test_streaming_foreach_with_simple_function(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        def foreach_func(row):
+            tester.write_process_event(row)
+
+        tester.run_streaming_query_on_writer(foreach_func, 2)
+        self.assertEqual(len(tester.process_events()), 2)
+
+    def test_streaming_foreach_with_basic_open_process_close(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def open(self, partitionId, epochId):
+                tester.write_open_event(partitionId, epochId)
+                return True
+
+            def process(self, row):
+                tester.write_process_event(row)
+
+            def close(self, error):
+                tester.write_close_event(error)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+
+        open_events = tester.open_events()
+        self.assertEqual(len(open_events), 2)
+        self.assertSetEqual(set([e['epoch'] for e in open_events]), {0, 1})
+
+        self.assertEqual(len(tester.process_events()), 2)
+
+        close_events = tester.close_events()
+        self.assertEqual(len(close_events), 2)
+        self.assertSetEqual(set([e['error'] for e in close_events]), {'None'})
+
+    def test_streaming_foreach_with_open_returning_false(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def open(self, partition_id, epoch_id):
+                tester.write_open_event(partition_id, epoch_id)
+                return False
+
+            def process(self, row):
+                tester.write_process_event(row)
+
+            def close(self, error):
+                tester.write_close_event(error)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+
+        self.assertEqual(len(tester.open_events()), 2)
+
+        self.assertEqual(len(tester.process_events()), 0)  # no row was processed
+
+        close_events = tester.close_events()
+        self.assertEqual(len(close_events), 2)
+        self.assertSetEqual(set([e['error'] for e in close_events]), {'None'})
+
+    def test_streaming_foreach_without_open_method(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def process(self, row):
+                tester.write_process_event(row)
+
+            def close(self, error):
+                tester.write_close_event(error)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+        self.assertEqual(len(tester.open_events()), 0)  # no open events
+        self.assertEqual(len(tester.process_events()), 2)
+        self.assertEqual(len(tester.close_events()), 2)
+
+    def test_streaming_foreach_without_close_method(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def open(self, partition_id, epoch_id):
+                tester.write_open_event(partition_id, epoch_id)
+                return True
+
+            def process(self, row):
+                tester.write_process_event(row)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+        self.assertEqual(len(tester.open_events()), 2)  # no open events
+        self.assertEqual(len(tester.process_events()), 2)
+        self.assertEqual(len(tester.close_events()), 0)
+
+    def test_streaming_foreach_without_open_and_close_methods(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def process(self, row):
+                tester.write_process_event(row)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+        self.assertEqual(len(tester.open_events()), 0)  # no open events
+        self.assertEqual(len(tester.process_events()), 2)
+        self.assertEqual(len(tester.close_events()), 0)
+
+    def test_streaming_foreach_with_process_throwing_error(self):
+        from pyspark.sql.utils import StreamingQueryException
+
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def process(self, row):
+                raise Exception("test error")
+
+            def close(self, error):
+                tester.write_close_event(error)
+
+        try:
+            tester.run_streaming_query_on_writer(ForeachWriter(), 1)
+            self.fail("bad writer did not fail the query")  # this is not expected
+        except StreamingQueryException as e:
+            # TODO: Verify whether original error message is inside the exception
+            pass
+
+        self.assertEqual(len(tester.process_events()), 0)  # no row was processed
+        close_events = tester.close_events()
+        self.assertEqual(len(close_events), 1)
+        # TODO: Verify whether original error message is inside the exception
+
+    def test_streaming_foreach_with_invalid_writers(self):
+
+        tester = self.ForeachWriterTester(self.spark)
+
+        def func_with_iterator_input(iter):
+            for x in iter:
+                print(x)
+
+        tester.assert_invalid_writer(func_with_iterator_input)
+
+        class WriterWithoutProcess:
+            def open(self, partition):
+                pass
+
+        tester.assert_invalid_writer(WriterWithoutProcess(), "does not have a 'process'")
+
+        class WriterWithNonCallableProcess():
+            process = True
+
+        tester.assert_invalid_writer(WriterWithNonCallableProcess(),
+                                     "'process' in provided object is not callable")
+
+        class WriterWithNoParamProcess():
+            def process(self):
+                pass
+
+        tester.assert_invalid_writer(WriterWithNoParamProcess())
+
+        # Abstract class for tests below
+        class WithProcess():
+            def process(self, row):
+                pass
+
+        class WriterWithNonCallableOpen(WithProcess):
+            open = True
+
+        tester.assert_invalid_writer(WriterWithNonCallableOpen(),
+                                     "'open' in provided object is not callable")
+
+        class WriterWithNoParamOpen(WithProcess):
+            def open(self):
+                pass
+
+        tester.assert_invalid_writer(WriterWithNoParamOpen())
+
+        class WriterWithNonCallableClose(WithProcess):
+            close = True
+
+        tester.assert_invalid_writer(WriterWithNonCallableClose(),
+                                     "'close' in provided object is not callable")
+
+    def test_streaming_foreachBatch(self):
+        q = None
+        collected = dict()
+
+        def collectBatch(batch_df, batch_id):
+            collected[batch_id] = batch_df.collect()
+
+        try:
+            df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+            q = df.writeStream.foreachBatch(collectBatch).start()
+            q.processAllAvailable()
+            self.assertTrue(0 in collected)
+            self.assertTrue(len(collected[0]), 2)
+        finally:
+            if q:
+                q.stop()
+
+    def test_streaming_foreachBatch_propagates_python_errors(self):
+        from pyspark.sql.utils import StreamingQueryException
+
+        q = None
+
+        def collectBatch(df, id):
+            raise Exception("this should fail the query")
+
+        try:
+            df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+            q = df.writeStream.foreachBatch(collectBatch).start()
+            q.processAllAvailable()
+            self.fail("Expected a failure")
+        except StreamingQueryException as e:
+            self.assertTrue("this should fail" in str(e))
+        finally:
+            if q:
+                q.stop()
 
     def test_help_command(self):
         # Regression test for SPARK-5464
@@ -4144,6 +4421,61 @@ class PandasUDFTests(ReusedSQLTestCase):
                 def foo(k, v, w):
                     return k
 
+    def test_stopiteration_in_udf(self):
+        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
+        from py4j.protocol import Py4JJavaError
+
+        def foo(x):
+            raise StopIteration()
+
+        def foofoo(x, y):
+            raise StopIteration()
+
+        exc_message = "Caught StopIteration thrown from user's code; failing the task"
+        df = self.spark.range(0, 100)
+
+        # plain udf (test for SPARK-23754)
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.withColumn('v', udf(foo)('id')).collect
+        )
+
+        # pandas scalar udf
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.withColumn(
+                'v', pandas_udf(foo, 'double', PandasUDFType.SCALAR)('id')
+            ).collect
+        )
+
+        # pandas grouped map
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.groupBy('id').apply(
+                pandas_udf(foo, df.schema, PandasUDFType.GROUPED_MAP)
+            ).collect
+        )
+
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.groupBy('id').apply(
+                pandas_udf(foofoo, df.schema, PandasUDFType.GROUPED_MAP)
+            ).collect
+        )
+
+        # pandas grouped agg
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            exc_message,
+            df.groupBy('id').agg(
+                pandas_udf(foo, 'double', PandasUDFType.GROUPED_AGG)('id')
+            ).collect
+        )
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
@@ -5415,6 +5747,15 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
             expected1 = df.groupby(df.id).agg(sum(df.v))
             self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
+    def test_array_type(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        df = self.data
+
+        array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
+        result1 = df.groupby('id').agg(array_udf(df['v']).alias('v2'))
+        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+
     def test_invalid_args(self):
         from pyspark.sql.functions import mean
 
@@ -5439,6 +5780,235 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                     AnalysisException,
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
+
+
+@unittest.skipIf(
+    not _have_pandas or not _have_pyarrow,
+    _pandas_requirement_message or _pyarrow_requirement_message)
+class WindowPandasUDFTests(ReusedSQLTestCase):
+    @property
+    def data(self):
+        from pyspark.sql.functions import array, explode, col, lit
+        return self.spark.range(10).toDF('id') \
+            .withColumn("vs", array([lit(i * 1.0) + col('id') for i in range(20, 30)])) \
+            .withColumn("v", explode(col('vs'))) \
+            .drop('vs') \
+            .withColumn('w', lit(1.0))
+
+    @property
+    def python_plus_one(self):
+        from pyspark.sql.functions import udf
+        return udf(lambda v: v + 1, 'double')
+
+    @property
+    def pandas_scalar_time_two(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        return pandas_udf(lambda v: v * 2, 'double')
+
+    @property
+    def pandas_agg_mean_udf(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def avg(v):
+            return v.mean()
+        return avg
+
+    @property
+    def pandas_agg_max_udf(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def max(v):
+            return v.max()
+        return max
+
+    @property
+    def pandas_agg_min_udf(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def min(v):
+            return v.min()
+        return min
+
+    @property
+    def unbounded_window(self):
+        return Window.partitionBy('id') \
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+
+    @property
+    def ordered_window(self):
+        return Window.partitionBy('id').orderBy('v')
+
+    @property
+    def unpartitioned_window(self):
+        return Window.partitionBy()
+
+    def test_simple(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType, percent_rank, mean, max
+
+        df = self.data
+        w = self.unbounded_window
+
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('mean_v', mean_udf(df['v']).over(w))
+        expected1 = df.withColumn('mean_v', mean(df['v']).over(w))
+
+        result2 = df.select(mean_udf(df['v']).over(w))
+        expected2 = df.select(mean(df['v']).over(w))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+
+    def test_multiple_udfs(self):
+        from pyspark.sql.functions import max, min, mean
+
+        df = self.data
+        w = self.unbounded_window
+
+        result1 = df.withColumn('mean_v', self.pandas_agg_mean_udf(df['v']).over(w)) \
+                    .withColumn('max_v', self.pandas_agg_max_udf(df['v']).over(w)) \
+                    .withColumn('min_w', self.pandas_agg_min_udf(df['w']).over(w))
+
+        expected1 = df.withColumn('mean_v', mean(df['v']).over(w)) \
+                      .withColumn('max_v', max(df['v']).over(w)) \
+                      .withColumn('min_w', min(df['w']).over(w))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+
+    def test_replace_existing(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w = self.unbounded_window
+
+        result1 = df.withColumn('v', self.pandas_agg_mean_udf(df['v']).over(w))
+        expected1 = df.withColumn('v', mean(df['v']).over(w))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+
+    def test_mixed_sql(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w = self.unbounded_window
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('v', mean_udf(df['v'] * 2).over(w) + 1)
+        expected1 = df.withColumn('v', mean(df['v'] * 2).over(w) + 1)
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+
+    def test_mixed_udf(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w = self.unbounded_window
+
+        plus_one = self.python_plus_one
+        time_two = self.pandas_scalar_time_two
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn(
+            'v2',
+            plus_one(mean_udf(plus_one(df['v'])).over(w)))
+        expected1 = df.withColumn(
+            'v2',
+            plus_one(mean(plus_one(df['v'])).over(w)))
+
+        result2 = df.withColumn(
+            'v2',
+            time_two(mean_udf(time_two(df['v'])).over(w)))
+        expected2 = df.withColumn(
+            'v2',
+            time_two(mean(time_two(df['v'])).over(w)))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+
+    def test_without_partitionBy(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w = self.unpartitioned_window
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('v2', mean_udf(df['v']).over(w))
+        expected1 = df.withColumn('v2', mean(df['v']).over(w))
+
+        result2 = df.select(mean_udf(df['v']).over(w))
+        expected2 = df.select(mean(df['v']).over(w))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+
+    def test_mixed_sql_and_udf(self):
+        from pyspark.sql.functions import max, min, rank, col
+
+        df = self.data
+        w = self.unbounded_window
+        ow = self.ordered_window
+        max_udf = self.pandas_agg_max_udf
+        min_udf = self.pandas_agg_min_udf
+
+        result1 = df.withColumn('v_diff', max_udf(df['v']).over(w) - min_udf(df['v']).over(w))
+        expected1 = df.withColumn('v_diff', max(df['v']).over(w) - min(df['v']).over(w))
+
+        # Test mixing sql window function and window udf in the same expression
+        result2 = df.withColumn('v_diff', max_udf(df['v']).over(w) - min(df['v']).over(w))
+        expected2 = expected1
+
+        # Test chaining sql aggregate function and udf
+        result3 = df.withColumn('max_v', max_udf(df['v']).over(w)) \
+                    .withColumn('min_v', min(df['v']).over(w)) \
+                    .withColumn('v_diff', col('max_v') - col('min_v')) \
+                    .drop('max_v', 'min_v')
+        expected3 = expected1
+
+        # Test mixing sql window function and udf
+        result4 = df.withColumn('max_v', max_udf(df['v']).over(w)) \
+                    .withColumn('rank', rank().over(ow))
+        expected4 = df.withColumn('max_v', max(df['v']).over(w)) \
+                      .withColumn('rank', rank().over(ow))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+        self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
+        self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
+
+    def test_array_type(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        df = self.data
+        w = self.unbounded_window
+
+        array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
+        result1 = df.withColumn('v2', array_udf(df['v']).over(w))
+        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+
+    def test_invalid_args(self):
+        from pyspark.sql.functions import mean, pandas_udf, PandasUDFType
+
+        df = self.data
+        w = self.unbounded_window
+        ow = self.ordered_window
+        mean_udf = self.pandas_agg_mean_udf
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    '.*not supported within a window function'):
+                foo_udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUPED_MAP)
+                df.withColumn('v2', foo_udf(df['v']).over(w))
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    '.*Only unbounded window frame is supported.*'):
+                df.withColumn('mean_v', mean_udf(df['v']).over(ow))
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
