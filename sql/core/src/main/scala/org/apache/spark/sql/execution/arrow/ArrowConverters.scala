@@ -230,79 +230,61 @@ private[sql] object ArrowConverters {
    */
   private[sql] def getBatchesFromStream(in: SeekableByteChannel): Iterator[Array[Byte]] = {
 
-    // TODO: simplify in super class
-    class RecordBatchMessageReader(inputChannel: SeekableByteChannel) {
-      // TODO: need ReadChannel to be protected
-      // extends MessageChannelReader(new ReadChannel(fileChannel)) {
-      val in = new ReadChannel(inputChannel)
-      private var lastBatch: Array[Byte] = null
+    // TODO: this could be moved to Arrow
+    def readMessageLength(in: ReadChannel): Int = {
+      val buffer = ByteBuffer.allocate(4)
+      if (in.readFully(buffer) != 4) {
+        return 0
+      }
+      MessageSerializer.bytesToInt(buffer.array())
+    }
 
-      def getLastBatch() = lastBatch
+    // TODO: this could be moved to Arrow
+    def loadMessage(in: ReadChannel, messageLength: Int, buffer: ByteBuffer): Message = {
+      if (in.readFully(buffer) != messageLength) {
+        throw new java.io.IOException(
+          "Unexpected end of stream trying to read message.")
+      }
+      buffer.rewind()
+      Message.getRootAsMessage(buffer)
+    }
 
-      def readNextMessage(): Message = {
-        lastBatch = null
-        val buffer = ByteBuffer.allocate(4)
-        if (in.readFully(buffer) != 4) {
-          return null
-        }
-        val messageLength = MessageSerializer.bytesToInt(buffer.array())
+
+    // Create an iterator to get each serialized ArrowRecordBatch from a stream
+    new Iterator[Array[Byte]] {
+      val inputChannel = new ReadChannel(in)
+      var batch: Array[Byte] = readNextBatch()
+
+      override def hasNext: Boolean = batch != null
+
+      override def next(): Array[Byte] = {
+        val prevBatch = batch
+        batch = readNextBatch()
+        prevBatch
+      }
+
+      def readNextBatch(): Array[Byte] = {
+        val messageLength = readMessageLength(inputChannel)
         if (messageLength == 0) {
           return null
         }
 
-        loadMessageOverride(messageLength, ByteBuffer.allocate(messageLength))
-      }
-
-      protected def loadMessage(messageLength: Int, buffer: ByteBuffer): Message = {
-        if (in.readFully(buffer) != messageLength) {
-          throw new java.io.IOException(
-            "Unexpected end of stream trying to read message.")
-        }
-        buffer.rewind()
-        Message.getRootAsMessage(buffer)
-      }
-
-      protected def loadMessageOverride(messageLength: Int, buffer: ByteBuffer): Message = {
-        val msg = loadMessage(messageLength, buffer)
+        val buffer = ByteBuffer.allocate(messageLength)
+        val msg = loadMessage(inputChannel, messageLength, buffer)
         val bodyLength = msg.bodyLength().asInstanceOf[Int]
 
         if (msg.headerType() == MessageHeader.RecordBatch) {
           val allbuf = ByteBuffer.allocate(4 + messageLength + bodyLength)
           allbuf.put(WriteChannel.intToBytes(messageLength))
           allbuf.put(buffer)
-          in.readFully(allbuf)
-          lastBatch = allbuf.array()
-        } else if (bodyLength > 0) {
-          // Skip message body if not a record batch
-          inputChannel.position(inputChannel.position() + bodyLength)
-        }
-
-        msg
-      }
-    }
-
-    // Create an iterator to get each serialized ArrowRecordBatch in an stream
-    new Iterator[Array[Byte]] {
-      val msgReader = new RecordBatchMessageReader(in)
-      var batch: Array[Byte] = null
-      readNextBatch()
-
-      override def hasNext: Boolean = batch != null
-
-      override def next(): Array[Byte] = {
-        val prevBatch = batch
-        readNextBatch()
-        prevBatch
-      }
-
-      def readNextBatch(): Unit = {
-        var stop = false
-        while (!stop) {
-          val msg = msgReader.readNextMessage()
-          batch = msgReader.getLastBatch()
-          if (msg == null || (msg != null && batch != null)) {
-            stop = true
+          inputChannel.readFully(allbuf)
+          allbuf.array()
+        } else {
+          if (bodyLength > 0) {
+            // Skip message body if not a record batch
+            in.position(in.position() + bodyLength)
           }
+          readNextBatch()
         }
       }
     }
