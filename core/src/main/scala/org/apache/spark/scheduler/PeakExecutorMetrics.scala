@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.MetricGetter
 
 /**
@@ -35,11 +34,11 @@ private[spark] class PeakExecutorMetrics {
    * @param executorMetrics the executor metrics to compare
    * @return if there is a new peak value for any metric
    */
-  def compareAndUpdate(executorMetrics: ExecutorMetrics): Boolean = {
+  def compareAndUpdate(executorMetrics: Array[Long]): Boolean = {
     var updated: Boolean = false
 
     (0 until MetricGetter.values.length).foreach { metricIdx =>
-      val newVal = executorMetrics.metrics(metricIdx)
+      val newVal = executorMetrics(metricIdx)
       if ( newVal > metrics(metricIdx)) {
         updated = true
         metrics(metricIdx) = newVal

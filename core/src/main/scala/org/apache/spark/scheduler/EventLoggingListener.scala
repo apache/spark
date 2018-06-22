@@ -36,7 +36,6 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -191,19 +190,13 @@ private[spark] class EventLoggingListener(
 
       // log the peak executor metrics for the stage, for each live executor,
       // whether or not the executor is running tasks for the stage
-      val accumUpdates = new ArrayBuffer[(Long, Int, Int, Seq[AccumulableInfo])]()
       val executorMap = liveStageExecutorMetrics.remove(
         (event.stageInfo.stageId, event.stageInfo.attemptNumber()))
       executorMap.foreach {
        executorEntry => {
           for ((executorId, peakExecutorMetrics) <- executorEntry) {
-            // -1 timestamp indicates that the ExecutorMetricsUpdate event is being read from the
-            // history log, and contains the peak metrics for the stage whose StageCompleted event
-            // immediately follows
-            val executorMetrics = new ExecutorMetrics(-1, peakExecutorMetrics.metrics)
-            val executorUpdate = new SparkListenerExecutorMetricsUpdate(
-              executorId, accumUpdates, Some(executorMetrics))
-            logEvent(executorUpdate)
+            logEvent(new SparkListenerStageExecutorMetrics(executorId, event.stageInfo.stageId,
+              event.stageInfo.attemptNumber(), peakExecutorMetrics.metrics))
           }
         }
       }

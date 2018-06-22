@@ -99,6 +99,8 @@ private[spark] object JsonProtocol {
         logStartToJson(logStart)
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
         executorMetricsUpdateToJson(metricsUpdate)
+      case stageExecutorMetrics: SparkListenerStageExecutorMetrics =>
+        stageExecutorMetricsToJson(stageExecutorMetrics)
       case blockUpdate: SparkListenerBlockUpdated =>
         blockUpdateToJson(blockUpdate)
       case _ => parse(mapper.writeValueAsString(event))
@@ -247,7 +249,14 @@ private[spark] object JsonProtocol {
       ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
     }) ~
     ("Executor Metrics Updated" -> executorMetrics)
+  }
 
+  def stageExecutorMetricsToJson(metrics: SparkListenerStageExecutorMetrics): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageExecutorMetrics) ~
+    ("Executor ID" -> metrics.execId) ~
+    ("Stage ID" -> metrics.stageId) ~
+    ("Stage Attempt ID" -> metrics.stageAttemptId) ~
+    ("Executor Metrics" -> executorMetricsToJson(metrics.executorMetrics))
   }
 
   def blockUpdateToJson(blockUpdate: SparkListenerBlockUpdated): JValue = {
@@ -383,19 +392,12 @@ private[spark] object JsonProtocol {
     ("Updated Blocks" -> updatedBlocks)
   }
 
-  /**
-   * Convert ExecutorMetrics to JSON.
-   *
-   * @param executorMetrics the executor metrics
-   * @return the JSON representation
-   */
-  def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
+  /** Convert executor metrics (indexed by MetricGetter.values) to JSON. */
+  def executorMetricsToJson(executorMetrics: Array[Long]): JValue = {
     val metrics = MetricGetter.idxAndValues.map { case (idx, metric) =>
-      JField(metric.name, executorMetrics.metrics(idx))
+      JField(metric.name, executorMetrics(idx))
     }
-    JObject(
-      (Seq(JField("Timestamp", executorMetrics.timestamp)) ++ metrics): _*
-    )
+    JObject(metrics: _*)
   }
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
@@ -550,6 +552,7 @@ private[spark] object JsonProtocol {
     val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
     val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
     val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
+    val stageExecutorMetrics = Utils.getFormattedClassName(SparkListenerStageExecutorMetrics)
     val blockUpdate = Utils.getFormattedClassName(SparkListenerBlockUpdated)
   }
 
@@ -574,6 +577,7 @@ private[spark] object JsonProtocol {
       case `executorRemoved` => executorRemovedFromJson(json)
       case `logStart` => logStartFromJson(json)
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
+      case `stageExecutorMetrics` => stageExecutorMetricsFromJson(json)
       case `blockUpdate` => blockUpdateFromJson(json)
       case other => mapper.readValue(compact(render(json)), Utils.classForName(other))
         .asInstanceOf[SparkListenerEvent]
@@ -604,20 +608,13 @@ private[spark] object JsonProtocol {
     SparkListenerTaskGettingResult(taskInfo)
   }
 
-  /**
-   * Extract the ExecutorMetrics from JSON.
-   *
-   * @param json the JSON representation of executor metrics
-   * @return the ExecutorMetrics
-   */
-  def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
-    val timeStamp = (json \ "Timestamp").extract[Long]
-
+  /** Extract the executor metrics (indexed by MetricGetter.values) from JSON. */
+  def executorMetricsFromJson(json: JValue): Array[Long] = {
     val metrics =
       MetricGetter.values.map {metric =>
-        val metricVal = (json \ metric.name).extract[Long]
+        val metricVal = jsonOption(json \ metric.name).map(_.extract[Long]).getOrElse(0L)
       metricVal}
-    new ExecutorMetrics(timeStamp, metrics.toArray)
+    metrics.toArray
   }
 
   def taskEndFromJson(json: JValue): SparkListenerTaskEnd = {
@@ -731,6 +728,14 @@ private[spark] object JsonProtocol {
       case Some(executorUpdate) => Some(executorMetricsFromJson(executorUpdate))
     }
     SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates, executorUpdates)
+  }
+
+  def stageExecutorMetricsFromJson(json: JValue): SparkListenerStageExecutorMetrics = {
+    val execId = (json \ "Executor ID").extract[String]
+    val stageId = (json \ "Stage ID").extract[Int]
+    val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
+    val executorMetrics = executorMetricsFromJson(json \ "Executor Metrics")
+    SparkListenerStageExecutorMetrics(execId, stageId, stageAttemptId, executorMetrics)
   }
 
   def blockUpdateFromJson(json: JValue): SparkListenerBlockUpdated = {

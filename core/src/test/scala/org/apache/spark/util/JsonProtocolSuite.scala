@@ -95,13 +95,16 @@ class JsonProtocolSuite extends SparkFunSuite {
         makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
-      val executorUpdates = Some(new ExecutorMetrics(1234567L, Array(543L, 123456L, 12345L,
-        1234L, 123L, 12L, 432L, 321L, 654L, 765L)))
+      val executorUpdates = Some(Array(543L, 123456L, 12345L,
+        1234L, 123L, 12L, 432L, 321L, 654L, 765L))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)), executorUpdates)
     }
     val blockUpdated =
       SparkListenerBlockUpdated(BlockUpdatedInfo(BlockManagerId("Stars",
         "In your multitude...", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
+    val stageExecutorMetrics =
+      SparkListenerStageExecutorMetrics("1", 2, 3,
+        Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -127,7 +130,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
-    testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
+    testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
   }
 
   test("Dependent Classes") {
@@ -464,6 +467,16 @@ class JsonProtocolSuite extends SparkFunSuite {
     testAccumValue(Some("anything"), 123, JString("123"))
   }
 
+  test("executorMetricsFromJson backward compatibility: handle missing metrics") {
+    // any missing metrics should be set to 0
+    val executorMetrics = Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 789L)
+    val oldExecutorMetricsJson =
+      JsonProtocol.executorMetricsToJson(executorMetrics)
+        .removeField( _._1 == "MappedPoolMemory")
+    val exepectedExecutorMetrics = Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 0L)
+    assertExecutorMetricsEquals(exepectedExecutorMetrics,
+      JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
+  }
 }
 
 
@@ -593,7 +606,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
             assert(stageAttemptId1 === stageAttemptId2)
             assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
           })
-        assertEquals(e1.executorUpdates, e2.executorUpdates)
+        assertExecutorMetricsEquals(e1.executorUpdates, e2.executorUpdates)
+      case (e1: SparkListenerStageExecutorMetrics, e2: SparkListenerStageExecutorMetrics) =>
+        assert(e1.execId === e2.execId)
+        assert(e1.stageId === e2.stageId)
+        assert(e1.stageAttemptId === e2.stageAttemptId)
+        assertExecutorMetricsEquals(e1.executorMetrics, e2.executorMetrics)
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -681,19 +699,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def assertEquals(metrics1: InputMetrics, metrics2: InputMetrics) {
     assert(metrics1.bytesRead === metrics2.bytesRead)
-  }
-
-  private def assertEquals(metrics1: Option[ExecutorMetrics], metrics2: Option[ExecutorMetrics]) {
-    (metrics1, metrics2) match {
-      case (Some(m1), Some(m2)) =>
-        assert(m1.timestamp === m2.timestamp)
-        (0 until MetricGetter.values.length).foreach { idx =>
-          assert(m1.metrics(idx) === m2.metrics(idx))
-        }
-      case (None, None) =>
-      case _ =>
-        assert(false)
-    }
   }
 
   private def assertEquals(result1: JobResult, result2: JobResult) {
@@ -807,6 +812,26 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(ste1 === ste2)
   }
 
+  private def assertExecutorMetricsEquals(
+      metrics1: Option[Array[Long]],
+      metrics2: Option[Array[Long]]) {
+    (metrics1, metrics2) match {
+      case (Some(m1), Some(m2)) =>
+        assertExecutorMetricsEquals(m1, m2)
+      case (None, None) =>
+      case _ =>
+        assert(false)
+    }
+  }
+
+  private def assertExecutorMetricsEquals(metrics1: Array[Long], metrics2: Array[Long]) {
+    assert(metrics1.length === MetricGetter.values.length)
+    assert(metrics2.length === MetricGetter.values.length)
+    (0 until MetricGetter.values.length).foreach { idx =>
+      assert(metrics1(idx) === metrics2(idx))
+    }
+  }
+
 
   /** ----------------------------------- *
    | Util methods for constructing events |
@@ -876,7 +901,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       }
     val executorMetricsUpdate =
       if (includeExecutorMetrics) {
-        Some(new ExecutorMetrics(1234567L, Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L)))
+        Some(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L))
       } else {
         None
       }
@@ -2072,7 +2097,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    }
       |  ],
       |  "Executor Metrics Updated" : {
-      |    "Timestamp" : 1234567,
       |    "JVMHeapMemory" : 543,
       |    "JVMOffHeapMemory" : 123456,
       |    "OnHeapExecutionMemory" : 12345,
@@ -2085,6 +2109,28 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "MappedPoolMemory" : 765
       |  }
       |
+      |}
+    """.stripMargin
+
+  private val stageExecutorMetricsJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerStageExecutorMetrics",
+      |  "Executor ID": "1",
+      |  "Stage ID": 2,
+      |  "Stage Attempt ID": 3,
+      |  "Executor Metrics" : {
+      |    "JVMHeapMemory" : 543,
+      |    "JVMOffHeapMemory" : 123456,
+      |    "OnHeapExecutionMemory" : 12345,
+      |    "OffHeapExecutionMemory" : 1234,
+      |    "OnHeapStorageMemory" : 123,
+      |    "OffHeapStorageMemory" : 12,
+      |    "OnHeapUnifiedMemory" : 432,
+      |    "OffHeapUnifiedMemory" : 321,
+      |    "DirectPoolMemory" : 654,
+      |    "MappedPoolMemory" : 765
+      |  }
       |}
     """.stripMargin
 
