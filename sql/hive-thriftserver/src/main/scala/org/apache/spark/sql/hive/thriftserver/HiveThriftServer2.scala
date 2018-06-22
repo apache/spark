@@ -213,7 +213,7 @@ object HiveThriftServer2 extends Logging {
       } {
         onStatementCancel(statementId)
       }
-      sessionToRunningStatement.remove(sessionId)
+      runningStatement.remove(sessionId)
       onlineSessionNum -= 1
       trimSessionIfNecessary()
     }
