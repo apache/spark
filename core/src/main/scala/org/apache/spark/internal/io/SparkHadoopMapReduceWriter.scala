@@ -86,7 +86,7 @@ object SparkHadoopMapReduceWriter extends Logging {
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
-        // SPARK-24552: Generate a unique "attempt ID" based on the stage and task atempt numbers.
+        // SPARK-24552: Generate a unique "attempt ID" based on the stage and task attempt numbers.
         // Assumes that there won't be more than Short.MaxValue attempts, at least not concurrently.
         val attemptId = (context.stageAttemptNumber << 16) | context.attemptNumber
 
