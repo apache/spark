@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.sql.types.{DataType, NumericType, StructField, StructType}
+import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.sql.types._
 
 
 /**
@@ -100,5 +101,18 @@ private[spark] object SchemaUtils {
   def appendColumn(schema: StructType, col: StructField): StructType = {
     require(!schema.fieldNames.contains(col.name), s"Column ${col.name} already exists.")
     StructType(schema.fields :+ col)
+  }
+
+  /**
+   * Check whether the given column in the schema is one of the supporting vector type: Vector,
+   * Array[Float]. Array[Double]
+   * @param schema input schema
+   * @param colName column name
+   */
+  def validateVectorCompatibleColumn(schema: StructType, colName: String): Unit = {
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, false))
+    checkColumnTypes(schema, colName, typeCandidates)
   }
 }

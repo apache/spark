@@ -342,7 +342,7 @@ package object config {
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
       .regexConf
-      .createWithDefault("(?i)secret|password|url|user|username".r)
+      .createWithDefault("(?i)secret|password".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -351,6 +351,11 @@ package object config {
         "dummy value. This is currently used to redact the output of SQL explain commands.")
       .regexConf
       .createOptional
+
+  private[spark] val AUTH_SECRET_BIT_LENGTH =
+    ConfigBuilder("spark.authenticate.secretBitLength")
+      .intConf
+      .createWithDefault(256)
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")

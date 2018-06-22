@@ -199,15 +199,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   case class CheckAnswerRowsByFunc(
       globalCheckFunction: Seq[Row] => Unit,
       lastOnly: Boolean) extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"$operatorName"
-    private def operatorName = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
+    override def toString: String = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
   }
 
   case class CheckNewAnswerRows(expectedAnswer: Seq[Row])
     extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
-
-    private def operatorName = "CheckNewAnswer"
+    override def toString: String = s"CheckNewAnswer: ${expectedAnswer.mkString(",")}"
   }
 
   object CheckNewAnswer {
@@ -218,6 +215,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
       CheckNewAnswerRows((data +: moreData).map(d => toExternalRow.fromRow(encoder.toRow(d))))
     }
+
+    def apply(rows: Row*): CheckNewAnswerRows = CheckNewAnswerRows(rows)
   }
 
   /** Stops the stream. It must currently be running. */
@@ -293,7 +292,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   /** Execute arbitrary code */
   object Execute {
     def apply(func: StreamExecution => Any): AssertOnQuery =
-      AssertOnQuery(query => { func(query); true })
+      AssertOnQuery(query => { func(query); true }, "Execute")
   }
 
   object AwaitEpoch {
@@ -747,7 +746,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             error => failTest(error)
           }
       }
-      pos += 1
     }
 
     try {
@@ -761,8 +759,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           currentStream.asInstanceOf[MicroBatchExecution].withProgressLocked {
             actns.foreach(executeAction)
           }
+          pos += 1
 
-        case action: StreamAction => executeAction(action)
+        case action: StreamAction =>
+          executeAction(action)
+          pos += 1
       }
       if (streamThreadDeathCause != null) {
         failTest("Stream Thread Died", streamThreadDeathCause)

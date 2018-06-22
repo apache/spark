@@ -31,6 +31,8 @@ from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
 from pyspark.sql import DataFrame, SparkSession
 
+__all__ = ["ImageSchema"]
+
 
 class _ImageSchema(object):
     """

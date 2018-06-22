@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.exchange
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.launcher.SparkLauncher
@@ -30,7 +31,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
 /**
  * A [[BroadcastExchangeExec]] collects, transforms and finally broadcasts the result of
@@ -69,7 +70,7 @@ case class BroadcastExchangeExec(
     Future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
-      SQLExecution.withExecutionId(sparkContext, executionId) {
+      SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
         try {
           val beforeCollect = System.nanoTime()
           // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
@@ -111,12 +112,18 @@ case class BroadcastExchangeExec(
           SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
           broadcasted
         } catch {
+          // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
+          // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
+          // will catch this exception and re-throw the wrapped fatal throwable.
           case oe: OutOfMemoryError =>
-            throw new OutOfMemoryError(s"Not enough memory to build and broadcast the table to " +
+            throw new SparkFatalException(
+              new OutOfMemoryError(s"Not enough memory to build and broadcast the table to " +
               s"all worker nodes. As a workaround, you can either disable broadcast by setting " +
               s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark driver " +
               s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value")
-              .initCause(oe.getCause)
+              .initCause(oe.getCause))
+          case e if !NonFatal(e) =>
+            throw new SparkFatalException(e)
         }
       }
     }(BroadcastExchangeExec.executionContext)

@@ -133,9 +133,8 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.am.waitTime</code></td>
   <td><code>100s</code></td>
   <td>
-    In <code>cluster</code> mode, time for the YARN Application Master to wait for the
-    SparkContext to be initialized. In <code>client</code> mode, time for the YARN Application Master to wait
-    for the driver to connect to it.
+    Only used in <code>cluster</code> mode. Time for the YARN Application Master to wait for the
+    SparkContext to be initialized.
   </td>
 </tr>
 <tr>
@@ -425,9 +424,12 @@ To use a custom metrics.properties for the application master and executors, upd
 
 Standard Kerberos support in Spark is covered in the [Security](security.html#kerberos) page.
 
-In YARN mode, when accessing Hadoop file systems, aside from the service hosting the user's home
-directory, Spark will also automatically obtain delegation tokens for the service hosting the
-staging directory of the Spark application.
+In YARN mode, when accessing Hadoop filesystems, Spark will automatically obtain delegation tokens
+for:
+
+- the filesystem hosting the staging directory of the Spark application (which is the default
+  filesystem if `spark.yarn.stagingDir` is not set);
+- if Hadoop federation is enabled, all the federated filesystems in the configuration.
 
 If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
 explicitly provided to Spark at launch time. This is done by listing them in the
