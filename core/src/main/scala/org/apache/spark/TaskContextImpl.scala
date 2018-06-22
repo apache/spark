@@ -29,8 +29,9 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.util._
 
 private[spark] class TaskContextImpl(
-    val stageId: Int,
-    val partitionId: Int,
+    override val stageId: Int,
+    override val stageAttemptNumber: Int,
+    override val partitionId: Int,
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
