@@ -167,7 +167,7 @@ object HiveThriftServer2 extends Logging {
     private var onlineSessionNum: Int = 0
     private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     private val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
-    private val runningStatement = new Set
+    private val runningStatement = new mutable.LinkedHashMap[String, mutable.Set[String]]
     private val retainedStatements = conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
     private val retainedSessions = conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
     private var totalRunning = 0
@@ -200,12 +200,20 @@ object HiveThriftServer2 extends Logging {
         val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
         sessionList.put(sessionId, info)
         onlineSessionNum += 1
+        runningStatement.put(sessionId, mutable.Set[String]())
         trimSessionIfNecessary()
       }
     }
 
     def onSessionClosed(sessionId: String): Unit = synchronized {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
+      for {
+        statementIds <- runningStatement.get(sessionId)
+        statementId <- statementIds
+      } {
+        onStatementCancel(statementId)
+      }
+      sessionToRunningStatement.remove(sessionId)
       onlineSessionNum -= 1
       trimSessionIfNecessary()
     }
@@ -222,6 +230,7 @@ object HiveThriftServer2 extends Logging {
       trimExecutionIfNecessary()
       sessionList(sessionId).totalExecution += 1
       executionList(id).groupId = groupId
+      runningStatement(sessionId).add(groupId)
       totalRunning += 1
     }
 
@@ -236,6 +245,9 @@ object HiveThriftServer2 extends Logging {
         executionList(id).detail = errorMessage
         executionList(id).state = ExecutionState.FAILED
         totalRunning -= 1
+        for (info <- executionList.get(id)) {
+          runningStatement(info.sessionId).remove(id)
+        }
         trimExecutionIfNecessary()
       }
     }
@@ -244,6 +256,9 @@ object HiveThriftServer2 extends Logging {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).state = ExecutionState.FINISHED
       totalRunning -= 1
+      for (info <- executionList.get(id)) {
+        runningStatement(info.sessionId).remove(id)
+      }
       trimExecutionIfNecessary()
     }
 
@@ -251,6 +266,9 @@ object HiveThriftServer2 extends Logging {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).state = ExecutionState.CANCELLED
       totalRunning -= 1
+      for (info <- executionList.get(id)) {
+        runningStatement(info.sessionId).remove(id)
+      }
       trimExecutionIfNecessary()
     }
 
