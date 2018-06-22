@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.collection.OpenHashSet
@@ -2656,7 +2657,9 @@ object Sequence {
 
     val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / step.toLong
 
-    require(len <= Int.MaxValue, s"Too long sequence: $len. Should be <= ${Int.MaxValue}")
+    require(
+      len <= MAX_ROUNDED_ARRAY_LENGTH,
+      s"Too long sequence: $len. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
 
     len.toInt
   }
@@ -2676,9 +2679,9 @@ object Sequence {
        |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
        |}
        |long $longLen = $stop == $start ? 1L : 1L + ((long) $stop - $start) / $step;
-       |if ($longLen > Integer.MAX_VALUE) {
+       |if ($longLen > $MAX_ROUNDED_ARRAY_LENGTH) {
        |  throw new IllegalArgumentException(
-       |    "Too long sequence: " + $longLen + ". Should be <= ${Int.MaxValue}");
+       |    "Too long sequence: " + $longLen + ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH");
        |}
        |int $len = (int) $longLen;
        """.stripMargin
