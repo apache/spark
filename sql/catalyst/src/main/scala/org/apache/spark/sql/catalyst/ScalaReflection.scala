@@ -798,7 +798,11 @@ object ScalaReflection extends ScalaReflection {
    * Whether the fields of the given type is defined entirely by its constructor parameters.
    */
   def definedByConstructorParams(tpe: Type): Boolean = cleanUpReflectionObjects {
-    tpe.dealias <:< localTypeOf[Product] || tpe.dealias <:< localTypeOf[DefinedByConstructorParams]
+    tpe.dealias match {
+      case t if t <:< localTypeOf[Option[_]] => definedByConstructorParams(t.typeArgs.head)
+      case _ => tpe.dealias <:< localTypeOf[Product] ||
+        tpe.dealias <:< localTypeOf[DefinedByConstructorParams]
+    }
   }
 
   private val javaKeywords = Set("abstract", "assert", "boolean", "break", "byte", "case", "catch",
