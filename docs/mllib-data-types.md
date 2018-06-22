@@ -317,7 +317,7 @@ Refer to the [`Matrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.
 from pyspark.mllib.linalg import Matrix, Matrices
 
 # Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
-dm2 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
+dm2 = Matrices.dense(3, 2, [1, 3, 5, 2, 4, 6])
 
 # Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
 sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 2, 1], [9, 6, 8])
