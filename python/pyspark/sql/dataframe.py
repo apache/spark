@@ -2095,9 +2095,9 @@ class DataFrame(object):
                         _check_dataframe_localize_timestamps
                     import pyarrow
 
-                    batch_iter = self._collectAsArrow()
-                    if batch_iter:
-                        table = pyarrow.Table.from_batches(batch_iter)
+                    batches = self._collectAsArrow()
+                    if batches:
+                        table = pyarrow.Table.from_batches(batches)
                         pdf = table.to_pandas()
                         pdf = _check_dataframe_convert_date(pdf, self.schema)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
@@ -2146,8 +2146,8 @@ class DataFrame(object):
 
     def _collectAsArrow(self):
         """
-        Returns all records as list of deserialized ArrowPayloads, pyarrow must be installed
-        and available.
+        Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
+        and available on driver and worker Python environments.
 
         .. note:: Experimental.
         """
