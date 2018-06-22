@@ -176,7 +176,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
 
   test("SPARK-24596 Non-cascading Cache Invalidation - verify cached data reuse") {
     val expensiveUDF = udf({ x: Int => Thread.sleep(5000); x })
-    val df = spark.range(0, 10).toDF("a")
+    val df = spark.range(0, 5).toDF("a")
     val df1 = df.withColumn("b", expensiveUDF($"a"))
     val df2 = df1.groupBy('a).agg(sum('b))
     val df3 = df.agg(sum('a))
@@ -194,16 +194,16 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assert(df1.storageLevel == StorageLevel.NONE)
     assertCacheDependency(df1.groupBy('a).agg(sum('b)), 0)
 
-    val df4 = df1.groupBy('a).agg(sum('b)).select("sum(b)")
+    val df4 = df1.groupBy('a).agg(sum('b)).agg(sum("sum(b)"))
     assertCached(df4)
     // reuse loaded cache
     failAfter(3 seconds) {
-      df4.collect()
+      checkDataset(df4, Row(10))
     }
 
     val df5 = df.agg(sum('a)).filter($"sum(a)" > 1)
     assertCached(df5)
     // first time use, load cache
-    df5.collect()
+    checkDataset(df5, Row(10))
   }
 }

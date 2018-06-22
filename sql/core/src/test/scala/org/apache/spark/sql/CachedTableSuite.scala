@@ -802,7 +802,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("SPARK-24596 Non-cascading Cache Invalidation - uncache temporary view") {
-    withView("t1", "t2") {
+    withTempView("t1", "t2") {
       sql("CACHE TABLE t1 AS SELECT * FROM testData WHERE key > 1")
       sql("CACHE TABLE t2 as SELECT * FROM t1 WHERE value > 1")
 
@@ -815,7 +815,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("SPARK-24596 Non-cascading Cache Invalidation - drop temporary view") {
-    withView("t1", "t2") {
+    withTempView("t1", "t2") {
       sql("CACHE TABLE t1 AS SELECT * FROM testData WHERE key > 1")
       sql("CACHE TABLE t2 as SELECT * FROM t1 WHERE value > 1")
 
@@ -830,16 +830,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     withTable("t") {
       spark.range(1, 10).toDF("key").withColumn("value", 'key * 2)
         .write.format("json").saveAsTable("t")
-      withView("t1", "t2") {
-        sql("CREATE VIEW t1 AS SELECT * FROM t WHERE key > 1")
+      withView("t1") {
+        withTempView("t2") {
+          sql("CREATE VIEW t1 AS SELECT * FROM t WHERE key > 1")
 
-        sql("CACHE TABLE t1")
-        sql("CACHE TABLE t2 AS SELECT * FROM t1 WHERE value > 1")
+          sql("CACHE TABLE t1")
+          sql("CACHE TABLE t2 AS SELECT * FROM t1 WHERE value > 1")
 
-        assert(spark.catalog.isCached("t1"))
-        assert(spark.catalog.isCached("t2"))
-        sql("DROP VIEW t1")
-        assert(!spark.catalog.isCached("t2"))
+          assert(spark.catalog.isCached("t1"))
+          assert(spark.catalog.isCached("t2"))
+          sql("DROP VIEW t1")
+          assert(!spark.catalog.isCached("t2"))
+        }
       }
     }
   }
@@ -848,7 +850,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     withTable("t") {
       spark.range(1, 10).toDF("key").withColumn("value", 'key * 2)
         .write.format("json").saveAsTable("t")
-      withView("t1", "t2") {
+      withTempView("t1", "t2") {
         sql("CACHE TABLE t")
         sql("CACHE TABLE t1 AS SELECT * FROM t WHERE key > 1")
         sql("CACHE TABLE t2 AS SELECT * FROM t1 WHERE value > 1")
