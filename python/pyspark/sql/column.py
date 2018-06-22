@@ -514,6 +514,16 @@ class Column(object):
     desc_nulls_first = ignore_unicode_prefix(_unary_op("desc_nulls_first", _desc_nulls_first_doc))
     desc_nulls_last = ignore_unicode_prefix(_unary_op("desc_nulls_last", _desc_nulls_last_doc))
 
+    _isInf_doc = """
+    True if the current expression is inf.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+        Row(name=u'Tom', height=80.0),
+        Row(name=u'Alice', height=float('inf'))])
+    >>> df.filter(df.height.isInf()).collect()
+    [Row(height=inf, name=u'Alice')]
+    """
     _isNull_doc = """
     True if the current expression is null.
 
@@ -531,6 +541,7 @@ class Column(object):
     [Row(height=80, name=u'Tom')]
     """
 
+    isInf = ignore_unicode_prefix(_unary_op("isInf", _isInf_doc))
     isNull = ignore_unicode_prefix(_unary_op("isNull", _isNull_doc))
     isNotNull = ignore_unicode_prefix(_unary_op("isNotNull", _isNotNull_doc))
 
