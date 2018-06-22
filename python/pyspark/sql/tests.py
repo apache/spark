@@ -5060,6 +5060,19 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         df = self.spark.range(1).select(pandas_udf(f=_locals['noop'], returnType='bigint')('id'))
         self.assertEqual(df.first()[0], 0)
 
+    def test_mixed_udf(self):
+        from pyspark.sql.functions import udf, pandas_udf
+
+        df = self.spark.range(0, 10).toDF('a')
+
+        df = df.withColumn('b', udf(lambda x: x + 1, 'double')(df['a']))
+        df = df.withColumn('c', df['b'] + 2)
+        df = df.withColumn('d', udf(lambda x: x + 1, 'double')(df['c']))
+
+        df.explain(True)
+
+        #df.show()
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,

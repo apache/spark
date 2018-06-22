@@ -94,7 +94,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  */
 object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
-  private def hasPythonUDF(e: Expression): Boolean = {
+  private def hasScalarPythonUDF(e: Expression): Boolean = {
     e.find(PythonUDF.isScalarPythonUDF).isDefined
   }
 
@@ -103,7 +103,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       // single PythonUDF child could be chained and evaluated in Python
       case Seq(u: PythonUDF) => canEvaluateInPython(u)
       // Python UDF can't be evaluated directly in JVM
-      case children => !children.exists(hasPythonUDF)
+      case children => !children.exists(hasScalarPythonUDF)
     }
   }
 
@@ -123,6 +123,10 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
   private def extract(plan: SparkPlan): SparkPlan = {
+    println("*************  input  ****************")
+    println(plan)
+    println("**************************************")
+
     val udfs = plan.expressions.flatMap(collectEvaluatableUDF)
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
@@ -130,6 +134,8 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       // If there aren't any, we are done.
       plan
     } else {
+      println("udfs:" + udfs.toList)
+
       val inputsForPlan = plan.references ++ plan.outputSet
       val prunedChildren = plan.children.map { child =>
         val allNeededOutput = inputsForPlan.intersect(child.outputSet).toSeq
@@ -166,7 +172,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
               ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
             case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
               BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
-            case _ =>
+            case (vectorizedUdfs, plainUdfs) =>
               throw new IllegalArgumentException("Can not mix vectorized and non-vectorized UDFs")
           }
 
@@ -187,6 +193,10 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           attributeMap(p)
       }
 
+      println("***********  rewritten  **************")
+      println(rewritten)
+      println("**************************************")
+
       // extract remaining python UDFs recursively
       val newPlan = extract(rewritten)
       if (newPlan.output != plan.output) {
@@ -195,6 +205,12 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       } else {
         newPlan
       }
+
+      println("************  output  ****************")
+      println(newPlan)
+      println("**************************************")
+
+      newPlan
     }
   }
 
@@ -205,7 +221,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       case filter: FilterExec =>
         val (candidates, nonDeterministic) =
           splitConjunctivePredicates(filter.condition).partition(_.deterministic)
-        val (pushDown, rest) = candidates.partition(!hasPythonUDF(_))
+        val (pushDown, rest) = candidates.partition(!hasScalarPythonUDF(_))
         if (pushDown.nonEmpty) {
           val newChild = FilterExec(pushDown.reduceLeft(And), filter.child)
           FilterExec((rest ++ nonDeterministic).reduceLeft(And), newChild)
