@@ -25,13 +25,19 @@ import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters(pushDownDate: Boolean, inFilterThreshold: Int) {
+private[parquet] class ParquetFilters {
+
+  val sqlConf: SQLConf = SQLConf.get
+
+  val pushDownDate = sqlConf.parquetFilterPushDownDate
+  val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
 
   private def dateToDays(date: Date): SQLDate = {
     DateTimeUtils.fromJavaDate(date)
@@ -271,7 +277,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, inFilterThreshold: 
         createFilter(schema, pred).map(FilterApi.not)
 
       case sources.In(name, values)
-        if canMakeFilterOn(name) && values.distinct.length <= inFilterThreshold =>
+        if canMakeFilterOn(name) && values.distinct.length <= pushDownInFilterThreshold =>
         values.distinct.flatMap { v =>
           makeEq.lift(nameToType(name)).map(_(name, v))
         }.reduceLeftOption(FilterApi.or)

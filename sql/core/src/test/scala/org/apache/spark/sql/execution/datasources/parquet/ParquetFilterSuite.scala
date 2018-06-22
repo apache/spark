@@ -55,8 +55,7 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
-  private lazy val parquetFilters =
-    new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownInFilterThreshold)
+  private lazy val parquetFilters = new ParquetFilters()
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -702,8 +701,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     import testImplicits._
     withTempPath { path =>
-      (0 to 1024).toDF("a").coalesce(1)
-        .write.option("parquet.block.size", 512)
+      (0 to 1024).toDF("a").selectExpr("if (a = 1024, null, a) AS a") // convert 1024 to null
+        .coalesce(1).write.option("parquet.block.size", 512)
         .parquet(path.getAbsolutePath)
       val df = spark.read.parquet(path.getAbsolutePath)
       Seq(true, false).foreach { pushEnabled =>
@@ -712,7 +711,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           Seq(1, 5, 10, 11, 1000).foreach { count =>
             assert(df.where(s"a in(${Range(0, count).mkString(",")})").count() === count)
           }
-          assert(df.where(s"a in(null)").count() === 0)
+          assert(df.where("a in(null)").count() === 0)
+          assert(df.where("a = null").count() === 0)
+          assert(df.where("a is null").count() === 1)
         }
       }
     }
