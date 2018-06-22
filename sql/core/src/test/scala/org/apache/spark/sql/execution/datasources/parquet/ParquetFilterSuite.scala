@@ -55,7 +55,8 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
-  private lazy val parquetFilters = new ParquetFilters(conf.parquetFilterPushDownDate)
+  private lazy val parquetFilters =
+    new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownInFilterThreshold)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -666,8 +667,17 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       StructField("a", IntegerType, nullable = false)
     ))
 
+    assertResult(Some(FilterApi.eq(intColumn("a"), null: Integer))) {
+      parquetFilters.createFilter(schema, sources.In("a", Array(null)))
+    }
+
     assertResult(Some(FilterApi.eq(intColumn("a"), 10: Integer))) {
       parquetFilters.createFilter(schema, sources.In("a", Array(10)))
+    }
+
+    // Remove duplicates
+    assertResult(Some(FilterApi.eq(intColumn("a"), 10: Integer))) {
+      parquetFilters.createFilter(schema, sources.In("a", Array(10, 10)))
     }
 
     assertResult(Some(or(
@@ -685,8 +695,27 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       parquetFilters.createFilter(schema, sources.In("a", Array(10, 20, 30)))
     }
 
-    assert(parquetFilters.createFilter(schema, sources.In("a", Range(1, 20).toArray)).isDefined)
-    assert(parquetFilters.createFilter(schema, sources.In("a", Range(1, 21).toArray)).isEmpty)
+    assert(parquetFilters.createFilter(schema, sources.In("a",
+      Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray)).isDefined)
+    assert(parquetFilters.createFilter(schema, sources.In("a",
+      Range(0, conf.parquetFilterPushDownInFilterThreshold + 1).toArray)).isEmpty)
+
+    import testImplicits._
+    withTempPath { path =>
+      (0 to 1024).toDF("a").coalesce(1)
+        .write.option("parquet.block.size", 512)
+        .parquet(path.getAbsolutePath)
+      val df = spark.read.parquet(path.getAbsolutePath)
+      Seq(true, false).foreach { pushEnabled =>
+        withSQLConf(
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushEnabled.toString) {
+          Seq(1, 5, 10, 11, 1000).foreach { count =>
+            assert(df.where(s"a in(${Range(0, count).mkString(",")})").count() === count)
+          }
+          assert(df.where(s"a in(null)").count() === 0)
+        }
+      }
+    }
   }
 }
 

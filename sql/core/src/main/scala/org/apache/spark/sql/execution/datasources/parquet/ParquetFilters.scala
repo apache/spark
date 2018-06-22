@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters(pushDownDate: Boolean) {
+private[parquet] class ParquetFilters(pushDownDate: Boolean, inFilterThreshold: Int) {
 
   private def dateToDays(date: Date): SQLDate = {
     DateTimeUtils.fromJavaDate(date)
@@ -270,8 +270,9 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       case sources.Not(pred) =>
         createFilter(schema, pred).map(FilterApi.not)
 
-      case sources.In(name, values) if canMakeFilterOn(name) && values.length < 20 =>
-        values.flatMap { v =>
+      case sources.In(name, values)
+        if canMakeFilterOn(name) && values.distinct.length <= inFilterThreshold =>
+        values.distinct.flatMap { v =>
           makeEq.lift(nameToType(name)).map(_(name, v))
         }.reduceLeftOption(FilterApi.or)
 
