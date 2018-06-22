@@ -2444,7 +2444,6 @@ case class Sequence(
     } else {
       ev.copy(code =
         code"""
-           |boolean ${ev.isNull} = false;
            |${startGen.code}
            |${stopGen.code}
            |${stepGen.code}
