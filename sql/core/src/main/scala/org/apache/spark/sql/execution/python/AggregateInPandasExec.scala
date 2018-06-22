@@ -82,7 +82,7 @@ case class AggregateInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val runnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+    val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
 
@@ -143,7 +143,7 @@ case class AggregateInPandasExec(
         argOffsets,
         aggInputSchema,
         sessionLocalTimeZone,
-        runnerConf).compute(projectedRowIter, context.partitionId(), context)
+        pythonRunnerConf).compute(projectedRowIter, context.partitionId(), context)
 
       val joinedAttributes =
         groupingExpressions.map(_.toAttribute) ++ udfExpressions.map(_.resultAttribute)

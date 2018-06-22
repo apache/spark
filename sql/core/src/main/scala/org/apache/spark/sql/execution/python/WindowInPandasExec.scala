@@ -98,7 +98,7 @@ case class WindowInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val runnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+    val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     // Extract window expressions and window functions
     val expressions = windowExpression.flatMap(_.collect { case e: WindowExpression => e })
@@ -162,7 +162,7 @@ case class WindowInPandasExec(
         argOffsets,
         windowInputSchema,
         sessionLocalTimeZone,
-        runnerConf).compute(pythonInput, context.partitionId(), context)
+        pythonRunnerConf).compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
       val resultProj = createResultProjection(expressions)

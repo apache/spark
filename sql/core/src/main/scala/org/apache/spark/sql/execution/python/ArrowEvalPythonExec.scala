@@ -64,7 +64,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val runnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
@@ -88,7 +88,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       argOffsets,
       schema,
       sessionLocalTimeZone,
-      runnerConf).compute(batchIter, context.partitionId(), context)
+      pythonRunnerConf).compute(batchIter, context.partitionId(), context)
 
     new Iterator[InternalRow] {
 

@@ -78,7 +78,7 @@ case class FlatMapGroupsInPandasExec(
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val runnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+    val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     // Deduplicate the grouping attributes.
     // If a grouping attribute also appears in data attributes, then we don't need to send the
@@ -147,7 +147,7 @@ case class FlatMapGroupsInPandasExec(
         argOffsets,
         dedupSchema,
         sessionLocalTimeZone,
-        runnerConf).compute(grouped, context.partitionId(), context)
+        pythonRunnerConf).compute(grouped, context.partitionId(), context)
 
       columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
     }
