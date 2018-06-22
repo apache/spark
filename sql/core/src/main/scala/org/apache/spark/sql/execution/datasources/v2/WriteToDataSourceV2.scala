@@ -123,7 +123,10 @@ object DataWritingSparkTask extends Logging {
       writeTask: DataWriterFactory[InternalRow],
       context: TaskContext,
       iter: Iterator[InternalRow]): WriterCommitMessage = {
-    val dataWriter = writeTask.createDataWriter(context.partitionId(), context.attemptNumber())
+    // SPARK-24552: Generate a unique "attempt ID" based on the stage and task attempt numbers.
+    // Assumes that there won't be more than Short.MaxValue attempts, at least not concurrently.
+    val attemptId = (context.stageAttemptNumber << 16) | context.attemptNumber
+    val dataWriter = writeTask.createDataWriter(context.partitionId(), attemptId)
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
