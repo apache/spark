@@ -117,19 +117,12 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
                 "doesn't match specified schema. "
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
 
-        if not assign_cols_by_pos:
-            try:
-                # Assign result columns by schema name
-                return [(result[field.name], to_arrow_type(field.dataType))
-                        for field in return_type]
-            except KeyError:
-                # Raise error if columns are labeled with strings, else allow positional assignment
-                if any(isinstance(name, basestring) for name in result.columns):
-                    raise
-
-        # Assign result columns by position
-        return [(result[result.columns[i]], to_arrow_type(field.dataType))
-                for i, field in enumerate(return_type)]
+        # Assign result columns by schema name if user labeled with strings, else use position
+        if not assign_cols_by_pos and any(isinstance(name, basestring) for name in result.columns):
+            return [(result[field.name], to_arrow_type(field.dataType)) for field in return_type]
+        else:
+            return [(result[result.columns[i]], to_arrow_type(field.dataType))
+                    for i, field in enumerate(return_type)]
 
     return wrapped
 
