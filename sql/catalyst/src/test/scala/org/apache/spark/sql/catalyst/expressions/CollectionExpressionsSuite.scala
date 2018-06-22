@@ -1173,6 +1173,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a02 = Literal.create(Seq(1, 2, null, 4, 5), ArrayType(IntegerType))
     val a03 = Literal.create(Seq(-5, 4, -3, 2, -1), ArrayType(IntegerType))
     val a04 = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
+    val a05 = Literal.create(Seq[Byte](1, 2, 3), ArrayType(ByteType))
+    val a06 = Literal.create(Seq[Byte](4, 2), ArrayType(ByteType))
+    val a07 = Literal.create(Seq[Short](1, 2, 3), ArrayType(ShortType))
+    val a08 = Literal.create(Seq[Short](4, 2), ArrayType(ShortType))
 
     val a10 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType))
     val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType))
@@ -1191,6 +1195,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayUnion(a02, a03), Seq(1, 2, null, 4, 5, -5, -3, -1))
     checkEvaluation(ArrayUnion(a03, a02), Seq(-5, 4, -3, 2, -1, 1, null, 5))
     checkEvaluation(ArrayUnion(a02, a04), Seq(1, 2, null, 4, 5))
+    checkEvaluation(
+      ArrayUnion(a05, a06), UnsafeArrayData.fromPrimitiveArray(Array[Byte](1, 2, 3, 4)))
+    checkEvaluation(
+      ArrayUnion(a07, a08), UnsafeArrayData.fromPrimitiveArray(Array[Short](1, 2, 3, 4)))
 
     checkEvaluation(
       ArrayUnion(a10, a11), UnsafeArrayData.fromPrimitiveArray(Array(1L, 2L, 3L, 4L)))
