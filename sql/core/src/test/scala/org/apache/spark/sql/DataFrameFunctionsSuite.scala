@@ -633,6 +633,56 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
   }
 
+  test("map_from_entries function") {
+    def dummyFilter(c: Column): Column = c.isNull || c.isNotNull
+    val oneRowDF = Seq(3215).toDF("i")
+
+    // Test cases with primitive-type keys and values
+    val idf = Seq(
+      Seq((1, 10), (2, 20), (3, 10)),
+      Seq((1, 10), null, (2, 20)),
+      Seq.empty,
+      null
+    ).toDF("a")
+    val iExpected = Seq(
+      Row(Map(1 -> 10, 2 -> 20, 3 -> 10)),
+      Row(null),
+      Row(Map.empty),
+      Row(null))
+
+    checkAnswer(idf.select(map_from_entries('a)), iExpected)
+    checkAnswer(idf.selectExpr("map_from_entries(a)"), iExpected)
+    checkAnswer(idf.filter(dummyFilter('a)).select(map_from_entries('a)), iExpected)
+    checkAnswer(
+      oneRowDF.selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
+      Seq(Row(Map(1 -> null, 2 -> null)))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('i))
+        .selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
+      Seq(Row(Map(1 -> null, 2 -> null)))
+    )
+
+    // Test cases with non-primitive-type keys and values
+    val sdf = Seq(
+      Seq(("a", "aa"), ("b", "bb"), ("c", "aa")),
+      Seq(("a", "aa"), null, ("b", "bb")),
+      Seq(("a", null), ("b", null)),
+      Seq.empty,
+      null
+    ).toDF("a")
+    val sExpected = Seq(
+      Row(Map("a" -> "aa", "b" -> "bb", "c" -> "aa")),
+      Row(null),
+      Row(Map("a" -> null, "b" -> null)),
+      Row(Map.empty),
+      Row(null))
+
+    checkAnswer(sdf.select(map_from_entries('a)), sExpected)
+    checkAnswer(sdf.selectExpr("map_from_entries(a)"), sExpected)
+    checkAnswer(sdf.filter(dummyFilter('a)).select(map_from_entries('a)), sExpected)
+  }
+
   test("array contains function") {
     val df = Seq(
       (Seq[Int](1, 2), "x", 1),

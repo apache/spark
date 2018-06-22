@@ -3527,6 +3527,13 @@ object functions {
   def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
 
   /**
+   * Returns a map created from the given array of entries.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def map_from_entries(e: Column): Column = withExpr { MapFromEntries(e.expr) }
+
+  /**
    * Returns a merged array of structs in which the N-th struct contains all N-th values of input
    * arrays.
    * @group collection_funcs
