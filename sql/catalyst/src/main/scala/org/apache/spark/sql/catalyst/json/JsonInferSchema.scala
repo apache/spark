@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.json
+package org.apache.spark.sql.catalyst.json
 
 import java.util.Comparator
 
@@ -25,12 +25,36 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
-import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 private[sql] object JsonInferSchema {
+  def inferForRow[T](
+      row: T,
+      configOptions: JSONOptions,
+      createParser: (JsonFactory, T) => JsonParser,
+      factory: JsonFactory): Option[DataType] = {
+    val parseMode = configOptions.parseMode
+    val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
+
+    try {
+      Utils.tryWithResource(createParser(factory, row)) { parser =>
+        parser.nextToken()
+        Some(inferField(parser, configOptions))
+      }
+    } catch {
+      case  e @ (_: RuntimeException | _: JsonProcessingException) => parseMode match {
+        case PermissiveMode =>
+          Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
+        case DropMalformedMode =>
+          None
+        case FailFastMode =>
+          throw new SparkException("Malformed records are detected in schema inference. " +
+            s"Parse Mode: ${FailFastMode.name}.", e)
+      }
+    }
+  }
 
   /**
    * Infer the type of a collection of json records in three stages:
@@ -51,22 +75,7 @@ private[sql] object JsonInferSchema {
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
       iter.flatMap { row =>
-        try {
-          Utils.tryWithResource(createParser(factory, row)) { parser =>
-            parser.nextToken()
-            Some(inferField(parser, configOptions))
-          }
-        } catch {
-          case  e @ (_: RuntimeException | _: JsonProcessingException) => parseMode match {
-            case PermissiveMode =>
-              Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
-            case DropMalformedMode =>
-              None
-            case FailFastMode =>
-              throw new SparkException("Malformed records are detected in schema inference. " +
-                s"Parse Mode: ${FailFastMode.name}.", e)
-          }
-        }
+        inferForRow(row, configOptions, createParser, factory)
       }.reduceOption(typeMerger).toIterator
     }
 
@@ -246,7 +255,7 @@ private[sql] object JsonInferSchema {
   /**
    * Remove top-level ArrayType wrappers and merge the remaining schemas
    */
-  private def compatibleRootType(
+  def compatibleRootType(
       columnNameOfCorruptRecords: String,
       parseMode: ParseMode): (DataType, DataType) => DataType = {
     // Since we support array of json objects at the top level,
