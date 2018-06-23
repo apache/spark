@@ -462,6 +462,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(gauges.get("latency").getValue.asInstanceOf[Long] == 0)
         assert(gauges.get("processingRate-total").getValue.asInstanceOf[Double] == 0.0)
         assert(gauges.get("inputRate-total").getValue.asInstanceOf[Double] == 0.0)
+        assert(gauges.get("eventTime-watermark").getValue.asInstanceOf[Long] == 0)
+        assert(gauges.get("states-rowsTotal").getValue.asInstanceOf[Long] == 0)
+        assert(gauges.get("states-usedBytes").getValue.asInstanceOf[Long] == 0)
         sq.stop()
       }
     }
