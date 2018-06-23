@@ -371,6 +371,30 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       assert(thrown.getMessage.contains(key))
     }
   }
+
+  test("SPARK-24560") {
+    val conf = new SparkConf()
+    conf.set("spark.python.task.killTimeout", "3")
+    conf.set("spark.worker.driverTerminateTimeout", "12")
+    conf.set("spark.task.reaper.pollingInterval", "12")
+    conf.set("spark.executor.heartbeatInterval", "12")
+    conf.set("spark.starvation.timeout", "16")
+    conf.set("spark.scheduler.maxRegisteredResourcesWaitingTime", "32")
+    conf.set("spark.scheduler.revive.interval", "2")
+    conf.set("spark.rpc.retry.wait", "4")
+    conf.set("spark.mesos.coarse.shutdownTimeout", "12")
+    assert(conf.getTimeAsSeconds("spark.python.task.killTimeout").seconds.toMillis  === 3000)
+    assert(conf.getTimeAsSeconds("spark.worker.driverTerminateTimeout").seconds.toMillis === 12000)
+    assert(conf.getTimeAsSeconds("spark.task.reaper.pollingInterval").seconds.toMillis === 12000)
+    assert(conf.getTimeAsSeconds("spark.executor.heartbeatInterval").seconds.toMillis === 12000)
+    assert(conf.getTimeAsSeconds("spark.starvation.timeout").seconds.toMillis === 16000)
+    assert(conf.getTimeAsSeconds("spark.scheduler.maxRegisteredResourcesWaitingTime")
+      .seconds.toMillis === 32000)
+    assert(conf.getTimeAsSeconds("spark.scheduler.revive.interval").seconds.toMillis === 2000)
+    assert(conf.getTimeAsSeconds("spark.rpc.retry.wait").seconds.toMillis === 4000)
+    assert(conf.getTimeAsSeconds("spark.mesos.coarse.shutdownTimeout").seconds.toMillis === 12000)
+  }
+
 }
 
 class Class1 {}

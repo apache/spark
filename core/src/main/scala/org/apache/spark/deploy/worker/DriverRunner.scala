@@ -22,6 +22,7 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 
 import com.google.common.io.Files
 
@@ -58,7 +59,7 @@ private[deploy] class DriverRunner(
 
   // Timeout to wait for when trying to terminate a driver.
   private val DRIVER_TERMINATE_TIMEOUT_MS =
-    conf.getTimeAsMs("spark.worker.driverTerminateTimeout", "10s")
+    conf.getTimeAsSeconds("spark.worker.driverTerminateTimeout", "10s").seconds.toMillis
 
   // Decoupled for testing
   def setClock(_clock: Clock): Unit = {

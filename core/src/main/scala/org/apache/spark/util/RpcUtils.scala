@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.concurrent.duration._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 
@@ -39,7 +41,13 @@ private[spark] object RpcUtils {
 
   /** Returns the configured number of milliseconds to wait on each retry */
   def retryWaitMs(conf: SparkConf): Long = {
-    conf.getTimeAsMs("spark.rpc.retry.wait", "3s")
+    if (conf.contains("spark.rpc.retry.wait") && !conf.contains("spark.akka.retry.wait")) {
+      conf.getTimeAsSeconds("spark.rpc.retry.wait", "3s").seconds.toMillis
+    } else {
+      // compatible with deprecated alternative `spark.akka.retry.wait` which has default
+      // unit as millisecond
+      conf.getTimeAsMs("spark.rpc.retry.wait", "3s")
+    }
   }
 
   /** Returns the default Spark timeout to use for RPC ask operations. */
