@@ -457,6 +457,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.python.task.killTimeout</code></td>
+  <td>2s</td>
+  <td>
+    How long to wait before killing the python worker if a task cannot be interrupted.
+  </td>
+</tr>
+<tr>
   <td><code>spark.sql.repl.eagerEval.enabled</code></td>
   <td>false</td>
   <td>
@@ -566,6 +573,13 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     Python binary executable to use for PySpark in both driver and executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.driverTerminateTimeout</code></td>
+  <td>10s</td>
+  <td>
+    Timeout to wait for when trying to terminate a driver.
   </td>
 </tr>
 </table>
@@ -796,6 +810,13 @@ Apart from these, the following properties are also available, and may be useful
   <td>100k</td>
   <td>
     Buffer size to use when writing to output streams, in KiB unless otherwise specified.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.consoleProgress.update.interval</code></td>
+  <td>200</td>
+  <td>
+    Update period of progress bar, in milliseconds
   </td>
 </tr>
 <tr>
