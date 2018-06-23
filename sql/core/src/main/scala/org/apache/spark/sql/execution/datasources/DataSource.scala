@@ -745,8 +745,9 @@ object DataSource extends Logging {
       fs: FileSystem,
       hadoopConf: Configuration,
       qualified: Path): Seq[Path] = {
-    val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified)
-    if (paths.size < sparkSession.sessionState.conf.parallelGetGlobbedPathParallelism) {
+    val getGlobbedPathThreshold = sparkSession.sessionState.conf.parallelGetGlobbedPathThreshold
+    val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified, getGlobbedPathThreshold)
+    if (paths.size < getGlobbedPathThreshold) {
       SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
     } else {
       val parallelGetGlobbedPathParallelism =
@@ -754,10 +755,9 @@ object DataSource extends Logging {
       val numParallelism = Math.min(paths.size, parallelGetGlobbedPathParallelism * 2)
       val threadPool = ThreadUtils.newDaemonCachedThreadPool(
         "parallel-get-globbed-paths-thread-pool", numParallelism)
-      val result = paths.map { pathStr =>
+      val result = paths.map { path =>
         threadPool.submit(new Callable[Seq[Path]] {
           override def call(): Seq[Path] = {
-            val path = new Path(pathStr)
             val fs = path.getFileSystem(hadoopConf)
             SparkHadoopUtil.get.globPathIfNecessary(fs, path)
           }

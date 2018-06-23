@@ -30,7 +30,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter, SparkGlobber}
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -255,16 +255,11 @@ class SparkHadoopUtil extends Logging {
     if (isGlobPath(pattern)) globPath(fs, pattern) else Seq(pattern)
   }
 
-  def expandGlobPath(fs: FileSystem, pattern: Path): Seq[String] = {
-    val arr = pattern.toString.split("/")
-    val firstIdx = arr.indexWhere(_.exists("{}[]*?\\".toSet.contains))
-    if (isGlobPath(pattern) && firstIdx != arr.length - 1) {
-      val parentPath = arr.slice(0, firstIdx + 1).mkString("/")
-      Option(fs.globStatus(new Path(parentPath))).map{ statuses =>
-        statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
-          + "/" + arr.slice(firstIdx + 1, arr.length).mkString("/")).toSeq
-      }.getOrElse(Seq.empty[String])
-    } else Seq(pattern.toString)
+  def expandGlobPath(fs: FileSystem, pattern: Path, threshold: Int): Seq[Path] = {
+    val sparkGlobber = new SparkGlobber(fs, pattern)
+    Option(sparkGlobber.globWithThreshold(threshold)).map { statuses =>
+      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
+    }.getOrElse(Seq.empty[Path])
   }
 
   /**

@@ -737,6 +737,16 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val PARALLEL_GET_GLOBBED_PATH_THRESHOLD =
+    buildConf("spark.sql.sources.parallelGetGlobbedPath.threshold")
+      .doc("The maximum number of subfiles or directories allowed after a globbed path " +
+        "expansion. If the number of paths exceeds this value during expansion, it tries to " +
+        "expand the globbed in parallel with multi-thread.")
+      .intConf
+      .checkValue(threshlod => threshlod >= 0, "The maximum number of subfiles or directories " +
+        "must not be negative")
+      .createWithDefault(32)
+
   val PARALLEL_GET_GLOBBED_PATH_PARALLELISM =
     buildConf("spark.sql.sources.parallelGetGlobbedPath.parallelism")
       .doc("The number of threads to get a collection of path in parallel. Set the " +
@@ -1815,6 +1825,9 @@ class SQLConf extends Serializable with Logging {
 
   def parallelPartitionDiscoveryParallelism: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
+
+  def parallelGetGlobbedPathThreshold: Int =
+    getConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_THRESHOLD)
 
   def parallelGetGlobbedPathParallelism: Int =
     getConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_PARALLELISM)

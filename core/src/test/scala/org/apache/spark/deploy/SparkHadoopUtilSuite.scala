@@ -99,22 +99,29 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers with LocalSparkCo
       val sparkHadoopUtil = new SparkHadoopUtil
       val fs = FileSystem.getLocal(new Configuration())
 
-      // test partial match
-      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-000[1-5]/*")) should be(Seq(
-        s"file:${rootDir}/dir-0001/*",
-        s"file:${rootDir}/dir-0002/*",
-        s"file:${rootDir}/dir-0003/*",
-        s"file:${rootDir}/dir-0004/*",
-        s"file:${rootDir}/dir-0005/*"))
+      // when we set threshold to 5, just expand the dir-000[1-5]
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"$rootDir/dir-000[1-5]/*"), 5)
+        .sortWith(_.compareTo(_) < 0) should be(Seq(
+          new Path(s"file:$rootDir/dir-0001/*"),
+          new Path(s"file:$rootDir/dir-0002/*"),
+          new Path(s"file:$rootDir/dir-0003/*"),
+          new Path(s"file:$rootDir/dir-0004/*"),
+          new Path(s"file:$rootDir/dir-0005/*")))
+
+      // when we set threshold to 10, we'll get all 50 files in whole pattern
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"$rootDir/dir-000[1-5]/*"), 10)
+        .sortWith(_.compareTo(_) < 0).size should be(50)
+
       // test wild cast on the leaf files
-      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-0001/*")) should be(Seq(
-        s"${rootDir}/dir-0001/*"))
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"$rootDir/dir-0001/*"), 5).size should be(10)
+
       // test path is not globPath
-      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/dir-0001/part-0001")) should be(Seq(
-        s"${rootDir}/dir-0001/part-0001"))
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"$rootDir/dir-0001/part-0001"), 10) should
+        be(Seq(new Path(s"file:$rootDir/dir-0001/part-0001")))
+
       // test the wrong wild cast
-      sparkHadoopUtil.expandGlobPath(fs, new Path(s"${rootDir}/000[1-5]/*")) should be(
-        Seq.empty[String])
+      sparkHadoopUtil.expandGlobPath(fs, new Path(s"$rootDir/000[1-5]/*"), 10) should be(
+        Seq.empty[Path])
     } finally Utils.deleteRecursively(tmpDir)
   }
 
