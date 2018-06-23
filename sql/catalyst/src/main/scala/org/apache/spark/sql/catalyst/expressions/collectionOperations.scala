@@ -199,7 +199,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
       """.stripMargin
     }
 
-    val splittedGetValuesAndCardinalities = ctx.splitExpressions(
+    val splittedGetValuesAndCardinalities = ctx.splitExpressionsWithCurrentInputs(
       expressions = getValuesAndCardinalities,
       funcName = "getValuesAndCardinalities",
       returnType = "int",
@@ -209,7 +209,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
           |return $biggestCardinality;
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"$biggestCardinality = $funcCall;").mkString("\n"),
-      arguments =
+      extraArguments =
         ("ArrayData[]", arrVals) ::
         ("int", biggestCardinality) :: Nil)
 
