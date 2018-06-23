@@ -254,9 +254,8 @@ object ShuffleExchangeExec {
         row => projection(row).getInt(0)
       case RangePartitioning(_, _) | SinglePartition => identity
       case LocalPartitioning(_, _) =>
-        (row: InternalRow) => {
-          TaskContext.get().partitionId()
-        }
+        val partitionId = TaskContext.get().partitionId()
+        _ => partitionId
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
 
