@@ -239,8 +239,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     True
     >>> blorModel.intercept == model2.intercept
     True
-    >>> model2._resetUid("logReg")
-    uid = logReg, numClasses = 2, numFeatures = 2
+    >>> model2
+    LogisticRegressionModel: uid = ..., numClasses = 2, numFeatures = 2
 
     .. versionadded:: 1.3.0
     """
@@ -565,9 +565,7 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         return BinaryLogisticRegressionSummary(java_blr_summary)
 
     def __repr__(self):
-        numClasses = str(self._call_java("numClasses"))
-        numFeatures = str(self._call_java("numFeatures"))
-        return "uid = %s, numClasses = %s, numFeatures = %s" % (self.uid, numClasses, numFeatures)
+        return self._call_java("toString")
 
 
 class LogisticRegressionSummary(JavaWrapper):
