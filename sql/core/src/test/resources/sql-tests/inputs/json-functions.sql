@@ -35,3 +35,21 @@ DROP VIEW IF EXISTS jsonTable;
 -- from_json - complex types
 select from_json('{"a":1, "b":2}', 'map<string, int>');
 select from_json('{"a":1, "b":"2"}', 'struct<a:int,b:string>');
+
+-- schema inferring
+create temporary view json_structs(json) as select * from values
+  ('{"a":1}'),
+  ('{"a" 2}'),
+  ('{"a": 3}'),
+  (NULL);
+
+select infer_schema(json) from json_structs;
+
+create temporary view json_array(json) as select * from values
+  ('{"a": [1, 2, 3], "b": ["1"]}'),
+  ('{"a": [4, 5], "b": []}'),
+  ('{"a": []}'),
+  ('{}'),
+  (NULL);
+
+select infer_schema(json) from json_array;

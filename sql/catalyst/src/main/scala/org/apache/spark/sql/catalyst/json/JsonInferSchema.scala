@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, Pars
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-private[sql] object JsonInferSchema {
+object JsonInferSchema {
   def inferForRow[T](
       row: T,
       configOptions: JSONOptions,
