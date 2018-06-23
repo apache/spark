@@ -660,6 +660,30 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       assert(df.where("col > 0").count() === 2)
     }
   }
+
+  test("filter pushdown - StringStartsWith") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
+      Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
+        checkFilterPredicate(
+          '_1.startsWith(prefix).asInstanceOf[Predicate],
+          classOf[UserDefinedByInstance[_, _]],
+          "2str2")
+      }
+
+      Seq("2S", "null", "2str22").foreach { prefix =>
+        checkFilterPredicate(
+          '_1.startsWith(prefix).asInstanceOf[Predicate],
+          classOf[UserDefinedByInstance[_, _]],
+          Seq.empty[Row])
+      }
+
+      assertResult(None) {
+        parquetFilters.createFilter(
+          df.schema,
+          sources.StringStartsWith("_1", null))
+      }
+    }
+  }
 }
 
 class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {

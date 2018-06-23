@@ -22,11 +22,13 @@ import java.sql.Date
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
+import org.apache.parquet.schema.PrimitiveComparator
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
@@ -269,6 +271,29 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
 
       case sources.Not(pred) =>
         createFilter(schema, pred).map(FilterApi.not)
+
+      case sources.StringStartsWith(name, prefix) if canMakeFilterOn(name) =>
+        Option(prefix).map { v =>
+          FilterApi.userDefined(binaryColumn(name),
+            new UserDefinedPredicate[Binary] with Serializable {
+              private val strToBinary = Binary.fromReusedByteArray(v.getBytes)
+              private val size = strToBinary.length
+
+              override def canDrop(statistics: Statistics[Binary]): Boolean = {
+                val comparator = PrimitiveComparator.UNSIGNED_LEXICOGRAPHICAL_BINARY_COMPARATOR
+                val max = statistics.getMax
+                val min = statistics.getMin
+                comparator.compare(max.slice(0, math.min(size, max.length)), strToBinary) < 0 ||
+                  comparator.compare(min.slice(0, math.min(size, min.length)), strToBinary) > 0
+              }
+
+              override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
+
+              override def keep(value: Binary): Boolean =
+                UTF8String.fromBytes(value.getBytes).startsWith(UTF8String.fromString(v))
+            }
+          )
+        }
 
       case _ => None
     }
