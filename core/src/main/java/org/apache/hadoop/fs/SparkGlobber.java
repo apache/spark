@@ -113,8 +113,7 @@ public class SparkGlobber {
       if (fs != null) {
         scheme = fs.getUri().getScheme();
       } else {
-        scheme = fc.getFSofPath(fc.fixRelativePart(path)).
-            getUri().getScheme();
+        scheme = fc.getFSofPath(fc.fixRelativePart(path)).getUri().getScheme();
       }
     }
     return scheme;
@@ -126,8 +125,7 @@ public class SparkGlobber {
       if (fs != null) {
         authority = fs.getUri().getAuthority();
       } else {
-        authority = fc.getFSofPath(fc.fixRelativePart(path)).
-            getUri().getAuthority();
+        authority = fc.getFSofPath(fc.fixRelativePart(path)).getUri().getAuthority();
       }
     }
     return authority ;
