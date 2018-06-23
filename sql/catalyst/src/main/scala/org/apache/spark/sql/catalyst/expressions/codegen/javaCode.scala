@@ -194,10 +194,11 @@ object Block {
     while (strings.hasNext) {
       val input = inputs.next
       input match {
-        case _: ExprValue | _: Block =>
+        case _: ExprValue | _: CodeBlock =>
           codeParts += buf.toString
           buf.clear
           blockInputs += input.asInstanceOf[JavaCode]
+        case EmptyBlock =>
         case _ =>
           buf.append(input)
       }
