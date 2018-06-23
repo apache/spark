@@ -77,6 +77,8 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numLateRows" -> SQLMetrics.createMetric(sparkContext,
+      "number of rows which are later than watermark"),
     "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
     "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "total time to update rows"),
@@ -93,7 +95,9 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     new StateOperatorProgress(
       numRowsTotal = longMetric("numTotalStateRows").value,
       numRowsUpdated = longMetric("numUpdatedStateRows").value,
-      memoryUsedBytes = longMetric("stateMemory").value)
+      memoryUsedBytes = longMetric("stateMemory").value,
+      numLateInputRows = longMetric("numLateRows").value
+    )
   }
 
   /** Records the duration of running `body` for the next query progress update. */
@@ -120,6 +124,15 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
       case StateStoreCustomTimingMetric(name, desc) =>
         name -> SQLMetrics.createTimingMetric(sparkContext, desc)
     }.toMap
+  }
+
+  protected def applyRemovingRowsOlderThanWatermark(iter: Iterator[InternalRow],
+                                                    predicate: Predicate): Iterator[InternalRow] = {
+    iter.filter { row =>
+      val filteredIn = !predicate.eval(row)
+      if (!filteredIn) longMetric("numLateRows") += 1
+      filteredIn
+    }
   }
 
   /**
@@ -301,7 +314,8 @@ case class StateStoreSaveExec(
           // Assumption: watermark predicates must be non-empty if append mode is allowed
           case Some(Append) =>
             allUpdatesTimeMs += timeTakenMs {
-              val filteredIter = iter.filter(row => !watermarkPredicateForData.get.eval(row))
+              val filteredIter = applyRemovingRowsOlderThanWatermark(iter,
+                watermarkPredicateForData.get)
               while (filteredIter.hasNext) {
                 val row = filteredIter.next().asInstanceOf[UnsafeRow]
                 val key = getKey(row)
@@ -344,7 +358,7 @@ case class StateStoreSaveExec(
             new NextIterator[InternalRow] {
               // Filter late date using watermark if specified
               private[this] val baseIterator = watermarkPredicateForData match {
-                case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
+                case Some(predicate) => applyRemovingRowsOlderThanWatermark(iter, predicate)
                 case None => iter
               }
               private val updatesStartTimeNs = System.nanoTime
@@ -421,14 +435,13 @@ case class StreamingDeduplicateExec(
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
       val numOutputRows = longMetric("numOutputRows")
-      val numTotalStateRows = longMetric("numTotalStateRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
       val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
       val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
       val commitTimeMs = longMetric("commitTimeMs")
 
       val baseIterator = watermarkPredicateForData match {
-        case Some(predicate) => iter.filter(row => !predicate.eval(row))
+        case Some(predicate) => applyRemovingRowsOlderThanWatermark(iter, predicate)
         case None => iter
       }
 

@@ -58,7 +58,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |  "stateOperators" : [ {
         |    "numRowsTotal" : 0,
         |    "numRowsUpdated" : 1,
-        |    "memoryUsedBytes" : 2
+        |    "memoryUsedBytes" : 2,
+        |    "numLateInputRows" : 0
         |  } ],
         |  "sources" : [ {
         |    "description" : "source",
@@ -91,7 +92,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
          |  "stateOperators" : [ {
          |    "numRowsTotal" : 0,
          |    "numRowsUpdated" : 1,
-         |    "memoryUsedBytes" : 2
+         |    "memoryUsedBytes" : 2,
+         |    "numLateInputRows" : 0
          |  } ],
          |  "sources" : [ {
          |    "description" : "source",
@@ -230,7 +232,7 @@ object StreamingQueryStatusAndProgressSuite {
       "avg" -> "2016-12-05T20:54:20.827Z",
       "watermark" -> "2016-12-05T20:54:20.827Z").asJava),
     stateOperators = Array(new StateOperatorProgress(
-      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 2)),
+      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 2, numLateInputRows = 0)),
     sources = Array(
       new SourceProgress(
         description = "source",
@@ -254,7 +256,7 @@ object StreamingQueryStatusAndProgressSuite {
     // empty maps should be handled correctly
     eventTime = new java.util.HashMap(Map.empty[String, String].asJava),
     stateOperators = Array(new StateOperatorProgress(
-      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 2)),
+      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 2, numLateInputRows = 0)),
     sources = Array(
       new SourceProgress(
         description = "source",

@@ -38,7 +38,8 @@ import org.apache.spark.annotation.InterfaceStability
 class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
-    val memoryUsedBytes: Long
+    val memoryUsedBytes: Long,
+    val numLateInputRows: Long
   ) extends Serializable {
 
   /** The compact JSON representation of this progress. */
@@ -48,12 +49,13 @@ class StateOperatorProgress private[sql](
   def prettyJson: String = pretty(render(jsonValue))
 
   private[sql] def copy(newNumRowsUpdated: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes)
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, numLateInputRows)
 
   private[sql] def jsonValue: JValue = {
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
-    ("memoryUsedBytes" -> JInt(memoryUsedBytes))
+    ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
+    ("numLateInputRows" -> JInt(numLateInputRows))
   }
 
   override def toString: String = prettyJson
