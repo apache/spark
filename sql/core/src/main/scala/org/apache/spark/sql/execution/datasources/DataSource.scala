@@ -750,11 +750,10 @@ object DataSource extends Logging {
     if (paths.size < getGlobbedPathThreshold) {
       SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
     } else {
-      val parallelGetGlobbedPathParallelism =
-        sparkSession.sessionState.conf.parallelGetGlobbedPathParallelism
-      val numParallelism = Math.min(paths.size, parallelGetGlobbedPathParallelism * 2)
+      val numThreads =
+        Math.min(paths.size, sparkSession.sessionState.conf.parallelGetGlobbedPathNumThreads)
       val threadPool = ThreadUtils.newDaemonCachedThreadPool(
-        "parallel-get-globbed-paths-thread-pool", numParallelism)
+        "parallel-get-globbed-paths-thread-pool", numThreads)
       val result = paths.map { path =>
         threadPool.submit(new Callable[Seq[Path]] {
           override def call(): Seq[Path] = {

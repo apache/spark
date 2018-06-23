@@ -747,8 +747,8 @@ object SQLConf {
         "must not be negative")
       .createWithDefault(32)
 
-  val PARALLEL_GET_GLOBBED_PATH_PARALLELISM =
-    buildConf("spark.sql.sources.parallelGetGlobbedPath.parallelism")
+  val PARALLEL_GET_GLOBBED_PATH_NUM_THREADS =
+    buildConf("spark.sql.sources.parallelGetGlobbedPath.numThreads")
       .doc("The number of threads to get a collection of path in parallel. Set the " +
         "number to avoid generating too many threads.")
       .intConf
@@ -1829,8 +1829,8 @@ class SQLConf extends Serializable with Logging {
   def parallelGetGlobbedPathThreshold: Int =
     getConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_THRESHOLD)
 
-  def parallelGetGlobbedPathParallelism: Int =
-    getConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_PARALLELISM)
+  def parallelGetGlobbedPathNumThreads: Int =
+    getConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_NUM_THREADS)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
