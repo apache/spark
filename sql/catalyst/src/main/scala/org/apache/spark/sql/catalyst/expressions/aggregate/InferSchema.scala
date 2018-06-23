@@ -147,19 +147,20 @@ case class InferSchema(
       throw new IllegalArgumentException(s"Wrong input type ${other.getClass.getCanonicalName}")
   }
 
+  private val typeMerger = compatibleRootType(
+    jsonOptions.columnNameOfCorruptRecord,
+    jsonOptions.parseMode)
+
   private def mergeSchemas(
       inferredSchema: UTF8String,
       currentSchema: Option[UTF8String]): Option[UTF8String] = {
     currentSchema.flatMap { schema =>
-      val parseMode = jsonOptions.parseMode
-      val columnNameOfCorruptRecord = jsonOptions.columnNameOfCorruptRecord
-      val typeMerger = compatibleRootType(columnNameOfCorruptRecord, parseMode)
-      val inferredType = DataType.fromDDL(inferredSchema.toString)
-      val currentType = DataType.fromDDL(schema.toString)
+      Try {
+        val inferredType = DataType.fromDDL(inferredSchema.toString)
+        val currentType = DataType.fromDDL(schema.toString)
 
-      Try(typeMerger(inferredType, currentType))
-        .map(dt => UTF8String.fromString(dt.catalogString))
-        .toOption
+        typeMerger(inferredType, currentType)
+      }.map(dt => UTF8String.fromString(dt.catalogString)).toOption
     }
   }
 }
