@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types._
 
 
@@ -60,7 +61,8 @@ object DataSourceUtils {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
            StringType | BinaryType | DateType | TimestampType | _: DecimalType =>
 
-      case _: StructType | _: ArrayType | _: MapType if format.isInstanceOf[CSVFileFormat] =>
+      case _: CalendarIntervalType | _: StructType | _: ArrayType | _: MapType
+          if format.isInstanceOf[CSVFileFormat] =>
         throwUnsupportedException(dataType)
 
       case st: StructType => st.foreach { f => verifyType(f.dataType) }
@@ -71,8 +73,10 @@ object DataSourceUtils {
         verifyType(keyType)
         verifyType(valueType)
 
-      case _: CalendarIntervalType if isReadPath && format.isInstanceOf[JsonFileFormat] ||
-        isReadPath && format.isInstanceOf[OrcFileFormat] =>
+      // JSON and ORC don't support an Interval type, but we pass it in read pass
+      // for back-compatibility.
+      case _: CalendarIntervalType if isReadPath &&
+        (format.isInstanceOf[JsonFileFormat] | format.isInstanceOf[OrcFileFormat]) =>
 
       case udt: UserDefinedType[_] => verifyType(udt.sqlType)
 
@@ -80,6 +84,15 @@ object DataSourceUtils {
       case NullType if format.isInstanceOf[JsonFileFormat] ||
         (isReadPath && format.isInstanceOf[OrcFileFormat]) =>
 
+      // Actually we won't pass in unsupported data types below, this is a safety check
+      case _: CalendarIntervalType if format.isInstanceOf[JsonFileFormat] =>
+        throwUnsupportedException(dataType)
+
+      case _: CalendarIntervalType | _: NullType
+          if format.isInstanceOf[ParquetFileFormat] || format.isInstanceOf[OrcFileFormat] =>
+        throwUnsupportedException(dataType)
+
+      // We keep this default case for safeguards
       case _ => throwUnsupportedException(dataType)
     }
 
