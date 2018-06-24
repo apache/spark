@@ -81,9 +81,8 @@ trait ConstraintHelper {
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
-   * non-nullable attributes and complex type extractors. For example, if an expression is of the
-   * form (`a > 5`), this returns a constraint of the form `isNotNull(a)`. For an expression of the
-   * form (`a.b > 5`), this returns the more precise constraint `isNotNull(a.b)`.
+   * non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this
+   * returns a constraint of the form `isNotNull(a)`
    */
   def constructIsNotNullConstraints(
       constraints: Set[Expression],
@@ -100,28 +99,27 @@ trait ConstraintHelper {
   }
 
   /**
-   * Infer the Attribute and ExtractValue-specific IsNotNull constraints from the null intolerant
-   * child expressions of constraints.
+   * Infer the Attribute-specific IsNotNull constraints from the null intolerant child expressions
+   * of constraints.
    */
   private def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
     constraint match {
       // When the root is IsNotNull, we can push IsNotNull through the child null intolerant
       // expressions
-      case IsNotNull(expr) => scanNullIntolerantField(expr).map(IsNotNull(_))
+      case IsNotNull(expr) => scanNullIntolerantAttribute(expr).map(IsNotNull(_))
       // Constraints always return true for all the inputs. That means, null will never be returned.
       // Thus, we can infer `IsNotNull(constraint)`, and also push IsNotNull through the child
       // null intolerant expressions.
-      case _ => scanNullIntolerantField(constraint).map(IsNotNull(_))
+      case _ => scanNullIntolerantAttribute(constraint).map(IsNotNull(_))
     }
 
   /**
-   * Recursively explores the expressions which are null intolerant and returns all attributes and
-   * complex type extractors in these expressions.
+   * Recursively explores the expressions which are null intolerant and returns all attributes
+   * in these expressions.
    */
-  private def scanNullIntolerantField(expr: Expression): Seq[Expression] = expr match {
-    case ev: ExtractValue => Seq(ev)
+  private def scanNullIntolerantAttribute(expr: Expression): Seq[Attribute] = expr match {
     case a: Attribute => Seq(a)
-    case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantField)
+    case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
     case _ => Seq.empty[Attribute]
   }
 }

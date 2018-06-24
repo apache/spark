@@ -2499,21 +2499,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df, df.collect())
   }
 
-  test("SPARK-4502: Nested column pruning shouldn't fail filter") {
-    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        val data =
-          """{"a":{"b":1,"c":2}}
-            |{}""".stripMargin
-        Seq(data).toDF().repartition(1).write.text(path)
-        checkAnswer(
-          spark.read.json(path).filter($"a.b" > 1).select($"a.b"),
-          Seq.empty)
-      }
-    }
-  }
-
   test("SPARK-24313: access map with binary keys") {
     val mapWithBinaryKey = map(lit(Array[Byte](1.toByte)), lit(1))
     checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
