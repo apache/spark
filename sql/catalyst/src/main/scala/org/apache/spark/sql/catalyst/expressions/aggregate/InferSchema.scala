@@ -68,8 +68,8 @@ case class InferSchema(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def aggBufferAttributes: Seq[AttributeReference] = {
-    Seq(AttributeReference("infer_schema", StringType)())
+  override val aggBufferAttributes: Seq[AttributeReference] = {
+    Seq(AttributeReference("infer_schema_agg_buffer", StringType)())
   }
   // Note: although this simply copies aggBufferAttributes, this common code can not be placed
   // in the superclass because that will lead to initialization ordering issues.
