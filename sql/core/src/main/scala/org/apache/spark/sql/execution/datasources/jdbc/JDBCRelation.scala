@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import java.text.SimpleDateFormat
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
@@ -31,6 +33,7 @@ import org.apache.spark.sql.types.StructType
  * Instructions on how to partition the table among workers.
  */
 private[sql] case class JDBCPartitioningInfo(
+    columnType: Int,
     column: String,
     lowerBound: Long,
     upperBound: Long,
@@ -79,13 +82,14 @@ private[sql] object JDBCRelation extends Logging {
     // Here we get a little roundoff, but that's (hopefully) OK.
     val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
     val column = partitioning.column
+    val columnType = partitioning.columnType
     var i: Int = 0
     var currentValue: Long = lowerBound
     val ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
-      val lBound = if (i != 0) s"$column >= $currentValue" else null
+      val lBound = if (i != 0) s"$column >= ${getCurrentValue(columnType, currentValue)}" else null
       currentValue += stride
-      val uBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
+      val uBound = if (i != numPartitions - 1) s"$column < ${getCurrentValue(columnType, currentValue)}" else null
       val whereClause =
         if (uBound == null) {
           lBound
@@ -98,6 +102,16 @@ private[sql] object JDBCRelation extends Logging {
       i = i + 1
     }
     ans.toArray
+  }
+
+  def getCurrentValue(columnType: Int, value: Long): String = {
+    if (columnType == java.sql.Types.DATE || columnType == java.sql.Types.TIMESTAMP) {
+      val ts = new java.sql.Timestamp(value)
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+      "'" + sdf.format(ts) + "'"
+    } else {
+      value.toString
+    }
   }
 }
 
