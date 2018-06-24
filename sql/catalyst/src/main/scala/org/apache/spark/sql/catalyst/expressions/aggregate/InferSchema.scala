@@ -22,26 +22,28 @@ import scala.util.Try
 import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, JsonExprUtils}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExpressionDescription, JsonExprUtils}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.json.JsonInferSchema.compatibleRootType
 import org.apache.spark.sql.catalyst.util.DropMalformedMode
 import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
+@ExpressionDescription(
+  usage = """_FUNC_(expr,[options]) - Infers schema for JSON `expr` by using JSON `options`.""")
 case class InferSchema(
   child: Expression,
-  inputType: String,
+  inputFormat: String,
   options: Map[String, String],
   override val mutableAggBufferOffset: Int,
   override val inputAggBufferOffset: Int) extends ImperativeAggregate {
 
-  require(inputType.toLowerCase == "json", "Only JSON format is supported")
+  require(inputFormat.toLowerCase == "json", "Only JSON format is supported")
 
   def this(child: Expression) = {
     this(
       child = child,
-      inputType = "json",
+      inputFormat = "json",
       options = Map.empty[String, String],
       mutableAggBufferOffset = 0,
       inputAggBufferOffset = 0)
@@ -50,7 +52,7 @@ case class InferSchema(
   def this(child: Expression, options: Expression) = {
     this(
       child = child,
-      inputType = "json",
+      inputFormat = "json",
       options = JsonExprUtils.convertToMapData(options),
       mutableAggBufferOffset = 0,
       inputAggBufferOffset = 0)
