@@ -57,12 +57,10 @@ case class InferSchema(
   }
 
   override def nullable: Boolean = true
-
   override def children: Seq[Expression] = Seq(child)
-
   override def dataType: DataType = StringType
-
   override lazy val deterministic: Boolean = false
+  override def prettyName: String = "infer_schema"
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
