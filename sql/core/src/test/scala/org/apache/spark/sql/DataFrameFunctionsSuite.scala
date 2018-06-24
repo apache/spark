@@ -664,42 +664,72 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       (null, Map[Int, Int](3 -> 300, 4 -> 400))
     ).toDF("map1", "map2")
 
-    checkAnswer(
-      df1.selectExpr("map_concat(map1, map2)"),
-      Seq(
-        Row(Map(1 -> 100, 2 -> 200, 3 -> 300, 4 -> 400)),
-        Row(Map(1 -> 400, 2 -> 200, 3 -> 300)),
-        Row(null)
-      )
+    val expected1 = Seq(
+      Row(Map(1 -> 100, 2 -> 200, 3 -> 300, 4 -> 400)),
+      Row(Map(1 -> 400, 2 -> 200, 3 -> 300)),
+      Row(null)
     )
 
-    checkAnswer(
-      df1.selectExpr("map_concat(map1)"),
-      Seq(
-        Row(Map(1 -> 100, 2 -> 200)),
-        Row(Map(1 -> 100, 2 -> 200)),
-        Row(null)
-      )
+    checkAnswer(df1.selectExpr("map_concat(map1, map2)"), expected1)
+    checkAnswer(df1.select(map_concat('map1, 'map2)), expected1)
+
+    val expected2 = Seq(
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(null)
     )
+
+    checkAnswer(df1.selectExpr("map_concat(map1)"), expected2)
+    checkAnswer(df1.select(map_concat('map1)), expected2)
 
     val df2 = Seq(
       (Map[Int, Int](1 -> 100, 2 -> 200), Map[String, Int]("3" -> 300, "4" -> 400))
     ).toDF("map1", "map2")
 
-    checkAnswer(
-      df2.selectExpr("map_concat()"),
-      Seq(
-        Row(Map())
+    val expected3 = Seq(Row(Map()))
+
+    checkAnswer(df2.selectExpr("map_concat()"), expected3)
+    checkAnswer(df2.select(map_concat()), expected3)
+
+    val df3 = {
+      val schema = StructType(
+        StructField("map1", MapType(StringType, IntegerType, true), false)  ::
+        StructField("map2", MapType(StringType, IntegerType, false), false) :: Nil
       )
+      val data = Seq(
+        Row(Map[String, Any]("a" -> 1, "b" -> null), Map[String, Any]("c" -> 3, "d" -> 4)),
+        Row(Map[String, Any]("a" -> 1, "b" -> 2), Map[String, Any]("c" -> 3, "d" -> 4))
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val expected4 = Seq(
+      Row(Map[String, Any]("a" -> 1, "b" -> null, "c" -> 3, "d" -> 4)),
+      Row(Map[String, Any]("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4))
     )
+
+    checkAnswer(df3.selectExpr("map_concat(map1, map2)"), expected4)
+    checkAnswer(df3.select(map_concat('map1, 'map2)), expected4)
+
+    val expectedMessage1 = "input to function map_concat should all be the same type"
 
     assert(intercept[AnalysisException] {
       df2.selectExpr("map_concat(map1, map2)").collect()
-    }.getMessage().contains("input maps of function map_concat should all be the same type"))
+    }.getMessage().contains(expectedMessage1))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, 'map2)).collect()
+    }.getMessage().contains(expectedMessage1))
+
+    val expectedMessage2 = "input to function map_concat should all be of type map"
 
     assert(intercept[AnalysisException] {
       df2.selectExpr("map_concat(map1, 12)").collect()
-    }.getMessage().contains("input of function map_concat should all be of type map"))
+    }.getMessage().contains(expectedMessage2))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, lit(12))).collect()
+    }.getMessage().contains(expectedMessage2))
   }
 
   test("map_from_entries function") {

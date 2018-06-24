@@ -185,22 +185,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     )
 
     // null map
-    checkEvaluation(MapConcat(Seq(m0, mNull)),
-      null)
-    checkEvaluation(MapConcat(Seq(mNull, m0)),
-      null)
-    checkEvaluation(MapConcat(Seq(mNull, mNull)),
-      null)
-    checkEvaluation(MapConcat(Seq(mNull)),
-      null)
+    checkEvaluation(MapConcat(Seq(m0, mNull)), null)
+    checkEvaluation(MapConcat(Seq(mNull, m0)), null)
+    checkEvaluation(MapConcat(Seq(mNull, mNull)), null)
+    checkEvaluation(MapConcat(Seq(mNull)), null)
 
     // single map
-    checkEvaluation(MapConcat(Seq(m0)),
-      Map("a" -> "1", "b" -> "2"))
+    checkEvaluation(MapConcat(Seq(m0)), Map("a" -> "1", "b" -> "2"))
 
     // no map
-    checkEvaluation(MapConcat(Seq.empty),
-      Map.empty)
+    checkEvaluation(MapConcat(Seq.empty), Map.empty)
 
     // force split expressions for input in generated code
     val expectedKeys = Array.fill(65)(Seq("a", "b")).flatten ++ Array("d", "e")

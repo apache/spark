@@ -516,36 +516,27 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   """, since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends Expression {
 
-  private val MAX_MAP_SIZE: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-
   override def checkInputDataTypes(): TypeCheckResult = {
-    // check key types and value types separately to allow valueContainsNull to vary
+    var funcName = s"function $prettyName"
     if (children.exists(!_.dataType.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckFailure(
-        s"The given input of function $prettyName should all be of type map, " +
-          "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else if (children.map(_.dataType.asInstanceOf[MapType].keyType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"The given input maps of function $prettyName should all be the same type, " +
-          "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else if (children.map(_.dataType.asInstanceOf[MapType].valueType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"The given input maps of function $prettyName should all be the same type, " +
-          "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+        s"input to $funcName should all be of type map, but it's " +
+          children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
     }
   }
 
   override def dataType: MapType = {
-    MapType(
-      keyType = children.headOption
-        .map(_.dataType.asInstanceOf[MapType].keyType).getOrElse(StringType),
-      valueType = children.headOption
-        .map(_.dataType.asInstanceOf[MapType].valueType).getOrElse(StringType),
-      valueContainsNull = children.map(_.dataType.asInstanceOf[MapType])
-        .exists(_.valueContainsNull)
-    )
+    val dt = children.map(_.dataType.asInstanceOf[MapType]).headOption
+      .getOrElse(MapType(StringType, StringType))
+    val valueContainsNull = children.map(_.dataType.asInstanceOf[MapType])
+      .exists(_.valueContainsNull)
+    if (dt.valueContainsNull != valueContainsNull) {
+      dt.copy(valueContainsNull = valueContainsNull)
+    } else {
+      dt
+    }
   }
 
   override def nullable: Boolean = children.exists(_.nullable)
@@ -559,10 +550,10 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
     val valueArrayDatas = maps.map(_.asInstanceOf[MapData].valueArray())
 
     val numElements = keyArrayDatas.foldLeft(0L)((sum, ad) => sum + ad.numElements())
-    if (numElements > MAX_MAP_SIZE) {
-      throw new RuntimeException(s"Unsuccessful attempt to concat maps with $numElements" +
-        s" elements due to exceeding the map size limit" +
-        s" $MAX_MAP_SIZE.")
+    if (numElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      throw new RuntimeException(s"Unsuccessful attempt to concat maps with $numElements " +
+        s"elements due to exceeding the map size limit " +
+        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
     }
     val finalKeyArray = new Array[AnyRef](numElements.toInt)
     val finalValueArray = new Array[AnyRef](numElements.toInt)
@@ -603,14 +594,25 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
     val assignments = mapCodes.zipWithIndex.map { case (m, i) =>
       s"""
          |${m.code}
-         |$argsName[$i] = ${m.value.code};
+         |$argsName[$i] = ${m.value};
+         |if (${m.isNull}) {
+         |  ${ev.isNull} = true;
+         |}
        """.stripMargin
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignments,
-      funcName = "mapConcat",
-      extraArguments = (s"${mapDataClass}[]", argsName) :: Nil)
+      funcName = "getMapConcatInputs",
+      extraArguments = (s"$mapDataClass[]", argsName) :: ("boolean", ev.isNull.code) :: Nil,
+      returnType = "boolean",
+      makeSplitFunction = body =>
+        s"""
+           |$body
+           |return ${ev.isNull};
+        """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.isNull} = $funcCall;").mkString("\n")
+    )
 
     val idxName = ctx.freshName("idx")
     val numElementsName = ctx.freshName("numElems")
@@ -618,34 +620,30 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
     val finValsName = ctx.freshName("finalValues")
 
     val keyConcatenator = if (CodeGenerator.isPrimitiveType(keyType)) {
-      genCodeForPrimitiveArrays(ctx, keyType)
+      genCodeForPrimitiveArrays(ctx, keyType, false)
     } else {
       genCodeForNonPrimitiveArrays(ctx, keyType)
     }
 
     val valueConcatenator = if (CodeGenerator.isPrimitiveType(valueType)) {
-      genCodeForPrimitiveArrays(ctx, valueType)
+      genCodeForPrimitiveArrays(ctx, valueType, dataType.valueContainsNull)
     } else {
       genCodeForNonPrimitiveArrays(ctx, valueType)
     }
 
     val mapMerge =
       s"""
-        |long $numElementsName = 0;
-        |for (int $idxName = 0; $idxName < $argsName.length; $idxName++) {
-        |  if ($argsName[$idxName] == null) {
-        |    ${ev.isNull} = true;
-        |    break;
-        |  }
-        |  $keyArgsName[$idxName] = $argsName[$idxName].keyArray();
-        |  $valArgsName[$idxName] = $argsName[$idxName].valueArray();
-        |  $numElementsName += $argsName[$idxName].numElements();
-        |}
-        |
         |if (!${ev.isNull}) {
-        |  if ($numElementsName > $MAX_MAP_SIZE) {
+        |  long $numElementsName = 0;
+        |  for (int $idxName = 0; $idxName < $argsName.length; $idxName++) {
+        |    $keyArgsName[$idxName] = $argsName[$idxName].keyArray();
+        |    $valArgsName[$idxName] = $argsName[$idxName].valueArray();
+        |    $numElementsName += $argsName[$idxName].numElements();
+        |  }
+        |  if ($numElementsName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
         |    throw new RuntimeException("Unsuccessful attempt to concat maps with " +
-        |       $numElementsName + " elements due to exceeding the map size limit $MAX_MAP_SIZE.");
+        |       $numElementsName + " elements due to exceeding the map size limit " +
+        |       "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
         |  }
         |  $arrayDataClass $finKeysName = $keyConcatenator.concat($keyArgsName,
         |    (int) $numElementsName);
@@ -663,12 +661,31 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
       """.stripMargin)
   }
 
-  private def genCodeForPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
+  private def genCodeForPrimitiveArrays(ctx: CodegenContext, elementType: DataType,
+                                        checkForNull: Boolean): String = {
     val counter = ctx.freshName("counter")
     val arrayData = ctx.freshName("arrayData")
     val argsName = ctx.freshName("args")
     val numElemName = ctx.freshName("numElements")
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+
+    val setterCode1 =
+      s"""
+         |$arrayData.set$primitiveValueTypeName(
+         |  $counter,
+         |  ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")}
+         |);""".stripMargin.stripPrefix("\n")
+
+    val setterCode = if (checkForNull) {
+      s"""
+         |if ($argsName[y].isNullAt(z)) {
+         |  $arrayData.setNullAt($counter);
+         |} else {
+         |  $setterCode1
+         |}""".stripMargin.stripPrefix("\n")
+    } else {
+      setterCode1
+    }
 
     s"""
        |new Object() {
@@ -677,14 +694,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
        |    int $counter = 0;
        |    for (int y = 0; y < ${children.length}; y++) {
        |      for (int z = 0; z < $argsName[y].numElements(); z++) {
-       |        if ($argsName[y].isNullAt(z)) {
-       |          $arrayData.setNullAt($counter);
-       |        } else {
-       |          $arrayData.set$primitiveValueTypeName(
-       |            $counter,
-       |            ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")}
-       |          );
-       |        }
+       |        $setterCode
        |        $counter++;
        |      }
        |    }
