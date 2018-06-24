@@ -303,6 +303,7 @@ case class FileSourceScanExec(
     } getOrElse {
       withOptPartitionCount
     }
+
     withSelectedBucketsCount
   }
 
