@@ -1496,6 +1496,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i, j in array1, array2:
             self.assertAlmostEqual(i, j, dec)
 
+    @unittest.skip("Super flaky test")
     def test_parameter_accuracy(self):
         """Test that coefs are predicted accurately by fitting on toy data."""
 
@@ -1589,6 +1590,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
             true, predicted = zip(*batch)
             self.assertTrue(mean(abs(array(true) - array(predicted))) < 0.1)
 
+    @unittest.skip("Super flaky test")
     def test_train_prediction(self):
         """Test that error on test data improves as model is trained."""
         slr = StreamingLinearRegressionWithSGD(stepSize=0.2, numIterations=25)

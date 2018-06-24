@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.sql.{Date, Timestamp}
 
 import org.apache.parquet.filter2.predicate._
-import org.apache.parquet.filter2.predicate.FilterApi._
+import org.apache.parquet.filter2.predicate.Operators.{Column, SupportsEqNotEq, SupportsLtGt}
+import org.apache.parquet.hadoop.metadata.ColumnPath
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -32,29 +33,7 @@ import org.apache.spark.sql.types._
  */
 private[parquet] class ParquetFilters(pushDownDate: Boolean, int96AsTimestamp: Boolean) {
 
-  case class SetInFilter[T <: Comparable[T]](valueSet: Set[T])
-    extends UserDefinedPredicate[T] with Serializable {
-
-    override def keep(value: T): Boolean = {
-      value != null && valueSet.contains(value)
-    }
-
-    // Drop when no value in the set is within the statistics range.
-    override def canDrop(statistics: Statistics[T]): Boolean = {
-      val statMax = statistics.getMax
-      val statMin = statistics.getMin
-      val statRange = com.google.common.collect.Range.closed(statMin, statMax)
-      !valueSet.exists(value => statRange.contains(value))
-    }
-
-    // Can only drop not(in(set)) when we are know that every element in the block is in valueSet.
-    // From the statistics, we can only be assured of this when min == max.
-    override def inverseCanDrop(statistics: Statistics[T]): Boolean = {
-      val statMax = statistics.getMax
-      val statMin = statistics.getMin
-      statMin == statMax && valueSet.contains(statMin)
-    }
-  }
+  import ParquetColumns._
 
   private val makeInSet: PartialFunction[DataType, (String, Set[Any]) => FilterPredicate] = {
     case IntegerType =>
@@ -336,5 +315,65 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, int96AsTimestamp: B
 
       case _ => None
     }
+  }
+}
+
+private[parquet] case class SetInFilter[T <: Comparable[T]](valueSet: Set[T])
+  extends UserDefinedPredicate[T] with Serializable {
+
+  override def keep(value: T): Boolean = {
+    value != null && valueSet.contains(value)
+  }
+
+  // Drop when no value in the set is within the statistics range.
+  override def canDrop(statistics: Statistics[T]): Boolean = {
+    val statMax = statistics.getMax
+    val statMin = statistics.getMin
+    val statRange = com.google.common.collect.Range.closed(statMin, statMax)
+    !valueSet.exists(value => statRange.contains(value))
+  }
+
+  // Can only drop not(in(set)) when we are know that every element in the block is in valueSet.
+  // From the statistics, we can only be assured of this when min == max.
+  override def inverseCanDrop(statistics: Statistics[T]): Boolean = {
+    val statMax = statistics.getMax
+    val statMin = statistics.getMin
+    statMin == statMax && valueSet.contains(statMin)
+  }
+}
+
+/**
+ * Note that, this is a hacky workaround to allow dots in column names. Currently, column APIs
+ * in Parquet's `FilterApi` only allows dot-separated names so here we resemble those columns
+ * but only allow single column path that allows dots in the names as we don't currently push
+ * down filters with nested fields.
+ */
+private[parquet] object ParquetColumns {
+  def intColumn(columnPath: String): Column[Integer] with SupportsLtGt = {
+    new Column[Integer] (ColumnPath.get(columnPath), classOf[Integer]) with SupportsLtGt
+  }
+
+  def longColumn(columnPath: String): Column[java.lang.Long] with SupportsLtGt = {
+    new Column[java.lang.Long] (
+      ColumnPath.get(columnPath), classOf[java.lang.Long]) with SupportsLtGt
+  }
+
+  def floatColumn(columnPath: String): Column[java.lang.Float] with SupportsLtGt = {
+    new Column[java.lang.Float] (
+      ColumnPath.get(columnPath), classOf[java.lang.Float]) with SupportsLtGt
+  }
+
+  def doubleColumn(columnPath: String): Column[java.lang.Double] with SupportsLtGt = {
+    new Column[java.lang.Double] (
+      ColumnPath.get(columnPath), classOf[java.lang.Double]) with SupportsLtGt
+  }
+
+  def booleanColumn(columnPath: String): Column[java.lang.Boolean] with SupportsEqNotEq = {
+    new Column[java.lang.Boolean] (
+      ColumnPath.get(columnPath), classOf[java.lang.Boolean]) with SupportsEqNotEq
+  }
+
+  def binaryColumn(columnPath: String): Column[Binary] with SupportsLtGt = {
+    new Column[Binary] (ColumnPath.get(columnPath), classOf[Binary]) with SupportsLtGt
   }
 }

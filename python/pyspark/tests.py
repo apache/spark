@@ -2183,9 +2183,8 @@ class SparkSubmitTests(unittest.TestCase):
         env = dict(os.environ)
         del env['PYSPARK_PYTHON']
         del env['PYSPARK_DRIVER_PYTHON']
-        proc = subprocess.Popen([self.sparkSubmit,
-                                 "--properties-file", props,
-                                 script],
+        proc = subprocess.Popen(self.sparkSubmit + [
+                                "--properties-file", props, script],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 env=env)

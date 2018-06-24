@@ -31,7 +31,7 @@ RUN mkdir -p /usr/share/man/man1 \
     git \
     locales sudo openssh-client ca-certificates tar gzip parallel \
     net-tools netcat unzip zip bzip2 gnupg curl wget \
-    openjdk-8-jdk rsync \
+    openjdk-8-jdk rsync pandoc pandoc-citeproc \
   && rm -rf /var/lib/apt/lists/*
 
 # If you update java, make sure this aligns

@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.Date
 
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
-import org.apache.parquet.filter2.predicate.FilterApi._
+import org.apache.parquet.filter2.predicate.FilterApi.{and, gt, lt}
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 import org.apache.parquet.hadoop.ParquetInputFormat
 
@@ -56,6 +56,8 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
+  import ParquetColumns._
+
   private lazy val parquetFilters = new ParquetFilters(
     conf.parquetFilterPushDownDate, conf.isParquetINT96AsTimestamp)
 
@@ -84,6 +86,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withSQLConf(
       SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+      ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true",
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         val query = df
           .select(output.map(e => Column(e)): _*)
