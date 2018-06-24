@@ -76,16 +76,6 @@ class ParquetSchemaPruningSuite
       Row(null, "6242 Ash Street") :: Nil)
   }
 
-  testSchemaPruning("partial schema intersection - filter on subfield") {
-    val query =
-      sql("select name.middle, name.first, pets, address from contacts where " +
-        "name.first = 'Janet' and p=2")
-    checkScanSchemata(query,
-      "struct<name:struct<middle:string,first:string>,pets:int,address:string>")
-    checkAnswer(query,
-      Row(null, "Janet", null, "567 Maple Drive") :: Nil)
-  }
-
   testSchemaPruning("no unnecessary schema pruning") {
     val query =
       sql("select name.last, name.middle, name.first, relatives[''].last, " +
