@@ -44,6 +44,7 @@ create temporary view json_structs(json) as select * from values
   (NULL);
 
 select infer_schema(json) from json_structs;
+drop view if exists json_structs;
 
 create temporary view json_array(json) as select * from values
   ('{"a": [1, 2, 3], "b": ["1"]}'),
@@ -53,3 +54,4 @@ create temporary view json_array(json) as select * from values
   (NULL);
 
 select infer_schema(json) from json_array;
+drop view if exists json_array;
