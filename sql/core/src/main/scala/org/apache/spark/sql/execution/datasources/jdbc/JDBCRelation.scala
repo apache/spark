@@ -78,7 +78,8 @@ private[sql] object JDBCRelation extends Logging {
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
     val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
-    val column = partitioning.column
+    val dialect = JdbcDialects.get(jdbcOptions.url)
+    val column = dialect.quoteIdentifier(partitioning.column)
     var i: Int = 0
     var currentValue: Long = lowerBound
     val ans = new ArrayBuffer[Partition]()
