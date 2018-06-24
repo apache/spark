@@ -2964,6 +2964,7 @@ class Dataset[T] private[sql](
 
   /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
+   * This will not un-persist any cached data that is built upon this Dataset.
    *
    * @param blocking Whether to block until all blocks are deleted.
    *
@@ -2977,6 +2978,7 @@ class Dataset[T] private[sql](
 
   /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
+   * This will not un-persist any cached data that is built upon this Dataset.
    *
    * @group basic
    * @since 1.6.0
