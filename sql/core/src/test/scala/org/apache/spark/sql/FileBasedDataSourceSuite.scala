@@ -210,7 +210,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   //  json -> W: Interval
   //  orc -> W: Interval, Null
   //  parquet -> R/W: Interval, Null
-  test("SPARK-24204 error handling for unsupported data types") {
+  test("SPARK-24204 error handling for unsupported Array/Map/Struct types - csv") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
       var msg = intercept[UnsupportedOperationException] {
@@ -263,7 +263,9 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       }.getMessage
       assert(msg.contains("CSV data source does not support array<double> data type."))
     }
+  }
 
+  test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
 
@@ -330,6 +332,12 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         assert(msg.toLowerCase(Locale.ROOT)
           .contains(s"$format data source does not support calendarinterval data type."))
       }
+    }
+  }
+
+  test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
 
       Seq("orc").foreach { format =>
         // write path
