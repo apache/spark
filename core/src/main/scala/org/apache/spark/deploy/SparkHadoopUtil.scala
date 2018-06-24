@@ -256,10 +256,14 @@ class SparkHadoopUtil extends Logging {
   }
 
   def expandGlobPath(fs: FileSystem, pattern: Path, threshold: Int): Seq[Path] = {
-    val sparkGlobber = new SparkGlobber(fs, pattern)
-    Option(sparkGlobber.globWithThreshold(threshold)).map { statuses =>
-      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
-    }.getOrElse(Seq.empty[Path])
+    if (isGlobPath(pattern)) {
+      val sparkGlobber = new SparkGlobber(fs, pattern)
+      Option(sparkGlobber.globWithThreshold(threshold)).map { statuses =>
+        statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
+      }.getOrElse(Seq.empty[Path])
+    } else {
+      Seq(pattern)
+    }
   }
 
   /**
