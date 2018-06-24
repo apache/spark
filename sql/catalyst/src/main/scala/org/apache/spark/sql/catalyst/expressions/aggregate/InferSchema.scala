@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.json.JsonInferSchema.compatibleRootType
 import org.apache.spark.sql.catalyst.util.DropMalformedMode
-import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 case class InferSchema(
@@ -68,20 +68,16 @@ case class InferSchema(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
+  override def aggBufferAttributes: Seq[AttributeReference] = {
+    Seq(AttributeReference("infer_schema", StringType)())
+  }
   // Note: although this simply copies aggBufferAttributes, this common code can not be placed
   // in the superclass because that will lead to initialization ordering issues.
   override val inputAggBufferAttributes: Seq[AttributeReference] = {
     aggBufferAttributes.map(_.newInstance())
   }
-
-  override def aggBufferSchema: StructType = {
-    StructType(Seq(StructField("inferred_schema", StringType)))
-  }
+  override val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
   private val indexOfSchemaField = 0
-
-  override def aggBufferAttributes: Seq[AttributeReference] = {
-    Seq(AttributeReference("inferred_schema", StringType)())
-  }
 
   override def initialize(mutableAggBuffer: InternalRow): Unit = {
     mutableAggBuffer.setNullAt(mutableAggBufferOffset + indexOfSchemaField)

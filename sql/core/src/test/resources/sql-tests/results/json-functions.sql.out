@@ -291,7 +291,7 @@ struct<>
 -- !query 29
 select infer_schema(json) from json_structs
 -- !query 29 schema
-struct<inferschema(json):string>
+struct<infer_schema(json):string>
 -- !query 29 output
 struct<a:bigint>
 
@@ -312,6 +312,6 @@ struct<>
 -- !query 31
 select infer_schema(json) from json_array
 -- !query 31 schema
-struct<inferschema(json):string>
+struct<infer_schema(json):string>
 -- !query 31 output
 struct<a:array<bigint>,b:array<string>>
