@@ -48,8 +48,9 @@ class MountLocalFilesFeatureStepSuite extends SparkFunSuite with BeforeAndAfter 
       s"file://${secondLocalFile.getAbsolutePath}",
       "https://localhost:9000/file3.txt")
     localFiles = Seq(firstLocalFile, secondLocalFile)
+    val sparkConf = new SparkConf(false)
     kubernetesConf = KubernetesConf(
-      new SparkConf(false).set("spark.files", sparkFiles.mkString(",")),
+      sparkConf,
       KubernetesDriverSpecificConf(
         None,
         "test-app",
@@ -61,7 +62,9 @@ class MountLocalFilesFeatureStepSuite extends SparkFunSuite with BeforeAndAfter 
       Map.empty,
       Map.empty,
       Map.empty,
-      Map.empty)
+      Map.empty,
+      Map.empty,
+      sparkFiles)
     stepUnderTest = new MountLocalFilesFeatureStep(kubernetesConf)
   }
 

@@ -117,16 +117,6 @@ private[spark] object KubernetesConf {
     val sparkConfWithMainAppJar = sparkConf.clone()
     val additionalFiles = mutable.ArrayBuffer.empty[String]
     mainAppResource.foreach {
-<<<<<<< HEAD
-      case JavaMainAppResource(res) if res != SparkLauncher.NO_RESOURCE =>
-        val previousJars = sparkConf
-          .getOption("spark.jars")
-          .map(_.split(","))
-          .getOrElse(Array.empty)
-        if (!previousJars.contains(res)) {
-          sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
-        }
-=======
         case JavaMainAppResource(res) =>
           val previousJars = sparkConf
             .getOption("spark.jars")
@@ -146,7 +136,6 @@ private[spark] object KubernetesConf {
               sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
           }
           sparkConfWithMainAppJar.setIfMissing(MEMORY_OVERHEAD_FACTOR, 0.4)
->>>>>>> master
     }
 
     val trimmedJars = sparkConfWithMainAppJar.getOption("spark.jars")

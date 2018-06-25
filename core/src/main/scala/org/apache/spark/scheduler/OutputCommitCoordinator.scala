@@ -182,32 +182,6 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
           s"task attempt $attemptNumber already marked as failed.")
         false
       case Some(state) =>
-<<<<<<< HEAD
-        state.authorizedCommitters(partition) match {
-          case NO_AUTHORIZED_COMMITTER =>
-            logDebug(s"Authorizing attemptNumber=$attemptNumber to commit for stage=$stage, " +
-              s"partition=$partition")
-            state.authorizedCommitters(partition) = attemptNumber
-            true
-          case existingCommitter if existingCommitter == attemptNumber =>
-            logWarning(s"Authorizing duplicate request to commit for " +
-              s"attemptNumber=$attemptNumber to commit for stage=$stage, partition=$partition; " +
-              s"existingCommitter = $existingCommitter. This can indicate dropped network traffic.")
-            true
-          case existingCommitter =>
-            // Coordinator should be idempotent when receiving AskPermissionToCommit.
-            if (existingCommitter == attemptNumber) {
-              logWarning(s"Authorizing duplicate request to commit for " +
-                s"attemptNumber=$attemptNumber to commit for stage=$stage," +
-                s" partition=$partition; existingCommitter = $existingCommitter." +
-                s" This can indicate dropped network traffic.")
-              true
-            } else {
-              logDebug(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage, " +
-                s"partition=$partition; existingCommitter = $existingCommitter")
-              false
-            }
-=======
         val existing = state.authorizedCommitters(partition)
         if (existing == null) {
           logDebug(s"Commit allowed for stage=$stage.$stageAttempt, partition=$partition, " +
@@ -218,7 +192,6 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
           logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
             s"already committed by $existing")
           false
->>>>>>> master
         }
       case None =>
         logDebug(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +

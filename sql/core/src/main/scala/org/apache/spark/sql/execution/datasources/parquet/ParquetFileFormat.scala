@@ -69,9 +69,6 @@ class ParquetFileFormat
   // here.
   private val parquetLogRedirector = ParquetLogRedirector.INSTANCE
 
-  @transient private val cachedMetadata: mutable.LinkedHashMap[Path, ParquetMetadata] =
-    new mutable.LinkedHashMap[Path, ParquetMetadata]
-
   override def shortName(): String = "parquet"
 
   override def toString: String = "Parquet"
@@ -133,14 +130,9 @@ class ParquetFileFormat
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
     // SPARK-15719: Disables writing Parquet summary files by default.
-<<<<<<< HEAD
-    if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null) {
-      conf.set(ParquetOutputFormat.JOB_SUMMARY_LEVEL, "NONE")
-=======
     if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null
       && conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
       conf.setEnum(ParquetOutputFormat.JOB_SUMMARY_LEVEL, JobSummaryLevel.NONE)
->>>>>>> master
     }
 
     if (ParquetOutputFormat.getJobSummaryLevel(conf) == JobSummaryLevel.NONE

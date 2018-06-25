@@ -1,6 +1,5 @@
-<<<<<<< HEAD
 addSbtPlugin("com.typesafe.sbt" % "sbt-git" % "0.8.5")
-=======
+
 addSbtPlugin("com.etsy" % "sbt-checkstyle-plugin" % "3.1.1")
 
 // sbt-checkstyle-plugin uses an old version of checkstyle. Match it to Maven's.
@@ -8,7 +7,6 @@ libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "8.2"
 
 // checkstyle uses guava 23.0.
 libraryDependencies += "com.google.guava" % "guava" % "23.0"
->>>>>>> master
 
 // need to make changes to uptake sbt 1.0 support in "com.eed3si9n" % "sbt-assembly" % "1.14.5"
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.11.2")

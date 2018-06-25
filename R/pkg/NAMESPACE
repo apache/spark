@@ -205,13 +205,9 @@ exportMethods("%<=>%",
               "array_max",
               "array_min",
               "array_position",
-<<<<<<< HEAD
-              "array_sort",
-=======
               "array_repeat",
               "array_sort",
               "arrays_overlap",
->>>>>>> master
               "asc",
               "ascii",
               "asin",

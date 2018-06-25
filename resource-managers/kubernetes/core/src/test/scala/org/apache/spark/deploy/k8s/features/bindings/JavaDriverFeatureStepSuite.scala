@@ -37,6 +37,7 @@ class JavaDriverFeatureStepSuite extends SparkFunSuite {
         Seq("5 7")),
       appResourceNamePrefix = "",
       appId = "",
+      mountLocalFilesSecretName = None,
       roleLabels = Map.empty,
       roleAnnotations = Map.empty,
       roleSecretNamesToMountPaths = Map.empty,

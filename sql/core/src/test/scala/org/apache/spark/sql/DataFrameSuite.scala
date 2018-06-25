@@ -24,7 +24,6 @@ import java.util.UUID
 
 import scala.util.Random
 
-import com.sun.net.httpserver.Authenticator.Retry
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException

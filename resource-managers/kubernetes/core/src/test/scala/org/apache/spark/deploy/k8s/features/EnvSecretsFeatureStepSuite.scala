@@ -40,6 +40,7 @@ class EnvSecretsFeatureStepSuite extends SparkFunSuite{
       KubernetesExecutorSpecificConf("1", new PodBuilder().build()),
       "resource-name-prefix",
       "app-id",
+      None,
       Map.empty,
       Map.empty,
       Map.empty,

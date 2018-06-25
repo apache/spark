@@ -27,11 +27,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-<<<<<<< HEAD
-import org.apache.spark.TaskContext
-=======
 import org.apache.spark.{SparkContext, TaskContext}
->>>>>>> master
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
@@ -115,13 +111,6 @@ object SQLConf {
    * run unit tests (that does not involve SparkSession) in serial order.
    */
   def get: SQLConf = {
-<<<<<<< HEAD
-    if (Utils.isTesting && TaskContext.get != null) {
-      // we're accessing it during task execution, fail.
-      throw new IllegalStateException("SQLConf should only be created and accessed on the driver.")
-    }
-    confGetter.get()()
-=======
     if (TaskContext.get != null) {
       new ReadOnlySQLConf(TaskContext.get())
     } else {
@@ -136,7 +125,6 @@ object SQLConf {
       }
       confGetter.get()()
     }
->>>>>>> master
   }
 
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")

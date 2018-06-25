@@ -1027,17 +1027,12 @@ object SparkSession extends Logging {
    * @since 2.2.0
    */
   def getActiveSession: Option[SparkSession] = {
-<<<<<<< HEAD
-    assertOnDriver()
-    Option(activeThreadSession.get)
-=======
     if (TaskContext.get != null) {
       // Return None when running on executors.
       None
     } else {
       Option(activeThreadSession.get)
     }
->>>>>>> master
   }
 
   /**
@@ -1048,17 +1043,12 @@ object SparkSession extends Logging {
    * @since 2.2.0
    */
   def getDefaultSession: Option[SparkSession] = {
-<<<<<<< HEAD
-    assertOnDriver()
-    Option(defaultSession.get)
-=======
     if (TaskContext.get != null) {
       // Return None when running on executors.
       None
     } else {
       Option(defaultSession.get)
     }
->>>>>>> master
   }
 
   /**
@@ -1090,14 +1080,6 @@ object SparkSession extends Logging {
       case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
       case builder => builder
-    }
-  }
-
-  private def assertOnDriver(): Unit = {
-    if (Utils.isTesting && TaskContext.get != null) {
-      // we're accessing it during task execution, fail.
-      throw new IllegalStateException(
-        "SparkSession should only be created and accessed on the driver.")
     }
   }
 

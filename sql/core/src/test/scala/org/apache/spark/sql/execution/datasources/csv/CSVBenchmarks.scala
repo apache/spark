@@ -74,10 +74,6 @@ object CSVBenchmarks {
     }
   }
 
-<<<<<<< HEAD
-  def main(args: Array[String]): Unit = {
-    quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
-=======
   def multiColumnsBenchmark(rowsNum: Int): Unit = {
     val colsNum = 1000
     val benchmark = new Benchmark(s"Wide rows with $colsNum columns", rowsNum)
@@ -126,6 +122,5 @@ object CSVBenchmarks {
   def main(args: Array[String]): Unit = {
     quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
     multiColumnsBenchmark(rowsNum = 1000 * 1000)
->>>>>>> master
   }
 }

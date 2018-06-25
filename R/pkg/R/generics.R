@@ -775,10 +775,6 @@ setGeneric("array_position", function(x, value) { standardGeneric("array_positio
 
 #' @rdname column_collection_functions
 #' @name NULL
-<<<<<<< HEAD
-setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
-
-=======
 setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") })
 
 #' @rdname column_collection_functions
@@ -789,7 +785,6 @@ setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
 #' @name NULL
 setGeneric("arrays_overlap", function(x, y) { standardGeneric("arrays_overlap") })
 
->>>>>>> master
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })

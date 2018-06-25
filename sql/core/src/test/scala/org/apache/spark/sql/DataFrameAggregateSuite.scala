@@ -687,8 +687,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       }
     }
   }
-<<<<<<< HEAD
-=======
 
   test("SPARK-21896: Window functions inside aggregate functions") {
     def checkWindowError(df: => DataFrame): Unit = {
@@ -719,5 +717,4 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(1, 2, 1) :: Row(2, 2, 2) :: Row(3, 2, 3) :: Nil)
   }
 
->>>>>>> master
 }

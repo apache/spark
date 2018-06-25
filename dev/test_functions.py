@@ -599,13 +599,8 @@ def main():
                                 or f.endswith("checkstyle.xml")
                                 or f.endswith("checkstyle-suppressions.xml")
                                 for f in changed_files):
-<<<<<<< HEAD:dev/test_functions.py
-        run_java_style_checks()
-        pass
-=======
         # Run SBT Checkstyle after the build to prevent a side-effect to the build.
         should_run_java_style_checks = True
->>>>>>> master:dev/run-tests.py
     if not changed_files or any(f.endswith("lint-python")
                                 or f.endswith("tox.ini")
                                 or f.endswith(".py")

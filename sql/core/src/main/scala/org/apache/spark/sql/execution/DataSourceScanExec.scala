@@ -380,8 +380,6 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-    logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
-<<<<<<< HEAD
     val session = fsRelation.sparkSession
     val partitionFiles = selectedPartitions.flatMap { partition =>
       partition.files.map((_, partition.values))
@@ -400,38 +398,26 @@ case class FileSourceScanExec(
         validSplits.map { split =>
           val hosts = getBlockHosts(blockLocations, split.getStart, split.getLength)
           PartitionedFile(values, filePath, split.getStart, split.getLength, hosts)
-=======
-    val filesGroupedToBuckets =
-      selectedPartitions.flatMap { p =>
-        p.files.map { f =>
-          val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
-          PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
->>>>>>> master
         }
       } else {
         val hosts = getBlockHosts(blockLocations, 0, file.getLen)
         Seq(PartitionedFile(values, filePath, 0, file.getLen, hosts))
       }
-<<<<<<< HEAD
     }.groupBy { f =>
       BucketingUtils
         .getBucketId(new Path(f.filePath).getName)
         .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
-    }
-=======
-
-    val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
-      val bucketSet = optionalBucketSet.get
-      filesGroupedToBuckets.filter {
-        f => bucketSet.get(f._1)
+    }.filter { case (bucket, _) =>
+      if (optionalBucketSet.isDefined) {
+        val bucketSet = optionalBucketSet.get
+        bucketSet.get(bucket)
+      } else {
+        true
       }
-    } else {
-      filesGroupedToBuckets
     }
 
->>>>>>> master
     val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Nil))
+      FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
     }
 
     new FileScanRDD(session, readFile, filePartitions)

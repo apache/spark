@@ -138,7 +138,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
@@ -176,7 +175,6 @@ private[spark] object Config extends Logging {
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
 
-<<<<<<< HEAD
   val FILES_DOWNLOAD_LOCATION =
     ConfigBuilder("spark.kubernetes.mountDependencies.filesDownloadDir")
       .doc("Location to download files to in the driver and executors. When using " +
@@ -200,7 +198,7 @@ private[spark] object Config extends Logging {
       .internal()
       .stringConf
       .createOptional
-=======
+
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
       .doc("Interval between polls against the Kubernetes API server to inspect the " +
@@ -235,7 +233,6 @@ private[spark] object Config extends Logging {
       .checkValue(pv => List("2", "3").contains(pv),
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
->>>>>>> master
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"

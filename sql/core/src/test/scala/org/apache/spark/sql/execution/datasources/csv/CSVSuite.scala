@@ -1374,8 +1374,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       checkAnswer(computed, expected)
     }
   }
-<<<<<<< HEAD
-=======
 
   test("SPARK-24329: skip lines with comments, and one or multiple whitespaces") {
     val schema = new StructType().add("colA", StringType)
@@ -1604,5 +1602,4 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(testAppender2.events.asScala
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
->>>>>>> master
 }

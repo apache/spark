@@ -140,11 +140,7 @@ class CacheManager extends Logging {
     val it = cachedData.iterator()
     while (it.hasNext) {
       val cd = it.next()
-<<<<<<< HEAD
-      if (cd.plan.sameResult(plan)) {
-=======
       if (shouldRemove(cd.plan)) {
->>>>>>> master
         cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
         it.remove()
       }

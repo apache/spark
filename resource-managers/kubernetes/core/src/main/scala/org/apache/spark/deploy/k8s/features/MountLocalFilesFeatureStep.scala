@@ -60,7 +60,7 @@ private[spark] class MountLocalFilesFeatureStep(
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    val allFiles = kubernetesConf.sparkFiles()
+    val allFiles = kubernetesConf.sparkFiles
     val resolvedFiles = allFiles
       .map(file => {
         val uri = Utils.resolveURI(file)
@@ -78,7 +78,7 @@ private[spark] class MountLocalFilesFeatureStep(
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    val localFiles = kubernetesConf.sparkFiles()
+    val localFiles = kubernetesConf.sparkFiles
       .map(Utils.resolveURI)
       .filter { file =>
         Option(file.getScheme).getOrElse("file") == "file"
