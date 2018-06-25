@@ -518,8 +518,8 @@ class Column(object):
     True if the current expression is inf.
 
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([\
-            Row(name=u'Tom', height=80.0),\
+    >>> df = spark.createDataFrame([
+            Row(name=u'Tom', height=80.0),
             Row(name=u'Alice', height=float('inf'))])
     >>> df.filter(df.height.isInf()).collect()
     [Row(height=inf, name=u'Alice')]
