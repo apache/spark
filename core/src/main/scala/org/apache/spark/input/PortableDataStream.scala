@@ -45,7 +45,7 @@ private[spark] abstract class StreamFileInputFormat[T]
    * which is set through setMaxSplitSize
    */
   def setMinPartitions(sc: SparkContext, context: JobContext, minPartitions: Int) {
-    val defaultMaxSplitBytes = Math.min(
+    val defaultMaxSplitBytes = Math.max(
       sc.getConf.get(config.FILES_MAX_PARTITION_BYTES), minPartitions)
     val openCostInBytes = sc.getConf.get(config.FILES_OPEN_COST_IN_BYTES)
     val defaultParallelism = sc.defaultParallelism
