@@ -1266,7 +1266,7 @@ class JDBCSuite extends QueryTest
         .option("dbtable", "test.people")
         .load()
     }.getMessage
-    assert(e1.contains("Both 'dbtable' and 'query' can not be specified."))
+    assert(e1.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
 
     // jdbc api path
     val properties = new Properties()
@@ -1274,7 +1274,7 @@ class JDBCSuite extends QueryTest
     val e2 = intercept[RuntimeException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
     }.getMessage
-    assert(e2.contains("Both 'dbtable' and 'query' can not be specified."))
+    assert(e2.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
 
     val e3 = intercept[RuntimeException] {
       sql(
@@ -1285,7 +1285,7 @@ class JDBCSuite extends QueryTest
          |         user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
       }.getMessage
-    assert(e3.contains("Both 'dbtable' and 'query' can not be specified."))
+    assert(e3.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
 
     val e4 = intercept[RuntimeException] {
       val df = spark.read.format("jdbc")
@@ -1293,7 +1293,7 @@ class JDBCSuite extends QueryTest
         .option("query", "")
         .load()
     }.getMessage
-    assert(e4.contains("Empty string is not allowed in either 'dbtable' or 'query' options"))
+    assert(e4.contains("Option `query` can not be empty."))
 
     // Option query and partitioncolumn are not allowed together.
     val expectedErrorMsg =

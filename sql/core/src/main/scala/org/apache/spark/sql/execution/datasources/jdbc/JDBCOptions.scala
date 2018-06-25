@@ -65,14 +65,14 @@ class JDBCOptions(
   // Required parameters
   // ------------------------------------------------------------
   require(parameters.isDefinedAt(JDBC_URL), s"Option '$JDBC_URL' is required.")
-
   // a JDBC URL
   val url = parameters(JDBC_URL)
   val tableName = parameters.get(JDBC_TABLE_NAME)
   val query = parameters.get(JDBC_QUERY_STRING)
-  // Following two conditions make sure that :
+  // Following code checks to make sure that :
   // 1. One of the option (dbtable or query) must be specified.
   // 2. Both of them can not be specified at the same time as they are conflicting in nature.
+  /*
   require(
     tableName.isDefined || query.isDefined,
     s"Option '$JDBC_TABLE_NAME' or '${JDBC_QUERY_STRING}' is required."
@@ -80,21 +80,38 @@ class JDBCOptions(
 
   require(
     !(tableName.isDefined && query.isDefined),
-    s"Both '$JDBC_TABLE_NAME' and '$JDBC_QUERY_STRING' can not be specified."
+    s"Both '$JDBC_TABLE_NAME' and '$JDBC_QUERY_STRING' can not be specified at the same time."
   )
-
-  // table name or a table expression.
-  val tableOrQuery = tableName.map(_.trim).getOrElse {
-    // We have ensured in the code above that either dbtable or query is specified.
-    query.get match {
-      case subQuery if subQuery.nonEmpty => s"(${subQuery}) spark_gen_${curId.getAndIncrement()}"
-      case subQuery => subQuery
-    }
+  */
+  // table name or a table subquery.
+  val tableOrQuery = (tableName, query) match {
+    case (Some(name), Some(subquery)) =>
+      throw new IllegalArgumentException(
+        s"Both '$JDBC_TABLE_NAME' and '$JDBC_QUERY_STRING' can not be specified at the same time."
+      )
+    case (None, None) =>
+      throw new IllegalArgumentException(
+        s"Option '$JDBC_TABLE_NAME' or '${JDBC_QUERY_STRING}' is required."
+      )
+    case (Some(name), None) =>
+      if (name.isEmpty) {
+        throw new IllegalArgumentException(s"Option '${JDBC_TABLE_NAME}' can not be empty.")
+      } else {
+        name.trim
+      }
+    case (None, Some(subquery)) =>
+      if (subquery.isEmpty) {
+        throw new IllegalArgumentException(s"Option `${JDBC_QUERY_STRING}` can not be empty.")
+      } else {
+        s"(${subquery}) __SPARK_GEN_JDBC_SUBQUERY_NAME_${curId.getAndIncrement()}"
+      }
   }
 
+  /*
   require(tableOrQuery.nonEmpty,
     s"Empty string is not allowed in either '$JDBC_TABLE_NAME' or '${JDBC_QUERY_STRING}' options"
   )
+  */
 
 
   // Optional parameters
