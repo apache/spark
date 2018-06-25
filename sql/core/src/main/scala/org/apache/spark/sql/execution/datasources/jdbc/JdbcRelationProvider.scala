@@ -59,11 +59,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       mode: SaveMode,
       parameters: Map[String, String],
       df: DataFrame): BaseRelation = {
-    val options = new JDBCOptions(parameters)
-    require(
-      options.tableName.isDefined,
-      s"Option '${JDBCOptions.JDBC_TABLE_NAME}' is required. " +
-        s"Option '${JDBCOptions.JDBC_QUERY_STRING}' is not applicable while writing.")
+    val options = new JdbcOptionsInWrite(parameters)
     val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
 
     val conn = JdbcUtils.createConnectionFactory(options)()
@@ -79,7 +75,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
               saveTable(df, tableSchema, isCaseSensitive, options)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
-              dropTable(conn, options.tableOrQuery, options)
+              dropTable(conn, options.destinationTable, options)
               createTable(conn, df, options)
               saveTable(df, Some(df.schema), isCaseSensitive, options)
             }
@@ -90,7 +86,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
-              s"Table or view '${options.tableOrQuery}' already exists. " +
+              s"Table or view '${options.destinationTable}' already exists. " +
                 s"SaveMode: ErrorIfExists.")
 
           case SaveMode.Ignore =>

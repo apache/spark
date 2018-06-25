@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient private val parameters: CaseInsensitiveMap[String])
+    @transient val parameters: CaseInsensitiveMap[String])
   extends Serializable {
 
   import JDBCOptions._
@@ -67,24 +67,8 @@ class JDBCOptions(
   require(parameters.isDefinedAt(JDBC_URL), s"Option '$JDBC_URL' is required.")
   // a JDBC URL
   val url = parameters(JDBC_URL)
-  val tableName = parameters.get(JDBC_TABLE_NAME)
-  val query = parameters.get(JDBC_QUERY_STRING)
-  // Following code checks to make sure that :
-  // 1. One of the option (dbtable or query) must be specified.
-  // 2. Both of them can not be specified at the same time as they are conflicting in nature.
-  /*
-  require(
-    tableName.isDefined || query.isDefined,
-    s"Option '$JDBC_TABLE_NAME' or '${JDBC_QUERY_STRING}' is required."
-  )
-
-  require(
-    !(tableName.isDefined && query.isDefined),
-    s"Both '$JDBC_TABLE_NAME' and '$JDBC_QUERY_STRING' can not be specified at the same time."
-  )
-  */
   // table name or a table subquery.
-  val tableOrQuery = (tableName, query) match {
+  val tableOrQuery = (parameters.get(JDBC_TABLE_NAME), parameters.get(JDBC_QUERY_STRING)) match {
     case (Some(name), Some(subquery)) =>
       throw new IllegalArgumentException(
         s"Both '$JDBC_TABLE_NAME' and '$JDBC_QUERY_STRING' can not be specified at the same time."
@@ -106,13 +90,6 @@ class JDBCOptions(
         s"(${subquery}) __SPARK_GEN_JDBC_SUBQUERY_NAME_${curId.getAndIncrement()}"
       }
   }
-
-  /*
-  require(tableOrQuery.nonEmpty,
-    s"Empty string is not allowed in either '$JDBC_TABLE_NAME' or '${JDBC_QUERY_STRING}' options"
-  )
-  */
-
 
   // Optional parameters
   // ------------------------------------------------------------
@@ -152,7 +129,7 @@ class JDBCOptions(
       s"options: '$JDBC_PARTITION_COLUMN', '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', " +
       s"and '$JDBC_NUM_PARTITIONS'")
 
-  require(!(query.isDefined && partitionColumn.isDefined),
+  require(!(parameters.get(JDBC_QUERY_STRING).isDefined && partitionColumn.isDefined),
     s"""
        |Options '$JDBC_QUERY_STRING' and '$JDBC_PARTITION_COLUMN' can not be specified together.
        |Please define the query using `$JDBC_TABLE_NAME` option instead and make sure to qualify
@@ -231,4 +208,26 @@ object JDBCOptions {
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
+}
+
+class JdbcOptionsInWrite(
+    @transient override val parameters: CaseInsensitiveMap[String])
+  extends JDBCOptions(parameters) {
+
+  import JDBCOptions._
+
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
+
+  def this(url: String, table: String, parameters: Map[String, String]) = {
+    this(CaseInsensitiveMap(parameters ++ Map(
+      JDBCOptions.JDBC_URL -> url,
+      JDBCOptions.JDBC_TABLE_NAME -> table)))
+  }
+
+  require(
+    parameters.get(JDBC_TABLE_NAME).isDefined,
+    s"Option '${JDBCOptions.JDBC_TABLE_NAME}' is required. " +
+      s"Option '${JDBCOptions.JDBC_QUERY_STRING}' is not applicable while writing.")
+
+  val destinationTable = parameters(JDBC_TABLE_NAME)
 }

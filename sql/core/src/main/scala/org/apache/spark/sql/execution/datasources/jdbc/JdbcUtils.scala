@@ -67,14 +67,14 @@ object JdbcUtils extends Logging {
   /**
    * Returns true if the table already exists in the JDBC database.
    */
-  def tableExists(conn: Connection, options: JDBCOptions): Boolean = {
+  def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
     val dialect = JdbcDialects.get(options.url)
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
     // the database name. Query used to find table exists can be overridden by the dialects.
     Try {
-      val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.tableOrQuery))
+      val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.destinationTable))
       try {
         statement.setQueryTimeout(options.queryTimeout)
         statement.executeQuery()
@@ -100,12 +100,12 @@ object JdbcUtils extends Logging {
   /**
    * Truncates a table from the JDBC database without side effects.
    */
-  def truncateTable(conn: Connection, options: JDBCOptions): Unit = {
+  def truncateTable(conn: Connection, options: JdbcOptionsInWrite): Unit = {
     val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(dialect.getTruncateQuery(options.tableOrQuery))
+      statement.executeUpdate(dialect.getTruncateQuery(options.destinationTable))
     } finally {
       statement.close()
     }
@@ -809,9 +809,9 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      options: JDBCOptions): Unit = {
+      options: JdbcOptionsInWrite): Unit = {
     val url = options.url
-    val table = options.tableOrQuery
+    val table = options.destinationTable
     val dialect = JdbcDialects.get(url)
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(options)
@@ -838,10 +838,10 @@ object JdbcUtils extends Logging {
   def createTable(
       conn: Connection,
       df: DataFrame,
-      options: JDBCOptions): Unit = {
+      options: JdbcOptionsInWrite): Unit = {
     val strSchema = schemaString(
       df, options.url, options.createTableColumnTypes)
-    val table = options.tableOrQuery
+    val table = options.destinationTable
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
