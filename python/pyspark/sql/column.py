@@ -520,7 +520,8 @@ class Column(object):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([
             Row(name=u'Tom', height=80.0),
-            Row(name=u'Alice', height=float('inf'))])
+            Row(name=u'Alice', height=float('inf'))
+        ])
     >>> df.filter(df.height.isInf()).collect()
     [Row(height=inf, name=u'Alice')]
     """
