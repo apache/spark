@@ -183,11 +183,19 @@ class UnivocityParser(
     }
   }
 
+  private lazy val doParse = if (schema.nonEmpty) {
+    (input: String) => convert(tokenizer.parseLine(input))
+  } else {
+    // If `columnPruning` enabled and partition attributes scanned only,
+    // `schema` gets empty.
+    (_: String) => InternalRow.empty
+  }
+
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): InternalRow = convert(tokenizer.parseLine(input))
+  def parse(input: String): InternalRow = doParse(input)
 
   private def convert(tokens: Array[String]): InternalRow = {
     if (tokens.length != schema.length) {

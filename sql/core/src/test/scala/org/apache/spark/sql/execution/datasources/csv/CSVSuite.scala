@@ -1602,4 +1602,14 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(testAppender2.events.asScala
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
+
+  test("SPARK-24645 skip parsing when columnPruning enabled and partitions scanned only") {
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
+      withTempPath { path =>
+        val dir = path.getAbsolutePath
+        spark.range(10).selectExpr("id % 2 AS p", "id").write.partitionBy("p").csv(dir)
+        spark.read.csv(dir).selectExpr("sum(p)").collect()
+      }
+    }
+  }
 }
