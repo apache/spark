@@ -1608,7 +1608,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       withTempPath { path =>
         val dir = path.getAbsolutePath
         spark.range(10).selectExpr("id % 2 AS p", "id").write.partitionBy("p").csv(dir)
-        spark.read.csv(dir).selectExpr("sum(p)").collect()
+        checkAnswer(spark.read.csv(dir).selectExpr("sum(p)"), Row(5))
       }
     }
   }
