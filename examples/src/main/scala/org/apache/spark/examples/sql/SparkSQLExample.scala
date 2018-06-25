@@ -49,9 +49,6 @@ object SparkSQLExample {
     runInferSchemaExample(spark)
     runProgrammaticSchemaExample(spark)
 
-    val df = spark.read.json("examples/src/main/resources/a/b{0,1}/*/*")
-    df.show()
-
     spark.stop()
   }
 
