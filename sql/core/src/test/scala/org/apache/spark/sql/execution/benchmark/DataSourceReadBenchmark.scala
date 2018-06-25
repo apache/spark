@@ -578,6 +578,33 @@ object DataSourceReadBenchmark {
           }
         }
 
+        /*
+        OpenJDK 64-Bit Server VM 1.8.0_171-b10 on Linux 4.14.33-51.37.amzn1.x86_64
+        Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+        Partitioned Table:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        --------------------------------------------------------------------------------------------
+        Data column - CSV                       32613 / 32841          0.5        2073.4       1.0X
+        Data column - Json                      13343 / 13469          1.2         848.3       2.4X
+        Data column - Parquet Vectorized           302 /  318         52.1          19.2     108.0X
+        Data column - Parquet MR                  2908 / 2924          5.4         184.9      11.2X
+        Data column - ORC Vectorized               412 /  425         38.1          26.2      79.1X
+        Data column - ORC Vectorized with copy     442 /  446         35.6          28.1      73.8X
+        Data column - ORC MR                      2390 / 2396          6.6         152.0      13.6X
+        Partition column - CSV                    9626 / 9683          1.6         612.0       3.4X
+        Partition column - Json                 10909 / 10923          1.4         693.6       3.0X
+        Partition column - Parquet Vectorized       69 /   76        228.4           4.4     473.6X
+        Partition column - Parquet MR             1898 / 1933          8.3         120.7      17.2X
+        Partition column - ORC Vectorized           67 /   74        236.0           4.2     489.4X
+        Partition column - ORC Vectorized with copy 65 /   72        241.9           4.1     501.6X
+        Partition column - ORC MR                 1743 / 1749          9.0         110.8      18.7X
+        Both columns - CSV                      35523 / 35552          0.4        2258.5       0.9X
+        Both columns - Json                     13676 / 13681          1.2         869.5       2.4X
+        Both columns - Parquet Vectorized          317 /  326         49.5          20.2     102.7X
+        Both columns - Parquet MR                 3333 / 3336          4.7         211.9       9.8X
+        Both columns - ORC Vectorized              441 /  446         35.6          28.1      73.9X
+        Both column - ORC Vectorized with copy     517 /  524         30.4          32.9      63.1X
+        Both columns - ORC MR                     2574 / 2577          6.1         163.6      12.7X
+        */
         benchmark.run()
       }
     }
