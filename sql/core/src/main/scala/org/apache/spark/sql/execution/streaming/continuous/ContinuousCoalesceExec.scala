@@ -43,14 +43,12 @@ case class ContinuousCoalesceExec(numPartitions: Int, child: SparkPlan) extends 
     assert(numPartitions == 1)
 
     val childRdd = child.execute()
-    val endpointName = s"RPCContinuousShuffleReader-${UUID.randomUUID()}"
 
     new ContinuousCoalesceRDD(
       sparkContext,
       numPartitions,
       conf.continuousStreamingExecutorQueueSize,
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_INTERVAL_KEY).toLong,
-      endpointName,
       childRdd)
   }
 }

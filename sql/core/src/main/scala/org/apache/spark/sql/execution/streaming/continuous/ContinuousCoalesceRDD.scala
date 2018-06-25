@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
+import java.util.UUID
+
 import org.apache.spark._
 import org.apache.spark.rdd.{CoalescedRDDPartition, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -40,34 +42,42 @@ class ContinuousCoalesceRDD(
     numPartitions: Int,
     readerQueueSize: Int,
     epochIntervalMs: Long,
-    readerEndpointName: String,
     prev: RDD[InternalRow])
   extends RDD[InternalRow](context, Nil) {
 
-  override def getPartitions: Array[Partition] = Array(ContinuousCoalesceRDDPartition(0))
+  override def getPartitions: Array[Partition] =
+    (0 until numPartitions).map(ContinuousCoalesceRDDPartition).toArray
 
- val readerRDD = new ContinuousShuffleReadRDD(
+  // When we support more than 1 target partition, we'll need to figure out how to pass in the
+  // required partitioner.
+  private val outputPartitioner = new HashPartitioner(1)
+
+  private val readerEndpointNames = (0 until numPartitions).map { i =>
+    s"ContinuousCoalesceRDD-part$i-${UUID.randomUUID()}"
+  }
+
+  val readerRDD = new ContinuousShuffleReadRDD(
     sparkContext,
     numPartitions,
     readerQueueSize,
     prev.getNumPartitions,
     epochIntervalMs,
-    Seq(readerEndpointName))
+    readerEndpointNames)
 
   private lazy val threadPool = ThreadUtils.newDaemonFixedThreadPool(
     prev.getNumPartitions,
     this.name)
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-    assert(split.index == 0)
-    // lazy initialize endpoint so writer can send to it
-    readerRDD.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    // lazy initialize endpoints so writer can send to them
+    readerRDD.partitions.foreach {
+      _.asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    }
 
     if (!split.asInstanceOf[ContinuousCoalesceRDDPartition].writersInitialized) {
       val rpcEnv = SparkEnv.get.rpcEnv
-      val outputPartitioner = new HashPartitioner(1)
       val endpointRefs = readerRDD.endpointNames.map { endpointName =>
-          rpcEnv.setupEndpointRef(rpcEnv.address, endpointName)
+        rpcEnv.setupEndpointRef(rpcEnv.address, endpointName)
       }
 
       val runnables = prev.partitions.map { prevSplit =>
