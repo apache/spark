@@ -17,10 +17,64 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen.compiler
 
+import org.apache.spark.{TaskContext, TaskKilledException}
+import org.apache.spark.executor.InputMetrics
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeArrayData, UnsafeMapData, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, GeneratedClass}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.types.Decimal
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 
 abstract class CompilerBase {
+  protected val className = "org.apache.spark.sql.catalyst.expressions.GeneratedClass"
 
-  def compile (code: CodeAndComment): (GeneratedClass, Int)
+  protected val importClassNames = Seq(
+    classOf[Platform].getName,
+    classOf[InternalRow].getName,
+    classOf[UnsafeRow].getName,
+    classOf[UnsafeProjection].getName,
+    classOf[UTF8String].getName,
+    classOf[Decimal].getName,
+    classOf[CalendarInterval].getName,
+    classOf[ArrayData].getName,
+    classOf[UnsafeArrayData].getName,
+    classOf[MapData].getName,
+    classOf[UnsafeMapData].getName,
+    classOf[Expression].getName,
+    classOf[TaskContext].getName,
+    classOf[TaskKilledException].getName,
+    classOf[InputMetrics].getName
+  )
+
+  protected val extendedClass = classOf[GeneratedClass]
+
+  protected val debugSource = true
+  protected val debugLines = true
+  protected val debugVars = false
+
+  protected def prefixLineNumbers(code: String): String = {
+    if (!debugLines) {
+      return code
+    }
+    val out = new StringBuilder(code.length * 3 / 2)
+    var i = 1
+    for (line <- code.split("\n")) {
+      val start = out.length
+      out.append(i)
+      i += 1
+      val numLength = out.length() - start
+      out.append(":")
+      for (spaces <- 0 until 7 - numLength) {
+        out.append(" ")
+      }
+      out.append(line)
+      out.append('\n')
+    }
+    out.toString()
+  }
+
+  def compile(code: CodeAndComment): (GeneratedClass, Int)
 }

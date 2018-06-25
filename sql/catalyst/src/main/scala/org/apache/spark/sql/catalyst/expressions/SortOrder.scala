@@ -188,9 +188,9 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.child.genCode(ctx)
     val input = childCode.value
-    val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
-    val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
-    val StringPrefixCmp = classOf[StringPrefixComparator].getName
+    val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getCanonicalName
+    val DoublePrefixCmp = classOf[DoublePrefixComparator].getCanonicalName
+    val StringPrefixCmp = classOf[StringPrefixComparator].getCanonicalName
     val prefixCode = child.child.dataType match {
       case BooleanType =>
         s"$input ? 1L : 0L"

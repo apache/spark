@@ -127,7 +127,7 @@ class CodegenContext {
   def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    val clsName = Option(className).getOrElse(obj.getClass.getCanonicalName)
     s"(($clsName) references[$idx] /* $objName */)"
   }
 
@@ -1164,12 +1164,13 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected val genericMutableRowType: String = classOf[GenericInternalRow].getName
 
-  // In janino, Scala.Function1 need this. But, name clashes happen in JDK compilers
+  // In janino, Scala.Function1 needs this. But, name crashes happen in JDK compilers
   // because of type erasure. Probably, it seems this issue is related to a topic below;
   //  - https://stackoverflow.com/questions/12206181/generic-class-compiles-in-java-6-but-not-java-7
   // I do not look into this issue, so we need to revisit this.
   protected lazy val janinoCompatibilityCode = if (CodeGenerator.janinoCompilerEnabled) {
-    s"""public java.lang.Object apply(java.lang.Object row) {
+    s"""
+       |public java.lang.Object apply(java.lang.Object row) {
        |  return apply((InternalRow) row);
        |}
      """.stripMargin
@@ -1236,12 +1237,17 @@ object CodeGenerator extends Logging {
   // bytecode instruction
   final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
-  private lazy val compilerImpl: CompilerBase =
-    SparkEnv.get.conf.get("spark.sql.javaCompiler", "jdk").toLowerCase(Locale.ROOT) match {
+  private lazy val compilerImpl: CompilerBase = {
+    val compiler = SparkEnv.get.conf.get("spark.sql.javaCompiler", "jdk").toLowerCase(Locale.ROOT)
+    val compilerInstance = compiler match {
       case "janino" => JaninoCompiler
-      case "jdk" => JdkCompiler
+      case "jdk" => if (JdkCompiler.javaCompiler != null) JdkCompiler else JaninoCompiler
       case unknown => throw new IllegalArgumentException(s"Unknown compiler found: $unknown")
     }
+    val compilerName = if (compilerInstance == JaninoCompiler) "Janino" else "JDK"
+    logInfo(s"$compilerName Java bytecode compiler is used")
+    compilerInstance
+  }
 
   lazy val janinoCompilerEnabled: Boolean = {
     compilerImpl == JaninoCompiler

@@ -28,18 +28,10 @@ import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
-import org.apache.spark.{TaskContext, TaskKilledException}
-import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, GeneratedClass}
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types._
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
 
@@ -100,34 +92,18 @@ object JaninoCompiler extends CompilerBase with Logging {
     val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
     evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
-    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
-    evaluator.setDefaultImports(Array(
-      classOf[Platform].getName,
-      classOf[InternalRow].getName,
-      classOf[UnsafeRow].getName,
-      classOf[UTF8String].getName,
-      classOf[Decimal].getName,
-      classOf[CalendarInterval].getName,
-      classOf[ArrayData].getName,
-      classOf[UnsafeArrayData].getName,
-      classOf[MapData].getName,
-      classOf[UnsafeMapData].getName,
-      classOf[Expression].getName,
-      classOf[TaskContext].getName,
-      classOf[TaskKilledException].getName,
-      classOf[InputMetrics].getName
-    ))
-    evaluator.setExtendedClass(classOf[GeneratedClass])
+    evaluator.setClassName(className)
+    evaluator.setDefaultImports(importClassNames.toArray)
+    evaluator.setExtendedClass(extendedClass)
 
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
-      evaluator.setDebuggingInformation(true, true, false)
+      evaluator.setDebuggingInformation(debugSource, debugLines, debugVars)
       s"\n${CodeFormatter.format(code)}"
     })
 
-    val maxCodeSize = try {
+    try {
       evaluator.cook("generated.java", code.body)
-      updateAndGetCompilationStats(evaluator)
     } catch {
       case e: InternalCompilerException =>
         val msg = s"failed to compile: $e"
@@ -143,6 +119,7 @@ object JaninoCompiler extends CompilerBase with Logging {
         throw new CompileException(msg, e.getLocation)
     }
 
+    val maxCodeSize = updateAndGetCompilationStats(evaluator)
     (evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
   }
 }
