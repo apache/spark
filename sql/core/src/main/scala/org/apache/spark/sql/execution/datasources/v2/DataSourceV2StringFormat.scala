@@ -53,7 +53,9 @@ trait DataSourceV2StringFormat {
 
   private def sourceName: String = source match {
     case registered: DataSourceRegister => registered.shortName()
-    case _ => source.getClass.getSimpleName.stripSuffix("$")
+    // source.getClass.getSimpleName can cause Malformed class name error,
+    // call safer `Utils.getSimpleName` instead
+    case _ => Utils.getSimpleName(source.getClass)
   }
 
   def metadataString: String = {

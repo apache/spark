@@ -1752,6 +1752,11 @@ To use `groupBy().apply()`, the user needs to define the following:
 * A Python function that defines the computation for each group.
 * A `StructType` object or a string that defines the schema of the output `DataFrame`.
 
+The column labels of the returned `pandas.DataFrame` must either match the field names in the
+defined output schema if specified as strings, or match the field data types by position if not
+strings, e.g. integer indices. See [pandas.DataFrame](https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.html#pandas.DataFrame)
+on how to label columns when constructing a `pandas.DataFrame`.
+
 Note that all data for a group will be loaded into memory before the function is applied. This can
 lead to out of memory exceptons, especially if the group sizes are skewed. The configuration for
 [maxRecordsPerBatch](#setting-arrow-batch-size) is not applied on groups and it is up to the user

@@ -1071,6 +1071,17 @@ object functions {
   def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
 
   /**
+   * Creates a new map column. The array in the first column is used for keys. The array in the
+   * second column is used for values. All elements in the array for key should not be null.
+   *
+   * @group normal_funcs
+   * @since 2.4
+   */
+  def map_from_arrays(keys: Column, values: Column): Column = withExpr {
+    MapFromArrays(keys.expr, values.expr)
+  }
+
+  /**
    * Marks a DataFrame as small enough for use in broadcast joins.
    *
    * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
@@ -3082,7 +3093,7 @@ object functions {
    * @since 1.5.0
    */
   def array_contains(column: Column, value: Any): Column = withExpr {
-    ArrayContains(column.expr, Literal(value))
+    ArrayContains(column.expr, lit(value).expr)
   }
 
   /**
@@ -3146,7 +3157,7 @@ object functions {
    * @since 2.4.0
    */
   def array_position(column: Column, value: Any): Column = withExpr {
-    ArrayPosition(column.expr, Literal(value))
+    ArrayPosition(column.expr, lit(value).expr)
   }
 
   /**
@@ -3157,7 +3168,7 @@ object functions {
    * @since 2.4.0
    */
   def element_at(column: Column, value: Any): Column = withExpr {
-    ElementAt(column.expr, Literal(value))
+    ElementAt(column.expr, lit(value).expr)
   }
 
   /**
@@ -3168,6 +3179,22 @@ object functions {
    * @since 2.4.0
    */
   def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
+
+  /**
+   * Remove all elements that equal to element from the given array.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_remove(column: Column, element: Any): Column = withExpr {
+    ArrayRemove(column.expr, lit(element).expr)
+  }
+
+  /**
+   * Removes duplicate values from the array.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_distinct(e: Column): Column = withExpr { ArrayDistinct(e.expr) }
 
   /**
    * Creates a new row for each element in the given array or map column.
@@ -3349,7 +3376,7 @@ object functions {
     val dataType = try {
       DataType.fromJson(schema)
     } catch {
-      case NonFatal(_) => StructType.fromDDL(schema)
+      case NonFatal(_) => DataType.fromDDL(schema)
     }
     from_json(e, dataType, options)
   }
@@ -3498,6 +3525,22 @@ object functions {
    * @since 2.4.0
    */
   def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
+
+  /**
+   * Returns a map created from the given array of entries.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def map_from_entries(e: Column): Column = withExpr { MapFromEntries(e.expr) }
+
+  /**
+   * Returns a merged array of structs in which the N-th struct contains all N-th values of input
+   * arrays.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  @scala.annotation.varargs
+  def arrays_zip(e: Column*): Column = withExpr { ArraysZip(e.map(_.expr)) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Mask functions
