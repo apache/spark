@@ -540,7 +540,7 @@ object TypeCoercion {
         ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         ImplicitTypeCasts.implicitCast(arr, ArrayType(StringType, containsNull)) match {
-          case Some(finalDataType) => ArrayJoin(finalDataType, d, nr)
+          case Some(castedArr) => ArrayJoin(castedArr, d, nr)
           case None => aj
         }
 
