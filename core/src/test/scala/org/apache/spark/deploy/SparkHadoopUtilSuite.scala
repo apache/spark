@@ -117,7 +117,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers with LocalSparkCo
 
       // test path is not globPath
       sparkHadoopUtil.expandGlobPath(fs, new Path(s"$rootDir/dir-0001/part-0001"), 10) should
-        be(Seq(new Path(s"file:$rootDir/dir-0001/part-0001")))
+        be(Seq(new Path(s"$rootDir/dir-0001/part-0001")))
 
       // test the wrong wild cast
       sparkHadoopUtil.expandGlobPath(fs, new Path(s"$rootDir/000[1-5]/*"), 10) should be(
