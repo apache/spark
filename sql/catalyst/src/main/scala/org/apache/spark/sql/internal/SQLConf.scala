@@ -1167,7 +1167,7 @@ object SQLConf {
       .doc("When true, a grouped map Pandas UDF will assign columns from the returned " +
         "Pandas DataFrame based on position, regardless of column label type. When false, " +
         "columns will be looked up by name if labeled with a string and fallback to use " +
-        "position if not.")
+        "position if not. This configuration will be deprecated in future releases.")
       .booleanConf
       .createWithDefault(false)
 
