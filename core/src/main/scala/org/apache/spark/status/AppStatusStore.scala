@@ -391,6 +391,26 @@ private[spark] class AppStatusStore(
     ordered.skip(offset).max(length).asScala.map(_.toApi).toSeq
   }
 
+  def fullTaskList(
+    stageId: Int,
+    stageAttemptId: Int,
+    sortBy: Option[String],
+    ascending: Boolean): Seq[v1.TaskData] = {
+    val stageKey = Array(stageId, stageAttemptId)
+    val base = store.view(classOf[TaskDataWrapper])
+    val indexed = sortBy match {
+      case Some(index) =>
+        base.index(index).parent(stageKey)
+
+      case _ =>
+        // Sort by ID, which is the "stage" index.
+        base.index("stage").first(stageKey).last(stageKey)
+    }
+
+    val ordered = if (ascending) indexed else indexed.reverse()
+    ordered.skip(0).asScala.map(_.toApi).toSeq
+  }
+
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
     val stageKey = Array(stageId, attemptId)
     store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)

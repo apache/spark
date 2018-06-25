@@ -709,7 +709,7 @@ private[ui] class TaskPagedTable(
   }
 }
 
-private[ui] object ApiHelper {
+private[spark] object ApiHelper {
 
   val HEADER_ID = "ID"
   val HEADER_TASK_INDEX = "Index"

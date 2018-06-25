@@ -439,12 +439,8 @@ $(document).ready(function () {
                         {data : "attempt", name: "Attempt"},
                         {data : "status", name: "Status"},
                         {data : "taskLocality", name: "Locality Level"},
-                        {
-                            data : function (row, type) {
-                                return row.executorId + ' / ' + row.host;
-                            },
-                            name: "Executor ID"
-                        },
+                        {data : "executorId", name: "Executor ID"},
+                        {data : "host", name: "Host"},
                         {data : "executorLogs", name: "Logs", render: formatLogsCells},
                         {data : "launchTime", name: "Launch Time", render: formatDate},
                         {
@@ -583,7 +579,7 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 if ("taskMetrics" in row) {
                                     if (row.taskMetrics.shuffleWriteMetrics.writeTime > 0) {
-                                        return type === 'display' ? formatDuration(row.taskMetrics.shuffleWriteMetrics.writeTime) : row.taskMetrics.shuffleWriteMetrics.writeTime;
+                                        return type === 'display' ? formatDuration(parseInt(row.taskMetrics.shuffleWriteMetrics.writeTime) / 1000000) : row.taskMetrics.shuffleWriteMetrics.writeTime;
                                     } else {
                                         return "";
                                     }
@@ -655,7 +651,6 @@ $(document).ready(function () {
                         }
                     ],
                     "columnDefs": [
-                        { "visible": false, "targets": 10 },
                         { "visible": false, "targets": 11 },
                         { "visible": false, "targets": 12 },
                         { "visible": false, "targets": 13 },
@@ -668,12 +663,13 @@ $(document).ready(function () {
                         { "visible": false, "targets": 20 },
                         { "visible": false, "targets": 21 },
                         { "visible": false, "targets": 22 },
-                        { "visible": false, "targets": 23 }
+                        { "visible": false, "targets": 23 },
+                        { "visible": false, "targets": 24 }
                     ],
                 };
                 var taskTableSelector = $(taskTable).DataTable(task_conf);
 
-                var optionalColumns = [10, 11, 12, 13, 14, 15, 16];
+                var optionalColumns = [11, 12, 13, 14, 15, 16, 17];
                 var allChecked = true;
                 for(k = 0; k < optionalColumns.length; k++) {
                     if (taskTableSelector.column(optionalColumns[k]).visible()) {
@@ -691,7 +687,7 @@ $(document).ready(function () {
                     // Get the column
                     var para = $(this).attr('data-column');
                     if(para == "0"){
-                        var column = taskTableSelector.column([10, 11, 12, 13, 14, 15, 16]);
+                        var column = taskTableSelector.column([11, 12, 13, 14, 15, 16, 17]);
                         if($(this).is(":checked")){
                             $(".toggle-vis").prop('checked', true);
                             column.visible(true);
@@ -714,27 +710,27 @@ $(document).ready(function () {
                 if (accumulator_table.length == 0) {
                     $("#accumulator-update-table").hide();
                 } else {
-                    taskTableSelector.column(17).visible(true);
+                    taskTableSelector.column(18).visible(true);
                     $("#accumulator-update-table").show();
                 }
 
                 if (inputSizeRecordsSummary.length > 0) {
-                    taskTableSelector.column(18).visible(true);
-                }
-                if (outputSizeRecordsSummary.length > 0) {
                     taskTableSelector.column(19).visible(true);
                 }
-                if (shuffleWriteSizeRecordsSummary.length > 0) {
+                if (outputSizeRecordsSummary.length > 0) {
                     taskTableSelector.column(20).visible(true);
                 }
                 if (shuffleWriteSizeRecordsSummary.length > 0) {
                     taskTableSelector.column(21).visible(true);
                 }
-                if (shuffleSpillMemorySummary.length > 0) {
+                if (shuffleWriteSizeRecordsSummary.length > 0) {
                     taskTableSelector.column(22).visible(true);
                 }
-                if (shuffleSpillDiskSummary.length > 0) {
+                if (shuffleSpillMemorySummary.length > 0) {
                     taskTableSelector.column(23).visible(true);
+                }
+                if (shuffleSpillDiskSummary.length > 0) {
+                    taskTableSelector.column(24).visible(true);
                 }
             });
         });

@@ -27,6 +27,7 @@ import org.apache.spark.status.AppStatusUtils
 import org.apache.spark.status.api.v1.StageStatus._
 import org.apache.spark.status.api.v1.TaskSorting._
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.jobs.ApiHelper._
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class StagesResource extends BaseAppResource {
@@ -124,49 +125,40 @@ private[v1] class StagesResource extends BaseAppResource {
   @Path("{stageId: \\d+}/taskTable")
   def taskTable(
     @PathParam("stageId") stageId: Int,
-    @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo): util.HashMap[String, util.ArrayList[TaskData]] = {
+    @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo): util.HashMap[String, Seq[TaskData]] = {
     withUI { ui =>
-      var ret = ui.store.stageData(stageId, details = details)
-      var abc = uriInfo.getQueryParameters(true)
-      var iter = abc.keySet().iterator()
+      val abc = uriInfo.getQueryParameters(true)
+      val iter = abc.keySet().iterator()
       while(iter.hasNext) {
         var ac = iter.next()
         System.err.println("hereeeeeeeeeeee 1 " + ac+" : "+abc.get(ac))
       }
-      if (ret.nonEmpty) {
-        for (i <- 0 to (ret.length - 1)) {
-          var executorIdArray = ret(i).executorSummary.get.keys.toArray
-          for (execId <- executorIdArray) {
-            var executorLogs = ui.store.executorSummary(execId).executorLogs
-            var hostPort = ui.store.executorSummary(execId).hostPort
-            var taskDataArray = ret(i).tasks.get.keys.toArray
-            var executorStageSummaryArray = ret(i).executorSummary.get.keys.toArray
-            ret(i).executorSummary.get.get(execId).get.executorLogs = executorLogs
-            ret(i).executorSummary.get.get(execId).get.hostPort = hostPort
-            for (taskData <- taskDataArray) {
-              ret(i).tasks.get.get(taskData).get.executorLogs = executorLogs
-              ret(i).tasks.get.get(taskData).get.schedulerDelay = AppStatusUtils.schedulerDelay(ret(i).tasks.get.get(taskData).get)
-              ret(i).tasks.get.get(taskData).get.gettingResultTime = AppStatusUtils.gettingResultTime(ret(i).tasks.get.get(taskData).get)
-            }
-          }
-        }
-        val ret4 = new util.ArrayList[TaskData]()
-        ret(0).tasks.get.keys.foreach({ i =>
-            ret4.add(ret(0).tasks.get(i));
-        })
+      val queryParams = abc.keySet()
+      var columnToSort = 0
+      if (queryParams.contains("order[0][column]")) {
+        columnToSort = abc.getFirst("order[0][column]").toInt
+      }
+      var columnNameToSort = abc.getFirst("columns["+columnToSort+"][name]")
+      if (columnNameToSort.equalsIgnoreCase("Logs")) {
+        columnNameToSort = "Index"
+        columnToSort = 0
+      }
+      val isAscendingStr = abc.getFirst("order[0][dir]")
+      val _tasksToShow: Seq[TaskData] = ui.store.fullTaskList(stageId, 0,
+        indexName(columnNameToSort), isAscendingStr.equalsIgnoreCase("asc"))
+      if (_tasksToShow.nonEmpty) {
 
-        Collections.sort(ret4, new Comparator[TaskData] {
-          def compare(t1: TaskData, t2: TaskData): Int = {
-            var str = "index"
-            var c = t1.getClass
-            val result = c.getField(str).get(t1)
-            if (t1.index == t2.index) return 0
-            if (t1.index < t2.index) -1
-            else 1
-          }
-        })
-        val ret5 = new util.HashMap[String, util.ArrayList[TaskData]]()
-        ret5.put("aaData", ret4)
+        val iterator = _tasksToShow.iterator
+        while(iterator.hasNext) {
+          val t1: TaskData = iterator.next()
+          val execId = t1.executorId
+          val executorLogs = ui.store.executorSummary(execId).executorLogs
+          t1.executorLogs = executorLogs
+          t1.schedulerDelay = AppStatusUtils.schedulerDelay(t1)
+          t1.gettingResultTime = AppStatusUtils.gettingResultTime(t1)
+        }
+        val ret5 = new util.HashMap[String, Seq[TaskData]]()
+        ret5.put("aaData", _tasksToShow)
         ret5
       } else {
         throw new NotFoundException(s"unknown stage: $stageId")
