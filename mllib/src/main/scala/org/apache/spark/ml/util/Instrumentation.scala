@@ -19,7 +19,8 @@ package org.apache.spark.ml.util
 
 import java.util.UUID
 
-import scala.reflect.ClassTag
+import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -35,31 +36,47 @@ import org.apache.spark.util.Utils
 /**
  * A small wrapper that defines a training session for an estimator, and some methods to log
  * useful information during this session.
- *
- * A new instance is expected to be created within fit().
- *
- * @param estimator the estimator that is being fit
- * @param dataset the training dataset
- * @tparam E the type of the estimator
  */
-private[spark] class Instrumentation[E <: Estimator[_]] private (
-    val estimator: E,
-    val dataset: RDD[_]) extends Logging {
+private[spark] class Instrumentation extends Logging {
 
   private val id = UUID.randomUUID()
-  private val prefix = {
-    // estimator.getClass.getSimpleName can cause Malformed class name error,
-    // call safer `Utils.getSimpleName` instead
-    val className = Utils.getSimpleName(estimator.getClass)
-    s"$className-${estimator.uid}-${dataset.hashCode()}-$id: "
+  private val shortId = id.toString.take(8)
+  private var prefix = s"$shortId:"
+
+  // TODO: update spark.ml to use new Instrumentation APIs and remove these
+  var estimator: Estimator[_] = _
+  private def this(estimator: Estimator[_], dataset: RDD[_]) = {
+    this()
+    logContext(estimator, dataset)
   }
+  // end of remove
 
-  init()
+  /**
+   * Log info about the estimator and dataset being fit.
+   *
+   * @param estimator the estimator that is being fit
+   * @param dataset the training dataset
+   */
+  def logContext(estimator: Estimator[_], dataset: RDD[_]): Unit = {
+    this.estimator = estimator
+    prefix = {
+      // estimator.getClass.getSimpleName can cause Malformed class name error,
+      // call safer `Utils.getSimpleName` instead
+      val className = Utils.getSimpleName(estimator.getClass)
+      s"$shortId-$className-${estimator.uid}-${dataset.hashCode()}:"
+    }
 
-  private def init(): Unit = {
     log(s"training: numPartitions=${dataset.partitions.length}" +
       s" storageLevel=${dataset.getStorageLevel}")
   }
+
+  /**
+   * Log info about the estimator and dataset being fit.
+   *
+   * @param e the estimator that is being fit
+   * @param dataset the training dataset
+   */
+  def logContext(e: Estimator[_], dataset: Dataset[_]): Unit = logContext(e, dataset.rdd)
 
   /**
    * Logs a debug message with a prefix that uniquely identifies the training session.
@@ -97,7 +114,7 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   /**
    * Logs the value of the given parameters for the estimator being used in this session.
    */
-  def logParams(params: Param[_]*): Unit = {
+  def logParams(estimator: Estimator[_], params: Param[_]*): Unit = {
     val pairs: Seq[(String, JValue)] = for {
       p <- params
       value <- estimator.get(p)
@@ -106,6 +123,12 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
       p.name -> parse(cast.jsonEncode(value))
     }
     log(compact(render(map2jvalue(pairs.toMap))))
+  }
+
+  // TODO: remove this
+  def logParams(params: Param[_]*): Unit = {
+    require(estimator != null, "`logContext` must be called before `logParams`.")
+    logParams(estimator, params: _*)
   }
 
   def logNumFeatures(num: Long): Unit = {
@@ -154,6 +177,14 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   def logSuccess(model: Model[_]): Unit = {
     log(s"training finished")
   }
+
+  /**
+   * Logs an exception raised during a training session.
+   */
+  def logFailure(e: Throwable): Unit = {
+    val msg = e.getStackTrace.mkString("\n")
+    super.logInfo(msg)
+  }
 }
 
 /**
@@ -169,22 +200,33 @@ private[spark] object Instrumentation {
     val varianceOfLabels = "varianceOfLabels"
   }
 
+  // TODO: Remove these
   /**
    * Creates an instrumentation object for a training session.
    */
-  def create[E <: Estimator[_]](
-      estimator: E, dataset: Dataset[_]): Instrumentation[E] = {
-    create[E](estimator, dataset.rdd)
+  def create(estimator: Estimator[_], dataset: Dataset[_]): Instrumentation = {
+    create(estimator, dataset.rdd)
   }
 
   /**
    * Creates an instrumentation object for a training session.
    */
-  def create[E <: Estimator[_]](
-      estimator: E, dataset: RDD[_]): Instrumentation[E] = {
-    new Instrumentation[E](estimator, dataset)
+  def create(estimator: Estimator[_], dataset: RDD[_]): Instrumentation = {
+    new Instrumentation(estimator, dataset)
   }
+  // end remove
 
+  def instrumented[M <: Model[_]](body: (Instrumentation => M)): M = {
+    val instr = new Instrumentation()
+    Try(body(new Instrumentation())) match {
+      case Failure(NonFatal(e)) =>
+        instr.logFailure(e)
+        throw e
+      case Success(model) =>
+        instr.logSuccess(model)
+        model
+    }
+  }
 }
 
 /**
@@ -193,7 +235,7 @@ private[spark] object Instrumentation {
  * will log via it, otherwise will log via common logger.
  */
 private[spark] class OptionalInstrumentation private(
-    val instrumentation: Option[Instrumentation[_ <: Estimator[_]]],
+    val instrumentation: Option[Instrumentation],
     val className: String) extends Logging {
 
   protected override def logName: String = className
@@ -225,7 +267,7 @@ private[spark] object OptionalInstrumentation {
   /**
    * Creates an `OptionalInstrumentation` object from an existing `Instrumentation` object.
    */
-  def create[E <: Estimator[_]](instr: Instrumentation[E]): OptionalInstrumentation = {
+  def create(instr: Instrumentation): OptionalInstrumentation = {
     new OptionalInstrumentation(Some(instr),
       instr.estimator.getClass.getName.stripSuffix("$"))
   }
