@@ -225,7 +225,7 @@ If you are building PySpark and wish to run the PySpark tests you will need to b
 If you are building PySpark with SBT and wish to run the PySpark tests, you will need to build Spark with Hive support and also build the test components:
 
     ./build/sbt -Phive clean package
-    ./build/sbt sql/test:compile
+    ./build/sbt test:compile
     ./python/run-tests
 
 The run-tests script also can be limited to a specific Python version or a specific module
