@@ -183,7 +183,7 @@ class UnivocityParser(
     }
   }
 
-  private lazy val doParse = if (schema.nonEmpty) {
+  private val doParse = if (schema.nonEmpty) {
     (input: String) => convert(tokenizer.parseLine(input))
   } else {
     // If `columnPruning` enabled and partition attributes scanned only,
