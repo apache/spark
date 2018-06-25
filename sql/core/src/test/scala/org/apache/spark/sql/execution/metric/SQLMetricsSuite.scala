@@ -519,21 +519,21 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
 
   test("writing metrics from multiple threads") {
     implicit val ec: ExecutionContextExecutor = ExecutionContext.global
-    val nThreads = 1000
+    val nFutures = 1000
     val nAdds = 100
     val acc = new SQLMetric("test", -10)
     assert(acc.isZero() === true)
     acc.set(0)
-    val l = for ( i <- 1 to nThreads ) yield {
+    val l = for ( i <- 1 to nFutures ) yield {
       Future {
         for (j <- 1 to nAdds) acc.add(1)
         i
       }
     }
     for (futures <- Future.sequence(l)) {
-      assert(nThreads === futures.length)
+      assert(nFutures === futures.length)
       assert(!acc.isZero())
-      assert(nThreads * nAdds === acc.value)
+      assert(nFutures * nAdds === acc.value)
       acc.reset()
       assert(acc.isZero())
     }
