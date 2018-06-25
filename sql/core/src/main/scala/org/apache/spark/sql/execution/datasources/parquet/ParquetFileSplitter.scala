@@ -59,7 +59,9 @@ class ParquetMetadataFileSplitter(
   extends ParquetFileSplitter
   with Logging {
 
-  private val int96AsTimestamp = session.sessionState.conf.isParquetINT96AsTimestamp
+  private val parquetFilters = new ParquetFilters(
+    session.sessionState.conf.parquetFilterPushDownDate,
+    session.sessionState.conf.isParquetINT96AsTimestamp)
 
   private val referencedFiles = blocks.map(bmd => new Path(root, bmd.getPath)).toSet
 
@@ -104,9 +106,7 @@ class ParquetMetadataFileSplitter(
   private def applyParquetFilter(
       filters: Seq[Filter],
       blocks: Seq[BlockMetaData]): Seq[BlockMetaData] = {
-    val predicates = filters.flatMap {
-      ParquetFilters.createFilter(schema, _, int96AsTimestamp)
-    }
+    val predicates = filters.flatMap(parquetFilters.createFilter(schema, _))
     if (predicates.nonEmpty) {
       // Asynchronously build bitmaps
       Future {
@@ -127,14 +127,13 @@ class ParquetMetadataFileSplitter(
         .filter(filterSets.getIfPresent(_) == null)
         .flatMap { filter =>
           val bitmap = new RoaringBitmap
-          ParquetFilters.createFilter(schema, filter, int96AsTimestamp)
-            .map((filter, _, bitmap))
+          parquetFilters.createFilter(schema, filter).map((filter, _, bitmap))
         }
       var i = 0
       val blockLen = blocks.size
       while (i < blockLen) {
         val bmd = blocks(i)
-        sets.foreach { case (filter, parquetFilter, bitmap) =>
+        sets.foreach { case (_, parquetFilter, bitmap) =>
           if (!StatisticsFilter.canDrop(parquetFilter, bmd.getColumns)) {
             bitmap.add(i)
           }

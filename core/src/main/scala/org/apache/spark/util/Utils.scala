@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.{Byte => JByte}
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
@@ -26,11 +27,11 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.GZIPInputStream
-import javax.net.ssl.HttpsURLConnection
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -44,6 +45,7 @@ import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.google.common.hash.HashCodes
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
@@ -2689,6 +2691,30 @@ private[spark] object Utils extends Logging {
 
     s"k8s://$resolvedURL"
   }
+
+  /**
+   * Replaces all the {{EXECUTOR_ID}} occurrences with the Executor Id
+   * and {{APP_ID}} occurrences with the App Id.
+   */
+  def substituteAppNExecIds(opt: String, appId: String, execId: String): String = {
+    opt.replace("{{APP_ID}}", appId).replace("{{EXECUTOR_ID}}", execId)
+  }
+
+  /**
+   * Replaces all the {{APP_ID}} occurrences with the App Id.
+   */
+  def substituteAppId(opt: String, appId: String): String = {
+    opt.replace("{{APP_ID}}", appId)
+  }
+
+  def createSecret(conf: SparkConf): String = {
+    val bits = conf.get(AUTH_SECRET_BIT_LENGTH)
+    val rnd = new SecureRandom()
+    val secretBytes = new Array[Byte](bits / JByte.SIZE)
+    rnd.nextBytes(secretBytes)
+    HashCodes.fromBytes(secretBytes).toString()
+  }
+
 }
 
 private[util] object CallerContext extends Logging {

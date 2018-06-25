@@ -276,7 +276,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("sort_array function") {
+  test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
       (Array.empty[Int], Array.empty[String]),
@@ -286,28 +286,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(sort_array($"a"), sort_array($"b")),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.select(sort_array($"a", false), sort_array($"b", false)),
       Seq(
         Row(Seq(3, 2, 1), Seq("c", "b", "a")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.selectExpr("sort_array(a)", "sort_array(b)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.selectExpr("sort_array(a, true)", "sort_array(b, false)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("c", "b", "a")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
 
@@ -323,6 +323,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df3 = Seq(("xxx", "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {
       df3.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("only supports array input"))
+
+    checkAnswer(
+      df.select(array_sort($"a"), array_sort($"b")),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("array_sort(a)", "array_sort(b)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+
+    checkAnswer(
+      df2.selectExpr("array_sort(a)"),
+      Seq(Row(Seq[Seq[Int]](Seq(1), Seq(2), Seq(2, 4), null)))
+    )
+
+    assert(intercept[AnalysisException] {
+      df3.selectExpr("array_sort(a)").collect()
     }.getMessage().contains("only supports array input"))
   }
 
@@ -340,6 +364,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("size(a)"),
       Seq(Row(2), Row(0), Row(3), Row(-1))
+    )
+
+    checkAnswer(
+      df.selectExpr("cardinality(a)"),
+      Seq(Row(2L), Row(0L), Row(3L), Row(-1L))
     )
   }
 
@@ -411,6 +440,45 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+  }
+
+  test("slice function") {
+    val df = Seq(
+      Seq(1, 2, 3),
+      Seq(4, 5)
+    ).toDF("x")
+
+    val answer = Seq(Row(Seq(2, 3)), Row(Seq(5)))
+
+    checkAnswer(df.select(slice(df("x"), 2, 2)), answer)
+    checkAnswer(df.selectExpr("slice(x, 2, 2)"), answer)
+
+    val answerNegative = Seq(Row(Seq(3)), Row(Seq(5)))
+    checkAnswer(df.select(slice(df("x"), -1, 1)), answerNegative)
+    checkAnswer(df.selectExpr("slice(x, -1, 1)"), answerNegative)
+  }
+
+  test("array_join function") {
+    val df = Seq(
+      (Seq[String]("a", "b"), ","),
+      (Seq[String]("a", null, "b"), ","),
+      (Seq.empty[String], ",")
+    ).toDF("x", "delimiter")
+
+    checkAnswer(
+      df.select(array_join(df("x"), ";")),
+      Seq(Row("a;b"), Row("a;b"), Row(""))
+    )
+    checkAnswer(
+      df.select(array_join(df("x"), ";", "NULL")),
+      Seq(Row("a;b"), Row("a;NULL;b"), Row(""))
+    )
+    checkAnswer(
+      df.selectExpr("array_join(x, delimiter)"),
+      Seq(Row("a,b"), Row("a,b"), Row("")))
+    checkAnswer(
+      df.selectExpr("array_join(x, delimiter, 'NULL')"),
+      Seq(Row("a,b"), Row("a,NULL,b"), Row("")))
   }
 
   test("array_min function") {
@@ -688,6 +756,90 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     intercept[AnalysisException] {
       df.selectExpr("concat(i1, array(i1, i2))")
+    }
+
+    val e = intercept[AnalysisException] {
+      df.selectExpr("concat(map(1, 2), map(3, 4))")
+    }
+    assert(e.getMessage.contains("string, binary or array"))
+  }
+
+  test("flatten function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
+    val oneRowDF = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
+
+    // Test cases with a primitive type
+    val intDF = Seq(
+      (Seq(Seq(1, 2, 3), Seq(4, 5), Seq(6))),
+      (Seq(Seq(1, 2))),
+      (Seq(Seq(1), Seq.empty)),
+      (Seq(Seq.empty, Seq(1))),
+      (Seq(Seq.empty, Seq.empty)),
+      (Seq(Seq(1), null)),
+      (Seq(null, Seq(1))),
+      (Seq(null, null))
+    ).toDF("i")
+
+    val intDFResult = Seq(
+      Row(Seq(1, 2, 3, 4, 5, 6)),
+      Row(Seq(1, 2)),
+      Row(Seq(1)),
+      Row(Seq(1)),
+      Row(Seq.empty),
+      Row(null),
+      Row(null),
+      Row(null))
+
+    checkAnswer(intDF.select(flatten($"i")), intDFResult)
+    checkAnswer(intDF.filter(dummyFilter($"i"))select(flatten($"i")), intDFResult)
+    checkAnswer(intDF.selectExpr("flatten(i)"), intDFResult)
+    checkAnswer(
+      oneRowDF.selectExpr("flatten(array(arr, array(null, 5), array(6, null)))"),
+      Seq(Row(Seq(1, 2, 3, null, 5, 6, null))))
+
+    // Test cases with non-primitive types
+    val strDF = Seq(
+      (Seq(Seq("a", "b"), Seq("c"), Seq("d", "e", "f"))),
+      (Seq(Seq("a", "b"))),
+      (Seq(Seq("a", null), Seq(null, "b"), Seq(null, null))),
+      (Seq(Seq("a"), Seq.empty)),
+      (Seq(Seq.empty, Seq("a"))),
+      (Seq(Seq.empty, Seq.empty)),
+      (Seq(Seq("a"), null)),
+      (Seq(null, Seq("a"))),
+      (Seq(null, null))
+    ).toDF("s")
+
+    val strDFResult = Seq(
+      Row(Seq("a", "b", "c", "d", "e", "f")),
+      Row(Seq("a", "b")),
+      Row(Seq("a", null, null, "b", null, null)),
+      Row(Seq("a")),
+      Row(Seq("a")),
+      Row(Seq.empty),
+      Row(null),
+      Row(null),
+      Row(null))
+
+    checkAnswer(strDF.select(flatten($"s")), strDFResult)
+    checkAnswer(strDF.filter(dummyFilter($"s")).select(flatten($"s")), strDFResult)
+    checkAnswer(strDF.selectExpr("flatten(s)"), strDFResult)
+    checkAnswer(
+      oneRowDF.selectExpr("flatten(array(array(arr, arr), array(arr)))"),
+      Seq(Row(Seq(Seq(1, 2, 3), Seq(1, 2, 3), Seq(1, 2, 3)))))
+
+    // Error test cases
+    intercept[AnalysisException] {
+      oneRowDF.select(flatten($"arr"))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.select(flatten($"i"))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.select(flatten($"s"))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("flatten(null)")
     }
   }
 

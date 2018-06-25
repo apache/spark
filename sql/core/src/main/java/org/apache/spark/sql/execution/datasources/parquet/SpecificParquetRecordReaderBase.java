@@ -26,7 +26,6 @@ import static org.apache.parquet.hadoop.ParquetInputFormat.DICTIONARY_FILTERING_
 import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
 
 import com.google.common.collect.ImmutableList;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -303,7 +302,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       return new RLEIntIterator(
           new RunLengthBitPackingHybridDecoder(
               BytesUtils.getWidthFromMaxInt(maxLevel),
-              new ByteArrayInputStream(bytes.toByteArray())));
+              bytes.toInputStream()));
     } catch (IOException e) {
       throw new IOException("could not read levels in page for col " + descriptor, e);
     }

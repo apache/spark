@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.language.existentials
 import scala.util.Random
 
 import org.dmg.pmml.{ClusteringModel, PMML}
@@ -25,8 +26,8 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans,
-  KMeansModel => MLlibKMeansModel}
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
@@ -198,6 +199,23 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(e.getCause.isInstanceOf[AssertionError])
     assert(e.getCause.getMessage.contains("Cosine distance is not defined"))
   }
+
+  test("KMean with Array input") {
+    def trainAndComputeCost(dataset: Dataset[_]): Double = {
+      val model = new KMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
+      model.computeCost(dataset)
+    }
+
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val trueCost = trainAndComputeCost(newDataset)
+    val doubleArrayCost = trainAndComputeCost(newDatasetD)
+    val floatArrayCost = trainAndComputeCost(newDatasetF)
+
+    // checking the cost is fine enough as a sanity check
+    assert(trueCost ~== doubleArrayCost absTol 1e-6)
+    assert(trueCost ~== floatArrayCost absTol 1e-6)
+  }
+
 
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {

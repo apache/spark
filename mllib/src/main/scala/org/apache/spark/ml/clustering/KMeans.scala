@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
@@ -92,7 +92,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
@@ -125,8 +125,11 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
+
     val predictUDF = udf((vector: Vector) => predict(vector))
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+
+    dataset.withColumn($(predictionCol),
+      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
   }
 
   @Since("1.5.0")
@@ -146,10 +149,8 @@ class KMeansModel private[ml] (
   // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
-    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    val data: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
-      case Row(point: Vector) => OldVectors.fromML(point)
-    }
+    SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
+    val data = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
     parentModel.computeCost(data)
   }
 
@@ -264,7 +265,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
         sparkSession.read.parquet(dataPath).as[OldData].head().clusterCenters
       }
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -335,9 +336,7 @@ class KMeans @Since("1.5.0") (
     transformSchema(dataset.schema, logging = true)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
-      case Row(point: Vector) => OldVectors.fromML(point)
-    }
+    val instances = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
 
     if (handlePersistence) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)

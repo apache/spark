@@ -189,6 +189,11 @@ NULL
 #'              the map or array of maps.
 #'          \item \code{from_json}: it is the column containing the JSON string.
 #'          }
+#' @param value A value to compute on.
+#'          \itemize{
+#'          \item \code{array_contains}: a value to be checked if contained in the column.
+#'          \item \code{array_position}: a value to locate in the given array.
+#'          }
 #' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
 #'            additional named properties to control how it is converted, accepts the same
 #'            options as the JSON data source.
@@ -201,14 +206,22 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
+#' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
+#' head(select(tmp, array_position(tmp$v1, 21), array_sort(tmp$v1)))
+#' head(select(tmp, flatten(tmp$v1), reverse(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
+#' head(select(tmp, slice(tmp$v1, 2L, 2L)))
 #' head(select(tmp, sort_array(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
 #' head(select(tmp3, map_keys(tmp3$v3)))
-#' head(select(tmp3, map_values(tmp3$v3)))}
+#' head(select(tmp3, map_values(tmp3$v3)))
+#' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
+#' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$hp))
+#' head(select(tmp4, concat(tmp4$v4, tmp4$v5)))
+#' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))}
 NULL
 
 #' Window functions for Column operations
@@ -796,6 +809,8 @@ setMethod("factorial",
 #'
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#' Note: the function is non-deterministic because its results depends on order of rows which
+#' may be non-deterministic after a shuffle.
 #'
 #' @param na.rm a logical value indicating whether NA values should be stripped
 #'        before the computation proceeds.
@@ -939,6 +954,8 @@ setMethod("kurtosis",
 #'
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#' Note: the function is non-deterministic because its results depends on order of rows which
+#' may be non-deterministic after a shuffle.
 #'
 #' @param x column to compute on.
 #' @param na.rm a logical value indicating whether NA values should be stripped
@@ -1192,6 +1209,7 @@ setMethod("minute",
 #' 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
 #' This is equivalent to the MONOTONICALLY_INCREASING_ID function in SQL.
 #' The method should be used with no argument.
+#' Note: the function is non-deterministic because its result depends on partition IDs.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases monotonically_increasing_id monotonically_increasing_id,missing-method
@@ -1245,9 +1263,9 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{reverse}: Reverses the string column and returns it as a new string column.
+#' \code{reverse}: Returns a reversed string or an array with reverse order of elements.
 #'
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @aliases reverse reverse,Column-method
 #' @note reverse since 1.5.0
 setMethod("reverse",
@@ -1898,6 +1916,7 @@ setMethod("atan2", signature(y = "Column"),
 
 #' @details
 #' \code{datediff}: Returns the number of days from \code{y} to \code{x}.
+#' If \code{y} is later than \code{x} then the result is positive.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases datediff datediff,Column-method
@@ -1957,7 +1976,10 @@ setMethod("levenshtein", signature(y = "Column"),
           })
 
 #' @details
-#' \code{months_between}: Returns number of months between dates \code{y} and \code{x}.
+#' \code{months_between}: Returns number of months between dates \code{y} and \code{x}. 
+#' If \code{y} is later than \code{x}, then the result is positive. If \code{y} and \code{x}
+#' are on the same day of month, or both are the last day of month, time of day will be ignored.
+#' Otherwise, the difference is calculated based on 31 days per month, and rounded to 8 digits.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases months_between months_between,Column-method
@@ -2036,20 +2058,10 @@ setMethod("countDistinct",
 
 #' @details
 #' \code{concat}: Concatenates multiple input columns together into a single column.
-#' If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
+#' The function works with strings, binary and compatible array columns.
 #'
-#' @rdname column_string_functions
+#' @rdname column_collection_functions
 #' @aliases concat concat,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' # concatenate strings
-#' tmp <- mutate(df, s1 = concat(df$Class, df$Sex),
-#'                   s2 = concat(df$Class, df$Sex, df$Age),
-#'                   s3 = concat(df$Class, df$Sex, df$Age, df$Class),
-#'                   s4 = concat_ws("_", df$Class, df$Sex),
-#'                   s5 = concat_ws("+", df$Class, df$Sex, df$Age, df$Survived))
-#' head(tmp)}
 #' @note concat since 1.5.0
 setMethod("concat",
           signature(x = "Column"),
@@ -2390,6 +2402,13 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
 #' @param sep separator to use.
 #' @rdname column_string_functions
 #' @aliases concat_ws concat_ws,character,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' # concatenate strings
+#' tmp <- mutate(df, s1 = concat_ws("_", df$Class, df$Sex),
+#'                   s2 = concat_ws("+", df$Class, df$Sex, df$Age, df$Survived))
+#' head(tmp)}
 #' @note concat_ws since 1.5.0
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
@@ -2575,6 +2594,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' @details
 #' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
 #' samples from U[0.0, 1.0].
+#' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
 #' @param seed a random seed. Can be missing.
@@ -2603,6 +2623,7 @@ setMethod("rand", signature(seed = "numeric"),
 #' @details
 #' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples
 #' from the standard normal distribution.
+#' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases randn randn,missing-method
@@ -2975,7 +2996,6 @@ setMethod("row_number",
 #' \code{array_contains}: Returns null if the array is null, true if the array contains
 #' the value, and false otherwise.
 #'
-#' @param value a value to be checked if contained in the column
 #' @rdname column_collection_functions
 #' @aliases array_contains array_contains,Column-method
 #' @note array_contains since 1.6.0
@@ -2983,6 +3003,76 @@ setMethod("array_contains",
           signature(x = "Column", value = "ANY"),
           function(x, value) {
             jc <- callJStatic("org.apache.spark.sql.functions", "array_contains", x@jc, value)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_max}: Returns the maximum value of the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_max array_max,Column-method
+#' @note array_max since 2.4.0
+setMethod("array_max",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_max", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_min}: Returns the minimum value of the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_min array_min,Column-method
+#' @note array_min since 2.4.0
+setMethod("array_min",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_min", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_position}: Locates the position of the first occurrence of the given value
+#' in the given array. Returns NA if either of the arguments are NA.
+#' Note: The position is not zero based, but 1 based index. Returns 0 if the given
+#' value could not be found in the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_position array_position,Column-method
+#' @note array_position since 2.4.0
+setMethod("array_position",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_position", x@jc, value)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_sort}: Sorts the input array in ascending order. The elements of the input array
+#' must be orderable. NA elements will be placed at the end of the returned array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_sort array_sort,Column-method
+#' @note array_sort since 2.4.0
+setMethod("array_sort",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{flatten}: Creates a single array from an array of arrays.
+#' If a structure of nested arrays is deeper than two levels, only one level of nesting is removed.
+#'
+#' @rdname column_collection_functions
+#' @aliases flatten flatten,Column-method
+#' @note flatten since 2.4.0
+setMethod("flatten",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "flatten", x@jc)
             column(jc)
           })
 
@@ -3013,6 +3103,22 @@ setMethod("map_values",
           })
 
 #' @details
+#' \code{element_at}: Returns element of array at given index in \code{extraction} if
+#' \code{x} is array. Returns value for the given key in \code{extraction} if \code{x} is map.
+#' Note: The position is not zero based, but 1 based index.
+#'
+#' @param extraction index to check for in array or key to check for in map
+#' @rdname column_collection_functions
+#' @aliases element_at element_at,Column-method
+#' @note element_at since 2.4.0
+setMethod("element_at",
+          signature(x = "Column", extraction = "ANY"),
+          function(x, extraction) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "element_at", x@jc, extraction)
+            column(jc)
+          })
+
+#' @details
 #' \code{explode}: Creates a new row for each element in the given array or map column.
 #'
 #' @rdname column_collection_functions
@@ -3039,8 +3145,25 @@ setMethod("size",
           })
 
 #' @details
-#' \code{sort_array}: Sorts the input array in ascending or descending order according
-#' to the natural ordering of the array elements.
+#' \code{slice}: Returns an array containing all the elements in x from the index start
+#' (or starting from the end if start is negative) with the specified length.
+#'
+#' @rdname column_collection_functions
+#' @param start an index indicating the first element occuring in the result.
+#' @param length a number of consecutive elements choosen to the result.
+#' @aliases slice slice,Column-method
+#' @note slice since 2.4.0
+setMethod("slice",
+          signature(x = "Column"),
+          function(x, start, length) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "slice", x@jc, start, length)
+            column(jc)
+          })
+
+#' @details
+#' \code{sort_array}: Sorts the input array in ascending or descending order according to
+#' the natural ordering of the array elements. NA elements will be placed at the beginning of
+#' the returned array in ascending order or at the end of the returned array in descending order.
 #'
 #' @rdname column_collection_functions
 #' @param asc a logical flag indicating the sorting order.
@@ -3109,6 +3232,8 @@ setMethod("create_map",
 
 #' @details
 #' \code{collect_list}: Creates a list of objects with duplicates.
+#' Note: the function is non-deterministic because the order of collected results depends
+#' on order of rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_list collect_list,Column-method
@@ -3128,6 +3253,8 @@ setMethod("collect_list",
 
 #' @details
 #' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
+#' Note: the function is non-deterministic because the order of collected results depends
+#' on order of rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_set collect_set,Column-method

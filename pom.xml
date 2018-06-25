@@ -114,7 +114,7 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.5.2</maven.version>
+    <maven.version>3.5.4</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.25</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -130,7 +130,7 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.12.1.1</derby.version>
-    <parquet.version>1.9.1-palantir3</parquet.version>
+    <parquet.version>1.10.1-palantir.1</parquet.version>
     <feign.version>8.18.0</feign.version>
     <okhttp3.version>3.9.1</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
@@ -2114,6 +2114,12 @@
         <artifactId>parquet-hadoop</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-pool</groupId>
+            <artifactId>commons-pool</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.parquet</groupId>
@@ -3074,6 +3080,15 @@
           </dependency>
         </dependencies>
       </dependencyManagement>
+    </profile>
+
+    <profile>
+      <id>hadoop-3.1</id>
+      <properties>
+        <hadoop.version>3.1.0</hadoop.version>
+        <curator.version>2.12.0</curator.version>
+        <zookeeper.version>3.4.9</zookeeper.version>
+      </properties>
     </profile>
 
     <profile>

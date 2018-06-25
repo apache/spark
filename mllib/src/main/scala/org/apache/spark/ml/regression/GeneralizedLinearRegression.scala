@@ -404,7 +404,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
-      val wlsModel = optimizer.fit(instances)
+      val wlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
@@ -418,10 +418,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
             OffsetInstance(label, weight, offset, features)
         }
       // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
-      val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
+      val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam),
+        instr = OptionalInstrumentation.create(instr))
       val optimizer = new IterativelyReweightedLeastSquares(initialModel,
         familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
-      val irlsModel = optimizer.fit(instances)
+      val irlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
           .setParent(this))
@@ -492,7 +493,10 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     def initialize(
         instances: RDD[OffsetInstance],
         fitIntercept: Boolean,
-        regParam: Double): WeightedLeastSquaresModel = {
+        regParam: Double,
+        instr: OptionalInstrumentation = OptionalInstrumentation.create(
+          classOf[GeneralizedLinearRegression])
+      ): WeightedLeastSquaresModel = {
       val newInstances = instances.map { instance =>
         val mu = family.initialize(instance.label, instance.weight)
         val eta = predict(mu) - instance.offset
@@ -501,7 +505,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val initialModel = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
-        .fit(newInstances)
+        .fit(newInstances, instr)
       initialModel
     }
 
@@ -1146,7 +1150,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
 
       val model = new GeneralizedLinearRegressionModel(metadata.uid, coefficients, intercept)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

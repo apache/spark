@@ -45,8 +45,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val inMemoryRelation = InMemoryRelation(useCompression = true, 5, storageLevel, plan, None,
       data.logicalPlan)
 
-    assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
-    inMemoryRelation.cachedColumnBuffers.collect().head match {
+    assert(inMemoryRelation.cacheBuilder.cachedColumnBuffers.getStorageLevel == storageLevel)
+    inMemoryRelation.cacheBuilder.cachedColumnBuffers.collect().head match {
       case _: CachedBatch =>
       case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
     }
@@ -337,7 +337,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
+    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
   }
 
   test("access primitive-type columns in CachedBatch without whole stage codegen") {
@@ -503,7 +503,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
             case plan: InMemoryRelation => plan
           }.head
           // InMemoryRelation's stats is file size before the underlying RDD is materialized
-          assert(inMemoryRelation.computeStats().sizeInBytes === 700)
+          assert(inMemoryRelation.computeStats().sizeInBytes === 822)
 
           // InMemoryRelation's stats is updated after materializing RDD
           dfFromFile.collect()
@@ -516,7 +516,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
           // Even CBO enabled, InMemoryRelation's stats keeps as the file size before table's stats
           // is calculated
-          assert(inMemoryRelation2.computeStats().sizeInBytes === 700)
+          assert(inMemoryRelation2.computeStats().sizeInBytes === 822)
 
           // InMemoryRelation's stats should be updated after calculating stats of the table
           // clear cache to simulate a fresh environment

@@ -15,21 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
+import org.apache.spark.sql.sources.v2.reader.InputPartitionReader;
 
 /**
- * A mix-in interface for {@link DataReaderFactory}. Continuous data reader factories can
- * implement this interface to provide creating {@link DataReader} with particular offset.
+ * A variation on {@link InputPartitionReader} for use with streaming in continuous processing mode.
  */
 @InterfaceStability.Evolving
-public interface ContinuousDataReaderFactory<T> extends DataReaderFactory<T> {
-  /**
-   * Create a DataReader with particular offset as its startOffset.
-   *
-   * @param offset offset want to set as the DataReader's startOffset.
-   */
-  DataReader<T> createDataReaderWithOffset(PartitionOffset offset);
+public interface ContinuousInputPartitionReader<T> extends InputPartitionReader<T> {
+    /**
+     * Get the offset of the current record, or the start offset if no records have been read.
+     *
+     * The execution engine will call this method along with get() to keep track of the current
+     * offset. When an epoch ends, the offset of the previous record in each partition will be saved
+     * as a restart checkpoint.
+     */
+    PartitionOffset getOffset();
 }

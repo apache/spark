@@ -86,10 +86,13 @@ object RRunner extends CondaRunner with Logging {
     // Java system properties etc.
     val sparkRBackend = new RBackend()
     @volatile var sparkRBackendPort = 0
+    @volatile var sparkRBackendSecret: String = null
     val initialized = new Semaphore(0)
     val sparkRBackendThread = new Thread("SparkR backend") {
       override def run() {
-        sparkRBackendPort = sparkRBackend.init()
+        val (port, authHelper) = sparkRBackend.init()
+        sparkRBackendPort = port
+        sparkRBackendSecret = authHelper.secret
         initialized.release()
         sparkRBackend.run()
       }
@@ -111,6 +114,7 @@ object RRunner extends CondaRunner with Logging {
         env.put("SPARKR_PACKAGE_DIR", rPackageDir.mkString(","))
         env.put("R_PROFILE_USER",
           Seq(rPackageDir(0), "SparkR", "profile", "general.R").mkString(File.separator))
+        env.put("SPARKR_BACKEND_AUTH_SECRET", sparkRBackendSecret)
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
         val process = builder.start()
 

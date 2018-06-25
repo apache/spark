@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.sql.Date
+import java.sql.{Date, Timestamp}
 
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.Operators.{Column, SupportsEqNotEq, SupportsLtGt}
@@ -31,33 +31,9 @@ import org.apache.spark.sql.types._
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] object ParquetFilters {
+private[parquet] class ParquetFilters(pushDownDate: Boolean, int96AsTimestamp: Boolean) {
 
   import ParquetColumns._
-
-  case class SetInFilter[T <: Comparable[T]](valueSet: Set[T])
-    extends UserDefinedPredicate[T] with Serializable {
-
-    override def keep(value: T): Boolean = {
-      value != null && valueSet.contains(value)
-    }
-
-    // Drop when no value in the set is within the statistics range.
-    override def canDrop(statistics: Statistics[T]): Boolean = {
-      val statMax = statistics.getMax
-      val statMin = statistics.getMin
-      val statRange = com.google.common.collect.Range.closed(statMin, statMax)
-      !valueSet.exists(value => statRange.contains(value))
-    }
-
-    // Can only drop not(in(set)) when we are know that every element in the block is in valueSet.
-    // From the statistics, we can only be assured of this when min == max.
-    override def inverseCanDrop(statistics: Statistics[T]): Boolean = {
-      val statMax = statistics.getMax
-      val statMin = statistics.getMin
-      statMin == statMax && valueSet.contains(statMin)
-    }
-  }
 
   private val makeInSet: PartialFunction[DataType, (String, Set[Any]) => FilterPredicate] = {
     case IntegerType =>
@@ -106,7 +82,7 @@ private[parquet] object ParquetFilters {
     case TimestampType =>
       (n: String, v: Any) => FilterApi.eq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
+    case DateType if pushDownDate =>
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -134,7 +110,7 @@ private[parquet] object ParquetFilters {
     case TimestampType =>
       (n: String, v: Any) => FilterApi.notEq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
+    case DateType if pushDownDate =>
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -159,7 +135,7 @@ private[parquet] object ParquetFilters {
     case TimestampType =>
       (n: String, v: Any) => FilterApi.lt(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
+    case DateType if pushDownDate =>
       (n: String, v: Any) => FilterApi.lt(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -183,7 +159,7 @@ private[parquet] object ParquetFilters {
     case TimestampType =>
       (n: String, v: Any) => FilterApi.ltEq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
+    case DateType if pushDownDate =>
       (n: String, v: Any) => FilterApi.ltEq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -207,7 +183,7 @@ private[parquet] object ParquetFilters {
     case TimestampType =>
       (n: String, v: Any) => FilterApi.gt(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
+    case DateType if pushDownDate =>
       (n: String, v: Any) => FilterApi.gt(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
@@ -231,20 +207,20 @@ private[parquet] object ParquetFilters {
     case TimestampType =>
       (n: String, v: Any) => FilterApi.gtEq(
         longColumn(n), convertTimestamp(v.asInstanceOf[java.sql.Timestamp]))
-    case DateType =>
+    case DateType if pushDownDate =>
       (n: String, v: Any) => FilterApi.gtEq(
         intColumn(n), convertDate(v.asInstanceOf[java.sql.Date]))
   }
 
-  private def convertDate(d: java.sql.Date): java.lang.Integer = {
+  private def convertDate(d: Date): Integer = {
     if (d != null) {
-      DateTimeUtils.fromJavaDate(d).asInstanceOf[java.lang.Integer]
+      DateTimeUtils.fromJavaDate(d).asInstanceOf[Integer]
     } else {
       null
     }
   }
 
-  private def convertTimestamp(t: java.sql.Timestamp): java.lang.Long = {
+  private def convertTimestamp(t: Timestamp): java.lang.Long = {
     if (t != null) {
       DateTimeUtils.fromJavaTimestamp(t).asInstanceOf[java.lang.Long]
     } else {
@@ -273,8 +249,7 @@ private[parquet] object ParquetFilters {
    */
   def createFilter(
     schema: StructType,
-    predicate: sources.Filter,
-    int96AsTimestamp: Boolean): Option[FilterPredicate] = {
+    predicate: sources.Filter): Option[FilterPredicate] = {
     val nameToType = getFieldMap(schema, int96AsTimestamp)
 
     def canMakeFilterOn(name: String): Boolean = nameToType.contains(name)
@@ -320,18 +295,18 @@ private[parquet] object ParquetFilters {
         // Pushing one side of AND down is only safe to do at the top level.
         // You can see ParquetRelation's initializeLocalJobFunc method as an example.
         for {
-          lhsFilter <- createFilter(schema, lhs, int96AsTimestamp)
-          rhsFilter <- createFilter(schema, rhs, int96AsTimestamp)
+          lhsFilter <- createFilter(schema, lhs)
+          rhsFilter <- createFilter(schema, rhs)
         } yield FilterApi.and(lhsFilter, rhsFilter)
 
       case sources.Or(lhs, rhs) =>
         for {
-          lhsFilter <- createFilter(schema, lhs, int96AsTimestamp)
-          rhsFilter <- createFilter(schema, rhs, int96AsTimestamp)
+          lhsFilter <- createFilter(schema, lhs)
+          rhsFilter <- createFilter(schema, rhs)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
-        createFilter(schema, pred, int96AsTimestamp)
+        createFilter(schema, pred)
           .map(FilterApi.not)
           .map(LogicalInverseRewriter.rewrite)
 
@@ -340,6 +315,30 @@ private[parquet] object ParquetFilters {
 
       case _ => None
     }
+  }
+}
+
+private[parquet] case class SetInFilter[T <: Comparable[T]](valueSet: Set[T])
+  extends UserDefinedPredicate[T] with Serializable {
+
+  override def keep(value: T): Boolean = {
+    value != null && valueSet.contains(value)
+  }
+
+  // Drop when no value in the set is within the statistics range.
+  override def canDrop(statistics: Statistics[T]): Boolean = {
+    val statMax = statistics.getMax
+    val statMin = statistics.getMin
+    val statRange = com.google.common.collect.Range.closed(statMin, statMax)
+    !valueSet.exists(value => statRange.contains(value))
+  }
+
+  // Can only drop not(in(set)) when we are know that every element in the block is in valueSet.
+  // From the statistics, we can only be assured of this when min == max.
+  override def inverseCanDrop(statistics: Statistics[T]): Boolean = {
+    val statMax = statistics.getMax
+    val statMin = statistics.getMin
+    statMin == statMax && valueSet.contains(statMin)
   }
 }
 

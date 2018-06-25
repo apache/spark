@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, DataSourceReader}
+import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, InputPartition, InputPartitionReader}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -45,7 +45,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
   class Reader(path: String, conf: Configuration) extends DataSourceReader {
     override def readSchema(): StructType = schema
 
-    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
+    override def planInputPartitions(): JList[InputPartition[Row]] = {
       val dataPath = new Path(path)
       val fs = dataPath.getFileSystem(conf)
       if (fs.exists(dataPath)) {
@@ -54,9 +54,9 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
           name.startsWith("_") || name.startsWith(".")
         }.map { f =>
           val serializableConf = new SerializableConfiguration(conf)
-          new SimpleCSVDataReaderFactory(
+          new SimpleCSVInputPartitionReader(
             f.getPath.toUri.toString,
-            serializableConf): DataReaderFactory[Row]
+            serializableConf): InputPartition[Row]
         }.toList.asJava
       } else {
         Collections.emptyList()
@@ -156,14 +156,14 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
   }
 }
 
-class SimpleCSVDataReaderFactory(path: String, conf: SerializableConfiguration)
-  extends DataReaderFactory[Row] with DataReader[Row] {
+class SimpleCSVInputPartitionReader(path: String, conf: SerializableConfiguration)
+  extends InputPartition[Row] with InputPartitionReader[Row] {
 
   @transient private var lines: Iterator[String] = _
   @transient private var currentLine: String = _
   @transient private var inputStream: FSDataInputStream = _
 
-  override def createDataReader(): DataReader[Row] = {
+  override def createPartitionReader(): InputPartitionReader[Row] = {
     val filePath = new Path(path)
     val fs = filePath.getFileSystem(conf.value)
     inputStream = fs.open(filePath)

@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetColumns.{doubleColumn, intColumn}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -57,6 +56,11 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
+  import ParquetColumns._
+
+  private lazy val parquetFilters = new ParquetFilters(
+    conf.parquetFilterPushDownDate, conf.isParquetINT96AsTimestamp)
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     // Note that there are many tests here that require record-level filtering set to be true.
@@ -79,34 +83,35 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       expected: Seq[Row]): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
 
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
-      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-      ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true") {
-      val query = df
-        .select(output.map(e => Column(e)): _*)
-        .where(Column(predicate))
+    withSQLConf(
+      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+      ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        val query = df
+          .select(output.map(e => Column(e)): _*)
+          .where(Column(predicate))
 
-      var maybeRelation: Option[HadoopFsRelation] = None
-      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-        case PhysicalOperation(_, filters,
-                               LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
-          maybeRelation = Some(relation)
-          filters
-      }.flatten.reduceLeftOption(_ && _)
-      assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
+        var maybeRelation: Option[HadoopFsRelation] = None
+        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+          case PhysicalOperation(_, filters,
+                                 LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
+            maybeRelation = Some(relation)
+            filters
+        }.flatten.reduceLeftOption(_ && _)
+        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-      val (_, selectedFilters, _) =
-        DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-      assert(selectedFilters.nonEmpty, "No filter is pushed down")
+        val (_, selectedFilters, _) =
+          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+        assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-      selectedFilters.foreach { pred =>
-        val maybeFilter = ParquetFilters.createFilter(df.schema, pred,
-          spark.sessionState.conf.isParquetINT96AsTimestamp)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-        // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-        maybeFilter.exists(_.getClass === filterClass)
-      }
-      checker(stripSparkFilter(query), expected)
+        selectedFilters.foreach { pred =>
+          val maybeFilter = parquetFilters.createFilter(df.schema, pred)
+          assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+          maybeFilter.exists(_.getClass === filterClass)
+        }
+        checker(stripSparkFilter(query), expected)
     }
   }
 
@@ -519,31 +524,28 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       lt(intColumn("a"), 10: Integer),
       gt(doubleColumn("c"), 1.5: java.lang.Double)))
     ) {
-      ParquetFilters.createFilter(
+      parquetFilters.createFilter(
         schema,
         sources.And(
           sources.LessThan("a", 10),
-          sources.GreaterThan("c", 1.5D)),
-        spark.sessionState.conf.isParquetINT96AsTimestamp)
+          sources.GreaterThan("c", 1.5D)))
     }
 
     assertResult(None) {
-      ParquetFilters.createFilter(
+      parquetFilters.createFilter(
         schema,
         sources.And(
           sources.LessThan("a", 10),
-          sources.StringContains("b", "prefix")),
-        spark.sessionState.conf.isParquetINT96AsTimestamp)
+          sources.StringContains("b", "prefix")))
     }
 
     assertResult(None) {
-      ParquetFilters.createFilter(
+      parquetFilters.createFilter(
         schema,
         sources.Not(
           sources.And(
             sources.GreaterThan("a", 1),
-            sources.StringContains("b", "prefix"))),
-        spark.sessionState.conf.isParquetINT96AsTimestamp)
+            sources.StringContains("b", "prefix"))))
     }
   }
 
@@ -682,6 +684,16 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         assert(actual > 1 && actual < data.length)
       }
     }
+  }
+
+  test("SPARK-23852: Broken Parquet push-down for partially-written stats") {
+    // parquet-1217.parquet contains a single column with values -1, 0, 1, 2 and null.
+    // The row-group statistics include null counts, but not min and max values, which
+    // triggers PARQUET-1217.
+    val df = readResourceParquetFile("test-data/parquet-1217.parquet")
+
+    // Will return 0 rows if PARQUET-1217 is not fixed.
+    assert(df.where("col > 0").count() === 2)
   }
 }
 

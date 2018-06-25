@@ -192,8 +192,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
 
                 // Note: This is not true in palantir/parquet-mr and statistics are always returned
                 // and they are always unsigned.
-                assert(!(oneFooter.getFileMetaData.getCreatedBy.contains("impala") ^
-                  columnStats.isEmpty))
+                assert(oneFooter.getFileMetaData.getCreatedBy.contains("impala") ^
+                  columnStats.hasNonNullValue)
               }
 
               // These queries should return the entire dataset with the conversion applied,
