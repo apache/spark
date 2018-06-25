@@ -483,10 +483,11 @@ package object config {
 
   private[spark] val FORCE_DOWNLOAD_SCHEMES =
     ConfigBuilder("spark.yarn.dist.forceDownloadSchemes")
-      .doc("Comma-separated list of schemes for which files will be downloaded to the " +
+      .doc("Comma-separated list of schemes for which resources will be downloaded to the " +
         "local disk prior to being added to YARN's distributed cache. For use in cases " +
         "where the YARN service does not support schemes that are supported by Spark, like http, " +
-        "https and ftp.")
+        "https and ftp, or jars required to add to local YARN client's classpath. Wildcard '*' is" +
+        " denoted to download resources for all the schemes.")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
