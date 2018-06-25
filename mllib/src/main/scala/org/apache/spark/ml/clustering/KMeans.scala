@@ -342,7 +342,7 @@ class KMeans @Since("1.5.0") (
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
       maxIter, seed, tol)
     val algo = new MLlibKMeans()
@@ -359,6 +359,7 @@ class KMeans @Since("1.5.0") (
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
 
     model.setSummary(Some(summary))
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
     instr.logSuccess(model)
     if (handlePersistence) {
       instances.unpersist()

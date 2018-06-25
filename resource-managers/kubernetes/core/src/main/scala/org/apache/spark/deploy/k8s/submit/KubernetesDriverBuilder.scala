@@ -16,11 +16,17 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+<<<<<<< HEAD
 import java.io.File
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, LocalDirsFeatureStep, MountLocalFilesFeatureStep, MountSecretsFeatureStep}
 import org.apache.spark.util.Utils
+=======
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeatureConfigStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
+>>>>>>> master
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -33,6 +39,7 @@ private[spark] class KubernetesDriverBuilder(
     provideSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountSecretsFeatureStep) =
       new MountSecretsFeatureStep(_),
+<<<<<<< HEAD
     provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => LocalDirsFeatureStep) =
       new LocalDirsFeatureStep(_),
@@ -40,6 +47,22 @@ private[spark] class KubernetesDriverBuilder(
       => MountLocalFilesFeatureStep) =
     new MountLocalFilesFeatureStep(_)) {
   import KubernetesDriverBuilder._
+=======
+    provideEnvSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => EnvSecretsFeatureStep) =
+    new EnvSecretsFeatureStep(_),
+    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => LocalDirsFeatureStep) =
+      new LocalDirsFeatureStep(_),
+    provideJavaStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+        => JavaDriverFeatureStep) =
+      new JavaDriverFeatureStep(_),
+    providePythonStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+      => PythonDriverFeatureStep) =
+      new PythonDriverFeatureStep(_)) {
+>>>>>>> master
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -48,9 +71,29 @@ private[spark] class KubernetesDriverBuilder(
       provideCredentialsStep(kubernetesConf),
       provideServiceStep(kubernetesConf),
       provideLocalDirsStep(kubernetesConf))
+<<<<<<< HEAD
     val withProvideSecretsStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
       baseFeatures ++ Seq(provideSecretsStep(kubernetesConf))
     } else baseFeatures
+=======
+
+    val maybeRoleSecretNamesStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
+      Some(provideSecretsStep(kubernetesConf)) } else None
+
+    val maybeProvideSecretsStep = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
+      Some(provideEnvSecretsStep(kubernetesConf)) } else None
+
+    val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
+        case JavaMainAppResource(_) =>
+          provideJavaStep(kubernetesConf)
+        case PythonMainAppResource(_) =>
+          providePythonStep(kubernetesConf)}.getOrElse(provideJavaStep(kubernetesConf))
+
+    val allFeatures: Seq[KubernetesFeatureConfigStep] =
+      (baseFeatures :+ bindingsStep) ++
+        maybeRoleSecretNamesStep.toSeq ++
+        maybeProvideSecretsStep.toSeq
+>>>>>>> master
 
     val sparkFiles = kubernetesConf.sparkFiles()
     val localFiles = KubernetesUtils.submitterLocalFiles(sparkFiles).map(new File(_))

@@ -261,8 +261,9 @@ class BisectingKMeans @Since("2.0.0") (
     transformSchema(dataset.schema, logging = true)
     val rdd = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
 
-    val instr = Instrumentation.create(this, rdd)
-    instr.logParams(featuresCol, predictionCol, k, maxIter, seed, minDivisibleClusterSize)
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(featuresCol, predictionCol, k, maxIter, seed,
+      minDivisibleClusterSize, distanceMeasure)
 
     val bkm = new MLlibBisectingKMeans()
       .setK($(k))
@@ -275,6 +276,7 @@ class BisectingKMeans @Since("2.0.0") (
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
     instr.logSuccess(model)
     model
   }

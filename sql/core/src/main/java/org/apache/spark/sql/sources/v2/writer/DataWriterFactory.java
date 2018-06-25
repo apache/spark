@@ -35,7 +35,7 @@ public interface DataWriterFactory<T> extends Serializable {
   /**
    * Returns a data writer to do the actual writing work.
    *
-   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    *
    * @param partitionId A unique id of the RDD partition that the returned writer will process.

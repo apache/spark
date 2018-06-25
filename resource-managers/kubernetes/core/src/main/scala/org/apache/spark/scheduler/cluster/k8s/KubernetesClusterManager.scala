@@ -17,7 +17,9 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 
+import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.{SparkContext, SparkException}
@@ -26,7 +28,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SystemClock, ThreadUtils}
 
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
 
@@ -56,17 +58,45 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
 
-    val allocatorExecutor = ThreadUtils
-      .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
       "kubernetes-executor-requests")
+
+    val subscribersExecutor = ThreadUtils
+      .newDaemonThreadPoolScheduledExecutor(
+        "kubernetes-executor-snapshots-subscribers", 2)
+    val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor)
+    val removedExecutorsCache = CacheBuilder.newBuilder()
+      .expireAfterWrite(3, TimeUnit.MINUTES)
+      .build[java.lang.Long, java.lang.Long]()
+    val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
+      sc.conf,
+      new KubernetesExecutorBuilder(),
+      kubernetesClient,
+      snapshotsStore,
+      removedExecutorsCache)
+
+    val executorPodsAllocator = new ExecutorPodsAllocator(
+      sc.conf, new KubernetesExecutorBuilder(), kubernetesClient, snapshotsStore, new SystemClock())
+
+    val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
+      snapshotsStore,
+      kubernetesClient)
+
+    val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "kubernetes-executor-pod-polling-sync")
+    val podsPollingEventSource = new ExecutorPodsPollingSnapshotSource(
+      sc.conf, kubernetesClient, snapshotsStore, eventsPollingExecutor)
+
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
       sc.env.rpcEnv,
-      new KubernetesExecutorBuilder,
       kubernetesClient,
-      allocatorExecutor,
-      requestExecutorsService)
+      requestExecutorsService,
+      snapshotsStore,
+      executorPodsAllocator,
+      executorPodsLifecycleEventHandler,
+      podsWatchEventSource,
+      podsPollingEventSource)
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {

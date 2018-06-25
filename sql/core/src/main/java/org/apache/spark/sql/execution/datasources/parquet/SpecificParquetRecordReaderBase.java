@@ -18,6 +18,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+<<<<<<< HEAD
 import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
@@ -26,6 +27,8 @@ import static org.apache.parquet.hadoop.ParquetInputFormat.DICTIONARY_FILTERING_
 import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
 
 import com.google.common.collect.ImmutableList;
+=======
+>>>>>>> master
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -159,7 +162,17 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+<<<<<<< HEAD
     this.totalRowCount = this.reader.getRecordCount();
+=======
+    this.reader = new ParquetFileReader(
+        configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
+    // use the blocks from the reader in case some do not match filters and will not be read
+    for (BlockMetaData block : reader.getRowGroups()) {
+      this.totalRowCount += block.getRowCount();
+    }
+
+>>>>>>> master
     // For test purpose.
     // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
     // will be updated to the accumulator. So we can check if the row groups are filtered or not
@@ -234,7 +247,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(
         config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    for (BlockMetaData block : blocks) {
+    // use the blocks from the reader in case some do not match filters and will not be read
+    for (BlockMetaData block : reader.getRowGroups()) {
       this.totalRowCount += block.getRowCount();
     }
   }

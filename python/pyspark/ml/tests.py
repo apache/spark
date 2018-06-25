@@ -679,6 +679,13 @@ class FeatureTests(SparkSessionTestCase):
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
+        # with locale
+        stopwords = ["BELKİ"]
+        dataset = self.spark.createDataFrame([Row(input=["belki"])])
+        stopWordRemover.setStopWords(stopwords).setLocale("tr")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, [])
 
     def test_count_vectorizer_with_binary(self):
         dataset = self.spark.createDataFrame([
@@ -1592,6 +1599,44 @@ class PersistenceTest(SparkSessionTestCase):
 
         self.assertEqual(lr.uid, lr3.uid)
         self.assertEqual(lr.extractParamMap(), lr3.extractParamMap())
+
+    def test_default_read_write_default_params(self):
+        lr = LogisticRegression()
+        self.assertFalse(lr.isSet(lr.getParam("threshold")))
+
+        lr.setMaxIter(50)
+        lr.setThreshold(.75)
+
+        # `threshold` is set by user, default param `predictionCol` is not set by user.
+        self.assertTrue(lr.isSet(lr.getParam("threshold")))
+        self.assertFalse(lr.isSet(lr.getParam("predictionCol")))
+        self.assertTrue(lr.hasDefault(lr.getParam("predictionCol")))
+
+        writer = DefaultParamsWriter(lr)
+        metadata = json.loads(writer._get_metadata_to_save(lr, self.sc))
+        self.assertTrue("defaultParamMap" in metadata)
+
+        reader = DefaultParamsReadable.read()
+        metadataStr = json.dumps(metadata, separators=[',',  ':'])
+        loadedMetadata = reader._parseMetaData(metadataStr, )
+        reader.getAndSetParams(lr, loadedMetadata)
+
+        self.assertTrue(lr.isSet(lr.getParam("threshold")))
+        self.assertFalse(lr.isSet(lr.getParam("predictionCol")))
+        self.assertTrue(lr.hasDefault(lr.getParam("predictionCol")))
+
+        # manually create metadata without `defaultParamMap` section.
+        del metadata['defaultParamMap']
+        metadataStr = json.dumps(metadata, separators=[',',  ':'])
+        loadedMetadata = reader._parseMetaData(metadataStr, )
+        with self.assertRaisesRegexp(AssertionError, "`defaultParamMap` section not found"):
+            reader.getAndSetParams(lr, loadedMetadata)
+
+        # Prior to 2.4.0, metadata doesn't have `defaultParamMap`.
+        metadata['sparkVersion'] = '2.3.0'
+        metadataStr = json.dumps(metadata, separators=[',',  ':'])
+        loadedMetadata = reader._parseMetaData(metadataStr, )
+        reader.getAndSetParams(lr, loadedMetadata)
 
 
 class LDATest(SparkSessionTestCase):

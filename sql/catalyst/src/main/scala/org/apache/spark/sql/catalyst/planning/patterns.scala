@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -215,7 +216,7 @@ object PhysicalAggregation {
           case agg: AggregateExpression
             if !equivalentAggregateExpressions.addExpr(agg) => agg
           case udf: PythonUDF
-            if PythonUDF.isGroupAggPandasUDF(udf) &&
+            if PythonUDF.isGroupedAggPandasUDF(udf) &&
               !equivalentAggregateExpressions.addExpr(udf) => udf
         }
       }
@@ -245,7 +246,7 @@ object PhysicalAggregation {
             equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
             // Similar to AggregateExpression
-          case ue: PythonUDF if PythonUDF.isGroupAggPandasUDF(ue) =>
+          case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
             equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
               .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
           case expression =>
@@ -264,6 +265,43 @@ object PhysicalAggregation {
         aggregateExpressions,
         rewrittenResultExpressions,
         child))
+
+    case _ => None
+  }
+}
+
+/**
+ * An extractor used when planning physical execution of a window. This extractor outputs
+ * the window function type of the logical window.
+ *
+ * The input logical window must contain same type of window functions, which is ensured by
+ * the rule ExtractWindowExpressions in the analyzer.
+ */
+object PhysicalWindow {
+  // windowFunctionType, windowExpression, partitionSpec, orderSpec, child
+  private type ReturnType =
+    (WindowFunctionType, Seq[NamedExpression], Seq[Expression], Seq[SortOrder], LogicalPlan)
+
+  def unapply(a: Any): Option[ReturnType] = a match {
+    case expr @ logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
+
+      // The window expression should not be empty here, otherwise it's a bug.
+      if (windowExpressions.isEmpty) {
+        throw new AnalysisException(s"Window expression is empty in $expr")
+      }
+
+      val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)
+        .reduceLeft { (t1: WindowFunctionType, t2: WindowFunctionType) =>
+          if (t1 != t2) {
+            // We shouldn't have different window function type here, otherwise it's a bug.
+            throw new AnalysisException(
+              s"Found different window function type in $windowExpressions")
+          } else {
+            t1
+          }
+        }
+
+      Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child))
 
     case _ => None
   }

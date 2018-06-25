@@ -54,6 +54,7 @@ private[spark] object KubernetesUtils {
     }
   }
 
+<<<<<<< HEAD
   def submitterLocalFiles(fileUris: Iterable[String]): Iterable[String] = {
     fileUris
       .map(Utils.resolveURI)
@@ -66,6 +67,9 @@ private[spark] object KubernetesUtils {
   }
 
   private def resolveFileUri(uri: String): String = {
+=======
+  def resolveFileUri(uri: String): String = {
+>>>>>>> master
     val fileUri = Utils.resolveURI(uri)
     val fileScheme = Option(fileUri.getScheme).getOrElse("file")
     fileScheme match {

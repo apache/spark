@@ -89,6 +89,10 @@ class JDBCOptions(
   // the number of partitions
   val numPartitions = parameters.get(JDBC_NUM_PARTITIONS).map(_.toInt)
 
+  // the number of seconds the driver will wait for a Statement object to execute to the given
+  // number of seconds. Zero means there is no limit.
+  val queryTimeout = parameters.getOrElse(JDBC_QUERY_TIMEOUT, "0").toInt
+
   // ------------------------------------------------------------
   // Optional parameters only for reading
   // ------------------------------------------------------------
@@ -160,6 +164,7 @@ object JDBCOptions {
   val JDBC_LOWER_BOUND = newOption("lowerBound")
   val JDBC_UPPER_BOUND = newOption("upperBound")
   val JDBC_NUM_PARTITIONS = newOption("numPartitions")
+  val JDBC_QUERY_TIMEOUT = newOption("queryTimeout")
   val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
   val JDBC_TRUNCATE = newOption("truncate")
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")

@@ -20,27 +20,44 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
+<<<<<<< HEAD
 import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountLocalFilesFeatureStep, MountSecretsFeatureStep}
+=======
+import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
+>>>>>>> master
 
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
   private val SECRETS_STEP_TYPE = "mount-secrets"
+<<<<<<< HEAD
   private val MOUNT_LOCAL_FILES_STEP_TYPE = "mount-local-files"
+=======
+  private val ENV_SECRETS_STEP_TYPE = "env-secrets"
+>>>>>>> master
   private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
   private val mountSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
+<<<<<<< HEAD
   private val mountLocalFilesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_LOCAL_FILES_STEP_TYPE, classOf[MountLocalFilesFeatureStep])
+=======
+  private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
+>>>>>>> master
   private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
 
   private val builderUnderTest = new KubernetesExecutorBuilder(
     _ => basicFeatureStep,
     _ => mountSecretsStep,
+<<<<<<< HEAD
     _ => mountLocalFilesStep,
+=======
+    _ => envSecretsStep,
+>>>>>>> master
     _ => localDirsStep)
 
   test("Basic steps are consistently applied.") {
@@ -54,7 +71,9 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
-      Map.empty)
+      Map.empty,
+      Map.empty,
+      Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
   }
@@ -70,12 +89,15 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map("secret" -> "secretMountPath"),
-      Map.empty)
+      Map("secret-name" -> "secret-key"),
+      Map.empty,
+      Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
-      SECRETS_STEP_TYPE)
+      SECRETS_STEP_TYPE,
+      ENV_SECRETS_STEP_TYPE)
   }
 
   test("Apply mount local files step if secret name is present.") {

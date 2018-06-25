@@ -63,7 +63,11 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
 checkJavaVersion <- function() {
   javaBin <- "java"
   javaHome <- Sys.getenv("JAVA_HOME")
+<<<<<<< HEAD
   javaReqs <- utils::packageDescription(utils::packageName(), fields=c("SystemRequirements"))
+=======
+  javaReqs <- utils::packageDescription(utils::packageName(), fields = c("SystemRequirements"))
+>>>>>>> master
   sparkJavaVersion <- as.numeric(tail(strsplit(javaReqs, "[(=)]")[[1]], n = 1L))
   if (javaHome != "") {
     javaBin <- file.path(javaHome, "bin", javaBin)
@@ -90,7 +94,12 @@ checkJavaVersion <- function() {
   # Extract 8 from it to compare to sparkJavaVersion
   javaVersionNum <- as.integer(strsplit(javaVersionStr, "[.]")[[1L]][2])
   if (javaVersionNum != sparkJavaVersion) {
+<<<<<<< HEAD
     stop(paste("Java version", sparkJavaVersion, "is required for this package; found version:", javaVersionStr))
+=======
+    stop(paste("Java version", sparkJavaVersion, "is required for this package; found version:",
+               javaVersionStr))
+>>>>>>> master
   }
 }
 

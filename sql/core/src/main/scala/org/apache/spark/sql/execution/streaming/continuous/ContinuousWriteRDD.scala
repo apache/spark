@@ -45,7 +45,8 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
     val epochCoordinator = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       SparkEnv.get)
-    var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
+    EpochTracker.initializeCurrentEpoch(
+      context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
 
     while (!context.isInterrupted() && !context.isCompleted()) {
       var dataWriter: DataWriter[InternalRow] = null
@@ -54,19 +55,24 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
         try {
           val dataIterator = prev.compute(split, context)
           dataWriter = writeTask.createDataWriter(
-            context.partitionId(), context.attemptNumber(), currentEpoch)
+            context.partitionId(),
+            context.attemptNumber(),
+            EpochTracker.getCurrentEpoch.get)
           while (dataIterator.hasNext) {
             dataWriter.write(dataIterator.next())
           }
           logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch $currentEpoch is committing.")
+            s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")
           val msg = dataWriter.commit()
           epochCoordinator.send(
-            CommitPartitionEpoch(context.partitionId(), currentEpoch, msg)
+            CommitPartitionEpoch(
+              context.partitionId(),
+              EpochTracker.getCurrentEpoch.get,
+              msg)
           )
           logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch $currentEpoch committed.")
-          currentEpoch += 1
+            s"in epoch ${EpochTracker.getCurrentEpoch.get} committed.")
+          EpochTracker.incrementCurrentEpoch()
         } catch {
           case _: InterruptedException =>
           // Continuous shutdown always involves an interrupt. Just finish the task.
