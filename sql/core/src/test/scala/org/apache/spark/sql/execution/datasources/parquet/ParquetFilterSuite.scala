@@ -698,6 +698,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray)).isDefined)
     assert(parquetFilters.createFilter(schema, sources.In("a",
       Range(0, conf.parquetFilterPushDownInFilterThreshold + 1).toArray)).isEmpty)
+    // These DataType can't provide better performance.
+    Seq(DecimalType.DoubleDecimal, TimestampType, BooleanType).foreach { t =>
+      val s = StructType(Seq(StructField("a", t)))
+      assert(parquetFilters.createFilter(s, sources.In("a", Array(1))).isEmpty)
+    }
 
     import testImplicits._
     withTempPath { path =>

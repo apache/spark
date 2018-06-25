@@ -213,6 +213,13 @@ private[parquet] class ParquetFilters {
     // See SPARK-20364.
     def canMakeFilterOn(name: String): Boolean = nameToType.contains(name) && !name.contains(".")
 
+    // All DataTypes that support `makeEq` can provide better performance.
+    def shouldConvertInPredicate(name: String): Boolean = nameToType(name) match {
+      case IntegerType | LongType | FloatType | DoubleType | StringType | BinaryType => true
+      case DateType if pushDownDate => true
+      case _ => false
+    }
+
     // NOTE:
     //
     // For any comparison operator `cmp`, both `a cmp NULL` and `NULL cmp a` evaluate to `NULL`,
@@ -276,8 +283,8 @@ private[parquet] class ParquetFilters {
       case sources.Not(pred) =>
         createFilter(schema, pred).map(FilterApi.not)
 
-      case sources.In(name, values)
-        if canMakeFilterOn(name) && values.distinct.length <= pushDownInFilterThreshold =>
+      case sources.In(name, values) if canMakeFilterOn(name) && shouldConvertInPredicate(name)
+        && values.distinct.length <= pushDownInFilterThreshold =>
         values.distinct.flatMap { v =>
           makeEq.lift(nameToType(name)).map(_(name, v))
         }.reduceLeftOption(FilterApi.or)
