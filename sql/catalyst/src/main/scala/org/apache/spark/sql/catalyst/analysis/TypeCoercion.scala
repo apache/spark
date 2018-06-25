@@ -536,10 +536,12 @@ object TypeCoercion {
           case None => c
         }
 
-      case ArrayJoin(arr, d, nr) if !ArrayType(StringType).acceptsType(arr.dataType) &&
+      case aj @ ArrayJoin(arr, d, nr) if !ArrayType(StringType).acceptsType(arr.dataType) &&
         ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
-        ArrayJoin(Cast(arr, ArrayType(StringType, containsNull)), d, nr)
+        ImplicitTypeCasts.implicitCast(arr, ArrayType(StringType, containsNull))
+          .map(a => ArrayJoin(a, d, nr))
+          .getOrElse(aj)
 
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
         (!haveSameType(m.keys) || !haveSameType(m.values)) =>
