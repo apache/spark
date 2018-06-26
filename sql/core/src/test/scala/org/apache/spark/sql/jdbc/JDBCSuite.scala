@@ -25,7 +25,7 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
@@ -39,7 +39,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite
+class JDBCSuite extends QueryTest
   with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
   import testImplicits._
 
@@ -1099,7 +1099,7 @@ class JDBCSuite extends SparkFunSuite
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
     def testJdbcOptions(options: JDBCOptions): Unit = {
       // Spark JDBC data source options are case-insensitive
-      assert(options.table == "t1")
+      assert(options.tableOrQuery == "t1")
       // When we convert it to properties, it should be case-sensitive.
       assert(options.asProperties.size == 3)
       assert(options.asProperties.get("customkey") == null)
@@ -1254,5 +1254,93 @@ class JDBCSuite extends SparkFunSuite
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       testIncorrectJdbcPartitionColumn(testH2Dialect.quoteIdentifier("ThEiD"))
     }
+  }
+
+  test("query JDBC option - negative tests") {
+    val query = "SELECT * FROM  test.people WHERE theid = 1"
+    // load path
+    val e1 = intercept[RuntimeException] {
+      val df = spark.read.format("jdbc")
+        .option("Url", urlWithUserAndPass)
+        .option("query", query)
+        .option("dbtable", "test.people")
+        .load()
+    }.getMessage
+    assert(e1.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    // jdbc api path
+    val properties = new Properties()
+    properties.setProperty(JDBCOptions.JDBC_QUERY_STRING, query)
+    val e2 = intercept[RuntimeException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
+    }.getMessage
+    assert(e2.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    val e3 = intercept[RuntimeException] {
+      sql(
+        s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', query '$query', dbtable 'TEST.PEOPLE',
+         |         user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+      }.getMessage
+    assert(e3.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    val e4 = intercept[RuntimeException] {
+      val df = spark.read.format("jdbc")
+        .option("Url", urlWithUserAndPass)
+        .option("query", "")
+        .load()
+    }.getMessage
+    assert(e4.contains("Option `query` can not be empty."))
+
+    // Option query and partitioncolumn are not allowed together.
+    val expectedErrorMsg =
+      s"""
+         |Options 'query' and 'partitionColumn' can not be specified together.
+         |Please define the query using `dbtable` option instead and make sure to qualify
+         |the partition columns using the supplied subquery alias to resolve any ambiguity.
+         |Example :
+         |spark.read.format("jdbc")
+         |        .option("dbtable", "(select c1, c2 from t1) as subq")
+         |        .option("partitionColumn", "subq.c1"
+         |        .load()
+     """.stripMargin
+    val e5 = intercept[RuntimeException] {
+      sql(
+        s"""
+           |CREATE OR REPLACE TEMPORARY VIEW queryOption
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (url '$url', query '$query', user 'testUser', password 'testPass',
+           |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
+       """.stripMargin.replaceAll("\n", " "))
+    }.getMessage
+    assert(e5.contains(expectedErrorMsg))
+  }
+
+  test("query JDBC option") {
+    val query = "SELECT name, theid FROM  test.people WHERE theid = 1"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("query", query)
+      .load()
+    checkAnswer(
+      df,
+      Row("fred", 1) :: Nil)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', query '$query', user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+
+    checkAnswer(
+      sql("select name, theid from queryOption"),
+      Row("fred", 1) :: Nil)
+
   }
 }
