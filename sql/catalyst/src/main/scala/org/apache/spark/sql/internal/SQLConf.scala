@@ -1331,7 +1331,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val REPL_EAGER_EAVL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
+  val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
       "displayed if and only if the REPL supports the eager evaluation. Currently, the " +
       "eager evaluation is only supported in PySpark. For the notebooks like Jupyter, " +
@@ -1340,7 +1340,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val REPL_EAGER_EAVL_MAX_NUM_ROWS = buildConf("spark.sql.repl.eagerEval.maxNumRows")
+  val REPL_EAGER_EVAL_MAX_NUM_ROWS = buildConf("spark.sql.repl.eagerEval.maxNumRows")
     .doc("The max number of rows that are returned by eager evaluation. This only takes " +
       "effect when spark.sql.repl.eagerEval.enabled is set to true. The valid range of this " +
       "config is from 0 to (Int.MaxValue - 1), so the invalid config like negative and " +
@@ -1348,7 +1348,7 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
-  val REPL_EAGER_EAVL_TRUNCATE = buildConf("spark.sql.repl.eagerEval.truncate")
+  val REPL_EAGER_EVAL_TRUNCATE = buildConf("spark.sql.repl.eagerEval.truncate")
     .doc("The max number of characters for each cell that is returned by eager evaluation. " +
       "This only takes effect when spark.sql.repl.eagerEval.enabled is set to true.")
     .intConf
