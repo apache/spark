@@ -106,11 +106,36 @@ class ComplexDataSuite extends SparkFunSuite {
   }
 
   test("SPARK-24659: GenericArrayData.equals should respect element type differences") {
-    // Spark SQL considers array<int> and array<long> to be incompatible,
-    // so an underlying implementation of array type should return false in this case.
-    val array1 = new GenericArrayData(Array[Int](123))
-    val array2 = new GenericArrayData(Array[Long](123L))
+    import scala.reflect.ClassTag
 
-    assert(!array1.equals(array2))
+    // Expected positive cases
+    def arraysShouldEqual[T: ClassTag](element: T*): Unit = {
+      val array1 = new GenericArrayData(Array[T](element: _*))
+      val array2 = new GenericArrayData(Array[T](element: _*))
+      assert(array1.equals(array2))
+    }
+    arraysShouldEqual(true, false)                            // Boolean
+    arraysShouldEqual(0.toByte, 123.toByte, (-123).toByte)    // Byte
+    arraysShouldEqual(0.toShort, 123.toShort, (-256).toShort) // Short
+    arraysShouldEqual(0, 123, -65536)                         // Int
+    arraysShouldEqual(0L, 123L, -65536L)                      // Long
+    arraysShouldEqual(0.0F, 123.0F, -65536.0F)                // Float
+    arraysShouldEqual(0.0, 123.0, -65536.0)                   // Double
+    arraysShouldEqual(Array[Byte](123.toByte), null)          // Binary (Array[Byte])
+    arraysShouldEqual(UTF8String.fromString("foo"), null)     // String (UTF8String)
+
+    // Expected negative cases
+    // Spark SQL considers cases like array<int> vs array<long> to be incompatible,
+    // so an underlying implementation of array type should return false in such cases.
+    def arraysShouldNotEqual[T: ClassTag, U: ClassTag](element1: T, element2: U): Unit = {
+      val array1 = new GenericArrayData(Array[T](element1))
+      val array2 = new GenericArrayData(Array[U](element2))
+      assert(!array1.equals(array2))
+    }
+    arraysShouldNotEqual(true, 1)                            // Boolean <-> Int
+    arraysShouldNotEqual(123.toByte, 123)                    // Byte    <-> Int
+    arraysShouldNotEqual(123.toByte, 123L)                   // Byte    <-> Long
+    arraysShouldNotEqual(123.toShort, 123)                   // Short   <-> Int
+    arraysShouldNotEqual(123, 123L)                          // Int     <-> Long
   }
 }
