@@ -1621,6 +1621,7 @@ case class ArrayJoin(
 
   override def dataType: DataType = StringType
 
+  override def prettyName: String = "array_join"
 }
 
 /**
