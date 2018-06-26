@@ -46,7 +46,7 @@ class MetricsReporter(
   timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
 
   registerGauge("eventTime-watermark",
-    s => convertStringDateToMillis(s.eventTime.get("watermark")), 0L)
+    progress => convertStringDateToMillis(progress.eventTime.get("watermark")), 0L)
 
   registerGauge("states-rowsTotal", _.stateOperators.map(_.numRowsTotal).sum, 0L)
   registerGauge("states-usedBytes", _.stateOperators.map(_.memoryUsedBytes).sum, 0L)
