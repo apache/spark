@@ -29,8 +29,10 @@ trait StateStoreMetricsTest extends StreamTest {
     lastCheckedRecentProgressIndex = -1
   }
 
-  def assertNumStateRows(total: Seq[Long], updated: Seq[Long]): AssertOnQuery =
-    AssertOnQuery(s"Check total state rows = $total, updated state rows = $updated") { q =>
+  def assertNumStateRows(total: Seq[Long], updated: Seq[Long],
+                         lateInputRows: Seq[Long]): AssertOnQuery =
+    AssertOnQuery(s"Check total state rows = $total, updated state rows = $updated" +
+      s", late input rows = $lateInputRows") { q =>
       val recentProgress = q.recentProgress
       require(recentProgress.nonEmpty, "No progress made, cannot check num state rows")
       require(recentProgress.length < spark.sessionState.conf.streamingProgressRetention,
@@ -57,12 +59,15 @@ trait StateStoreMetricsTest extends StreamTest {
       val numUpdatedRows = arraySum(allNumUpdatedRowsSinceLastCheck, numStateOperators)
       assert(numUpdatedRows === updated, s"incorrect updates rows, $debugString")
 
+      val numLateInputRows = recentProgress.last.stateOperators.map(_.numLateInputRows)
+      assert(numLateInputRows === lateInputRows, s"incorrect late input rows, $debugString")
+
       lastCheckedRecentProgressIndex = recentProgress.length - 1
       true
     }
 
-  def assertNumStateRows(total: Long, updated: Long): AssertOnQuery =
-    assertNumStateRows(Seq(total), Seq(updated))
+  def assertNumStateRows(total: Long, updated: Long, lateInputRows: Long = 0): AssertOnQuery =
+    assertNumStateRows(Seq(total), Seq(updated), Seq(lateInputRows))
 
   def arraySum(arraySeq: Seq[Array[Long]], arrayLength: Int): Seq[Long] = {
     if (arraySeq.isEmpty) return Seq.fill(arrayLength)(0L)

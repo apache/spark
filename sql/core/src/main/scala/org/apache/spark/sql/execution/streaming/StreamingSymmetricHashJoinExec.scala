@@ -432,7 +432,7 @@ case class StreamingSymmetricHashJoinExec(
         WatermarkSupport.watermarkExpression(watermarkAttribute, eventTimeWatermark) match {
           case Some(watermarkExpr) =>
             val predicate = newPredicate(watermarkExpr, inputAttributes)
-            inputIter.filter { row => !predicate.eval(row) }
+            applyRemovingRowsOlderThanWatermark(inputIter, predicate)
           case None =>
             inputIter
         }
