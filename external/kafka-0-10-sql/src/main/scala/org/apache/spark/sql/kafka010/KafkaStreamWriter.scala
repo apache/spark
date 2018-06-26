@@ -44,7 +44,7 @@ class KafkaStreamWriter(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
   extends StreamWriter {
 
-  validateQuery(schema.toAttributes, producerParams.toMap[String, Object].asJava, topic)
+  validateQuery(schema.toAttributes, producerParams.asInstanceOf[Map[String, Object]].asJava, topic)
 
   override def createWriterFactory(): KafkaStreamWriterFactory =
     KafkaStreamWriterFactory(topic, producerParams, schema)

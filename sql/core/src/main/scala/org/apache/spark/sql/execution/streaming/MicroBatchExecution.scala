@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
@@ -238,6 +238,7 @@ class MicroBatchExecution(
    *  DONE
    */
   private def populateStartOffsets(sparkSessionToRunBatches: SparkSession): Unit = {
+    sinkCommitProgress = None
     offsetLog.getLatest() match {
       case Some((latestBatchId, nextOffsets)) =>
         /* First assume that we are re-executing the latest known batch
@@ -522,18 +523,25 @@ class MicroBatchExecution(
     val nextBatch =
       new Dataset(sparkSessionToRunBatch, lastExecution, RowEncoder(lastExecution.analyzed.schema))
 
-    reportTimeTaken("addBatch") {
+    val batchSinkProgress: Option[StreamWriterCommitProgress] =
+      reportTimeTaken("addBatch") {
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
-          case s: Sink => s.addBatch(currentBatchId, nextBatch)
+          case s: Sink =>
+            s.addBatch(currentBatchId, nextBatch)
           case _: StreamWriteSupport =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
+        }
+        lastExecution.executedPlan match {
+          case w: WriteToDataSourceV2Exec => w.commitProgress
+          case _ => None
         }
       }
     }
 
     withProgressLocked {
+      sinkCommitProgress = batchSinkProgress
       watermarkTracker.updateWatermark(lastExecution.executedPlan)
       commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
       committedOffsets ++= availableOffsets

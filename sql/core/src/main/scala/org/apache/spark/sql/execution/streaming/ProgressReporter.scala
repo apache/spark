@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.internal.Logging
@@ -32,7 +31,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.sources.v2.CustomMetrics
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, SupportsCustomReaderMetrics}
@@ -64,6 +63,7 @@ trait ProgressReporter extends Logging {
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
   protected def newData: Map[BaseStreamingSource, LogicalPlan]
+  protected def sinkCommitProgress: Option[StreamWriterCommitProgress]
   protected def sources: Seq[BaseStreamingSource]
   protected def sink: BaseStreamingSink
   protected def offsetSeqMetadata: OffsetSeqMetadata
@@ -208,7 +208,10 @@ trait ProgressReporter extends Logging {
       case _ => None
     }
 
-    val sinkProgress = new SinkProgress(sink.toString, customWriterMetrics.orNull)
+    val sinkProgress = SinkProgress(
+      sink.toString,
+      customWriterMetrics.orNull,
+      sinkCommitProgress.map(_.numOutputRows))
 
     val newProgress = new StreamingQueryProgress(
       id = id,

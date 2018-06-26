@@ -24,6 +24,7 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -224,16 +225,19 @@ class SourceProgress protected[sql](
  * during a trigger. See [[StreamingQueryProgress]] for more information.
  *
  * @param description Description of the source corresponding to this status.
+ * @param numOutputRows Number of rows written to the sink or -1 for Continuous Mode (temporarily)
+ * or Sink V1 (until decommissioned).
  * @since 2.1.0
  */
 @InterfaceStability.Evolving
 class SinkProgress protected[sql](
-    val description: String,
-    val customMetrics: String) extends Serializable {
+  val description: String,
+  val customMetrics: String,
+  val numOutputRows: Long) extends Serializable {
 
   /** SinkProgress without custom metrics. */
   protected[sql] def this(description: String) {
-    this(description, null)
+    this(description, null, DEFAULT_NUM_OUTPUT_ROWS)
   }
 
   /** The compact JSON representation of this progress. */
@@ -245,7 +249,8 @@ class SinkProgress protected[sql](
   override def toString: String = prettyJson
 
   private[sql] def jsonValue: JValue = {
-    val jsonVal = ("description" -> JString(description))
+    val jsonVal = ("description" -> JString(description)) ~
+      ("numOutputRows" -> JInt(numOutputRows))
 
     if (customMetrics != null) {
       jsonVal ~ ("customMetrics" -> parse(customMetrics))
@@ -253,4 +258,11 @@ class SinkProgress protected[sql](
       jsonVal
     }
   }
+}
+
+private[sql] object SinkProgress {
+  val DEFAULT_NUM_OUTPUT_ROWS: Long = -1L
+
+  def apply(description: String, customMetrics: String, numOutputRows: Option[Long]): SinkProgress =
+    new SinkProgress(description, customMetrics, numOutputRows.getOrElse(DEFAULT_NUM_OUTPUT_ROWS))
 }
