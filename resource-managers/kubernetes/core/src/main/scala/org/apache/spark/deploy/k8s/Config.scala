@@ -176,6 +176,24 @@ private[spark] object Config extends Logging {
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
 
+  val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
+      .doc("Interval between polls against the Kubernetes API server to inspect the " +
+        "state of executors.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, s"API server polling interval must be a" +
+        " positive time value.")
+      .createWithDefaultString("30s")
+
+  val KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.eventProcessingInterval")
+      .doc("Interval between successive inspection of executor events sent from the" +
+        " Kubernetes API.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, s"Event processing interval must be a positive" +
+        " time value.")
+      .createWithDefaultString("1s")
+
   val MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.kubernetes.memoryOverheadFactor")
       .doc("This sets the Memory Overhead Factor that will allocate memory to non-JVM jobs " +
@@ -192,7 +210,6 @@ private[spark] object Config extends Logging {
       .checkValue(pv => List("2", "3").contains(pv),
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
-
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
