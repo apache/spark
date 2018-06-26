@@ -575,9 +575,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
     val keyType = dataType.keyType
     val valueType = dataType.valueType
     val argsName = ctx.freshName("args")
-    val keyArgsName = ctx.freshName("keyArgs")
-    val valArgsName = ctx.freshName("valArgs")
-
+    val hasNullName = ctx.freshName("hasNull")
     val mapDataClass = classOf[MapData].getName
     val arrayBasedMapDataClass = classOf[ArrayBasedMapData].getName
     val arrayDataClass = classOf[ArrayData].getName
@@ -585,18 +583,18 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
     val init =
       s"""
         |$mapDataClass[] $argsName = new $mapDataClass[${mapCodes.size}];
-        |$arrayDataClass[] $keyArgsName = new $arrayDataClass[${mapCodes.size}];
-        |$arrayDataClass[] $valArgsName = new $arrayDataClass[${mapCodes.size}];
-        |boolean ${ev.isNull} = false;
+        |boolean ${ev.isNull}, $hasNullName = false;
         |$mapDataClass ${ev.value} = null;
       """.stripMargin
 
     val assignments = mapCodes.zipWithIndex.map { case (m, i) =>
       s"""
-         |${m.code}
-         |$argsName[$i] = ${m.value};
-         |if (${m.isNull}) {
-         |  ${ev.isNull} = true;
+         |if (!$hasNullName) {
+         |  ${m.code}
+         |  $argsName[$i] = ${m.value};
+         |  if (${m.isNull}) {
+         |    $hasNullName = true;
+         |  }
          |}
        """.stripMargin
     }
@@ -604,14 +602,14 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignments,
       funcName = "getMapConcatInputs",
-      extraArguments = (s"$mapDataClass[]", argsName) :: ("boolean", ev.isNull.code) :: Nil,
+      extraArguments = (s"$mapDataClass[]", argsName) :: ("boolean", hasNullName) :: Nil,
       returnType = "boolean",
       makeSplitFunction = body =>
         s"""
            |$body
-           |return ${ev.isNull};
+           |return $hasNullName;
         """.stripMargin,
-      foldFunctions = _.map(funcCall => s"${ev.isNull} = $funcCall;").mkString("\n")
+      foldFunctions = _.map(funcCall => s"$hasNullName = $funcCall;").mkString("\n")
     )
 
     val idxName = ctx.freshName("idx")
@@ -631,9 +629,15 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
       genCodeForNonPrimitiveArrays(ctx, valueType)
     }
 
+    val keyArgsName = ctx.freshName("keyArgs")
+    val valArgsName = ctx.freshName("valArgs")
+
     val mapMerge =
       s"""
+        |${ev.isNull} = $hasNullName;
         |if (!${ev.isNull}) {
+        |  $arrayDataClass[] $keyArgsName = new $arrayDataClass[${mapCodes.size}];
+        |  $arrayDataClass[] $valArgsName = new $arrayDataClass[${mapCodes.size}];
         |  long $numElementsName = 0;
         |  for (int $idxName = 0; $idxName < $argsName.length; $idxName++) {
         |    $keyArgsName[$idxName] = $argsName[$idxName].keyArray();
@@ -661,8 +665,10 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
       """.stripMargin)
   }
 
-  private def genCodeForPrimitiveArrays(ctx: CodegenContext, elementType: DataType,
-                                        checkForNull: Boolean): String = {
+  private def genCodeForPrimitiveArrays(
+      ctx: CodegenContext,
+      elementType: DataType,
+      checkForNull: Boolean): String = {
     val counter = ctx.freshName("counter")
     val arrayData = ctx.freshName("arrayData")
     val argsName = ctx.freshName("args")
@@ -674,7 +680,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
          |$arrayData.set$primitiveValueTypeName(
          |  $counter,
          |  ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")}
-         |);""".stripMargin.stripPrefix("\n")
+         |);""".stripMargin
 
     val setterCode = if (checkForNull) {
       s"""
@@ -682,7 +688,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
          |  $arrayData.setNullAt($counter);
          |} else {
          |  $setterCode1
-         |}""".stripMargin.stripPrefix("\n")
+         |}""".stripMargin
     } else {
       setterCode1
     }
