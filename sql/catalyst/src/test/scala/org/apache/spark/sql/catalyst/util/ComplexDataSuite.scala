@@ -104,4 +104,13 @@ class ComplexDataSuite extends SparkFunSuite {
     // The copied data should not be changed externally.
     assert(copied.getStruct(0, 1).getUTF8String(0).toString == "a")
   }
+
+  test("SPARK-24659: GenericArrayData.equals should respect element type differences") {
+    // Spark SQL considers array<int> and array<long> to be incompatible,
+    // so an underlying implementation of array type should return false in this case.
+    val array1 = new GenericArrayData(Array[Int](123))
+    val array2 = new GenericArrayData(Array[Long](123L))
+
+    assert(!array1.equals(array2))
+  }
 }
