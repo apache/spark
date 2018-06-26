@@ -2651,7 +2651,7 @@ object Sequence {
     require(
       (step > num.zero && start <= stop)
         || (step < num.zero && start >= stop)
-        || (step == 0 && start == stop),
+        || (step == num.zero && start == stop),
       s"Illegal sequence boundaries: $start to $stop by $step")
 
     val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / step.toLong
