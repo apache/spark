@@ -344,7 +344,6 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.parquetFilterPushDown
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
-    val pushDownDate = sqlConf.parquetFilterPushDownDate
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
@@ -355,7 +354,7 @@ class ParquetFileFormat
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.
-          .flatMap(new ParquetFilters(pushDownDate).createFilter(requiredSchema, _))
+          .flatMap(new ParquetFilters().createFilter(requiredSchema, _))
           .reduceOption(FilterApi.and)
       } else {
         None

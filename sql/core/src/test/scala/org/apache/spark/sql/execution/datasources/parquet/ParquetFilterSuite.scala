@@ -55,7 +55,7 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
-  private lazy val parquetFilters = new ParquetFilters(conf.parquetFilterPushDownDate)
+  private lazy val parquetFilters = new ParquetFilters()
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -663,6 +663,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - StringStartsWith") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
+      checkFilterPredicate(
+        '_1.startsWith("").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]],
+        Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
+
       Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
         checkFilterPredicate(
           '_1.startsWith(prefix).asInstanceOf[Predicate],

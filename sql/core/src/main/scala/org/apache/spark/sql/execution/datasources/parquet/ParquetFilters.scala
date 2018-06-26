@@ -26,6 +26,7 @@ import org.apache.parquet.schema.PrimitiveComparator
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -33,7 +34,11 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters(pushDownDate: Boolean) {
+private[parquet] class ParquetFilters() {
+
+  val sqlConf: SQLConf = SQLConf.get
+  val pushDownDate = sqlConf.parquetFilterPushDownDate
+  val pushDownStartWith = sqlConf.parquetFilterPushDownStringStartWith
 
   private def dateToDays(date: Date): SQLDate = {
     DateTimeUtils.fromJavaDate(date)
@@ -272,7 +277,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean) {
       case sources.Not(pred) =>
         createFilter(schema, pred).map(FilterApi.not)
 
-      case sources.StringStartsWith(name, prefix) if canMakeFilterOn(name) =>
+      case sources.StringStartsWith(name, prefix) if pushDownStartWith && canMakeFilterOn(name) =>
         Option(prefix).map { v =>
           FilterApi.userDefined(binaryColumn(name),
             new UserDefinedPredicate[Binary] with Serializable {
