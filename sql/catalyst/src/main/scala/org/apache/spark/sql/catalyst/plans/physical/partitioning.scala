@@ -211,7 +211,9 @@ case object SinglePartition extends Partitioning {
  * of partitions are not changed and also the distribution of rows. This is mainly used to
  * obtain some statistics of map tasks such as number of outputs.
  */
-case class LocalPartitioning(orgPartition: Partitioning, numPartitions: Int) extends Partitioning {
+case class LocalPartitioning(orgPartition: Partitioning) extends Partitioning {
+  val numPartitions = orgPartition.numPartitions
+
   // We will perform this partitioning no matter what the data distribution is.
   override def satisfies0(required: Distribution): Boolean = false
 }

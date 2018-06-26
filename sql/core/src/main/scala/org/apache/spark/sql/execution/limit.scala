@@ -110,8 +110,7 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
-    val partitioner = LocalPartitioning(child.outputPartitioning,
-      childRDD.getNumPartitions)
+    val partitioner = LocalPartitioning(child.outputPartitioning)
     val shuffleDependency = ShuffleExchangeExec.prepareShuffleDependency(
       childRDD, child.output, partitioner, serializer)
     val numberOfOutput: Seq[Long] = if (shuffleDependency.rdd.getNumPartitions != 0) {
