@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -211,8 +213,8 @@ case object SinglePartition extends Partitioning {
  * of partitions are not changed and also the distribution of rows. This is mainly used to
  * obtain some statistics of map tasks such as number of outputs.
  */
-case class LocalPartitioning(orgPartition: Partitioning) extends Partitioning {
-  val numPartitions = orgPartition.numPartitions
+case class LocalPartitioning(childRDD: RDD[InternalRow]) extends Partitioning {
+  val numPartitions = childRDD.getNumPartitions
 
   // We will perform this partitioning no matter what the data distribution is.
   override def satisfies0(required: Distribution): Boolean = false
