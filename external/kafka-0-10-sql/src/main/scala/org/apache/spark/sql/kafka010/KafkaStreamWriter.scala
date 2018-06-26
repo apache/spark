@@ -67,7 +67,7 @@ case class KafkaStreamWriterFactory(
 
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
     new KafkaStreamDataWriter(topic, producerParams, schema.toAttributes)
   }

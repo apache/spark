@@ -1869,6 +1869,299 @@ class SQLTests(ReusedSQLTestCase):
             q.stop()
             shutil.rmtree(tmpPath)
 
+    class ForeachWriterTester:
+
+        def __init__(self, spark):
+            self.spark = spark
+
+        def write_open_event(self, partitionId, epochId):
+            self._write_event(
+                self.open_events_dir,
+                {'partition': partitionId, 'epoch': epochId})
+
+        def write_process_event(self, row):
+            self._write_event(self.process_events_dir, {'value': 'text'})
+
+        def write_close_event(self, error):
+            self._write_event(self.close_events_dir, {'error': str(error)})
+
+        def write_input_file(self):
+            self._write_event(self.input_dir, "text")
+
+        def open_events(self):
+            return self._read_events(self.open_events_dir, 'partition INT, epoch INT')
+
+        def process_events(self):
+            return self._read_events(self.process_events_dir, 'value STRING')
+
+        def close_events(self):
+            return self._read_events(self.close_events_dir, 'error STRING')
+
+        def run_streaming_query_on_writer(self, writer, num_files):
+            self._reset()
+            try:
+                sdf = self.spark.readStream.format('text').load(self.input_dir)
+                sq = sdf.writeStream.foreach(writer).start()
+                for i in range(num_files):
+                    self.write_input_file()
+                    sq.processAllAvailable()
+            finally:
+                self.stop_all()
+
+        def assert_invalid_writer(self, writer, msg=None):
+            self._reset()
+            try:
+                sdf = self.spark.readStream.format('text').load(self.input_dir)
+                sq = sdf.writeStream.foreach(writer).start()
+                self.write_input_file()
+                sq.processAllAvailable()
+                self.fail("invalid writer %s did not fail the query" % str(writer))  # not expected
+            except Exception as e:
+                if msg:
+                    assert msg in str(e), "%s not in %s" % (msg, str(e))
+
+            finally:
+                self.stop_all()
+
+        def stop_all(self):
+            for q in self.spark._wrapped.streams.active:
+                q.stop()
+
+        def _reset(self):
+            self.input_dir = tempfile.mkdtemp()
+            self.open_events_dir = tempfile.mkdtemp()
+            self.process_events_dir = tempfile.mkdtemp()
+            self.close_events_dir = tempfile.mkdtemp()
+
+        def _read_events(self, dir, json):
+            rows = self.spark.read.schema(json).json(dir).collect()
+            dicts = [row.asDict() for row in rows]
+            return dicts
+
+        def _write_event(self, dir, event):
+            import uuid
+            with open(os.path.join(dir, str(uuid.uuid4())), 'w') as f:
+                f.write("%s\n" % str(event))
+
+        def __getstate__(self):
+            return (self.open_events_dir, self.process_events_dir, self.close_events_dir)
+
+        def __setstate__(self, state):
+            self.open_events_dir, self.process_events_dir, self.close_events_dir = state
+
+    def test_streaming_foreach_with_simple_function(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        def foreach_func(row):
+            tester.write_process_event(row)
+
+        tester.run_streaming_query_on_writer(foreach_func, 2)
+        self.assertEqual(len(tester.process_events()), 2)
+
+    def test_streaming_foreach_with_basic_open_process_close(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def open(self, partitionId, epochId):
+                tester.write_open_event(partitionId, epochId)
+                return True
+
+            def process(self, row):
+                tester.write_process_event(row)
+
+            def close(self, error):
+                tester.write_close_event(error)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+
+        open_events = tester.open_events()
+        self.assertEqual(len(open_events), 2)
+        self.assertSetEqual(set([e['epoch'] for e in open_events]), {0, 1})
+
+        self.assertEqual(len(tester.process_events()), 2)
+
+        close_events = tester.close_events()
+        self.assertEqual(len(close_events), 2)
+        self.assertSetEqual(set([e['error'] for e in close_events]), {'None'})
+
+    def test_streaming_foreach_with_open_returning_false(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def open(self, partition_id, epoch_id):
+                tester.write_open_event(partition_id, epoch_id)
+                return False
+
+            def process(self, row):
+                tester.write_process_event(row)
+
+            def close(self, error):
+                tester.write_close_event(error)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+
+        self.assertEqual(len(tester.open_events()), 2)
+
+        self.assertEqual(len(tester.process_events()), 0)  # no row was processed
+
+        close_events = tester.close_events()
+        self.assertEqual(len(close_events), 2)
+        self.assertSetEqual(set([e['error'] for e in close_events]), {'None'})
+
+    def test_streaming_foreach_without_open_method(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def process(self, row):
+                tester.write_process_event(row)
+
+            def close(self, error):
+                tester.write_close_event(error)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+        self.assertEqual(len(tester.open_events()), 0)  # no open events
+        self.assertEqual(len(tester.process_events()), 2)
+        self.assertEqual(len(tester.close_events()), 2)
+
+    def test_streaming_foreach_without_close_method(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def open(self, partition_id, epoch_id):
+                tester.write_open_event(partition_id, epoch_id)
+                return True
+
+            def process(self, row):
+                tester.write_process_event(row)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+        self.assertEqual(len(tester.open_events()), 2)  # no open events
+        self.assertEqual(len(tester.process_events()), 2)
+        self.assertEqual(len(tester.close_events()), 0)
+
+    def test_streaming_foreach_without_open_and_close_methods(self):
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def process(self, row):
+                tester.write_process_event(row)
+
+        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
+        self.assertEqual(len(tester.open_events()), 0)  # no open events
+        self.assertEqual(len(tester.process_events()), 2)
+        self.assertEqual(len(tester.close_events()), 0)
+
+    def test_streaming_foreach_with_process_throwing_error(self):
+        from pyspark.sql.utils import StreamingQueryException
+
+        tester = self.ForeachWriterTester(self.spark)
+
+        class ForeachWriter:
+            def process(self, row):
+                raise Exception("test error")
+
+            def close(self, error):
+                tester.write_close_event(error)
+
+        try:
+            tester.run_streaming_query_on_writer(ForeachWriter(), 1)
+            self.fail("bad writer did not fail the query")  # this is not expected
+        except StreamingQueryException as e:
+            # TODO: Verify whether original error message is inside the exception
+            pass
+
+        self.assertEqual(len(tester.process_events()), 0)  # no row was processed
+        close_events = tester.close_events()
+        self.assertEqual(len(close_events), 1)
+        # TODO: Verify whether original error message is inside the exception
+
+    def test_streaming_foreach_with_invalid_writers(self):
+
+        tester = self.ForeachWriterTester(self.spark)
+
+        def func_with_iterator_input(iter):
+            for x in iter:
+                print(x)
+
+        tester.assert_invalid_writer(func_with_iterator_input)
+
+        class WriterWithoutProcess:
+            def open(self, partition):
+                pass
+
+        tester.assert_invalid_writer(WriterWithoutProcess(), "does not have a 'process'")
+
+        class WriterWithNonCallableProcess():
+            process = True
+
+        tester.assert_invalid_writer(WriterWithNonCallableProcess(),
+                                     "'process' in provided object is not callable")
+
+        class WriterWithNoParamProcess():
+            def process(self):
+                pass
+
+        tester.assert_invalid_writer(WriterWithNoParamProcess())
+
+        # Abstract class for tests below
+        class WithProcess():
+            def process(self, row):
+                pass
+
+        class WriterWithNonCallableOpen(WithProcess):
+            open = True
+
+        tester.assert_invalid_writer(WriterWithNonCallableOpen(),
+                                     "'open' in provided object is not callable")
+
+        class WriterWithNoParamOpen(WithProcess):
+            def open(self):
+                pass
+
+        tester.assert_invalid_writer(WriterWithNoParamOpen())
+
+        class WriterWithNonCallableClose(WithProcess):
+            close = True
+
+        tester.assert_invalid_writer(WriterWithNonCallableClose(),
+                                     "'close' in provided object is not callable")
+
+    def test_streaming_foreachBatch(self):
+        q = None
+        collected = dict()
+
+        def collectBatch(batch_df, batch_id):
+            collected[batch_id] = batch_df.collect()
+
+        try:
+            df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+            q = df.writeStream.foreachBatch(collectBatch).start()
+            q.processAllAvailable()
+            self.assertTrue(0 in collected)
+            self.assertTrue(len(collected[0]), 2)
+        finally:
+            if q:
+                q.stop()
+
+    def test_streaming_foreachBatch_propagates_python_errors(self):
+        from pyspark.sql.utils import StreamingQueryException
+
+        q = None
+
+        def collectBatch(df, id):
+            raise Exception("this should fail the query")
+
+        try:
+            df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+            q = df.writeStream.foreachBatch(collectBatch).start()
+            q.processAllAvailable()
+            self.fail("Expected a failure")
+        except StreamingQueryException as e:
+            self.assertTrue("this should fail" in str(e))
+        finally:
+            if q:
+                q.stop()
+
     def test_help_command(self):
         # Regression test for SPARK-5464
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -4449,7 +4742,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     def test_vectorized_udf_wrong_return_type(self):
         from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
@@ -5033,6 +5325,109 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         result4 = df.groupby().apply(udf3).sort('id', 'v').toPandas()
         expected4 = udf3.func((), pdf)
         self.assertPandasEqual(expected4, result4)
+
+    def test_column_order(self):
+        from collections import OrderedDict
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        # Helper function to set column names from a list
+        def rename_pdf(pdf, names):
+            pdf.rename(columns={old: new for old, new in
+                                zip(pd_result.columns, names)}, inplace=True)
+
+        df = self.data
+        grouped_df = df.groupby('id')
+        grouped_pdf = df.toPandas().groupby('id')
+
+        # Function returns a pdf with required column names, but order could be arbitrary using dict
+        def change_col_order(pdf):
+            # Constructing a DataFrame from a dict should result in the same order,
+            # but use from_items to ensure the pdf column order is different than schema
+            return pd.DataFrame.from_items([
+                ('id', pdf.id),
+                ('u', pdf.v * 2),
+                ('v', pdf.v)])
+
+        ordered_udf = pandas_udf(
+            change_col_order,
+            'id long, v int, u int',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        # The UDF result should assign columns by name from the pdf
+        result = grouped_df.apply(ordered_udf).sort('id', 'v')\
+            .select('id', 'u', 'v').toPandas()
+        pd_result = grouped_pdf.apply(change_col_order)
+        expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
+        # Function returns a pdf with positional columns, indexed by range
+        def range_col_order(pdf):
+            # Create a DataFrame with positional columns, fix types to long
+            return pd.DataFrame(list(zip(pdf.id, pdf.v * 3, pdf.v)), dtype='int64')
+
+        range_udf = pandas_udf(
+            range_col_order,
+            'id long, u long, v long',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        # The UDF result uses positional columns from the pdf
+        result = grouped_df.apply(range_udf).sort('id', 'v') \
+            .select('id', 'u', 'v').toPandas()
+        pd_result = grouped_pdf.apply(range_col_order)
+        rename_pdf(pd_result, ['id', 'u', 'v'])
+        expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
+        # Function returns a pdf with columns indexed with integers
+        def int_index(pdf):
+            return pd.DataFrame(OrderedDict([(0, pdf.id), (1, pdf.v * 4), (2, pdf.v)]))
+
+        int_index_udf = pandas_udf(
+            int_index,
+            'id long, u int, v int',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        # The UDF result should assign columns by position of integer index
+        result = grouped_df.apply(int_index_udf).sort('id', 'v') \
+            .select('id', 'u', 'v').toPandas()
+        pd_result = grouped_pdf.apply(int_index)
+        rename_pdf(pd_result, ['id', 'u', 'v'])
+        expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
+        @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
+        def column_name_typo(pdf):
+            return pd.DataFrame({'iid': pdf.id, 'v': pdf.v})
+
+        @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
+        def invalid_positional_types(pdf):
+            return pd.DataFrame([(u'a', 1.2)])
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
+                grouped_df.apply(column_name_typo).collect()
+            with self.assertRaisesRegexp(Exception, "No cast implemented"):
+                grouped_df.apply(invalid_positional_types).collect()
+
+    def test_positional_assignment_conf(self):
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        with self.sql_conf({"spark.sql.execution.pandas.groupedMap.assignColumnsByPosition": True}):
+
+            @pandas_udf("a string, b float", PandasUDFType.GROUPED_MAP)
+            def foo(_):
+                return pd.DataFrame([('hi', 1)], columns=['x', 'y'])
+
+            df = self.data
+            result = df.groupBy('id').apply(foo).select('a', 'b').collect()
+            for r in result:
+                self.assertEqual(r.a, 'hi')
+                self.assertEqual(r.b, 1)
 
 
 @unittest.skipIf(
