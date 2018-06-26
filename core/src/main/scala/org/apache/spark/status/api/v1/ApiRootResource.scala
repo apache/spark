@@ -20,7 +20,7 @@ import java.util.zip.ZipOutputStream
 import javax.servlet.ServletContext
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs._
-import javax.ws.rs.core.{Context, Response}
+import javax.ws.rs.core.{Context, MediaType, Response}
 
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
@@ -148,13 +148,14 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
 }
 
 private[v1] class ForbiddenException(msg: String) extends WebApplicationException(
-  Response.status(Response.Status.FORBIDDEN).entity(msg).build())
+  Response.status(Response.Status.FORBIDDEN).entity(msg).`type`(MediaType.TEXT_PLAIN).build())
 
 private[v1] class NotFoundException(msg: String) extends WebApplicationException(
   new NoSuchElementException(msg),
     Response
       .status(Response.Status.NOT_FOUND)
-      .entity(ErrorWrapper(msg))
+      .entity(msg)
+      .`type`(MediaType.TEXT_PLAIN)
       .build()
 )
 
@@ -162,7 +163,8 @@ private[v1] class ServiceUnavailable(msg: String) extends WebApplicationExceptio
   new ServiceUnavailableException(msg),
   Response
     .status(Response.Status.SERVICE_UNAVAILABLE)
-    .entity(ErrorWrapper(msg))
+    .entity(msg)
+    .`type`(MediaType.TEXT_PLAIN)
     .build()
 )
 
@@ -170,7 +172,8 @@ private[v1] class BadParameterException(msg: String) extends WebApplicationExcep
   new IllegalArgumentException(msg),
   Response
     .status(Response.Status.BAD_REQUEST)
-    .entity(ErrorWrapper(msg))
+    .entity(msg)
+    .`type`(MediaType.TEXT_PLAIN)
     .build()
 ) {
   def this(param: String, exp: String, actual: String) = {
@@ -178,8 +181,3 @@ private[v1] class BadParameterException(msg: String) extends WebApplicationExcep
   }
 }
 
-/**
- * Signal to JacksonMessageWriter to not convert the message into json (which would result in an
- * extra set of quotes).
- */
-private[v1] case class ErrorWrapper(s: String)
