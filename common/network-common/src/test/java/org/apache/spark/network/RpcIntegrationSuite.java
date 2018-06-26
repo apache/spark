@@ -417,6 +417,7 @@ public class RpcIntegrationSuite {
     final StreamSuite.TestCallback helper;
     final OutputStream out;
     final File outFile;
+
     VerifyingStreamCallback(String streamId) throws IOException {
       if (streamId.equals("file")) {
         outFile = File.createTempFile("data", ".tmp", testData.tempDir);
