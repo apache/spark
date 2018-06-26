@@ -33,6 +33,7 @@ from pyspark.serializers import ArrowSerializer, BatchedSerializer, PickleSerial
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
+from pyspark.sql.conf import SQLConf
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
@@ -81,6 +82,7 @@ class DataFrame(object):
         # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
         # by __repr__ and _repr_html_ while eager evaluation opened.
         self._support_repr_html = False
+        self.sql_conf = SQLConf(sql_ctx)
 
     @property
     @since(1.3)
@@ -358,22 +360,19 @@ class DataFrame(object):
     def _eager_eval(self):
         """Returns true if the eager evaluation enabled.
         """
-        return self.sql_ctx.getConf(
-            "spark.sql.repl.eagerEval.enabled", "false").lower() == "true"
+        return self.sql_conf.isReplEagerEvalEnabled()
 
     @property
     def _max_num_rows(self):
         """Returns the max row number for eager evaluation.
         """
-        return int(self.sql_ctx.getConf(
-            "spark.sql.repl.eagerEval.maxNumRows", "20"))
+        return self.sql_conf.replEagerEvalMaxNumRows()
 
     @property
     def _truncate(self):
         """Returns the truncate length for eager evaluation.
         """
-        return int(self.sql_ctx.getConf(
-            "spark.sql.repl.eagerEval.truncate", "20"))
+        return self.sql_conf.replEagerEvalTruncate()
 
     def __repr__(self):
         if not self._support_repr_html and self._eager_eval:
@@ -2049,13 +2048,12 @@ class DataFrame(object):
 
         import pandas as pd
 
-        if self.sql_ctx.getConf("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
-           == "true":
-            timezone = self.sql_ctx.getConf("spark.sql.session.timeZone")
+        if self.sql_conf.PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE():
+            timezone = self.sql_conf.sessionLocalTimeZone()
         else:
             timezone = None
 
-        if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
+        if self.sql_conf.arrowEnabled():
             use_arrow = True
             try:
                 from pyspark.sql.types import to_arrow_schema
@@ -2065,8 +2063,7 @@ class DataFrame(object):
                 to_arrow_schema(self.schema)
             except Exception as e:
 
-                if self.sql_ctx.getConf("spark.sql.execution.arrow.fallback.enabled", "true") \
-                        .lower() == "true":
+                if self.sql_conf.arrowFallbackEnabled():
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.enabled' is set to true; however, "
