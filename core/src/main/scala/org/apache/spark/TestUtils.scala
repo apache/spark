@@ -172,11 +172,10 @@ private[spark] object TestUtils {
   /**
    * Run some code involving jobs submitted to the given context and assert that the jobs spilled.
    */
-  def assertSpilled[T](sc: SparkContext, identifier: String)(body: => T): Unit = {
+  def assertSpilled(sc: SparkContext, identifier: String)(body: => Unit): Unit = {
     withListener(sc, new SpillListener) { listener =>
-      val ret = body
+      body
       assert(listener.numSpilledStages > 0, s"expected $identifier to spill, but did not")
-      ret
     }
   }
 
@@ -184,11 +183,10 @@ private[spark] object TestUtils {
    * Run some code involving jobs submitted to the given context and assert that the jobs
    * did not spill.
    */
-  def assertNotSpilled[T](sc: SparkContext, identifier: String)(body: => T): Unit = {
+  def assertNotSpilled(sc: SparkContext, identifier: String)(body: => Unit): Unit = {
     withListener(sc, new SpillListener) { listener =>
-      val ret = body
+      body
       assert(listener.numSpilledStages == 0, s"expected $identifier to not spill, but did")
-      ret
     }
   }
 
@@ -240,7 +238,7 @@ private[spark] object TestUtils {
    * this method will wait until all events posted to the listener bus are processed, and then
    * remove the listener from the bus.
    */
-  def withListener[L <: SparkListener, T](sc: SparkContext, listener: L) (body: L => T): T = {
+  def withListener[L <: SparkListener](sc: SparkContext, listener: L) (body: L => Unit): Unit = {
     sc.addSparkListener(listener)
     try {
       body(listener)
