@@ -67,7 +67,7 @@ private[yarn] class YarnAllocator(
     securityMgr: SecurityManager,
     localResources: Map[String, LocalResource],
     resolver: SparkRackResolver,
-    failureTracker: FailureTracker)
+    clock: Clock = new SystemClock)
   extends Logging {
 
   import YarnAllocator._
@@ -102,6 +102,8 @@ private[yarn] class YarnAllocator(
    */
   private var executorIdCounter: Int =
     driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
+
+  private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
 
   private val allocatorBlacklistTracker =
     new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
@@ -148,13 +150,15 @@ private[yarn] class YarnAllocator(
   private var hostToLocalTaskCounts: Map[String, Int] = Map.empty
 
   // Number of tasks that have locality preferences in active stages
-  private var numLocalityAwareTasks: Int = 0
+  private[yarn] var numLocalityAwareTasks: Int = 0
 
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource, resolver)
 
   def getNumExecutorsRunning: Int = runningExecutors.size()
+
+  def getNumReleasedContainers: Int = releasedContainers.size()
 
   def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 

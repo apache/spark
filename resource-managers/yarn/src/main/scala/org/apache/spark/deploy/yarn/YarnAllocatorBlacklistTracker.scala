@@ -28,8 +28,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.BlacklistTracker
-import org.apache.spark.scheduler.cluster.YarnClusterSchedulerSource
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * YarnAllocatorBlacklistTracker is responsible for tracking the blacklisted nodes
@@ -178,7 +177,7 @@ private[spark] class FailureTracker(
     failedExecutorsTimeStamps.enqueue(timeMillis)
   }
 
-  def numFailuresOnHost(hostname: String): Int = synchronized {
+  def numFailuresOnHost(hostname: String): Int = {
     failedExecutorsTimeStampsPerHost.get(hostname).map { failedExecutorsOnHost =>
       updateAndCountFailures(failedExecutorsOnHost)
     }.getOrElse(0)

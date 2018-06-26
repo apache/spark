@@ -105,7 +105,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       new SecurityManager(sparkConf),
       Map(),
       new MockResolver(),
-      new FailureTracker(sparkConf, clock))
+      clock)
   }
 
   def createContainer(host: String): Container = {
