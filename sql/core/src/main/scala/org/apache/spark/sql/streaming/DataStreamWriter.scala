@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.sources._
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.StreamWriteSupport
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -250,7 +250,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
           val r = Dataset.ofRows(df.sparkSession, new MemoryPlanV2(s, df.schema.toAttributes))
           (s, r)
         case _ =>
-          val s = new MemorySink(df.schema, outputMode, new DataSourceOptions(extraOptions.asJava))
+          val s = new MemorySink(df.schema, outputMode)
           val r = Dataset.ofRows(df.sparkSession, new MemoryPlan(s))
           (s, r)
       }

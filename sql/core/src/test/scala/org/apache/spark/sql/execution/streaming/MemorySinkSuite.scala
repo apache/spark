@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -38,7 +36,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Append output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Append, DataSourceOptions.empty())
+    val sink = new MemorySink(schema, OutputMode.Append)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -70,35 +68,9 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, 1 to 9)
   }
 
-  test("directly add data in Append output mode with row limit") {
-    implicit val schema = new StructType().add(new StructField("value", IntegerType))
-
-    var optionsMap = new scala.collection.mutable.HashMap[String, String]
-    optionsMap.put(MemorySinkBase.MAX_MEMORY_SINK_ROWS, 5.toString())
-    var options = new DataSourceOptions(optionsMap.toMap.asJava)
-    val sink = new MemorySink(schema, OutputMode.Append, options)
-
-    // Before adding data, check output
-    assert(sink.latestBatchId === None)
-    checkAnswer(sink.latestBatchData, Seq.empty)
-    checkAnswer(sink.allData, Seq.empty)
-
-    // Add batch 0 and check outputs
-    sink.addBatch(0, 1 to 3)
-    assert(sink.latestBatchId === Some(0))
-    checkAnswer(sink.latestBatchData, 1 to 3)
-    checkAnswer(sink.allData, 1 to 3)
-
-    // Add batch 1 and check outputs
-    sink.addBatch(1, 4 to 6)
-    assert(sink.latestBatchId === Some(1))
-    checkAnswer(sink.latestBatchData, 4 to 5)
-    checkAnswer(sink.allData, 1 to 5)     // new data should not go over the limit
-  }
-
   test("directly add data in Update output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Update, DataSourceOptions.empty())
+    val sink = new MemorySink(schema, OutputMode.Update)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -132,7 +104,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Complete output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Complete, DataSourceOptions.empty())
+    val sink = new MemorySink(schema, OutputMode.Complete)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -162,32 +134,6 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     assert(sink.latestBatchId === Some(2))
     checkAnswer(sink.latestBatchData, 7 to 9)
     checkAnswer(sink.allData, 7 to 9)
-  }
-
-  test("directly add data in Complete output mode with row limit") {
-    implicit val schema = new StructType().add(new StructField("value", IntegerType))
-
-    var optionsMap = new scala.collection.mutable.HashMap[String, String]
-    optionsMap.put(MemorySinkBase.MAX_MEMORY_SINK_ROWS, 5.toString())
-    var options = new DataSourceOptions(optionsMap.toMap.asJava)
-    val sink = new MemorySink(schema, OutputMode.Complete, options)
-
-    // Before adding data, check output
-    assert(sink.latestBatchId === None)
-    checkAnswer(sink.latestBatchData, Seq.empty)
-    checkAnswer(sink.allData, Seq.empty)
-
-    // Add batch 0 and check outputs
-    sink.addBatch(0, 1 to 3)
-    assert(sink.latestBatchId === Some(0))
-    checkAnswer(sink.latestBatchData, 1 to 3)
-    checkAnswer(sink.allData, 1 to 3)
-
-    // Add batch 1 and check outputs
-    sink.addBatch(1, 4 to 10)
-    assert(sink.latestBatchId === Some(1))
-    checkAnswer(sink.latestBatchData, 4 to 8)
-    checkAnswer(sink.allData, 4 to 8)     // new data should replace old data
   }
 
 
@@ -265,7 +211,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("MemoryPlan statistics") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Append, DataSourceOptions.empty())
+    val sink = new MemorySink(schema, OutputMode.Append)
     val plan = new MemoryPlan(sink)
 
     // Before adding data, check output
