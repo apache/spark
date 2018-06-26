@@ -499,3 +499,22 @@ Python Software Foundation License
 ----------------------------------
 
 pyspark/heapq3.py
+
+
+Public Domain
+-------------
+
+aopalliance:aopalliance
+net.iharder:base64
+org.tukaani:xz
+
+
+Creative Commons CC0 1.0 Universal Public Domain Dedication
+-----------------------------------------------------------
+(see LICENSE-CC0.txt)
+
+data/mllib/images/kittens/29.5.a_b_EGDP022204.jpg
+data/mllib/images/kittens/54893.jpg
+data/mllib/images/kittens/DP153539.jpg
+data/mllib/images/kittens/DP802813.jpg
+data/mllib/images/multi-channel/chr30.4.184.jpg

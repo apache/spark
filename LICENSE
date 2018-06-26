@@ -248,3 +248,14 @@ core/src/main/resources/org/apache/spark/ui/static/sorttable.js
 docs/js/vendor/anchor.min.js
 docs/js/vendor/jquery*
 docs/js/vendor/modernizer*
+
+
+Creative Commons CC0 1.0 Universal Public Domain Dedication
+-----------------------------------------------------------
+(see LICENSE-CC0.txt)
+
+data/mllib/images/kittens/29.5.a_b_EGDP022204.jpg
+data/mllib/images/kittens/54893.jpg
+data/mllib/images/kittens/DP153539.jpg
+data/mllib/images/kittens/DP802813.jpg
+data/mllib/images/multi-channel/chr30.4.184.jpg
