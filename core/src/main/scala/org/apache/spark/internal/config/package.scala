@@ -567,4 +567,15 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
+
+  private[spark] val EXECUTOR_PLUGINS =
+    ConfigBuilder("spark.executor.plugins")
+      .internal()
+      .doc("Comma-separated list of class names for \"plugins\" implementing " +
+        "org.apache.spark.AbstractExecutorPlugin.  Plugins have the same privileges as any task " +
+        "in a spark executor.  They can also interfere with task execution and fail in " +
+        "unexpected ways.  So be sure to only use this for trusted plugins.")
+      .stringConf
+      .toSequence
+      .createOptional
 }
