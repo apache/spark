@@ -74,7 +74,7 @@ object JdbcUtils extends Logging {
     // SQL database systems using JDBC meta data calls, considering "table" could also include
     // the database name. Query used to find table exists can be overridden by the dialects.
     Try {
-      val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.destinationTable))
+      val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
         statement.setQueryTimeout(options.queryTimeout)
         statement.executeQuery()
@@ -105,7 +105,7 @@ object JdbcUtils extends Logging {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(dialect.getTruncateQuery(options.destinationTable))
+      statement.executeUpdate(dialect.getTruncateQuery(options.table))
     } finally {
       statement.close()
     }
@@ -811,7 +811,7 @@ object JdbcUtils extends Logging {
       isCaseSensitive: Boolean,
       options: JdbcOptionsInWrite): Unit = {
     val url = options.url
-    val table = options.destinationTable
+    val table = options.table
     val dialect = JdbcDialects.get(url)
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(options)
@@ -841,7 +841,7 @@ object JdbcUtils extends Logging {
       options: JdbcOptionsInWrite): Unit = {
     val strSchema = schemaString(
       df, options.url, options.createTableColumnTypes)
-    val table = options.destinationTable
+    val table = options.table
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be

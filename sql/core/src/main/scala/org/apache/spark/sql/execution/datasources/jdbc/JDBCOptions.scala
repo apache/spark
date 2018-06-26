@@ -75,22 +75,23 @@ class JDBCOptions(
       )
     case (None, None) =>
       throw new IllegalArgumentException(
-        s"Option '$JDBC_TABLE_NAME' or '${JDBC_QUERY_STRING}' is required."
+        s"Option '$JDBC_TABLE_NAME' or '$JDBC_QUERY_STRING' is required."
       )
     case (Some(name), None) =>
       if (name.isEmpty) {
-        throw new IllegalArgumentException(s"Option '${JDBC_TABLE_NAME}' can not be empty.")
+        throw new IllegalArgumentException(s"Option '$JDBC_TABLE_NAME' can not be empty.")
       } else {
         name.trim
       }
     case (None, Some(subquery)) =>
       if (subquery.isEmpty) {
-        throw new IllegalArgumentException(s"Option `${JDBC_QUERY_STRING}` can not be empty.")
+        throw new IllegalArgumentException(s"Option `$JDBC_QUERY_STRING` can not be empty.")
       } else {
         s"(${subquery}) __SPARK_GEN_JDBC_SUBQUERY_NAME_${curId.getAndIncrement()}"
       }
   }
 
+  // ------------------------------------------------------------
   // Optional parameters
   // ------------------------------------------------------------
   val driverClass = {
@@ -182,6 +183,28 @@ class JDBCOptions(
   val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
 }
 
+class JdbcOptionsInWrite(
+    @transient override val parameters: CaseInsensitiveMap[String])
+  extends JDBCOptions(parameters) {
+
+  import JDBCOptions._
+
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
+
+  def this(url: String, table: String, parameters: Map[String, String]) = {
+    this(CaseInsensitiveMap(parameters ++ Map(
+      JDBCOptions.JDBC_URL -> url,
+      JDBCOptions.JDBC_TABLE_NAME -> table)))
+  }
+
+  require(
+    parameters.get(JDBC_TABLE_NAME).isDefined,
+    s"Option '$JDBC_TABLE_NAME' is required. " +
+      s"Option '$JDBC_QUERY_STRING' is not applicable while writing.")
+
+  val table = parameters(JDBC_TABLE_NAME)
+}
+
 object JDBCOptions {
   private val curId = new java.util.concurrent.atomic.AtomicLong(0L)
   private val jdbcOptionNames = collection.mutable.Set[String]()
@@ -208,26 +231,4 @@ object JDBCOptions {
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
-}
-
-class JdbcOptionsInWrite(
-    @transient override val parameters: CaseInsensitiveMap[String])
-  extends JDBCOptions(parameters) {
-
-  import JDBCOptions._
-
-  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
-
-  def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(CaseInsensitiveMap(parameters ++ Map(
-      JDBCOptions.JDBC_URL -> url,
-      JDBCOptions.JDBC_TABLE_NAME -> table)))
-  }
-
-  require(
-    parameters.get(JDBC_TABLE_NAME).isDefined,
-    s"Option '${JDBCOptions.JDBC_TABLE_NAME}' is required. " +
-      s"Option '${JDBCOptions.JDBC_QUERY_STRING}' is not applicable while writing.")
-
-  val destinationTable = parameters(JDBC_TABLE_NAME)
 }

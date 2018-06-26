@@ -75,7 +75,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
               saveTable(df, tableSchema, isCaseSensitive, options)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
-              dropTable(conn, options.destinationTable, options)
+              dropTable(conn, options.table, options)
               createTable(conn, df, options)
               saveTable(df, Some(df.schema), isCaseSensitive, options)
             }
@@ -86,7 +86,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
-              s"Table or view '${options.destinationTable}' already exists. " +
+              s"Table or view '${options.table}' already exists. " +
                 s"SaveMode: ErrorIfExists.")
 
           case SaveMode.Ignore =>
