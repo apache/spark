@@ -559,6 +559,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df8.selectExpr("arrays_zip(v1, v2)"), expectedValue8)
   }
 
+  test("SPARK-24633: arrays_zip splits input processing correctly") {
+    Seq("true", "false").foreach { wholestageCodegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholestageCodegenEnabled) {
+        val df = spark.range(1)
+        val exprs = (0 to 5).map(x => array($"id" + lit(x)))
+        checkAnswer(df.select(arrays_zip(exprs: _*)),
+          Row(Seq(Row(0, 1, 2, 3, 4, 5))))
+      }
+    }
+  }
+
+  test("map size function") {
   def testSizeOfMap(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
@@ -643,11 +655,61 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
   }
 
+  test("map_from_entries function") {
+    def dummyFilter(c: Column): Column = c.isNull || c.isNotNull
+    val oneRowDF = Seq(3215).toDF("i")
+
+    // Test cases with primitive-type keys and values
+    val idf = Seq(
+      Seq((1, 10), (2, 20), (3, 10)),
+      Seq((1, 10), null, (2, 20)),
+      Seq.empty,
+      null
+    ).toDF("a")
+    val iExpected = Seq(
+      Row(Map(1 -> 10, 2 -> 20, 3 -> 10)),
+      Row(null),
+      Row(Map.empty),
+      Row(null))
+
+    checkAnswer(idf.select(map_from_entries('a)), iExpected)
+    checkAnswer(idf.selectExpr("map_from_entries(a)"), iExpected)
+    checkAnswer(idf.filter(dummyFilter('a)).select(map_from_entries('a)), iExpected)
+    checkAnswer(
+      oneRowDF.selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
+      Seq(Row(Map(1 -> null, 2 -> null)))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('i))
+        .selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
+      Seq(Row(Map(1 -> null, 2 -> null)))
+    )
+
+    // Test cases with non-primitive-type keys and values
+    val sdf = Seq(
+      Seq(("a", "aa"), ("b", "bb"), ("c", "aa")),
+      Seq(("a", "aa"), null, ("b", "bb")),
+      Seq(("a", null), ("b", null)),
+      Seq.empty,
+      null
+    ).toDF("a")
+    val sExpected = Seq(
+      Row(Map("a" -> "aa", "b" -> "bb", "c" -> "aa")),
+      Row(null),
+      Row(Map("a" -> null, "b" -> null)),
+      Row(Map.empty),
+      Row(null))
+
+    checkAnswer(sdf.select(map_from_entries('a)), sExpected)
+    checkAnswer(sdf.selectExpr("map_from_entries(a)"), sExpected)
+    checkAnswer(sdf.filter(dummyFilter('a)).select(map_from_entries('a)), sExpected)
+  }
+
   test("array contains function") {
     val df = Seq(
-      (Seq[Int](1, 2), "x"),
-      (Seq[Int](), "x")
-    ).toDF("a", "b")
+      (Seq[Int](1, 2), "x", 1),
+      (Seq[Int](), "x", 1)
+    ).toDF("a", "b", "c")
 
     // Simple test cases
     checkAnswer(
@@ -656,6 +718,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
     checkAnswer(
       df.selectExpr("array_contains(a, 1)"),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df.select(array_contains(df("a"), df("c"))),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df.selectExpr("array_contains(a, c)"),
       Seq(Row(true), Row(false))
     )
 
@@ -746,6 +816,23 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("array_join(x, delimiter, 'NULL')"),
       Seq(Row("a,b"), Row("a,NULL,b"), Row("")))
+
+    val idf = Seq(Seq(1, 2, 3)).toDF("x")
+
+    checkAnswer(
+      idf.select(array_join(idf("x"), ", ")),
+      Seq(Row("1, 2, 3"))
+    )
+    checkAnswer(
+      idf.selectExpr("array_join(x, ', ')"),
+      Seq(Row("1, 2, 3"))
+    )
+    intercept[AnalysisException] {
+      idf.selectExpr("array_join(x, 1)")
+    }
+    intercept[AnalysisException] {
+      idf.selectExpr("array_join(x, ', ', 1)")
+    }
   }
 
   test("array_min function") {
@@ -872,9 +959,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("array position function") {
     val df = Seq(
-      (Seq[Int](1, 2), "x"),
-      (Seq[Int](), "x")
-    ).toDF("a", "b")
+      (Seq[Int](1, 2), "x", 1),
+      (Seq[Int](), "x", 1)
+    ).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(array_position(df("a"), 1)),
@@ -884,7 +971,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_position(a, 1)"),
       Seq(Row(1L), Row(0L))
     )
-
+    checkAnswer(
+      df.selectExpr("array_position(a, c)"),
+      Seq(Row(1L), Row(0L))
+    )
+    checkAnswer(
+      df.select(array_position(df("a"), df("c"))),
+      Seq(Row(1L), Row(0L))
+    )
     checkAnswer(
       df.select(array_position(df("a"), null)),
       Seq(Row(null), Row(null))
@@ -911,10 +1005,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("element_at function") {
     val df = Seq(
-      (Seq[String]("1", "2", "3")),
-      (Seq[String](null, "")),
-      (Seq[String]())
-    ).toDF("a")
+      (Seq[String]("1", "2", "3"), 1),
+      (Seq[String](null, ""), -1),
+      (Seq[String](), 2)
+    ).toDF("a", "b")
 
     intercept[Exception] {
       checkAnswer(
@@ -931,6 +1025,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(element_at(df("a"), 4)),
       Seq(Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(element_at(df("a"), df("b"))),
+      Seq(Row("1"), Row(""), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("element_at(a, b)"),
+      Seq(Row("1"), Row(""), Row(null))
     )
 
     checkAnswer(
@@ -1199,16 +1301,32 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("array remove") {
     val df = Seq(
-      (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", "")),
-      (Array.empty[Int], Array.empty[String], Array.empty[String]),
-      (null, null, null)
-    ).toDF("a", "b", "c")
+      (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", ""), 2),
+      (Array.empty[Int], Array.empty[String], Array.empty[String], 2),
+      (null, null, null, 2)
+    ).toDF("a", "b", "c", "d")
     checkAnswer(
       df.select(array_remove($"a", 2), array_remove($"b", "a"), array_remove($"c", "")),
       Seq(
         Row(Seq(1, 3), Seq("b", "c"), Seq.empty[String]),
         Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),
         Row(null, null, null))
+    )
+
+    checkAnswer(
+      df.select(array_remove($"a", $"d")),
+      Seq(
+        Row(Seq(1, 3)),
+        Row(Seq.empty[Int]),
+        Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_remove(a, d)"),
+      Seq(
+        Row(Seq(1, 3)),
+        Row(Seq.empty[Int]),
+        Row(null))
     )
 
     checkAnswer(
@@ -1224,6 +1342,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(("a string element", "a")).toDF().selectExpr("array_remove(_1, _2)")
     }
     assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+  }
+
+  test("array_distinct functions") {
+    val df = Seq(
+      (Array[Int](2, 1, 3, 4, 3, 5), Array("b", "c", "a", "c", "b", "", "")),
+      (Array.empty[Int], Array.empty[String]),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(array_distinct($"a"), array_distinct($"b")),
+      Seq(
+        Row(Seq(2, 1, 3, 4, 5), Seq("b", "c", "a", "")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("array_distinct(a)", "array_distinct(b)"),
+      Seq(
+        Row(Seq(2, 1, 3, 4, 5), Seq("b", "c", "a", "")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

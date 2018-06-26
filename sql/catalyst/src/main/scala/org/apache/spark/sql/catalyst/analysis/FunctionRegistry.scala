@@ -421,6 +421,7 @@ object FunctionRegistry {
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
     expression[MapEntries]("map_entries"),
+    expression[MapFromEntries]("map_from_entries"),
     expression[Size]("size"),
     expression[Slice]("slice"),
     expression[Size]("cardinality"),
@@ -433,6 +434,7 @@ object FunctionRegistry {
     expression[Flatten]("flatten"),
     expression[ArrayRepeat]("array_repeat"),
     expression[ArrayRemove]("array_remove"),
+    expression[ArrayDistinct]("array_distinct"),
     CreateStruct.registryEntry,
 
     // mask functions

@@ -26,7 +26,7 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions, JSONOptionsInRead}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -40,7 +40,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    val parsedOptions = new JSONOptions(
+    val parsedOptions = new JSONOptionsInRead(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
@@ -52,7 +52,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val parsedOptions = new JSONOptions(
+    val parsedOptions = new JSONOptionsInRead(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
@@ -99,7 +99,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val parsedOptions = new JSONOptions(
+    val parsedOptions = new JSONOptionsInRead(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
@@ -156,6 +156,11 @@ private[json] class JsonOutputWriter(
   private val encoding = options.encoding match {
     case Some(charsetName) => Charset.forName(charsetName)
     case None => StandardCharsets.UTF_8
+  }
+
+  if (JSONOptionsInRead.blacklist.contains(encoding)) {
+    logWarning(s"The JSON file ($path) was written in the encoding ${encoding.displayName()}" +
+         " which can be read back by Spark only if multiLine is enabled.")
   }
 
   private val writer = CodecStreams.createOutputStreamWriter(
