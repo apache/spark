@@ -186,6 +186,24 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
+ * An internal class that describes the input data of an event log.
+ */
+@DeveloperApi
+case class SparkListenerInputUpdate(format: String,
+                                    options: Map[String, String],
+                                    locations: Seq[String] = Seq.empty[String])
+  extends SparkListenerEvent
+
+/**
+ * An internal class that describes the non-table output of an event log.
+ */
+@DeveloperApi
+case class SparkListenerOutputUpdate(format: String,
+                                     mode: String,
+                                     options: Map[String, String])
+  extends SparkListenerEvent
+
+/**
  * Interface for listening to events from the Spark scheduler. Most applications should probably
  * extend SparkListener or SparkFirehoseListener directly, rather than implementing this class.
  *

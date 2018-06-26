@@ -19,6 +19,7 @@ package org.apache.spark.status
 
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import java.util.function.Function
 
 import scala.collection.JavaConverters._
@@ -73,6 +74,10 @@ private[spark] class AppStatusListener(
   // around liveExecutors.
   @volatile private var activeExecutorCount = 0
 
+  private val inputDataSetId = new AtomicLong(0)
+  private val outputDataSetId = new AtomicLong(0)
+  private val maxRecords = conf.getInt("spark.data.maxRecords", 1000)
+
   kvstore.addTrigger(classOf[ExecutorSummaryWrapper], conf.get(MAX_RETAINED_DEAD_EXECUTORS))
     { count => cleanupExecutors(count) }
 
@@ -92,7 +97,31 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
+    case update: SparkListenerInputUpdate =>
+          mayUpdateInput(update)
+    case update: SparkListenerOutputUpdate =>
+          mayUpdateOutput(update)
     case _ =>
+  }
+
+  private def mayUpdateInput(inputUpdateEvent: SparkListenerInputUpdate): Unit = {
+    val id = inputDataSetId.getAndIncrement
+    if (id < maxRecords) {
+      kvstore.write(new InputDataWrapper(id,
+        inputUpdateEvent.format,
+        inputUpdateEvent.options.toMap,
+        inputUpdateEvent.locations))
+    }
+  }
+
+  private def mayUpdateOutput(outputUpdateEvent: SparkListenerOutputUpdate): Unit = {
+    val id = outputDataSetId.getAndIncrement
+    if (id < maxRecords) {
+      kvstore.write(new OutputDataWrapper(id,
+        outputUpdateEvent.format,
+        outputUpdateEvent.mode,
+        outputUpdateEvent.options.toMap))
+    }
   }
 
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {

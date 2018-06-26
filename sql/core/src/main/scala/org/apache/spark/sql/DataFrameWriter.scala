@@ -23,6 +23,7 @@ import java.util.{Date, Locale, Properties, UUID}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.scheduler.SparkListenerOutputUpdate
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
@@ -266,6 +267,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     } else {
       saveToV1Source()
     }
+    ds.sparkSession
+      .sparkContext
+      .listenerBus
+      .post(SparkListenerOutputUpdate(
+        this.source,
+        this.mode.toString,
+        this.extraOptions))
   }
 
   private def saveToV1Source(): Unit = {

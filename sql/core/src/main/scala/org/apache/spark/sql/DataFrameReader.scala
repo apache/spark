@@ -29,9 +29,10 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.SparkListenerInputUpdate
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser}
+import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
@@ -214,13 +215,25 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   private def loadV1Source(paths: String*) = {
     // Code path for data source v1.
-    sparkSession.baseRelationToDataFrame(
-      DataSource.apply(
-        sparkSession,
-        paths = paths,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap).resolveRelation())
+
+    val relation = DataSource.apply(
+      sparkSession,
+      paths = paths,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = source,
+      options = extraOptions.toMap).resolveRelation()
+
+    relation match {
+      case hs: HadoopFsRelation =>
+        sparkSession
+          .sparkContext
+          .listenerBus
+          .post(SparkListenerInputUpdate(this.source,
+            this.extraOptions,
+            hs.location.rootPaths.map(_.toString)))
+      case _ =>
+    }
+    sparkSession.baseRelationToDataFrame(relation)
   }
 
   /**

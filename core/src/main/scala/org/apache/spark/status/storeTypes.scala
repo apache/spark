@@ -438,6 +438,18 @@ private[spark] class AppSummary(
 
 }
 
+private[spark] class InputDataWrapper(
+    @KVIndexParam @JsonIgnore val inputSetId: Long,
+    val format: String,
+    val options: Map[String, String],
+    val locations: Seq[String])
+
+private[spark] class OutputDataWrapper(
+    @KVIndexParam @JsonIgnore val outputSetId: Long,
+    val format: String,
+    val mode: String,
+    val options: Map[String, String])
+
 /**
  * A cached view of a specific quantile for one stage attempt's metrics.
  */

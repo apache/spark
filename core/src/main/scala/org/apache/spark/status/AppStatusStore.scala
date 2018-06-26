@@ -482,6 +482,14 @@ private[spark] class AppStatusStore(
     }
   }
 
+  def inputs(): Seq[InputDataWrapper] = {
+    store.view(classOf[InputDataWrapper]).asScala.toSeq
+  }
+
+  def outputs(): Seq[OutputDataWrapper] = {
+    store.view(classOf[OutputDataWrapper]).asScala.toSeq
+  }
+
   def pool(name: String): PoolData = {
     store.read(classOf[PoolData], name)
   }

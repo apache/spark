@@ -252,6 +252,20 @@ private[spark] object JsonProtocol {
     ("Block Updated Info" -> blockUpdatedInfo)
   }
 
+  def inputEventFromJson(json: JValue): SparkListenerInputUpdate = {
+    val inputFormat = (json \ "format").extract[String]
+    val options = mapFromJson(json \ "options")
+    val locations = (json \ "locations").extract[Seq[JValue]].map(_.toString)
+    SparkListenerInputUpdate(inputFormat, options, locations)
+  }
+
+  def outputEventFromJson(json: JValue): SparkListenerOutputUpdate = {
+    val mode = (json \ "mode").extract[String]
+    val outputFormat = (json \ "format").extract[String]
+    val options = mapFromJson(json \ "options")
+    SparkListenerOutputUpdate(outputFormat, mode, options)
+  }
+
   /** ------------------------------------------------------------------- *
    * JSON serialization methods for classes SparkListenerEvents depend on |
    * -------------------------------------------------------------------- */
@@ -508,7 +522,6 @@ private[spark] object JsonProtocol {
     ("Stack Trace" -> stackTraceToJson(exception.getStackTrace))
   }
 
-
   /** --------------------------------------------------- *
    * JSON deserialization methods for SparkListenerEvents |
    * ---------------------------------------------------- */
@@ -532,6 +545,8 @@ private[spark] object JsonProtocol {
     val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
     val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
     val blockUpdate = Utils.getFormattedClassName(SparkListenerBlockUpdated)
+    val inputUpdate = Utils.getFormattedClassName(SparkListenerInputUpdate)
+    val outputUpdate = Utils.getFormattedClassName(SparkListenerOutputUpdate)
   }
 
   def sparkEventFromJson(json: JValue): SparkListenerEvent = {
@@ -556,6 +571,8 @@ private[spark] object JsonProtocol {
       case `logStart` => logStartFromJson(json)
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
       case `blockUpdate` => blockUpdateFromJson(json)
+      case `inputUpdate` => inputEventFromJson(json)
+      case `outputUpdate` => outputEventFromJson(json)
       case other => mapper.readValue(compact(render(json)), Utils.classForName(other))
         .asInstanceOf[SparkListenerEvent]
     }
