@@ -30,7 +30,14 @@ import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 @ExpressionDescription(
-  usage = """_FUNC_(expr,[options]) - Infers schema for JSON `expr` by using JSON `options`.""")
+  usage = """_FUNC_(expr, [options]) - Infers schema for JSON `expr` by using JSON `options`.""",
+  examples = """
+    Examples:
+      > CREATE TEMPORARY VIEW json_table(json) AS SELECT * FROM VALUES ('{"a":1}'), ('{"a": 3}');
+      > SELECT _FUNC_(json) FROM json_table;
+       struct<a:bigint>
+  """,
+  since = "2.4.0")
 case class InferSchema(
   child: Expression,
   inputFormat: String,
