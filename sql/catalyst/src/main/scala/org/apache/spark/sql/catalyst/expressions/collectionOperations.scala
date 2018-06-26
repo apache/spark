@@ -119,11 +119,7 @@ case class Size(
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
         (${childGen.value}).numElements();""", isNull = FalseLiteral)
     } else {
-      child.dataType match {
-        case _: ArrayType | _: MapType => defineCodeGen(ctx, ev, c => s"($c).numElements()")
-        case other => throw new UnsupportedOperationException(
-          s"The size function doesn't support the operand type ${other.getClass.getCanonicalName}")
-      }
+      defineCodeGen(ctx, ev, c => s"($c).numElements()")
     }
   }
 }
