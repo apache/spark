@@ -805,6 +805,28 @@ class StreamSuite extends StreamTest {
     }
   }
 
+  test("streaming limit in append mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(5)
+
+    testStream(limited)(
+      AddData(inputData, 1 to 3: _*),
+      CheckAnswer(1 to 3: _*),
+      AddData(inputData, 4 to 9: _*),
+      CheckAnswer(1 to 5: _*))
+  }
+
+  test("streaming limit in complete mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(5)
+
+    testStream(limited, OutputMode.Complete())(
+      AddData(inputData, 1 to 3: _*),
+      CheckAnswer(1 to 3: _*),
+      AddData(inputData, 4 to 9: _*),
+      CheckAnswer(4 to 8: _*))
+  }
+
   for (e <- Seq(
     new InterruptedException,
     new InterruptedIOException,
