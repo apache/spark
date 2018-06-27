@@ -241,7 +241,7 @@ test_that("add and get file to be downloaded with Spark job on every node", {
   sparkR.session.stop()
 })
 
-test_that("add and get file to be downloaded with Spark job on every node", {
+test_that("getting number of cores and executors in the cluster", {
   sparkR.sparkContext(master = sparkRTestMaster)
 
   cores <- spark.numCores()
