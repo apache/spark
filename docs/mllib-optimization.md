@@ -121,7 +121,7 @@ computation of the sum of the partial results from each worker machine is perfor
 standard spark routines.
 
 If the fraction of points `miniBatchFraction` is set to 1 (default), then the resulting step in
-each iteration is exact (sub)gradient descent. In this case there is no randomness and no
+each iteration is exact (sub)gradient descent. In this case, there is no randomness and no
 variance in the used step directions.
 On the other extreme, if `miniBatchFraction` is chosen very small, such that only a single point
 is sampled, i.e. `$|S|=$ miniBatchFraction $\cdot n = 1$`, then the algorithm is equivalent to
@@ -135,7 +135,7 @@ algorithm in the family of quasi-Newton methods to solve the optimization proble
 quadratic without evaluating the second partial derivatives of the objective function to construct the 
 Hessian matrix. The Hessian matrix is approximated by previous gradient evaluations, so there is no 
 vertical scalability issue (the number of training features) when computing the Hessian matrix 
-explicitly in Newton's method. As a result, L-BFGS often achieves rapider convergence compared with 
+explicitly in Newton's method. As a result, L-BFGS often achieves more rapid convergence compared with
 other first-order optimization. 
 
 ### Choosing an Optimization Method

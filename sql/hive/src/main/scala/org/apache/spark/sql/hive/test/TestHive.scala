@@ -35,6 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, ExternalCatalogWithListener}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
@@ -83,11 +84,11 @@ private[hive] class TestHiveSharedState(
     hiveClient: Option[HiveClient] = None)
   extends SharedState(sc) {
 
-  override lazy val externalCatalog: TestHiveExternalCatalog = {
-    new TestHiveExternalCatalog(
+  override lazy val externalCatalog: ExternalCatalogWithListener = {
+    new ExternalCatalogWithListener(new TestHiveExternalCatalog(
       sc.conf,
       sc.hadoopConfiguration,
-      hiveClient)
+      hiveClient))
   }
 }
 
@@ -159,10 +160,6 @@ private[hive] class TestHiveSparkSession(
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
-  // TODO(SPARK-23826): TestHiveSparkSession should set default session the same way as
-  // TestSparkSession, but doing this the same way breaks many tests in the package. We need
-  // to investigate and find a different strategy.
-
   def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
       sc,
@@ -178,6 +175,9 @@ private[hive] class TestHiveSparkSession(
       parentSessionState = None,
       loadTestTables)
   }
+
+  SparkSession.setDefaultSession(this)
+  SparkSession.setActiveSession(this)
 
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
@@ -209,7 +209,9 @@ private[hive] class TestHiveSparkSession(
     new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
-  lazy val metadataHive: HiveClient = sharedState.externalCatalog.client.newSession()
+  lazy val metadataHive: HiveClient = {
+    sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.newSession()
+  }
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)

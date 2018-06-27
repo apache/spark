@@ -59,7 +59,7 @@ object TypeCoercion {
       IfCoercion ::
       StackCoercion ::
       Division ::
-      ImplicitTypeCasts ::
+      new ImplicitTypeCasts(conf) ::
       DateTimeOperations ::
       WindowFrameCoercion ::
       Nil
@@ -111,6 +111,14 @@ object TypeCoercion {
         val dataType = findTightestCommonType(f1.dataType, f2.dataType).get
         StructField(f1.name, dataType, nullable = f1.nullable || f2.nullable)
       }))
+
+    case (a1 @ ArrayType(et1, hasNull1), a2 @ ArrayType(et2, hasNull2)) if a1.sameType(a2) =>
+      findTightestCommonType(et1, et2).map(ArrayType(_, hasNull1 || hasNull2))
+
+    case (m1 @ MapType(kt1, vt1, hasNull1), m2 @ MapType(kt2, vt2, hasNull2)) if m1.sameType(m2) =>
+      val keyType = findTightestCommonType(kt1, kt2)
+      val valueType = findTightestCommonType(vt1, vt2)
+      Some(MapType(keyType.get, valueType.get, hasNull1 || hasNull2))
 
     case _ => None
   }
@@ -175,11 +183,27 @@ object TypeCoercion {
       })
   }
 
+  /**
+   * Whether the data type contains StringType.
+   */
+  def hasStringType(dt: DataType): Boolean = dt match {
+    case StringType => true
+    case ArrayType(et, _) => hasStringType(et)
+    // Add StructType if we support string promotion for struct fields in the future.
+    case _ => false
+  }
+
   private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case Some(d) => findWiderTypeForTwo(d, c)
-      case None => None
-    })
+    // findWiderTypeForTwo doesn't satisfy the associative law, i.e. (a op b) op c may not equal
+    // to a op (b op c). This is only a problem for StringType or nested StringType in ArrayType.
+    // Excluding these types, findWiderTypeForTwo satisfies the associative law. For instance,
+    // (TimestampType, IntegerType, StringType) should have StringType as the wider common type.
+    val (stringTypes, nonStringTypes) = types.partition(hasStringType(_))
+    (stringTypes.distinct ++ nonStringTypes).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
+      r match {
+        case Some(d) => findWiderTypeForTwo(d, c)
+        case _ => None
+      })
   }
 
   /**
@@ -504,6 +528,29 @@ object TypeCoercion {
           case None => a
         }
 
+      case c @ Concat(children) if children.forall(c => ArrayType.acceptsType(c.dataType)) &&
+        !haveSameType(children) =>
+        val types = children.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(finalDataType) => Concat(children.map(Cast(_, finalDataType)))
+          case None => c
+        }
+
+      case aj @ ArrayJoin(arr, d, nr) if !ArrayType(StringType).acceptsType(arr.dataType) &&
+        ArrayType.acceptsType(arr.dataType) =>
+        val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
+        ImplicitTypeCasts.implicitCast(arr, ArrayType(StringType, containsNull)) match {
+          case Some(castedArr) => ArrayJoin(castedArr, d, nr)
+          case None => aj
+        }
+
+      case s @ Sequence(_, _, _, timeZoneId) if !haveSameType(s.coercibleChildren) =>
+        val types = s.coercibleChildren.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(widerDataType) => s.castChildrenTo(widerDataType)
+          case None => s
+        }
+
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
         (!haveSameType(m.keys) || !haveSameType(m.values)) =>
         val newKeys = if (haveSameType(m.keys)) {
@@ -744,11 +791,32 @@ object TypeCoercion {
   /**
    * Casts types according to the expected input types for [[Expression]]s.
    */
-  object ImplicitTypeCasts extends TypeCoercionRule {
+  class ImplicitTypeCasts(conf: SQLConf) extends TypeCoercionRule {
+
+    private def rejectTzInString = conf.getConf(SQLConf.REJECT_TIMEZONE_IN_STRING)
+
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
+
+      // Special rules for `from/to_utc_timestamp`. These 2 functions assume the input timestamp
+      // string is in a specific timezone, so the string itself should not contain timezone.
+      // TODO: We should move the type coercion logic to expressions instead of a central
+      // place to put all the rules.
+      case e: FromUTCTimestamp if e.left.dataType == StringType =>
+        if (rejectTzInString) {
+          e.copy(left = StringToTimestampWithoutTimezone(e.left))
+        } else {
+          e.copy(left = Cast(e.left, TimestampType))
+        }
+
+      case e: ToUTCTimestamp if e.left.dataType == StringType =>
+        if (rejectTzInString) {
+          e.copy(left = StringToTimestampWithoutTimezone(e.left))
+        } else {
+          e.copy(left = Cast(e.left, TimestampType))
+        }
 
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
@@ -766,7 +834,7 @@ object TypeCoercion {
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
-          implicitCast(in, expected).getOrElse(in)
+          ImplicitTypeCasts.implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
@@ -782,6 +850,9 @@ object TypeCoercion {
         }
         e.withNewChildren(children)
     }
+  }
+
+  object ImplicitTypeCasts {
 
     /**
      * Given an expected data type, try to cast the expression and return the cast expression.

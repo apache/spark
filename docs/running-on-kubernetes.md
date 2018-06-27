@@ -17,7 +17,7 @@ container images and entrypoints.**
 * A runnable distribution of Spark 2.3 or above.
 * A running Kubernetes cluster at version >= 1.6 with access configured to it using
 [kubectl](https://kubernetes.io/docs/user-guide/prereqs/).  If you do not already have a working Kubernetes cluster,
-you may setup a test cluster on your local machine using
+you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
   * We recommend using the latest release of minikube with the DNS addon enabled.
   * Be aware that the default minikube configuration is not enough for running Spark applications.
@@ -140,6 +140,12 @@ namespace as that of the driver and executor pods. For example, to mount a secre
 --conf spark.kubernetes.executor.secrets.spark-secret=/etc/secrets
 ```
 
+To use a secret through an environment variable use the following options to the `spark-submit` command:
+```
+--conf spark.kubernetes.driver.secretKeyRef.ENV_NAME=name:key
+--conf spark.kubernetes.executor.secretKeyRef.ENV_NAME=name:key
+```
+
 ## Introspection and Debugging
 
 These are the different ways in which you can investigate a running/completed Spark application, monitor progress, and
@@ -221,7 +227,7 @@ that allows driver pods to create pods and services under the default Kubernetes
 [RBAC](https://kubernetes.io/docs/admin/authorization/rbac/) policies. Sometimes users may need to specify a custom
 service account that has the right role granted. Spark on Kubernetes supports specifying a custom service account to
 be used by the driver pod through the configuration property
-`spark.kubernetes.authenticate.driver.serviceAccountName=<service account name>`. For example to make the driver pod
+`spark.kubernetes.authenticate.driver.serviceAccountName=<service account name>`. For example, to make the driver pod
 use the `spark` service account, a user simply adds the following option to the `spark-submit` command:
 
 ```
@@ -264,7 +270,6 @@ future versions of the spark-kubernetes integration.
 
 Some of these include:
 
-* PySpark
 * R
 * Dynamic Executor Scaling
 * Local File Dependency Management
@@ -319,6 +324,13 @@ specific to Spark on Kubernetes.
   <td><code>IfNotPresent</code></td>
   <td>
     Container image pull policy used when pulling images within Kubernetes.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.container.image.pullSecrets</code></td>
+  <td><code></code></td>
+  <td>
+    Comma separated list of Kubernetes secrets used to pull images from private image registries.
   </td>
 </tr>
 <tr>
@@ -549,14 +561,23 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.driver.limit.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the driver pod.
+    Specify a hard cpu [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the driver pod.
   </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.request.cores</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the cpu request for each executor pod. Values conform to the Kubernetes [convention](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu). 
+    Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in [CPU units](https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units).   
+    This is distinct from <code>spark.executor.cores</code>: it is only used and takes precedence over <code>spark.executor.cores</code> for specifying the executor pod cpu request if set. Task 
+    parallelism, e.g., number of tasks an executor can run concurrently is not affected by this.
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.limit.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify the hard CPU [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for each executor pod launched for the Spark Application.
+    Specify a hard cpu [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for each executor pod launched for the Spark Application.
   </td>
 </tr>
 <tr>
@@ -591,6 +612,37 @@ specific to Spark on Kubernetes.
   <td>
    Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the executor pod on the path specified in the value. For example,
    <code>spark.kubernetes.executor.secrets.spark-secret=/etc/secrets</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.secretKeyRef.[EnvName]</code></td>
+  <td>(none)</td>
+  <td>
+   Add as an environment variable to the driver container with name EnvName (case sensitive), the value referenced by key <code> key </code> in the data of the referenced <a href="https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables">Kubernetes Secret</a>. For example,
+   <code>spark.kubernetes.driver.secretKeyRef.ENV_VAR=spark-secret:key</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.secretKeyRef.[EnvName]</code></td>
+  <td>(none)</td>
+  <td>
+   Add as an environment variable to the executor container with name EnvName (case sensitive), the value referenced by key <code> key </code> in the data of the referenced <a href="https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables">Kubernetes Secret</a>. For example,
+   <code>spark.kubernetes.executor.secrets.ENV_VAR=spark-secret:key</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
+  <td><code>0.1</code></td>
+  <td>
+    This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, and various systems processes. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
+    This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This prempts this error with a higher default. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.pyspark.pythonversion</code></td>
+  <td><code>"2"</code></td>
+  <td>
+   This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
   </td>
 </tr>
 </table>

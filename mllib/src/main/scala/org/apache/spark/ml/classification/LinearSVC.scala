@@ -170,7 +170,7 @@ class LinearSVC @Since("2.2.0") (
           Instance(label, weight, features)
       }
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(regParam, maxIter, fitIntercept, tol, standardization, threshold,
       aggregationDepth)
 
@@ -187,6 +187,9 @@ class LinearSVC @Since("2.2.0") (
         (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
+    instr.logNamedValue(Instrumentation.loggerTags.numExamples, summarizer.count)
+    instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
+    instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -209,7 +212,7 @@ class LinearSVC @Since("2.2.0") (
       if (numInvalid != 0) {
         val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
           s"Found $numInvalid invalid labels."
-        logError(msg)
+        instr.logError(msg)
         throw new SparkException(msg)
       }
 
@@ -246,7 +249,7 @@ class LinearSVC @Since("2.2.0") (
       bcFeaturesStd.destroy(blocking = false)
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
-        logError(msg)
+        instr.logError(msg)
         throw new SparkException(msg)
       }
 
@@ -377,7 +380,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
       val Row(coefficients: Vector, intercept: Double) =
         data.select("coefficients", "intercept").head()
       val model = new LinearSVCModel(metadata.uid, coefficients, intercept)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

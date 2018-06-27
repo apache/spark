@@ -206,7 +206,7 @@ class DAGScheduler(
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
-  private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
   /**
@@ -1092,17 +1092,16 @@ class DAGScheduler(
       // the stage as completed here in case there are no tasks to run
       markStageAsFinished(stage, None)
 
-      val debugString = stage match {
+      stage match {
         case stage: ShuffleMapStage =>
-          s"Stage ${stage} is actually done; " +
-            s"(available: ${stage.isAvailable}," +
-            s"available outputs: ${stage.numAvailableOutputs}," +
-            s"partitions: ${stage.numPartitions})"
+          logDebug(s"Stage ${stage} is actually done; " +
+              s"(available: ${stage.isAvailable}," +
+              s"available outputs: ${stage.numAvailableOutputs}," +
+              s"partitions: ${stage.numPartitions})")
+          markMapStageJobsAsFinished(stage)
         case stage : ResultStage =>
-          s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})"
+          logDebug(s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})")
       }
-      logDebug(debugString)
-
       submitWaitingChildStages(stage)
     }
   }
@@ -1168,12 +1167,11 @@ class DAGScheduler(
    */
   private[scheduler] def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
-    val taskId = event.taskInfo.id
     val stageId = task.stageId
-    val taskType = Utils.getFormattedClassName(task)
 
     outputCommitCoordinator.taskCompleted(
       stageId,
+      task.stageAttemptId,
       task.partitionId,
       event.taskInfo.attemptNumber, // this is a task attempt number
       event.reason)
@@ -1211,7 +1209,7 @@ class DAGScheduler(
           case _ =>
             updateAccumulators(event)
         }
-      case _: ExceptionFailure => updateAccumulators(event)
+      case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
       case _ =>
     }
     postTaskEnd(event)
@@ -1307,13 +1305,7 @@ class DAGScheduler(
                   shuffleStage.findMissingPartitions().mkString(", "))
                 submitStage(shuffleStage)
               } else {
-                // Mark any map-stage jobs waiting on this stage as finished
-                if (shuffleStage.mapStageJobs.nonEmpty) {
-                  val stats = mapOutputTracker.getStatistics(shuffleStage.shuffleDep)
-                  for (job <- shuffleStage.mapStageJobs) {
-                    markMapStageJobAsFinished(job, stats)
-                  }
-                }
+                markMapStageJobsAsFinished(shuffleStage)
                 submitWaitingChildStages(shuffleStage)
               }
             }
@@ -1330,7 +1322,7 @@ class DAGScheduler(
               "tasks in ShuffleMapStages.")
         }
 
-      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
+      case FetchFailed(bmAddress, shuffleId, mapId, _, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
@@ -1339,22 +1331,23 @@ class DAGScheduler(
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
+          failedStage.fetchFailedAttemptIds.add(task.stageAttemptId)
+          val shouldAbortStage =
+            failedStage.fetchFailedAttemptIds.size >= maxConsecutiveStageAttempts ||
+            disallowStageRetryForTest
+
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
           // multiple tasks running concurrently on different executors). In that case, it is
           // possible the fetch failure has already been handled by the scheduler.
           if (runningStages.contains(failedStage)) {
             logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
               s"due to a fetch failure from $mapStage (${mapStage.name})")
-            markStageAsFinished(failedStage, Some(failureMessage))
+            markStageAsFinished(failedStage, errorMessage = Some(failureMessage),
+              willRetry = !shouldAbortStage)
           } else {
             logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
               s"longer running")
           }
-
-          failedStage.fetchFailedAttemptIds.add(task.stageAttemptId)
-          val shouldAbortStage =
-            failedStage.fetchFailedAttemptIds.size >= maxConsecutiveStageAttempts ||
-            disallowStageRetryForTest
 
           if (shouldAbortStage) {
             val abortMessage = if (disallowStageRetryForTest) {
@@ -1418,18 +1411,28 @@ class DAGScheduler(
           }
         }
 
-      case commitDenied: TaskCommitDenied =>
+      case _: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case exceptionFailure: ExceptionFailure =>
+      case _: ExceptionFailure | _: TaskKilled =>
         // Nothing left to do, already handled above for accumulator updates.
 
       case TaskResultLost =>
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
-      case _: ExecutorLostFailure | _: TaskKilled | UnknownReason =>
+      case _: ExecutorLostFailure | UnknownReason =>
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
+    }
+  }
+
+  private[scheduler] def markMapStageJobsAsFinished(shuffleStage: ShuffleMapStage): Unit = {
+    // Mark any map-stage jobs waiting on this stage as finished
+    if (shuffleStage.isAvailable && shuffleStage.mapStageJobs.nonEmpty) {
+      val stats = mapOutputTracker.getStatistics(shuffleStage.shuffleDep)
+      for (job <- shuffleStage.mapStageJobs) {
+        markMapStageJobAsFinished(job, stats)
+      }
     }
   }
 
@@ -1544,7 +1547,10 @@ class DAGScheduler(
   /**
    * Marks a stage as finished and removes it from the list of running stages.
    */
-  private def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None): Unit = {
+  private def markStageAsFinished(
+      stage: Stage,
+      errorMessage: Option[String] = None,
+      willRetry: Boolean = false): Unit = {
     val serviceTime = stage.latestInfo.submissionTime match {
       case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
       case _ => "Unknown"
@@ -1563,7 +1569,9 @@ class DAGScheduler(
       logInfo(s"$stage (${stage.name}) failed in $serviceTime s due to ${errorMessage.get}")
     }
 
-    outputCommitCoordinator.stageEnd(stage.id)
+    if (!willRetry) {
+      outputCommitCoordinator.stageEnd(stage.id)
+    }
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage
   }

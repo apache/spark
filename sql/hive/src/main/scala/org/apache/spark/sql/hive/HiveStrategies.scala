@@ -186,15 +186,28 @@ case class RelationConversions(
       serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 
+  // Return true for Apache ORC and Hive ORC-related configuration names.
+  // Note that Spark doesn't support configurations like `hive.merge.orcfile.stripe.level`.
+  private def isOrcProperty(key: String) =
+    key.startsWith("orc.") || key.contains(".orc.")
+
+  private def isParquetProperty(key: String) =
+    key.startsWith("parquet.") || key.contains(".parquet.")
+
   private def convert(relation: HiveTableRelation): LogicalRelation = {
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+
+    // Consider table and storage properties. For properties existing in both sides, storage
+    // properties will supersede table properties.
     if (serde.contains("parquet")) {
-      val options = relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
+      val options = relation.tableMeta.properties.filterKeys(isParquetProperty) ++
+        relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
       sessionCatalog.metastoreCatalog
         .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
     } else {
-      val options = relation.tableMeta.storage.properties
+      val options = relation.tableMeta.properties.filterKeys(isOrcProperty) ++
+        relation.tableMeta.storage.properties
       if (conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
         sessionCatalog.metastoreCatalog.convertToLogicalRelation(
           relation,

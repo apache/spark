@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
@@ -42,10 +43,10 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val storageLevel = MEMORY_ONLY
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
     val inMemoryRelation = InMemoryRelation(useCompression = true, 5, storageLevel, plan, None,
-      data.logicalPlan.stats)
+      data.logicalPlan)
 
-    assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
-    inMemoryRelation.cachedColumnBuffers.collect().head match {
+    assert(inMemoryRelation.cacheBuilder.cachedColumnBuffers.getStorageLevel == storageLevel)
+    inMemoryRelation.cacheBuilder.cachedColumnBuffers.collect().head match {
       case _: CachedBatch =>
       case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
     }
@@ -119,7 +120,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("simple columnar query") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
-      testData.logicalPlan.stats)
+      testData.logicalPlan)
 
     checkAnswer(scan, testData.collect().toSeq)
   }
@@ -138,7 +139,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val logicalPlan = testData.select('value, 'key).logicalPlan
     val plan = spark.sessionState.executePlan(logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
-      logicalPlan.stats)
+      logicalPlan)
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
@@ -155,7 +156,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
-      testData.logicalPlan.stats)
+      testData.logicalPlan)
 
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)
@@ -329,14 +330,14 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-17549: cached table size should be correctly calculated") {
     val data = spark.sparkContext.parallelize(1 to 10, 5).toDF()
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
-    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None, data.logicalPlan.stats)
+    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None, data.logicalPlan)
 
     // Materialize the data.
     val expectedAnswer = data.collect()
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
+    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
   }
 
   test("access primitive-type columns in CachedBatch without whole stage codegen") {
@@ -455,7 +456,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-22249: buildFilter should not throw exception when In contains an empty list") {
     val attribute = AttributeReference("a", IntegerType)()
     val localTableScanExec = LocalTableScanExec(Seq(attribute), Nil)
-    val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY, localTableScanExec, None, null)
+    val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY, localTableScanExec, None,
+      LocalRelation(Seq(attribute), Nil))
     val tableScanExec = InMemoryTableScanExec(Seq(attribute),
       Seq(In(attribute, Nil)), testRelation)
     assert(tableScanExec.partitionFilters.isEmpty)
@@ -501,7 +503,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
             case plan: InMemoryRelation => plan
           }.head
           // InMemoryRelation's stats is file size before the underlying RDD is materialized
-          assert(inMemoryRelation.computeStats().sizeInBytes === 740)
+          assert(inMemoryRelation.computeStats().sizeInBytes === 800)
 
           // InMemoryRelation's stats is updated after materializing RDD
           dfFromFile.collect()
@@ -514,7 +516,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
           // Even CBO enabled, InMemoryRelation's stats keeps as the file size before table's stats
           // is calculated
-          assert(inMemoryRelation2.computeStats().sizeInBytes === 740)
+          assert(inMemoryRelation2.computeStats().sizeInBytes === 800)
 
           // InMemoryRelation's stats should be updated after calculating stats of the table
           // clear cache to simulate a fresh environment

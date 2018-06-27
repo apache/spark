@@ -196,6 +196,14 @@ public class LauncherServerSuite extends BaseSuite {
       Socket s = new Socket(InetAddress.getLoopbackAddress(), server.getPort());
       client = new TestClient(s);
       client.send(new Hello(secret, "1.4.0"));
+      client.send(new SetAppId("someId"));
+
+      // Wait until we know the server has received the messages and matched the handle to the
+      // connection before disconnecting.
+      eventually(Duration.ofSeconds(1), Duration.ofMillis(10), () -> {
+        assertEquals("someId", handle.getAppId());
+      });
+
       handle.disconnect();
       waitForError(client, secret);
     } finally {

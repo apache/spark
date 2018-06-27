@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s
 
+import io.fabric8.kubernetes.api.model.LocalObjectReference
+
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
@@ -50,7 +52,7 @@ private[spark] object KubernetesUtils {
     }
   }
 
-  private def resolveFileUri(uri: String): String = {
+  def resolveFileUri(uri: String): String = {
     val fileUri = Utils.resolveURI(uri)
     val fileScheme = Option(fileUri.getScheme).getOrElse("file")
     fileScheme match {

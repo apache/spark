@@ -22,6 +22,7 @@ import java.net.Socket
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
 import java.util.{Calendar, List => JList, Locale, Optional}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -33,7 +34,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.LongOffset
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
@@ -76,7 +77,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   @GuardedBy("this")
   private var lastOffsetCommitted: LongOffset = LongOffset(-1L)
 
-  initialize()
+  private val initialized: AtomicBoolean = new AtomicBoolean(false)
 
   /** This method is only used for unit test */
   private[sources] def getCurrentOffset(): LongOffset = synchronized {
@@ -140,7 +141,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     }
   }
 
-  override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
+  override def planInputPartitions(): JList[InputPartition[Row]] = {
     assert(startOffset != null && endOffset != null,
       "start offset and end offset should already be set before create read tasks.")
 
@@ -149,6 +150,10 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
 
     // Internal buffer only holds the batches after lastOffsetCommitted
     val rawList = synchronized {
+      if (initialized.compareAndSet(false, true)) {
+        initialize()
+      }
+
       val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
       val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
       batches.slice(sliceStart, sliceEnd)
@@ -165,21 +170,22 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
 
     (0 until numPartitions).map { i =>
       val slice = slices(i)
-      new DataReaderFactory[Row] {
-        override def createDataReader(): DataReader[Row] = new DataReader[Row] {
-          private var currentIdx = -1
+      new InputPartition[Row] {
+        override def createPartitionReader(): InputPartitionReader[Row] =
+          new InputPartitionReader[Row] {
+            private var currentIdx = -1
 
-          override def next(): Boolean = {
-            currentIdx += 1
-            currentIdx < slice.size
+            override def next(): Boolean = {
+              currentIdx += 1
+              currentIdx < slice.size
+            }
+
+            override def get(): Row = {
+              Row(slice(currentIdx)._1, slice(currentIdx)._2)
+            }
+
+            override def close(): Unit = {}
           }
-
-          override def get(): Row = {
-            Row(slice(currentIdx)._1, slice(currentIdx)._2)
-          }
-
-          override def close(): Unit = {}
-        }
       }
     }.toList.asJava
   }
@@ -214,7 +220,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     }
   }
 
-  override def toString: String = s"TextSocket[host: $host, port: $port]"
+  override def toString: String = s"TextSocketV2[host: $host, port: $port]"
 }
 
 class TextSocketSourceProvider extends DataSourceV2

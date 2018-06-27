@@ -36,7 +36,8 @@ object HashByteArrayBenchmark {
       bytes
     }
 
-    val benchmark = new Benchmark("Hash byte arrays with length " + length, iters * numArrays)
+    val benchmark =
+      new Benchmark("Hash byte arrays with length " + length, iters * numArrays.toLong)
     benchmark.addCase("Murmur3_x86_32") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iters) {

@@ -892,7 +892,9 @@ private[spark] class Client(
     // Include driver-specific java options if we are launching a driver
     if (isClusterMode) {
       sparkConf.get(DRIVER_JAVA_OPTIONS).foreach { opts =>
-        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+        javaOpts ++= Utils.splitCommandString(opts)
+          .map(Utils.substituteAppId(_, appId.toString))
+          .map(YarnSparkHadoopUtil.escapeForShell)
       }
       val libraryPaths = Seq(sparkConf.get(DRIVER_LIBRARY_PATH),
         sys.props.get("spark.driver.libraryPath")).flatten
@@ -914,7 +916,9 @@ private[spark] class Client(
             s"(was '$opts'). Use spark.yarn.am.memory instead."
           throw new SparkException(msg)
         }
-        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+        javaOpts ++= Utils.splitCommandString(opts)
+          .map(Utils.substituteAppId(_, appId.toString))
+          .map(YarnSparkHadoopUtil.escapeForShell)
       }
       sparkConf.get(AM_LIBRARY_PATH).foreach { paths =>
         prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(paths))))
@@ -1015,8 +1019,7 @@ private[spark] class Client(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
       logApplicationReport: Boolean = true,
-      interval: Long = sparkConf.get(REPORT_INTERVAL)):
-      (YarnApplicationState, FinalApplicationStatus) = {
+      interval: Long = sparkConf.get(REPORT_INTERVAL)): YarnAppReport = {
     var lastState: YarnApplicationState = null
     while (true) {
       Thread.sleep(interval)
@@ -1027,11 +1030,13 @@ private[spark] class Client(
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
             cleanupStagingDir(appId)
-            return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
+            return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
           case NonFatal(e) =>
-            logError(s"Failed to contact YARN for application $appId.", e)
+            val msg = s"Failed to contact YARN for application $appId."
+            logError(msg, e)
             // Don't necessarily clean up staging dir because status is unknown
-            return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
+            return YarnAppReport(YarnApplicationState.FAILED, FinalApplicationStatus.FAILED,
+              Some(msg))
         }
       val state = report.getYarnApplicationState
 
@@ -1069,14 +1074,14 @@ private[spark] class Client(
       }
 
       if (state == YarnApplicationState.FINISHED ||
-        state == YarnApplicationState.FAILED ||
-        state == YarnApplicationState.KILLED) {
+          state == YarnApplicationState.FAILED ||
+          state == YarnApplicationState.KILLED) {
         cleanupStagingDir(appId)
-        return (state, report.getFinalApplicationStatus)
+        return createAppReport(report)
       }
 
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
-        return (state, report.getFinalApplicationStatus)
+        return createAppReport(report)
       }
 
       lastState = state
@@ -1125,16 +1130,17 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
-      val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
-      if (yarnApplicationState == YarnApplicationState.FAILED ||
-        finalApplicationStatus == FinalApplicationStatus.FAILED) {
+      val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
+      if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
+        diags.foreach { err =>
+          logError(s"Application diagnostics message: $err")
+        }
         throw new SparkException(s"Application $appId finished with failed status")
       }
-      if (yarnApplicationState == YarnApplicationState.KILLED ||
-        finalApplicationStatus == FinalApplicationStatus.KILLED) {
+      if (appState == YarnApplicationState.KILLED || finalState == FinalApplicationStatus.KILLED) {
         throw new SparkException(s"Application $appId is killed")
       }
-      if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
+      if (finalState == FinalApplicationStatus.UNDEFINED) {
         throw new SparkException(s"The final status of application $appId is undefined")
       }
     }
@@ -1148,7 +1154,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.6-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.7-src.zip")
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
@@ -1473,6 +1479,12 @@ private object Client extends Logging {
     uri.startsWith(s"$LOCAL_SCHEME:")
   }
 
+  def createAppReport(report: ApplicationReport): YarnAppReport = {
+    val diags = report.getDiagnostics()
+    val diagsOpt = if (diags != null && diags.nonEmpty) Some(diags) else None
+    YarnAppReport(report.getYarnApplicationState(), report.getFinalApplicationStatus(), diagsOpt)
+  }
+
 }
 
 private[spark] class YarnClusterApplication extends SparkApplication {
@@ -1487,3 +1499,8 @@ private[spark] class YarnClusterApplication extends SparkApplication {
   }
 
 }
+
+private[spark] case class YarnAppReport(
+    appState: YarnApplicationState,
+    finalState: FinalApplicationStatus,
+    diagnostics: Option[String])

@@ -101,14 +101,15 @@ def continue_maybe(prompt):
 
 
 def clean_up():
-    print("Restoring head pointer to %s" % original_head)
-    run_cmd("git checkout %s" % original_head)
+    if 'original_head' in globals():
+        print("Restoring head pointer to %s" % original_head)
+        run_cmd("git checkout %s" % original_head)
 
-    branches = run_cmd("git branch").replace(" ", "").split("\n")
+        branches = run_cmd("git branch").replace(" ", "").split("\n")
 
-    for branch in filter(lambda x: x.startswith(BRANCH_PREFIX), branches):
-        print("Deleting local branch %s" % branch)
-        run_cmd("git branch -D %s" % branch)
+        for branch in filter(lambda x: x.startswith(BRANCH_PREFIX), branches):
+            print("Deleting local branch %s" % branch)
+            run_cmd("git branch -D %s" % branch)
 
 
 # merge the requested PR and return the merge hash
