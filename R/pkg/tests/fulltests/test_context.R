@@ -240,3 +240,15 @@ test_that("add and get file to be downloaded with Spark job on every node", {
   unlink(path, recursive = TRUE)
   sparkR.session.stop()
 })
+
+test_that("add and get file to be downloaded with Spark job on every node", {
+  sparkR.sparkContext(master = sparkRTestMaster)
+
+  cores <- spark.numCores()
+  expect_equal(cores, 1)
+
+  executors <- spark.numExecutors()
+  expect_equal(executors, 1)
+
+  sparkR.session.stop()
+})
