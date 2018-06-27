@@ -269,8 +269,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
 
-       Seq("orc", "json").foreach { format =>
-        // write path
+      // write path
+      Seq("csv", "json", "parquet", "orc").foreach { format =>
         var msg = intercept[AnalysisException] {
           sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
         }.getMessage
@@ -282,41 +282,11 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
           .contains(s"$format data source does not support calendarinterval data type."))
-
-        // read path
-        // We expect the types below should be passed for backward-compatibility
-
-        // Interval type
-        var schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
-        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
-        spark.read.schema(schema).format(format).load(tempDir).collect()
-
-        // UDT having interval data
-        schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
-        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
-        spark.read.schema(schema).format(format).load(tempDir).collect()
       }
-    }
 
-    withTempDir { dir =>
-      val tempDir = new File(dir, "files").getCanonicalPath
-
+      // read path
       Seq("parquet", "csv").foreach { format =>
-        // write path
-        var msg = intercept[AnalysisException] {
-          sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.contains("Cannot save interval data type into external storage."))
-
-        msg = intercept[UnsupportedOperationException] {
-          spark.udf.register("testType", () => new IntervalData())
-          sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support calendarinterval data type."))
-
-        // read path
-        msg = intercept[UnsupportedOperationException] {
+        var msg = intercept[UnsupportedOperationException] {
           val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
           spark.range(1).write.format(format).mode("overwrite").save(tempDir)
           spark.read.schema(schema).format(format).load(tempDir).collect()
@@ -331,6 +301,19 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
           .contains(s"$format data source does not support calendarinterval data type."))
+      }
+
+      // We expect the types below should be passed for backward-compatibility
+      Seq("orc", "json").foreach { format =>
+        // Interval type
+        var schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
+
+        // UDT having interval data
+        schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
       }
     }
   }
