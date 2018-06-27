@@ -430,4 +430,16 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(group2, Row("bob", Row(true, 3)) :: Nil)
     checkDataset(group2.as[OptionBooleanIntData], OptionBooleanIntData("bob", Some((true, 3))))
   }
+
+  test("SPARK-24569: groupByKey with Aggregator of output type Option[Boolean]") {
+    val df = Seq(
+      OptionBooleanData("bob", Some(true)),
+      OptionBooleanData("bob", Some(false)),
+      OptionBooleanData("bob", None)).toDF()
+    val grouped = df.groupByKey((r: Row) => r.getString(0))
+      .agg(OptionBooleanAggregator("isGood").toColumn).toDF("name", "isGood")
+
+    assert(grouped.schema == df.schema)
+    checkDataset(grouped.as[OptionBooleanData], OptionBooleanData("bob", Some(true)))
+  }
 }
