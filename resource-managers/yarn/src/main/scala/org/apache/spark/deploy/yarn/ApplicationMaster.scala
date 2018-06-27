@@ -68,7 +68,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
 
   private val securityMgr = new SecurityManager(sparkConf)
 
-  private var metricsSystem: MetricsSystem = _
+  private var metricsSystem: Option[MetricsSystem] = None
 
   // Set system properties for each config entry. This covers two use cases:
   // - The default configuration stored by the SparkHadoopUtil class
@@ -313,8 +313,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + StringUtils.stringifyException(e))
     } finally {
-      metricsSystem.report()
-      metricsSystem.stop()
+      metricsSystem.foreach { ms =>
+        ms.report()
+        ms.stop()
+      }
     }
   }
 
@@ -440,9 +442,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
 
     allocator.allocateResources()
-    metricsSystem = MetricsSystem.createMetricsSystem("yarn", sparkConf, securityMgr)
-    metricsSystem.registerSource(new YarnClusterSchedulerSource(allocator))
-    metricsSystem.start()
+    val ms = MetricsSystem.createMetricsSystem("yarn", sparkConf, securityMgr)
+    ms.registerSource(new YarnClusterSchedulerSource(allocator))
+    ms.start()
+    metricsSystem = Some(ms)
     reporterThread = launchReporterThread()
   }
 
