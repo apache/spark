@@ -22,6 +22,7 @@ import io.netty.channel.FileRegion
 import io.netty.util.AbstractReferenceCounted
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.AbstractFileRegion
 
 
 /**
@@ -30,14 +31,13 @@ import org.apache.spark.internal.Logging
  * even though the data is not backed by a file.
  */
 private[io] class ChunkedByteBufferFileRegion(
-    val chunkedByteBuffer: ChunkedByteBuffer,
-    val ioChunkSize: Int) extends AbstractReferenceCounted with FileRegion with Logging {
+    private val chunkedByteBuffer: ChunkedByteBuffer,
+    private val ioChunkSize: Int) extends AbstractFileRegion {
 
   private var _transferred: Long = 0
   // this duplicates the original chunks, so we're free to modify the position, limit, etc.
   private val chunks = chunkedByteBuffer.getChunks()
-  private val cumLength = chunks.scanLeft(0L) { _ + _.remaining()}
-  private val size = cumLength.last
+  private val size = chunks.foldLeft(0) { _ + _.remaining()}
 
   protected def deallocate: Unit = {}
 
@@ -47,22 +47,6 @@ private[io] class ChunkedByteBufferFileRegion(
   override def position(): Long = 0
 
   override def transferred(): Long = _transferred
-
-  override def transfered(): Long = _transferred
-
-  override def touch(): ChunkedByteBufferFileRegion = this
-
-  override def touch(hint: Object): ChunkedByteBufferFileRegion = this
-
-  override def retain(): FileRegion = {
-    super.retain()
-    this
-  }
-
-  override def retain(increment: Int): FileRegion = {
-    super.retain(increment)
-    this
-  }
 
   private var currentChunkIdx = 0
 
@@ -75,7 +59,6 @@ private[io] class ChunkedByteBufferFileRegion(
     while (keepGoing) {
       while (currentChunk.hasRemaining && keepGoing) {
         val ioSize = Math.min(currentChunk.remaining(), ioChunkSize)
-        val originalPos = currentChunk.position()
         val originalLimit = currentChunk.limit()
         currentChunk.limit(currentChunk.position() + ioSize)
         val thisWriteSize = target.write(currentChunk)
