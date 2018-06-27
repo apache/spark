@@ -440,6 +440,10 @@ setCheckpointDir <- function(directory) {
 #'
 #' @rdname spark.numCores
 #' @return current number of cores in the cluster.
+#' @examples
+#'\dontrun{
+#' spark.numCores()
+#'}
 #' @note numCores since 2.4.0
 spark.numCores <- function() {
   sc <- getSparkContext()
@@ -450,6 +454,10 @@ spark.numCores <- function() {
 #'
 #' @rdname spark.numExecutors
 #' @return current number of executors in the cluster.
+#' @examples
+#'\dontrun{
+#' spark.numExecutors()
+#'}
 #' @note numExecutors since 2.4.0
 spark.numExecutors <- function() {
   sc <- getSparkContext()
