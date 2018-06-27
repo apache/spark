@@ -418,11 +418,14 @@ $(document).ready(function () {
                 var taskTable = "#active-tasks-table";
                 var task_conf = {
                     "serverSide": true,
-                    "paging": false,
+                    "paging": true,
                     "info": true,
                     "processing": true,
                     "ajax": {
                         "url": stageEndPoint(appId) + "/taskTable",
+                        "data": {
+                            "numTasks": response[0].numTasks
+                            },
                         "dataSrc": function ( jsons ) {
                             var jsonStr = JSON.stringify(jsons);
                             var marrr = JSON.parse(jsonStr);
@@ -668,6 +671,12 @@ $(document).ready(function () {
                     ],
                 };
                 var taskTableSelector = $(taskTable).DataTable(task_conf);
+                $('#active-tasks-table_filter input').unbind();
+                $('#active-tasks-table_filter input').bind('keyup', function(e) {
+                  if(e.keyCode == 13) {
+                    taskTableSelector.search( this.value ).draw();
+                  }
+                });
 
                 var optionalColumns = [11, 12, 13, 14, 15, 16, 17];
                 var allChecked = true;

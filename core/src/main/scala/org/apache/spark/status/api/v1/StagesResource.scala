@@ -19,7 +19,7 @@ package org.apache.spark.status.api.v1
 import java.util
 import java.util.{Collections, Comparator, List => JList}
 import javax.ws.rs._
-import javax.ws.rs.core.{Context, MediaType, UriInfo}
+import javax.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.StageInfo
@@ -125,29 +125,27 @@ private[v1] class StagesResource extends BaseAppResource {
   @Path("{stageId: \\d+}/taskTable")
   def taskTable(
     @PathParam("stageId") stageId: Int,
-    @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo): util.HashMap[String, Seq[TaskData]] = {
+    @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo): util.HashMap[String, Object] = {
     withUI { ui =>
       val abc = uriInfo.getQueryParameters(true)
+      val totalRecords = abc.getFirst("numTasks")
+      var isSearch = false
+      var searchValue: String = null
       val iter = abc.keySet().iterator()
       while(iter.hasNext) {
         var ac = iter.next()
         System.err.println("hereeeeeeeeeeee 1 " + ac+" : "+abc.get(ac))
       }
-      val queryParams = abc.keySet()
-      var columnToSort = 0
-      if (queryParams.contains("order[0][column]")) {
-        columnToSort = abc.getFirst("order[0][column]").toInt
+      var _tasksToShow: Seq[TaskData] = null
+      if (abc.getFirst("search[value]") != null && abc.getFirst("search[value]").length > 0) {
+        _tasksToShow = ui.store.taskList(stageId, 0, 0, totalRecords.toInt,
+          indexName("Index"), true)
+        isSearch = true
+        searchValue = abc.getFirst("search[value]")
+      } else {
+        _tasksToShow = doPagination(abc, stageId)
       }
-      var columnNameToSort = abc.getFirst("columns["+columnToSort+"][name]")
-      if (columnNameToSort.equalsIgnoreCase("Logs")) {
-        columnNameToSort = "Index"
-        columnToSort = 0
-      }
-      val isAscendingStr = abc.getFirst("order[0][dir]")
-      val _tasksToShow: Seq[TaskData] = ui.store.fullTaskList(stageId, 0,
-        indexName(columnNameToSort), isAscendingStr.equalsIgnoreCase("asc"))
       if (_tasksToShow.nonEmpty) {
-
         val iterator = _tasksToShow.iterator
         while(iterator.hasNext) {
           val t1: TaskData = iterator.next()
@@ -157,13 +155,52 @@ private[v1] class StagesResource extends BaseAppResource {
           t1.schedulerDelay = AppStatusUtils.schedulerDelay(t1)
           t1.gettingResultTime = AppStatusUtils.gettingResultTime(t1)
         }
-        val ret5 = new util.HashMap[String, Seq[TaskData]]()
-        ret5.put("aaData", _tasksToShow)
+        val ret5 = new util.HashMap[String, Object]()
+        if (isSearch) {
+          val filteredTaskList = ui.store.filterTaskList(_tasksToShow, searchValue)
+          if (filteredTaskList.length > 0) {
+            ret5.put("aaData", filteredTaskList)
+          } else {
+            _tasksToShow = doPagination(abc, stageId)
+            val iterator = _tasksToShow.iterator
+            while(iterator.hasNext) {
+              val t1: TaskData = iterator.next()
+              val execId = t1.executorId
+              val executorLogs = ui.store.executorSummary(execId).executorLogs
+              t1.executorLogs = executorLogs
+              t1.schedulerDelay = AppStatusUtils.schedulerDelay(t1)
+              t1.gettingResultTime = AppStatusUtils.gettingResultTime(t1)
+            }
+            ret5.put("aaData", _tasksToShow)
+          }
+        } else {
+          ret5.put("aaData", _tasksToShow)
+        }
+        ret5.put("recordsTotal", totalRecords)
+        ret5.put("recordsFiltered", totalRecords)
         ret5
       } else {
         throw new NotFoundException(s"unknown stage: $stageId")
       }
     }
+  }
+
+  def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int): Seq[TaskData] = {
+    val queryParams = queryParameters.keySet()
+    var columnToSort = 0
+    if (queryParams.contains("order[0][column]")) {
+      columnToSort = queryParameters.getFirst("order[0][column]").toInt
+    }
+    var columnNameToSort = queryParameters.getFirst("columns[" + columnToSort + "][name]")
+    if (columnNameToSort.equalsIgnoreCase("Logs")) {
+      columnNameToSort = "Index"
+      columnToSort = 0
+    }
+    val isAscendingStr = queryParameters.getFirst("order[0][dir]")
+    val pageStartIndex = queryParameters.getFirst("start").toInt
+    val pageLength = queryParameters.getFirst("length").toInt
+    return withUI(_.store.taskList(stageId, 0, pageStartIndex, pageLength,
+      indexName(columnNameToSort), isAscendingStr.equalsIgnoreCase("asc")))
   }
 
 }
