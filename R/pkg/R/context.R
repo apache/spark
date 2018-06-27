@@ -25,22 +25,6 @@ getMinPartitions <- function(sc, minPartitions) {
   as.integer(minPartitions)
 }
 
-#' Total number of CPU cores of all executors registered in the cluster at the moment.
-#'
-#' @param sc SparkContext to use
-#' @return current number of cores in the cluster.
-numCores <- function(sc) {
-  callJMethod(sc, "numCores")
-}
-
-#' Total number of executors registered in the cluster at the moment.
-#'
-#' @param sc SparkContext to use
-#' @return current number of executors in the cluster.
-numExecutors <- function(sc) {
-  callJMethod(sc, "numExecutors")
-}
-
 #' Create an RDD from a text file.
 #'
 #' This function reads a text file from HDFS, a local file system (available on all
@@ -450,4 +434,24 @@ setLogLevel <- function(level) {
 setCheckpointDir <- function(directory) {
   sc <- getSparkContext()
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(directory))))
+}
+
+#' Total number of CPU cores of all executors registered in the cluster at the moment.
+#'
+#' @rdname spark.numCores
+#' @return current number of cores in the cluster.
+#' @note numCores since 2.4.0
+spark.numCores <- function() {
+  sc <- getSparkContext()
+  callJMethod(sc, "numCores")
+}
+
+#' Total number of executors registered in the cluster at the moment.
+#'
+#' @rdname spark.numExecutors
+#' @return current number of executors in the cluster.
+#' @note numExecutors since 2.4.0
+spark.numExecutors <- function() {
+  sc <- getSparkContext()
+  callJMethod(sc, "numExecutors")
 }
