@@ -18,12 +18,15 @@
 package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
+import java.util.TimeZone
 
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -860,6 +863,59 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(df.select(array_max(df("a"))), answer)
     checkAnswer(df.selectExpr("array_max(a)"), answer)
+  }
+
+  test("sequence") {
+    checkAnswer(Seq((-2, 2)).toDF().select(sequence('_1, '_2)), Seq(Row(Array(-2, -1, 0, 1, 2))))
+    checkAnswer(Seq((7, 2, -2)).toDF().select(sequence('_1, '_2, '_3)), Seq(Row(Array(7, 5, 3))))
+
+    checkAnswer(
+      spark.sql("select sequence(" +
+        "   cast('2018-01-01 00:00:00' as timestamp)" +
+        ",  cast('2018-01-02 00:00:00' as timestamp)" +
+        ",  interval 12 hours)"),
+      Seq(Row(Array(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))))
+
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+      checkAnswer(
+        spark.sql("select sequence(" +
+          "   cast('2018-01-01' as date)" +
+          ",  cast('2018-03-01' as date)" +
+          ",  interval 1 month)"),
+        Seq(Row(Array(
+          Date.valueOf("2018-01-01"),
+          Date.valueOf("2018-02-01"),
+          Date.valueOf("2018-03-01")))))
+    }
+
+    // test type coercion
+    checkAnswer(
+      Seq((1.toByte, 3L, 1)).toDF().select(sequence('_1, '_2, '_3)),
+      Seq(Row(Array(1L, 2L, 3L))))
+
+    checkAnswer(
+      spark.sql("select sequence(" +
+        "   cast('2018-01-01' as date)" +
+        ",  cast('2018-01-02 00:00:00' as timestamp)" +
+        ",  interval 12 hours)"),
+      Seq(Row(Array(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))))
+
+    // test invalid data types
+    intercept[AnalysisException] {
+      Seq((true, false)).toDF().selectExpr("sequence(_1, _2)")
+    }
+    intercept[AnalysisException] {
+      Seq((true, false, 42)).toDF().selectExpr("sequence(_1, _2, _3)")
+    }
+    intercept[AnalysisException] {
+      Seq((1, 2, 0.5)).toDF().selectExpr("sequence(_1, _2, _3)")
+    }
   }
 
   test("reverse function") {

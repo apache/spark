@@ -544,6 +544,13 @@ object TypeCoercion {
           case None => aj
         }
 
+      case s @ Sequence(_, _, _, timeZoneId) if !haveSameType(s.coercibleChildren) =>
+        val types = s.coercibleChildren.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(widerDataType) => s.castChildrenTo(widerDataType)
+          case None => s
+        }
+
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
         (!haveSameType(m.keys) || !haveSameType(m.values)) =>
         val newKeys = if (haveSameType(m.keys)) {

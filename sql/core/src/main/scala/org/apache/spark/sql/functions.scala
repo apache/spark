@@ -3486,6 +3486,27 @@ object functions {
   def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
 
   /**
+   * Generate a sequence of integers from start to stop, incrementing by step.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def sequence(start: Column, stop: Column, step: Column): Column = withExpr {
+    new Sequence(start.expr, stop.expr, step.expr)
+  }
+
+  /**
+   * Generate a sequence of integers from start to stop,
+   * incrementing by 1 if start is less than or equal to stop, otherwise -1.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def sequence(start: Column, stop: Column): Column = withExpr {
+    new Sequence(start.expr, stop.expr)
+  }
+
+  /**
    * Creates an array containing the left argument repeated the number of times given by the
    * right argument.
    *
