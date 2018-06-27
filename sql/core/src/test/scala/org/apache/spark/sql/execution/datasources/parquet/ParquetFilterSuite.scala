@@ -82,6 +82,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withSQLConf(
       SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         val query = df
           .select(output.map(e => Column(e)): _*)
@@ -663,6 +664,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - StringStartsWith") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
+      // Test canDrop()
       checkFilterPredicate(
         '_1.startsWith("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
@@ -680,6 +682,26 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           '_1.startsWith(prefix).asInstanceOf[Predicate],
           classOf[UserDefinedByInstance[_, _]],
           Seq.empty[Row])
+      }
+
+      // Test inverseCanDrop()
+      checkFilterPredicate(
+        !'_1.startsWith("").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]],
+        Seq().map(Row(_)))
+
+      Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
+        checkFilterPredicate(
+          !'_1.startsWith(prefix).asInstanceOf[Predicate],
+          classOf[UserDefinedByInstance[_, _]],
+          Seq("1str1", "3str3", "4str4").map(Row(_)))
+      }
+
+      Seq("2S", "null", "2str22").foreach { prefix =>
+        checkFilterPredicate(
+          !'_1.startsWith(prefix).asInstanceOf[Predicate],
+          classOf[UserDefinedByInstance[_, _]],
+          Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
       }
 
       assertResult(None) {

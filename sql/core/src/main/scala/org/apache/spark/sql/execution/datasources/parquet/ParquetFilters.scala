@@ -292,10 +292,17 @@ private[parquet] class ParquetFilters() {
                   comparator.compare(min.slice(0, math.min(size, min.length)), strToBinary) > 0
               }
 
-              override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
+              override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = {
+                val comparator = PrimitiveComparator.UNSIGNED_LEXICOGRAPHICAL_BINARY_COMPARATOR
+                val max = statistics.getMax
+                val min = statistics.getMin
+                comparator.compare(max.slice(0, math.min(size, max.length)), strToBinary) == 0 &&
+                  comparator.compare(min.slice(0, math.min(size, min.length)), strToBinary) == 0
+              }
 
-              override def keep(value: Binary): Boolean =
+              override def keep(value: Binary): Boolean = {
                 UTF8String.fromBytes(value.getBytes).startsWith(UTF8String.fromString(v))
+              }
             }
           )
         }
