@@ -51,11 +51,11 @@ class ContinuousDataSourceRDD(
     sc: SparkContext,
     dataQueueSize: Int,
     epochPollIntervalMs: Long,
-    private val readerFactories: Seq[InputPartition[UnsafeRow]])
+    private val readerInputPartitions: Seq[InputPartition[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
-    readerFactories.zipWithIndex.map {
+    readerInputPartitions.zipWithIndex.map {
       case (inputPartition, index) => new ContinuousDataSourceRDDPartition(index, inputPartition)
     }.toArray
   }
@@ -74,8 +74,7 @@ class ContinuousDataSourceRDD(
       val partition = split.asInstanceOf[ContinuousDataSourceRDDPartition]
       if (partition.queueReader == null) {
         partition.queueReader =
-          new ContinuousQueuedDataReader(
-            partition, context, dataQueueSize, epochPollIntervalMs)
+          new ContinuousQueuedDataReader(partition, context, dataQueueSize, epochPollIntervalMs)
       }
 
       partition.queueReader
@@ -97,10 +96,6 @@ class ContinuousDataSourceRDD(
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     split.asInstanceOf[ContinuousDataSourceRDDPartition].inputPartition.preferredLocations()
-  }
-
-  override def clearDependencies(): Unit = {
-    throw new IllegalStateException("Continuous RDDs cannot be checkpointed")
   }
 }
 

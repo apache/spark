@@ -20,13 +20,31 @@ package org.apache.spark.sql.execution.streaming.continuous
 import java.util.UUID
 
 import org.apache.spark._
-import org.apache.spark.rdd.{CoalescedRDDPartition, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.continuous.shuffle._
 import org.apache.spark.util.ThreadUtils
 
-case class ContinuousCoalesceRDDPartition(index: Int) extends Partition {
+case class ContinuousCoalesceRDDPartition(
+    index: Int,
+    endpointName: String,
+    queueSize: Int,
+    numShuffleWriters: Int,
+    epochIntervalMs: Long)
+  extends Partition {
+  // Initialized only on the executor, and only once even as we call compute() multiple times.
+  lazy val (reader: ContinuousShuffleReader, endpoint) = {
+    val env = SparkEnv.get.rpcEnv
+    val receiver = new RPCContinuousShuffleReader(
+      queueSize, numShuffleWriters, epochIntervalMs, env)
+    val endpoint = env.setupEndpoint(endpointName, receiver)
+
+    TaskContext.get().addTaskCompletionListener { ctx =>
+      env.stop(endpoint)
+    }
+    (receiver, endpoint)
+  }
   // This flag will be flipped on the executors to indicate that the threads processing
   // partitions of the write-side RDD have been started. These will run indefinitely
   // asynchronously as epochs of the coalesce RDD complete on the read side.
@@ -45,9 +63,6 @@ class ContinuousCoalesceRDD(
     prev: RDD[InternalRow])
   extends RDD[InternalRow](context, Nil) {
 
-  override def getPartitions: Array[Partition] =
-    (0 until numPartitions).map(ContinuousCoalesceRDDPartition).toArray
-
   // When we support more than 1 target partition, we'll need to figure out how to pass in the
   // required partitioner.
   private val outputPartitioner = new HashPartitioner(1)
@@ -56,27 +71,30 @@ class ContinuousCoalesceRDD(
     s"ContinuousCoalesceRDD-part$i-${UUID.randomUUID()}"
   }
 
-  val readerRDD = new ContinuousShuffleReadRDD(
-    sparkContext,
-    numPartitions,
-    readerQueueSize,
-    prev.getNumPartitions,
-    epochIntervalMs,
-    readerEndpointNames)
+  override def getPartitions: Array[Partition] = {
+    (0 until numPartitions).map { partIndex =>
+      ContinuousCoalesceRDDPartition(
+        partIndex,
+        readerEndpointNames(partIndex),
+        readerQueueSize,
+        prev.getNumPartitions,
+        epochIntervalMs)
+    }.toArray
+  }
 
   private lazy val threadPool = ThreadUtils.newDaemonFixedThreadPool(
     prev.getNumPartitions,
     this.name)
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-    // lazy initialize endpoints so writer can send to them
-    readerRDD.partitions.foreach {
-      _.asInstanceOf[ContinuousShuffleReadPartition].endpoint
-    }
+    val part = split.asInstanceOf[ContinuousCoalesceRDDPartition]
 
-    if (!split.asInstanceOf[ContinuousCoalesceRDDPartition].writersInitialized) {
+    if (!part.writersInitialized) {
       val rpcEnv = SparkEnv.get.rpcEnv
-      val endpointRefs = readerRDD.endpointNames.map { endpointName =>
+
+      // trigger lazy initialization
+      part.endpoint
+      val endpointRefs = readerEndpointNames.map { endpointName =>
         rpcEnv.setupEndpointRef(rpcEnv.address, endpointName)
       }
 
@@ -104,12 +122,12 @@ class ContinuousCoalesceRDD(
         threadPool.shutdownNow()
       }
 
-      split.asInstanceOf[ContinuousCoalesceRDDPartition].writersInitialized = true
+      part.writersInitialized = true
 
       runnables.foreach(threadPool.execute)
     }
 
-    readerRDD.compute(readerRDD.partitions(split.index), context)
+    part.reader.read()
   }
 
   override def clearDependencies(): Unit = {

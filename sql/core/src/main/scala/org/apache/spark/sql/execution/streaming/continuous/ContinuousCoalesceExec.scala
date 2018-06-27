@@ -41,14 +41,11 @@ case class ContinuousCoalesceExec(numPartitions: Int, child: SparkPlan) extends 
 
   override def doExecute(): RDD[InternalRow] = {
     assert(numPartitions == 1)
-
-    val childRdd = child.execute()
-
     new ContinuousCoalesceRDD(
       sparkContext,
       numPartitions,
       conf.continuousStreamingExecutorQueueSize,
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_INTERVAL_KEY).toLong,
-      childRdd)
+      child.execute())
   }
 }

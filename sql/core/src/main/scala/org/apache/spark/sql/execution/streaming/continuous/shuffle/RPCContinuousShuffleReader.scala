@@ -46,7 +46,7 @@ private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends RPCContin
  * TODO: Support multiple source tasks. We need to output a single epoch marker once all
  * source tasks have sent one.
  */
-private[shuffle] class RPCContinuousShuffleReader(
+private[continuous] class RPCContinuousShuffleReader(
       queueSize: Int,
       numShuffleWriters: Int,
       epochIntervalMs: Long,

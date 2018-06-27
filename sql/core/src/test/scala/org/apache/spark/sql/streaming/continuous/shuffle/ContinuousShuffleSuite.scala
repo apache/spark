@@ -146,7 +146,7 @@ class ContinuousShuffleSuite extends StreamTest {
       val iter = rdd.compute(part, ctx)
       assert(iter.next().getInt(0) == part.index)
       assert(!iter.hasNext)
-    }Oh
+    }
   }
 
   test("reader - blocks waiting for new rows") {
