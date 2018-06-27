@@ -1517,19 +1517,14 @@ class SparkContext(config: SparkConf) extends Logging {
    * only supported for Hadoop-supported filesystems.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    var uri = new Path(path).toUri
-    // mark the original path's scheme is local or not, there is no need to add the local file
-    // in file server.
-    var localFile = false
+    val uri = new Path(path).toUri
     val schemeCorrectedPath = uri.getScheme match {
-      case null =>
-        new File(path).getCanonicalFile.toURI.toString
+      case null => new File(path).getCanonicalFile.toURI.toString
       case "local" =>
-        localFile = true
-        val tmpPath = new File(uri.getPath).getCanonicalFile.toURI.toString
-        // SPARK-24195: Local is not a valid scheme for FileSystem, we should only keep path here.
-        uri = new Path(uri.getPath).toUri
-        tmpPath
+        logWarning("We do not support add a local file here because file with local scheme is " +
+          "already existed on every node, there is no need to call addFile to add it again. " +
+          "(See more discussion about this in SPARK-24195.)")
+        return
       case _ => path
     }
 
@@ -1551,7 +1546,7 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.validateURL(uri)
     }
 
-    val key = if (!isLocal && scheme == "file" && !localFile) {
+    val key = if (!isLocal && scheme == "file") {
       env.rpcEnv.fileServer.addFile(new File(uri.getPath))
     } else {
       schemeCorrectedPath
