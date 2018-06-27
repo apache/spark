@@ -245,10 +245,10 @@ test_that("getting number of cores and executors in the cluster", {
   sparkR.sparkContext(master = sparkRTestMaster)
 
   cores <- spark.numCores()
-  expect_equal(cores, 1)
+  expect_true(cores > 0)
 
   executors <- spark.numExecutors()
-  expect_equal(executors, 1)
+  expect_true(executors > 0)
 
   sparkR.session.stop()
 })
