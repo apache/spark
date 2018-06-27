@@ -66,7 +66,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    CSVUtils.verifySchema(dataSchema)
+    DataSourceUtils.verifyWriteSchema(this, dataSchema)
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(
       options,
@@ -98,7 +98,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    CSVUtils.verifySchema(dataSchema)
+    DataSourceUtils.verifyReadSchema(this, dataSchema)
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 

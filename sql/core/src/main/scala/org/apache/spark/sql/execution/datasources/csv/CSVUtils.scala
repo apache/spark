@@ -118,25 +118,6 @@ object CSVUtils {
   }
 
   /**
-   * Verify if the schema is supported in CSV datasource.
-   */
-  def verifySchema(schema: StructType): Unit = {
-    def verifyType(dataType: DataType): Unit = dataType match {
-      case ByteType | ShortType | IntegerType | LongType | FloatType |
-           DoubleType | BooleanType | _: DecimalType | TimestampType |
-           DateType | StringType =>
-
-      case udt: UserDefinedType[_] => verifyType(udt.sqlType)
-
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"CSV data source does not support ${dataType.simpleString} data type.")
-    }
-
-    schema.foreach(field => verifyType(field.dataType))
-  }
-
-  /**
    * Sample CSV dataset as configured by `samplingRatio`.
    */
   def sample(csv: Dataset[String], options: CSVOptions): Dataset[String] = {
