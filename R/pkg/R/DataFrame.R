@@ -3905,6 +3905,18 @@ setMethod("rollup",
             groupedData(sgd)
           })
 
+isTypeAllowed <- function(x) {
+  if (is.character(x)) {
+    TRUE
+  } else if (is.list(x)) {
+    TRUE
+  } else if (is.numeric(x)) {
+    TRUE
+  } else {
+    FALSE
+  }
+}
+
 #' hint
 #'
 #' Specifies execution plan hint and return a new SparkDataFrame.
@@ -3929,7 +3941,7 @@ setMethod("hint",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name, ...) {
             parameters <- list(...)
-            stopifnot(all(sapply(parameters, is.character)))
+            stopifnot(all(sapply(parameters, isTypeAllowed)))
             jdf <- callJMethod(x@sdf, "hint", name, parameters)
             dataFrame(jdf)
           })

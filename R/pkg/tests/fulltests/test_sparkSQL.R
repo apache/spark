@@ -2370,6 +2370,15 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_true(any(grepl("BroadcastHashJoin", execution_plan_broadcast)))
 })
 
+test_that("test hint", {
+  df <- sql("SELECT * FROM range(10e10)")
+  hintList <- list("hint2", "hin3", "hint4")
+  execution_plan_hint <- capture.output(
+    explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
+  )
+  expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
+})
+
 test_that("toJSON() on DataFrame", {
   df <- as.DataFrame(cars)
   df_json <- toJSON(df)
