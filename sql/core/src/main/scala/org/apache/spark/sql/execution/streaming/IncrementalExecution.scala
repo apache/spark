@@ -136,6 +136,8 @@ class IncrementalExecution(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
               Some(offsetSeqMetadata.batchWatermarkMs))
         )
+
+      case l: StreamingLimitExec => l.copy(stateInfo = Some(nextStatefulOperationStateInfo))
     }
   }
 

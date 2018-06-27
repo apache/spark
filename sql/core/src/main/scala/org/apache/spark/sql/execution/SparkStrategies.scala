@@ -72,6 +72,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
             if limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+        case Limit(IntegerLiteral(limit), child) if plan.isStreaming =>
+          // TODO: Should I split this into a separate strategy? It was hitting ReturnAnswer here.
+          StreamingLimitExec(limit, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), child) =>
           // With whole stage codegen, Spark releases resources only when all the output data of the
           // query plan are consumed. It's possible that `CollectLimitExec` only consumes a little
