@@ -487,26 +487,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }.getMessage().contains("only supports array input"))
   }
 
-  test("array size function") {
+  def testSizeOfArray(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
       (Seq[Int](), "y"),
       (Seq[Int](1, 2, 3), "z"),
       (null, "empty")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
-    checkAnswer(
-      df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
 
-    checkAnswer(
-      df.selectExpr("cardinality(a)"),
-      Seq(Row(2L), Row(0L), Row(3L), Row(-1L))
-    )
+    checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("cardinality(a)"), Seq(Row(2L), Row(0L), Row(3L), Row(sizeOfNull)))
+  }
+
+  test("array size function - legacy") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSizeOfArray(sizeOfNull = -1)
+    }
+  }
+
+  test("array size function") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSizeOfArray(sizeOfNull = null)
+    }
   }
 
   test("dataframe arrays_zip function") {
@@ -567,21 +570,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("map size function") {
+  def testSizeOfMap(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
       (Map[Int, Int](), "y"),
       (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z"),
       (null, "empty")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
-    checkAnswer(
-      df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
+
+    checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+  }
+
+  test("map size function - legacy") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSizeOfMap(sizeOfNull = -1: Int)
+    }
+  }
+
+  test("map size function") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSizeOfMap(sizeOfNull = null)
+    }
   }
 
   test("map_keys/map_values function") {

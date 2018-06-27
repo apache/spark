@@ -67,37 +67,61 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
 
 
 /**
- * Given an array or map, returns its size. Returns -1 if null.
+ * Given an array or map, returns total number of elements in it.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the size of an array or a map. Returns -1 if null.",
+  usage = """
+    _FUNC_(expr) - Returns the size of an array or a map.
+    The function returns -1 if its input is null and spark.sql.legacy.sizeOfNull is set to true.
+    If spark.sql.legacy.sizeOfNull is set to false, the function returns null for null input.
+    By default, the spark.sql.legacy.sizeOfNull parameter is set to true.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
        4
+      > SELECT _FUNC_(map('a', 1, 'b', 2));
+       2
+      > SELECT _FUNC_(NULL);
+       -1
   """)
-case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Size(
+    child: Expression,
+    legacySizeOfNull: Boolean)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  def this(child: Expression) =
+    this(
+      child,
+      legacySizeOfNull = SQLConf.get.getConf(SQLConf.LEGACY_SIZE_OF_NULL))
+
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
-  override def nullable: Boolean = false
+  override def nullable: Boolean = if (legacySizeOfNull) false else super.nullable
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
-      -1
+      if (legacySizeOfNull) -1 else null
     } else child.dataType match {
       case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
       case _: MapType => value.asInstanceOf[MapData].numElements()
+      case other => throw new UnsupportedOperationException(
+        s"The size function doesn't support the operand type ${other.getClass.getCanonicalName}")
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childGen = child.genCode(ctx)
-    ev.copy(code = code"""
+    if (legacySizeOfNull) {
+      val childGen = child.genCode(ctx)
+      ev.copy(code = code"""
       boolean ${ev.isNull} = false;
       ${childGen.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
         (${childGen.value}).numElements();""", isNull = FalseLiteral)
+    } else {
+      defineCodeGen(ctx, ev, c => s"($c).numElements()")
+    }
   }
 }
 
