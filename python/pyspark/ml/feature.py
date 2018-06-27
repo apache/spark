@@ -26,6 +26,9 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
+from pyspark.ml import Estimator, Transformer, Model
+from pyspark.sql.functions import col, udf
+from pyspark.sql.types import IntegerType
 
 __all__ = ['Binarizer',
            'BucketedRandomProjectionLSH', 'BucketedRandomProjectionLSHModel',
@@ -777,37 +780,27 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         return self.getOrDefault(self.scalingVec)
 
 @inherit_doc
-class FuncTransformer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class FuncTransformer(Transformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     FuncTransformer helps create a custom feature transformer easily with UDF
-
-    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["words"])
-    >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
-    >>> hashingTF.transform(df).head().features
-    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
-    >>> hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
-    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
-    >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
-    >>> hashingTF.transform(df, params).head().vector
-    SparseVector(5, {0: 1.0, 1: 1.0, 2: 1.0})
-    >>> hashingTFPath = temp_path + "/hashing-tf"
-    >>> hashingTF.save(hashingTFPath)
-    >>> loadedHashingTF = HashingTF.load(hashingTFPath)
-    >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
-    True
+    >>> df = spark.createDataFrame([("a",), ("b",)], ["words"])
+    >>> genLen = udf(lambda words: len(words), IntegerType())
+    >>> funcTransfomer = FuncTransformer(func=genLen, inputCol="words", outputCol="features")
+    >>> funcTransfomer.transform(df).head().features
+    1
+    >>> funcTransfomerPath = temp_path + "/func-transformer"
+    >>> funcTransfomer.save(funcTransfomerPath)
+    >>> loadedfuncTransfomer = FuncTransfomer.load(funcTransfomerPath)
 
     .. versionadded:: 2.4.0
     """
     @keyword_only
-    def __init__(self, udf, inputCol=None, outputCol=None):
+    def __init__(self, func):
         """
-        __init__(self, p=2.0, inputCol=None, outputCol=None)
+        __init__(self, func=udf(lambda s: len(s), IntegerType()), inputCol=None, outputCol=None)
         """
         super(FuncTransformer, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FuncTransformer",
-                                            self.uid, udf)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.func = func
 
     @keyword_only
     @since("2.4.0")
@@ -818,6 +811,10 @@ class FuncTransformer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def _transform(self, dataset):
+        dataset.withColumn(self.getOutputCol(),
+                           self.func(col(self.getInputCol())))
 
 
 @inherit_doc

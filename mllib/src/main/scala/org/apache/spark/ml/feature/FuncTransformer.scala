@@ -128,7 +128,7 @@ object FuncTransformer extends DefaultParamsReadable[FuncTransformer] {
       val Row(funcBytes: Array[Byte]) = data.select("func").head()
       val func = new ObjectInputStream(new ByteArrayInputStream(funcBytes)).readObject()
       val model = new FuncTransformer(metadata.uid, func.asInstanceOf[UserDefinedFunction])
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
