@@ -460,7 +460,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.python.task.killTimeout</code></td>
   <td>2s</td>
   <td>
-    How long to wait before killing the python worker if a task cannot be interrupted.
+    Timeout to wait before killing the python worker when a task cannot be interrupted
   </td>
 </tr>
 <tr>
