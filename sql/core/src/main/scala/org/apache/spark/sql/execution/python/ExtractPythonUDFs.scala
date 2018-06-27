@@ -150,7 +150,6 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
     val udfs = collectEvaluableUDFs(plan)
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
-
     if (udfs.isEmpty) {
       // If there aren't any, we are done.
       plan
@@ -215,7 +214,6 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
       // extract remaining python UDFs recursively
       val newPlan = extract(rewritten)
-
       if (newPlan.output != plan.output) {
         // Trim away the new UDF value if it was only used for filtering or something.
         ProjectExec(plan.output, newPlan)
