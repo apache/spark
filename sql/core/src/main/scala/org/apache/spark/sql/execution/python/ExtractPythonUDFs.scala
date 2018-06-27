@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
@@ -98,24 +99,47 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
     e.find(PythonUDF.isScalarPythonUDF).isDefined
   }
 
-  private def canEvaluateInPython(e: PythonUDF): Boolean = {
-    e.children match {
-      // single PythonUDF child could be chained and evaluated in Python
-      case Seq(u: PythonUDF) => canEvaluateInPython(u)
-      // Python UDF can't be evaluated directly in JVM
-      case children => !children.exists(hasScalarPythonUDF)
+  private def canEvaluateInPython(e: PythonUDF, evalType: Int): Boolean = {
+    if (e.evalType != evalType) {
+      false
+    } else {
+      e.children match {
+        // single PythonUDF child could be chained and evaluated in Python
+        case Seq(u: PythonUDF) => canEvaluateInPython(u, evalType)
+        // Python UDF can't be evaluated directly in JVM
+        case children => !children.exists(hasScalarPythonUDF)
+      }
     }
   }
 
-  private def collectEvaluatableUDF(expr: Expression): Seq[PythonUDF] = expr match {
-    case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf) => Seq(udf)
-    case e => e.children.flatMap(collectEvaluatableUDF)
+  private def collectEvaluableUDF(expr: Expression, evalType: Int): Seq[PythonUDF] = expr match {
+    case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf, evalType) =>
+      Seq(udf)
+    case e => e.children.flatMap(collectEvaluableUDF(_, evalType))
+  }
+
+  /**
+   * Collect evaluable UDFs from the current node.
+   *
+   * This function collects Python UDFs or Scalar Python UDFs from expressions of the input node,
+   * and returns a list of UDFs of the same eval type.
+   *
+   * If expressions contain both UDFs eval types, this function will only return Python UDFs.
+   *
+   * The caller should call this function multiple times until all evaluable UDFs are collected.
+   */
+  private def collectEvaluableUDFs(plan: SparkPlan): Seq[PythonUDF] = {
+    val pythonUDFs =
+      plan.expressions.flatMap(collectEvaluableUDF(_, PythonEvalType.SQL_BATCHED_UDF))
+
+    if (pythonUDFs.isEmpty) {
+      plan.expressions.flatMap(collectEvaluableUDF(_, PythonEvalType.SQL_SCALAR_PANDAS_UDF))
+    } else {
+      pythonUDFs
+    }
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    // AggregateInPandasExec and FlatMapGroupsInPandas can be evaluated directly in python worker
-    // Therefore we don't need to extract the UDFs
-    case plan: FlatMapGroupsInPandasExec => plan
     case plan: SparkPlan => extract(plan)
   }
 
@@ -123,19 +147,14 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
   private def extract(plan: SparkPlan): SparkPlan = {
-    println("*************  input  ****************")
-    println(plan)
-    println("**************************************")
-
-    val udfs = plan.expressions.flatMap(collectEvaluatableUDF)
+    val udfs = collectEvaluableUDFs(plan)
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
+
     if (udfs.isEmpty) {
       // If there aren't any, we are done.
       plan
     } else {
-      println("udfs:" + udfs.toList)
-
       val inputsForPlan = plan.references ++ plan.outputSet
       val prunedChildren = plan.children.map { child =>
         val allNeededOutput = inputsForPlan.intersect(child.outputSet).toSeq
@@ -173,7 +192,8 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
             case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
               BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
             case (vectorizedUdfs, plainUdfs) =>
-              throw new IllegalArgumentException("Can not mix vectorized and non-vectorized UDFs")
+              throw new AnalysisException(
+                "Mixed Python and Scalar Pandas UDFs are not expected here")
           }
 
           attributeMap ++= validUdfs.zip(resultAttrs)
@@ -193,24 +213,15 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           attributeMap(p)
       }
 
-      println("***********  rewritten  **************")
-      println(rewritten)
-      println("**************************************")
-
       // extract remaining python UDFs recursively
       val newPlan = extract(rewritten)
+
       if (newPlan.output != plan.output) {
         // Trim away the new UDF value if it was only used for filtering or something.
         ProjectExec(plan.output, newPlan)
       } else {
         newPlan
       }
-
-      println("************  output  ****************")
-      println(newPlan)
-      println("**************************************")
-
-      newPlan
     }
   }
 
