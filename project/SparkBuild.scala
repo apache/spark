@@ -28,6 +28,7 @@ import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
+import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
 import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{MavenHelper, PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
@@ -59,16 +60,12 @@ object BuildCommons {
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     streamingFlumeSink, streamingFlume,
     streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
-    dockerIntegrationTests, hadoopCloud, _*) =
+    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests, sparkDist) =
     Seq("kubernetes", "mesos", "yarn",
       "streaming-flume-sink", "streaming-flume",
       "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests", "hadoop-cloud",
-      "kubernetes-integration-tests",
-      "kubernetes-integration-tests-spark-jobs", "kubernetes-integration-tests-spark-jobs-helpers",
-      "kubernetes-docker-minimal-bundle",
-      "spark-dist-hadoop-palantir"
-    ).map(ProjectRef(buildLocation, _))
+      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests",
+      "spark-dist-hadoop-palantir").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
     Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-0-8-assembly", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
@@ -88,41 +85,12 @@ object BuildCommons {
   val scalacJVMVersion = settingKey[String]("source and target JVM version for scalac")
 }
 
-object DefaultSparkPlugin extends AutoPlugin {
-  override def requires: Plugins = JvmPlugin
-
-  override def projectSettings: Seq[Def.Setting[_]] = SparkBuild.sharedSettings ++ Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
-  )
-
-  override def globalSettings: Seq[Def.Setting[_]] = Seq(
-    // Cached resolution is behaving very weirdly, disable it.
-    updateOptions := updateOptions.value.withCachedResolution(false)
-  )
-}
-
-object AssemblyExclusionsPlugin extends AutoPlugin {
-
-  override def requires: Plugins = DefaultSparkPlugin
-
-  val exclusions = Seq(
-    SbtExclusionRule("com.sun.jersey"),
-    SbtExclusionRule("com.sun.jersey.jersey-test-framework"),
-    SbtExclusionRule("com.sun.jersey.contribs")
-  )
-
-  override def projectSettings: Seq[Def.Setting[_]] = Seq(
-    excludeDependencies ++= exclusions
-  )
-}
-
-//noinspection ScalaStyle
 object SparkBuild extends PomBuild {
 
   import BuildCommons._
   import scala.collection.mutable.Map
 
-  val projectsMap: mutable.Map[String, Seq[DslEntry]] = mutable.Map.empty
+  val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
   override val profiles = {
     val profiles = Properties.propOrNone("sbt.maven.profiles") orElse Properties.envOrNone("SBT_MAVEN_PROFILES") match {
@@ -351,10 +319,16 @@ object SparkBuild extends PomBuild {
     }.value.toSet
   )
 
-  def enable(dslEntries: DslEntry*)(projectRef: ProjectRef): Unit = {
-    val existingSettings = projectsMap.getOrElse(projectRef.project, Vector())
-    projectsMap += (projectRef.project -> (existingSettings ++ dslEntries))
+  def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
+    val existingSettings = projectsMap.getOrElse(projectRef.project, Seq[Setting[_]]())
+    projectsMap += (projectRef.project -> (existingSettings ++ settings))
   }
+
+  // Note ordering of these settings matter.
+  /* Enable shared settings on all projects */
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
+    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
+      ExcludedDependencies.settings ++ Checkstyle.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -384,7 +358,6 @@ object SparkBuild extends PomBuild {
   if (!"false".equals(System.getProperty("copyDependencies"))) {
     copyJarsProjects.foreach(enable(CopyDependencies.settings))
   }
-  copyJarsProjects.foreach(enable(dsl.enablePlugins(AssemblyExclusionsPlugin)))
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -456,14 +429,9 @@ object SparkBuild extends PomBuild {
 
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
-    import sbt.internals._
-    def applyDsl(project: Project, entry: DslEntry): Project = entry match {
-      case ProjectManipulation(func) => func(project)
-      case ProjectSettings(ss) => project.settings(ss)
-    }
     super.projectDefinitions(baseDirectory).map { x =>
-      val proj = x.enablePlugins(DefaultSparkPlugin)
-      projectsMap.getOrElse(x.id, Nil).foldLeft(proj)(applyDsl)
+      if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
+      else x.settings(Seq[Setting[_]](): _*)
     } ++ Seq[Project](OldDeps.project)
   }
 }
@@ -502,6 +470,24 @@ object DockerIntegrationTests {
 }
 
 /**
+ * Overrides to work around sbt's dependency resolution being different from Maven's.
+ */
+object DependencyOverrides {
+  lazy val settings = Seq(
+    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
+}
+
+/**
+ * This excludes library dependencies in sbt, which are specified in maven but are
+ * not needed by sbt build.
+ */
+object ExcludedDependencies {
+  lazy val settings = Seq(
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+  )
+}
+
+/**
  * Project to pull previous artifacts of Spark for generating Mima excludes.
  */
 object OldDeps {
@@ -515,7 +501,7 @@ object OldDeps {
       .join
   }
 
-  def oldDepsSettings() = Seq(
+  def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     libraryDependencies := allPreviousArtifactKeys.value.flatten
   )
@@ -753,7 +739,8 @@ object Unidoc {
 
     scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(
       "-groups", // Group similar methods together based on the @group annotation.
-      "-skip-packages", "org.apache.hadoop"
+      "-skip-packages", "org.apache.hadoop",
+      "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath
     ) ++ (
       // Add links to sources when generating Scaladoc for a non-snapshot release
       if (!isSnapshot.value) {
@@ -762,6 +749,17 @@ object Unidoc {
         Seq()
       }
     )
+  )
+}
+
+object Checkstyle {
+  lazy val settings = Seq(
+    checkstyleSeverityLevel := Some(CheckstyleSeverityLevel.Error),
+    javaSource in (Compile, checkstyle) := baseDirectory.value / "src/main/java",
+    javaSource in (Test, checkstyle) := baseDirectory.value / "src/test/java",
+    checkstyleConfigLocation := CheckstyleConfigLocation.File("dev/checkstyle.xml"),
+    checkstyleOutputFile := baseDirectory.value / "target/checkstyle-output.xml",
+    checkstyleOutputFile in Test := baseDirectory.value / "target/checkstyle-output.xml"
   )
 }
 

@@ -18,8 +18,9 @@ package org.apache.spark.deploy.k8s.submit
 
 import java.io.File
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, LocalDirsFeatureStep, MountLocalFilesFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
 import org.apache.spark.util.Utils
 
 private[spark] class KubernetesDriverBuilder(
@@ -33,12 +34,20 @@ private[spark] class KubernetesDriverBuilder(
     provideSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountSecretsFeatureStep) =
       new MountSecretsFeatureStep(_),
+    provideEnvSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => EnvSecretsFeatureStep) =
+      new EnvSecretsFeatureStep(_),
     provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => LocalDirsFeatureStep) =
       new LocalDirsFeatureStep(_),
     provideMountLocalFilesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountLocalFilesFeatureStep) =
-    new MountLocalFilesFeatureStep(_)) {
+      new MountLocalFilesFeatureStep(_),
+    provideJavaStep: (KubernetesConf[KubernetesDriverSpecificConf] => JavaDriverFeatureStep) =
+      new JavaDriverFeatureStep(_),
+    providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf] => PythonDriverFeatureStep) =
+      new PythonDriverFeatureStep(_)) {
+
   import KubernetesDriverBuilder._
 
   def buildFromFeatures(
@@ -48,12 +57,21 @@ private[spark] class KubernetesDriverBuilder(
       provideCredentialsStep(kubernetesConf),
       provideServiceStep(kubernetesConf),
       provideLocalDirsStep(kubernetesConf))
-    val withProvideSecretsStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
-      baseFeatures ++ Seq(provideSecretsStep(kubernetesConf))
-    } else baseFeatures
 
-    val sparkFiles = kubernetesConf.sparkFiles()
-    val localFiles = KubernetesUtils.submitterLocalFiles(sparkFiles).map(new File(_))
+    val maybeRoleSecretNamesStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
+      Some(provideSecretsStep(kubernetesConf)) } else None
+
+    val maybeProvideSecretsStep = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
+      Some(provideEnvSecretsStep(kubernetesConf)) } else None
+
+    val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
+        case JavaMainAppResource(_) =>
+          provideJavaStep(kubernetesConf)
+        case PythonMainAppResource(_) =>
+          providePythonStep(kubernetesConf)}.getOrElse(provideJavaStep(kubernetesConf))
+
+    val localFiles = KubernetesUtils.submitterLocalFiles(kubernetesConf.sparkFiles)
+      .map(new File(_))
     require(localFiles.forall(_.isFile), s"All submitted local files must be present and not" +
       s" directories, Got got: ${localFiles.map(_.getAbsolutePath).mkString(",")}")
 
@@ -62,9 +80,15 @@ private[spark] class KubernetesDriverBuilder(
     require(totalFileSize < MAX_SECRET_BUNDLE_SIZE_BYTES,
       s"Total size of all files submitted must be less than $MAX_SECRET_BUNDLE_SIZE_BYTES_STRING." +
         s" Total size for files ended up being $totalSizeBytesString")
-    val allFeatures = if (localFiles.nonEmpty) {
-      withProvideSecretsStep ++ Seq(provideMountLocalFilesStep(kubernetesConf))
-    } else withProvideSecretsStep
+    val providedLocalFiles = if (localFiles.nonEmpty) {
+      Some(provideMountLocalFilesStep(kubernetesConf))
+    } else None
+
+    val allFeatures: Seq[KubernetesFeatureConfigStep] =
+      (baseFeatures :+ bindingsStep) ++
+        maybeRoleSecretNamesStep.toSeq ++
+        maybeProvideSecretsStep.toSeq ++
+        providedLocalFiles.toSeq
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {

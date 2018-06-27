@@ -504,6 +504,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
+      if (!ctx.lateralView.isEmpty) {
+        throw new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
+      }
       withPivot(ctx.pivotClause, from)
     } else {
       ctx.lateralView.asScala.foldLeft(from)(withGenerate)
@@ -1201,6 +1204,34 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitPosition(ctx: PositionContext): Expression = withOrigin(ctx) {
     new StringLocate(expression(ctx.substr), expression(ctx.str))
+  }
+
+  /**
+   * Create a Extract expression.
+   */
+  override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
+    ctx.field.getText.toUpperCase(Locale.ROOT) match {
+      case "YEAR" =>
+        Year(expression(ctx.source))
+      case "QUARTER" =>
+        Quarter(expression(ctx.source))
+      case "MONTH" =>
+        Month(expression(ctx.source))
+      case "WEEK" =>
+        WeekOfYear(expression(ctx.source))
+      case "DAY" =>
+        DayOfMonth(expression(ctx.source))
+      case "DAYOFWEEK" =>
+        DayOfWeek(expression(ctx.source))
+      case "HOUR" =>
+        Hour(expression(ctx.source))
+      case "MINUTE" =>
+        Minute(expression(ctx.source))
+      case "SECOND" =>
+        Second(expression(ctx.source))
+      case other =>
+        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+    }
   }
 
   /**

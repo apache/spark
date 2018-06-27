@@ -76,9 +76,14 @@ private[spark] object Constants {
   val SPARK_CONF_FILE_NAME = "spark.properties"
   val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
 
+  // BINDINGS
+  val ENV_PYSPARK_PRIMARY = "PYSPARK_PRIMARY"
+  val ENV_PYSPARK_FILES = "PYSPARK_FILES"
+  val ENV_PYSPARK_ARGS = "PYSPARK_APP_ARGS"
+  val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
+
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
-  val MEMORY_OVERHEAD_FACTOR = 0.10
   val MEMORY_OVERHEAD_MIN_MIB = 384L
 }

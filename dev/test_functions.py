@@ -204,7 +204,7 @@ def run_scala_style_checks():
 
 def run_java_style_checks():
     set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-java")])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle")])
 
 
 def run_python_style_checks():
@@ -364,7 +364,7 @@ def build_spark_unidoc_sbt(hadoop_version):
     exec_sbt(profiles_and_goals)
 
 
-def build_spark_assembly_sbt(hadoop_version):
+def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["assembly/package"]
@@ -372,6 +372,9 @@ def build_spark_assembly_sbt(hadoop_version):
     print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
+
+    if checkstyle:
+        run_java_style_checks()
 
     # Note that we skip Unidoc build only if Hadoop 2.6 is explicitly set in this SBT build.
     # Due to a different dependency resolution in SBT & Unidoc by an unknown reason, the
@@ -591,12 +594,13 @@ def main():
                                 or f.endswith("scalastyle-config.xml")
                                 for f in changed_files):
         run_scala_style_checks()
+    should_run_java_style_checks = False
     if not changed_files or any(f.endswith(".java")
                                 or f.endswith("checkstyle.xml")
                                 or f.endswith("checkstyle-suppressions.xml")
                                 for f in changed_files):
-        run_java_style_checks()
-        pass
+        # Run SBT Checkstyle after the build to prevent a side-effect to the build.
+        should_run_java_style_checks = True
     if not changed_files or any(f.endswith("lint-python")
                                 or f.endswith("tox.ini")
                                 or f.endswith(".py")
@@ -625,7 +629,7 @@ def main():
         detect_binary_inop_with_mima(hadoop_version)
         # Since we did not build assembly/package before running dev/mima, we need to
         # do it here because the tests still rely on it; see SPARK-13294 for details.
-        build_spark_assembly_sbt(hadoop_version)
+        build_spark_assembly_sbt(hadoop_version, should_run_java_style_checks)
 
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)

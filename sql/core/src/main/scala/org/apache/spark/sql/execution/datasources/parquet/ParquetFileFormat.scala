@@ -37,6 +37,7 @@ import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.metadata.ParquetMetadata
 import org.apache.parquet.hadoop.util.ContextUtil
@@ -67,9 +68,6 @@ class ParquetFileFormat
   // is constructed or deserialized. Do not heed the Scala compiler's warning about an unused field
   // here.
   private val parquetLogRedirector = ParquetLogRedirector.INSTANCE
-
-  @transient private val cachedMetadata: mutable.LinkedHashMap[Path, ParquetMetadata] =
-    new mutable.LinkedHashMap[Path, ParquetMetadata]
 
   override def shortName(): String = "parquet"
 
@@ -132,16 +130,17 @@ class ParquetFileFormat
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
     // SPARK-15719: Disables writing Parquet summary files by default.
-    if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null) {
-      conf.set(ParquetOutputFormat.JOB_SUMMARY_LEVEL, "NONE")
+    if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null
+      && conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
+      conf.setEnum(ParquetOutputFormat.JOB_SUMMARY_LEVEL, JobSummaryLevel.NONE)
     }
 
-    if (conf.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+    if (ParquetOutputFormat.getJobSummaryLevel(conf) == JobSummaryLevel.NONE
       && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
       // output summary is requested, but the class is not a Parquet Committer
       logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot" +
         s" create job summaries. " +
-        s"Set Parquet option ${ParquetOutputFormat.ENABLE_JOB_SUMMARY} to false.")
+        s"Set Parquet option ${ParquetOutputFormat.JOB_SUMMARY_LEVEL} to NONE.")
     }
 
     new OutputWriterFactory {

@@ -167,7 +167,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     }
 
     (0 until numPartitions).map { p =>
-      new RateStreamMicroBatchDataReaderFactory(
+      new RateStreamMicroBatchInputPartition(
         p, numPartitions, rangeStart, rangeEnd, localStartTimeMs, relativeMsPerValue)
         : InputPartition[Row]
     }.toList.asJava
@@ -182,7 +182,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     s"numPartitions=${options.get(NUM_PARTITIONS).orElse("default")}"
 }
 
-class RateStreamMicroBatchDataReaderFactory(
+class RateStreamMicroBatchInputPartition(
     partitionId: Int,
     numPartitions: Int,
     rangeStart: Long,
@@ -202,7 +202,7 @@ class RateStreamMicroBatchInputPartitionReader(
     rangeEnd: Long,
     localStartTimeMs: Long,
     relativeMsPerValue: Double) extends InputPartitionReader[Row] {
-  private var count = 0
+  private var count: Long = 0
 
   override def next(): Boolean = {
     rangeStart + partitionId + numPartitions * count < rangeEnd

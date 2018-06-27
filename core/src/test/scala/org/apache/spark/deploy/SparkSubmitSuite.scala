@@ -180,6 +180,26 @@ class SparkSubmitSuite
     appArgs.toString should include ("thequeue")
   }
 
+  test("SPARK-24241: do not fail fast if executor num is 0 when dynamic allocation is enabled") {
+    val clArgs1 = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=true",
+      "thejar.jar")
+    new SparkSubmitArguments(clArgs1)
+
+    val clArgs2 = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=false",
+      "thejar.jar")
+
+    val e = intercept[SparkException](new SparkSubmitArguments(clArgs2))
+    assert(e.getMessage.contains("Number of executors must be a positive number"))
+  }
+
   test("specify deploy mode through configuration") {
     val clArgs = Seq(
       "--master", "yarn",
@@ -751,9 +771,13 @@ class SparkSubmitSuite
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
 
     // Test remote python files
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
     val f4 = File.createTempFile("test-submit-remote-python-files", "", tmpDir)
+    val pyFile1 = File.createTempFile("file1", ".py", tmpDir)
+    val pyFile2 = File.createTempFile("file2", ".py", tmpDir)
     val writer4 = new PrintWriter(f4)
-    val remotePyFiles = "hdfs:///tmp/file1.py,hdfs:///tmp/file2.py"
+    val remotePyFiles = s"s3a://${pyFile1.getAbsolutePath},s3a://${pyFile2.getAbsolutePath}"
     writer4.println("spark.submit.pyFiles " + remotePyFiles)
     writer4.close()
     val clArgs4 = Seq(
@@ -763,7 +787,7 @@ class SparkSubmitSuite
       "hdfs:///tmp/mister.py"
     )
     val appArgs4 = new SparkSubmitArguments(clArgs4)
-    val (_, _, conf4, _) = submit.prepareSubmitEnvironment(appArgs4)
+    val (_, _, conf4, _) = submit.prepareSubmitEnvironment(appArgs4, conf = Some(hadoopConf))
     // Should not format python path for yarn cluster mode
     conf4.get("spark.submit.pyFiles") should be(Utils.resolveURIs(remotePyFiles))
   }
@@ -1073,6 +1097,44 @@ class SparkSubmitSuite
     assert(exception.getMessage() === "hello")
   }
 
+  test("support --py-files/spark.submit.pyFiles in non pyspark application") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+
+    val tmpDir = Utils.createTempDir()
+    val pyFile = File.createTempFile("tmpPy", ".egg", tmpDir)
+
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--py-files", s"s3a://${pyFile.getAbsolutePath}",
+      "spark-internal"
+    )
+
+    val appArgs = new SparkSubmitArguments(args)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, conf = Some(hadoopConf))
+
+    conf.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf.get("spark.submit.pyFiles") should (startWith("/"))
+
+    // Verify "spark.submit.pyFiles"
+    val args1 = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--conf", s"spark.submit.pyFiles=s3a://${pyFile.getAbsolutePath}",
+      "spark-internal"
+    )
+
+    val appArgs1 = new SparkSubmitArguments(args1)
+    val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1, conf = Some(hadoopConf))
+
+    conf1.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf1.get("spark.submit.pyFiles") should (startWith("/"))
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {

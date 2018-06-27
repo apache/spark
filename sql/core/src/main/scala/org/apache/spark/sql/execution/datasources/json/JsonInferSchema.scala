@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, ParseMode, PermissiveMode}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -45,17 +44,17 @@ private[sql] object JsonInferSchema {
       createParser: (JsonFactory, T) => JsonParser): StructType = {
     val parseMode = configOptions.parseMode
     val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
-    val caseSensitive = SQLConf.get.caseSensitiveAnalysis
 
-    // perform schema inference on each row and merge afterwards
-    val rootType = json.mapPartitions { iter =>
+    // In each RDD partition, perform schema inference on each row and merge afterwards.
+    val typeMerger = compatibleRootType(columnNameOfCorruptRecord, parseMode)
+    val mergedTypesFromPartitions = json.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
       iter.flatMap { row =>
         try {
           Utils.tryWithResource(createParser(factory, row)) { parser =>
             parser.nextToken()
-            Some(inferField(parser, configOptions, caseSensitive))
+            Some(inferField(parser, configOptions))
           }
         } catch {
           case  e @ (_: RuntimeException | _: JsonProcessingException) => parseMode match {
@@ -68,11 +67,15 @@ private[sql] object JsonInferSchema {
                 s"Parse Mode: ${FailFastMode.name}.", e)
           }
         }
-      }
-    }.fold(StructType(Nil))(
-      compatibleRootType(columnNameOfCorruptRecord, parseMode, caseSensitive))
+      }.reduceOption(typeMerger).toIterator
+    }
 
-    canonicalizeType(rootType) match {
+    // Here we get RDD local iterator then fold, instead of calling `RDD.fold` directly, because
+    // `RDD.fold` will run the fold function in DAGScheduler event loop thread, which may not have
+    // active SparkSession and `SQLConf.get` may point to the wrong configs.
+    val rootType = mergedTypesFromPartitions.toLocalIterator.fold(StructType(Nil))(typeMerger)
+
+    canonicalizeType(rootType, configOptions) match {
       case Some(st: StructType) => st
       case _ =>
         // canonicalizeType erases all empty structs, including the only one we want to keep
@@ -100,15 +103,14 @@ private[sql] object JsonInferSchema {
   /**
    * Infer the type of a json document from the parser's token stream
    */
-  private def inferField(
-      parser: JsonParser, configOptions: JSONOptions, caseSensitive: Boolean): DataType = {
+  private def inferField(parser: JsonParser, configOptions: JSONOptions): DataType = {
     import com.fasterxml.jackson.core.JsonToken._
     parser.getCurrentToken match {
       case null | VALUE_NULL => NullType
 
       case FIELD_NAME =>
         parser.nextToken()
-        inferField(parser, configOptions, caseSensitive)
+        inferField(parser, configOptions)
 
       case VALUE_STRING if parser.getTextLength < 1 =>
         // Zero length strings and nulls have special handling to deal
@@ -125,7 +127,7 @@ private[sql] object JsonInferSchema {
         while (nextUntil(parser, END_OBJECT)) {
           builder += StructField(
             parser.getCurrentName,
-            inferField(parser, configOptions, caseSensitive),
+            inferField(parser, configOptions),
             nullable = true)
         }
         val fields: Array[StructField] = builder.result()
@@ -140,7 +142,7 @@ private[sql] object JsonInferSchema {
         var elementType: DataType = NullType
         while (nextUntil(parser, END_ARRAY)) {
           elementType = compatibleType(
-            elementType, inferField(parser, configOptions, caseSensitive), caseSensitive)
+            elementType, inferField(parser, configOptions))
         }
 
         ArrayType(elementType)
@@ -179,33 +181,33 @@ private[sql] object JsonInferSchema {
   }
 
   /**
-   * Convert NullType to StringType and remove StructTypes with no fields
+   * Recursively canonicalizes inferred types, e.g., removes StructTypes with no fields,
+   * drops NullTypes or converts them to StringType based on provided options.
    */
-  private def canonicalizeType(tpe: DataType): Option[DataType] = tpe match {
-    case at @ ArrayType(elementType, _) =>
-      for {
-        canonicalType <- canonicalizeType(elementType)
-      } yield {
-        at.copy(canonicalType)
-      }
+  private def canonicalizeType(tpe: DataType, options: JSONOptions): Option[DataType] = tpe match {
+    case at: ArrayType =>
+      canonicalizeType(at.elementType, options)
+        .map(t => at.copy(elementType = t))
 
     case StructType(fields) =>
-      val canonicalFields: Array[StructField] = for {
-        field <- fields
-        if field.name.length > 0
-        canonicalType <- canonicalizeType(field.dataType)
-      } yield {
-        field.copy(dataType = canonicalType)
+      val canonicalFields = fields.filter(_.name.nonEmpty).flatMap { f =>
+        canonicalizeType(f.dataType, options)
+          .map(t => f.copy(dataType = t))
       }
-
-      if (canonicalFields.length > 0) {
-        Some(StructType(canonicalFields))
-      } else {
-        // per SPARK-8093: empty structs should be deleted
+      // SPARK-8093: empty structs should be deleted
+      if (canonicalFields.isEmpty) {
         None
+      } else {
+        Some(StructType(canonicalFields))
       }
 
-    case NullType => Some(StringType)
+    case NullType =>
+      if (options.dropFieldIfAllNull) {
+        None
+      } else {
+        Some(StringType)
+      }
+
     case other => Some(other)
   }
 
@@ -246,14 +248,13 @@ private[sql] object JsonInferSchema {
    */
   private def compatibleRootType(
       columnNameOfCorruptRecords: String,
-      parseMode: ParseMode,
-      caseSensitive: Boolean): (DataType, DataType) => DataType = {
+      parseMode: ParseMode): (DataType, DataType) => DataType = {
     // Since we support array of json objects at the top level,
     // we need to check the element type and find the root level data type.
     case (ArrayType(ty1, _), ty2) =>
-      compatibleRootType(columnNameOfCorruptRecords, parseMode, caseSensitive)(ty1, ty2)
+      compatibleRootType(columnNameOfCorruptRecords, parseMode)(ty1, ty2)
     case (ty1, ArrayType(ty2, _)) =>
-      compatibleRootType(columnNameOfCorruptRecords, parseMode, caseSensitive)(ty1, ty2)
+      compatibleRootType(columnNameOfCorruptRecords, parseMode)(ty1, ty2)
     // Discard null/empty documents
     case (struct: StructType, NullType) => struct
     case (NullType, struct: StructType) => struct
@@ -263,7 +264,7 @@ private[sql] object JsonInferSchema {
       withCorruptField(struct, o, columnNameOfCorruptRecords, parseMode)
     // If we get anything else, we call compatibleType.
     // Usually, when we reach here, ty1 and ty2 are two StructTypes.
-    case (ty1, ty2) => compatibleType(ty1, ty2, caseSensitive)
+    case (ty1, ty2) => compatibleType(ty1, ty2)
   }
 
   private[this] val emptyStructFieldArray = Array.empty[StructField]
@@ -271,8 +272,8 @@ private[sql] object JsonInferSchema {
   /**
    * Returns the most general data type for two given data types.
    */
-  def compatibleType(t1: DataType, t2: DataType, caseSensitive: Boolean): DataType = {
-    TypeCoercion.findTightestCommonType(t1, t2, caseSensitive).getOrElse {
+  def compatibleType(t1: DataType, t2: DataType): DataType = {
+    TypeCoercion.findTightestCommonType(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
         // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
@@ -307,8 +308,7 @@ private[sql] object JsonInferSchema {
             val f2Name = fields2(f2Idx).name
             val comp = f1Name.compareTo(f2Name)
             if (comp == 0) {
-              val dataType = compatibleType(
-                fields1(f1Idx).dataType, fields2(f2Idx).dataType, caseSensitive)
+              val dataType = compatibleType(fields1(f1Idx).dataType, fields2(f2Idx).dataType)
               newFields.add(StructField(f1Name, dataType, nullable = true))
               f1Idx += 1
               f2Idx += 1
@@ -331,17 +331,15 @@ private[sql] object JsonInferSchema {
           StructType(newFields.toArray(emptyStructFieldArray))
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
-          ArrayType(
-            compatibleType(elementType1, elementType2, caseSensitive),
-            containsNull1 || containsNull2)
+          ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
 
         // The case that given `DecimalType` is capable of given `IntegralType` is handled in
         // `findTightestCommonTypeOfTwo`. Both cases below will be executed only when
         // the given `DecimalType` is not capable of the given `IntegralType`.
         case (t1: IntegralType, t2: DecimalType) =>
-          compatibleType(DecimalType.forType(t1), t2, caseSensitive)
+          compatibleType(DecimalType.forType(t1), t2)
         case (t1: DecimalType, t2: IntegralType) =>
-          compatibleType(t1, DecimalType.forType(t2), caseSensitive)
+          compatibleType(t1, DecimalType.forType(t2))
 
         // strings and every string is a Json object.
         case (_, _) => StringType

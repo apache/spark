@@ -48,8 +48,10 @@ class JdbcRelationProvider extends CreatableRelationProvider
       JDBCPartitioningInfo(
         partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
-    val parts = JDBCRelation.columnPartition(partitionInfo)
-    JDBCRelation(parts, jdbcOptions)(sqlContext.sparkSession)
+    val resolver = sqlContext.conf.resolver
+    val schema = JDBCRelation.getSchema(resolver, jdbcOptions)
+    val parts = JDBCRelation.columnPartition(schema, partitionInfo, resolver, jdbcOptions)
+    JDBCRelation(schema, parts, jdbcOptions)(sqlContext.sparkSession)
   }
 
   override def createRelation(
@@ -73,7 +75,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
               saveTable(df, tableSchema, isCaseSensitive, options)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
-              dropTable(conn, options.table)
+              dropTable(conn, options.table, options)
               createTable(conn, df, options)
               saveTable(df, Some(df.schema), isCaseSensitive, options)
             }

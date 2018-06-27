@@ -1022,21 +1022,33 @@ object SparkSession extends Logging {
   /**
    * Returns the active SparkSession for the current thread, returned by the builder.
    *
+   * @note Return None, when calling this function on executors
+   *
    * @since 2.2.0
    */
   def getActiveSession: Option[SparkSession] = {
-    assertOnDriver()
-    Option(activeThreadSession.get)
+    if (TaskContext.get != null) {
+      // Return None when running on executors.
+      None
+    } else {
+      Option(activeThreadSession.get)
+    }
   }
 
   /**
    * Returns the default SparkSession that is returned by the builder.
    *
+   * @note Return None, when calling this function on executors
+   *
    * @since 2.2.0
    */
   def getDefaultSession: Option[SparkSession] = {
-    assertOnDriver()
-    Option(defaultSession.get)
+    if (TaskContext.get != null) {
+      // Return None when running on executors.
+      None
+    } else {
+      Option(defaultSession.get)
+    }
   }
 
   /**

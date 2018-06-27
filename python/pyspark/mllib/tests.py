@@ -1364,6 +1364,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
             LabeledPoint(y_p[i], Vectors.dense([x[i]]))
             for i in range(nPoints)]
 
+    @unittest.skip("Super flaky test")
     def test_parameter_accuracy(self):
         """
         Test that the final value of weights is close to the desired value.

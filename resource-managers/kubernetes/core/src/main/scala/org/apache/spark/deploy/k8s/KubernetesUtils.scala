@@ -65,7 +65,7 @@ private[spark] object KubernetesUtils {
       .map(_.getAbsolutePath)
   }
 
-  private def resolveFileUri(uri: String): String = {
+  def resolveFileUri(uri: String): String = {
     val fileUri = Utils.resolveURI(uri)
     val fileScheme = Option(fileUri.getScheme).getOrElse("file")
     fileScheme match {

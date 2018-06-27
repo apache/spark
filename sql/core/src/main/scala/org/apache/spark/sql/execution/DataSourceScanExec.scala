@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   val relation: BaseRelation
@@ -69,7 +70,7 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
    * Shorthand for calling redactString() without specifying redacting rules
    */
   private def redact(text: String): String = {
-    Utils.redact(sqlContext.sessionState.conf.stringRedationPattern, text)
+    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
   }
 }
 
@@ -151,6 +152,7 @@ case class RowDataSourceScanExec(
  * @param output Output attributes of the scan, including data attributes and partition attributes.
  * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
  * @param partitionFilters Predicates to use for partition pruning.
+ * @param optionalBucketSet Bucket ids for bucket pruning
  * @param dataFilters Filters on non-partition columns.
  * @param tableIdentifier identifier for the table in the metastore.
  */
@@ -159,6 +161,7 @@ case class FileSourceScanExec(
     output: Seq[Attribute],
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],
+    optionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
@@ -286,7 +289,20 @@ case class FileSourceScanExec(
       } getOrElse {
         metadata
       }
-    withOptPartitionCount
+
+    val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
+      val numSelectedBuckets = optionalBucketSet.map { b =>
+        b.cardinality()
+      } getOrElse {
+        spec.numBuckets
+      }
+      withOptPartitionCount + ("SelectedBucketsCount" ->
+        s"$numSelectedBuckets out of ${spec.numBuckets}")
+    } getOrElse {
+      withOptPartitionCount
+    }
+
+    withSelectedBucketsCount
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
@@ -364,7 +380,6 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-    logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val session = fsRelation.sparkSession
     val partitionFiles = selectedPartitions.flatMap { partition =>
       partition.files.map((_, partition.values))
@@ -392,7 +407,15 @@ case class FileSourceScanExec(
       BucketingUtils
         .getBucketId(new Path(f.filePath).getName)
         .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
+    }.filter { case (bucket, _) =>
+      if (optionalBucketSet.isDefined) {
+        val bucketSet = optionalBucketSet.get
+        bucketSet.get(bucket)
+      } else {
+        true
+      }
     }
+
     val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
       FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
     }
@@ -532,6 +555,7 @@ case class FileSourceScanExec(
       output.map(QueryPlan.normalizeExprId(_, output)),
       requiredSchema,
       QueryPlan.normalizePredicates(partitionFilters, output),
+      optionalBucketSet,
       QueryPlan.normalizePredicates(dataFilters, output),
       None)
   }

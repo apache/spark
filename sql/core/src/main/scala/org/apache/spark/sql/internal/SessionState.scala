@@ -56,7 +56,6 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
  * @param createQueryExecution Function used to create QueryExecution objects.
  * @param createClone Function used to create clones of the session state.
  */
-
 private[sql] class SessionState(
     sharedState: SharedState,
     val conf: SQLConf,

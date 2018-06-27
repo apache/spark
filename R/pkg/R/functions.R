@@ -189,6 +189,7 @@ NULL
 #'              the map or array of maps.
 #'          \item \code{from_json}: it is the column containing the JSON string.
 #'          }
+#' @param y Column to compute on.
 #' @param value A value to compute on.
 #'          \itemize{
 #'          \item \code{array_contains}: a value to be checked if contained in the column.
@@ -207,7 +208,7 @@ NULL
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1)))
-#' head(select(tmp, array_position(tmp$v1, 21), array_sort(tmp$v1)))
+#' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
 #' head(select(tmp, flatten(tmp$v1), reverse(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
@@ -216,12 +217,13 @@ NULL
 #' head(select(tmp, sort_array(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
-#' head(select(tmp3, map_keys(tmp3$v3)))
-#' head(select(tmp3, map_values(tmp3$v3)))
+#' head(select(tmp3, map_entries(tmp3$v3), map_keys(tmp3$v3), map_values(tmp3$v3)))
 #' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
-#' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$hp))
-#' head(select(tmp4, concat(tmp4$v4, tmp4$v5)))
-#' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))}
+#' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
+#' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
+#' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))
+#' tmp5 <- mutate(df, v6 = create_array(df$model, df$model))
+#' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))}
 NULL
 
 #' Window functions for Column operations
@@ -1976,7 +1978,7 @@ setMethod("levenshtein", signature(y = "Column"),
           })
 
 #' @details
-#' \code{months_between}: Returns number of months between dates \code{y} and \code{x}. 
+#' \code{months_between}: Returns number of months between dates \code{y} and \code{x}.
 #' If \code{y} is later than \code{x}, then the result is positive. If \code{y} and \code{x}
 #' are on the same day of month, or both are the last day of month, time of day will be ignored.
 #' Otherwise, the difference is calculated based on 31 days per month, and rounded to 8 digits.
@@ -3007,6 +3009,27 @@ setMethod("array_contains",
           })
 
 #' @details
+#' \code{array_join}: Concatenates the elements of column using the delimiter.
+#' Null values are replaced with nullReplacement if set, otherwise they are ignored.
+#'
+#' @param delimiter a character string that is used to concatenate the elements of column.
+#' @param nullReplacement an optional character string that is used to replace the Null values.
+#' @rdname column_collection_functions
+#' @aliases array_join array_join,Column-method
+#' @note array_join since 2.4.0
+setMethod("array_join",
+         signature(x = "Column", delimiter = "character"),
+         function(x, delimiter, nullReplacement = NULL) {
+           jc <- if (is.null(nullReplacement)) {
+             callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter)
+           } else {
+             callJStatic("org.apache.spark.sql.functions", "array_join", x@jc, delimiter,
+                         as.character(nullReplacement))
+           }
+           column(jc)
+         })
+
+#' @details
 #' \code{array_max}: Returns the maximum value of the array.
 #'
 #' @rdname column_collection_functions
@@ -3049,6 +3072,26 @@ setMethod("array_position",
           })
 
 #' @details
+#' \code{array_repeat}: Creates an array containing \code{x} repeated the number of times
+#' given by \code{count}.
+#'
+#' @param count a Column or constant determining the number of repetitions.
+#' @rdname column_collection_functions
+#' @aliases array_repeat array_repeat,Column,numericOrColumn-method
+#' @note array_repeat since 2.4.0
+setMethod("array_repeat",
+          signature(x = "Column", count = "numericOrColumn"),
+          function(x, count) {
+            if (class(count) == "Column") {
+              count <- count@jc
+            } else {
+              count <- as.integer(count)
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_repeat", x@jc, count)
+            column(jc)
+          })
+
+#' @details
 #' \code{array_sort}: Sorts the input array in ascending order. The elements of the input array
 #' must be orderable. NA elements will be placed at the end of the returned array.
 #'
@@ -3059,6 +3102,21 @@ setMethod("array_sort",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{arrays_overlap}: Returns true if the input arrays have at least one non-null element in
+#' common. If not and both arrays are non-empty and any of them contains a null, it returns null.
+#' It returns false otherwise.
+#'
+#' @rdname column_collection_functions
+#' @aliases arrays_overlap arrays_overlap,Column-method
+#' @note arrays_overlap since 2.4.0
+setMethod("arrays_overlap",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "arrays_overlap", x@jc, y@jc)
             column(jc)
           })
 
@@ -3075,6 +3133,19 @@ setMethod("flatten",
             jc <- callJStatic("org.apache.spark.sql.functions", "flatten", x@jc)
             column(jc)
           })
+
+#' @details
+#' \code{map_entries}: Returns an unordered array of all entries in the given map.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_entries map_entries,Column-method
+#' @note map_entries since 2.4.0
+setMethod("map_entries",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_entries", x@jc)
+            column(jc)
+         })
 
 #' @details
 #' \code{map_keys}: Returns an unordered array containing the keys of the map.
@@ -3149,8 +3220,8 @@ setMethod("size",
 #' (or starting from the end if start is negative) with the specified length.
 #'
 #' @rdname column_collection_functions
-#' @param start an index indicating the first element occuring in the result.
-#' @param length a number of consecutive elements choosen to the result.
+#' @param start an index indicating the first element occurring in the result.
+#' @param length a number of consecutive elements chosen to the result.
 #' @aliases slice slice,Column-method
 #' @note slice since 2.4.0
 setMethod("slice",
