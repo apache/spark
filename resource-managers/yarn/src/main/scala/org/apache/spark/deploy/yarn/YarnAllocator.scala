@@ -169,6 +169,10 @@ private[yarn] class YarnAllocator(
    */
   def getPendingAllocate: Seq[ContainerRequest] = getPendingAtLocation(ANY_HOST)
 
+  def getNumPendingAllocate: Int = synchronized {
+    getPendingAllocate.size
+  }
+
   /**
    * A sequence of pending container requests at the given location that have not yet been
    * fulfilled.
