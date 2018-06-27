@@ -393,9 +393,8 @@ class DataFrame(object):
             self._support_repr_html = True
         if self._eager_eval:
             max_num_rows = max(self._max_num_rows, 0)
-            vertical = False
             sock_info = self._jdf.getRowsToPython(
-                max_num_rows, self._truncate, vertical)
+                max_num_rows, self._truncate)
             rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
             head = rows[0]
             row_data = rows[1:]

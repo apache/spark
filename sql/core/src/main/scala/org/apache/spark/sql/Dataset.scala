@@ -236,12 +236,10 @@ class Dataset[T] private[sql](
    * @param numRows Number of rows to return
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
    *                   all cells will be aligned right.
-   * @param vertical If set to true, the rows to return do not need truncate.
    */
   private[sql] def getRows(
       numRows: Int,
-      truncate: Int,
-      vertical: Boolean): Seq[Seq[String]] = {
+      truncate: Int): Seq[Seq[String]] = {
     val newDf = toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
       // Since binary types in top-level schema fields have a specific format to print,
@@ -289,7 +287,7 @@ class Dataset[T] private[sql](
       vertical: Boolean = false): String = {
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
     // Get rows represented by Seq[Seq[String]], we may get one more line if it has more data.
-    val tmpRows = getRows(numRows, truncate, vertical)
+    val tmpRows = getRows(numRows, truncate)
 
     val hasMoreData = tmpRows.length - 1 > numRows
     val rows = tmpRows.take(numRows + 1)
@@ -3226,11 +3224,10 @@ class Dataset[T] private[sql](
 
   private[sql] def getRowsToPython(
       _numRows: Int,
-      truncate: Int,
-      vertical: Boolean): Array[Any] = {
+      truncate: Int): Array[Any] = {
     EvaluatePython.registerPicklers()
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
-    val rows = getRows(numRows, truncate, vertical).map(_.toArray).toArray
+    val rows = getRows(numRows, truncate).map(_.toArray).toArray
     val toJava: (Any) => Any = EvaluatePython.toJava(_, ArrayType(ArrayType(StringType)))
     val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
       rows.iterator.map(toJava))
