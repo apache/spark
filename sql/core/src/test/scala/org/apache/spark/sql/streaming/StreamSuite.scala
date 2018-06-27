@@ -818,13 +818,26 @@ class StreamSuite extends StreamTest {
 
   test("streaming limit in complete mode") {
     val inputData = MemoryStream[Int]
-    val limited = inputData.toDF().limit(5)
+    val limited = inputData.toDF().limit(5).groupBy("value").count()
 
     testStream(limited, OutputMode.Complete())(
       AddData(inputData, 1 to 3: _*),
-      CheckAnswer(1 to 3: _*),
-      AddData(inputData, 4 to 9: _*),
-      CheckAnswer(4 to 8: _*))
+      CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
+      AddData(inputData, 1 to 9: _*),
+      CheckAnswer(Row(1, 2), Row(2, 2), Row(3, 2), Row(4, 1), Row(5, 1)))
+  }
+
+  test("streaming limit in update mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(5)
+
+    val e = intercept[AnalysisException] {
+      testStream(limited, OutputMode.Update())(
+        AddData(inputData, 1 to 3: _*)
+      )
+    }
+    assert(e.getMessage.contains(
+      "Limits are not supported on streaming DataFrames/Datasets in Update output mode"))
   }
 
   for (e <- Seq(
