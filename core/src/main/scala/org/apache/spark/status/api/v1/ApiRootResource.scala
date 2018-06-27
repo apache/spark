@@ -151,15 +151,12 @@ private[v1] class ForbiddenException(msg: String) extends WebApplicationExceptio
     UIUtils.buildErrorResponse(Response.Status.FORBIDDEN, msg))
 
 private[v1] class NotFoundException(msg: String) extends WebApplicationException(
-    new NoSuchElementException(msg),
     UIUtils.buildErrorResponse(Response.Status.NOT_FOUND, msg))
 
 private[v1] class ServiceUnavailable(msg: String) extends WebApplicationException(
-    new ServiceUnavailableException(msg),
     UIUtils.buildErrorResponse(Response.Status.SERVICE_UNAVAILABLE, msg))
 
 private[v1] class BadParameterException(msg: String) extends WebApplicationException(
-    new IllegalArgumentException(msg),
     UIUtils.buildErrorResponse(Response.Status.BAD_REQUEST, msg)) {
   def this(param: String, exp: String, actual: String) = {
     this(raw"""Bad value for parameter "$param".  Expected a $exp, got "$actual"""")
