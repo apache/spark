@@ -939,6 +939,8 @@ class SQLTests(ReusedSQLTestCase):
         df.cache()
         self.assertTrue(df.is_cached)
         self.assertEqual(2, df.count())
+        self.assertEqual(len(df), df.count())
+        self.assertEqual(2, len(df))
 
         df.createOrReplaceTempView("temp")
         df = self.spark.sql("select foo from temp")

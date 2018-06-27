@@ -375,6 +375,9 @@ class DataFrame(object):
         return int(self.sql_ctx.getConf(
             "spark.sql.repl.eagerEval.truncate", "20"))
 
+    def __len__(self):
+        return self.count()
+
     def __repr__(self):
         if not self._support_repr_html and self._eager_eval:
             vertical = False
