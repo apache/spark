@@ -141,11 +141,8 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
         .build()
     } catch {
       case NonFatal(_) =>
-        Response.serverError()
-          .entity(s"Event logs are not available for app: $appId.")
-          .`type`(MediaType.TEXT_PLAIN)
-          .status(Response.Status.SERVICE_UNAVAILABLE)
-          .build()
+        UIUtils.buildErrorResponse(Response.Status.SERVICE_UNAVAILABLE,
+          s"Event logs are not available for app: $appId.")
     }
   }
 
