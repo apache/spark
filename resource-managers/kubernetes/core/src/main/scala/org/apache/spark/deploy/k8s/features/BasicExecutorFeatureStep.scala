@@ -159,7 +159,7 @@ private[spark] class BasicExecutorFeatureStep(
         .build()
       new ContainerBuilder(containerWithLimitCores)
         .editResources()
-          .addToLimits(gpuProvider+"/gpu", executorGpuLimitQuantity)
+          .addToLimits(gpuProvider + "/gpu", executorGpuLimitQuantity)
           .endResources()
         .build()
     }.getOrElse(containerWithLimitCores)
