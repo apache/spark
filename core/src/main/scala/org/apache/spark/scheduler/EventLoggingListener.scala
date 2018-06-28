@@ -51,7 +51,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  *   spark.eventLog.overwrite - Whether to overwrite any existing files.
  *   spark.eventLog.dir - Path to the directory in which events are logged.
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
- *   spark.eventLog.logExecutorMetricsUpdates.enabled - Whether to log executor metrics updates
+ *   spark.eventLog.logStageExecutorMetrics.enabled - Whether to log stage executor metrics
  */
 private[spark] class EventLoggingListener(
     appId: String,
@@ -70,7 +70,7 @@ private[spark] class EventLoggingListener(
   private val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS)
   private val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
   private val shouldLogBlockUpdates = sparkConf.get(EVENT_LOG_BLOCK_UPDATES)
-  private val shouldLogExecutorMetricsUpdates = sparkConf.get(EVENT_LOG_EXECUTOR_METRICS_UPDATES)
+  private val shouldLogStageExecutorMetrics = sparkConf.get(EVENT_LOG_STAGE_EXECUTOR_METRICS)
   private val testing = sparkConf.get(EVENT_LOG_TESTING)
   private val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
@@ -162,7 +162,7 @@ private[spark] class EventLoggingListener(
   // Events that do not trigger a flush
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
     logEvent(event)
-    if (shouldLogExecutorMetricsUpdates) {
+    if (shouldLogStageExecutorMetrics) {
       // record the peak metrics for the new stage
       liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
         new HashMap[String, PeakExecutorMetrics]())
@@ -181,7 +181,7 @@ private[spark] class EventLoggingListener(
 
   // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
-    if (shouldLogExecutorMetricsUpdates) {
+    if (shouldLogStageExecutorMetrics) {
       // clear out any previous attempts, that did not have a stage completed event
       val prevAttemptId = event.stageInfo.attemptNumber() - 1
       for (attemptId <- 0 to prevAttemptId) {
@@ -190,14 +190,12 @@ private[spark] class EventLoggingListener(
 
       // log the peak executor metrics for the stage, for each live executor,
       // whether or not the executor is running tasks for the stage
-      val executorMap = liveStageExecutorMetrics.remove(
+      val executorOpt = liveStageExecutorMetrics.remove(
         (event.stageInfo.stageId, event.stageInfo.attemptNumber()))
-      executorMap.foreach {
-       executorEntry => {
-          for ((executorId, peakExecutorMetrics) <- executorEntry) {
+      executorOpt.foreach { execMap =>
+        execMap.foreach { case (executorId, peakExecutorMetrics) =>
             logEvent(new SparkListenerStageExecutorMetrics(executorId, event.stageInfo.stageId,
               event.stageInfo.attemptNumber(), peakExecutorMetrics.metrics))
-          }
         }
       }
     }
@@ -269,14 +267,12 @@ private[spark] class EventLoggingListener(
   }
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
-    if (shouldLogExecutorMetricsUpdates) {
+    if (shouldLogStageExecutorMetrics) {
       // For the active stages, record any new peak values for the memory metrics for the executor
-      event.executorUpdates.foreach { executorUpdates =>
-        liveStageExecutorMetrics.values.foreach { peakExecutorMetrics =>
-          val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
-            event.execId, new PeakExecutorMetrics())
-          peakMetrics.compareAndUpdate(executorUpdates)
-        }
+      liveStageExecutorMetrics.values.foreach { peakExecutorMetrics =>
+        val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
+          event.execId, new PeakExecutorMetrics())
+        peakMetrics.compareAndUpdate(event.executorUpdates)
       }
     }
   }

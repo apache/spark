@@ -24,6 +24,7 @@ import org.apache.spark.metrics.MetricGetter
  * values have been recorded yet.
  */
 private[spark] class PeakExecutorMetrics {
+  // Metrics are indexed by MetricGetter.values
   val metrics = new Array[Long](MetricGetter.values.length)
   metrics(0) = -1
 
@@ -45,11 +46,5 @@ private[spark] class PeakExecutorMetrics {
       }
     }
     updated
-  }
-
-  /** Clears/resets the saved peak values. */
-  def reset(): Unit = {
-    (0 until metrics.length).foreach { idx => metrics(idx) = 0}
-    metrics(0) = -1
   }
 }

@@ -686,12 +686,13 @@ private[spark] class AppStatusListener(
         }
       }
     }
-    event.executorUpdates.foreach { updates: Array[Long] =>
-      // check if there is a new peak value for any of the executor level memory metrics
-      liveExecutors.get(event.execId).foreach { exec: LiveExecutor =>
-        if (exec.peakExecutorMetrics.compareAndUpdate(updates)) {
-          maybeUpdate(exec, now)
-        }
+
+    // check if there is a new peak value for any of the executor level memory metrics
+    // for the live UI. SparkListenerExecutorMetricsUpdate events are only processed
+    // for the live UI.
+    liveExecutors.get(event.execId).foreach { exec: LiveExecutor =>
+      if (exec.peakExecutorMetrics.compareAndUpdate(event.executorUpdates)) {
+        maybeUpdate(exec, now)
       }
     }
   }
@@ -699,7 +700,9 @@ private[spark] class AppStatusListener(
   override def onStageExecutorMetrics(executorMetrics: SparkListenerStageExecutorMetrics): Unit = {
     val now = System.nanoTime()
 
-    // check if there is a new peak value for any of the executor level memory metrics
+    // check if there is a new peak value for any of the executor level memory metrics,
+    // while reading from the log. SparkListenerStageExecutorMetrics are only processed
+    // when reading logs.
     liveExecutors.get(executorMetrics.execId)
       .orElse(deadExecutors.get(executorMetrics.execId)) match {
       case Some(exec) =>

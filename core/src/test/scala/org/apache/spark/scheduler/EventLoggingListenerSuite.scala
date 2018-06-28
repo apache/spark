@@ -144,7 +144,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Executor metrics update") {
-    testExecutorMetricsUpdateEventLogging()
+    testStageExecutorMetricsEventLogging()
   }
 
   /* ----------------- *
@@ -262,19 +262,17 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   /**
-   * Test executor metrics update logging functionality. This checks that a
-   * SparkListenerExecutorMetricsUpdate event is added to the Spark history
-   * log if one of the executor metrics is larger than any previously
-   * recorded value for the metric, per executor per stage. The task metrics
-   * should not be added.
+   * Test stage executor metrics logging functionality. This checks that peak
+   * values from SparkListenerExecutorMetricsUpdate events during a stage are
+   * logged in a StageExecutorMetrics event for each executor at stage completion.
    */
-  private def testExecutorMetricsUpdateEventLogging() {
+  private def testStageExecutorMetricsEventLogging() {
     val conf = getLoggingConf(testDirPath, None)
-    val logName = "executorMetricsUpdated-test"
+    val logName = "stageExecutorMetrics-test"
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
     val listenerBus = new LiveListenerBus(conf)
 
-    // expected ExecutorMetricsUpdate, for the given stage id and executor id
+    // expected StageExecutorMetrics, for the given stage id and executor id
     val expectedMetricsEvents: Map[(Int, String), SparkListenerStageExecutorMetrics] =
       Map(
         ((0, "1"),
@@ -375,7 +373,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
           case stageCompleted: SparkListenerStageCompleted =>
             val execIds = Set[String]()
             (1 to 2).foreach { _ =>
-              val execId = checkExecutorMetricsUpdate(lines(logIdx),
+              val execId = checkStageExecutorMetrics(lines(logIdx),
                 stageCompleted.stageInfo.stageId, expectedMetricsEvents)
               execIds += execId
               logIdx += 1
@@ -418,7 +416,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     taskMetrics.incDiskBytesSpilled(111)
     taskMetrics.incMemoryBytesSpilled(222)
     val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
-    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, Some(executorMetrics))
+    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, executorMetrics)
   }
 
   /** Check that the Spark history log line matches the expected event. */
@@ -446,7 +444,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    * @param stageId the stage ID the ExecutorMetricsUpdate is associated with
    * @param expectedEvents map of expected ExecutorMetricsUpdate events, for (stageId, executorId)
    */
-  private def checkExecutorMetricsUpdate(
+  private def checkStageExecutorMetrics(
       line: String,
       stageId: Int,
       expectedEvents: Map[(Int, String), SparkListenerStageExecutorMetrics]): String = {

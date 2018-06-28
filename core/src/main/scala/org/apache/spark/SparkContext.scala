@@ -1928,7 +1928,7 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
     }
-    if(_heartbeater != null) {
+    if (_heartbeater != null) {
       Utils.tryLogNonFatalError {
         _heartbeater.stop()
       }
@@ -2414,8 +2414,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def reportHeartBeat(): Unit = {
     val driverUpdates = _heartbeater.getCurrentMetrics()
     val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
-    listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
-      Some(driverUpdates)))
+    listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates, driverUpdates))
   }
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this

@@ -235,9 +235,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       s1Tasks.foreach { task =>
         val accum = new AccumulableInfo(1L, Some(InternalAccumulator.MEMORY_BYTES_SPILLED),
           Some(value), None, true, false, None)
+        val executorUpdates = Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L)
         listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
           task.executorId,
-          Seq((task.taskId, stages.head.stageId, stages.head.attemptNumber, Seq(accum)))))
+          Seq((task.taskId, stages.head.stageId, stages.head.attemptNumber, Seq(accum))),
+          executorUpdates))
       }
 
       check[StageDataWrapper](key(stages.head)) { stage =>
@@ -1274,7 +1276,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       "2" -> Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 80L, 40L))
 
     // check that the stored peak values match the expected values
-    for ((id, metrics) <- expectedValues) {
+    expectedValues.foreach { case (id, metrics) =>
       check[ExecutorSummaryWrapper](id) { exec =>
         assert(exec.info.id === id)
         exec.info.peakMemoryMetrics match {
@@ -1400,6 +1402,6 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     taskMetrics.incDiskBytesSpilled(111)
     taskMetrics.incMemoryBytesSpilled(222)
     val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
-    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, Some(executorMetrics))
+    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, executorMetrics)
   }
 }

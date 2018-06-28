@@ -113,8 +113,8 @@ class MemoryMetrics private[spark](
     val totalOnHeapStorageMemory: Long,
     val totalOffHeapStorageMemory: Long)
 
-/** deserialzer for peakMemoryMetrics: convert to array ordered by metric name */
-class PeakMemoryMetricsDeserializer private[spark] extends JsonDeserializer[Option[Array[Long]]] {
+/** deserializer for peakMemoryMetrics: convert to array ordered by metric name */
+private class PeakMemoryMetricsDeserializer extends JsonDeserializer[Option[Array[Long]]] {
   override def deserialize(
       jsonParser: JsonParser,
       deserializationContext: DeserializationContext): Option[Array[Long]] = {
@@ -128,7 +128,7 @@ class PeakMemoryMetricsDeserializer private[spark] extends JsonDeserializer[Opti
   }
 }
 /** serializer for peakMemoryMetrics: convert array to map with metric name as key */
-class PeakMemoryMetricsSerializer private[spark] extends JsonSerializer[Option[Array[Long]]] {
+private class PeakMemoryMetricsSerializer extends JsonSerializer[Option[Array[Long]]] {
   override def serialize(
       metrics: Option[Array[Long]],
       jsonGenerator: JsonGenerator,

@@ -166,7 +166,7 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
     accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])],
-    executorUpdates: Option[Array[Long]] = None)
+    executorUpdates: Array[Long])
   extends SparkListenerEvent
 
 /**
@@ -175,7 +175,7 @@ case class SparkListenerExecutorMetricsUpdate(
  * @param execId executor id
  * @param stageId stage id
  * @param stageAttemptId stage attempt
- * @param executorMetrics executor level metrics
+ * @param executorMetrics executor level metrics, indexed by MetricGetter.values
  */
 @DeveloperApi
 case class SparkListenerStageExecutorMetrics(
@@ -283,7 +283,9 @@ private[spark] trait SparkListenerInterface {
   def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit
 
   /**
-   * Called when the driver reads stage executor metrics from the history log.
+   * Called with the peak memory metrics for a given (executor, stage) combination. Note that this
+   * is only present when reading from the event log (as in the history server), and is never
+   * called in a live application.
    */
   def onStageExecutorMetrics(executorMetrics: SparkListenerStageExecutorMetrics): Unit
 

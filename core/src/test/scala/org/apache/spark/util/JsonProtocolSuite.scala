@@ -95,8 +95,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
-      val executorUpdates = Some(Array(543L, 123456L, 12345L,
-        1234L, 123L, 12L, 432L, 321L, 654L, 765L))
+      val executorUpdates = Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L)
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)), executorUpdates)
     }
     val blockUpdated =
@@ -424,30 +423,6 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(exceptionFailure.fullStackTrace === oldExceptionFailure.fullStackTrace)
     assertSeqEquals[AccumulableInfo](
       exceptionFailure.accumUpdates, oldExceptionFailure.accumUpdates, (x, y) => x == y)
-  }
-
-  test("ExecutorMetricsUpdate backward compatibility: executor metrics update") {
-    // executorMetricsUpdate was added in 2.1.0. For older event logs, this should
-    // be set to None.
-    val executorMetricsUpdate = makeExecutorMetricsUpdate("1", true, true)
-    val oldExecutorMetricsUpdateJson =
-      JsonProtocol.executorMetricsUpdateToJson(executorMetricsUpdate)
-        .removeField( _._1 == "Executor Metrics Updated")
-    val exepectedExecutorMetricsUpdate = makeExecutorMetricsUpdate("1", true, false)
-    assertEquals(exepectedExecutorMetricsUpdate,
-      JsonProtocol.executorMetricsUpdateFromJson(oldExecutorMetricsUpdateJson))
-  }
-
-  test("ExecutorMetricsUpdate: empty metrics update") {
-    // For SparkListenerExecutorMetricUpdate events, metrics update will be set to
-    // empty in the event log, to avoid excess logging.
-    val executorMetricsUpdate = makeExecutorMetricsUpdate("1", true, true)
-    val oldExecutorMetricsUpdateJson =
-      JsonProtocol.executorMetricsUpdateToJson(executorMetricsUpdate)
-        .replace(List("Metrics Updated"), List.empty[JValue])
-    val exepectedExecutorMetricsUpdate = makeExecutorMetricsUpdate("1", false, true)
-    assertEquals(exepectedExecutorMetricsUpdate,
-      JsonProtocol.executorMetricsUpdateFromJson(oldExecutorMetricsUpdateJson))
   }
 
   test("AccumulableInfo value de/serialization") {
@@ -812,18 +787,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(ste1 === ste2)
   }
 
-  private def assertExecutorMetricsEquals(
-      metrics1: Option[Array[Long]],
-      metrics2: Option[Array[Long]]) {
-    (metrics1, metrics2) match {
-      case (Some(m1), Some(m2)) =>
-        assertExecutorMetricsEquals(m1, m2)
-      case (None, None) =>
-      case _ =>
-        assert(false)
-    }
-  }
-
   private def assertExecutorMetricsEquals(metrics1: Array[Long], metrics2: Array[Long]) {
     assert(metrics1.length === MetricGetter.values.length)
     assert(metrics2.length === MetricGetter.values.length)
@@ -831,7 +794,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       assert(metrics1(idx) === metrics2(idx))
     }
   }
-
 
   /** ----------------------------------- *
    | Util methods for constructing events |
@@ -886,27 +848,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       metadata: Option[String] = None): AccumulableInfo =
     new AccumulableInfo(id, Some(s"Accumulable$id"), Some(s"delta$id"), Some(s"val$id"),
       internal, countFailedValues, metadata)
-
-  /** Creates an SparkListenerExecutorMetricsUpdate event */
-  private def makeExecutorMetricsUpdate(
-      execId: String,
-      includeTaskMetrics: Boolean,
-      includeExecutorMetrics: Boolean): SparkListenerExecutorMetricsUpdate = {
-    val taskMetrics =
-      if (includeTaskMetrics) {
-        Seq((1L, 1, 1, Seq(makeAccumulableInfo(1, false, false, None),
-          makeAccumulableInfo(2, false, false, None))))
-      } else {
-        Seq()
-      }
-    val executorMetricsUpdate =
-      if (includeExecutorMetrics) {
-        Some(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L))
-      } else {
-        None
-      }
-    SparkListenerExecutorMetricsUpdate(execId, taskMetrics, executorMetricsUpdate)
-  }
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is

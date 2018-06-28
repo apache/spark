@@ -42,7 +42,7 @@ private[spark] class Heartbeater(
   private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor(name)
 
   /** Schedules a task to report a heartbeat. */
-  private[spark] def start(): Unit = {
+  def start(): Unit = {
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
 
@@ -53,7 +53,7 @@ private[spark] class Heartbeater(
   }
 
   /** Stops the heartbeat thread. */
-  private[spark] def stop(): Unit = {
+  def stop(): Unit = {
     heartbeater.shutdown()
     heartbeater.awaitTermination(10, TimeUnit.SECONDS)
   }
