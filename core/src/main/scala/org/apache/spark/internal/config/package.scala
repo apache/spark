@@ -433,7 +433,7 @@ package object config {
       // as well use fetch-to-disk in that case.  The message includes some metadata in addition
       // to the block data itself (in particular UploadBlock has a lot of metadata), so we leave
       // extra room.
-      .createWithDefault(Int.MaxValue - 500)
+      .createWithDefault(Int.MaxValue - 512)
 
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
     ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
