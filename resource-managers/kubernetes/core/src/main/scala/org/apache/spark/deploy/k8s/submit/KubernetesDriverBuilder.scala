@@ -68,7 +68,8 @@ private[spark] class KubernetesDriverBuilder(
         case JavaMainAppResource(_) =>
           provideJavaStep(kubernetesConf)
         case PythonMainAppResource(_) =>
-          providePythonStep(kubernetesConf)}.getOrElse(provideJavaStep(kubernetesConf))
+          providePythonStep(kubernetesConf)}
+      .getOrElse(provideJavaStep(kubernetesConf))
 
     val localFiles = KubernetesUtils.submitterLocalFiles(kubernetesConf.sparkFiles)
       .map(new File(_))
