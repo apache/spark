@@ -329,8 +329,8 @@ private[sql] object JsonInferSchema {
           ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
 
         // The case that given `DecimalType` is capable of given `IntegralType` is handled in
-        // `findTightestCommonTypeOfTwo`. Both cases below will be executed only when
-        // the given `DecimalType` is not capable of the given `IntegralType`.
+        // `findTightestCommonType`. Both cases below will be executed only when the given
+        // `DecimalType` is not capable of the given `IntegralType`.
         case (t1: IntegralType, t2: DecimalType) =>
           compatibleType(DecimalType.forType(t1), t2)
         case (t1: DecimalType, t2: IntegralType) =>
