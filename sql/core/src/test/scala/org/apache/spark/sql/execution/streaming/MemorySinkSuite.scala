@@ -46,25 +46,25 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, Seq.empty)
 
     // Add batch 0 and check outputs
-    sink.addBatch(0, 1 to 3)
+    sink.addBatch(0, 1 to 3, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(0))
     checkAnswer(sink.latestBatchData, 1 to 3)
     checkAnswer(sink.allData, 1 to 3)
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, 4 to 6)
+    sink.addBatch(1, 4 to 6, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 1 to 6)     // new data should get appended to old data
 
     // Re-add batch 1 with different data, should not be added and outputs should not be changed
-    sink.addBatch(1, 7 to 9)
+    sink.addBatch(1, 7 to 9, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 1 to 6)
 
     // Add batch 2 and check outputs
-    sink.addBatch(2, 7 to 9)
+    sink.addBatch(2, 7 to 9, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(2))
     checkAnswer(sink.latestBatchData, 7 to 9)
     checkAnswer(sink.allData, 1 to 9)
@@ -84,13 +84,13 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, Seq.empty)
 
     // Add batch 0 and check outputs
-    sink.addBatch(0, 1 to 3)
+    sink.addBatch(0, 1 to 3, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(0))
     checkAnswer(sink.latestBatchData, 1 to 3)
     checkAnswer(sink.allData, 1 to 3)
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, 4 to 6)
+    sink.addBatch(1, 4 to 6, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 5)
     checkAnswer(sink.allData, 1 to 5)     // new data should not go over the limit
@@ -106,25 +106,25 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, Seq.empty)
 
     // Add batch 0 and check outputs
-    sink.addBatch(0, 1 to 3)
+    sink.addBatch(0, 1 to 3, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(0))
     checkAnswer(sink.latestBatchData, 1 to 3)
     checkAnswer(sink.allData, 1 to 3)
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, 4 to 6)
+    sink.addBatch(1, 4 to 6, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 1 to 6) // new data should get appended to old data
 
     // Re-add batch 1 with different data, should not be added and outputs should not be changed
-    sink.addBatch(1, 7 to 9)
+    sink.addBatch(1, 7 to 9, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 1 to 6)
 
     // Add batch 2 and check outputs
-    sink.addBatch(2, 7 to 9)
+    sink.addBatch(2, 7 to 9, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(2))
     checkAnswer(sink.latestBatchData, 7 to 9)
     checkAnswer(sink.allData, 1 to 9)
@@ -140,25 +140,25 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, Seq.empty)
 
     // Add batch 0 and check outputs
-    sink.addBatch(0, 1 to 3)
+    sink.addBatch(0, 1 to 3, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(0))
     checkAnswer(sink.latestBatchData, 1 to 3)
     checkAnswer(sink.allData, 1 to 3)
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, 4 to 6)
+    sink.addBatch(1, 4 to 6, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 4 to 6)     // new data should replace old data
 
     // Re-add batch 1 with different data, should not be added and outputs should not be changed
-    sink.addBatch(1, 7 to 9)
+    sink.addBatch(1, 7 to 9, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 4 to 6)
 
     // Add batch 2 and check outputs
-    sink.addBatch(2, 7 to 9)
+    sink.addBatch(2, 7 to 9, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(2))
     checkAnswer(sink.latestBatchData, 7 to 9)
     checkAnswer(sink.allData, 7 to 9)
@@ -178,13 +178,13 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, Seq.empty)
 
     // Add batch 0 and check outputs
-    sink.addBatch(0, 1 to 3)
+    sink.addBatch(0, 1 to 3, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(0))
     checkAnswer(sink.latestBatchData, 1 to 3)
     checkAnswer(sink.allData, 1 to 3)
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, 4 to 10)
+    sink.addBatch(1, 4 to 10, OffsetSeq.fill(), OffsetSeq.fill())
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 8)
     checkAnswer(sink.allData, 4 to 8)     // new data should replace old data
@@ -272,11 +272,11 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, Seq.empty)
     assert(plan.stats.sizeInBytes === 0)
 
-    sink.addBatch(0, 1 to 3)
+    sink.addBatch(0, 1 to 3, OffsetSeq.fill(), OffsetSeq.fill())
     plan.invalidateStatsCache()
     assert(plan.stats.sizeInBytes === 36)
 
-    sink.addBatch(1, 4 to 6)
+    sink.addBatch(1, 4 to 6, OffsetSeq.fill(), OffsetSeq.fill())
     plan.invalidateStatsCache()
     assert(plan.stats.sizeInBytes === 72)
   }
