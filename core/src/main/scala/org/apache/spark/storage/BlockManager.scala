@@ -1569,7 +1569,7 @@ private[spark] object BlockManager {
 
     val blockManagers = new HashMap[BlockId, Seq[String]]
     for (i <- 0 until blockIds.length) {
-      blockManagers(blockIds(i)) = blockLocations(i).map(_.host)
+      blockManagers(blockIds(i)) = blockLocations(i).map(b => s"executor_${b.host}_${b.executorId}")
     }
     blockManagers.toMap
   }
