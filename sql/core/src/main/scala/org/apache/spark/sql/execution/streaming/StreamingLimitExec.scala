@@ -21,6 +21,9 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.state.StateStoreOps
@@ -33,16 +36,20 @@ case class StreamingLimitExec(
     stateInfo: Option[StatefulOperatorStateInfo] = None)
   extends UnaryExecNode with StateStoreWriter {
 
+  private val keySchema = StructType(Array(StructField("key", NullType)))
+  private val valueSchema = StructType(Array(StructField("value", LongType)))
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
-      keySchema = StructType(Array(StructField("key", NullType))),
-      valueSchema = StructType(Array(StructField("value", LongType))),
+      keySchema,
+      valueSchema,
       indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+      val key = UnsafeProjection.create(keySchema)(new GenericInternalRow(Array[Any](null)))
       val numOutputRows = longMetric("numOutputRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
       val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
@@ -52,7 +59,12 @@ case class StreamingLimitExec(
       // scalastyle:off println
       println("Inside StreamingLimitExec")
 
-      // Limit iter based on the limit and the state store
+      val count = Option(store.get(key)).map(_.getLong(0)).getOrElse(0L)
+      println("VALUE: " + count)
+      store.put(key, getValueRow(100L))
+
+      // actually do limit
+
       // consume the iterator
 
       CompletionIterator[InternalRow, Iterator[InternalRow]](
@@ -71,4 +83,8 @@ case class StreamingLimitExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = AllTuples :: Nil
+
+  private def getValueRow(value: Long): UnsafeRow = {
+    UnsafeProjection.create(valueSchema)(new GenericInternalRow(Array[Any](value)))
+  }
 }

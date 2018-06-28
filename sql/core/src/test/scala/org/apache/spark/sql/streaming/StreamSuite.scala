@@ -807,14 +807,17 @@ class StreamSuite extends StreamTest {
 
   test("streaming limit in append mode") {
     val inputData = MemoryStream[Int]
-    val limited = inputData.toDF().limit(5)
+    val limited = inputData.toDF().limit(4)
 
     testStream(limited)(
-      AddData(inputData, 1 to 3: _*),
-      CheckAnswer(1 to 3: _*),
-      AddData(inputData, 4 to 9: _*),
-      CheckAnswer(1 to 5: _*))
+      AddData(inputData, 1 to 2: _*),
+      CheckAnswer(1 to 2: _*),
+      AddData(inputData, 3 to 9: _*),
+      CheckAnswer(1 to 4: _*))
   }
+
+  // Multiple batches, with other streaming operators
+  // multiple limits
 
   test("streaming limit in complete mode") {
     val inputData = MemoryStream[Int]
