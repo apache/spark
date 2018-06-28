@@ -441,11 +441,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test ("rename a managed table with existing empty directory") {
+  test("rename a managed table with existing empty directory") {
     val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier("tab2")))
     try {
       withTable("tab1") {
-        sql(s"CREATE TABLE tab1 USING ${dataSource} AS SELECT 1, 'a'")
+        sql(s"CREATE TABLE tab1 USING $dataSource AS SELECT 1, 'a'")
         tableLoc.mkdir()
         val ex = intercept[AnalysisException] {
           sql("ALTER TABLE tab1 RENAME TO tab2")
