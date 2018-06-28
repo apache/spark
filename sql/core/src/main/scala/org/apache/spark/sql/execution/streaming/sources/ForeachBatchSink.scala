@@ -20,13 +20,13 @@ package org.apache.spark.sql.execution.streaming.sources
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.sql.execution.streaming.{OffsetSeq, Sink}
 import org.apache.spark.sql.streaming.DataStreamWriter
 
 class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: ExpressionEncoder[T])
   extends Sink {
 
-  override def addBatch(batchId: Long, data: DataFrame): Unit = {
+  override def addBatch(batchId: Long, data: DataFrame, start: OffsetSeq, end: OffsetSeq): Unit = { // not done
     val resolvedEncoder = encoder.resolveAndBind(
       data.logicalPlan.output,
       data.sparkSession.sessionState.analyzer)
@@ -55,4 +55,3 @@ object PythonForeachBatchHelper {
     dsw.foreachBatch(pythonFunc.call _)
   }
 }
-

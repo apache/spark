@@ -104,7 +104,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     LastOptions.partitionColumns = partitionColumns
     LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns, outputMode)
     new Sink {
-      override def addBatch(batchId: Long, data: DataFrame): Unit = {}
+      override def addBatch(batchId: Long, data: DataFrame, start: OffsetSeq, end: OffsetSeq): Unit = {}
     }
   }
 }

@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.{SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.streaming.OffsetSeq
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -72,7 +73,9 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
-      options: Map[String, String])
+      options: Map[String, String],
+      start: OffsetSeq, // not done
+      end: OffsetSeq)
     : Set[String] = {
 
     val job = Job.getInstance(hadoopConf)

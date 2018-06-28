@@ -313,7 +313,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
     }.mkString("\n")
   }
 
-  override def addBatch(batchId: Long, data: DataFrame): Unit = {
+  override def addBatch(batchId: Long, data: DataFrame, start: OffsetSeq, end: OffsetSeq): Unit = { // not done
     val notCommitted = synchronized {
       latestBatchId.isEmpty || batchId > latestBatchId.get
     }

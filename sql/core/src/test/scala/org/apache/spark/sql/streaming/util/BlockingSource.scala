@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming.util
 import java.util.concurrent.CountDownLatch
 
 import org.apache.spark.sql.{SQLContext, _}
-import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, Sink, Source}
+import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, OffsetSeq, Sink, Source}
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -62,7 +62,8 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
     new Sink {
-      override def addBatch(batchId: Long, data: DataFrame): Unit = {}
+      override def addBatch(batchId: Long, data: DataFrame,
+                            start: OffsetSeq, end: OffsetSeq): Unit = {}
     }
   }
 }

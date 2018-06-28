@@ -21,7 +21,7 @@ import java.util.Optional
 
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{RateStreamOffset, Sink, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.{OffsetSeq, RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
@@ -102,7 +102,8 @@ class FakeNoWrite extends DataSourceRegister {
 case class FakeWriteV1FallbackException() extends Exception
 
 class FakeSink extends Sink {
-  override def addBatch(batchId: Long, data: DataFrame): Unit = {}
+  override def addBatch(batchId: Long, data: DataFrame,
+                        start: OffsetSeq, end: OffsetSeq): Unit = {}
 }
 
 class FakeWriteV1Fallback extends DataSourceRegister

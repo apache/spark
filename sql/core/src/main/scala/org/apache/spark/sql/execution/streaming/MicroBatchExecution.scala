@@ -302,7 +302,7 @@ class MicroBatchExecution(
    * Returns true if there is any new data available to be processed.
    */
   private def isNewDataAvailable: Boolean = {
-    availableOffsets.exists {
+    availableOffsets exists {
       case (source, available) =>
         committedOffsets
           .get(source)
@@ -522,7 +522,9 @@ class MicroBatchExecution(
     reportTimeTaken("addBatch") {
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
-          case s: Sink => s.addBatch(currentBatchId, nextBatch)
+          case s: Sink => s.addBatch(currentBatchId, nextBatch,
+            committedOffsets.toOffsetSeq(sources, offsetSeqMetadata),
+            availableOffsets.toOffsetSeq(sources, offsetSeqMetadata))
           case _: StreamWriteSupport =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()

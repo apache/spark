@@ -252,7 +252,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val topic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
     KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution,
-      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), topic)
+      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), topic, null, null)
 
     /* This method is suppose to return a relation that reads the data that was written.
      * We cannot support this for Kafka. Therefore, in order to make things consistent,

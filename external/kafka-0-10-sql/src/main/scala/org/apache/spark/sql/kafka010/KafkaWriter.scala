@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.streaming.OffsetSeq
 import org.apache.spark.sql.types.{BinaryType, StringType}
 import org.apache.spark.util.Utils
 
@@ -39,6 +40,8 @@ private[kafka010] object KafkaWriter extends Logging {
   val TOPIC_ATTRIBUTE_NAME: String = "topic"
   val KEY_ATTRIBUTE_NAME: String = "key"
   val VALUE_ATTRIBUTE_NAME: String = "value"
+  val START_OFFSETS_ATTRIBUTE_NAME: String = "startOffsets"
+  val END_OFFSETS_ATTRIBUTE_NAME: String = "endOffsets"
 
   override def toString: String = "KafkaWriter"
 
@@ -81,11 +84,13 @@ private[kafka010] object KafkaWriter extends Logging {
       sparkSession: SparkSession,
       queryExecution: QueryExecution,
       kafkaParameters: ju.Map[String, Object],
-      topic: Option[String] = None): Unit = {
+      topic: Option[String] = None,
+      start: OffsetSeq,
+      end: OffsetSeq): Unit = {
     val schema = queryExecution.analyzed.output
     validateQuery(schema, kafkaParameters, topic)
     queryExecution.toRdd.foreachPartition { iter =>
-      val writeTask = new KafkaWriteTask(kafkaParameters, schema, topic)
+      val writeTask = new KafkaWriteTask(kafkaParameters, schema, topic, start, end)
       Utils.tryWithSafeFinally(block = writeTask.execute(iter))(
         finallyBlock = writeTask.close())
     }

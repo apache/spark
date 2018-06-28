@@ -23,6 +23,7 @@ import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecor
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
+import org.apache.spark.sql.execution.streaming.OffsetSeq
 import org.apache.spark.sql.types.{BinaryType, StringType}
 
 /**
@@ -33,7 +34,9 @@ import org.apache.spark.sql.types.{BinaryType, StringType}
 private[kafka010] class KafkaWriteTask(
     producerConfiguration: ju.Map[String, Object],
     inputSchema: Seq[Attribute],
-    topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
+    topic: Option[String],
+    start: OffsetSeq,  // not done
+    end: OffsetSeq) extends KafkaRowWriter(inputSchema, topic) {
   // used to synchronize with Kafka callbacks
   private var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
 

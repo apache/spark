@@ -103,7 +103,7 @@ class FileStreamSink(
     new BasicWriteJobStatsTracker(serializableHadoopConf, BasicWriteJobStatsTracker.metrics)
   }
 
-  override def addBatch(batchId: Long, data: DataFrame): Unit = {
+  override def addBatch(batchId: Long, data: DataFrame, start: OffsetSeq, end: OffsetSeq): Unit = {
     if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
@@ -138,7 +138,9 @@ class FileStreamSink(
         partitionColumns = partitionColumns,
         bucketSpec = None,
         statsTrackers = Seq(basicWriteJobStatsTracker),
-        options = options)
+        options = options,
+        start = start,
+        end = end)
     }
   }
 

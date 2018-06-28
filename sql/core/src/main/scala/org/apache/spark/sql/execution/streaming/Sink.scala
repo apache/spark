@@ -37,5 +37,5 @@ trait Sink extends BaseStreamingSink {
    * Note 2: The method is supposed to be executed synchronously, i.e. the method should only return
    * after data is consumed by sink successfully.
    */
-  def addBatch(batchId: Long, data: DataFrame): Unit
+  def addBatch(batchId: Long, data: DataFrame, start: OffsetSeq, end: OffsetSeq): Unit
 }
