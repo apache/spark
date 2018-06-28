@@ -811,7 +811,7 @@ private[spark] class Client(
 
     // Finally, update the Spark config to propagate PYTHONPATH to the AM and executors.
     if (pythonPath.nonEmpty) {
-      val pythonPathStr = (sys.env.get("PYTHONPATH") ++=: pythonPath)
+      val pythonPathStr = (sys.env.get("PYTHONPATH") ++ pythonPath)
         .mkString(ApplicationConstants.CLASS_PATH_SEPARATOR)
       val newValue =
         if (env.contains("PYTHONPATH")) {
@@ -821,7 +821,11 @@ private[spark] class Client(
         }
       env("PYTHONPATH") = newValue
       if (!sparkConf.getExecutorEnv.toMap.contains("PYTHONPATH")) {
-        sparkConf.setExecutorEnv("PYTHONPATH", newValue)
+        sparkConf.setExecutorEnv("PYTHONPATH", pythonPathStr)
+      } else {
+        val pythonPathExecutorEnv = sparkConf.getExecutorEnv.toMap.get("PYTHONPATH").get +
+          ApplicationConstants.CLASS_PATH_SEPARATOR + pythonPathStr
+        sparkConf.setExecutorEnv("PYTHONPATH", pythonPathExecutorEnv)
       }
     }
 
