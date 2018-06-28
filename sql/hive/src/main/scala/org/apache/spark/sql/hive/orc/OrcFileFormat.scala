@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.OrcOptions
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{CalendarIntervalType, DataType, NullType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -177,6 +177,11 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           recordsIterator)
       }
     }
+  }
+
+  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
+    case _: NullType | _: CalendarIntervalType if !isReadPath => false
+    case _ => true
   }
 }
 
