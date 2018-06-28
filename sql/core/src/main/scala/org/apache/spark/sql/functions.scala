@@ -1032,14 +1032,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the absolute value.
-   *
-   * @group normal_funcs
-   * @since 1.3.0
-   */
-  def abs(e: Column): Column = withExpr { Abs(e.expr) }
-
-  /**
    * Creates a new array column. The input columns must all have the same data type.
    *
    * @group normal_funcs
@@ -1336,7 +1328,7 @@ object functions {
   }
 
   /**
-   * Computes bitwise NOT.
+   * Computes bitwise NOT (~) of a number.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1363,6 +1355,14 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Computes the absolute value of a numeric value.
+   *
+   * @group math_funcs
+   * @since 1.3.0
+   */
+  def abs(e: Column): Column = withExpr { Abs(e.expr) }
 
   /**
    * @return inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
