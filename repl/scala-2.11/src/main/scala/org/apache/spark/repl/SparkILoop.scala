@@ -44,7 +44,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def this() = this(None, new JPrintWriter(Console.out, true))
 
   override def createInterpreter(): Unit = {
-    intp = new SparkILoopInterpreter(settings, out)
+    intp = new SparkILoopInterpreter(settings, out, initializeSpark)
   }
 
   val initializationCommands: Seq[String] = Seq(

@@ -21,12 +21,13 @@ import scala.collection.mutable
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter._
 
-class SparkILoopInterpreter(settings: Settings, out: JPrintWriter) extends IMain(settings, out) { self =>
+class SparkILoopInterpreter(settings: Settings, out: JPrintWriter) extends IMain(settings, out) {
+  self =>
 
-  override lazy val memberHandlers = new {
-    val intp: self.type = self
-  } with MemberHandlers {
-    import intp.global._
+    override lazy val memberHandlers = new {
+      val intp: self.type = self
+    } with MemberHandlers {
+      import intp.global._
 
     override def chooseHandler(member: intp.global.Tree): MemberHandler = member match {
       case member: Import => new SparkImportHandler(member)
