@@ -69,7 +69,8 @@ You can build just the Spark scaladoc and javadoc by running `build/sbt unidoc` 
 
 Similarly, you can build just the PySpark docs by running `make html` from the
 `$SPARK_HOME/python/docs` directory. Documentation is only generated for classes that are listed as
-public in `__init__.py`. The SparkR docs can be built by running `$SPARK_HOME/R/create-docs.sh`, and
+public in `__init__.py`. You can also set `SPHINXPYTHON` to specify the Python executable to use with Sphinx.
+ The SparkR docs can be built by running `$SPARK_HOME/R/create-docs.sh`, and
 the SQL docs can be built by running `$SPARK_HOME/sql/create-docs.sh`
 after [building Spark](https://github.com/apache/spark#building-spark) first.
 
