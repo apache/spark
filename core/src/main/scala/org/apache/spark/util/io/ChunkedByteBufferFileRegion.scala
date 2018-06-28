@@ -27,7 +27,7 @@ import org.apache.spark.network.util.AbstractFileRegion
 
 /**
  * This exposes a ChunkedByteBuffer as a netty FileRegion, just to allow sending > 2gb in one netty
- * message.   This is because netty cannot send a ByteBuf > 2g, but it can send a large FileRegion,
+ * message.  This is because netty cannot send a ByteBuf > 2g, but it can send a large FileRegion,
  * even though the data is not backed by a file.
  */
 private[io] class ChunkedByteBufferFileRegion(
@@ -37,7 +37,7 @@ private[io] class ChunkedByteBufferFileRegion(
   private var _transferred: Long = 0
   // this duplicates the original chunks, so we're free to modify the position, limit, etc.
   private val chunks = chunkedByteBuffer.getChunks()
-  private val size = chunks.foldLeft(0) { _ + _.remaining()}
+  private val size = chunks.foldLeft(0) { _ + _.remaining() }
 
   protected def deallocate: Unit = {}
 
