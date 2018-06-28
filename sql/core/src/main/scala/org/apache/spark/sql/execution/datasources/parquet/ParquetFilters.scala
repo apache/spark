@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.math.{BigDecimal => JBigDecimal}
 import java.sql.Date
 
 import org.apache.parquet.filter2.predicate._
@@ -25,16 +26,51 @@ import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter.minBytesForPrecision
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownDecimal: Boolean) {
+private[parquet] class ParquetFilters(
+    pushDownDate: Boolean,
+    pushDownDecimal: Boolean,
+    readLegacyFormat: Boolean) {
 
   private def dateToDays(date: Date): SQLDate = {
     DateTimeUtils.fromJavaDate(date)
+  }
+
+  private def decimalToBinaryUsingUnscaledBytes(precision: Int, decimal: JBigDecimal): Binary = {
+    val numBytes = minBytesForPrecision(precision)
+    val bytes = decimal.unscaledValue().toByteArray
+    val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
+
+    val fixedLengthBytes = if (bytes.length == numBytes) {
+      bytes
+    } else {
+      val signByte = if (bytes.head < 0) -1: Byte else 0: Byte
+      java.util.Arrays.fill(decimalBuffer, 0, numBytes - bytes.length, signByte)
+      System.arraycopy(bytes, 0, decimalBuffer, numBytes - bytes.length, bytes.length)
+      decimalBuffer
+    }
+    Binary.fromReusedByteArray(fixedLengthBytes, 0, numBytes)
+  }
+
+  private def decimalToBinaryUsingUnscaledLong(precision: Int, decimal: JBigDecimal): Binary = {
+    val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
+    val numBytes = minBytesForPrecision(precision)
+    val unscaled = decimal.unscaledValue().longValue()
+    var i = 0
+    var shift = 8 * (numBytes - 1)
+
+    while (i < numBytes) {
+      decimalBuffer(i) = (unscaled >> shift).toByte
+      i += 1
+      shift -= 8
+    }
+    Binary.fromReusedByteArray(decimalBuffer, 0, numBytes)
   }
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -62,16 +98,30 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownDecimal: Bo
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && (DecimalType.is32BitDecimalType(decimal) && !readLegacyFormat) =>
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && (DecimalType.is64BitDecimalType(decimal) && !readLegacyFormat) =>
       (n: String, v: Any) => FilterApi.eq(
         longColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
-          .asInstanceOf[java.lang.Long]).orNull)
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().longValue()
+            .asInstanceOf[java.lang.Long]).orNull)
+    case decimal: DecimalType
+      if pushDownDecimal && ((DecimalType.is32BitDecimalType(decimal) && readLegacyFormat)
+        || (DecimalType.is64BitDecimalType(decimal) && readLegacyFormat)) =>
+      (n: String, v: Any) => FilterApi.eq(
+        binaryColumn(n),
+        Option(v).map(d =>
+        decimalToBinaryUsingUnscaledLong(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
+    case decimal: DecimalType if pushDownDecimal && DecimalType.isByteArrayDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.eq(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledBytes(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
   }
 
   private val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -98,16 +148,30 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownDecimal: Bo
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.notEq(
         longColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().longValue()
           .asInstanceOf[java.lang.Long]).orNull)
+    case decimal: DecimalType
+      if pushDownDecimal && ((DecimalType.is32BitDecimalType(decimal) && readLegacyFormat)
+        || (DecimalType.is64BitDecimalType(decimal) && readLegacyFormat)) =>
+      (n: String, v: Any) => FilterApi.notEq(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledLong(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
+    case decimal: DecimalType if pushDownDecimal && DecimalType.isByteArrayDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.notEq(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledBytes(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
   }
 
   private val makeLt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -131,16 +195,30 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownDecimal: Bo
       (n: String, v: Any) => FilterApi.lt(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.lt(
         intColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.lt(
         longColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().longValue()
           .asInstanceOf[java.lang.Long]).orNull)
+    case decimal: DecimalType
+      if pushDownDecimal && ((DecimalType.is32BitDecimalType(decimal) && readLegacyFormat)
+        || (DecimalType.is64BitDecimalType(decimal) && readLegacyFormat)) =>
+      (n: String, v: Any) => FilterApi.lt(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledLong(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
+    case decimal: DecimalType if pushDownDecimal && DecimalType.isByteArrayDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.lt(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledBytes(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
   }
 
   private val makeLtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -164,16 +242,30 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownDecimal: Bo
       (n: String, v: Any) => FilterApi.ltEq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.ltEq(
         intColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.ltEq(
         longColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().longValue()
           .asInstanceOf[java.lang.Long]).orNull)
+    case decimal: DecimalType
+      if pushDownDecimal && ((DecimalType.is32BitDecimalType(decimal) && readLegacyFormat)
+        || (DecimalType.is64BitDecimalType(decimal) && readLegacyFormat)) =>
+      (n: String, v: Any) => FilterApi.ltEq(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledLong(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
+    case decimal: DecimalType if pushDownDecimal && DecimalType.isByteArrayDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.ltEq(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledBytes(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
   }
 
   private val makeGt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -197,16 +289,30 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownDecimal: Bo
       (n: String, v: Any) => FilterApi.gt(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.gt(
         intColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.gt(
         longColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().longValue()
           .asInstanceOf[java.lang.Long]).orNull)
+    case decimal: DecimalType
+      if pushDownDecimal && ((DecimalType.is32BitDecimalType(decimal) && readLegacyFormat)
+        || (DecimalType.is64BitDecimalType(decimal) && readLegacyFormat)) =>
+      (n: String, v: Any) => FilterApi.gt(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledLong(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
+    case decimal: DecimalType if pushDownDecimal && DecimalType.isByteArrayDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.gt(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledBytes(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
   }
 
   private val makeGtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -230,16 +336,30 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownDecimal: Bo
       (n: String, v: Any) => FilterApi.gtEq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is32BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is32BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.gtEq(
         intColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().intValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().intValue()
           .asInstanceOf[Integer]).orNull)
-    case decimal: DecimalType if DecimalType.is64BitDecimalType(decimal) =>
+    case decimal: DecimalType
+      if pushDownDecimal && DecimalType.is64BitDecimalType(decimal) && !readLegacyFormat =>
       (n: String, v: Any) => FilterApi.gtEq(
         longColumn(n),
-        Option(v).map(_.asInstanceOf[java.math.BigDecimal].unscaledValue().longValue()
+        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().longValue()
           .asInstanceOf[java.lang.Long]).orNull)
+    case decimal: DecimalType
+      if pushDownDecimal && ((DecimalType.is32BitDecimalType(decimal) && readLegacyFormat)
+        || (DecimalType.is64BitDecimalType(decimal) && readLegacyFormat)) =>
+      (n: String, v: Any) => FilterApi.gtEq(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledLong(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
+    case decimal: DecimalType if pushDownDecimal && DecimalType.isByteArrayDecimalType(decimal) =>
+      (n: String, v: Any) => FilterApi.gtEq(
+        binaryColumn(n),
+        Option(v).map(d =>
+          decimalToBinaryUsingUnscaledBytes(decimal.precision, d.asInstanceOf[JBigDecimal])).orNull)
   }
 
   /**

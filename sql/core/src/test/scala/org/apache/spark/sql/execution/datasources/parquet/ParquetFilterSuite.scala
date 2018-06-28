@@ -56,8 +56,8 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
-  private lazy val parquetFilters =
-    new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownDecimal)
+  private lazy val parquetFilters = new ParquetFilters(conf.parquetFilterPushDownDate,
+    conf.parquetFilterPushDownDecimal, conf.readLegacyParquetFormat)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -369,41 +369,49 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - decimal(is32BitDecimalType & is64BitDecimalType)") {
-    Seq(s"_1 decimal(${Decimal.MAX_INT_DIGITS}, 2)",
-      s"_1 decimal(${Decimal.MAX_LONG_DIGITS}, 2)").foreach { schemaDDL =>
-      val schema = StructType.fromDDL(schemaDDL)
-      val rdd = spark.sparkContext.parallelize((1 to 4).map(i => Row(new java.math.BigDecimal(i))))
-      val dataFrame = spark.createDataFrame(rdd, schema)
-      testDecimalPushDown(dataFrame) { implicit df =>
-        assert(df.schema === schema)
-        checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-        checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
+  test("filter pushdown - decimal") {
+    Seq(true, false).foreach { legacyFormat =>
+      withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> legacyFormat.toString) {
+        Seq(s"_1 decimal(${Decimal.MAX_INT_DIGITS}, 2)", // 32BitDecimalType
+          s"_1 decimal(${Decimal.MAX_LONG_DIGITS}, 2)",  // 64BitDecimalType
+          "_1 decimal(38, 18)"                           // ByteArrayDecimalType
+        ).foreach { schemaDDL =>
+          val schema = StructType.fromDDL(schemaDDL)
+          val rdd =
+            spark.sparkContext.parallelize((1 to 4).map(i => Row(new java.math.BigDecimal(i))))
+          val dataFrame = spark.createDataFrame(rdd, schema)
+          testDecimalPushDown(dataFrame) { implicit df =>
+            assert(df.schema === schema)
+            checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+            checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
 
-        checkFilterPredicate('_1 === 1, classOf[Eq[_]], 1)
-        checkFilterPredicate('_1 <=> 1, classOf[Eq[_]], 1)
-        checkFilterPredicate('_1 =!= 1, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
+            checkFilterPredicate('_1 === 1, classOf[Eq[_]], 1)
+            checkFilterPredicate('_1 <=> 1, classOf[Eq[_]], 1)
+            checkFilterPredicate('_1 =!= 1, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
 
-        checkFilterPredicate('_1 < 2, classOf[Lt[_]], 1)
-        checkFilterPredicate('_1 > 3, classOf[Gt[_]], 4)
-        checkFilterPredicate('_1 <= 1, classOf[LtEq[_]], 1)
-        checkFilterPredicate('_1 >= 4, classOf[GtEq[_]], 4)
+            checkFilterPredicate('_1 < 2, classOf[Lt[_]], 1)
+            checkFilterPredicate('_1 > 3, classOf[Gt[_]], 4)
+            checkFilterPredicate('_1 <= 1, classOf[LtEq[_]], 1)
+            checkFilterPredicate('_1 >= 4, classOf[GtEq[_]], 4)
 
-        checkFilterPredicate(Literal(1) === '_1, classOf[Eq[_]], 1)
-        checkFilterPredicate(Literal(1) <=> '_1, classOf[Eq[_]], 1)
-        checkFilterPredicate(Literal(2) > '_1, classOf[Lt[_]], 1)
-        checkFilterPredicate(Literal(3) < '_1, classOf[Gt[_]], 4)
-        checkFilterPredicate(Literal(1) >= '_1, classOf[LtEq[_]], 1)
-        checkFilterPredicate(Literal(4) <= '_1, classOf[GtEq[_]], 4)
+            checkFilterPredicate(Literal(1) === '_1, classOf[Eq[_]], 1)
+            checkFilterPredicate(Literal(1) <=> '_1, classOf[Eq[_]], 1)
+            checkFilterPredicate(Literal(2) > '_1, classOf[Lt[_]], 1)
+            checkFilterPredicate(Literal(3) < '_1, classOf[Gt[_]], 4)
+            checkFilterPredicate(Literal(1) >= '_1, classOf[LtEq[_]], 1)
+            checkFilterPredicate(Literal(4) <= '_1, classOf[GtEq[_]], 4)
 
-        checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
-        checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+            checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
+            checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+          }
+        }
       }
     }
   }
 
-  test("32BitDecimalType & 64BitDecimalType filter pushdown doesn't support legacy format") {
-    withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
+  test("incompatible parquet file format will throw exeception") {
+    withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true",
+      SQLConf.PARQUET_READ_LEGACY_FORMAT.key -> "false") {
       Seq(s"_1 decimal(${Decimal.MAX_INT_DIGITS}, 2)",
         s"_1 decimal(${Decimal.MAX_LONG_DIGITS}, 2)").foreach { schemaDDL =>
         val schema = StructType.fromDDL(schemaDDL)
@@ -420,8 +428,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           assert(e.getMessage.contains("does not match the schema found in file metadata. " +
             "Column _1 is of type: FIXED_LEN_BYTE_ARRAY\nValid types for this column are: " +
             "[class org.apache.parquet.io.api.Binary]"))
-          }
         }
+      }
     }
   }
 

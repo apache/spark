@@ -386,7 +386,13 @@ object SQLConf {
         "enabled and Decimal statistics are generated(Since Spark 2.4).")
       .internal()
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
+
+  val PARQUET_READ_LEGACY_FORMAT = buildConf("spark.sql.parquet.readLegacyFormat")
+    .doc("This config is only used for filter push-down optimization for Decimal " +
+      "to be compatible with the legacy Parquet format.")
+    .booleanConf
+    .createOptional
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
@@ -1431,6 +1437,9 @@ class SQLConf extends Serializable with Logging {
   def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
 
   def parquetFilterPushDownDecimal: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED)
+
+  def readLegacyParquetFormat: Boolean =
+    getConf(PARQUET_READ_LEGACY_FORMAT).getOrElse(writeLegacyParquetFormat)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
