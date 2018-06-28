@@ -40,8 +40,6 @@ private[kafka010] object KafkaWriter extends Logging {
   val TOPIC_ATTRIBUTE_NAME: String = "topic"
   val KEY_ATTRIBUTE_NAME: String = "key"
   val VALUE_ATTRIBUTE_NAME: String = "value"
-  val START_OFFSETS_ATTRIBUTE_NAME: String = "startOffsets"
-  val END_OFFSETS_ATTRIBUTE_NAME: String = "endOffsets"
 
   override def toString: String = "KafkaWriter"
 

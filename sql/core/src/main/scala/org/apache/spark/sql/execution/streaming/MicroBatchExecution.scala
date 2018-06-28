@@ -302,7 +302,7 @@ class MicroBatchExecution(
    * Returns true if there is any new data available to be processed.
    */
   private def isNewDataAvailable: Boolean = {
-    availableOffsets exists {
+    availableOffsets.exists {
       case (source, available) =>
         committedOffsets
           .get(source)
