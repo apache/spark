@@ -21,17 +21,17 @@ import java.nio.file.{Path, Paths}
 import java.util.UUID
 import java.util.regex.Pattern
 
-import scala.collection.JavaConverters._
-
 import com.google.common.io.PatternFilenameFilter
 import io.fabric8.kubernetes.api.model.{Container, Pod}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.deploy.k8s.integrationtest.config._
+import org.apache.spark.launcher.SparkLauncher
 
 private[spark] class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter {
@@ -107,6 +107,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   test("Run SparkPi with a very long application name.") {
     sparkAppConf.set("spark.app.name", "long" * 40)
     runSparkPiAndVerifyCompletion()
+  }
+
+  test("Use SparkLauncher.NO_RESOURCE") {
+    sparkAppConf.setJars(Seq(containerLocalSparkDistroExamplesJar))
+    runSparkPiAndVerifyCompletion(
+      appResource = SparkLauncher.NO_RESOURCE)
   }
 
   test("Run SparkPi with a master URL without a scheme.") {
