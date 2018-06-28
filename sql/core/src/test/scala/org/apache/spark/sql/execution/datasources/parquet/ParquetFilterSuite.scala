@@ -359,6 +359,35 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+  test("filter pushdown - decimal(ByteArrayDecimalType)") {
+    val schema = StructType.fromDDL("_1 decimal(38, 18)")
+
+    withParquetDataFrame((1 to 4).map(d => Tuple1(new java.math.BigDecimal(d)))) { implicit df =>
+      assert(schema === df.schema)
+      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(i => Row.apply(i)))
+
+      checkFilterPredicate('_1 === 1, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 <=> 1, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 =!= 1, classOf[NotEq[_]], (2 to 4).map(i => Row.apply(i)))
+
+      checkFilterPredicate('_1 < 2, classOf[Lt[_]], 1)
+      checkFilterPredicate('_1 > 3, classOf[Gt[_]], 4)
+      checkFilterPredicate('_1 <= 1, classOf[LtEq[_]], 1)
+      checkFilterPredicate('_1 >= 4, classOf[GtEq[_]], 4)
+
+      checkFilterPredicate(Literal(1) === '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(1) <=> '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(2) > '_1, classOf[Lt[_]], 1)
+      checkFilterPredicate(Literal(3) < '_1, classOf[Gt[_]], 4)
+      checkFilterPredicate(Literal(1) >= '_1, classOf[LtEq[_]], 1)
+      checkFilterPredicate(Literal(4) <= '_1, classOf[GtEq[_]], 4)
+
+      checkFilterPredicate(!('_1 < 4), classOf[GtEq[_]], 4)
+      checkFilterPredicate('_1 < 2 || '_1 > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+    }
+  }
+
   test("SPARK-6554: don't push down predicates which reference partition columns") {
     import testImplicits._
 
