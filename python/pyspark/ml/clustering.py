@@ -658,6 +658,20 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
         """
         return self.getOrDefault(self.minDivisibleClusterSize)
 
+    @since("2.4.0")
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    @since("2.4.0")
+    def getDistanceMeasure(self):
+        """
+        Gets the value of `distanceMeasure` or its default value.
+        """
+        return self.getOrDefault(self.distanceMeasure)
+
     def _create_model(self, java_model):
         return BisectingKMeansModel(java_model)
 
