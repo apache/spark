@@ -23,7 +23,7 @@ package org.apache.spark
  * @param shuffleId ID of the shuffle
  * @param bytesByPartitionId approximate number of output bytes for each map output partition
  *   (may be inexact due to use of compressed map statuses)
- * @param recordsByMapTask number of output records for each map task
+ * @param recordsByPartitionId number of output records for each map output partition
  */
 private[spark] class MapOutputStatistics(
     val shuffleId: Int,

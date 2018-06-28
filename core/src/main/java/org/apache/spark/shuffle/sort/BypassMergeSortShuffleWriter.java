@@ -145,12 +145,10 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // included in the shuffle write time.
     writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
 
-    long numOfRecords = 0;
     while (records.hasNext()) {
       final Product2<K, V> record = records.next();
       final K key = record._1();
       partitionWriters[partitioner.getPartition(key)].write(key, record._2());
-      numOfRecords += 1;
     }
 
     for (int i = 0; i < numPartitions; i++) {
@@ -170,7 +168,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(
-      blockManager.shuffleServerId(), partitionLengths, numOfRecords);
+      blockManager.shuffleServerId(), partitionLengths, writeMetrics.recordsWritten());
   }
 
   @VisibleForTesting
