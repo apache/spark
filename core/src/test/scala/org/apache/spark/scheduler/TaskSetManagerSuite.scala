@@ -1372,7 +1372,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates)
   }
 
-  test("SPARK-13343 speculative tasks that didn't commit shouldn't be marked as success"){
+  test("SPARK-13343 speculative tasks that didn't commit shouldn't be marked as success") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
