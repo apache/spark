@@ -95,10 +95,12 @@ abstract class AbstractCommandBuilder {
 
     if (javaHome != null) {
       cmd.add(join(File.separator, javaHome, "bin", "java"));
+    } else if (childEnv.containsKey("JAVA_HOME")) {
+      cmd.add(join(File.separator, childEnv.get("JAVA_HOME"), "bin", "java"));
     } else if ((envJavaHome = System.getenv("JAVA_HOME")) != null) {
-        cmd.add(join(File.separator, envJavaHome, "bin", "java"));
+      cmd.add(join(File.separator, envJavaHome, "bin", "java"));
     } else {
-        cmd.add(join(File.separator, System.getProperty("java.home"), "bin", "java"));
+      cmd.add(join(File.separator, System.getProperty("java.home"), "bin", "java"));
     }
 
     // Load extra JAVA_OPTS from conf/java-opts, if it exists.
