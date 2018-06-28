@@ -444,7 +444,7 @@ setCheckpointDir <- function(directory) {
 #'\dontrun{
 #' spark.numCores()
 #'}
-#' @note numCores since 2.4.0
+#' @note spark.numCores since 2.4.0
 spark.numCores <- function() {
   sc <- getSparkContext()
   invisible(callJMethod(sc, "numCores"))
@@ -458,7 +458,7 @@ spark.numCores <- function() {
 #'\dontrun{
 #' spark.numExecutors()
 #'}
-#' @note numExecutors since 2.4.0
+#' @note spark.numExecutors since 2.4.0
 spark.numExecutors <- function() {
   sc <- getSparkContext()
   invisible(callJMethod(sc, "numExecutors"))
