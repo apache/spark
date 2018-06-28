@@ -28,10 +28,9 @@ import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Pa
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.state.StateStoreOps
 import org.apache.spark.sql.types.{LongType, NullType, StructField, StructType}
-import org.apache.spark.util.CompletionIterator
 
 case class StreamingLimitExec(
-    limit: Long,
+    streamLimit: Long,
     child: SparkPlan,
     stateInfo: Option[StatefulOperatorStateInfo] = None)
   extends UnaryExecNode with StateStoreWriter {
@@ -56,25 +55,37 @@ case class StreamingLimitExec(
       val commitTimeMs = longMetric("commitTimeMs")
       val updatesStartTimeNs = System.nanoTime
 
-      // scalastyle:off println
-      println("Inside StreamingLimitExec")
+      val startCount: Long = Option(store.get(key)).map(_.getLong(0)).getOrElse(0L)
+      var rowCount = startCount
 
-      val count = Option(store.get(key)).map(_.getLong(0)).getOrElse(0L)
-      println("VALUE: " + count)
-      store.put(key, getValueRow(100L))
+      new Iterator[InternalRow] {
+        def hasNext: Boolean = {
+          iter.hasNext && rowCount < streamLimit
+        }
 
-      // actually do limit
+        def next(): InternalRow = {
+          rowCount += 1
+          val r = iter.next()
+          numOutputRows += 1
+          if (!hasNext) {
+            complete()
+          }
+          r
+        }
 
-      // consume the iterator
-
-      CompletionIterator[InternalRow, Iterator[InternalRow]](
-        iter,
-        {
+        private def complete(): Unit = {
+          while (iter.hasNext) {
+            iter.next()
+          }
+          if (rowCount > startCount) {
+            store.put(key, getValueRow(rowCount))
+            numUpdatedStateRows += 1
+          }
           allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
           commitTimeMs += timeTakenMs { store.commit() }
           setStoreMetrics(store)
         }
-      )
+      }
     }
   }
 
