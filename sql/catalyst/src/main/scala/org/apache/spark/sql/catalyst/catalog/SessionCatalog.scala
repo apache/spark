@@ -619,6 +619,7 @@ class SessionCatalog(
         requireTableExists(TableIdentifier(oldTableName, Some(db)))
         requireTableNotExists(TableIdentifier(newTableName, Some(db)))
         validateName(newTableName)
+        validateLocationOfRename(oldName, newName)
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
         if (newName.database.isDefined) {
@@ -1365,5 +1366,19 @@ class SessionCatalog(
     target.currentDb = currentDb
     // copy over temporary views
     tempViews.foreach(kv => target.tempViews.put(kv._1, kv._2))
+  }
+
+  private def validateLocationOfRename(oldName: TableIdentifier, newName: TableIdentifier): Unit = {
+    val oldTable = getTableMetadata(oldName)
+    if (oldTable.tableType == CatalogTableType.MANAGED) {
+      val databaseLocation =
+        externalCatalog.getDatabase(oldName.database.getOrElse(currentDb)).locationUri
+      val newTableLocation = new Path(new Path(databaseLocation), formatTableName(newName.table))
+      val fs = newTableLocation.getFileSystem(hadoopConf)
+      if (fs.exists(newTableLocation)) {
+        throw new AnalysisException(s"Can not rename the managed table('${oldName}')" +
+          s". The associated location('${newTableLocation.toString}') already exists.")
+      }
+    }
   }
 }
