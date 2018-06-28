@@ -28,7 +28,12 @@ import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Pa
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.state.StateStoreOps
 import org.apache.spark.sql.types.{LongType, NullType, StructField, StructType}
+import org.apache.spark.util.CompletionIterator
 
+/**
+ * A physical operator for executing a streaming limit, which makes sure no more than streamLimit
+ * rows are returned.
+ */
 case class StreamingLimitExec(
     streamLimit: Long,
     child: SparkPlan,
@@ -58,34 +63,24 @@ case class StreamingLimitExec(
       val startCount: Long = Option(store.get(key)).map(_.getLong(0)).getOrElse(0L)
       var rowCount = startCount
 
-      new Iterator[InternalRow] {
-        def hasNext: Boolean = {
-          iter.hasNext && rowCount < streamLimit
-        }
-
-        def next(): InternalRow = {
+      val result = iter.filter { r =>
+        val x = rowCount < streamLimit
+        if (x) {
           rowCount += 1
-          val r = iter.next()
-          numOutputRows += 1
-          if (!hasNext) {
-            complete()
-          }
-          r
         }
-
-        private def complete(): Unit = {
-          while (iter.hasNext) {
-            iter.next()
-          }
-          if (rowCount > startCount) {
-            store.put(key, getValueRow(rowCount))
-            numUpdatedStateRows += 1
-          }
-          allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-          commitTimeMs += timeTakenMs { store.commit() }
-          setStoreMetrics(store)
-        }
+        x
       }
+
+      CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
+        if (rowCount > startCount) {
+          numUpdatedStateRows += 1
+          numOutputRows += rowCount - startCount
+          store.put(key, getValueRow(rowCount))
+        }
+        allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+        commitTimeMs += timeTakenMs { store.commit() }
+        setStoreMetrics(store)
+      })
     }
   }
 

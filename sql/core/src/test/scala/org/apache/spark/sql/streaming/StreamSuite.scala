@@ -823,7 +823,9 @@ class StreamSuite extends StreamTest {
     testStream(inputData.toDF().limit(4))(
       AddData(inputData, 1 to 2: _*),
       CheckAnswer(1 to 2: _*),
-      AddData(inputData, 3 to 9: _*),
+      AddData(inputData, 3 to 6: _*),
+      CheckAnswer(1 to 4: _*),
+      AddData(inputData, 7 to 9: _*),
       CheckAnswer(1 to 4: _*))
   }
 
@@ -833,6 +835,8 @@ class StreamSuite extends StreamTest {
       AddData(inputData, 1 to 5: _*),
       CheckAnswer(1, 3, 5),
       AddData(inputData, 6 to 9: _*),
+      CheckAnswer(1, 3, 5, 7),
+      AddData(inputData, 10 to 12: _*),
       CheckAnswer(1, 3, 5, 7))
   }
 
