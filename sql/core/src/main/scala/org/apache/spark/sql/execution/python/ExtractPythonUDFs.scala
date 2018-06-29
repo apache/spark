@@ -190,7 +190,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
               ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
             case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
               BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
-            case (vectorizedUdfs, plainUdfs) =>
+            case _ =>
               throw new AnalysisException(
                 "Mixed Python and Scalar Pandas UDFs are not expected here")
           }

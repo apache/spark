@@ -104,11 +104,11 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     assert(qualifiedPlanNodes.size == 1)
   }
 
-  private def collectPythonExec(spark: SparkPlan): Seq[BatchEvalPythonExec] = spark.collect {
+  private def collectPythonExec(plan: SparkPlan): Seq[BatchEvalPythonExec] = plan.collect {
     case b: BatchEvalPythonExec => b
   }
 
-  private def collectPandasExec(spark: SparkPlan): Seq[ArrowEvalPythonExec] = spark.collect {
+  private def collectPandasExec(plan: SparkPlan): Seq[ArrowEvalPythonExec] = plan.collect {
     case b: ArrowEvalPythonExec => b
   }
 

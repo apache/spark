@@ -5055,6 +5055,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         df = self.spark.range(0, 1).toDF('v')
 
+        # Test mixture of multiple UDFs and Pandas UDFs
+
         @udf('int')
         def f1(x):
             assert type(x) == int
@@ -5109,6 +5111,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         df2 = df2.withColumn('f4_f3_f2', f4(f3(f2(df['v']))))
         df2 = df2.withColumn('f4_f3_f2_f1', f4(f3(f2(f1(df['v'])))))
 
+        # expected result
         df3 = df.withColumn('f1', df['v'] + 1)
         df3 = df3.withColumn('f2', df['v'] + 10)
         df3 = df3.withColumn('f3', df['v'] + 100)
@@ -5133,6 +5136,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import udf, pandas_udf
 
         df = self.spark.range(0, 1).toDF('v')
+
+        # Test mixture of UDFs, Pandas UDFs and SQL expression.
 
         @udf('int')
         def f1(x):
@@ -5163,6 +5168,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         df1 = df1.withColumn('f3_f1_f2', f3(f1(f2(df['v']))))
         df1 = df1.withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
 
+        # expected result
         df2 = df.withColumn('f1', df['v'] + 1)
         df2 = df2.withColumn('f2', df['v'] + 10)
         df2 = df2.withColumn('f3', df['v'] + 100)
