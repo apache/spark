@@ -59,7 +59,8 @@ class IncrementalExecution(
       StatefulAggregationStrategy ::
       FlatMapGroupsWithStateStrategy ::
       StreamingRelationStrategy ::
-      StreamingDeduplicationStrategy :: Nil
+      StreamingDeduplicationStrategy ::
+      StreamingGlobalLimitStrategy :: Nil
   }
 
   private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
