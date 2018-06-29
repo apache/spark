@@ -24,7 +24,7 @@ import java.util.{Calendar, Date}
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
@@ -458,6 +458,96 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  test("SPARK-24699: watermark should behave the same for Trigger ProcessingTime / Once") {
+    val watermarkSeconds = 2
+    val windowSeconds = 5
+    def windowAggregation(body: (MemoryStream[Int], Dataset[(Long, Long)]) => Unit): Unit = {
+      val source = MemoryStream[Int]
+      val sink = {
+        source
+          .toDF()
+          .withColumn("eventTime", 'value cast "timestamp")
+          .withWatermark("eventTime", s"$watermarkSeconds seconds")
+          .groupBy(window($"eventTime", s"$windowSeconds seconds") as 'window)
+          .count()
+          .select('window.getField("start").cast("long").as[Long], 'count.as[Long])
+      }
+      body(source, sink)
+    }
+    val (one, two, three) = (
+      Seq(1, 1, 2, 3, 4, 4, 6),
+      Seq(7, 8, 9),
+      Seq(11, 12, 13, 14, 14)
+    )
+    val (resultsAfterOne, resultsAfterTwo, resultsAfterThree) = (
+      CheckAnswer(),
+      CheckAnswer(0 -> 6),
+      CheckAnswer(0 -> 6, 5 -> 4)
+    )
+    val (statsAfterOne, statsAfterTwo, statsAfterThree) = (
+      checkEventStats(
+        min = one.min,
+        max = one.max,
+        avg = one.sum.toDouble / one.size,
+        watermark = 0,
+        "first"
+      ),
+      checkEventStats(
+        min = two.min,
+        max = two.max,
+        avg = two.sum.toDouble / two.size,
+        watermark = one.max - watermarkSeconds,
+        "second"
+      ),
+      checkEventStats(
+        min = three.min,
+        max = three.max,
+        avg = three.sum.toDouble / three.size,
+        watermark = two.max - watermarkSeconds,
+        "third"
+      )
+    )
+
+    // check assertions using normal Trigger.Processing
+    windowAggregation {
+      (source, sink) => testStream(sink)(
+        AddData(source, one: _*),
+        resultsAfterOne,
+        statsAfterOne,
+
+        AddData(source, two: _*),
+        resultsAfterTwo,
+        statsAfterTwo,
+
+        AddData(source, three: _*),
+        resultsAfterThree,
+        statsAfterThree
+      )
+    }
+
+    // check assertions while using Trigger.Once
+    windowAggregation {
+      (source, sink) => testStream(sink)(
+        AddData(source, one: _*),
+        StartStream(Trigger.Once),
+        resultsAfterOne,
+        statsAfterOne,
+        StopStream,
+
+        AddData(source, two: _*),
+        StartStream(Trigger.Once),
+        resultsAfterTwo,
+        statsAfterTwo,
+        StopStream,
+
+        AddData(source, three: _*),
+        StartStream(Trigger.Once),
+        resultsAfterThree,
+        statsAfterThree
+      )
+    }
+  }
+
   test("test no-data flag") {
     val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 
@@ -484,6 +574,19 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     testWithFlag(false)
   }
 
+  private def checkEventStats(
+    min: Long,
+    max: Long,
+    avg: Double,
+    watermark: Long,
+    name: String = "event stats"
+  ): AssertOnQuery = assertEventStats { e =>
+    assert(e.get("min") === formatTimestamp(min), s"[$name]: min value")
+    assert(e.get("max") === formatTimestamp(max), s"[$name]: max value")
+    assert(e.get("avg") === formatTimestamp(avg), s"[$name]: avg value")
+    assert(e.get("watermark") === formatTimestamp(watermark), s"[$name]: watermark value")
+  }
+
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
     q.processAllAvailable()
     val progressWithData = q.recentProgress.lastOption.get
@@ -503,5 +606,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   private def formatTimestamp(sec: Long): String = {
     timestampFormat.format(new ju.Date(sec * 1000))
+  }
+
+  private def formatTimestamp(sec: Double): String = {
+    timestampFormat.format(new ju.Date((sec * 1000).toLong))
   }
 }
