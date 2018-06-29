@@ -690,9 +690,11 @@ private[spark] class AppStatusListener(
     // check if there is a new peak value for any of the executor level memory metrics
     // for the live UI. SparkListenerExecutorMetricsUpdate events are only processed
     // for the live UI.
-    liveExecutors.get(event.execId).foreach { exec: LiveExecutor =>
-      if (exec.peakExecutorMetrics.compareAndUpdate(event.executorUpdates)) {
-        maybeUpdate(exec, now)
+    event.executorUpdates.foreach { updates: Array[Long] =>
+      liveExecutors.get(event.execId).foreach { exec: LiveExecutor =>
+        if (exec.peakExecutorMetrics.compareAndUpdate(updates)) {
+          maybeUpdate(exec, now)
+        }
       }
     }
   }

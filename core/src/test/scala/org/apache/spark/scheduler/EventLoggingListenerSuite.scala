@@ -416,7 +416,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     taskMetrics.incDiskBytesSpilled(111)
     taskMetrics.incMemoryBytesSpilled(222)
     val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
-    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, executorMetrics)
+    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, Some(executorMetrics))
   }
 
   /** Check that the Spark history log line matches the expected event. */

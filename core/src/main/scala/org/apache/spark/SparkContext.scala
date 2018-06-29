@@ -2414,7 +2414,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private def reportHeartBeat(): Unit = {
     val driverUpdates = _heartbeater.getCurrentMetrics()
     val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
-    listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates, driverUpdates))
+    listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
+      Some(driverUpdates)))
   }
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this

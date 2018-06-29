@@ -269,10 +269,12 @@ private[spark] class EventLoggingListener(
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     if (shouldLogStageExecutorMetrics) {
       // For the active stages, record any new peak values for the memory metrics for the executor
-      liveStageExecutorMetrics.values.foreach { peakExecutorMetrics =>
-        val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
-          event.execId, new PeakExecutorMetrics())
-        peakMetrics.compareAndUpdate(event.executorUpdates)
+      event.executorUpdates.foreach { executorUpdates =>
+        liveStageExecutorMetrics.values.foreach { peakExecutorMetrics =>
+          val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
+            event.execId, new PeakExecutorMetrics())
+          peakMetrics.compareAndUpdate(executorUpdates)
+        }
       }
     }
   }

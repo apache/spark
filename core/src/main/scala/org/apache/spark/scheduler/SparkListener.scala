@@ -166,7 +166,7 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
     accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])],
-    executorUpdates: Array[Long])
+    executorUpdates: Option[Array[Long]] = None)
   extends SparkListenerEvent
 
 /**
