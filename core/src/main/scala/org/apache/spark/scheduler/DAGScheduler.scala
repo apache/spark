@@ -1049,6 +1049,13 @@ class DAGScheduler(
         abortStage(stage, s"Task serialization failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage
         return
+
+      case e: NoClassDefFoundError =>
+        abortStage(stage, s"Task serialization failed:  $e\n${Utils.exceptionString(e)}", Some(e))
+        runningStages -= stage
+
+        // Abort execution
+        return
     }
 
     val tasks: Seq[Task[_]] = try {
