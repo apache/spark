@@ -577,7 +577,7 @@ case class SortMergeJoinExec(
       else s" || (comp == 0 && ${leftLowerSecRangeKey.value} " +
         s"$lowerCompop ${rightLowerSecRangeKey.value})"
     val upperCompExp = if (!useInnerRange || upperSecondaryRangeExpression.isEmpty) ""
-      else s" || (comp == 0 && ${leftUpperSecRangeKey.value} " +36:12
+      else s" || (comp == 0 && ${leftUpperSecRangeKey.value} " +
         s"$upperCompop ${rightUpperSecRangeKey.value})"
 
     logDebug(s"lowerCompExp: $lowerCompExp")
