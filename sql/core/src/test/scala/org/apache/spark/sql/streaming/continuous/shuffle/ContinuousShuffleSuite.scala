@@ -17,29 +17,16 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
-import org.apache.spark.{TaskContext, TaskContextImpl}
+import java.util.UUID
+
+import org.apache.spark.{HashPartitioner, Partition, TaskContext, TaskContextImpl}
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class ContinuousShuffleReadSuite extends StreamTest {
-
-  private def unsafeRow(value: Int) = {
-    UnsafeProjection.create(Array(IntegerType : DataType))(
-      new GenericInternalRow(Array(value: Any)))
-  }
-
-  private def unsafeRow(value: String) = {
-    UnsafeProjection.create(Array(StringType : DataType))(
-      new GenericInternalRow(Array(UTF8String.fromString(value): Any)))
-  }
-
-  private def send(endpoint: RpcEndpointRef, messages: UnsafeRowReceiverMessage*) = {
-    messages.foreach(endpoint.askSync[Unit](_))
-  }
-
+class ContinuousShuffleSuite extends StreamTest {
   // In this unit test, we emulate that we're in the task thread where
   // ContinuousShuffleReadRDD.compute() will be evaluated. This requires a task context
   // thread local to be set.
@@ -58,39 +45,29 @@ class ContinuousShuffleReadSuite extends StreamTest {
     super.afterEach()
   }
 
-  test("receiver stopped with row last") {
-    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
-    send(
-      endpoint,
-      ReceiverEpochMarker(0),
-      ReceiverRow(0, unsafeRow(111))
-    )
-
-    ctx.markTaskCompleted(None)
-    val receiver = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].reader
-    eventually(timeout(streamingTimeout)) {
-      assert(receiver.asInstanceOf[UnsafeRowReceiver].stopped.get())
-    }
+  private implicit def unsafeRow(value: Int) = {
+    UnsafeProjection.create(Array(IntegerType : DataType))(
+      new GenericInternalRow(Array(value: Any)))
   }
 
-  test("receiver stopped with marker last") {
-    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
-    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
-    send(
-      endpoint,
-      ReceiverRow(0, unsafeRow(111)),
-      ReceiverEpochMarker(0)
-    )
-
-    ctx.markTaskCompleted(None)
-    val receiver = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].reader
-    eventually(timeout(streamingTimeout)) {
-      assert(receiver.asInstanceOf[UnsafeRowReceiver].stopped.get())
-    }
+  private def unsafeRow(value: String) = {
+    UnsafeProjection.create(Array(StringType : DataType))(
+      new GenericInternalRow(Array(UTF8String.fromString(value): Any)))
   }
 
-  test("one epoch") {
+  private def send(endpoint: RpcEndpointRef, messages: RPCContinuousShuffleMessage*) = {
+    messages.foreach(endpoint.askSync[Unit](_))
+  }
+
+  private def readRDDEndpoint(rdd: ContinuousShuffleReadRDD) = {
+    rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+  }
+
+  private def readEpoch(rdd: ContinuousShuffleReadRDD) = {
+    rdd.compute(rdd.partitions(0), ctx).toSeq.map(_.getInt(0))
+  }
+
+  test("reader - one epoch") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
     send(
@@ -105,7 +82,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
     assert(iter.toSeq.map(_.getInt(0)) == Seq(111, 222, 333))
   }
 
-  test("multiple epochs") {
+  test("reader - multiple epochs") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
     send(
@@ -124,7 +101,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
     assert(secondEpoch.toSeq.map(_.getInt(0)) == Seq(222, 333))
   }
 
-  test("empty epochs") {
+  test("reader - empty epochs") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
 
@@ -148,8 +125,11 @@ class ContinuousShuffleReadSuite extends StreamTest {
     assert(rdd.compute(rdd.partitions(0), ctx).isEmpty)
   }
 
-  test("multiple partitions") {
-    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 5)
+  test("reader - multiple partitions") {
+    val rdd = new ContinuousShuffleReadRDD(
+      sparkContext,
+      numPartitions = 5,
+      endpointNames = Seq.fill(5)(s"endpt-${UUID.randomUUID()}"))
     // Send all data before processing to ensure there's no crossover.
     for (p <- rdd.partitions) {
       val part = p.asInstanceOf[ContinuousShuffleReadPartition]
@@ -169,7 +149,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
     }
   }
 
-  test("blocks waiting for new rows") {
+  test("reader - blocks waiting for new rows") {
     val rdd = new ContinuousShuffleReadRDD(
       sparkContext, numPartitions = 1, epochIntervalMs = Long.MaxValue)
     val epoch = rdd.compute(rdd.partitions(0), ctx)
@@ -195,7 +175,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
     }
   }
 
-  test("multiple writers") {
+  test("reader - multiple writers") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1, numShuffleWriters = 3)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
     send(
@@ -213,7 +193,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
       Set("writer0-row0", "writer1-row0", "writer2-row0"))
   }
 
-  test("epoch only ends when all writers send markers") {
+  test("reader - epoch only ends when all writers send markers") {
     val rdd = new ContinuousShuffleReadRDD(
       sparkContext, numPartitions = 1, numShuffleWriters = 3, epochIntervalMs = Long.MaxValue)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
@@ -233,6 +213,7 @@ class ContinuousShuffleReadSuite extends StreamTest {
 
     // After checking the right rows, block until we get an epoch marker indicating there's no next.
     // (Also fail the assertion if for some reason we get a row.)
+
     val readEpochMarkerThread = new Thread {
       override def run(): Unit = {
         assert(!epoch.hasNext)
@@ -251,10 +232,10 @@ class ContinuousShuffleReadSuite extends StreamTest {
     }
 
     // Join to pick up assertion failures.
-    readEpochMarkerThread.join()
+    readEpochMarkerThread.join(streamingTimeout.toMillis)
   }
 
-  test("writer epochs non aligned") {
+  test("reader - writer epochs non aligned") {
     val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1, numShuffleWriters = 3)
     val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
     // We send multiple epochs for 0, then multiple for 1, then multiple for 2. The receiver should
@@ -287,5 +268,154 @@ class ContinuousShuffleReadSuite extends StreamTest {
 
     val thirdEpoch = rdd.compute(rdd.partitions(0), ctx).map(_.getUTF8String(0).toString).toSet
     assert(thirdEpoch == Set("writer1-row1", "writer2-row0"))
+  }
+
+  test("one epoch") {
+    val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
+    val writer = new RPCContinuousShuffleWriter(
+      0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+
+    writer.write(Iterator(1, 2, 3))
+
+    assert(readEpoch(reader) == Seq(1, 2, 3))
+  }
+
+  test("multiple epochs") {
+    val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
+    val writer = new RPCContinuousShuffleWriter(
+      0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+
+    writer.write(Iterator(1, 2, 3))
+    writer.write(Iterator(4, 5, 6))
+
+    assert(readEpoch(reader) == Seq(1, 2, 3))
+    assert(readEpoch(reader) == Seq(4, 5, 6))
+  }
+
+  test("empty epochs") {
+    val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
+    val writer = new RPCContinuousShuffleWriter(
+      0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+
+    writer.write(Iterator())
+    writer.write(Iterator(1, 2))
+    writer.write(Iterator())
+    writer.write(Iterator())
+    writer.write(Iterator(3, 4))
+    writer.write(Iterator())
+
+    assert(readEpoch(reader) == Seq())
+    assert(readEpoch(reader) == Seq(1, 2))
+    assert(readEpoch(reader) == Seq())
+    assert(readEpoch(reader) == Seq())
+    assert(readEpoch(reader) == Seq(3, 4))
+    assert(readEpoch(reader) == Seq())
+  }
+
+  test("blocks waiting for writer") {
+    val reader = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
+    val writer = new RPCContinuousShuffleWriter(
+      0, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+
+    val readerEpoch = reader.compute(reader.partitions(0), ctx)
+
+    val readRowThread = new Thread {
+      override def run(): Unit = {
+        assert(readerEpoch.toSeq.map(_.getInt(0)) == Seq(1))
+      }
+    }
+    readRowThread.start()
+
+    eventually(timeout(streamingTimeout)) {
+      assert(readRowThread.getState == Thread.State.TIMED_WAITING)
+    }
+
+    // Once we write the epoch the thread should stop waiting and succeed.
+    writer.write(Iterator(1))
+    readRowThread.join(streamingTimeout.toMillis)
+  }
+
+  test("multiple writer partitions") {
+    val numWriterPartitions = 3
+
+    val reader = new ContinuousShuffleReadRDD(
+      sparkContext, numPartitions = 1, numShuffleWriters = numWriterPartitions)
+    val writers = (0 until 3).map { idx =>
+      new RPCContinuousShuffleWriter(idx, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+    }
+
+    writers(0).write(Iterator(1, 4, 7))
+    writers(1).write(Iterator(2, 5))
+    writers(2).write(Iterator(3, 6))
+
+    writers(0).write(Iterator(4, 7, 10))
+    writers(1).write(Iterator(5, 8))
+    writers(2).write(Iterator(6, 9))
+
+    // Since there are multiple asynchronous writers, the original row sequencing is not guaranteed.
+    // The epochs should be deterministically preserved, however.
+    assert(readEpoch(reader).toSet == Seq(1, 2, 3, 4, 5, 6, 7).toSet)
+    assert(readEpoch(reader).toSet == Seq(4, 5, 6, 7, 8, 9, 10).toSet)
+  }
+
+  test("reader epoch only ends when all writer partitions write it") {
+    val numWriterPartitions = 3
+
+    val reader = new ContinuousShuffleReadRDD(
+      sparkContext, numPartitions = 1, numShuffleWriters = numWriterPartitions)
+    val writers = (0 until 3).map { idx =>
+      new RPCContinuousShuffleWriter(idx, new HashPartitioner(1), Array(readRDDEndpoint(reader)))
+    }
+
+    writers(1).write(Iterator())
+    writers(2).write(Iterator())
+
+    val readerEpoch = reader.compute(reader.partitions(0), ctx)
+
+    val readEpochMarkerThread = new Thread {
+      override def run(): Unit = {
+        assert(!readerEpoch.hasNext)
+      }
+    }
+
+    readEpochMarkerThread.start()
+    eventually(timeout(streamingTimeout)) {
+      assert(readEpochMarkerThread.getState == Thread.State.TIMED_WAITING)
+    }
+
+    writers(0).write(Iterator())
+    readEpochMarkerThread.join(streamingTimeout.toMillis)
+  }
+
+  test("receiver stopped with row last") {
+    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
+    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    send(
+      endpoint,
+      ReceiverEpochMarker(0),
+      ReceiverRow(0, unsafeRow(111))
+    )
+
+    ctx.markTaskCompleted(None)
+    val receiver = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].reader
+    eventually(timeout(streamingTimeout)) {
+      assert(receiver.asInstanceOf[RPCContinuousShuffleReader].stopped.get())
+    }
+  }
+
+  test("receiver stopped with marker last") {
+    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 1)
+    val endpoint = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].endpoint
+    send(
+      endpoint,
+      ReceiverRow(0, unsafeRow(111)),
+      ReceiverEpochMarker(0)
+    )
+
+    ctx.markTaskCompleted(None)
+    val receiver = rdd.partitions(0).asInstanceOf[ContinuousShuffleReadPartition].reader
+    eventually(timeout(streamingTimeout)) {
+      assert(receiver.asInstanceOf[RPCContinuousShuffleReader].stopped.get())
+    }
   }
 }

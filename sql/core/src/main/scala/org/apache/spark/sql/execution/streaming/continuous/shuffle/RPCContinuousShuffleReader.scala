@@ -20,26 +20,24 @@ package org.apache.spark.sql.execution.streaming.continuous.shuffle
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.util.NextIterator
 
 /**
- * Messages for the UnsafeRowReceiver endpoint. Either an incoming row or an epoch marker.
+ * Messages for the RPCContinuousShuffleReader endpoint. Either an incoming row or an epoch marker.
  *
  * Each message comes tagged with writerId, identifying which writer the message is coming
  * from. The receiver will only begin the next epoch once all writers have sent an epoch
  * marker ending the current epoch.
  */
-private[shuffle] sealed trait UnsafeRowReceiverMessage extends Serializable {
+private[shuffle] sealed trait RPCContinuousShuffleMessage extends Serializable {
   def writerId: Int
 }
 private[shuffle] case class ReceiverRow(writerId: Int, row: UnsafeRow)
-  extends UnsafeRowReceiverMessage
-private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends UnsafeRowReceiverMessage
+  extends RPCContinuousShuffleMessage
+private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends RPCContinuousShuffleMessage
 
 /**
  * RPC endpoint for receiving rows into a continuous processing shuffle task. Continuous shuffle
@@ -48,7 +46,7 @@ private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends UnsafeRow
  * TODO: Support multiple source tasks. We need to output a single epoch marker once all
  * source tasks have sent one.
  */
-private[shuffle] class UnsafeRowReceiver(
+private[continuous] class RPCContinuousShuffleReader(
       queueSize: Int,
       numShuffleWriters: Int,
       epochIntervalMs: Long,
@@ -57,7 +55,7 @@ private[shuffle] class UnsafeRowReceiver(
   // Note that this queue will be drained from the main task thread and populated in the RPC
   // response thread.
   private val queues = Array.fill(numShuffleWriters) {
-    new ArrayBlockingQueue[UnsafeRowReceiverMessage](queueSize)
+    new ArrayBlockingQueue[RPCContinuousShuffleMessage](queueSize)
   }
 
   // Exposed for testing to determine if the endpoint gets stopped on task end.
@@ -68,7 +66,9 @@ private[shuffle] class UnsafeRowReceiver(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case r: UnsafeRowReceiverMessage =>
+    case r: RPCContinuousShuffleMessage =>
+      // Note that this will block a thread the shared RPC handler pool!
+      // The TCP based shuffle handler (SPARK-24541) will avoid this problem.
       queues(r.writerId).put(r)
       context.reply(())
   }
@@ -79,10 +79,10 @@ private[shuffle] class UnsafeRowReceiver(
       private val writerEpochMarkersReceived = Array.fill(numShuffleWriters)(false)
 
       private val executor = Executors.newFixedThreadPool(numShuffleWriters)
-      private val completion = new ExecutorCompletionService[UnsafeRowReceiverMessage](executor)
+      private val completion = new ExecutorCompletionService[RPCContinuousShuffleMessage](executor)
 
-      private def completionTask(writerId: Int) = new Callable[UnsafeRowReceiverMessage] {
-        override def call(): UnsafeRowReceiverMessage = queues(writerId).take()
+      private def completionTask(writerId: Int) = new Callable[RPCContinuousShuffleMessage] {
+        override def call(): RPCContinuousShuffleMessage = queues(writerId).take()
       }
 
       // Initialize by submitting tasks to read the first row from each writer.
@@ -107,7 +107,7 @@ private[shuffle] class UnsafeRowReceiver(
               }
               logWarning(
                 s"Completion service failed to make progress after $epochIntervalMs ms. Waiting " +
-                  s"for writers $writerIdsUncommitted to send epoch markers.")
+                  s"for writers ${writerIdsUncommitted.mkString(",")} to send epoch markers.")
 
             // The completion service guarantees this future will be available immediately.
             case future => future.get() match {
