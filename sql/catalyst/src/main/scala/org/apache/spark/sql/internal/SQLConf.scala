@@ -380,7 +380,7 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.string.startsWith")
-    .doc("If true, enables Parquet filter push-down optimization for string starts with. " +
+    .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
       "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
     .internal()
     .booleanConf

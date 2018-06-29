@@ -26,7 +26,6 @@ import org.apache.parquet.schema.PrimitiveComparator
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -297,7 +296,8 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
               }
 
               override def keep(value: Binary): Boolean = {
-                UTF8String.fromBytes(value.getBytes).startsWith(UTF8String.fromString(v))
+                UTF8String.fromBytes(value.getBytes).startsWith(
+                  UTF8String.fromBytes(strToBinary.getBytes))
               }
             }
           )

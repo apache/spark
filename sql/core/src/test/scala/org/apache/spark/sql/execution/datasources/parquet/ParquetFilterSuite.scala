@@ -155,7 +155,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
           val df = spark.read.parquet(path).filter(filter)
           df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
-          df.collect
           if (pushDown) {
             assert(accu.value == 0)
           } else {
@@ -602,7 +601,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
             val df = spark.read.parquet(path).filter("a < 100")
             df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
-            df.collect
 
             if (enablePushDown) {
               assert(accu.value == 0)
@@ -691,7 +689,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - StringStartsWith") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
-      // Test canDrop()
       checkFilterPredicate(
         '_1.startsWith("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
@@ -711,7 +708,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           Seq.empty[Row])
       }
 
-      // Test inverseCanDrop()
       checkFilterPredicate(
         !'_1.startsWith("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
@@ -739,9 +735,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
 
     import testImplicits._
-    // Test canDrop()
+    // Test canDrop() has taken effect
     testStringStartsWith(spark.range(1024).map(_.toString).toDF(), "value like 'a%'")
-    // Test inverseCanDrop()
+    // Test inverseCanDrop() has taken effect
     testStringStartsWith(spark.range(1024).map(c => "100").toDF(), "value not like '10%'")
   }
 }
