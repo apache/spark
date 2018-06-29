@@ -147,15 +147,16 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       dataFrame.write.option("parquet.block.size", 512).parquet(path)
-      Seq(true, false).foreach { enablePushDown =>
-        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> enablePushDown.toString) {
+      Seq(true, false).foreach { pushDown =>
+        withSQLConf(
+          SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> pushDown.toString) {
           val accu = new NumRowGroupsAcc
           sparkContext.register(accu)
 
           val df = spark.read.parquet(path).filter(filter)
           df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
           df.collect
-          if (enablePushDown) {
+          if (pushDown) {
             assert(accu.value == 0)
           } else {
             assert(accu.value > 0)
@@ -739,9 +740,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     import testImplicits._
     // Test canDrop()
-    testStringStartsWith(spark.range(1024).map(_.toString).toDF, "value like 'a%'")
+    testStringStartsWith(spark.range(1024).map(_.toString).toDF(), "value like 'a%'")
     // Test inverseCanDrop()
-    testStringStartsWith(spark.range(1024).map(c => "100").toDF, "value not like '100'")
+    testStringStartsWith(spark.range(1024).map(c => "100").toDF(), "value not like '10%'")
   }
 }
 
