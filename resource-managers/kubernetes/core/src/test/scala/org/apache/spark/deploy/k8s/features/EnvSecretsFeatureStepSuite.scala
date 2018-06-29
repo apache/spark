@@ -45,7 +45,8 @@ class EnvSecretsFeatureStepSuite extends SparkFunSuite{
       Map.empty,
       envVarsToKeys,
       Map.empty,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfDir = None)
 
     val step = new EnvSecretsFeatureStep(kubernetesConf)
     val driverContainerWithEnvSecrets = step.configurePod(baseDriverPod).container

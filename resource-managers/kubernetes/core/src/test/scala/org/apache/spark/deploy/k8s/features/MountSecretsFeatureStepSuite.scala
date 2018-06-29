@@ -43,7 +43,8 @@ class MountSecretsFeatureStepSuite extends SparkFunSuite {
       secretNamesToMountPaths,
       Map.empty,
       Map.empty,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfDir = None)
 
     val step = new MountSecretsFeatureStep(kubernetesConf)
     val driverPodWithSecretsMounted = step.configurePod(baseDriverPod).pod

@@ -45,7 +45,8 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       Map.empty,
       Map.empty,
       Map.empty,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfDir = None)
   }
 
   test("Resolve to default local dir if neither env nor configuration are set") {

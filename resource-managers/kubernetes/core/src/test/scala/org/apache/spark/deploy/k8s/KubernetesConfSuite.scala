@@ -59,7 +59,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       mainAppResource = None,
       MAIN_CLASS,
       APP_ARGS,
-      maybePyFiles = None)
+      maybePyFiles = None,
+      hadoopConfDir = None)
     assert(conf.appId === APP_ID)
     assert(conf.sparkConf.getAll.toMap === sparkConf.getAll.toMap)
     assert(conf.appResourceNamePrefix === RESOURCE_NAME_PREFIX)
@@ -81,7 +82,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       mainAppJar,
       MAIN_CLASS,
       APP_ARGS,
-      maybePyFiles = None)
+      maybePyFiles = None,
+      hadoopConfDir = None)
     assert(kubernetesConfWithMainJar.sparkConf.get("spark.jars")
       .split(",")
       === Array("local:///opt/spark/jar1.jar", "local:///opt/spark/main.jar"))
@@ -93,7 +95,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       mainAppResource = None,
       MAIN_CLASS,
       APP_ARGS,
-      maybePyFiles = None)
+      maybePyFiles = None,
+      hadoopConfDir = None)
     assert(kubernetesConfWithoutMainJar.sparkConf.get("spark.jars").split(",")
       === Array("local:///opt/spark/jar1.jar"))
     assert(kubernetesConfWithoutMainJar.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.1)
@@ -114,7 +117,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       mainAppResource,
       MAIN_CLASS,
       APP_ARGS,
-      Some(inputPyFiles.mkString(",")))
+      Some(inputPyFiles.mkString(",")),
+      hadoopConfDir = None)
     assert(kubernetesConfWithMainResource.sparkConf.get("spark.jars").split(",")
       === Array("local:///opt/spark/jar1.jar"))
     assert(kubernetesConfWithMainResource.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.4)
@@ -136,7 +140,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       mainAppResource,
       MAIN_CLASS,
       APP_ARGS,
-      None)
+      maybePyFiles = None,
+      hadoopConfDir = None)
     assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
   }
 
@@ -167,7 +172,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       mainAppResource = None,
       MAIN_CLASS,
       APP_ARGS,
-      maybePyFiles = None)
+      maybePyFiles = None,
+      hadoopConfDir = None)
     assert(conf.roleLabels === Map(
       SPARK_APP_ID_LABEL -> APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++
@@ -184,7 +190,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       new SparkConf(false),
       EXECUTOR_ID,
       APP_ID,
-      DRIVER_POD)
+      DRIVER_POD,
+      None)
     assert(conf.roleSpecificConf.executorId === EXECUTOR_ID)
     assert(conf.roleSpecificConf.driverPod === DRIVER_POD)
   }
@@ -195,7 +202,8 @@ class KubernetesConfSuite extends SparkFunSuite {
         .set(IMAGE_PULL_SECRETS, "my-secret-1,my-secret-2 "),
       EXECUTOR_ID,
       APP_ID,
-      DRIVER_POD)
+      DRIVER_POD,
+      None)
     assert(conf.imagePullSecrets() ===
       Seq(
         new LocalObjectReferenceBuilder().withName("my-secret-1").build(),
@@ -221,7 +229,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       sparkConf,
       EXECUTOR_ID,
       APP_ID,
-      DRIVER_POD)
+      DRIVER_POD,
+      None)
     assert(conf.roleLabels === Map(
       SPARK_EXECUTOR_ID_LABEL -> EXECUTOR_ID,
       SPARK_APP_ID_LABEL -> APP_ID,

@@ -45,7 +45,8 @@ private[spark] case class ClientArguments(
     mainAppResource: Option[MainAppResource],
     mainClass: String,
     driverArgs: Array[String],
-    maybePyFiles: Option[String])
+    maybePyFiles: Option[String],
+    hadoopConfigDir: Option[String])
 
 private[spark] object ClientArguments {
 
@@ -77,7 +78,8 @@ private[spark] object ClientArguments {
       mainAppResource,
       mainClass.get,
       driverArgs.toArray,
-      maybePyFiles)
+      maybePyFiles,
+      sys.env.get(ENV_HADOOP_CONF_DIR))
   }
 }
 
@@ -223,7 +225,8 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       clientArguments.mainAppResource,
       clientArguments.mainClass,
       clientArguments.driverArgs,
-      clientArguments.maybePyFiles)
+      clientArguments.maybePyFiles,
+      clientArguments.hadoopConfigDir)
     val builder = new KubernetesDriverBuilder
     val namespace = kubernetesConf.namespace()
     // The master URL has been checked for validity already in SparkSubmit.

@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeatureConfigStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
 
 private[spark] class KubernetesDriverBuilder(
@@ -44,7 +44,15 @@ private[spark] class KubernetesDriverBuilder(
     providePythonStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
       => PythonDriverFeatureStep) =
-      new PythonDriverFeatureStep(_)) {
+      new PythonDriverFeatureStep(_),
+    provideHadoopConfStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+        => HadoopConfFeatureStep) =
+    new HadoopConfFeatureStep(_),
+    provideHadoopGlobalStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+        => HadoopGlobalFeatureStep) =
+    new HadoopGlobalFeatureStep(_)) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -66,10 +74,18 @@ private[spark] class KubernetesDriverBuilder(
         case PythonMainAppResource(_) =>
           providePythonStep(kubernetesConf)}.getOrElse(provideJavaStep(kubernetesConf))
 
+    val maybeHadoopConfigSteps =
+      kubernetesConf.hadoopConfDir.map { _ =>
+        Seq(
+          provideHadoopConfStep(kubernetesConf),
+          provideHadoopGlobalStep(kubernetesConf))
+      }.getOrElse(Seq.empty[KubernetesFeatureConfigStep])
+
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       (baseFeatures :+ bindingsStep) ++
         maybeRoleSecretNamesStep.toSeq ++
-        maybeProvideSecretsStep.toSeq
+        maybeProvideSecretsStep.toSeq ++
+        maybeHadoopConfigSteps
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {

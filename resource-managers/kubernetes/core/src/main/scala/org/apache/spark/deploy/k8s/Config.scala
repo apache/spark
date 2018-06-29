@@ -211,6 +211,51 @@ private[spark] object Config extends Logging {
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
 
+  val KUBERNETES_KERBEROS_SUPPORT =
+    ConfigBuilder("spark.kubernetes.kerberos.enabled")
+      .doc("Specify whether your job is a job that will require a Delegation Token to access HDFS")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_KERBEROS_KEYTAB =
+    ConfigBuilder("spark.kubernetes.kerberos.keytab")
+      .doc("Specify the location of keytab " +
+        "for Kerberos in order to access Secure HDFS")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_PRINCIPAL =
+    ConfigBuilder("spark.kubernetes.kerberos.principal")
+      .doc("Specify the principal " +
+        "for Kerberos in order to access Secure HDFS")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_RENEWER_PRINCIPAL =
+    ConfigBuilder("spark.kubernetes.kerberos.renewer.principal")
+      .doc("Specify the principal " +
+        "you wish to renew and retrieve your Kerberos values with")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_DT_SECRET_NAME =
+    ConfigBuilder("spark.kubernetes.kerberos.tokensecret.name")
+      .doc("Specify the name of the secret where " +
+        "your existing delegation token is stored. This removes the need " +
+        "for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY =
+    ConfigBuilder("spark.kubernetes.kerberos.tokensecret.itemkey")
+      .doc("Specify the item key of the data where " +
+        "your existing delegation token is stored. This removes the need " +
+        "for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
+
+
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

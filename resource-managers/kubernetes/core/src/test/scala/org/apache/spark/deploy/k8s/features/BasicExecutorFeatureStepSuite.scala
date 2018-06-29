@@ -89,7 +89,8 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Map.empty,
-        Seq.empty[String]))
+        Seq.empty[String],
+        hadoopConfDir = None))
     val executor = step.configurePod(SparkPod.initialPod())
 
     // The executor pod name and default labels.
@@ -128,7 +129,8 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Map.empty,
-        Seq.empty[String]))
+        Seq.empty[String],
+        hadoopConfDir = None))
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
   }
 
@@ -148,7 +150,8 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Map("qux" -> "quux"),
-        Seq.empty[String]))
+        Seq.empty[String],
+        hadoopConfDir = None))
     val executor = step.configurePod(SparkPod.initialPod())
 
     checkEnv(executor,

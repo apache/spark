@@ -65,11 +65,13 @@ private[spark] object Constants {
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
   val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
+  val ENV_SPARK_USER = "SPARK_USER"
   // Spark app configs for containers
   val SPARK_CONF_VOLUME = "spark-conf-volume"
   val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
   val SPARK_CONF_FILE_NAME = "spark.properties"
   val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
+  val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
 
   // BINDINGS
   val ENV_PYSPARK_PRIMARY = "PYSPARK_PRIMARY"
@@ -81,4 +83,33 @@ private[spark] object Constants {
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
   val MEMORY_OVERHEAD_MIN_MIB = 384L
+
+  // Hadoop Configuration
+  val HADOOP_FILE_VOLUME = "hadoop-properties"
+  val HADOOP_CONF_DIR_PATH = "/etc/hadoop/conf"
+  val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
+  val HADOOP_CONF_DIR_LOC = "spark.kubernetes.hadoop.conf.dir"
+  val HADOOP_CONFIG_MAP_SPARK_CONF_NAME =
+    "spark.kubernetes.hadoop.executor.hadoopConfigMapName"
+
+  // Kerberos Configuration
+  val KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME =
+    "spark.kubernetes.kerberos.delegation-token-secret-name"
+  val KERBEROS_KEYTAB_SECRET_NAME =
+    "spark.kubernetes.kerberos.key-tab-secret-name"
+  val KERBEROS_KEYTAB_SECRET_KEY =
+    "spark.kubernetes.kerberos.key-tab-secret-key"
+  val KERBEROS_SECRET_LABEL_PREFIX =
+    "hadoop-tokens"
+  val SPARK_HADOOP_PREFIX = "spark.hadoop."
+  val HADOOP_SECURITY_AUTHENTICATION =
+    SPARK_HADOOP_PREFIX + "hadoop.security.authentication"
+
+  // Kerberos Token-Refresh Server
+  val KERBEROS_REFRESH_LABEL_KEY = "refresh-hadoop-tokens"
+  val KERBEROS_REFRESH_LABEL_VALUE = "yes"
+
+  // Hadoop credentials secrets for the Spark app.
+  private[spark] val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"
+  private[spark] val SPARK_APP_HADOOP_SECRET_VOLUME_NAME = "hadoop-secret"
 }

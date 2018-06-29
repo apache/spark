@@ -162,11 +162,13 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         } else {
           val k8sConf = argument.asInstanceOf[KubernetesConf[KubernetesExecutorSpecificConf]]
           val executorSpecificConf = k8sConf.roleSpecificConf
+          // TODO: HADOOP_CONF_DIR
           val expectedK8sConf = KubernetesConf.createExecutorConf(
             conf,
             executorSpecificConf.executorId,
             TEST_SPARK_APP_ID,
-            driverPod)
+            driverPod,
+            None)
           k8sConf.sparkConf.getAll.toMap == conf.getAll.toMap &&
             // Since KubernetesConf.createExecutorConf clones the SparkConf object, force
             // deep equality comparison for the SparkConf object and use object equality
