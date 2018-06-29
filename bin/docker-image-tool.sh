@@ -63,10 +63,6 @@ function build {
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
-  local BINDING_BUILD_ARGS=(
-    --build-arg
-    base_img=$(image_ref spark)
-  )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
 
@@ -74,7 +70,7 @@ function build {
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .
 
-  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+  docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark-py) \
     -f "$PYDOCKERFILE" .
 }
