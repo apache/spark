@@ -190,6 +190,10 @@ class MicroBatchExecution(
           currentBatchHasNewData = isNewDataAvailable
 
           currentStatus = currentStatus.copy(isDataAvailable = isNewDataAvailable)
+
+          // remember the committed offsets to report progress correctly
+          prevCommittedOffsets ++= committedOffsets
+
           if (isCurrentBatchConstructed) {
             if (currentBatchHasNewData) updateStatusMessage("Processing new data")
             else updateStatusMessage("No new data but cleaning up state")
