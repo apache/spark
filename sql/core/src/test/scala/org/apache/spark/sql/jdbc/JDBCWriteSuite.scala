@@ -293,13 +293,23 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   test("save errors if dbtable is not specified") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    val e = intercept[RuntimeException] {
+    val e1 = intercept[RuntimeException] {
       df.write.format("jdbc")
         .option("url", url1)
         .options(properties.asScala)
         .save()
     }.getMessage
-    assert(e.contains("Option 'dbtable' is required"))
+    assert(e1.contains("Option 'dbtable' or 'query' is required"))
+
+    val e2 = intercept[RuntimeException] {
+      df.write.format("jdbc")
+        .option("url", url1)
+        .options(properties.asScala)
+        .option("query", "select * from TEST.SAVETEST")
+        .save()
+    }.getMessage
+    val msg = "Option 'dbtable' is required. Option 'query' is not applicable while writing."
+    assert(e2.contains(msg))
   }
 
   test("save errors if wrong user/password combination") {
@@ -514,5 +524,23 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       sql("INSERT INTO PEOPLE1 values (null, null)")
     }.getMessage
     assert(e.contains("NULL not allowed for column \"NAME\""))
+  }
+
+  ignore("SPARK-23856 Spark jdbc setQueryTimeout option") {
+    // The behaviour of the option `queryTimeout` depends on how JDBC drivers implement the API
+    // `setQueryTimeout`. For example, in the h2 JDBC driver, `executeBatch` invokes multiple
+    // INSERT queries in a batch and `setQueryTimeout` means that the driver checks the timeout
+    // of each query. In the PostgreSQL JDBC driver, `setQueryTimeout` means that the driver
+    // checks the timeout of an entire batch in a driver side. So, the test below fails because
+    // this test suite depends on the h2 JDBC driver and the JDBC write path internally
+    // uses `executeBatch`.
+    val errMsg = intercept[SparkException] {
+      spark.range(10000000L).selectExpr("id AS k", "id AS v").coalesce(1).write
+        .mode(SaveMode.Overwrite)
+        .option("queryTimeout", 1)
+        .option("batchsize", Int.MaxValue)
+        .jdbc(url1, "TEST.TIMEOUTTEST", properties)
+    }.getMessage
+    assert(errMsg.contains("Statement was canceled or the session timed out"))
   }
 }

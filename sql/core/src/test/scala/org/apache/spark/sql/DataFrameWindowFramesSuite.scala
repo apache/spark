@@ -402,4 +402,18 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
         Row(7, 3000) :: Row(8, 3000) :: Row(9, 5500) ::
         Row(10, 6000) :: Nil)
   }
+
+  test("SPARK-24033: Analysis Failure of OffsetWindowFunction") {
+    val ds = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("n", "i")
+    val res =
+      Row(1, 1, null) :: Row (1, 2, 1) :: Row(1, 3, 2) :: Row(2, 1, null) :: Row(2, 2, 1) :: Nil
+    checkAnswer(
+      ds.withColumn("m",
+        lead("i", -1).over(Window.partitionBy("n").orderBy("i").rowsBetween(-1, -1))),
+      res)
+    checkAnswer(
+      ds.withColumn("m",
+        lag("i", 1).over(Window.partitionBy("n").orderBy("i").rowsBetween(-1, -1))),
+      res)
+  }
 }

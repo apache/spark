@@ -681,6 +681,13 @@ class FeatureTests(SparkSessionTestCase):
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
+        # with locale
+        stopwords = ["BELKİ"]
+        dataset = self.spark.createDataFrame([Row(input=["belki"])])
+        stopWordRemover.setStopWords(stopwords).setLocale("tr")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, [])
 
     def test_count_vectorizer_with_binary(self):
         dataset = self.spark.createDataFrame([
@@ -1018,6 +1025,50 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvParallelModel = cv.fit(dataset)
         self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
 
+    def test_expose_sub_models(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        numFolds = 3
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+                            numFolds=numFolds, collectSubModels=True)
+
+        def checkSubModels(subModels):
+            self.assertEqual(len(subModels), numFolds)
+            for i in range(numFolds):
+                self.assertEqual(len(subModels[i]), len(grid))
+
+        cvModel = cv.fit(dataset)
+        checkSubModels(cvModel.subModels)
+
+        # Test the default value for option "persistSubModel" to be "true"
+        testSubPath = temp_path + "/testCrossValidatorSubModels"
+        savingPathWithSubModels = testSubPath + "cvModel3"
+        cvModel.save(savingPathWithSubModels)
+        cvModel3 = CrossValidatorModel.load(savingPathWithSubModels)
+        checkSubModels(cvModel3.subModels)
+        cvModel4 = cvModel3.copy()
+        checkSubModels(cvModel4.subModels)
+
+        savingPathWithoutSubModels = testSubPath + "cvModel2"
+        cvModel.write().option("persistSubModels", "false").save(savingPathWithoutSubModels)
+        cvModel2 = CrossValidatorModel.load(savingPathWithoutSubModels)
+        self.assertEqual(cvModel2.subModels, None)
+
+        for i in range(numFolds):
+            for j in range(len(grid)):
+                self.assertEqual(cvModel.subModels[i][j].uid, cvModel3.subModels[i][j].uid)
+
     def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
@@ -1186,6 +1237,40 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsParallelModel = tvs.fit(dataset)
         self.assertEqual(tvsSerialModel.validationMetrics, tvsParallelModel.validationMetrics)
 
+    def test_expose_sub_models(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+                                   collectSubModels=True)
+        tvsModel = tvs.fit(dataset)
+        self.assertEqual(len(tvsModel.subModels), len(grid))
+
+        # Test the default value for option "persistSubModel" to be "true"
+        testSubPath = temp_path + "/testTrainValidationSplitSubModels"
+        savingPathWithSubModels = testSubPath + "cvModel3"
+        tvsModel.save(savingPathWithSubModels)
+        tvsModel3 = TrainValidationSplitModel.load(savingPathWithSubModels)
+        self.assertEqual(len(tvsModel3.subModels), len(grid))
+        tvsModel4 = tvsModel3.copy()
+        self.assertEqual(len(tvsModel4.subModels), len(grid))
+
+        savingPathWithoutSubModels = testSubPath + "cvModel2"
+        tvsModel.write().option("persistSubModels", "false").save(savingPathWithoutSubModels)
+        tvsModel2 = TrainValidationSplitModel.load(savingPathWithoutSubModels)
+        self.assertEqual(tvsModel2.subModels, None)
+
+        for i in range(len(grid)):
+            self.assertEqual(tvsModel.subModels[i].uid, tvsModel3.subModels[i].uid)
+
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.
         # Save/load for TrainValidationSplit will be added later: SPARK-13786
@@ -1276,6 +1361,23 @@ class PersistenceTest(SparkSessionTestCase):
             rmtree(path)
         except OSError:
             pass
+
+    def test_linear_regression_pmml_basic(self):
+        # Most of the validation is done in the Scala side, here we just check
+        # that we output text rather than parquet (e.g. that the format flag
+        # was respected).
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LinearRegression(maxIter=1)
+        model = lr.fit(df)
+        path = tempfile.mkdtemp()
+        lr_path = path + "/lr-pmml"
+        model.write().format("pmml").save(lr_path)
+        pmml_text_list = self.sc.textFile(lr_path).collect()
+        pmml_text = "\n".join(pmml_text_list)
+        self.assertIn("Apache Spark", pmml_text)
+        self.assertIn("PMML", pmml_text)
 
     def test_logistic_regression(self):
         lr = LogisticRegression(maxIter=1)
@@ -1516,6 +1618,44 @@ class PersistenceTest(SparkSessionTestCase):
 
         self.assertEqual(lr.uid, lr3.uid)
         self.assertEqual(lr.extractParamMap(), lr3.extractParamMap())
+
+    def test_default_read_write_default_params(self):
+        lr = LogisticRegression()
+        self.assertFalse(lr.isSet(lr.getParam("threshold")))
+
+        lr.setMaxIter(50)
+        lr.setThreshold(.75)
+
+        # `threshold` is set by user, default param `predictionCol` is not set by user.
+        self.assertTrue(lr.isSet(lr.getParam("threshold")))
+        self.assertFalse(lr.isSet(lr.getParam("predictionCol")))
+        self.assertTrue(lr.hasDefault(lr.getParam("predictionCol")))
+
+        writer = DefaultParamsWriter(lr)
+        metadata = json.loads(writer._get_metadata_to_save(lr, self.sc))
+        self.assertTrue("defaultParamMap" in metadata)
+
+        reader = DefaultParamsReadable.read()
+        metadataStr = json.dumps(metadata, separators=[',',  ':'])
+        loadedMetadata = reader._parseMetaData(metadataStr, )
+        reader.getAndSetParams(lr, loadedMetadata)
+
+        self.assertTrue(lr.isSet(lr.getParam("threshold")))
+        self.assertFalse(lr.isSet(lr.getParam("predictionCol")))
+        self.assertTrue(lr.hasDefault(lr.getParam("predictionCol")))
+
+        # manually create metadata without `defaultParamMap` section.
+        del metadata['defaultParamMap']
+        metadataStr = json.dumps(metadata, separators=[',',  ':'])
+        loadedMetadata = reader._parseMetaData(metadataStr, )
+        with self.assertRaisesRegexp(AssertionError, "`defaultParamMap` section not found"):
+            reader.getAndSetParams(lr, loadedMetadata)
+
+        # Prior to 2.4.0, metadata doesn't have `defaultParamMap`.
+        metadata['sparkVersion'] = '2.3.0'
+        metadataStr = json.dumps(metadata, separators=[',',  ':'])
+        loadedMetadata = reader._parseMetaData(metadataStr, )
+        reader.getAndSetParams(lr, loadedMetadata)
 
 
 class LDATest(SparkSessionTestCase):
@@ -2058,17 +2198,23 @@ class ImageReaderTest2(PySparkTestCase):
     @classmethod
     def setUpClass(cls):
         super(ImageReaderTest2, cls).setUpClass()
+        cls.hive_available = True
         # Note that here we enable Hive's support.
         cls.spark = None
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
             cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         except TypeError:
             cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
-        cls.spark = HiveContext._createForTesting(cls.sc)
+            cls.hive_available = False
+        if cls.hive_available:
+            cls.spark = HiveContext._createForTesting(cls.sc)
+
+    def setUp(self):
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     @classmethod
     def tearDownClass(cls):
@@ -2584,6 +2730,6 @@ class EstimatorTest(unittest.TestCase):
 if __name__ == "__main__":
     from pyspark.ml.tests import *
     if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
     else:
-        unittest.main()
+        unittest.main(verbosity=2)

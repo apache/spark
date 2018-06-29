@@ -45,8 +45,9 @@ private[sql] object JsonInferSchema {
     val parseMode = configOptions.parseMode
     val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
 
-    // perform schema inference on each row and merge afterwards
-    val rootType = json.mapPartitions { iter =>
+    // In each RDD partition, perform schema inference on each row and merge afterwards.
+    val typeMerger = compatibleRootType(columnNameOfCorruptRecord, parseMode)
+    val mergedTypesFromPartitions = json.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
       iter.flatMap { row =>
@@ -66,11 +67,15 @@ private[sql] object JsonInferSchema {
                 s"Parse Mode: ${FailFastMode.name}.", e)
           }
         }
-      }
-    }.fold(StructType(Nil))(
-      compatibleRootType(columnNameOfCorruptRecord, parseMode))
+      }.reduceOption(typeMerger).toIterator
+    }
 
-    canonicalizeType(rootType) match {
+    // Here we get RDD local iterator then fold, instead of calling `RDD.fold` directly, because
+    // `RDD.fold` will run the fold function in DAGScheduler event loop thread, which may not have
+    // active SparkSession and `SQLConf.get` may point to the wrong configs.
+    val rootType = mergedTypesFromPartitions.toLocalIterator.fold(StructType(Nil))(typeMerger)
+
+    canonicalizeType(rootType, configOptions) match {
       case Some(st: StructType) => st
       case _ =>
         // canonicalizeType erases all empty structs, including the only one we want to keep
@@ -176,33 +181,33 @@ private[sql] object JsonInferSchema {
   }
 
   /**
-   * Convert NullType to StringType and remove StructTypes with no fields
+   * Recursively canonicalizes inferred types, e.g., removes StructTypes with no fields,
+   * drops NullTypes or converts them to StringType based on provided options.
    */
-  private def canonicalizeType(tpe: DataType): Option[DataType] = tpe match {
-    case at @ ArrayType(elementType, _) =>
-      for {
-        canonicalType <- canonicalizeType(elementType)
-      } yield {
-        at.copy(canonicalType)
-      }
+  private def canonicalizeType(tpe: DataType, options: JSONOptions): Option[DataType] = tpe match {
+    case at: ArrayType =>
+      canonicalizeType(at.elementType, options)
+        .map(t => at.copy(elementType = t))
 
     case StructType(fields) =>
-      val canonicalFields: Array[StructField] = for {
-        field <- fields
-        if field.name.length > 0
-        canonicalType <- canonicalizeType(field.dataType)
-      } yield {
-        field.copy(dataType = canonicalType)
+      val canonicalFields = fields.filter(_.name.nonEmpty).flatMap { f =>
+        canonicalizeType(f.dataType, options)
+          .map(t => f.copy(dataType = t))
       }
-
-      if (canonicalFields.length > 0) {
-        Some(StructType(canonicalFields))
-      } else {
-        // per SPARK-8093: empty structs should be deleted
+      // SPARK-8093: empty structs should be deleted
+      if (canonicalFields.isEmpty) {
         None
+      } else {
+        Some(StructType(canonicalFields))
       }
 
-    case NullType => Some(StringType)
+    case NullType =>
+      if (options.dropFieldIfAllNull) {
+        None
+      } else {
+        Some(StringType)
+      }
+
     case other => Some(other)
   }
 
@@ -329,8 +334,8 @@ private[sql] object JsonInferSchema {
           ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
 
         // The case that given `DecimalType` is capable of given `IntegralType` is handled in
-        // `findTightestCommonTypeOfTwo`. Both cases below will be executed only when
-        // the given `DecimalType` is not capable of the given `IntegralType`.
+        // `findTightestCommonType`. Both cases below will be executed only when the given
+        // `DecimalType` is not capable of the given `IntegralType`.
         case (t1: IntegralType, t2: DecimalType) =>
           compatibleType(DecimalType.forType(t1), t2)
         case (t1: DecimalType, t2: IntegralType) =>

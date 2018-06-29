@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -514,10 +513,9 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String],
+    forceNullableSchema: Boolean)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
-
-  val forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA)
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
@@ -532,17 +530,24 @@ case class JsonToStructs(
       schema = JsonExprUtils.validateSchemaLiteral(schema),
       options = Map.empty[String, String],
       child = child,
-      timeZoneId = None)
+      timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = JsonExprUtils.validateSchemaLiteral(schema),
       options = JsonExprUtils.convertToMapData(options),
       child = child,
-      timeZoneId = None)
+      timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
+
+  // Used in `org.apache.spark.sql.functions`
+  def this(schema: DataType, options: Map[String, String], child: Expression) =
+    this(schema, options, child, timeZoneId = None,
+      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+    case _: StructType | ArrayType(_: StructType, _) | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input schema ${nullableSchema.simpleString} must be a struct or an array of structs.")
@@ -552,6 +557,7 @@ case class JsonToStructs(
   lazy val rowSchema = nullableSchema match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
   }
 
   // This converts parsed rows to the desired output by the given schema.
@@ -561,6 +567,8 @@ case class JsonToStructs(
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
     case ArrayType(_: StructType, _) =>
       (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+    case _: MapType =>
+      (rows: Seq[InternalRow]) => rows.head.getMap(0)
   }
 
   @transient
@@ -607,6 +615,11 @@ case class JsonToStructs(
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+
+  override def sql: String = schema match {
+    case _: MapType => "entries"
+    case _ => super.sql
+  }
 }
 
 /**
@@ -733,8 +746,8 @@ case class StructsToJson(
 
 object JsonExprUtils {
 
-  def validateSchemaLiteral(exp: Expression): StructType = exp match {
-    case Literal(s, StringType) => CatalystSqlParser.parseTableSchema(s.toString)
+  def validateSchemaLiteral(exp: Expression): DataType = exp match {
+    case Literal(s, StringType) => DataType.fromDDL(s.toString)
     case e => throw new AnalysisException(s"Expected a string literal instead of $e")
   }
 

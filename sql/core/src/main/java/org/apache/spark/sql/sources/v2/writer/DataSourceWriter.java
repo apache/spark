@@ -34,8 +34,8 @@ import org.apache.spark.sql.types.StructType;
  * It can mix in various writing optimization interfaces to speed up the data saving. The actual
  * writing logic is delegated to {@link DataWriter}.
  *
- * If an exception was throw when applying any of these writing optimizations, the action would fail
- * and no Spark job was submitted.
+ * If an exception was throw when applying any of these writing optimizations, the action will fail
+ * and no Spark job will be submitted.
  *
  * The writing procedure is:
  *   1. Create a writer factory by {@link #createWriterFactory()}, serialize and send it to all the
@@ -58,14 +58,14 @@ public interface DataSourceWriter {
   /**
    * Creates a writer factory which will be serialized and sent to executors.
    *
-   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */
   DataWriterFactory<Row> createWriterFactory();
 
   /**
-   * Returns whether Spark should use the commit coordinator to ensure that at most one attempt for
-   * each task commits.
+   * Returns whether Spark should use the commit coordinator to ensure that at most one task for
+   * each partition commits.
    *
    * @return true if commit coordinator should be used, false otherwise.
    */
@@ -90,9 +90,9 @@ public interface DataSourceWriter {
    * is undefined and @{@link #abort(WriterCommitMessage[])} may not be able to deal with it.
    *
    * Note that speculative execution may cause multiple tasks to run for a partition. By default,
-   * Spark uses the commit coordinator to allow at most one attempt to commit. Implementations can
+   * Spark uses the commit coordinator to allow at most one task to commit. Implementations can
    * disable this behavior by overriding {@link #useCommitCoordinator()}. If disabled, multiple
-   * attempts may have committed successfully and one successful commit message per task will be
+   * tasks may have committed successfully and one successful commit message per task will be
    * passed to this commit method. The remaining commit messages are ignored by Spark.
    */
   void commit(WriterCommitMessage[] messages);

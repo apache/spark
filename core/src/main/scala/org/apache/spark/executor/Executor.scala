@@ -287,6 +287,28 @@ private[spark] class Executor(
       notifyAll()
     }
 
+    /**
+     *  Utility function to:
+     *    1. Report executor runtime and JVM gc time if possible
+     *    2. Collect accumulator updates
+     *    3. Set the finished flag to true and clear current thread's interrupt status
+     */
+    private def collectAccumulatorsAndResetStatusOnFailure(taskStartTime: Long) = {
+      // Report executor runtime and JVM gc time
+      Option(task).foreach(t => {
+        t.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStartTime)
+        t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+      })
+
+      // Collect latest accumulator values to report back to the driver
+      val accums: Seq[AccumulatorV2[_, _]] =
+        Option(task).map(_.collectAccumulatorUpdates(taskFailed = true)).getOrElse(Seq.empty)
+      val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+
+      setTaskFinishedAndClearInterruptStatus()
+      (accums, accUpdates)
+    }
+
     override def run(): Unit = {
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
@@ -300,7 +322,7 @@ private[spark] class Executor(
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
-      var taskStart: Long = 0
+      var taskStartTime: Long = 0
       var taskStartCpu: Long = 0
       startGCTime = computeTotalGcTime()
 
@@ -336,7 +358,7 @@ private[spark] class Executor(
         }
 
         // Run the actual task and measure its runtime.
-        taskStart = System.currentTimeMillis()
+        taskStartTime = System.currentTimeMillis()
         taskStartCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
           threadMXBean.getCurrentThreadCpuTime
         } else 0L
@@ -396,11 +418,11 @@ private[spark] class Executor(
         // Deserialization happens in two parts: first, we deserialize a Task object, which
         // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
         task.metrics.setExecutorDeserializeTime(
-          (taskStart - deserializeStartTime) + task.executorDeserializeTime)
+          (taskStartTime - deserializeStartTime) + task.executorDeserializeTime)
         task.metrics.setExecutorDeserializeCpuTime(
           (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime)
         // We need to subtract Task.run()'s deserialization time to avoid double-counting
-        task.metrics.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
+        task.metrics.setExecutorRunTime((taskFinish - taskStartTime) - task.executorDeserializeTime)
         task.metrics.setExecutorCpuTime(
           (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
@@ -482,16 +504,19 @@ private[spark] class Executor(
       } catch {
         case t: TaskKilledException =>
           logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
-          setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
+
+          val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTime)
+          val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates, accums))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case _: InterruptedException | NonFatal(_) if
             task != null && task.reasonIfKilled.isDefined =>
           val killReason = task.reasonIfKilled.getOrElse("unknown reason")
           logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
-          setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(
-            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
+
+          val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTime)
+          val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates, accums))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
           val reason = task.context.fetchFailed.get.toTaskFailedReason
@@ -524,17 +549,7 @@ private[spark] class Executor(
           // the task failure would not be ignored if the shutdown happened because of premption,
           // instead of an app issue).
           if (!ShutdownHookManager.inShutdown()) {
-            // Collect latest accumulator values to report back to the driver
-            val accums: Seq[AccumulatorV2[_, _]] =
-              if (task != null) {
-                task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
-                task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
-                task.collectAccumulatorUpdates(taskFailed = true)
-              } else {
-                Seq.empty
-              }
-
-            val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+            val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTime)
 
             val serializedTaskEndReason = {
               try {
