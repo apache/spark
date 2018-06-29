@@ -577,7 +577,7 @@ case class SortMergeJoinExec(
       else s" || (comp == 0 && ${leftLowerSecRangeKey.value} " +
         s"$lowerCompop ${rightLowerSecRangeKey.value})"
     val upperCompExp = if (!useInnerRange || upperSecondaryRangeExpression.isEmpty) ""
-      else s" || (comp == 0 && ${leftUpperSecRangeKey.value} " +
+      else s" || (comp == 0 && ${leftUpperSecRangeKey.value} " +36:12
         s"$upperCompop ${rightUpperSecRangeKey.value})"
 
     logDebug(s"lowerCompExp: $lowerCompExp")
@@ -593,7 +593,7 @@ case class SortMergeJoinExec(
       val rightRngTmpKeyVars = createJoinKey(ctx, rightTmpRow,
         rightUpperKeys.slice(0, 1), right.output)
       val rightRngTmpKeyVarsDecl = rightRngTmpKeyVars.map(_.code).mkString("\n")
-      rightRngTmpKeyVars.foreach(_.code = "")
+      rightRngTmpKeyVars.foreach(_.code = EmptyBlock)
       val javaType = CodeGenerator.javaType(rightLowerKeys(0).dataType)
 
       ctx.addNewFunction("getRightTmpRangeValue",

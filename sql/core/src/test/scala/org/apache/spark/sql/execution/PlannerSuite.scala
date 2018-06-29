@@ -694,11 +694,11 @@ class PlannerSuite extends SharedSQLContext {
     val plan2 = DummySparkPlan(outputOrdering = Seq(orderingB),
       outputPartitioning = HashPartitioning(exprB :: Nil, 5))
     val smjExec = SortMergeJoinExec(
-      exprA :: exprA :: Nil, exprB :: exprC :: Nil, Inner, None, plan1, plan2)
+      exprA :: exprA :: Nil, exprB :: exprC :: Nil, Inner, Nil, None, plan1, plan2)
 
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
     outputPlan match {
-      case SortMergeJoinExec(leftKeys, rightKeys, _, _, _, _) =>
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _, _, _, _) =>
         assert(leftKeys == Seq(exprA, exprA))
         assert(rightKeys == Seq(exprB, exprC))
       case _ => fail()
