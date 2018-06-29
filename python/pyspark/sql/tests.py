@@ -5125,8 +5125,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         df3 = df3.withColumn('f4_f3_f2', df['v'] + 1110)
         df3 = df3.withColumn('f4_f3_f2_f1', df['v'] + 1111)
 
-        self.assertTrue(df3.collect() == df1.collect())
-        self.assertTrue(df3.collect() == df2.collect())
+        self.assertEquals(df3.collect(), df1.collect())
+        self.assertEquals(df3.collect(), df2.collect())
 
     def test_mixed_udf_and_sql(self):
         import pandas as pd
@@ -5177,9 +5177,9 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         df2 = df2.withColumn('f2_f1_f3', df['v'] + 111)
         df2 = df2.withColumn('f2_f3_f1', df['v'] + 111)
         df2 = df2.withColumn('f3_f1_f2', df['v'] + 111)
-        df2 = df2.withColumn('f3_f2_f1', df['v'] + 110)
+        df2 = df2.withColumn('f3_f2_f1', df['v'] + 111)
 
-        self.assertTrue(df2.collect(), df1.collect())
+        self.assertEquals(df2.collect(), df1.collect())
 
 
 @unittest.skipIf(
