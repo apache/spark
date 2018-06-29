@@ -34,11 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters() {
-
-  val sqlConf: SQLConf = SQLConf.get
-  val pushDownDate = sqlConf.parquetFilterPushDownDate
-  val pushDownStartWith = sqlConf.parquetFilterPushDownStringStartWith
+private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: Boolean) {
 
   private def dateToDays(date: Date): SQLDate = {
     DateTimeUtils.fromJavaDate(date)

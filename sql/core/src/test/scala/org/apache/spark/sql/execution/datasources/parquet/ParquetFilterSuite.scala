@@ -55,7 +55,8 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
-  private lazy val parquetFilters = new ParquetFilters()
+  private lazy val parquetFilters =
+    new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownStringStartWith)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -139,6 +140,31 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Array[Byte])
       (implicit df: DataFrame): Unit = {
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
+  }
+
+  // This function tests that exactly go through the `canDrop` and `inverseCanDrop`.
+  private def testStringStartsWith(dataFrame: DataFrame, filter: String): Unit = {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      dataFrame.write.option("parquet.block.size", 512).parquet(path)
+      Seq(true, false).foreach { enablePushDown =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> enablePushDown.toString) {
+          val accu = new NumRowGroupsAcc
+          sparkContext.register(accu)
+
+          val df = spark.read.parquet(path).filter(filter)
+          df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
+          df.collect
+          if (enablePushDown) {
+            assert(accu.value == 0)
+          } else {
+            assert(accu.value > 0)
+          }
+
+          AccumulatorContext.remove(accu.id)
+        }
+      }
+    }
   }
 
   test("filter pushdown - boolean") {
@@ -710,6 +736,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           sources.StringStartsWith("_1", null))
       }
     }
+
+    import testImplicits._
+    // Test canDrop()
+    testStringStartsWith(spark.range(1024).map(_.toString).toDF, "value like 'a%'")
+    // Test inverseCanDrop()
+    testStringStartsWith(spark.range(1024).map(c => "100").toDF, "value not like '100'")
   }
 }
 
