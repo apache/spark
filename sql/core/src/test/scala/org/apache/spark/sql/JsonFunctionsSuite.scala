@@ -202,6 +202,39 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("""{"a":1}""") :: Nil)
   }
 
+  test("to_json - map with Date/Timestamp as key") {
+    val df1 = Seq(Map(java.sql.Date.valueOf("2015-08-26") -> 1)).toDF("map")
+    val df2 = Seq(Map(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0") -> 1)).toDF("map")
+
+    val optionsTimestamp = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+    val optionsDate = Map("dateFormat" -> "dd/MM/yyyy")
+
+    checkAnswer(
+      df1.select(to_json($"map", optionsDate)),
+      Row("""{"26/08/2015":1}""") :: Nil)
+    checkAnswer(
+      df2.select(to_json($"map", optionsTimestamp)),
+      Row("""{"26/08/2015 18:00":1}""") :: Nil)
+  }
+
+  test("roundtrip in to_json and from_json - Timestamp as key") {
+    val df = Seq(Map(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0") -> 1)).toDF("map")
+    val optionsTimestamp = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+    val schema = MapType(TimestampType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("roundtrip in to_json and from_json - Date as key") {
+    val df = Seq(Map(java.sql.Date.valueOf("2015-08-26") -> 1)).toDF("map")
+    val optionsDate = Map("dateFormat" -> "dd/MM/yyyy")
+    val schema = MapType(DateType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
   test("to_json with option") {
     val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
@@ -211,9 +244,10 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
   }
 
-  test("to_json - key types of map don't matter") {
+  test("to_json - key types of map (other than Date/Timestamp) don't matter") {
     // interval type is invalid for converting to JSON. However, the keys of a map are treated
-    // as strings, so its type doesn't matter.
+    // as strings, so its type doesn't matter.  Date's and Timestamps will be formatted
+    // while being turned to strings, all other types simply turned to strings.
     val df = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
       .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
     checkAnswer(

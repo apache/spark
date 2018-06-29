@@ -97,7 +97,7 @@ class JacksonParser(
   private def makeMapRootConverter(mt: MapType): JsonParser => Seq[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, mt) {
-      case START_OBJECT => Seq(InternalRow(convertMap(parser, fieldConverter)))
+      case START_OBJECT => Seq(InternalRow(convertMap(parser, mt.keyType, fieldConverter)))
     }
   }
 
@@ -179,17 +179,7 @@ class JacksonParser(
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING =>
-          val stringValue = parser.getText
-          // This one will lose microseconds parts.
-          // See https://issues.apache.org/jira/browse/SPARK-10681.
-          Long.box {
-            Try(options.timestampFormat.parse(stringValue).getTime * 1000L)
-              .getOrElse {
-                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility.
-                DateTimeUtils.stringToTime(stringValue).getTime * 1000L
-              }
-          }
+          parseTimestamp(parser.getText)
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
@@ -198,22 +188,7 @@ class JacksonParser(
     case DateType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
         case VALUE_STRING =>
-          val stringValue = parser.getText
-          // This one will lose microseconds parts.
-          // See https://issues.apache.org/jira/browse/SPARK-10681.x
-          Int.box {
-            Try(DateTimeUtils.millisToDays(options.dateFormat.parse(stringValue).getTime))
-              .orElse {
-                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility.
-                Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(stringValue).getTime))
-              }
-              .getOrElse {
-                // In Spark 1.5.0, we store the data as number of days since epoch in string.
-                // So, we just convert it to Int.
-                stringValue.toInt
-              }
-          }
+          parseDate(parser.getText)
       }
 
     case BinaryType =>
@@ -242,7 +217,7 @@ class JacksonParser(
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter)
+        case START_OBJECT => convertMap(parser, mt.keyType, valueConverter)
       }
 
     case udt: UserDefinedType[_] =>
@@ -317,16 +292,52 @@ class JacksonParser(
     row
   }
 
+  private def parseTimestamp(stringValue: String): Long = {
+    // This one will lose microseconds parts.
+    // See https://issues.apache.org/jira/browse/SPARK-10681.x
+    Try(options.timestampFormat.parse(stringValue).getTime * 1000L)
+      .getOrElse {
+        // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+        // compatibility.
+        DateTimeUtils.stringToTime(stringValue).getTime * 1000L
+      }
+  }
+
+  private def parseDate(stringValue: String): Int = {
+    Try(DateTimeUtils.millisToDays(options.dateFormat.parse(stringValue).getTime))
+      .orElse {
+        // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+        // compatibility.
+        Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(stringValue).getTime))
+      }
+      .getOrElse {
+        // In Spark 1.5.0, we store the data as number of days since epoch in string.
+        // So, we just convert it to Int.
+        stringValue.toInt
+      }
+  }
+
   /**
    * Parse an object as a Map, preserving all fields.
    */
   private def convertMap(
       parser: JsonParser,
+      keyType: DataType,
       fieldConverter: ValueConverter): MapData = {
-    val keys = ArrayBuffer.empty[UTF8String]
+    val keys = ArrayBuffer.empty[Any]
     val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.getCurrentName)
+
+      val keyValue = keyType match {
+        case DateType =>
+          parseDate(parser.getCurrentName)
+        case TimestampType =>
+          parseTimestamp(parser.getCurrentName)
+        case _ =>
+          UTF8String.fromString(parser.getCurrentName)
+      }
+
+      keys += keyValue
       values += fieldConverter.apply(parser)
     }
 

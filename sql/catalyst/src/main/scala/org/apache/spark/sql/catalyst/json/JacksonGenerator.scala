@@ -43,6 +43,11 @@ private[sql] class JacksonGenerator(
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
+  // A `ValueReader` is responsible for reading a field of an `InternalRow` to a String.
+  // The only purpose of this is to read the key values for a map so that they can be
+  // written as JSON filed names.
+  private type ValueReader = (SpecializedGetters, Int) => String
+
   // `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
   require(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType],
     "JacksonGenerator only supports to be initialized with a StructType " +
@@ -63,12 +68,18 @@ private[sql] class JacksonGenerator(
       }
     case mt: MapType =>
       (arr: SpecializedGetters, i: Int) => {
-        writeObject(writeMapData(arr.getMap(i), mt, mapElementWriter))
+        writeObject(writeMapData(arr.getMap(i), mapKeyReader, mapValueWriter))
       }
   }
 
-  private lazy val mapElementWriter: ValueWriter = dataType match {
+  private lazy val mapValueWriter: ValueWriter = dataType match {
     case mt: MapType => makeWriter(mt.valueType)
+    case _ => throw new UnsupportedOperationException(
+      s"Initial type ${dataType.simpleString} must be a map")
+  }
+
+  private lazy val mapKeyReader: ValueReader = dataType match {
+    case mt: MapType => makeReader(mt.keyType)
     case _ => throw new UnsupportedOperationException(
       s"Initial type ${dataType.simpleString} must be a map")
   }
@@ -145,9 +156,10 @@ private[sql] class JacksonGenerator(
         writeArray(writeArrayData(row.getArray(ordinal), elementWriter))
 
     case mt: MapType =>
+      val keyReader = makeReader(mt.keyType)
       val valueWriter = makeWriter(mt.valueType)
       (row: SpecializedGetters, ordinal: Int) =>
-        writeObject(writeMapData(row.getMap(ordinal), mt, valueWriter))
+        writeObject(writeMapData(row.getMap(ordinal), keyReader, valueWriter))
 
     // For UDT values, they should be in the SQL type's corresponding value type.
     // We should not see values in the user-defined class at here.
@@ -161,6 +173,22 @@ private[sql] class JacksonGenerator(
         val v = row.get(ordinal, dataType)
         sys.error(s"Failed to convert value $v (class of ${v.getClass}}) " +
           s"with the type of $dataType to JSON.")
+  }
+
+  private def makeReader(dataType: DataType): ValueReader = dataType match {
+
+    case TimestampType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        options.timestampFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+
+    case DateType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        options.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
+
+    case _ =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        row.get(ordinal, dataType).toString
+
   }
 
   private def writeObject(f: => Unit): Unit = {
@@ -202,14 +230,14 @@ private[sql] class JacksonGenerator(
   }
 
   private def writeMapData(
-      map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
+      map: MapData, keyReader: ValueReader, valueWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
     val valueArray = map.valueArray()
     var i = 0
     while (i < map.numElements()) {
-      gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
+      gen.writeFieldName(keyReader.apply(keyArray, i))
       if (!valueArray.isNullAt(i)) {
-        fieldWriter.apply(valueArray, i)
+        valueWriter.apply(valueArray, i)
       } else {
         gen.writeNull()
       }
@@ -249,9 +277,9 @@ private[sql] class JacksonGenerator(
    */
   def write(map: MapData): Unit = {
     writeObject(writeMapData(
-      fieldWriter = mapElementWriter,
-      map = map,
-      mapType = dataType.asInstanceOf[MapType]))
+      keyReader = mapKeyReader,
+      valueWriter = mapValueWriter,
+      map = map))
   }
 
   def writeLineEnding(): Unit = {
