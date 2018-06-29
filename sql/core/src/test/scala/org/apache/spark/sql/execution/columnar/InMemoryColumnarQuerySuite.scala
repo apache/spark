@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In, InValues}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec, WholeStageCodegenExec}
@@ -459,7 +459,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY, localTableScanExec, None,
       LocalRelation(Seq(attribute), Nil))
     val tableScanExec = InMemoryTableScanExec(Seq(attribute),
-      Seq(In(Seq(attribute), Nil)), testRelation)
+      Seq(In(InValues(Seq(attribute)), Nil)), testRelation)
     assert(tableScanExec.partitionFilters.isEmpty)
   }
 

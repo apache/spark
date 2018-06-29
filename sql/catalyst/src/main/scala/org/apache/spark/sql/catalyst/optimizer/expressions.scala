@@ -212,18 +212,18 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  * 1. Converts the predicate to false when the list is empty and
  *    the value is not nullable.
  * 2. Removes literal repetitions.
- * 3. Replaces [[In (values, seq[Literal])]] with optimized version
+ * 3. Replaces [[In (value, seq[Literal])]] with optimized version
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case i @ In(_, list) if list.isEmpty && !i.value.nullable => FalseLiteral
-      case expr @ In(_, list) if expr.inSetConvertible =>
+      case In(v, list) if list.isEmpty && !v.nullable => FalseLiteral
+      case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
         if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
-          InSet(expr.value, HashSet() ++ hSet)
+          InSet(v.valueExpression, HashSet() ++ hSet)
         } else if (newList.size < list.size) {
           expr.copy(list = newList)
         } else { // newList.length == list.length
@@ -493,7 +493,7 @@ object NullPropagation extends Rule[LogicalPlan] {
         }
 
       // If the value expression is NULL then transform the In expression to null literal.
-      case In(Seq(Literal(null, _)), _) => Literal.create(null, BooleanType)
+      case In(InValues(Seq(Literal(null, _))), _) => Literal.create(null, BooleanType)
 
       // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
       // a null literal.

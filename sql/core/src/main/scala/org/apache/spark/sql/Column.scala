@@ -795,8 +795,8 @@ class Column(val expr: Expression) extends Logging {
   @scala.annotation.varargs
   def isin(list: Any*): Column = withExpr {
     expr match {
-      case c: CreateNamedStruct => In(c.valExprs, list.map(lit(_).expr))
-      case other => In(Seq(other), list.map(lit(_).expr))
+      case c: CreateNamedStruct => In(InValues(c.valExprs), list.map(lit(_).expr))
+      case other => In(InValues(Seq(other)), list.map(lit(_).expr))
     }
   }
 

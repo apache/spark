@@ -1086,9 +1086,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case not => Not(e)
     }
 
-    def getValueExpressions(e: Expression): Seq[Expression] = e match {
-      case c: CreateNamedStruct => c.valExprs
-      case other => Seq(other)
+    def getValueExpressions(e: Expression): InValues = e match {
+      case c: CreateNamedStruct => InValues(c.valExprs)
+      case other => InValues(Seq(other))
     }
 
     // Create the predicate.

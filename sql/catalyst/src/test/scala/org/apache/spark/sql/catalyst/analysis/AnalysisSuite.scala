@@ -275,7 +275,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-8654: invalid CAST in NULL IN(...) expression") {
-    val plan = Project(Alias(In(Seq(Literal(null)), Seq(Literal(1), Literal(2))), "a")() :: Nil,
+    val plan = Project(
+      Alias(In(InValues(Seq(Literal(null))), Seq(Literal(1), Literal(2))), "a")() :: Nil,
       LocalRelation()
     )
     assertAnalysisSuccess(plan)
@@ -283,13 +284,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-8654: different types in inlist but can be converted to a common type") {
     val plan = Project(
-      Alias(In(Seq(Literal(null)), Seq(Literal(1), Literal(1.2345))), "a")() :: Nil,
+      Alias(In(InValues(Seq(Literal(null))), Seq(Literal(1), Literal(1.2345))), "a")() :: Nil,
       LocalRelation())
     assertAnalysisSuccess(plan)
   }
 
   test("SPARK-8654: check type compatibility error") {
-    val plan = Project(Alias(In(Seq(Literal(null)), Seq(Literal(true), Literal(1))), "a")() :: Nil,
+    val plan = Project(
+      Alias(In(InValues(Seq(Literal(null))), Seq(Literal(true), Literal(1))), "a")() :: Nil,
       LocalRelation()
     )
     assertAnalysisError(plan, Seq("data type mismatch: Arguments must be same type"))

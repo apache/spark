@@ -667,8 +667,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     def convert(expr: Expression): Option[String] = expr match {
-      case In(Seq(ExtractAttribute(NonVarcharAttribute(name))), ExtractableLiterals(values))
-          if useAdvanced =>
+      case In(InValues(Seq(ExtractAttribute(NonVarcharAttribute(name)))),
+          ExtractableLiterals(values)) if useAdvanced =>
         Some(convertInToOr(name, values))
 
       case InSet(ExtractAttribute(NonVarcharAttribute(name)), ExtractableValues(values))

@@ -138,6 +138,22 @@ case class Not(child: Expression)
   override def sql: String = s"(NOT ${child.sql})"
 }
 
+case class InValues(children: Seq[Expression]) extends Unevaluable {
+  @transient lazy val numValues: Int = children.length
+  @transient lazy val valueExpression: Expression = if (children.length > 1) {
+    CreateNamedStruct(children.zipWithIndex.flatMap {
+      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
+      case (v, idx) => Seq(Literal(s"_$idx"), v)
+    })
+  } else {
+    children.head
+  }
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def dataType: DataType = valueExpression.dataType
+  override def sql: String = valueExpression.sql
+  override def toString: String = valueExpression.toString
+}
+
 
 /**
  * Evaluates to `true` if `list` contains `value`.
@@ -161,18 +177,9 @@ case class Not(child: Expression)
        true
   """)
 // scalastyle:on line.size.limit
-case class In(values: Seq[Expression], list: Seq[Expression]) extends Predicate {
+case class In(value: InValues, list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
-
-  @transient lazy val value = if (values.length > 1) {
-    CreateNamedStruct(values.zipWithIndex.flatMap {
-      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
-      case (v, idx) => Seq(Literal(s"_$idx"), v)
-    })
-  } else {
-    values.head
-  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
@@ -180,19 +187,19 @@ case class In(values: Seq[Expression], list: Seq[Expression]) extends Predicate 
     if (mismatchOpt.isDefined) {
       list match {
         case ListQuery(_, _, _, childOutputs) :: Nil =>
-          if (values.length != childOutputs.length) {
+          if (value.numValues != childOutputs.length) {
             TypeCheckResult.TypeCheckFailure(
               s"""
                  |The number of columns in the left hand side of an IN subquery does not match the
                  |number of columns in the output of subquery.
-                 |#columns in left hand side: ${values.length}.
+                 |#columns in left hand side: ${value.numValues}.
                  |#columns in right hand side: ${childOutputs.length}.
                  |Left side columns:
-                 |[${values.map(_.sql).mkString(", ")}].
+                 |[${value.children.map(_.sql).mkString(", ")}].
                  |Right side columns:
                  |[${childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
           } else {
-            val mismatchedColumns = values.zip(childOutputs).flatMap {
+            val mismatchedColumns = value.children.zip(childOutputs).flatMap {
               case (l, r) if l.dataType != r.dataType =>
                 s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
               case _ => None
@@ -204,7 +211,7 @@ case class In(values: Seq[Expression], list: Seq[Expression]) extends Predicate 
                  |Mismatched columns:
                  |[${mismatchedColumns.mkString(", ")}]
                  |Left side:
-                 |[${values.map(_.dataType.catalogString).mkString(", ")}].
+                 |[${value.children.map(_.dataType.catalogString).mkString(", ")}].
                  |Right side:
                  |[${childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
           }
@@ -217,7 +224,7 @@ case class In(values: Seq[Expression], list: Seq[Expression]) extends Predicate 
     }
   }
 
-  override def children: Seq[Expression] = values ++: list
+  override def children: Seq[Expression] = value +: list
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
@@ -227,7 +234,7 @@ case class In(values: Seq[Expression], list: Seq[Expression]) extends Predicate 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
-    val evaluatedValue = value.eval(input)
+    val evaluatedValue = value.valueExpression.eval(input)
     if (evaluatedValue == null) {
       null
     } else {
@@ -250,7 +257,7 @@ case class In(values: Seq[Expression], list: Seq[Expression]) extends Predicate 
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaDataType = CodeGenerator.javaType(value.dataType)
-    val valueGen = value.genCode(ctx)
+    val valueGen = value.valueExpression.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
     // inTmpResult has 3 possible values:
     // -1 means no matches found and there is at least one value in the list evaluated to null
@@ -312,8 +319,9 @@ case class In(values: Seq[Expression], list: Seq[Expression]) extends Predicate 
   }
 
   override def sql: String = {
-    val valueSQL = value.sql
-    val listSQL = list.map(_.sql).mkString(", ")
+    val childrenSQL = children.map(_.sql)
+    val valueSQL = childrenSQL.head
+    val listSQL = childrenSQL.tail.mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
 }

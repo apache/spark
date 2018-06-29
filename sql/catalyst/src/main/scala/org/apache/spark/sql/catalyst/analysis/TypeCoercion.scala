@@ -415,42 +415,42 @@ object TypeCoercion {
       // in IN subquery.
       // LHS is the value expressions of IN subquery.
       case i @ In(lhs, Seq(ListQuery(sub, children, exprId, _)))
-        if !i.resolved && lhs.length == sub.output.length =>
+        if !i.resolved && lhs.numValues == sub.output.length =>
         // RHS is the subquery output.
         val rhs = sub.output
 
-        val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
+        val commonTypes = lhs.children.zip(rhs).flatMap { case (l, r) =>
           findCommonTypeForBinaryComparison(l.dataType, r.dataType, conf)
             .orElse(findTightestCommonType(l.dataType, r.dataType))
         }
 
         // The number of columns/expressions must match between LHS and RHS of an
         // IN subquery expression.
-        if (commonTypes.length == lhs.length) {
+        if (commonTypes.length == lhs.numValues) {
           val castedRhs = rhs.zip(commonTypes).map {
             case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
             case (e, _) => e
           }
-          val newLhs = lhs.zip(commonTypes).map {
+          val newLhsChildren = lhs.children.zip(commonTypes).map {
             case (e, dt) if e.dataType != dt => Cast(e, dt)
             case (e, _) => e
           }
 
           val newSub = Project(castedRhs, sub)
-          In(newLhs, Seq(ListQuery(newSub, children, exprId, newSub.output)))
+          In(InValues(newLhsChildren), Seq(ListQuery(newSub, children, exprId, newSub.output)))
         } else {
           i
         }
 
-      case i @ In(a, b) if b.exists(_.dataType != i.value.dataType) =>
-        findWiderCommonType(i.value.dataType +: b.map(_.dataType)) match {
-          case Some(finalDataType: StructType) if i.values.length > 1 =>
-            val newValues = a.zip(finalDataType.fields.map(_.dataType)).map {
+      case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
+        findWiderCommonType(a.dataType +: b.map(_.dataType)) match {
+          case Some(finalDataType: StructType) if a.numValues > 1 =>
+            val newValues = a.children.zip(finalDataType.fields.map(_.dataType)).map {
               case (expr, dataType) => Cast(expr, dataType)
             }
-            In(newValues, b.map(Cast(_, finalDataType)))
+            In(InValues(newValues), b.map(Cast(_, finalDataType)))
           case Some(finalDataType) =>
-            In(a.map(Cast(_, finalDataType)), b.map(Cast(_, finalDataType)))
+            In(InValues(a.children.map(Cast(_, finalDataType))), b.map(Cast(_, finalDataType)))
           case None => i
         }
     }
