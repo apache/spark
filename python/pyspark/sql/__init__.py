@@ -16,7 +16,7 @@
 #
 
 """
-Important classes of Spark SQL and DataFrames:
+Important classes of Spark SQL and DataFrames
 
     - :class:`pyspark.sql.SparkSession`
       Main entry point for :class:`DataFrame` and SQL functionality.
