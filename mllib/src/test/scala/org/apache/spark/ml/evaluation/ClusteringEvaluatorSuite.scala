@@ -19,8 +19,6 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.clustering.{KMeans, KMeansSuite}
-import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
@@ -100,27 +98,6 @@ class ClusteringEvaluatorSuite
         evaluator.evaluate(singleClusterDataset)
       }
       assert(e.getMessage.contains("Number of clusters must be greater than one"))
-    }
-  }
-
-  test("SPARK-23451: kmeansCost metric") {
-    val k = 4
-    val dataset = KMeansSuite.generateKMeansData(spark, 40, 3, k)
-      .filter(_.getAs[Vector](0).numNonzeros > 1)
-    Seq("euclidean", "cosine").foreach { distanceMeasure =>
-      val kmeans = new KMeans()
-        .setK(k)
-        .setSeed(1)
-        .setDistanceMeasure(distanceMeasure)
-      val model = kmeans.fit(dataset)
-      val predicted = model.transform(dataset)
-
-      val evaluator = new ClusteringEvaluator()
-        .setMetricName("kmeansCost")
-        .setClusterCenters(model.clusterCenters)
-        .setDistanceMeasure(distanceMeasure)
-
-      assert(evaluator.evaluate(predicted) ~== model.computeCost(dataset) relTol 1e-5)
     }
   }
 
