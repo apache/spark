@@ -19,19 +19,19 @@ package org.apache.spark.repl
 
 import java.io.BufferedReader
 
+// scalastyle:off println
+import scala.Predef.{println => _, _}
+// scalastyle:on println
 import scala.concurrent.Future
 import scala.reflect.classTag
 import scala.reflect.internal.util.ScalaClassLoader.savingContextLoader
 import scala.reflect.io.File
-import scala.tools.nsc.interpreter.StdReplTags.tagOfIMain
 import scala.tools.nsc.{GenericRunnerSettings, Properties}
-import scala.tools.nsc.interpreter.{AbstractOrMissingHandler, IMain, NamedParam, SimpleReader, SplashLoop, SplashReader, isReplDebug, isReplPower, replProps}
-
-// scalastyle:off println
-import scala.Predef.{println => _, _}
-// scalastyle:on println
 import scala.tools.nsc.Settings
-import scala.tools.nsc.interpreter.{ILoop, JPrintWriter}
+import scala.tools.nsc.interpreter.{isReplDebug, isReplPower, replProps}
+import scala.tools.nsc.interpreter.{AbstractOrMissingHandler, ILoop, IMain, JPrintWriter}
+import scala.tools.nsc.interpreter.{NamedParam, SimpleReader, SplashLoop, SplashReader}
+import scala.tools.nsc.interpreter.StdReplTags.tagOfIMain
 import scala.tools.nsc.util.stringFromStream
 import scala.util.Properties.{javaVersion, javaVmName, versionString}
 
@@ -124,6 +124,20 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     super.replay()
   }
 
+  /**
+   * The following code is mostly a copy of `process` implementation in `ILoop.scala` in Scala
+   *
+   * In newer version of Scala, `printWelcome` is the first thing to be called. As a result,
+   * SparkUI URL information would be always shown after the welcome message.
+   *
+   * However, this is inconsistent to the existing version of Spark which will always
+   * show SparkUI URL first.
+   *
+   * The only way we can make it consistent will be duplicate the Scala code.
+   *
+   * We should remove this duplication once Scala provides a way to load our custom initialization
+   * code, and also customize the ordering of printing welcome message.
+   */
   override def process(settings: Settings): Boolean = savingContextLoader {
 
     def newReader = in0.fold(chooseReader(settings))(r => SimpleReader(r, out, interactive = true))
@@ -207,9 +221,8 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
           null
         } else {
           loopPostInit()
-          // starting
-          printWelcome()
 
+          printWelcome()
           // let them start typing
           val splash = preLoop
           splash.start()
@@ -237,8 +250,6 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
         true
     }
   }
-
-
 }
 
 object SparkILoop {
