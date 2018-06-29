@@ -219,11 +219,11 @@ object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
       case In(v, list) if list.isEmpty && !v.nullable => FalseLiteral
-      case expr @ In(v, list) if expr.inSetConvertible =>
+      case expr @ In(_, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
         if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
-          InSet(v.valueExpression, HashSet() ++ hSet)
+          InSet(expr.inValues.valueExpression, HashSet() ++ hSet)
         } else if (newList.size < list.size) {
           expr.copy(list = newList)
         } else { // newList.length == list.length

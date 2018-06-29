@@ -521,7 +521,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val plan = Project(
-      Seq(a, Alias(In(InValues(Seq(a)), Seq(ListQuery(LocalRelation(b)))), "c")()),
+      Seq(a, Alias(In(a, Seq(ListQuery(LocalRelation(b)))), "c")()),
       LocalRelation(a))
     assertAnalysisError(plan, "Predicate sub-queries can only be used in a Filter" :: Nil)
   }
@@ -530,14 +530,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val c = AttributeReference("c", BooleanType)()
-    val plan1 = Filter(
-      Cast(Not(In(InValues(Seq(a)), Seq(ListQuery(LocalRelation(b))))), BooleanType),
+    val plan1 = Filter(Cast(Not(In(a, Seq(ListQuery(LocalRelation(b))))), BooleanType),
       LocalRelation(a))
     assertAnalysisError(plan1,
       "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
 
-    val plan2 = Filter(
-      Or(Not(In(InValues(Seq(a)), Seq(ListQuery(LocalRelation(b))))), c), LocalRelation(a, c))
+    val plan2 = Filter(Or(Not(In(a, Seq(ListQuery(LocalRelation(b))))), c), LocalRelation(a, c))
     assertAnalysisError(plan2,
       "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
   }

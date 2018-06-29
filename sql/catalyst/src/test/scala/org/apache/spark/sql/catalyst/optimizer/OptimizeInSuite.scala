@@ -45,9 +45,9 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: Remove deterministic repetitions") {
     val originalQuery =
       testRelation
-        .where(In(InValues(Seq(UnresolvedAttribute("a"))),
+        .where(In(UnresolvedAttribute("a"),
           Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
-        .where(In(InValues(Seq(UnresolvedAttribute("b"))),
+        .where(In(UnresolvedAttribute("b"),
           Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
             Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
             Rand(0), Rand(0))))
@@ -56,8 +56,8 @@ class OptimizeInSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(In(InValues(Seq(UnresolvedAttribute("a"))), Seq(Literal(1), Literal(2))))
-        .where(In(InValues(Seq(UnresolvedAttribute("b"))),
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("b"),
           Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
             Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
             Rand(0), Rand(0))))
@@ -69,7 +69,7 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: In clause not optimized to InSet when less than 10 items") {
     val originalQuery =
       testRelation
-        .where(In(InValues(Seq(UnresolvedAttribute("a"))), Seq(Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -79,7 +79,7 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: In clause optimized to InSet when more than 10 items") {
     val originalQuery =
       testRelation
-        .where(In(InValues(Seq(UnresolvedAttribute("a"))), (1 to 11).map(Literal(_))))
+        .where(In(UnresolvedAttribute("a"), (1 to 11).map(Literal(_))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -94,15 +94,13 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: In clause not optimized in case filter has attributes") {
     val originalQuery =
       testRelation
-        .where(In(InValues(Seq(UnresolvedAttribute("a"))),
-          Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(In(InValues(Seq(UnresolvedAttribute("a"))),
-          Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -111,7 +109,7 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: NULL IN (expr1, ..., exprN) gets transformed to Filter(null)") {
     val originalQuery =
       testRelation
-        .where(In(InValues(Seq(Literal.create(null, NullType))), Seq(Literal(1), Literal(2))))
+        .where(In(Literal.create(null, NullType), Seq(Literal(1), Literal(2))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -127,8 +125,7 @@ class OptimizeInSuite extends PlanTest {
     "list expression contains attribute)") {
     val originalQuery =
       testRelation
-        .where(In(InValues(Seq(Literal.create(null, StringType))),
-          Seq(Literal(1), UnresolvedAttribute("b"))))
+        .where(In(Literal.create(null, StringType), Seq(Literal(1), UnresolvedAttribute("b"))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -144,7 +141,7 @@ class OptimizeInSuite extends PlanTest {
     "list expression contains attribute - select)") {
     val originalQuery =
       testRelation
-        .select(In(InValues(Seq(Literal.create(null, StringType))),
+        .select(In(Literal.create(null, StringType),
         Seq(Literal(1), UnresolvedAttribute("b"))).as("a")).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -159,7 +156,7 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: Setting the threshold for turning Set into InSet.") {
     val plan =
       testRelation
-        .where(In(InValues(Seq(UnresolvedAttribute("a"))), Seq(Literal(1), Literal(2), Literal(3))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), Literal(3))))
         .analyze
 
     withSQLConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "10") {
@@ -183,7 +180,7 @@ class OptimizeInSuite extends PlanTest {
     "when value is not nullable") {
     val originalQuery =
       testRelation
-        .where(In(InValues(Seq(Literal("a"))), Nil))
+        .where(In(Literal("a"), Nil))
         .analyze
 
     val optimized = Optimize.execute(originalQuery)

@@ -27,9 +27,9 @@ class CanonicalizeSuite extends SparkFunSuite {
     val range = Range(1, 1, 1, 1)
     val idAttr = range.output.head
 
-    val in1 = In(InValues(Seq(idAttr)), Seq(Literal(1), Literal(2)))
-    val in2 = In(InValues(Seq(idAttr)), Seq(Literal(2), Literal(1)))
-    val in3 = In(InValues(Seq(idAttr)), Seq(Literal(1), Literal(2), Literal(3)))
+    val in1 = In(idAttr, Seq(Literal(1), Literal(2)))
+    val in2 = In(idAttr, Seq(Literal(2), Literal(1)))
+    val in3 = In(idAttr, Seq(Literal(1), Literal(2), Literal(3)))
 
     assert(in1.canonicalized.semanticHash() == in2.canonicalized.semanticHash())
     assert(in1.canonicalized.semanticHash() != in3.canonicalized.semanticHash())
@@ -37,11 +37,11 @@ class CanonicalizeSuite extends SparkFunSuite {
     assert(range.where(in1).sameResult(range.where(in2)))
     assert(!range.where(in1).sameResult(range.where(in3)))
 
-    val arrays1 = In(InValues(Seq(idAttr)), Seq(CreateArray(Seq(Literal(1), Literal(2))),
+    val arrays1 = In(idAttr, Seq(CreateArray(Seq(Literal(1), Literal(2))),
       CreateArray(Seq(Literal(2), Literal(1)))))
-    val arrays2 = In(InValues(Seq(idAttr)), Seq(CreateArray(Seq(Literal(2), Literal(1))),
+    val arrays2 = In(idAttr, Seq(CreateArray(Seq(Literal(2), Literal(1))),
       CreateArray(Seq(Literal(1), Literal(2)))))
-    val arrays3 = In(InValues(Seq(idAttr)), Seq(CreateArray(Seq(Literal(1), Literal(2))),
+    val arrays3 = In(idAttr, Seq(CreateArray(Seq(Literal(1), Literal(2))),
       CreateArray(Seq(Literal(3), Literal(1)))))
 
     assert(arrays1.canonicalized.semanticHash() == arrays2.canonicalized.semanticHash())

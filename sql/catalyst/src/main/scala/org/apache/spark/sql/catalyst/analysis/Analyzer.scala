@@ -145,6 +145,8 @@ class Analyzer(
       ResolveHints.RemoveAllHints),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
+    Batch("Resolve IN values", Once,
+      ResolveInValues),
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
@@ -241,6 +243,20 @@ class Analyzer(
               WindowExpression(c, windowSpecDefinition)
           }
         }
+    }
+  }
+
+  /**
+   * Substitutes In values with an instance of [[InValues]].
+   */
+  object ResolveInValues extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case q => q transformExpressions {
+        case In(value, list) if !value.isInstanceOf[InValues] => value match {
+          case c: CreateNamedStruct => In(InValues(c.valExprs), list)
+          case other => In(InValues(Seq(other)), list)
+        }
+      }
     }
   }
 
@@ -1351,9 +1367,9 @@ class Analyzer(
           val expr = resolveSubQuery(l, plans)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
-          val subqueryOutputNum = expr.asInstanceOf[ListQuery].childOutputs.length
-          if (value.numValues != subqueryOutputNum) {
-            throw new AnalysisException(s"${i.sql} has ${value.numValues} values, but the " +
+          val subqueryOutputNum = expr.plan.output.length
+          if (i.inValues.numValues != subqueryOutputNum) {
+            throw new AnalysisException(s"${i.sql} has ${i.inValues.numValues} values, but the " +
               s"subquery has $subqueryOutputNum output values.")
           }
           In(value, Seq(expr))

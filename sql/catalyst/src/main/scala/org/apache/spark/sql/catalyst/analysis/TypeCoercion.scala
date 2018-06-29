@@ -413,9 +413,10 @@ object TypeCoercion {
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      // LHS is the value expressions of IN subquery.
-      case i @ In(lhs, Seq(ListQuery(sub, children, exprId, _)))
-        if !i.resolved && lhs.numValues == sub.output.length =>
+      case i @ In(_, Seq(ListQuery(sub, children, exprId, _)))
+        if !i.resolved && i.inValues.numValues == sub.output.length =>
+        // LHS is the value expressions of IN subquery.
+        val lhs = i.inValues
         // RHS is the subquery output.
         val rhs = sub.output
 
@@ -444,7 +445,7 @@ object TypeCoercion {
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         findWiderCommonType(a.dataType +: b.map(_.dataType)) match {
-          case Some(finalDataType: StructType) if a.numValues > 1 =>
+          case Some(finalDataType: StructType) if i.inValues.numValues > 1 =>
             val newValues = a.children.zip(finalDataType.fields.map(_.dataType)).map {
               case (expr, dataType) => Cast(expr, dataType)
             }

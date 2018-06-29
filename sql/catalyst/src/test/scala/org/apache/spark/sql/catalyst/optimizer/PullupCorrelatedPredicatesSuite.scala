@@ -42,7 +42,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         .select('c)
     val outerQuery =
       testRelation
-        .where(In(InValues(Seq('a)), Seq(ListQuery(correlatedSubquery))))
+        .where(In('a, Seq(ListQuery(correlatedSubquery))))
         .select('a).analyze
     assert(outerQuery.resolved)
 

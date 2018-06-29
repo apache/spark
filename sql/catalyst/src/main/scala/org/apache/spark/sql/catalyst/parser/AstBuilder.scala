@@ -1086,11 +1086,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case not => Not(e)
     }
 
-    def getValueExpressions(e: Expression): InValues = e match {
-      case c: CreateNamedStruct => InValues(c.valExprs)
-      case other => InValues(Seq(other))
-    }
-
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1099,9 +1094,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           GreaterThanOrEqual(e, expression(ctx.lower)),
           LessThanOrEqual(e, expression(ctx.upper))))
       case SqlBaseParser.IN if ctx.query != null =>
-        invertIfNotDefined(In(getValueExpressions(e), Seq(ListQuery(plan(ctx.query)))))
+        invertIfNotDefined(In(e, Seq(ListQuery(plan(ctx.query)))))
       case SqlBaseParser.IN =>
-        invertIfNotDefined(In(getValueExpressions(e), ctx.expression.asScala.map(expression)))
+        invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
         invertIfNotDefined(Like(e, expression(ctx.pattern)))
       case SqlBaseParser.RLIKE =>
