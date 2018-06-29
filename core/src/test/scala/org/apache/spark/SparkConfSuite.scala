@@ -371,23 +371,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       assert(thrown.getMessage.contains(key))
     }
   }
-
-  test("SPARK-24566") {
-    val conf = new SparkConf()
-    conf.set("spark.storage.blockManagerSlaveTimeoutMs", "13000ms")
-    conf.set("spark.storage.blockManagerTimeoutIntervalMs", "13000ms")
-
-    val executorTimeoutMs =
-      conf.getTimeAsSeconds("spark.network.timeout",
-        s"${conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
-          "120s")}ms").seconds.toMillis
-    assert(executorTimeoutMs === 13000)
-    val checkTimeoutIntervalMs =
-      conf.getTimeAsSeconds("spark.network.timeoutInterval",
-        s"${conf.getTimeAsMs("spark.storage.blockManagerTimeoutIntervalMs",
-          "60s")}ms").seconds.toMillis
-    assert(checkTimeoutIntervalMs === 13000)
-  }
 }
 
 class Class1 {}

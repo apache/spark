@@ -21,7 +21,6 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.Future
-import scala.concurrent.duration._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
@@ -76,16 +75,15 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
   // "milliseconds"
   private val executorTimeoutMs =
-    sc.conf.getTimeAsSeconds("spark.network.timeout",
-      s"${sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
-        "120s")}ms").seconds.toMillis
+    sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
+      s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s")}s")
 
   // "spark.network.timeoutInterval" uses "seconds", while
   // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"
+  private val timeoutIntervalMs =
+    sc.conf.getTimeAsMs("spark.storage.blockManagerTimeoutIntervalMs", "60s")
   private val checkTimeoutIntervalMs =
-    sc.conf.getTimeAsSeconds("spark.network.timeoutInterval",
-      s"${sc.conf.getTimeAsMs("spark.storage.blockManagerTimeoutIntervalMs",
-        "60s")}ms").seconds.toMillis
+    sc.conf.getTimeAsSeconds("spark.network.timeoutInterval", s"${timeoutIntervalMs}ms") * 1000
 
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
