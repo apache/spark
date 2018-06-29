@@ -388,16 +388,16 @@ case class CatalogStatistics(
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
-  def toPlanStats(planOutput: Seq[Attribute], cboEnabled: Boolean): Statistics = {
-    if (cboEnabled && rowCount.isDefined) {
+  def toPlanStats(planOutput: Seq[Attribute], planStatsEnabled: Boolean): Statistics = {
+    if (planStatsEnabled && rowCount.isDefined) {
       val attrStats = AttributeMap(planOutput
         .flatMap(a => colStats.get(a.name).map(a -> _.toPlanStat(a.name, a.dataType))))
       // Estimate size as number of rows * row size.
       val size = EstimationUtils.getOutputSize(planOutput, rowCount.get, attrStats)
       Statistics(sizeInBytes = size, rowCount = rowCount, attributeStats = attrStats)
     } else {
-      // When CBO is disabled or the table doesn't have other statistics, we apply the size-only
-      // estimation strategy and only propagate sizeInBytes in statistics.
+      // When plan statistics are disabled or the table doesn't have other statistics,
+      // we apply the size-only estimation strategy and only propagate sizeInBytes in statistics.
       Statistics(sizeInBytes = sizeInBytes)
     }
   }
@@ -634,7 +634,7 @@ case class HiveTableRelation(
   )
 
   override def computeStats(): Statistics = {
-    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled))
+    tableMeta.stats.map(_.toPlanStats(output, conf.planStatsEnabled))
       .orElse(tableStats)
       .getOrElse {
       throw new IllegalStateException("table stats must be specified.")

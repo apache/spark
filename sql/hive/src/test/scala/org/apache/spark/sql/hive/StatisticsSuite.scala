@@ -55,13 +55,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       Seq(dsTbl, hiveTbl).foreach { tbl =>
         sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS")
         val catalogStats = getCatalogStatistics(tbl)
-        withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+        withSQLConf(SQLConf.CBO_ENABLED.key -> "false", SQLConf.PLAN_STATS_ENABLED.key -> "false") {
           val relationStats = spark.table(tbl).queryExecution.optimizedPlan.stats
           assert(relationStats.sizeInBytes == catalogStats.sizeInBytes)
           assert(relationStats.rowCount.isEmpty)
         }
         spark.sessionState.catalog.refreshTable(TableIdentifier(tbl))
-        withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.PLAN_STATS_ENABLED.key -> "true") {
           val relationStats = spark.table(tbl).queryExecution.optimizedPlan.stats
           // Due to compression in parquet files, in this test, file size is smaller than
           // in-memory size.

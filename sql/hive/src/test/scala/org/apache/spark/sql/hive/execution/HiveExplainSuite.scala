@@ -42,7 +42,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkKeywordsNotExist(sql(explainCostCommand),
       "Parsed Logical Plan", "Analyzed Logical Plan")
 
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.PLAN_STATS_ENABLED.key -> "true") {
       // Only has sizeInBytes before ANALYZE command
       checkKeywordsExist(sql(explainCostCommand), "sizeInBytes")
       checkKeywordsNotExist(sql(explainCostCommand), "rowCount")
@@ -54,7 +54,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     spark.sessionState.catalog.refreshTable(TableIdentifier("src"))
 
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false", SQLConf.PLAN_STATS_ENABLED.key -> "false") {
       // Don't show rowCount if cbo is disabled
       checkKeywordsExist(sql(explainCostCommand), "sizeInBytes")
       checkKeywordsNotExist(sql(explainCostCommand), "rowCount")
