@@ -37,11 +37,17 @@ if [ -z "$uidentry" ] ; then
 fi
 
 SPARK_K8S_CMD="$1"
-if [ -z "$SPARK_K8S_CMD" ]; then
-  echo "No command to execute has been provided." 1>&2
-  exit 1
-fi
-shift 1
+case "$SPARK_K8S_CMD" in
+    driver | driver-py | executor)
+      shift 1
+      ;;
+    "")
+      ;;
+    *)
+      echo "Non-spark-on-k8s command provided, proceeding in pass-through mode..."
+      exec /sbin/tini -s -- "$@"
+      ;;
+esac
 
 SPARK_CLASSPATH="$SPARK_CLASSPATH:${SPARK_HOME}/jars/*"
 env | grep SPARK_JAVA_OPT_ | sort -t_ -k4 -n | sed 's/[^=]*=\(.*\)/\1/g' > /tmp/java_opts.txt
@@ -92,7 +98,6 @@ case "$SPARK_K8S_CMD" in
       "$@" $PYSPARK_PRIMARY $PYSPARK_ARGS
     )
     ;;
-
   executor)
     CMD=(
       ${JAVA_HOME}/bin/java

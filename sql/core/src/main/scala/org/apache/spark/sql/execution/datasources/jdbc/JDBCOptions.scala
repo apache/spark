@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient private val parameters: CaseInsensitiveMap[String])
+    @transient val parameters: CaseInsensitiveMap[String])
   extends Serializable {
 
   import JDBCOptions._
@@ -65,11 +65,31 @@ class JDBCOptions(
   // Required parameters
   // ------------------------------------------------------------
   require(parameters.isDefinedAt(JDBC_URL), s"Option '$JDBC_URL' is required.")
-  require(parameters.isDefinedAt(JDBC_TABLE_NAME), s"Option '$JDBC_TABLE_NAME' is required.")
   // a JDBC URL
   val url = parameters(JDBC_URL)
-  // name of table
-  val table = parameters(JDBC_TABLE_NAME)
+  // table name or a table subquery.
+  val tableOrQuery = (parameters.get(JDBC_TABLE_NAME), parameters.get(JDBC_QUERY_STRING)) match {
+    case (Some(name), Some(subquery)) =>
+      throw new IllegalArgumentException(
+        s"Both '$JDBC_TABLE_NAME' and '$JDBC_QUERY_STRING' can not be specified at the same time."
+      )
+    case (None, None) =>
+      throw new IllegalArgumentException(
+        s"Option '$JDBC_TABLE_NAME' or '$JDBC_QUERY_STRING' is required."
+      )
+    case (Some(name), None) =>
+      if (name.isEmpty) {
+        throw new IllegalArgumentException(s"Option '$JDBC_TABLE_NAME' can not be empty.")
+      } else {
+        name.trim
+      }
+    case (None, Some(subquery)) =>
+      if (subquery.isEmpty) {
+        throw new IllegalArgumentException(s"Option `$JDBC_QUERY_STRING` can not be empty.")
+      } else {
+        s"(${subquery}) __SPARK_GEN_JDBC_SUBQUERY_NAME_${curId.getAndIncrement()}"
+      }
+  }
 
   // ------------------------------------------------------------
   // Optional parameters
@@ -109,6 +129,20 @@ class JDBCOptions(
     s"When reading JDBC data sources, users need to specify all or none for the following " +
       s"options: '$JDBC_PARTITION_COLUMN', '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', " +
       s"and '$JDBC_NUM_PARTITIONS'")
+
+  require(!(parameters.get(JDBC_QUERY_STRING).isDefined && partitionColumn.isDefined),
+    s"""
+       |Options '$JDBC_QUERY_STRING' and '$JDBC_PARTITION_COLUMN' can not be specified together.
+       |Please define the query using `$JDBC_TABLE_NAME` option instead and make sure to qualify
+       |the partition columns using the supplied subquery alias to resolve any ambiguity.
+       |Example :
+       |spark.read.format("jdbc")
+       |        .option("dbtable", "(select c1, c2 from t1) as subq")
+       |        .option("partitionColumn", "subq.c1"
+       |        .load()
+     """.stripMargin
+  )
+
   val fetchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
     require(size >= 0,
@@ -149,7 +183,30 @@ class JDBCOptions(
   val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
 }
 
+class JdbcOptionsInWrite(
+    @transient override val parameters: CaseInsensitiveMap[String])
+  extends JDBCOptions(parameters) {
+
+  import JDBCOptions._
+
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
+
+  def this(url: String, table: String, parameters: Map[String, String]) = {
+    this(CaseInsensitiveMap(parameters ++ Map(
+      JDBCOptions.JDBC_URL -> url,
+      JDBCOptions.JDBC_TABLE_NAME -> table)))
+  }
+
+  require(
+    parameters.get(JDBC_TABLE_NAME).isDefined,
+    s"Option '$JDBC_TABLE_NAME' is required. " +
+      s"Option '$JDBC_QUERY_STRING' is not applicable while writing.")
+
+  val table = parameters(JDBC_TABLE_NAME)
+}
+
 object JDBCOptions {
+  private val curId = new java.util.concurrent.atomic.AtomicLong(0L)
   private val jdbcOptionNames = collection.mutable.Set[String]()
 
   private def newOption(name: String): String = {
@@ -159,6 +216,7 @@ object JDBCOptions {
 
   val JDBC_URL = newOption("url")
   val JDBC_TABLE_NAME = newOption("dbtable")
+  val JDBC_QUERY_STRING = newOption("query")
   val JDBC_DRIVER_CLASS = newOption("driver")
   val JDBC_PARTITION_COLUMN = newOption("partitionColumn")
   val JDBC_LOWER_BOUND = newOption("lowerBound")
