@@ -126,6 +126,8 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       assert(summary.predictions.columns.contains(c))
     }
     assert(summary.cluster.columns === Array(predictionColName))
+    assert(summary.trainingCost < 0.1)
+    assert(model.computeCost(dataset) == summary.trainingCost)
     val clusterSizes = summary.clusterSizes
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)

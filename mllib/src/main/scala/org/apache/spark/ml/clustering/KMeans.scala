@@ -142,10 +142,10 @@ class KMeansModel private[ml] (
    * model on the given data.
    *
    * @deprecated This method is deprecated and will be removed in 3.0.0. Use ClusteringEvaluator
-   *             instead.
+   *             instead. You can also get the cost on the training dataset in the summary.
    */
-  @deprecated("This method is deprecated and will be removed in 3.0.0." +
-    " Use ClusteringEvaluator instead.", "2.4.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.Use ClusteringEvaluator " +
+    "instead. You can also get the cost on the training dataset in the summary.", "2.4.0")
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
@@ -336,7 +336,7 @@ class KMeans @Since("1.5.0") (
     val parentModel = algo.run(instances, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k), parentModel.trainingCost)
 
     model.setSummary(Some(summary))
     instr.logSuccess(model)
@@ -367,6 +367,8 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param trainingCost K-means cost (sum of squared distances to the nearest centroid for all
+ *                     points in the training dataset). This is equivalent to sklearn's inertia.
  */
 @Since("2.0.0")
 @Experimental
@@ -374,4 +376,6 @@ class KMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
+    k: Int,
+    @Since("2.4.0") val trainingCost: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k)

@@ -348,7 +348,7 @@ class KMeans private (
 
     logInfo(s"The cost is $cost.")
 
-    new KMeansModel(centers.map(_.vector), distanceMeasure)
+    new KMeansModel(centers.map(_.vector), distanceMeasure, cost)
   }
 
   /**
