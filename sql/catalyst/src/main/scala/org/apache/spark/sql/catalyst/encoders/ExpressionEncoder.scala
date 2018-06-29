@@ -43,17 +43,12 @@ import org.apache.spark.util.Utils
  *    to the name `value`.
  */
 object ExpressionEncoder {
-  def apply[T : TypeTag](): ExpressionEncoder[T] = apply(topLevel = true)
-
-  /**
-   * @param topLevel whether the encoders to construct are for top-level row.
-   */
-  def apply[T : TypeTag](topLevel: Boolean): ExpressionEncoder[T] = {
+  def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = ScalaReflection.mirror
     val tpe = typeTag[T].in(mirror).tpe
 
-    if (topLevel && ScalaReflection.optionOfProductType(tpe)) {
+    if (ScalaReflection.optionOfProductType(tpe)) {
       throw new UnsupportedOperationException(
         "Cannot create encoder for Option of Product type, because Product type is represented " +
           "as a row, and the entire row can not be null in Spark SQL like normal databases. " +
