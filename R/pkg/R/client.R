@@ -61,6 +61,11 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
 }
 
 checkJavaVersion <- function() {
+  if (is_windows()) {
+    # See SPARK-24535
+    return(NULL)
+  }
+
   javaBin <- "java"
   javaHome <- Sys.getenv("JAVA_HOME")
   javaReqs <- utils::packageDescription(utils::packageName(), fields = c("SystemRequirements"))
@@ -93,6 +98,7 @@ checkJavaVersion <- function() {
     stop(paste("Java version", sparkJavaVersion, "is required for this package; found version:",
                javaVersionStr))
   }
+  return(javaVersionNum)
 }
 
 launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
