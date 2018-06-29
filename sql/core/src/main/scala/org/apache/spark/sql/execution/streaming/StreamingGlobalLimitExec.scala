@@ -25,19 +25,22 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.state.StateStoreOps
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{LongType, NullType, StructField, StructType}
 import org.apache.spark.util.CompletionIterator
 
 /**
  * A physical operator for executing a streaming limit, which makes sure no more than streamLimit
- * rows are returned.
+ * rows are returned. This operator is meant for streams in Append mode only.
  */
 case class StreamingGlobalLimitExec(
     streamLimit: Long,
     child: SparkPlan,
-    stateInfo: Option[StatefulOperatorStateInfo] = None)
+    stateInfo: Option[StatefulOperatorStateInfo] = None,
+    outputMode: Option[OutputMode] = None)
   extends UnaryExecNode with StateStoreWriter {
 
   private val keySchema = StructType(Array(StructField("key", NullType)))
@@ -46,13 +49,16 @@ case class StreamingGlobalLimitExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
+    assert(outputMode.isDefined && outputMode.get == InternalOutputModes.Append,
+      "StreamingGlobalLimitExec is only valid for streams in Append output mode")
+
     child.execute().mapPartitionsWithStateStore(
-      getStateInfo,
-      keySchema,
-      valueSchema,
-      indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+        getStateInfo,
+        keySchema,
+        valueSchema,
+        indexOrdinal = None,
+        sqlContext.sessionState,
+        Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
       val key = UnsafeProjection.create(keySchema)(new GenericInternalRow(Array[Any](null)))
       val numOutputRows = longMetric("numOutputRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")

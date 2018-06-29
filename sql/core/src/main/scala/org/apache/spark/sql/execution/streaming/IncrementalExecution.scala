@@ -60,7 +60,7 @@ class IncrementalExecution(
       FlatMapGroupsWithStateStrategy ::
       StreamingRelationStrategy ::
       StreamingDeduplicationStrategy ::
-      StreamingGlobalLimitStrategy :: Nil
+      StreamingGlobalLimitStrategy(outputMode) :: Nil
   }
 
   private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
@@ -138,7 +138,10 @@ class IncrementalExecution(
               Some(offsetSeqMetadata.batchWatermarkMs))
         )
 
-      case l: StreamingGlobalLimitExec => l.copy(stateInfo = Some(nextStatefulOperationStateInfo))
+      case l: StreamingGlobalLimitExec =>
+        l.copy(
+        stateInfo = Some(nextStatefulOperationStateInfo),
+        outputMode = Some(outputMode))
     }
   }
 

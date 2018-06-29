@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -34,7 +35,7 @@ import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlanV2
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -357,13 +358,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   /**
    * Used to plan the streaming global limit operator.
    */
-  object StreamingGlobalLimitStrategy extends Strategy {
+  case class StreamingGlobalLimitStrategy(outputMode: OutputMode) extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
-        case Limit(IntegerLiteral(limit), child) if plan.isStreaming =>
+        case Limit(IntegerLiteral(limit), child)
+            if plan.isStreaming && outputMode == InternalOutputModes.Append =>
           StreamingGlobalLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
         case _ => Nil
       }
+      case Limit(IntegerLiteral(limit), child)
+          if plan.isStreaming && outputMode == InternalOutputModes.Append =>
+        StreamingGlobalLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
       case _ => Nil
     }
   }
