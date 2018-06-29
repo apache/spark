@@ -137,7 +137,7 @@ class IncrementalExecution(
               Some(offsetSeqMetadata.batchWatermarkMs))
         )
 
-      case l: StreamingLimitExec => l.copy(stateInfo = Some(nextStatefulOperationStateInfo))
+      case l: StreamingGlobalLimitExec => l.copy(stateInfo = Some(nextStatefulOperationStateInfo))
     }
   }
 

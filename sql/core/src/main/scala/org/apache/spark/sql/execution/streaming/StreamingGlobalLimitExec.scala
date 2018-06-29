@@ -34,7 +34,7 @@ import org.apache.spark.util.CompletionIterator
  * A physical operator for executing a streaming limit, which makes sure no more than streamLimit
  * rows are returned.
  */
-case class StreamingLimitExec(
+case class StreamingGlobalLimitExec(
     streamLimit: Long,
     child: SparkPlan,
     stateInfo: Option[StatefulOperatorStateInfo] = None)
