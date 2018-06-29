@@ -371,9 +371,9 @@ class ColumnPruningSuite extends PlanTest {
 
   test("SPARK-24696 ColumnPruning rule fails to remove extra Project") {
     val input = LocalRelation('key.int, 'value.string)
-    val query = input.select('key).where('key > 1).where('key < 10).analyze
+    val query = input.select('key).where(rand(0L) > 0.5).where('key < 10).analyze
     val optimized = Optimize.execute(query)
-    val expected = input.where('key > 1).where('key < 10).select('key).analyze
+    val expected = input.where(rand(0L) > 0.5).where('key < 10).select('key).analyze
     comparePlans(optimized, expected)
   }
 
