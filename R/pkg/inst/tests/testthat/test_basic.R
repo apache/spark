@@ -20,7 +20,7 @@ context("basic tests for CRAN")
 test_that("create DataFrame from list or data.frame", {
   tryCatch( if (is.null(checkJavaVersion())) { skip("Windows") },
             error = function(e) { skip("error on Java check") },
-            warning = function(e) { skip("warning on Java check") } })
+            warning = function(e) { skip("warning on Java check") } )
 
   sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE,
                  sparkConfig = sparkRTestConfig)
@@ -56,7 +56,7 @@ test_that("create DataFrame from list or data.frame", {
 test_that("spark.glm and predict", {
   tryCatch( if (is.null(checkJavaVersion())) { skip("Windows") },
             error = function(e) { skip("error on Java check") },
-            warning = function(e) { skip("warning on Java check") } })
+            warning = function(e) { skip("warning on Java check") } )
 
   sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE,
                  sparkConfig = sparkRTestConfig)
