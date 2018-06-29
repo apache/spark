@@ -1173,7 +1173,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[Cast]] expression.
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
-    Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType))
+    typedVisit[DataType](ctx.dataType) match {
+      case t: CharType =>
+        validate(t.length > 0, s"Char length ${t.length} is out of range [1, 255]", ctx)
+        Substring(Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType)),
+          Literal(1), Literal(t.length))
+      case t: VarcharType =>
+        validate(t.length > 0, s"VarChar length ${t.length} is out of range [1, 65535]", ctx)
+        Substring(Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType)),
+          Literal(1), Literal(t.length))
+      case _ =>
+        Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType))
+    }
   }
 
   /**

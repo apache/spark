@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -2790,6 +2791,42 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         assert(sql("desc t").select("col_name")
           .as[String].collect().mkString(",").contains("i,p,j"))
       }
+    }
+  }
+
+  test("`Cast` to CHAR/VARCHAR should truncate the values") {
+    withTable("t") {
+      val m = intercept[ParseException] {
+        sql("SELECT CAST('abc' AS CHAR(0))")
+      }.getMessage
+      assert(m.contains("Char length 0 is out of range [1, 255]"))
+
+      val m2 = intercept[ParseException] {
+        sql("SELECT CAST('abc' AS VARCHAR(0))")
+      }.getMessage
+      assert(m2.contains("VarChar length 0 is out of range [1, 65535]"))
+
+      checkAnswer(
+        sql("SELECT CAST('abc' AS CHAR(2)), CAST('abc' AS CHAR(4))"),
+        Row("ab", "abc"))
+
+      sql("CREATE TABLE t(a STRING) USING PARQUET")
+      sql("INSERT INTO t VALUES ('abc')")
+      sql("INSERT INTO t VALUES (null)")
+
+      checkAnswer(
+        sql("SELECT CAST(a AS CHAR(2)), CAST(a AS CHAR(3)), CAST(a AS CHAR(4)) FROM t"),
+        Row("ab", "abc", "abc") :: Row(null, null, null) :: Nil)
+
+      sql(
+        """
+          |CREATE TABLE t_ctas
+          |USING ORC
+          |AS SELECT CAST(a AS CHAR(2)) c1, CAST(a AS CHAR(3)) c2, CAST(a AS CHAR(4)) c3 FROM t
+        """.stripMargin)
+      checkAnswer(
+        sql("SELECT * FROM t_ctas"),
+        Row("ab", "abc", "abc") :: Row(null, null, null) :: Nil)
     }
   }
 }
