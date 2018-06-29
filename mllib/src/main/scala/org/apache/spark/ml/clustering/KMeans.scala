@@ -144,7 +144,7 @@ class KMeansModel private[ml] (
    * @deprecated This method is deprecated and will be removed in 3.0.0. Use ClusteringEvaluator
    *             instead. You can also get the cost on the training dataset in the summary.
    */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.Use ClusteringEvaluator " +
+  @deprecated("This method is deprecated and will be removed in 3.0.0. Use ClusteringEvaluator " +
     "instead. You can also get the cost on the training dataset in the summary.", "2.4.0")
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {

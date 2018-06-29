@@ -62,8 +62,8 @@ class ClusteringEvaluatorSuite
   */
   test("squared euclidean Silhouette") {
     val evaluator = new ClusteringEvaluator()
-      .setFeaturesCol("features")
-      .setPredictionCol("label")
+        .setFeaturesCol("features")
+        .setPredictionCol("label")
 
     assert(evaluator.evaluate(irisDataset) ~== 0.6564679231 relTol 1e-5)
   }
