@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -368,6 +367,14 @@ class ColumnPruningSuite extends PlanTest {
     val optimized2 = Optimize.execute(query2.analyze)
     val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a)).select('a as 'aa)
     comparePlans(optimized2, expected2.analyze)
+  }
+
+  test("SPARK-24696 ColumnPruning rule fails to remove extra Project") {
+    val input = LocalRelation('key.int, 'value.string)
+    val query = input.select('key).where(rand(0L) > 0.5).where('key < 10).analyze
+    val optimized = Optimize.execute(query)
+    val expected = input.where(rand(0L) > 0.5).where('key < 10).select('key).analyze
+    comparePlans(optimized, expected)
   }
 
   // todo: add more tests for column pruning
