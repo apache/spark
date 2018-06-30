@@ -178,6 +178,62 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+  test(s"filter pushdown - ByteType") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toByte)))) { implicit df =>
+      assert(df.schema.head.dataType === ByteType)
+      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
+
+      checkFilterPredicate('_1 === 1.toByte, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 <=> 1.toByte, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 =!= 1.toByte, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
+
+      checkFilterPredicate('_1 < 2.toByte, classOf[Lt[_]], 1)
+      checkFilterPredicate('_1 > 3.toByte, classOf[Gt[_]], 4)
+      checkFilterPredicate('_1 <= 1.toByte, classOf[LtEq[_]], 1)
+      checkFilterPredicate('_1 >= 4.toByte, classOf[GtEq[_]], 4)
+
+      checkFilterPredicate(Literal(1.toByte) === '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(1.toByte) <=> '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(2.toByte) > '_1, classOf[Lt[_]], 1)
+      checkFilterPredicate(Literal(3.toByte) < '_1, classOf[Gt[_]], 4)
+      checkFilterPredicate(Literal(1.toByte) >= '_1, classOf[LtEq[_]], 1)
+      checkFilterPredicate(Literal(4.toByte) <= '_1, classOf[GtEq[_]], 4)
+
+      checkFilterPredicate(!('_1 < 4.toByte), classOf[GtEq[_]], 4)
+      checkFilterPredicate('_1 < 2.toByte || '_1 > 3.toByte,
+        classOf[Operators.Or], Seq(Row(1), Row(4)))
+    }
+  }
+
+  test(s"filter pushdown - ShortType") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toShort)))) { implicit df =>
+      assert(df.schema.head.dataType === ShortType)
+      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
+
+      checkFilterPredicate('_1 === 1.toShort, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 <=> 1.toShort, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 =!= 1.toShort, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
+
+      checkFilterPredicate('_1 < 2.toShort, classOf[Lt[_]], 1)
+      checkFilterPredicate('_1 > 3.toShort, classOf[Gt[_]], 4)
+      checkFilterPredicate('_1 <= 1.toShort, classOf[LtEq[_]], 1)
+      checkFilterPredicate('_1 >= 4.toShort, classOf[GtEq[_]], 4)
+
+      checkFilterPredicate(Literal(1.toShort) === '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(1.toShort) <=> '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(2.toShort) > '_1, classOf[Lt[_]], 1)
+      checkFilterPredicate(Literal(3.toShort) < '_1, classOf[Gt[_]], 4)
+      checkFilterPredicate(Literal(1.toShort) >= '_1, classOf[LtEq[_]], 1)
+      checkFilterPredicate(Literal(4.toShort) <= '_1, classOf[GtEq[_]], 4)
+
+      checkFilterPredicate(!('_1 < 4.toShort), classOf[GtEq[_]], 4)
+      checkFilterPredicate('_1 < 2.toShort || '_1 > 3.toShort,
+        classOf[Operators.Or], Seq(Row(1), Row(4)))
+    }
+  }
+
   test("filter pushdown - integer") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
