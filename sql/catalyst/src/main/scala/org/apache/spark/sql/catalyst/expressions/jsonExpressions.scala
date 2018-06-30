@@ -777,9 +777,9 @@ object JsonExprUtils {
     case e @ SchemaOfJson(_: Literal) =>
       val ddlSchema = e.eval().asInstanceOf[UTF8String]
       DataType.fromDDL(ddlSchema.toString)
-    case e => throw new AnalysisException(s"""
-      |Schema should be specified in DDL format as a string literal
-      |or output of the schema_of_json function instead of $e""".stripMargin)
+    case e => throw new AnalysisException(
+      "Schema should be specified in DDL format as a string literal" +
+      s" or output of the schema_of_json function instead of $e")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
