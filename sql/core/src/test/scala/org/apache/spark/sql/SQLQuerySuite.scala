@@ -2785,4 +2785,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-24696 ColumnPruning rule fails to remove extra Project") {
+    withTable("fact_stats", "dim_stats") {
+      val factData = Seq((1, 1, 99, 1), (2, 2, 99, 2), (3, 1, 99, 3), (4, 2, 99, 4))
+      val storeData = Seq((1, "BW", "DE"), (2, "AZ", "US"))
+      spark.udf.register("filterND", udf((value: Int) => value > 2).asNondeterministic)
+      factData.toDF("date_id", "store_id", "product_id", "units_sold")
+        .write.mode("overwrite").partitionBy("store_id").format("parquet").saveAsTable("fact_stats")
+      storeData.toDF("store_id", "state_province", "country")
+        .write.mode("overwrite").format("parquet").saveAsTable("dim_stats")
+      val df = sql(
+        """
+          |SELECT f.date_id, f.product_id, f.store_id FROM
+          |(SELECT date_id, product_id, store_id
+          |   FROM fact_stats WHERE filterND(date_id)) AS f
+          |JOIN dim_stats s
+          |ON f.store_id = s.store_id WHERE s.country = 'DE'
+        """.stripMargin)
+      checkAnswer(df, Seq(Row(3, 99, 1)))
+    }
+  }
 }
