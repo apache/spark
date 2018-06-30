@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql
 
-import java.io.FileNotFoundException
+import java.io.{File, FileNotFoundException}
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -201,5 +203,214 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         assert(exception.getMessage().contains("does not exist"))
       }
     }
+  }
+
+  // Unsupported data types of csv, json, orc, and parquet are as follows;
+  //  csv -> R/W: Interval, Null, Array, Map, Struct
+  //  json -> W: Interval
+  //  orc -> W: Interval, Null
+  //  parquet -> R/W: Interval, Null
+  test("SPARK-24204 error handling for unsupported Array/Map/Struct types - csv") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      var msg = intercept[UnsupportedOperationException] {
+        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b)").write.csv(csvDir)
+      }.getMessage
+      assert(msg.contains("CSV data source does not support struct<a:int,b:string> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        val schema = StructType.fromDDL("a struct<b: Int>")
+        spark.range(1).write.mode("overwrite").csv(csvDir)
+        spark.read.schema(schema).csv(csvDir).collect()
+      }.getMessage
+      assert(msg.contains("CSV data source does not support struct<b:int> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.mode("overwrite").csv(csvDir)
+      }.getMessage
+      assert(msg.contains("CSV data source does not support map<string,int> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        val schema = StructType.fromDDL("a map<int, int>")
+        spark.range(1).write.mode("overwrite").csv(csvDir)
+        spark.read.schema(schema).csv(csvDir).collect()
+      }.getMessage
+      assert(msg.contains("CSV data source does not support map<int,int> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands")
+          .write.mode("overwrite").csv(csvDir)
+      }.getMessage
+      assert(msg.contains("CSV data source does not support array<string> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+         val schema = StructType.fromDDL("a array<int>")
+         spark.range(1).write.mode("overwrite").csv(csvDir)
+         spark.read.schema(schema).csv(csvDir).collect()
+       }.getMessage
+      assert(msg.contains("CSV data source does not support array<int> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
+          .write.mode("overwrite").csv(csvDir)
+      }.getMessage
+      assert(msg.contains("CSV data source does not support array<double> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
+        spark.range(1).write.mode("overwrite").csv(csvDir)
+        spark.read.schema(schema).csv(csvDir).collect()
+      }.getMessage
+      assert(msg.contains("CSV data source does not support array<double> data type."))
+    }
+  }
+
+  test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+
+      // write path
+      Seq("csv", "json", "parquet", "orc").foreach { format =>
+        var msg = intercept[AnalysisException] {
+          sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.contains("Cannot save interval data type into external storage."))
+
+        msg = intercept[UnsupportedOperationException] {
+          spark.udf.register("testType", () => new IntervalData())
+          sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support calendarinterval data type."))
+      }
+
+      // read path
+      Seq("parquet", "csv").foreach { format =>
+        var msg = intercept[UnsupportedOperationException] {
+          val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+          spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+          spark.read.schema(schema).format(format).load(tempDir).collect()
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support calendarinterval data type."))
+
+        msg = intercept[UnsupportedOperationException] {
+          val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
+          spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+          spark.read.schema(schema).format(format).load(tempDir).collect()
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support calendarinterval data type."))
+      }
+
+      // We expect the types below should be passed for backward-compatibility
+      Seq("orc", "json").foreach { format =>
+        // Interval type
+        var schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
+
+        // UDT having interval data
+        schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
+      }
+    }
+  }
+
+  test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+
+      Seq("orc").foreach { format =>
+        // write path
+        var msg = intercept[UnsupportedOperationException] {
+          sql("select null").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support null data type."))
+
+        msg = intercept[UnsupportedOperationException] {
+          spark.udf.register("testType", () => new NullData())
+          sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support null data type."))
+
+        // read path
+        // We expect the types below should be passed for backward-compatibility
+
+        // Null type
+        var schema = StructType(StructField("a", NullType, true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
+
+        // UDT having null data
+        schema = StructType(StructField("a", new NullUDT(), true) :: Nil)
+        spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+        spark.read.schema(schema).format(format).load(tempDir).collect()
+      }
+
+      Seq("parquet", "csv").foreach { format =>
+        // write path
+        var msg = intercept[UnsupportedOperationException] {
+          sql("select null").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support null data type."))
+
+        msg = intercept[UnsupportedOperationException] {
+          spark.udf.register("testType", () => new NullData())
+          sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support null data type."))
+
+        // read path
+        msg = intercept[UnsupportedOperationException] {
+          val schema = StructType(StructField("a", NullType, true) :: Nil)
+          spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+          spark.read.schema(schema).format(format).load(tempDir).collect()
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support null data type."))
+
+        msg = intercept[UnsupportedOperationException] {
+          val schema = StructType(StructField("a", new NullUDT(), true) :: Nil)
+          spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+          spark.read.schema(schema).format(format).load(tempDir).collect()
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"$format data source does not support null data type."))
+      }
+    }
+  }
+}
+
+object TestingUDT {
+
+  @SQLUserDefinedType(udt = classOf[IntervalUDT])
+  class IntervalData extends Serializable
+
+  class IntervalUDT extends UserDefinedType[IntervalData] {
+
+    override def sqlType: DataType = CalendarIntervalType
+    override def serialize(obj: IntervalData): Any =
+      throw new NotImplementedError("Not implemented")
+    override def deserialize(datum: Any): IntervalData =
+      throw new NotImplementedError("Not implemented")
+    override def userClass: Class[IntervalData] = classOf[IntervalData]
+  }
+
+  @SQLUserDefinedType(udt = classOf[NullUDT])
+  private[sql] class NullData extends Serializable
+
+  private[sql] class NullUDT extends UserDefinedType[NullData] {
+
+    override def sqlType: DataType = NullType
+    override def serialize(obj: NullData): Any = throw new NotImplementedError("Not implemented")
+    override def deserialize(datum: Any): NullData =
+      throw new NotImplementedError("Not implemented")
+    override def userClass: Class[NullData] = classOf[NullData]
   }
 }

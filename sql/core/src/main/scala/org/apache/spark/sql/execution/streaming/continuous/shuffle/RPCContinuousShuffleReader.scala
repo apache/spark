@@ -46,7 +46,7 @@ private[shuffle] case class ReceiverEpochMarker(writerId: Int) extends RPCContin
  * TODO: Support multiple source tasks. We need to output a single epoch marker once all
  * source tasks have sent one.
  */
-private[shuffle] class RPCContinuousShuffleReader(
+private[continuous] class RPCContinuousShuffleReader(
       queueSize: Int,
       numShuffleWriters: Int,
       epochIntervalMs: Long,
@@ -107,7 +107,7 @@ private[shuffle] class RPCContinuousShuffleReader(
               }
               logWarning(
                 s"Completion service failed to make progress after $epochIntervalMs ms. Waiting " +
-                  s"for writers $writerIdsUncommitted to send epoch markers.")
+                  s"for writers ${writerIdsUncommitted.mkString(",")} to send epoch markers.")
 
             // The completion service guarantees this future will be available immediately.
             case future => future.get() match {

@@ -1362,6 +1362,23 @@ class PersistenceTest(SparkSessionTestCase):
         except OSError:
             pass
 
+    def test_linear_regression_pmml_basic(self):
+        # Most of the validation is done in the Scala side, here we just check
+        # that we output text rather than parquet (e.g. that the format flag
+        # was respected).
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LinearRegression(maxIter=1)
+        model = lr.fit(df)
+        path = tempfile.mkdtemp()
+        lr_path = path + "/lr-pmml"
+        model.write().format("pmml").save(lr_path)
+        pmml_text_list = self.sc.textFile(lr_path).collect()
+        pmml_text = "\n".join(pmml_text_list)
+        self.assertIn("Apache Spark", pmml_text)
+        self.assertIn("PMML", pmml_text)
+
     def test_logistic_regression(self):
         lr = LogisticRegression(maxIter=1)
         path = tempfile.mkdtemp()

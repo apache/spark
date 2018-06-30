@@ -1479,6 +1479,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds1.schema == ds2.schema)
     checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
   }
+
+  test("SPARK-24571: filtering of string values by char literal") {
+    val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
+    checkAnswer(df.where('city === 'X'), Seq(Row("X")))
+    checkAnswer(
+      df.where($"city".contains(new java.lang.Character('A'))),
+      Seq(Row("Amsterdam")))
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
