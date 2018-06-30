@@ -93,7 +93,8 @@ class SQLContext(object):
         """
         return self._jsqlContext
 
-    def conf(self):
+    @property
+    def _conf(self):
         """Get SQLConf from current SqlContext"""
         return self.sparkSession._jsparkSession.sessionState().conf()
 
