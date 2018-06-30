@@ -24,4 +24,8 @@ fi
 # disable randomized hash for string in Python 3.3+
 export PYTHONHASHSEED=0
 
+#spark-submit最终调用的是spark-class脚本
+#传入的类是org.apache.spark.deploy.SparkSubmit
+#及其它传入的参数，如deploy mode、executor-memory等
+
 exec "${SPARK_HOME}"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"
