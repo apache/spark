@@ -28,7 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType}
 import org.apache.spark.util.{Benchmark, Utils}
 
 /**
@@ -274,7 +274,7 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
     }
   }
 
-  ignore("Pushdown benchmark for Decimal") {
+  ignore(s"Pushdown benchmark for ${DecimalType.simpleString}") {
     withTempPath { dir =>
       Seq(
         s"decimal(${Decimal.MAX_INT_DIGITS}, 2)",
@@ -288,8 +288,7 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
           saveAsTable(df, dir)
 
           Seq(s"value = $mid").foreach { whereExpr =>
-            val title = s"$dt: " +
-              s"Select 1 $dt row ($whereExpr)".replace("value AND value", "value")
+            val title = s"Select 1 $dt row ($whereExpr)".replace("value AND value", "value")
             filterPushDownBenchmark(numRows, title, whereExpr)
           }
 
@@ -297,7 +296,7 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
           Seq(10, 50, 90).foreach { percent =>
             filterPushDownBenchmark(
               numRows,
-              s"$dt: Select $percent% $dt rows (value < ${numRows * percent / 100})",
+              s"Select $percent% $dt rows (value < ${numRows * percent / 100})",
               s"value < ${numRows * percent / 100}",
               selectExpr
             )
@@ -319,6 +318,36 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
             val title = s"InSet -> InFilters (values count: $count, distribution: $distribution)"
             filterPushDownBenchmark(numRows, title, whereExpr)
           }
+        }
+      }
+    }
+  }
+
+  ignore(s"Pushdown benchmark for ${ByteType.simpleString}") {
+    withTempPath { dir =>
+      val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
+      val df = spark.range(numRows).selectExpr(columns: _*)
+        .withColumn("value", (monotonically_increasing_id() % Byte.MaxValue).cast(ByteType))
+        .orderBy("value")
+      withTempTable("orcTable", "patquetTable") {
+        saveAsTable(df, dir)
+
+        Seq(s"value = CAST(${Byte.MaxValue / 2} AS ${ByteType.simpleString})")
+          .foreach { whereExpr =>
+            val title = s"Select 1 ${ByteType.simpleString} row ($whereExpr)"
+              .replace("value AND value", "value")
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+
+        val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
+        Seq(10, 50, 90).foreach { percent =>
+          filterPushDownBenchmark(
+            numRows,
+            s"Select $percent% ${ByteType.simpleString} rows " +
+              s"(value < CAST(${Byte.MaxValue * percent / 100} AS ${ByteType.simpleString}))",
+            s"value < CAST(${Byte.MaxValue * percent / 100} AS ${ByteType.simpleString})",
+            selectExpr
+          )
         }
       }
     }
