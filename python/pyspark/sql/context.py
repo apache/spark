@@ -93,6 +93,10 @@ class SQLContext(object):
         """
         return self._jsqlContext
 
+    def conf(self):
+        """Get SQLConf from current SqlContext"""
+        return self.sparkSession._jsparkSession.sessionState().conf()
+
     @classmethod
     @since(1.6)
     def getOrCreate(cls, sc):
