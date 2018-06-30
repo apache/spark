@@ -234,8 +234,6 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
 
   ignore("Pushdown for many distinct value case") {
     withTempPath { dir =>
-      val mid = numRows / 2
-
       withTempTable("orcTable", "patquetTable") {
         Seq(true, false).foreach { useStringForValue =>
           prepareTable(dir, numRows, width, useStringForValue)
@@ -262,7 +260,6 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
 
   ignore("Pushdown benchmark for StringStartsWith") {
     withTempPath { dir =>
-      val mid = numRows / 2
       withTempTable("orcTable", "patquetTable") {
         prepareTable(dir, numRows, width, true)
         Seq(
@@ -279,8 +276,6 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
 
   ignore("Pushdown benchmark for Decimal") {
     withTempPath { dir =>
-      val mid = numRows / 2
-
       Seq(
         s"decimal(${Decimal.MAX_INT_DIGITS}, 2)",
         s"decimal(${Decimal.MAX_LONG_DIGITS}, 2)",
@@ -314,15 +309,14 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
 
   ignore("Pushdown benchmark for InSet -> InFilters") {
     withTempPath { dir =>
-      val mid = numRows / 2
       withTempTable("orcTable", "patquetTable") {
         prepareTable(dir, numRows, width, false)
-        Seq(1, 10, 50, 100).foreach { number =>
-          Seq(10, 50, 90).foreach { distribute =>
+        Seq(5, 10, 50, 100).foreach { count =>
+          Seq(10, 50, 90).foreach { distribution =>
             val filter =
-              Range(0, number).map(r => scala.util.Random.nextInt(numRows * distribute / 100))
+              Range(0, count).map(r => scala.util.Random.nextInt(numRows * distribution / 100))
             val whereExpr = s"value in(${filter.mkString(",")})"
-            val title = s"InSet -> InFilters filter: ($number, $distribute)"
+            val title = s"InSet -> InFilters (values count: $count, distribution: $distribution)"
             filterPushDownBenchmark(numRows, title, whereExpr)
           }
         }
