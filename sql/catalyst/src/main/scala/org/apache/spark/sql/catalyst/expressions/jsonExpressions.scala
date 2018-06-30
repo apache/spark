@@ -528,7 +528,7 @@ case class JsonToStructs(
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression) =
     this(
-      schema = JsonExprUtils.validateSchemaLiteral(schema),
+      schema = JsonExprUtils.evalSchemaExpr(schema),
       options = Map.empty[String, String],
       child = child,
       timeZoneId = None,
@@ -536,7 +536,7 @@ case class JsonToStructs(
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
-      schema = JsonExprUtils.validateSchemaLiteral(schema),
+      schema = JsonExprUtils.evalSchemaExpr(schema),
       options = JsonExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None,
@@ -772,9 +772,14 @@ case class SchemaOfJson(child: Expression)
 
 object JsonExprUtils {
 
-  def validateSchemaLiteral(exp: Expression): DataType = exp match {
+  def evalSchemaExpr(exp: Expression): DataType = exp match {
     case Literal(s, StringType) => DataType.fromDDL(s.toString)
-    case e => throw new AnalysisException(s"Expected a string literal instead of $e")
+    case e @ SchemaOfJson(_: Literal) =>
+      val ddlSchema = e.eval().asInstanceOf[UTF8String]
+      DataType.fromDDL(ddlSchema.toString)
+    case e => throw new AnalysisException(s"""
+      |Schema should be specified in DDL format as a string literal
+      |or output of the schema_of_json function instead of $e""".stripMargin)
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
