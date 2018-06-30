@@ -16,21 +16,25 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Comparator
+import java.util.{Comparator, TimeZone}
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -67,37 +71,61 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
 
 
 /**
- * Given an array or map, returns its size. Returns -1 if null.
+ * Given an array or map, returns total number of elements in it.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the size of an array or a map. Returns -1 if null.",
+  usage = """
+    _FUNC_(expr) - Returns the size of an array or a map.
+    The function returns -1 if its input is null and spark.sql.legacy.sizeOfNull is set to true.
+    If spark.sql.legacy.sizeOfNull is set to false, the function returns null for null input.
+    By default, the spark.sql.legacy.sizeOfNull parameter is set to true.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
        4
+      > SELECT _FUNC_(map('a', 1, 'b', 2));
+       2
+      > SELECT _FUNC_(NULL);
+       -1
   """)
-case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Size(
+    child: Expression,
+    legacySizeOfNull: Boolean)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  def this(child: Expression) =
+    this(
+      child,
+      legacySizeOfNull = SQLConf.get.getConf(SQLConf.LEGACY_SIZE_OF_NULL))
+
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
-  override def nullable: Boolean = false
+  override def nullable: Boolean = if (legacySizeOfNull) false else super.nullable
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
-      -1
+      if (legacySizeOfNull) -1 else null
     } else child.dataType match {
       case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
       case _: MapType => value.asInstanceOf[MapData].numElements()
+      case other => throw new UnsupportedOperationException(
+        s"The size function doesn't support the operand type ${other.getClass.getCanonicalName}")
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childGen = child.genCode(ctx)
-    ev.copy(code = code"""
+    if (legacySizeOfNull) {
+      val childGen = child.genCode(ctx)
+      ev.copy(code = code"""
       boolean ${ev.isNull} = false;
       ${childGen.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
         (${childGen.value}).numElements();""", isNull = FalseLiteral)
+    } else {
+      defineCodeGen(ctx, ev, c => s"($c).numElements()")
+    }
   }
 }
 
@@ -200,7 +228,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
       """.stripMargin
     }
 
-    val splittedGetValuesAndCardinalities = ctx.splitExpressions(
+    val splittedGetValuesAndCardinalities = ctx.splitExpressionsWithCurrentInputs(
       expressions = getValuesAndCardinalities,
       funcName = "getValuesAndCardinalities",
       returnType = "int",
@@ -210,7 +238,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
           |return $biggestCardinality;
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"$biggestCardinality = $funcCall;").mkString("\n"),
-      arguments =
+      extraArguments =
         ("ArrayData[]", arrVals) ::
         ("int", biggestCardinality) :: Nil)
 
@@ -474,6 +502,223 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
 
   override def prettyName: String = "map_entries"
 }
+
+/**
+ * Returns a map created from the given array of entries.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(arrayOfEntries) - Returns a map created from the given array of entries.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
+       {1:"a",2:"b"}
+  """,
+  since = "2.4.0")
+case class MapFromEntries(child: Expression) extends UnaryExpression {
+
+  @transient
+  private lazy val dataTypeDetails: Option[(MapType, Boolean, Boolean)] = child.dataType match {
+    case ArrayType(
+      StructType(Array(
+        StructField(_, keyType, keyNullable, _),
+        StructField(_, valueType, valueNullable, _))),
+      containsNull) => Some((MapType(keyType, valueType, valueNullable), keyNullable, containsNull))
+    case _ => None
+  }
+
+  private def nullEntries: Boolean = dataTypeDetails.get._3
+
+  override def nullable: Boolean = child.nullable || nullEntries
+
+  override def dataType: MapType = dataTypeDetails.get._1
+
+  override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
+    case Some(_) => TypeCheckResult.TypeCheckSuccess
+    case None => TypeCheckResult.TypeCheckFailure(s"'${child.sql}' is of " +
+      s"${child.dataType.simpleString} type. $prettyName accepts only arrays of pair structs.")
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    val arrayData = input.asInstanceOf[ArrayData]
+    val numEntries = arrayData.numElements()
+    var i = 0
+    if(nullEntries) {
+      while (i < numEntries) {
+        if (arrayData.isNullAt(i)) return null
+        i += 1
+      }
+    }
+    val keyArray = new Array[AnyRef](numEntries)
+    val valueArray = new Array[AnyRef](numEntries)
+    i = 0
+    while (i < numEntries) {
+      val entry = arrayData.getStruct(i, 2)
+      val key = entry.get(0, dataType.keyType)
+      if (key == null) {
+        throw new RuntimeException("The first field from a struct (key) can't be null.")
+      }
+      keyArray.update(i, key)
+      val value = entry.get(1, dataType.valueType)
+      valueArray.update(i, value)
+      i += 1
+    }
+    ArrayBasedMapData(keyArray, valueArray)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val numEntries = ctx.freshName("numEntries")
+      val isKeyPrimitive = CodeGenerator.isPrimitiveType(dataType.keyType)
+      val isValuePrimitive = CodeGenerator.isPrimitiveType(dataType.valueType)
+      val code = if (isKeyPrimitive && isValuePrimitive) {
+        genCodeForPrimitiveElements(ctx, c, ev.value, numEntries)
+      } else {
+        genCodeForAnyElements(ctx, c, ev.value, numEntries)
+      }
+      ctx.nullArrayElementsSaveExec(nullEntries, ev.isNull, c) {
+        s"""
+           |final int $numEntries = $c.numElements();
+           |$code
+         """.stripMargin
+      }
+    })
+  }
+
+  private def genCodeForAssignmentLoop(
+      ctx: CodegenContext,
+      childVariable: String,
+      mapData: String,
+      numEntries: String,
+      keyAssignment: (String, String) => String,
+      valueAssignment: (String, String) => String): String = {
+    val entry = ctx.freshName("entry")
+    val i = ctx.freshName("idx")
+
+    val nullKeyCheck = if (dataTypeDetails.get._2) {
+      s"""
+         |if ($entry.isNullAt(0)) {
+         |  throw new RuntimeException("The first field from a struct (key) can't be null.");
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    s"""
+       |for (int $i = 0; $i < $numEntries; $i++) {
+       |  InternalRow $entry = $childVariable.getStruct($i, 2);
+       |  $nullKeyCheck
+       |  ${keyAssignment(CodeGenerator.getValue(entry, dataType.keyType, "0"), i)}
+       |  ${valueAssignment(entry, i)}
+       |}
+     """.stripMargin
+  }
+
+  private def genCodeForPrimitiveElements(
+      ctx: CodegenContext,
+      childVariable: String,
+      mapData: String,
+      numEntries: String): String = {
+    val byteArraySize = ctx.freshName("byteArraySize")
+    val keySectionSize = ctx.freshName("keySectionSize")
+    val valueSectionSize = ctx.freshName("valueSectionSize")
+    val data = ctx.freshName("byteArray")
+    val unsafeMapData = ctx.freshName("unsafeMapData")
+    val keyArrayData = ctx.freshName("keyArrayData")
+    val valueArrayData = ctx.freshName("valueArrayData")
+
+    val baseOffset = Platform.BYTE_ARRAY_OFFSET
+    val keySize = dataType.keyType.defaultSize
+    val valueSize = dataType.valueType.defaultSize
+    val kByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $keySize)"
+    val vByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $valueSize)"
+    val keyTypeName = CodeGenerator.primitiveTypeName(dataType.keyType)
+    val valueTypeName = CodeGenerator.primitiveTypeName(dataType.valueType)
+
+    val keyAssignment = (key: String, idx: String) => s"$keyArrayData.set$keyTypeName($idx, $key);"
+    val valueAssignment = (entry: String, idx: String) => {
+      val value = CodeGenerator.getValue(entry, dataType.valueType, "1")
+      val valueNullUnsafeAssignment = s"$valueArrayData.set$valueTypeName($idx, $value);"
+      if (dataType.valueContainsNull) {
+        s"""
+           |if ($entry.isNullAt(1)) {
+           |  $valueArrayData.setNullAt($idx);
+           |} else {
+           |  $valueNullUnsafeAssignment
+           |}
+         """.stripMargin
+      } else {
+        valueNullUnsafeAssignment
+      }
+    }
+    val assignmentLoop = genCodeForAssignmentLoop(
+      ctx,
+      childVariable,
+      mapData,
+      numEntries,
+      keyAssignment,
+      valueAssignment
+    )
+
+    s"""
+       |final long $keySectionSize = $kByteSize;
+       |final long $valueSectionSize = $vByteSize;
+       |final long $byteArraySize = 8 + $keySectionSize + $valueSectionSize;
+       |if ($byteArraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+       |  ${genCodeForAnyElements(ctx, childVariable, mapData, numEntries)}
+       |} else {
+       |  final byte[] $data = new byte[(int)$byteArraySize];
+       |  UnsafeMapData $unsafeMapData = new UnsafeMapData();
+       |  Platform.putLong($data, $baseOffset, $keySectionSize);
+       |  Platform.putLong($data, ${baseOffset + 8}, $numEntries);
+       |  Platform.putLong($data, ${baseOffset + 8} + $keySectionSize, $numEntries);
+       |  $unsafeMapData.pointTo($data, $baseOffset, (int)$byteArraySize);
+       |  ArrayData $keyArrayData = $unsafeMapData.keyArray();
+       |  ArrayData $valueArrayData = $unsafeMapData.valueArray();
+       |  $assignmentLoop
+       |  $mapData = $unsafeMapData;
+       |}
+     """.stripMargin
+  }
+
+  private def genCodeForAnyElements(
+      ctx: CodegenContext,
+      childVariable: String,
+      mapData: String,
+      numEntries: String): String = {
+    val keys = ctx.freshName("keys")
+    val values = ctx.freshName("values")
+    val mapDataClass = classOf[ArrayBasedMapData].getName()
+
+    val isValuePrimitive = CodeGenerator.isPrimitiveType(dataType.valueType)
+    val valueAssignment = (entry: String, idx: String) => {
+      val value = CodeGenerator.getValue(entry, dataType.valueType, "1")
+      if (dataType.valueContainsNull && isValuePrimitive) {
+        s"$values[$idx] = $entry.isNullAt(1) ? null : (Object)$value;"
+      } else {
+        s"$values[$idx] = $value;"
+      }
+    }
+    val keyAssignment = (key: String, idx: String) => s"$keys[$idx] = $key;"
+    val assignmentLoop = genCodeForAssignmentLoop(
+      ctx,
+      childVariable,
+      mapData,
+      numEntries,
+      keyAssignment,
+      valueAssignment)
+
+    s"""
+       |final Object[] $keys = new Object[$numEntries];
+       |final Object[] $values = new Object[$numEntries];
+       |$assignmentLoop
+       |$mapData = $mapDataClass.apply($keys, $values);
+     """.stripMargin
+  }
+
+  override def prettyName: String = "map_from_entries"
+}
+
 
 /**
  * Common base class for [[SortArray]] and [[ArraySort]].
@@ -1404,6 +1649,7 @@ case class ArrayJoin(
 
   override def dataType: DataType = StringType
 
+  override def prettyName: String = "array_join"
 }
 
 /**
@@ -1990,22 +2236,8 @@ case class Flatten(child: Expression) extends UnaryExpression {
       } else {
         genCodeForFlattenOfNonPrimitiveElements(ctx, c, ev.value)
       }
-      if (childDataType.containsNull) nullElementsProtection(ev, c, code) else code
+      ctx.nullArrayElementsSaveExec(childDataType.containsNull, ev.isNull, c)(code)
     })
-  }
-
-  private def nullElementsProtection(
-      ev: ExprCode,
-      childVariableName: String,
-      coreLogic: String): String = {
-    s"""
-    |for (int z = 0; !${ev.isNull} && z < $childVariableName.numElements(); z++) {
-    |  ${ev.isNull} |= $childVariableName.isNullAt(z);
-    |}
-    |if (!${ev.isNull}) {
-    |  $coreLogic
-    |}
-    """.stripMargin
   }
 
   private def genCodeForNumberOfElements(
@@ -2083,6 +2315,401 @@ case class Flatten(child: Expression) extends UnaryExpression {
   }
 
   override def prettyName: String = "flatten"
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(start, stop, step) - Generates an array of elements from start to stop (inclusive),
+      incrementing by step. The type of the returned elements is the same as the type of argument
+      expressions.
+
+      Supported types are: byte, short, integer, long, date, timestamp.
+
+      The start and stop expressions must resolve to the same type.
+      If start and stop expressions resolve to the 'date' or 'timestamp' type
+      then the step expression must resolve to the 'interval' type, otherwise to the same type
+      as the start and stop expressions.
+  """,
+  arguments = """
+    Arguments:
+      * start - an expression. The start of the range.
+      * stop - an expression. The end the range (inclusive).
+      * step - an optional expression. The step of the range.
+          By default step is 1 if start is less than or equal to stop, otherwise -1.
+          For the temporal sequences it's 1 day and -1 day respectively.
+          If start is greater than stop then the step must be negative, and vice versa.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1, 5);
+       [1, 2, 3, 4, 5]
+      > SELECT _FUNC_(5, 1);
+       [5, 4, 3, 2, 1]
+      > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval 1 month);
+       [2018-01-01, 2018-02-01, 2018-03-01]
+  """,
+  since = "2.4.0"
+)
+case class Sequence(
+    start: Expression,
+    stop: Expression,
+    stepOpt: Option[Expression],
+    timeZoneId: Option[String] = None)
+  extends Expression
+  with TimeZoneAwareExpression {
+
+  import Sequence._
+
+  def this(start: Expression, stop: Expression) =
+    this(start, stop, None, None)
+
+  def this(start: Expression, stop: Expression, step: Expression) =
+    this(start, stop, Some(step), None)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Some(timeZoneId))
+
+  override def children: Seq[Expression] = Seq(start, stop) ++ stepOpt
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  override lazy val dataType: ArrayType = ArrayType(start.dataType, containsNull = false)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val startType = start.dataType
+    def stepType = stepOpt.get.dataType
+    val typesCorrect =
+      startType.sameType(stop.dataType) &&
+        (startType match {
+          case TimestampType | DateType =>
+            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType)
+          case _: IntegralType =>
+            stepOpt.isEmpty || stepType.sameType(startType)
+          case _ => false
+        })
+
+    if (typesCorrect) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName only supports integral, timestamp or date types")
+    }
+  }
+
+  def coercibleChildren: Seq[Expression] = children.filter(_.dataType != CalendarIntervalType)
+
+  def castChildrenTo(widerType: DataType): Expression = Sequence(
+    Cast(start, widerType),
+    Cast(stop, widerType),
+    stepOpt.map(step => if (step.dataType != CalendarIntervalType) Cast(step, widerType) else step),
+    timeZoneId)
+
+  private lazy val impl: SequenceImpl = dataType.elementType match {
+    case iType: IntegralType =>
+      type T = iType.InternalType
+      val ct = ClassTag[T](iType.tag.mirror.runtimeClass(iType.tag.tpe))
+      new IntegralSequenceImpl(iType)(ct, iType.integral)
+
+    case TimestampType =>
+      new TemporalSequenceImpl[Long](LongType, 1, identity, timeZone)
+
+    case DateType =>
+      new TemporalSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, timeZone)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val startVal = start.eval(input)
+    if (startVal == null) return null
+    val stopVal = stop.eval(input)
+    if (stopVal == null) return null
+    val stepVal = stepOpt.map(_.eval(input)).getOrElse(impl.defaultStep(startVal, stopVal))
+    if (stepVal == null) return null
+
+    ArrayData.toArrayData(impl.eval(startVal, stopVal, stepVal))
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val startGen = start.genCode(ctx)
+    val stopGen = stop.genCode(ctx)
+    val stepGen = stepOpt.map(_.genCode(ctx)).getOrElse(
+      impl.defaultStep.genCode(ctx, startGen, stopGen))
+
+    val resultType = CodeGenerator.javaType(dataType)
+    val resultCode = {
+      val arr = ctx.freshName("arr")
+      val arrElemType = CodeGenerator.javaType(dataType.elementType)
+      s"""
+         |final $arrElemType[] $arr = null;
+         |${impl.genCode(ctx, startGen.value, stopGen.value, stepGen.value, arr, arrElemType)}
+         |${ev.value} = UnsafeArrayData.fromPrimitiveArray($arr);
+       """.stripMargin
+    }
+
+    if (nullable) {
+      val nullSafeEval =
+        startGen.code + ctx.nullSafeExec(start.nullable, startGen.isNull) {
+          stopGen.code + ctx.nullSafeExec(stop.nullable, stopGen.isNull) {
+            stepGen.code + ctx.nullSafeExec(stepOpt.exists(_.nullable), stepGen.isNull) {
+              s"""
+                 |${ev.isNull} = false;
+                 |$resultCode
+               """.stripMargin
+            }
+          }
+        }
+      ev.copy(code =
+        code"""
+           |boolean ${ev.isNull} = true;
+           |$resultType ${ev.value} = null;
+           |$nullSafeEval
+         """.stripMargin)
+
+    } else {
+      ev.copy(code =
+        code"""
+           |${startGen.code}
+           |${stopGen.code}
+           |${stepGen.code}
+           |$resultType ${ev.value} = null;
+           |$resultCode
+         """.stripMargin,
+        isNull = FalseLiteral)
+    }
+  }
+}
+
+object Sequence {
+
+  private type LessThanOrEqualFn = (Any, Any) => Boolean
+
+  private class DefaultStep(lteq: LessThanOrEqualFn, stepType: DataType, one: Any) {
+    private val negativeOne = UnaryMinus(Literal(one)).eval()
+
+    def apply(start: Any, stop: Any): Any = {
+      if (lteq(start, stop)) one else negativeOne
+    }
+
+    def genCode(ctx: CodegenContext, startGen: ExprCode, stopGen: ExprCode): ExprCode = {
+      val Seq(oneVal, negativeOneVal) = Seq(one, negativeOne).map(Literal(_).genCode(ctx).value)
+      ExprCode.forNonNullValue(JavaCode.expression(
+        s"${startGen.value} <= ${stopGen.value} ? $oneVal : $negativeOneVal",
+        stepType))
+    }
+  }
+
+  private trait SequenceImpl {
+    def eval(start: Any, stop: Any, step: Any): Any
+
+    def genCode(
+        ctx: CodegenContext,
+        start: String,
+        stop: String,
+        step: String,
+        arr: String,
+        elemType: String): String
+
+    val defaultStep: DefaultStep
+  }
+
+  private class IntegralSequenceImpl[T: ClassTag]
+    (elemType: IntegralType)(implicit num: Integral[T]) extends SequenceImpl {
+
+    override val defaultStep: DefaultStep = new DefaultStep(
+      (elemType.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      elemType,
+      num.one)
+
+    override def eval(input1: Any, input2: Any, input3: Any): Array[T] = {
+      import num._
+
+      val start = input1.asInstanceOf[T]
+      val stop = input2.asInstanceOf[T]
+      val step = input3.asInstanceOf[T]
+
+      var i: Int = getSequenceLength(start, stop, step)
+      val arr = new Array[T](i)
+      while (i > 0) {
+        i -= 1
+        arr(i) = start + step * num.fromInt(i)
+      }
+      arr
+    }
+
+    override def genCode(
+        ctx: CodegenContext,
+        start: String,
+        stop: String,
+        step: String,
+        arr: String,
+        elemType: String): String = {
+      val i = ctx.freshName("i")
+      s"""
+         |${genSequenceLengthCode(ctx, start, stop, step, i)}
+         |$arr = new $elemType[$i];
+         |while ($i > 0) {
+         |  $i--;
+         |  $arr[$i] = ($elemType) ($start + $step * $i);
+         |}
+         """.stripMargin
+    }
+  }
+
+  private class TemporalSequenceImpl[T: ClassTag]
+      (dt: IntegralType, scale: Long, fromLong: Long => T, timeZone: TimeZone)
+      (implicit num: Integral[T]) extends SequenceImpl {
+
+    override val defaultStep: DefaultStep = new DefaultStep(
+      (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      CalendarIntervalType,
+      new CalendarInterval(0, MICROS_PER_DAY))
+
+    private val backedSequenceImpl = new IntegralSequenceImpl[T](dt)
+    private val microsPerMonth = 28 * CalendarInterval.MICROS_PER_DAY
+
+    override def eval(input1: Any, input2: Any, input3: Any): Array[T] = {
+      val start = input1.asInstanceOf[T]
+      val stop = input2.asInstanceOf[T]
+      val step = input3.asInstanceOf[CalendarInterval]
+      val stepMonths = step.months
+      val stepMicros = step.microseconds
+
+      if (stepMonths == 0) {
+        backedSequenceImpl.eval(start, stop, fromLong(stepMicros / scale))
+
+      } else {
+        // To estimate the resulted array length we need to make assumptions
+        // about a month length in microseconds
+        val intervalStepInMicros = stepMicros + stepMonths * microsPerMonth
+        val startMicros: Long = num.toLong(start) * scale
+        val stopMicros: Long = num.toLong(stop) * scale
+        val maxEstimatedArrayLength =
+          getSequenceLength(startMicros, stopMicros, intervalStepInMicros)
+
+        val stepSign = if (stopMicros > startMicros) +1 else -1
+        val exclusiveItem = stopMicros + stepSign
+        val arr = new Array[T](maxEstimatedArrayLength)
+        var t = startMicros
+        var i = 0
+
+        while (t < exclusiveItem ^ stepSign < 0) {
+          arr(i) = fromLong(t / scale)
+          t = timestampAddInterval(t, stepMonths, stepMicros, timeZone)
+          i += 1
+        }
+
+        // truncate array to the correct length
+        if (arr.length == i) arr else arr.slice(0, i)
+      }
+    }
+
+    override def genCode(
+        ctx: CodegenContext,
+        start: String,
+        stop: String,
+        step: String,
+        arr: String,
+        elemType: String): String = {
+      val stepMonths = ctx.freshName("stepMonths")
+      val stepMicros = ctx.freshName("stepMicros")
+      val stepScaled = ctx.freshName("stepScaled")
+      val intervalInMicros = ctx.freshName("intervalInMicros")
+      val startMicros = ctx.freshName("startMicros")
+      val stopMicros = ctx.freshName("stopMicros")
+      val arrLength = ctx.freshName("arrLength")
+      val stepSign = ctx.freshName("stepSign")
+      val exclusiveItem = ctx.freshName("exclusiveItem")
+      val t = ctx.freshName("t")
+      val i = ctx.freshName("i")
+      val genTimeZone = ctx.addReferenceObj("timeZone", timeZone, classOf[TimeZone].getName)
+
+      val sequenceLengthCode =
+        s"""
+           |final long $intervalInMicros = $stepMicros + $stepMonths * ${microsPerMonth}L;
+           |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
+          """.stripMargin
+
+      val timestampAddIntervalCode =
+        s"""
+           |$t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
+           |  $t, $stepMonths, $stepMicros, $genTimeZone);
+          """.stripMargin
+
+      s"""
+         |final int $stepMonths = $step.months;
+         |final long $stepMicros = $step.microseconds;
+         |
+         |if ($stepMonths == 0) {
+         |  final $elemType $stepScaled = ($elemType) ($stepMicros / ${scale}L);
+         |  ${backedSequenceImpl.genCode(ctx, start, stop, stepScaled, arr, elemType)};
+         |
+         |} else {
+         |  final long $startMicros = $start * ${scale}L;
+         |  final long $stopMicros = $stop * ${scale}L;
+         |
+         |  $sequenceLengthCode
+         |
+         |  final int $stepSign = $stopMicros > $startMicros ? +1 : -1;
+         |  final long $exclusiveItem = $stopMicros + $stepSign;
+         |
+         |  $arr = new $elemType[$arrLength];
+         |  long $t = $startMicros;
+         |  int $i = 0;
+         |
+         |  while ($t < $exclusiveItem ^ $stepSign < 0) {
+         |    $arr[$i] = ($elemType) ($t / ${scale}L);
+         |    $timestampAddIntervalCode
+         |    $i += 1;
+         |  }
+         |
+         |  if ($arr.length > $i) {
+         |    $arr = java.util.Arrays.copyOf($arr, $i);
+         |  }
+         |}
+         """.stripMargin
+    }
+  }
+
+  private def getSequenceLength[U](start: U, stop: U, step: U)(implicit num: Integral[U]): Int = {
+    import num._
+    require(
+      (step > num.zero && start <= stop)
+        || (step < num.zero && start >= stop)
+        || (step == num.zero && start == stop),
+      s"Illegal sequence boundaries: $start to $stop by $step")
+
+    val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / step.toLong
+
+    require(
+      len <= MAX_ROUNDED_ARRAY_LENGTH,
+      s"Too long sequence: $len. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
+
+    len.toInt
+  }
+
+  private def genSequenceLengthCode(
+      ctx: CodegenContext,
+      start: String,
+      stop: String,
+      step: String,
+      len: String): String = {
+    val longLen = ctx.freshName("longLen")
+    s"""
+       |if (!(($step > 0 && $start <= $stop) ||
+       |  ($step < 0 && $start >= $stop) ||
+       |  ($step == 0 && $start == $stop))) {
+       |  throw new IllegalArgumentException(
+       |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
+       |}
+       |long $longLen = $stop == $start ? 1L : 1L + ((long) $stop - $start) / $step;
+       |if ($longLen > $MAX_ROUNDED_ARRAY_LENGTH) {
+       |  throw new IllegalArgumentException(
+       |    "Too long sequence: " + $longLen + ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH");
+       |}
+       |int $len = (int) $longLen;
+       """.stripMargin
+  }
 }
 
 /**

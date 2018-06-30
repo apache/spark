@@ -88,7 +88,7 @@ case class ForeachWriterFactory[T](
   extends DataWriterFactory[InternalRow] {
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): ForeachDataWriter[T] = {
     new ForeachDataWriter(writer, rowConverter, partitionId, epochId)
   }

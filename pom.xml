@@ -155,7 +155,7 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.11.8</scala.version>
+    <scala.version>2.11.12</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.6.7</fasterxml.jackson.version>
@@ -740,13 +740,13 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
-        <version>1.0.4</version>
+        <version>1.1.0</version>
       </dependency>
       <!-- SPARK-16770 affecting Scala 2.11.x -->
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
-        <version>2.12.1</version>
+        <version>2.14.3</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
@@ -2755,7 +2755,7 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.4</scala.version>
+        <scala.version>2.12.6</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>

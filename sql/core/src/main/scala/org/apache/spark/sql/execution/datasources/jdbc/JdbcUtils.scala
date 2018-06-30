@@ -67,7 +67,7 @@ object JdbcUtils extends Logging {
   /**
    * Returns true if the table already exists in the JDBC database.
    */
-  def tableExists(conn: Connection, options: JDBCOptions): Boolean = {
+  def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
     val dialect = JdbcDialects.get(options.url)
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
@@ -100,7 +100,7 @@ object JdbcUtils extends Logging {
   /**
    * Truncates a table from the JDBC database without side effects.
    */
-  def truncateTable(conn: Connection, options: JDBCOptions): Unit = {
+  def truncateTable(conn: Connection, options: JdbcOptionsInWrite): Unit = {
     val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
@@ -255,7 +255,7 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(options.url)
 
     try {
-      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.table))
+      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(statement.executeQuery(), dialect))
@@ -809,7 +809,7 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      options: JDBCOptions): Unit = {
+      options: JdbcOptionsInWrite): Unit = {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
@@ -838,7 +838,7 @@ object JdbcUtils extends Logging {
   def createTable(
       conn: Connection,
       df: DataFrame,
-      options: JDBCOptions): Unit = {
+      options: JdbcOptionsInWrite): Unit = {
     val strSchema = schemaString(
       df, options.url, options.createTableColumnTypes)
     val table = options.table
