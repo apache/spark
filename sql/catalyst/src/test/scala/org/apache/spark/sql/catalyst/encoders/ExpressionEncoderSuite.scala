@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ClosureCleaner
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
@@ -202,13 +202,14 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
   encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
-  productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
+  productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0)))
 
   productTest(
     OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true))))
+      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))),
+      Some(new CalendarInterval(2, 0))))
 
-  productTest(OptionalData(None, None, None, None, None, None, None, None))
+  productTest(OptionalData(None, None, None, None, None, None, None, None, None))
 
   encodeDecodeTest(Seq(Some(1), None), "Option in array")
   encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map")
@@ -217,9 +218,10 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
   productTest(BoxedData(null, null, null, null, null, null, null))
 
-  productTest(RepeatedStruct(PrimitiveData(1, 1, 1, 1, 1, 1, true) :: Nil))
+  productTest(RepeatedStruct(PrimitiveData(1, 1, 1, 1, 1, 1, true,
+    new CalendarInterval(2, 0)) :: Nil))
 
-  productTest((1, "test", PrimitiveData(1, 1, 1, 1, 1, 1, true)))
+  productTest((1, "test", PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))))
 
   productTest(
     RepeatedData(
@@ -227,7 +229,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       Seq(new Integer(1), null, new Integer(2)),
       Map(1 -> 2L),
       Map(1 -> null),
-      PrimitiveData(1, 1, 1, 1, 1, 1, true)))
+      PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))))
 
   productTest(NestedArray(Array(Array(1, -2, 3), null, Array(4, 5, -6))))
 
@@ -275,17 +277,17 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     ExpressionEncoder.tuple(ExpressionEncoder[Int], ExpressionEncoder[Long]))
 
   encodeDecodeTest(
-    (PrimitiveData(1, 1, 1, 1, 1, 1, true), (3, 30L)),
+    (PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0)), (3, 30L)),
     "tuple with 2 product encoders")(
     ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData], ExpressionEncoder[(Int, Long)]))
 
   encodeDecodeTest(
-    (PrimitiveData(1, 1, 1, 1, 1, 1, true), 3),
+    (PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0)), 3),
     "tuple with flat encoder and product encoder")(
     ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData], ExpressionEncoder[Int]))
 
   encodeDecodeTest(
-    (3, PrimitiveData(1, 1, 1, 1, 1, 1, true)),
+    (3, PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))),
     "tuple with product encoder and flat encoder")(
     ExpressionEncoder.tuple(ExpressionEncoder[Int], ExpressionEncoder[PrimitiveData]))
 
