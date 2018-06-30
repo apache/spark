@@ -149,7 +149,7 @@ package object dsl {
       }
     }
 
-    def rand(e: Long): Expression = Rand(Literal.create(e, LongType))
+    def rand(e: Long): Expression = Rand(e)
     def sum(e: Expression): Expression = Sum(e).toAggregateExpression()
     def sumDistinct(e: Expression): Expression = Sum(e).toAggregateExpression(isDistinct = true)
     def count(e: Expression): Expression = Count(e).toAggregateExpression()
