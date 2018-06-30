@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
