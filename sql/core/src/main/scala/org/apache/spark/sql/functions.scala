@@ -3382,6 +3382,31 @@ object functions {
   }
 
   /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column): Column = withExpr {
+    new JsonToStructs(e.expr, schema.expr)
+  }
+
+  /**
+   * Parses a column containing a JSON string and infers its schema.
+   *
+   * @param e a string column containing JSON data.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def schema_of_json(e: Column): Column = withExpr(new SchemaOfJson(e.expr))
+
+  /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
    * a `MapType` or `ArrayType` of `MapType`s into a JSON string with the specified schema.
    * Throws an exception, in the case of an unsupported type.
