@@ -706,4 +706,11 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       assert(schemaToCompare == schema)
     }
   }
+
+  test("infer schema of json strings") {
+    checkEvaluation(SchemaOfJson(Literal.create("""{"col":0}""")), "struct<col:bigint>")
+    checkEvaluation(
+      SchemaOfJson(Literal.create("""{"col0":["a"], "col1": {"col2": "b"}}""")),
+      "struct<col0:array<string>,col1:struct<col2:string>>")
+  }
 }
