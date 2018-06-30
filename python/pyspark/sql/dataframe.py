@@ -354,29 +354,12 @@ class DataFrame(object):
         else:
             print(self._jdf.showString(n, int(truncate), vertical))
 
-    @property
-    def _eager_eval(self):
-        """Returns true if the eager evaluation enabled.
-        """
-        return self.sql_ctx.conf().isReplEagerEvalEnabled()
-
-    @property
-    def _max_num_rows(self):
-        """Returns the max row number for eager evaluation.
-        """
-        return self.sql_ctx.conf().replEagerEvalMaxNumRows()
-
-    @property
-    def _truncate(self):
-        """Returns the truncate length for eager evaluation.
-        """
-        return self.sql_ctx.conf().replEagerEvalTruncate()
-
     def __repr__(self):
-        if not self._support_repr_html and self._eager_eval:
+        if not self._support_repr_html and self.sql_ctx.conf().isReplEagerEvalEnabled():
             vertical = False
             return self._jdf.showString(
-                self._max_num_rows, self._truncate, vertical)
+                self.sql_ctx.conf().replEagerEvalMaxNumRows(),
+                self.sql_ctx.conf().replEagerEvalTruncate(), vertical)
         else:
             return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
@@ -388,10 +371,10 @@ class DataFrame(object):
         import cgi
         if not self._support_repr_html:
             self._support_repr_html = True
-        if self._eager_eval:
-            max_num_rows = max(self._max_num_rows, 0)
+        if self.sql_ctx.conf().isReplEagerEvalEnabled():
+            max_num_rows = max(self.sql_ctx.conf().replEagerEvalMaxNumRows(), 0)
             sock_info = self._jdf.getRowsToPython(
-                max_num_rows, self._truncate)
+                max_num_rows, self.sql_ctx.conf().replEagerEvalTruncate())
             rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
             head = rows[0]
             row_data = rows[1:]
