@@ -45,7 +45,7 @@ private[sql] class JacksonGenerator(
 
   // A `ValueReader` is responsible for reading a field of an `InternalRow` to a String.
   // The only purpose of this is to read the key values for a map so that they can be
-  // written as JSON filed names.
+  // written as JSON field names.
   private type ValueReader = (SpecializedGetters, Int) => String
 
   // `JackGenerator` can only be initialized with a `StructType` or a `MapType`.

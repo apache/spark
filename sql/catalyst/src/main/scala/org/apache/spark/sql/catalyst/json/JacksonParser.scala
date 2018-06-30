@@ -101,6 +101,27 @@ class JacksonParser(
     }
   }
 
+  private def parseJsonFieldName[R >: Null](parser: JsonParser)
+                                           (f: PartialFunction[String, R]): R = {
+    f.apply(parser.getText)
+  }
+
+  private type KeyConverter = JsonParser => AnyRef
+  def makeNameConverter(keyType: DataType): KeyConverter = keyType match {
+    case DateType =>
+      (parser: JsonParser) => parseJsonFieldName[Int](parser) {
+        case str: String => parseDate(str)
+      }
+    case TimestampType =>
+      (parser: JsonParser) => parseJsonFieldName[Long](parser) {
+        case str: String => parseTimestamp(str)
+      }
+    case _ =>
+      (parser: JsonParser) => parseJsonFieldName[UTF8String](parser) {
+        case str: String => UTF8String.fromString(str)
+      }
+  }
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema.
