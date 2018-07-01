@@ -760,9 +760,10 @@ case class StructsToJson(
 case class SchemaOfJson(child: Expression)
   extends UnaryExpression with String2StringExpression with CodegenFallback {
 
+  private val jsonOptions = new JSONOptions(Map.empty, "UTC")
+  private val jsonFactory = new JsonFactory()
+
   override def convert(v: UTF8String): UTF8String = {
-    val jsonOptions = new JSONOptions(Map.empty, "UTC")
-    val jsonFactory = new JsonFactory()
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
       parser.nextToken()
       inferField(parser, jsonOptions)
