@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
@@ -129,7 +129,7 @@ case class CaseWhen(
     case Seq(dt1, dt2) => dt1.sameType(dt2)
   }
 
-  override def dataType: DataType = branches.head._2.dataType
+  override def dataType: DataType = valueTypes.reduce(TypeCoercion.findTightestCommonType(_, _).get)
 
   override def nullable: Boolean = {
     // Result is nullable if any of the branch is nullable, or if the else value is nullable

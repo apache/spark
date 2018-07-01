@@ -113,6 +113,35 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5))).nullable === true)
   }
 
+  test("case when - nullability of nested types") {
+    val condition = Literal.FalseLiteral
+
+    val arrayWithNulls = Literal.create(Seq("a", null, "b"), ArrayType(StringType, true))
+    val arrayWithoutNulls = Literal.create(Seq("c", "d"), ArrayType(StringType, false))
+    val structWithNulls = Literal.create(
+      (null, null),
+      StructType(Seq(StructField("a", IntegerType, true), StructField("b", StringType, true))))
+    val structWithoutNulls = Literal.create(
+      (1, "a"),
+      StructType(Seq(StructField("a", IntegerType, false), StructField("b", StringType, false))))
+    val mapWithNulls = Literal.create(Map(1 -> null), MapType(IntegerType, StringType, true))
+    val mapWithoutNulls = Literal.create(Map(1 -> "a"), MapType(IntegerType, StringType, false))
+
+    val arrayCaseWhen1 = CaseWhen(Seq((condition, arrayWithNulls)), arrayWithoutNulls)
+    val arrayCaseWhen2 = CaseWhen(Seq((condition, arrayWithoutNulls)), arrayWithNulls)
+    val structCaseWhen1 = CaseWhen(Seq((condition, structWithNulls)), structWithoutNulls)
+    val structCaseWhen2 = CaseWhen(Seq((condition, structWithoutNulls)), structWithNulls)
+    val mapCaseWhen1 = CaseWhen(Seq((condition, mapWithNulls)), mapWithoutNulls)
+    val mapCaseWhen2 = CaseWhen(Seq((condition, mapWithoutNulls)), mapWithNulls)
+
+    assert(arrayWithNulls.dataType == arrayCaseWhen1.dataType)
+    assert(arrayWithNulls.dataType == arrayCaseWhen2.dataType)
+    assert(structWithNulls.dataType == structCaseWhen1.dataType)
+    assert(structWithNulls.dataType == structCaseWhen2.dataType)
+    assert(mapWithNulls.dataType == mapCaseWhen1.dataType)
+    assert(mapWithNulls.dataType == mapCaseWhen2.dataType)
+  }
+
   test("case key when") {
     val row = create_row(null, 1, 2, "a", "b", "c")
     val c1 = 'a.int.at(0)

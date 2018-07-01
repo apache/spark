@@ -2320,6 +2320,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 
+  test("SPARK-24165: nullability of nested types") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(true, ("a", 1)))
+    rows.add(Row(false, (null, 2)))
+    val schema = StructType(Seq(
+      StructField("cond", BooleanType, false),
+      StructField("s", StructType(Seq(
+        StructField("val1", StringType, true),
+        StructField("val2", IntegerType, false)
+      )), false)))
+
+    val df = spark
+      .createDataFrame(rows, schema)
+      .select(when('cond, struct(lit("x").as("val1"), lit(10).as("val2"))).otherwise('s) as "res")
+      .select('res.getField("val1"))
+
+    checkAnswer(df, Seq(Row("x"), Row(null)))
+  }
+
   test("Uuid expressions should produce same results at retries in the same DataFrame") {
     val df = spark.range(1).select($"id", new Column(Uuid()))
     checkAnswer(df, df.collect())
