@@ -99,6 +99,8 @@ private[spark] object Constants {
     "spark.kubernetes.kerberos.key-tab-secret-name"
   val KERBEROS_KEYTAB_SECRET_KEY =
     "spark.kubernetes.kerberos.key-tab-secret-key"
+  val KERBEROS_SPARK_USER_NAME =
+    "spark.kubernetes.kerberos.spark-user-name"
   val KERBEROS_SECRET_LABEL_PREFIX =
     "hadoop-tokens"
   val SPARK_HADOOP_PREFIX = "spark.hadoop."

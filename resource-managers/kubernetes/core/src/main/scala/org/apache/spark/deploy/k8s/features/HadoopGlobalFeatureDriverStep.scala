@@ -22,8 +22,8 @@ import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasM
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesRoleSpecificConf
-import org.apache.spark.deploy.k8s.features.hadoopsteps.{HadoopConfigSpec, HadoopConfigurationStep}
+import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
+import org.apache.spark.deploy.k8s.features.hadoopsteps.{HadoopBootstrapUtil, HadoopConfigSpec, HadoopConfigurationStep}
 import org.apache.spark.internal.Logging
 
  /**
@@ -32,11 +32,12 @@ import org.apache.spark.internal.Logging
   * SparkPod and Kubernetes Resources using the additive method of the feature steps
   */
 private[spark] class HadoopGlobalFeatureStep(
-  kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
+  kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
   extends KubernetesFeatureConfigStep with Logging {
    private val hadoopTestOrchestrator =
      kubernetesConf.getHadoopStepsOrchestrator
-   require(hadoopTestOrchestrator.isDefined, "Ensure that HADOOP_CONF_DIR is defined")
+   require(kubernetesConf.hadoopConfDir.isDefined &&
+     hadoopTestOrchestrator.isDefined, "Ensure that HADOOP_CONF_DIR is defined")
    private val hadoopSteps =
      hadoopTestOrchestrator
        .map(hto => hto.getHadoopSteps(kubernetesConf.getTokenManager))
@@ -73,35 +74,36 @@ private[spark] class HadoopGlobalFeatureStep(
         secretItemKey <- currentHadoopSpec.dtSecretItemKey
         userName <- currentHadoopSpec.jobUserName
       } yield {
-        val kerberizedPod = new PodBuilder(hadoopBasedPod)
-          .editOrNewSpec()
-            .addNewVolume()
-              .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
-              .withNewSecret()
-                .withSecretName(currentHadoopSpec.dtSecretName)
-                .endSecret()
-              .endVolume()
-            .endSpec()
-          .build()
-        val kerberizedContainer = new ContainerBuilder(hadoopBasedContainer)
-          .addNewVolumeMount()
-            .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
-            .withMountPath(SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR)
-            .endVolumeMount()
-          .addNewEnv()
-            .withName(ENV_HADOOP_TOKEN_FILE_LOCATION)
-            .withValue(s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$secretItemKey")
-            .endEnv()
-          .addNewEnv()
-            .withName(ENV_SPARK_USER)
-            .withValue(userName)
-            .endEnv()
-          .build()
-      SparkPod(kerberizedPod, kerberizedContainer) }
-    maybeKerberosModification.getOrElse(SparkPod(hadoopBasedPod, hadoopBasedContainer))
+        HadoopBootstrapUtil.bootstrapKerberosPod(
+          currentHadoopSpec.dtSecretName,
+          secretItemKey,
+          userName,
+          SparkPod(hadoopBasedPod, hadoopBasedContainer))
+      }
+    maybeKerberosModification.getOrElse(
+      HadoopBootstrapUtil.bootstrapSparkUserPod(
+        kubernetesConf.getTokenManager.getCurrentUser.getShortUserName,
+        SparkPod(hadoopBasedPod, hadoopBasedContainer)))
   }
 
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
+  override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    val maybeKerberosConfValues =
+      for {
+        secretItemKey <- currentHadoopSpec.dtSecretItemKey
+        userName <- currentHadoopSpec.jobUserName
+      } yield {
+        Map(KERBEROS_KEYTAB_SECRET_NAME -> currentHadoopSpec.dtSecretName,
+          KERBEROS_KEYTAB_SECRET_KEY -> secretItemKey,
+          KERBEROS_SPARK_USER_NAME -> userName)
+    }
+    val resolvedConfValues = maybeKerberosConfValues.getOrElse(
+        Map(KERBEROS_SPARK_USER_NAME ->
+          kubernetesConf.getTokenManager.getCurrentUser.getShortUserName)
+      )
+    Map(HADOOP_CONFIG_MAP_SPARK_CONF_NAME -> kubernetesConf.getHadoopConfigMapName,
+      HADOOP_CONF_DIR_LOC -> kubernetesConf.hadoopConfDir.get) ++ resolvedConfValues
+  }
+
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     val configMap =

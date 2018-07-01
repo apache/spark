@@ -38,6 +38,8 @@ private[spark] class HadoopConfFeatureStep(
     require(kubernetesConf.hadoopConfDir.isDefined, "Ensure that HADOOP_CONF_DIR is defined")
     logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific files")
     val kubeTokenManager = kubernetesConf.getTokenManager
+    // TODO: For executors they should be taking from
+    // sparkConf move logic into a bootstrap
     val hadoopConfigFiles =
       kubeTokenManager.getHadoopConfFiles(kubernetesConf.hadoopConfDir.get)
     val keyPaths = hadoopConfigFiles.map { file =>

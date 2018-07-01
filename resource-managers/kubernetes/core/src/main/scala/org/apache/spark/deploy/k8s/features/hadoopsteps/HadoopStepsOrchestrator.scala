@@ -72,18 +72,16 @@ private[spark] class HadoopStepsOrchestrator(
           secretName <- maybeExistingSecretName
           secretItemKey <- maybeExistingSecretItemKey
         } yield {
-          new HadoopKerberosSecretResolverStep(secretName, secretItemKey, kubeTokenManager)
+          Some(new HadoopKerberosSecretResolverStep(secretName, secretItemKey, kubeTokenManager))
         }
-        maybeExistingSecretStep.getOrElse(new HadoopKerberosKeytabResolverStep(
+        maybeExistingSecretStep.getOrElse(Some(new HadoopKerberosKeytabResolverStep(
           conf,
           kubernetesResourceNamePrefix,
           maybePrincipal,
           maybeKeytab,
           maybeRenewerPrincipal,
-          kubeTokenManager))
-      } else {
-        new HadoopConfSparkUserStep(kubeTokenManager)
-      }
-    Seq(hadoopConfMounterStep) :+ maybeKerberosStep
+          kubeTokenManager)))
+      } else None
+    Seq(hadoopConfMounterStep) ++ maybeKerberosStep.toSeq
   }
 }

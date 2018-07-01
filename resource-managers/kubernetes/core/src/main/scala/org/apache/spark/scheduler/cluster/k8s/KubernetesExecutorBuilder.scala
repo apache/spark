@@ -17,7 +17,8 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesRoleSpecificConf, SparkPod}
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, EnvSecretsFeatureStep, KubernetesFeatureConfigStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features._
 
 private[spark] class KubernetesExecutorBuilder(
     provideBasicStep: (KubernetesConf[KubernetesExecutorSpecificConf]) => BasicExecutorFeatureStep =
@@ -30,10 +31,28 @@ private[spark] class KubernetesExecutorBuilder(
       new EnvSecretsFeatureStep(_),
     provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
       => LocalDirsFeatureStep =
-      new LocalDirsFeatureStep(_)) {
+      new LocalDirsFeatureStep(_),
+    provideHadoopConfStep: (
+      KubernetesConf[KubernetesExecutorSpecificConf]
+        => HadoopConfFeatureStep) =
+    new HadoopConfFeatureStep(_),
+    provideKerberosConfStep: (
+      KubernetesConf[KubernetesExecutorSpecificConf]
+        => KerberosConfExecutorFeatureStep) =
+    new KerberosConfExecutorFeatureStep(_),
+    provideHadoopSparkUserStep: (
+      KubernetesConf[KubernetesExecutorSpecificConf]
+        => HadoopSparkUserExecutorFeatureStep) =
+    new HadoopSparkUserExecutorFeatureStep(_)) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
+    val sparkConf = kubernetesConf.sparkConf
+    val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_SPARK_CONF_NAME)
+    val maybeDTSecretName = sparkConf.getOption(KERBEROS_KEYTAB_SECRET_NAME)
+    val maybeDTDataItem = sparkConf.getOption(KERBEROS_KEYTAB_SECRET_KEY)
+    val maybeSparkUserName = sparkConf.getOption(KERBEROS_SPARK_USER_NAME)
+
     val baseFeatures = Seq(
       provideBasicStep(kubernetesConf),
       provideLocalDirsStep(kubernetesConf))
@@ -44,10 +63,26 @@ private[spark] class KubernetesExecutorBuilder(
     val maybeProvideSecretsStep = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
       Some(provideEnvSecretsStep(kubernetesConf)) } else None
 
+    val maybeHadoopConfFeatureSteps = if (maybeHadoopConfigMap.isDefined) {
+      val maybeKerberosStep =
+        for {
+          _ <- maybeDTSecretName
+          _ <- maybeDTDataItem
+        } yield {
+          provideKerberosConfStep(kubernetesConf)
+        }
+      val maybeSparkUserStep = maybeSparkUserName.map {_ =>
+        provideHadoopSparkUserStep(kubernetesConf)}
+      Seq(provideHadoopConfStep(kubernetesConf)) ++
+        maybeKerberosStep.toSeq ++
+        maybeSparkUserStep.toSeq
+    } else Seq.empty[KubernetesFeatureConfigStep]
+
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       baseFeatures ++
       maybeRoleSecretNamesStep.toSeq ++
-      maybeProvideSecretsStep.toSeq
+      maybeProvideSecretsStep.toSeq ++
+      maybeHadoopConfFeatureSteps
 
     var executorPod = SparkPod.initialPod()
     for (feature <- allFeatures) {
