@@ -39,7 +39,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
     super.beforeAll()
     testUtils = new KafkaTestUtils
     testUtils.setup()
-    KafkaDataConsumer.init(16, 64, 0.75f)
+    KafkaDataConsumer.init(16, 64, 0.75f, 3)
   }
 
   override def afterAll(): Unit = {
@@ -65,11 +65,11 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
     val kafkaParams = getKafkaParams()
 
     val consumer1 = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
-      topicPartition, kafkaParams, null, true)
+      topicPartition, kafkaParams, null, true, 100)
     consumer1.release()
 
     val consumer2 = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
-      topicPartition, kafkaParams, null, true)
+      topicPartition, kafkaParams, null, true, 100)
     consumer2.release()
 
     assert(KafkaDataConsumer.cache.size() == 1)
@@ -99,7 +99,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
         null
       }
       val consumer = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
-        topicPartition, kafkaParams, taskContext, useCache)
+        topicPartition, kafkaParams, taskContext, useCache, 100)
       try {
         val rcvd = (0 until data.length).map { offset =>
           val bytes = consumer.get(offset, 10000).value()

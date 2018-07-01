@@ -208,6 +208,51 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("maintain buffer") {
+    val topic = s"topicbasic-${Random.nextInt}-${System.currentTimeMillis}"
+    kafkaTestUtils.createTopic(topic)
+    val messages = Array("the", "quick", "brown", "fox")
+    kafkaTestUtils.sendMessages(topic, messages)
+
+    val kafkaParams = new ju.HashMap[String, Object](getKafkaParams())
+    kafkaParams.put("max.poll.records", "15")
+
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
+
+    val cloneConf = sparkConf.clone()
+    cloneConf.set("spark.streaming.kafka.buffer.minRecordsPerPartition", "20")
+    cloneConf.set("spark.streaming.kafka.buffer.async.threads", "5")
+    sc.stop()
+    sc = new SparkContext(cloneConf)
+
+    var rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts)
+      .map(_.value)
+
+    val received = rdd.collect
+    assert(received === messages)
+
+    // size-related method optimizations return sane results
+    assert(rdd.count === messages.size)
+    assert(rdd.countApprox(0).getFinalValue.mean === messages.size)
+    assert(!rdd.isEmpty)
+    assert(rdd.take(1).size === 1)
+    assert(rdd.take(1).head === messages.head)
+    assert(rdd.take(messages.size + 10).size === messages.size)
+
+    val emptyRdd = KafkaUtils.createRDD[String, String](
+      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
+
+    assert(emptyRdd.isEmpty)
+
+    // invalid offset ranges throw exceptions
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
+    intercept[SparkException] {
+      val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
+        .map(_.value)
+        .collect()
+    }
+  }
+
   test("iterator boundary conditions") {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
     val topic = s"topicboundary-${Random.nextInt}-${System.currentTimeMillis}"

@@ -59,6 +59,13 @@
       <version>${kafka.version}</version>
       <scope>test</scope>
     </dependency>
+    <!-- This dependecy is required to run test for this module alone -->
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlet</artifactId>
+      <version>${jetty.version}</version>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>net.sf.jopt-simple</groupId>
       <artifactId>jopt-simple</artifactId>

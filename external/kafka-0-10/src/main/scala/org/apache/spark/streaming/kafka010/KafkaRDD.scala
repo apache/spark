@@ -74,6 +74,10 @@ private[spark] class KafkaRDD[K, V](
     conf.getDouble("spark.streaming.kafka.consumer.cache.loadFactor", 0.75).toFloat
   private val compacted =
     conf.getBoolean("spark.streaming.kafka.allowNonConsecutiveOffsets", false)
+  private val maintainBufferMin =
+    conf.getInt("spark.streaming.kafka.buffer.minRecordsPerPartition", 0)
+  private val asyncBufferThread =
+    conf.getInt("spark.streaming.kafka.buffer.async.threads", 1)
 
   override def persist(newLevel: StorageLevel): this.type = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -215,7 +219,9 @@ private[spark] class KafkaRDD[K, V](
           pollTimeout,
           cacheInitialCapacity,
           cacheMaxCapacity,
-          cacheLoadFactor
+          cacheLoadFactor,
+          maintainBufferMin,
+          asyncBufferThread
         )
       }
     }
@@ -234,14 +240,20 @@ private class KafkaRDDIterator[K, V](
   pollTimeout: Long,
   cacheInitialCapacity: Int,
   cacheMaxCapacity: Int,
-  cacheLoadFactor: Float
+  cacheLoadFactor: Float,
+  maintainBufferMin: Int,
+  asyncBufferThread: Int
 ) extends Iterator[ConsumerRecord[K, V]] {
 
   context.addTaskCompletionListener(_ => closeIfNeeded())
 
   val consumer = {
-    KafkaDataConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
-    KafkaDataConsumer.acquire[K, V](part.topicPartition(), kafkaParams, context, useConsumerCache)
+    KafkaDataConsumer.init(
+      cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor, asyncBufferThread
+    )
+    KafkaDataConsumer.acquire[K, V](
+      part.topicPartition(), kafkaParams, context, useConsumerCache, maintainBufferMin
+    )
   }
 
   var requestOffset = part.fromOffset
@@ -286,7 +298,9 @@ private class CompactedKafkaRDDIterator[K, V](
     pollTimeout,
     cacheInitialCapacity,
     cacheMaxCapacity,
-    cacheLoadFactor
+    cacheLoadFactor,
+    0,
+    1
   ) {
 
   consumer.compactedStart(part.fromOffset, pollTimeout)
