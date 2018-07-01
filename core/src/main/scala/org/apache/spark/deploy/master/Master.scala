@@ -131,12 +131,11 @@ private[deploy] class Master(
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
     val SSL_ENABLED = conf.getBoolean("spark.ssl.enabled", false)
-    val uriScheme = "http://"
+    var uriScheme = "http://"
     if (SSL_ENABLED) {
       uriScheme = "https://"
     }
     masterWebUiUrl = uriScheme + masterPublicAddress + ":" + webUi.boundPort
-    //masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     if (reverseProxy) {
       masterWebUiUrl = conf.get("spark.ui.reverseProxyUrl", masterWebUiUrl)
       webUi.addProxy()
