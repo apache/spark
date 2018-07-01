@@ -2239,6 +2239,7 @@ def to_json(col, options={}):
     jc = sc._jvm.functions.to_json(_to_java_column(col), options)
     return Column(jc)
 
+
 @ignore_unicode_prefix
 @since(2.4)
 def schema_of_json(col):
@@ -2259,6 +2260,7 @@ def schema_of_json(col):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.schema_of_json(_to_java_column(col))
     return Column(jc)
+
 
 @since(1.5)
 def size(col):
