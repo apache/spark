@@ -46,6 +46,10 @@ class JacksonParser(
   // to a value in a field for `InternalRow`.
   private type ValueConverter = JsonParser => AnyRef
 
+  // A `KeyConverter` is responsible for converting a field name from `JsonParser`
+  // to a value in a key of a map for `InternalRow`.
+  private type KeyConverter = JsonParser => AnyRef
+
   // `ValueConverter`s for the root schema for all fields in the schema
   private val rootConverter = makeRootConverter(schema)
 
@@ -95,31 +99,11 @@ class JacksonParser(
   }
 
   private def makeMapRootConverter(mt: MapType): JsonParser => Seq[InternalRow] = {
-    val fieldConverter = makeConverter(mt.valueType)
+    val keyConverter = makeKeyConverter(mt.keyType)
+    val valueConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, mt) {
-      case START_OBJECT => Seq(InternalRow(convertMap(parser, mt.keyType, fieldConverter)))
+      case START_OBJECT => Seq(InternalRow(convertMap(parser, keyConverter, valueConverter)))
     }
-  }
-
-  private def parseJsonFieldName[R >: Null](parser: JsonParser)
-                                           (f: PartialFunction[String, R]): R = {
-    f.apply(parser.getText)
-  }
-
-  private type KeyConverter = JsonParser => AnyRef
-  def makeNameConverter(keyType: DataType): KeyConverter = keyType match {
-    case DateType =>
-      (parser: JsonParser) => parseJsonFieldName[Int](parser) {
-        case str: String => parseDate(str)
-      }
-    case TimestampType =>
-      (parser: JsonParser) => parseJsonFieldName[Long](parser) {
-        case str: String => parseTimestamp(str)
-      }
-    case _ =>
-      (parser: JsonParser) => parseJsonFieldName[UTF8String](parser) {
-        case str: String => UTF8String.fromString(str)
-      }
   }
 
   /**
@@ -236,9 +220,10 @@ class JacksonParser(
       }
 
     case mt: MapType =>
+      val keyConverter = makeKeyConverter(mt.keyType)
       val valueConverter = makeConverter(mt.valueType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, mt.keyType, valueConverter)
+        case START_OBJECT => convertMap(parser, keyConverter, valueConverter)
       }
 
     case udt: UserDefinedType[_] =>
@@ -270,6 +255,75 @@ class JacksonParser(
 
       case other => f.applyOrElse(other, failedConversion(parser, dataType))
     }
+  }
+
+  private def makeKeyConverter(keyType: DataType): KeyConverter = keyType match {
+    // Branch on the types which can be stored as a String in the Key Name and convert.
+    // Binary Types, DecimalTypes, StructTypes, ArrayTypes and MapTypes are not supported.
+
+    case BooleanType =>
+      (parser: JsonParser) =>
+        val boolean = parser.getText match {
+          case "true" => true
+          case "false" => false
+        }
+        boolean.asInstanceOf[java.lang.Boolean]
+
+    case ByteType =>
+      (parser: JsonParser) =>
+        parser.getText.toByte.asInstanceOf[java.lang.Byte]
+
+    case ShortType =>
+      (parser: JsonParser) =>
+        parser.getText.toShort.asInstanceOf[java.lang.Short]
+
+    case IntegerType =>
+      (parser: JsonParser) =>
+        parser.getText.toInt.asInstanceOf[java.lang.Integer]
+
+    case LongType =>
+      (parser: JsonParser) =>
+        parser.getText.toLong.asInstanceOf[java.lang.Long]
+
+    case FloatType =>
+      (parser: JsonParser) =>
+        val float = parser.getText match {
+          case "NaN" => Float.NaN
+          case "Infinity" => Float.PositiveInfinity
+          case "-Infinity" => Float.NegativeInfinity
+          case other => parser.getText.toFloat
+        }
+        float.asInstanceOf[java.lang.Float]
+
+    case DoubleType =>
+      (parser: JsonParser) =>
+        val double = parser.getText match {
+          case "NaN" => Double.NaN
+          case "Infinity" => Double.PositiveInfinity
+          case "-Infinity" => Double.NegativeInfinity
+          case other => parser.getText.toDouble
+        }
+        double.asInstanceOf[java.lang.Double]
+
+    case StringType =>
+      (parser: JsonParser) =>
+        UTF8String.fromString(parser.getText)
+
+    case TimestampType =>
+      (parser: JsonParser) =>
+        parseTimestamp(parser.getCurrentName).asInstanceOf[java.lang.Long]
+
+    case DateType =>
+      (parser: JsonParser) =>
+        parseDate(parser.getCurrentName).asInstanceOf[java.lang.Integer]
+
+    case _ =>
+      (parser: JsonParser) =>
+        // Here, we pass empty `PartialFunction` so that this case can be
+        // handled as a failed conversion. It will throw an exception as
+        // long as the value is not null.
+        PartialFunction.empty[JsonToken, AnyRef]
+
   }
 
   /**
@@ -343,23 +397,13 @@ class JacksonParser(
    */
   private def convertMap(
       parser: JsonParser,
-      keyType: DataType,
-      fieldConverter: ValueConverter): MapData = {
+      keyConverter: KeyConverter,
+      valueConverter: ValueConverter): MapData = {
     val keys = ArrayBuffer.empty[Any]
     val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-
-      val keyValue = keyType match {
-        case DateType =>
-          parseDate(parser.getCurrentName)
-        case TimestampType =>
-          parseTimestamp(parser.getCurrentName)
-        case _ =>
-          UTF8String.fromString(parser.getCurrentName)
-      }
-
-      keys += keyValue
-      values += fieldConverter.apply(parser)
+      keys += keyConverter.apply(parser)
+      values += valueConverter.apply(parser)
     }
 
     ArrayBasedMapData(keys.toArray, values.toArray)

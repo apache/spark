@@ -202,39 +202,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("""{"a":1}""") :: Nil)
   }
 
-  test("to_json - map with Date/Timestamp as key") {
-    val df1 = Seq(Map(java.sql.Date.valueOf("2015-08-26") -> 1)).toDF("map")
-    val df2 = Seq(Map(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0") -> 1)).toDF("map")
-
-    val optionsTimestamp = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
-    val optionsDate = Map("dateFormat" -> "dd/MM/yyyy")
-
-    checkAnswer(
-      df1.select(to_json($"map", optionsDate)),
-      Row("""{"26/08/2015":1}""") :: Nil)
-    checkAnswer(
-      df2.select(to_json($"map", optionsTimestamp)),
-      Row("""{"26/08/2015 18:00":1}""") :: Nil)
-  }
-
-  test("roundtrip in to_json and from_json - Timestamp as key") {
-    val df = Seq(Map(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0") -> 1)).toDF("map")
-    val optionsTimestamp = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
-    val schema = MapType(TimestampType, IntegerType)
-    val readBack = df.select(to_json($"map").as("json"))
-      .select(from_json($"json", schema).as("map"))
-    checkAnswer(df, readBack)
-  }
-
-  test("roundtrip in to_json and from_json - Date as key") {
-    val df = Seq(Map(java.sql.Date.valueOf("2015-08-26") -> 1)).toDF("map")
-    val optionsDate = Map("dateFormat" -> "dd/MM/yyyy")
-    val schema = MapType(DateType, IntegerType)
-    val readBack = df.select(to_json($"map").as("json"))
-      .select(from_json($"json", schema).as("map"))
-    checkAnswer(df, readBack)
-  }
-
   test("to_json with option") {
     val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
@@ -425,5 +392,102 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null))
     checkAnswer(Seq("""{"{"f": 1}": "a"}""").toDS().select(from_json($"value", schema)),
       Row(null))
+  }
+
+  test("SPARK-24682: to_json - map with Date/Timestamp as key") {
+    val df1 = Seq(Map(java.sql.Date.valueOf("2015-08-26") -> 1)).toDF("map")
+    val df2 = Seq(Map(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0") -> 1)).toDF("map")
+
+    val optionsTimestamp = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+    val optionsDate = Map("dateFormat" -> "dd/MM/yyyy")
+
+    checkAnswer(
+      df1.select(to_json($"map", optionsDate)),
+      Row("""{"26/08/2015":1}""") :: Nil)
+    checkAnswer(
+      df2.select(to_json($"map", optionsTimestamp)),
+      Row("""{"26/08/2015 18:00":1}""") :: Nil)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - Boolean as key") {
+    val df = Seq(Map(true -> 1)).toDF("map")
+    val schema = MapType(BooleanType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - Byte as key") {
+    val df = Seq(Map(0x66.toByte -> 1)).toDF("map")
+    val schema = MapType(ByteType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - Short as key") {
+    val df = Seq(Map(1.toShort -> 1)).toDF("map")
+    val schema = MapType(ShortType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - Integer as key") {
+    val df = Seq(Map(1 -> 1)).toDF("map")
+    val schema = MapType(IntegerType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - Long as key") {
+    val df = Seq(Map(1L -> 1)).toDF("map")
+    val schema = MapType(LongType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - Float as key") {
+    val df = Seq(Map(1.toFloat -> 1)).toDF("map")
+    val schema = MapType(FloatType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - Double as key") {
+    val df = Seq(Map(1.toDouble -> 1)).toDF("map")
+    val schema = MapType(DoubleType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - String as key") {
+    val df = Seq(Map("1" -> 1)).toDF("map")
+    val schema = MapType(StringType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - Timestamp as key") {
+    val df = Seq(Map(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0") -> 1)).toDF("map")
+    val optionsTimestamp = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+    val schema = MapType(TimestampType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
+  }
+
+  test("SPARK-24682: roundtrip in to_json and from_json - Date as key") {
+    val df = Seq(Map(java.sql.Date.valueOf("2015-08-26") -> 1)).toDF("map")
+    val optionsDate = Map("dateFormat" -> "dd/MM/yyyy")
+    val schema = MapType(DateType, IntegerType)
+    val readBack = df.select(to_json($"map").as("json"))
+      .select(from_json($"json", schema).as("map"))
+    checkAnswer(df, readBack)
   }
 }
