@@ -43,7 +43,9 @@
       "writeTime" : 3842811,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 1,
   "index" : 1,
@@ -89,7 +91,9 @@
       "writeTime" : 3934399,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 2,
   "index" : 2,
@@ -135,7 +139,9 @@
       "writeTime" : 89885,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 3,
   "index" : 3,
@@ -181,7 +187,9 @@
       "writeTime" : 1311694,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 4,
   "index" : 4,
@@ -227,7 +235,9 @@
       "writeTime" : 83022,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 5,
   "index" : 5,
@@ -273,7 +283,9 @@
       "writeTime" : 3675510,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 6,
   "index" : 6,
@@ -319,7 +331,9 @@
       "writeTime" : 4016617,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 7,
   "index" : 7,
@@ -365,7 +379,9 @@
       "writeTime" : 2579051,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 8,
   "index" : 8,
@@ -411,7 +427,9 @@
       "writeTime" : 121551,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 9,
   "index" : 9,
@@ -457,7 +475,9 @@
       "writeTime" : 101664,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 10,
   "index" : 10,
@@ -503,7 +523,9 @@
       "writeTime" : 94709,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 11,
   "index" : 11,
@@ -549,7 +571,9 @@
       "writeTime" : 94507,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 12,
   "index" : 12,
@@ -595,7 +619,9 @@
       "writeTime" : 102476,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 13,
   "index" : 13,
@@ -641,7 +667,9 @@
       "writeTime" : 95004,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 14,
   "index" : 14,
@@ -687,7 +715,9 @@
       "writeTime" : 95646,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 15,
   "index" : 15,
@@ -733,7 +763,9 @@
       "writeTime" : 602780,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 16,
   "index" : 16,
@@ -779,7 +811,9 @@
       "writeTime" : 108320,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 17,
   "index" : 17,
@@ -825,7 +859,9 @@
       "writeTime" : 99944,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 18,
   "index" : 18,
@@ -871,7 +907,9 @@
       "writeTime" : 100836,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 19,
   "index" : 19,
@@ -917,5 +955,7 @@
       "writeTime" : 95788,
       "recordsWritten" : 10
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 } ]

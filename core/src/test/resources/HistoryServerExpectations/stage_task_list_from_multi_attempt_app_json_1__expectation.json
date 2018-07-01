@@ -48,7 +48,9 @@
       "writeTime" : 0,
       "recordsWritten" : 0
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 1,
   "index" : 1,
@@ -99,7 +101,9 @@
       "writeTime" : 0,
       "recordsWritten" : 0
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 2,
   "index" : 2,
@@ -150,7 +154,9 @@
       "writeTime" : 0,
       "recordsWritten" : 0
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 3,
   "index" : 3,
@@ -201,7 +207,9 @@
       "writeTime" : 0,
       "recordsWritten" : 0
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 4,
   "index" : 4,
@@ -252,7 +260,9 @@
       "writeTime" : 0,
       "recordsWritten" : 0
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 5,
   "index" : 5,
@@ -303,7 +313,9 @@
       "writeTime" : 0,
       "recordsWritten" : 0
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 6,
   "index" : 6,
@@ -354,7 +366,9 @@
       "writeTime" : 0,
       "recordsWritten" : 0
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 7,
   "index" : 7,
@@ -405,5 +419,7 @@
       "writeTime" : 0,
       "recordsWritten" : 0
     }
-  }
+  },
+  "schedulerDelay" : 0,
+  "gettingResultTime" : 0
 } ]

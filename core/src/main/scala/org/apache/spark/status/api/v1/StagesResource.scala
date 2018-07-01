@@ -122,28 +122,24 @@ private[v1] class StagesResource extends BaseAppResource {
   }
 
   @GET
-  @Path("{stageId: \\d+}/taskTable")
+  @Path("{stageId: \\d+}/{stageAttemptId: \\d+}/taskTable")
   def taskTable(
     @PathParam("stageId") stageId: Int,
+    @PathParam("stageAttemptId") stageAttemptId: Int,
     @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo): util.HashMap[String, Object] = {
     withUI { ui =>
       val abc = uriInfo.getQueryParameters(true)
       val totalRecords = abc.getFirst("numTasks")
       var isSearch = false
       var searchValue: String = null
-      val iter = abc.keySet().iterator()
-      while(iter.hasNext) {
-        var ac = iter.next()
-        System.err.println("hereeeeeeeeeeee 1 " + ac+" : "+abc.get(ac))
-      }
       var _tasksToShow: Seq[TaskData] = null
       if (abc.getFirst("search[value]") != null && abc.getFirst("search[value]").length > 0) {
-        _tasksToShow = ui.store.taskList(stageId, 0, 0, totalRecords.toInt,
+        _tasksToShow = ui.store.taskList(stageId, stageAttemptId, 0, totalRecords.toInt,
           indexName("Index"), true)
         isSearch = true
         searchValue = abc.getFirst("search[value]")
       } else {
-        _tasksToShow = doPagination(abc, stageId)
+        _tasksToShow = doPagination(abc, stageId, stageAttemptId)
       }
       if (_tasksToShow.nonEmpty) {
         val iterator = _tasksToShow.iterator
@@ -161,7 +157,7 @@ private[v1] class StagesResource extends BaseAppResource {
           if (filteredTaskList.length > 0) {
             ret5.put("aaData", filteredTaskList)
           } else {
-            _tasksToShow = doPagination(abc, stageId)
+            _tasksToShow = doPagination(abc, stageId, stageAttemptId)
             val iterator = _tasksToShow.iterator
             while(iterator.hasNext) {
               val t1: TaskData = iterator.next()
@@ -185,7 +181,7 @@ private[v1] class StagesResource extends BaseAppResource {
     }
   }
 
-  def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int): Seq[TaskData] = {
+  def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int, stageAttemptId: Int): Seq[TaskData] = {
     val queryParams = queryParameters.keySet()
     var columnToSort = 0
     if (queryParams.contains("order[0][column]")) {
@@ -199,7 +195,7 @@ private[v1] class StagesResource extends BaseAppResource {
     val isAscendingStr = queryParameters.getFirst("order[0][dir]")
     val pageStartIndex = queryParameters.getFirst("start").toInt
     val pageLength = queryParameters.getFirst("length").toInt
-    return withUI(_.store.taskList(stageId, 0, pageStartIndex, pageLength,
+    return withUI(_.store.taskList(stageId, stageAttemptId, pageStartIndex, pageLength,
       indexName(columnNameToSort), isAscendingStr.equalsIgnoreCase("asc")))
   }
 

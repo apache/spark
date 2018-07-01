@@ -78,7 +78,9 @@
           "writeTime": 3873006,
           "recordsWritten": 0
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "5": {
       "taskId": 5,
@@ -125,7 +127,9 @@
           "writeTime": 262919,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "10": {
       "taskId": 10,
@@ -172,7 +176,9 @@
           "writeTime": 243647,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "1": {
       "taskId": 1,
@@ -219,7 +225,9 @@
           "writeTime": 2409488,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "6": {
       "taskId": 6,
@@ -266,7 +274,9 @@
           "writeTime": 385110,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "9": {
       "taskId": 9,
@@ -313,7 +323,9 @@
           "writeTime": 259354,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "2": {
       "taskId": 2,
@@ -361,7 +373,9 @@
           "writeTime": 126128,
           "recordsWritten": 0
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "7": {
       "taskId": 7,
@@ -408,7 +422,9 @@
           "writeTime": 205520,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "3": {
       "taskId": 3,
@@ -455,7 +471,9 @@
           "writeTime": 207014,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "11": {
       "taskId": 11,
@@ -502,7 +520,9 @@
           "writeTime": 233652,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "8": {
       "taskId": 8,
@@ -549,7 +569,9 @@
           "writeTime": 213296,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     },
     "4": {
       "taskId": 4,
@@ -596,7 +618,9 @@
           "writeTime": 292381,
           "recordsWritten": 1
         }
-      }
+      },
+      "schedulerDelay" : 0,
+      "gettingResultTime" : 0
     }
   },
   "executorSummary": {

@@ -110,6 +110,13 @@ function getStandAloneAppId(cb) {
   });
 }
 
+function getStageAttemptId() {
+  var words = document.baseURI.split('?');
+  var attemptIdStr = words[1].split('&')[1];
+  var stgAttemptId = attemptIdStr.substr(attemptIdStr.indexOf('=') + 1, attemptIdStr.length - 1);
+  return stgAttemptId;
+}
+
 // This function is a helper function for sorting in datatable.
 // When the data is in duration (e.g. 12ms 2s 2min 2h )
 // It will convert the string into integer for correct ordering
