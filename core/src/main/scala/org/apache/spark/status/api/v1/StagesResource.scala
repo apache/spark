@@ -55,8 +55,10 @@ private[v1] class StagesResource extends BaseAppResource {
             ret(i).executorSummary.get.get(execId).get.hostPort = hostPort
             for (taskData <- taskDataArray) {
               ret(i).tasks.get.get(taskData).get.executorLogs = executorLogs
-              ret(i).tasks.get.get(taskData).get.schedulerDelay = AppStatusUtils.schedulerDelay(ret(i).tasks.get.get(taskData).get)
-              ret(i).tasks.get.get(taskData).get.gettingResultTime = AppStatusUtils.gettingResultTime(ret(i).tasks.get.get(taskData).get)
+              ret(i).tasks.get.get(taskData).get.schedulerDelay =
+                AppStatusUtils.schedulerDelay(ret(i).tasks.get.get(taskData).get)
+              ret(i).tasks.get.get(taskData).get.gettingResultTime =
+                AppStatusUtils.gettingResultTime(ret(i).tasks.get.get(taskData).get)
             }
           }
         }
@@ -125,14 +127,16 @@ private[v1] class StagesResource extends BaseAppResource {
   def taskTable(
     @PathParam("stageId") stageId: Int,
     @PathParam("stageAttemptId") stageAttemptId: Int,
-    @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo): util.HashMap[String, Object] = {
+    @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo):
+  util.HashMap[String, Object] = {
     withUI { ui =>
       val uriQueryParameters = uriInfo.getQueryParameters(true)
       val totalRecords = uriQueryParameters.getFirst("numTasks")
       var isSearch = false
       var searchValue: String = null
       var _tasksToShow: Seq[TaskData] = null
-      if (uriQueryParameters.getFirst("search[value]") != null && uriQueryParameters.getFirst("search[value]").length > 0) {
+      if (uriQueryParameters.getFirst("search[value]") != null &&
+        uriQueryParameters.getFirst("search[value]").length > 0) {
         _tasksToShow = ui.store.taskList(stageId, stageAttemptId, 0, totalRecords.toInt,
           indexName("Index"), true)
         isSearch = true
@@ -182,7 +186,8 @@ private[v1] class StagesResource extends BaseAppResource {
   }
 
   // Performs pagination on the server side
-  def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int, stageAttemptId: Int): Seq[TaskData] = {
+  def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int, stageAttemptId: Int):
+  Seq[TaskData] = {
     val queryParams = queryParameters.keySet()
     var columnToSort = 0
     if (queryParams.contains("order[0][column]")) {

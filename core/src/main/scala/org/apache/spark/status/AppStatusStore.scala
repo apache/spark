@@ -421,7 +421,8 @@ private[spark] class AppStatusStore(
         || f.taskMetrics.get.shuffleWriteMetrics.bytesWritten.toString.contains(searchValue)
         || f.taskMetrics.get.shuffleWriteMetrics.recordsWritten.toString.contains(searchValue)
         || f.taskMetrics.get.shuffleWriteMetrics.writeTime.toString.contains(searchValue)
-        || f.schedulerDelay.toString.contains(searchValue) || f.gettingResultTime.toString.contains(searchValue)))
+        || f.schedulerDelay.toString.contains(searchValue)
+        || f.gettingResultTime.toString.contains(searchValue)))
     filteredTaskDataSequence
   }
 
