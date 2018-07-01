@@ -233,9 +233,13 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   private[rest] def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
     import scala.concurrent.ExecutionContext.Implicits.global
     val responseFuture = Future {
+      val responseCode = connection.getResponseCode
       val dataStream =
-        if (connection.getResponseCode == HttpServletResponse.SC_OK) {
+        if (responseCode == HttpServletResponse.SC_OK) {
           connection.getInputStream
+        } else if (responseCode == HttpServletResponse.SC_NOT_FOUND) {
+          throw new SubmitRestProtocolException(s"Got a ${HttpServletResponse.SC_NOT_FOUND}." +
+            s"Please verify your master url is correct.")
         } else {
           connection.getErrorStream
         }
