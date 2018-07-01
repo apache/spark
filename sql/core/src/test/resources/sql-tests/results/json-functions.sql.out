@@ -183,7 +183,7 @@ select from_json('{"a":1}', 1)
 struct<>
 -- !query 17 output
 org.apache.spark.sql.AnalysisException
-Expected a string literal instead of 1;; line 1 pos 7
+Schema should be specified in DDL format as a string literal or output of the schema_of_json function instead of 1;; line 1 pos 7
 
 
 -- !query 18

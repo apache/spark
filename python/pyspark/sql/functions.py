@@ -2189,11 +2189,16 @@ def from_json(col, schema, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
     [Row(json=[Row(a=1)])]
+    >>> schema = schema_of_json(lit('''{"a": 0}'''))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
     """
 
     sc = SparkContext._active_spark_context
     if isinstance(schema, DataType):
         schema = schema.json()
+    elif isinstance(schema, Column):
+        schema = _to_java_column(schema)
     jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
     return Column(jc)
 
@@ -2246,6 +2251,8 @@ def schema_of_json(col):
     >>> data = [(1, '''{"a": 1}''')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(schema_of_json(df.value).alias("json")).collect()
+    [Row(json=u'struct<a:bigint>')]
+    >>> df.select(schema_of_json(lit('''{"a": 0}''')).alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
     """
 

@@ -3392,8 +3392,25 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def from_json(e: Column, schema: Column): Column = withExpr {
-    new JsonToStructs(e.expr, schema.expr)
+  def from_json(e: Column, schema: Column): Column = {
+    from_json(e, schema, Map.empty[String, String].asJava)
+  }
+
+  /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
+    withExpr {new JsonToStructs(e.expr, schema.expr, options.asScala.toMap)}
   }
 
   /**

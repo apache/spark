@@ -526,13 +526,15 @@ case class JsonToStructs(
   override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
-  def this(child: Expression, schema: Expression) =
+  def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
       schema = JsonExprUtils.evalSchemaExpr(schema),
-      options = Map.empty[String, String],
+      options = options,
       child = child,
       timeZoneId = None,
       forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
+
+  def this(child: Expression, schema: Expression) = this(child, schema, Map.empty[String, String])
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
