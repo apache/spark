@@ -18,22 +18,22 @@
 package org.apache.spark.launcher;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 abstract class AbstractAppHandle implements SparkAppHandle {
 
-  private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
+  private static final Logger LOG = Logger.getLogger(AbstractAppHandle.class.getName());
 
   private final LauncherServer server;
 
   private LauncherServer.ServerConnection connection;
   private List<Listener> listeners;
   private AtomicReference<State> state;
-  private String appId;
+  private volatile String appId;
   private volatile boolean disposed;
 
   protected AbstractAppHandle(LauncherServer server) {
@@ -44,7 +44,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
   @Override
   public synchronized void addListener(Listener l) {
     if (listeners == null) {
-      listeners = new ArrayList<>();
+      listeners = new CopyOnWriteArrayList<>();
     }
     listeners.add(l);
   }
@@ -71,16 +71,14 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   @Override
   public synchronized void disconnect() {
-    if (!isDisposed()) {
-      if (connection != null) {
-        try {
-          connection.closeAndWait();
-        } catch (IOException ioe) {
-          // no-op.
-        }
+    if (connection != null && connection.isOpen()) {
+      try {
+        connection.close();
+      } catch (IOException ioe) {
+        // no-op.
       }
-      dispose();
     }
+    dispose();
   }
 
   void setConnection(LauncherServer.ServerConnection connection) {
@@ -97,10 +95,25 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   /**
    * Mark the handle as disposed, and set it as LOST in case the current state is not final.
+   *
+   * This method should be called only when there's a reasonable expectation that the communication
+   * with the child application is not needed anymore, either because the code managing the handle
+   * has said so, or because the child application is finished.
    */
   synchronized void dispose() {
     if (!isDisposed()) {
+      // First wait for all data from the connection to be read. Then unregister the handle.
+      // Otherwise, unregistering might cause the server to be stopped and all child connections
+      // to be closed.
+      if (connection != null) {
+        try {
+          connection.waitForClose();
+        } catch (IOException ioe) {
+          // no-op.
+        }
+      }
       server.unregister(this);
+
       // Set state to LOST if not yet final.
       setState(State.LOST, false);
       this.disposed = true;
@@ -127,11 +140,13 @@ abstract class AbstractAppHandle implements SparkAppHandle {
       current = state.get();
     }
 
-    LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
-      new Object[] { current, s });
+    if (s != State.LOST) {
+      LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
+        new Object[] { current, s });
+    }
   }
 
-  synchronized void setAppId(String appId) {
+  void setAppId(String appId) {
     this.appId = appId;
     fireEvent(true);
   }

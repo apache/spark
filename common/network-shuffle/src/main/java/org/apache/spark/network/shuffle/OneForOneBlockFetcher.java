@@ -171,7 +171,9 @@ public class OneForOneBlockFetcher {
 
     @Override
     public void onData(String streamId, ByteBuffer buf) throws IOException {
-      channel.write(buf);
+      while (buf.hasRemaining()) {
+        channel.write(buf);
+      }
     }
 
     @Override

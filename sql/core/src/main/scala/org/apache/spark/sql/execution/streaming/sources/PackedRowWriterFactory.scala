@@ -21,17 +21,20 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriter, DataWriterFactory, WriterCommitMessage}
 
 /**
  * A simple [[DataWriterFactory]] whose tasks just pack rows into the commit message for delivery
- * to a [[org.apache.spark.sql.sources.v2.writer.DataSourceV2Writer]] on the driver.
+ * to a [[DataSourceWriter]] on the driver.
  *
  * Note that, because it sends all rows to the driver, this factory will generally be unsuitable
  * for production-quality sinks. It's intended for use in tests.
  */
 case object PackedRowWriterFactory extends DataWriterFactory[Row] {
-  def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
+  override def createDataWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[Row] = {
     new PackedRowDataWriter()
   }
 }

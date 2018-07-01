@@ -23,15 +23,18 @@ import java.util.List;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.ReadSupport;
 import org.apache.spark.sql.sources.v2.reader.*;
+import org.apache.spark.sql.sources.v2.reader.partitioning.ClusteredDistribution;
+import org.apache.spark.sql.sources.v2.reader.partitioning.Distribution;
+import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
 import org.apache.spark.sql.types.StructType;
 
 public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader, SupportsReportPartitioning {
+  class Reader implements DataSourceReader, SupportsReportPartitioning {
     private final StructType schema = new StructType().add("a", "int").add("b", "int");
 
     @Override
@@ -40,10 +43,10 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createDataReaderFactories() {
+    public List<InputPartition<Row>> planInputPartitions() {
       return java.util.Arrays.asList(
-        new SpecificDataReaderFactory(new int[]{1, 1, 3}, new int[]{4, 4, 6}),
-        new SpecificDataReaderFactory(new int[]{2, 4, 4}, new int[]{6, 2, 2}));
+        new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 4, 6}),
+        new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 2, 2}));
     }
 
     @Override
@@ -70,12 +73,12 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
   }
 
-  static class SpecificDataReaderFactory implements DataReaderFactory<Row>, DataReader<Row> {
+  static class SpecificInputPartition implements InputPartition<Row>, InputPartitionReader<Row> {
     private int[] i;
     private int[] j;
     private int current = -1;
 
-    SpecificDataReaderFactory(int[] i, int[] j) {
+    SpecificInputPartition(int[] i, int[] j) {
       assert i.length == j.length;
       this.i = i;
       this.j = j;
@@ -98,13 +101,13 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<Row> createDataReader() {
+    public InputPartitionReader<Row> createPartitionReader() {
       return this;
     }
   }
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
+  public DataSourceReader createReader(DataSourceOptions options) {
     return new Reader();
   }
 }

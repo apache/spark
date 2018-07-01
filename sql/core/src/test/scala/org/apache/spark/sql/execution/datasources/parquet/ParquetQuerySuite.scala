@@ -275,7 +275,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
-      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true"
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL"
     ) {
       testSchemaMerging(2)
     }
@@ -352,39 +352,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
       assert(exception2.getMessage().contains("is not a Parquet file"))
-    }
-  }
-
-  testQuietly("Enabling/disabling ignoreMissingFiles") {
-    def testIgnoreMissingFiles(): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
-        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
-        val thirdPath = new Path(basePath, "third")
-        spark.range(2, 3).toDF("a").write.parquet(thirdPath.toString)
-        val df = spark.read.parquet(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString)
-
-        val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
-        fs.delete(thirdPath, true)
-        checkAnswer(
-          df,
-          Seq(Row(0), Row(1)))
-      }
-    }
-
-    withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
-      testIgnoreMissingFiles()
-    }
-
-    withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-      val exception = intercept[SparkException] {
-        testIgnoreMissingFiles()
-      }
-      assert(exception.getMessage().contains("does not exist"))
     }
   }
 
@@ -852,7 +819,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val path = dir.getCanonicalPath
       spark.range(3).write.parquet(path)
 
-      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val fs = FileSystem.get(spark.sessionState.newHadoopConf())
       val files = fs.listFiles(new Path(path), true)
 
       while (files.hasNext) {
@@ -909,6 +876,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
         val withShortField = new StructType().add("f", ShortType)
         checkAnswer(spark.read.schema(withShortField).parquet(path), Row(1: Short))
+      }
+    }
+  }
+
+  test("SPARK-24230: filter row group using dictionary") {
+    withSQLConf(("parquet.filter.dictionary.enabled", "true")) {
+      // create a table with values from 0, 2, ..., 18 that will be dictionary-encoded
+      withParquetTable((0 until 100).map(i => ((i * 2) % 20, s"data-$i")), "t") {
+        // search for a key that is not present so the dictionary filter eliminates all row groups
+        // Fails without SPARK-24230:
+        //   java.io.IOException: expecting more rows but reached last block. Read 0 out of 50
+        checkAnswer(sql("SELECT _2 FROM t WHERE t._1 = 5"), Seq.empty)
       }
     }
   }

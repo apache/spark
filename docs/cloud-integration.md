@@ -27,13 +27,13 @@ description: Introduction to cloud storage support in Apache Spark SPARK_VERSION
 All major cloud providers offer persistent data storage in *object stores*.
 These are not classic "POSIX" file systems.
 In order to store hundreds of petabytes of data without any single points of failure,
-object stores replace the classic filesystem directory tree
+object stores replace the classic file system directory tree
 with a simpler model of `object-name => data`. To enable remote access, operations
 on objects are usually offered as (slow) HTTP REST operations.
 
 Spark can read and write data in object stores through filesystem connectors implemented
 in Hadoop or provided by the infrastructure suppliers themselves.
-These connectors make the object stores look *almost* like filesystems, with directories and files
+These connectors make the object stores look *almost* like file systems, with directories and files
 and the classic operations on them such as list, delete and rename.
 
 
@@ -70,7 +70,7 @@ be safely used as the direct destination of work with the normal rename-based co
 ### Installation
 
 With the relevant libraries on the classpath and Spark configured with valid credentials,
-objects can be can be read or written by using their URLs as the path to data.
+objects can be read or written by using their URLs as the path to data.
 For example `sparkContext.textFile("s3a://landsat-pds/scene_list.gz")` will create
 an RDD of the file `scene_list.gz` stored in S3, using the s3a connector.
 
@@ -184,7 +184,8 @@ is no need for a workflow of write-then-rename to ensure that files aren't picke
 while they are still being written. Applications can write straight to the monitored directory.
 
 1. Streams should only be checkpointed to a store implementing a fast and
-atomic `rename()` operation Otherwise the checkpointing may be slow and potentially unreliable.
+atomic `rename()` operation.
+Otherwise the checkpointing may be slow and potentially unreliable.
 
 ## Further Reading
 

@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.status.config._
@@ -442,7 +443,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     val oldCount = statusStore.executionsList().size
 
     val expectedAccumValue = 12345
-    val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue)
+    val expectedAccumValue2 = 54321
+    val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue, expectedAccumValue2)
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
       override lazy val executedPlan = physicalPlan
@@ -465,10 +467,14 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
+    val driverMetric2 = physicalPlan.metrics("dummy2")
     val expectedValue = SQLMetrics.stringValue(driverMetric.metricType, Seq(expectedAccumValue))
+    val expectedValue2 = SQLMetrics.stringValue(driverMetric2.metricType, Seq(expectedAccumValue2))
 
     assert(metrics.contains(driverMetric.id))
     assert(metrics(driverMetric.id) === expectedValue)
+    assert(metrics.contains(driverMetric2.id))
+    assert(metrics(driverMetric2.id) === expectedValue2)
   }
 
   test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
@@ -510,6 +516,50 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     }
   }
 
+  test("eviction should respect execution completion time") {
+    val conf = sparkContext.conf.clone().set(UI_RETAINED_EXECUTIONS.key, "2")
+    val store = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, store, live = true)
+    val statusStore = new SQLAppStatusStore(store, Some(listener))
+
+    var time = 0
+    val df = createTestDataFrame
+    // Start execution 1 and execution 2
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      1,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      time))
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      2,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      time))
+
+    // Stop execution 2 before execution 1
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(2, time))
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(1, time))
+
+    // Start execution 3 and execution 2 should be evicted.
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      3,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      time))
+    assert(statusStore.executionsCount === 2)
+    assert(statusStore.execution(2) === None)
+  }
 }
 
 
@@ -517,20 +567,31 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
  * A dummy [[org.apache.spark.sql.execution.SparkPlan]] that updates a [[SQLMetrics]]
  * on the driver.
  */
-private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExecNode {
+private case class MyPlan(sc: SparkContext, expectedValue: Long, expectedValue2: Long)
+  extends LeafExecNode {
+
   override def sparkContext: SparkContext = sc
   override def output: Seq[Attribute] = Seq()
 
   override val metrics: Map[String, SQLMetric] = Map(
-    "dummy" -> SQLMetrics.createMetric(sc, "dummy"))
+    "dummy" -> SQLMetrics.createMetric(sc, "dummy"),
+    "dummy2" -> SQLMetrics.createMetric(sc, "dummy2"))
 
   override def doExecute(): RDD[InternalRow] = {
     longMetric("dummy") += expectedValue
+    longMetric("dummy2") += expectedValue2
+
+    // postDriverMetricUpdates may happen multiple time in a query.
+    // (normally from different operators, but for the sake of testing, from one operator)
+    SQLMetrics.postDriverMetricUpdates(
+      sc,
+      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      Seq(metrics("dummy")))
 
     SQLMetrics.postDriverMetricUpdates(
       sc,
       sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
-      metrics.values.toSeq)
+      Seq(metrics("dummy2")))
     sc.emptyRDD
   }
 }
@@ -566,6 +627,7 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
         sc.listenerBus.waitUntilEmpty(10000)
         val statusStore = spark.sharedState.statusStore
         assert(statusStore.executionsCount() <= 50)
+        assert(statusStore.planGraphCount() <= 50)
         // No live data should be left behind after all executions end.
         assert(statusStore.listener.get.noLiveData())
       }

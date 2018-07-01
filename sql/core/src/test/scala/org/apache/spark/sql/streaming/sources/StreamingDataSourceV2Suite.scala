@@ -25,11 +25,10 @@ import org.apache.spark.sql.execution.streaming.{RateStreamOffset, Sink, Streami
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
-import org.apache.spark.sql.sources.v2.DataSourceV2Options
-import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
-import org.apache.spark.sql.sources.v2.streaming._
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, MicroBatchReader, Offset, PartitionOffset}
-import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, MicroBatchReadSupport, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.reader.InputPartition
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, MicroBatchReader, Offset, PartitionOffset}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -43,9 +42,9 @@ case class FakeReader() extends MicroBatchReader with ContinuousReader {
   def readSchema(): StructType = StructType(Seq())
   def stop(): Unit = {}
   def mergeOffsets(offsets: Array[PartitionOffset]): Offset = RateStreamOffset(Map())
-  def setOffset(start: Optional[Offset]): Unit = {}
+  def setStartOffset(start: Optional[Offset]): Unit = {}
 
-  def createDataReaderFactories(): java.util.ArrayList[DataReaderFactory[Row]] = {
+  def planInputPartitions(): java.util.ArrayList[InputPartition[Row]] = {
     throw new IllegalStateException("fake source - cannot actually read")
   }
 }
@@ -54,14 +53,14 @@ trait FakeMicroBatchReadSupport extends MicroBatchReadSupport {
   override def createMicroBatchReader(
       schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceV2Options): MicroBatchReader = FakeReader()
+      options: DataSourceOptions): MicroBatchReader = FakeReader()
 }
 
 trait FakeContinuousReadSupport extends ContinuousReadSupport {
   override def createContinuousReader(
       schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceV2Options): ContinuousReader = FakeReader()
+      options: DataSourceOptions): ContinuousReader = FakeReader()
 }
 
 trait FakeStreamWriteSupport extends StreamWriteSupport {
@@ -69,7 +68,7 @@ trait FakeStreamWriteSupport extends StreamWriteSupport {
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): StreamWriter = {
+      options: DataSourceOptions): StreamWriter = {
     throw new IllegalStateException("fake sink - cannot actually write")
   }
 }

@@ -59,6 +59,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   var rmClient: AMRMClient[ContainerRequest] = _
 
+  var clock: ManualClock = _
+
   var containerNum = 0
 
   override def beforeEach() {
@@ -66,6 +68,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     rmClient = AMRMClient.createAMRMClient()
     rmClient.init(conf)
     rmClient.start()
+    clock = new ManualClock()
   }
 
   override def afterEach() {
@@ -101,7 +104,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       appAttemptId,
       new SecurityManager(sparkConf),
       Map(),
-      new MockResolver())
+      new MockResolver(),
+      clock)
   }
 
   def createContainer(host: String): Container = {
@@ -251,9 +255,53 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Finished", 0)
     }
     handler.updateResourceRequests()
-    handler.processCompletedContainers(statuses.toSeq)
+    handler.processCompletedContainers(statuses)
     handler.getNumExecutorsRunning should be (0)
     handler.getPendingAllocate.size should be (1)
+  }
+
+  test("kill same executor multiple times") {
+    val handler = createAllocator(2)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.getNumExecutorsRunning should be (2)
+    handler.getPendingAllocate.size should be (0)
+
+    val executorToKill = handler.executorIdToContainer.keys.head
+    handler.killExecutor(executorToKill)
+    handler.getNumExecutorsRunning should be (1)
+    handler.killExecutor(executorToKill)
+    handler.killExecutor(executorToKill)
+    handler.killExecutor(executorToKill)
+    handler.getNumExecutorsRunning should be (1)
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map.empty, Set.empty)
+    handler.updateResourceRequests()
+    handler.getPendingAllocate.size should be (1)
+  }
+
+  test("process same completed container multiple times") {
+    val handler = createAllocator(2)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.getNumExecutorsRunning should be (2)
+    handler.getPendingAllocate.size should be (0)
+
+    val statuses = Seq(container1, container1, container2).map { c =>
+      ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Finished", 0)
+    }
+    handler.processCompletedContainers(statuses)
+    handler.getNumExecutorsRunning should be (0)
+
   }
 
   test("lost executor removed from backend") {
@@ -272,7 +320,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Failed", -1)
     }
     handler.updateResourceRequests()
-    handler.processCompletedContainers(statuses.toSeq)
+    handler.processCompletedContainers(statuses)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
     handler.getPendingAllocate.size should be (2)
@@ -288,10 +336,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map(), Set("hostA"))
     verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq[String]().asJava)
 
-    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), Set("hostA", "hostB"))
+    val blacklistedNodes = Set(
+      "hostA",
+      "hostB"
+    )
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), blacklistedNodes)
     verify(mockAmClient).updateBlacklist(Seq("hostB").asJava, Seq[String]().asJava)
 
-    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
+    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set.empty)
     verify(mockAmClient).updateBlacklist(Seq[String]().asJava, Seq("hostA", "hostB").asJava)
   }
 
@@ -309,8 +361,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   test("window based failure executor counting") {
     sparkConf.set("spark.yarn.executor.failuresValidityInterval", "100s")
     val handler = createAllocator(4)
-    val clock = new ManualClock(0L)
-    handler.setClock(clock)
 
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)

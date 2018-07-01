@@ -86,15 +86,15 @@ def scalar_pandas_udf_example(spark):
     # $example off:scalar_pandas_udf$
 
 
-def group_map_pandas_udf_example(spark):
-    # $example on:group_map_pandas_udf$
+def grouped_map_pandas_udf_example(spark):
+    # $example on:grouped_map_pandas_udf$
     from pyspark.sql.functions import pandas_udf, PandasUDFType
 
     df = spark.createDataFrame(
         [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ("id", "v"))
 
-    @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)
+    @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)
     def substract_mean(pdf):
         # pdf is a pandas.DataFrame
         v = pdf.v
@@ -110,7 +110,7 @@ def group_map_pandas_udf_example(spark):
     # |  2|-1.0|
     # |  2| 4.0|
     # +---+----+
-    # $example off:group_map_pandas_udf$
+    # $example off:grouped_map_pandas_udf$
 
 
 if __name__ == "__main__":
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     dataframe_with_arrow_example(spark)
     print("Running pandas_udf scalar example")
     scalar_pandas_udf_example(spark)
-    print("Running pandas_udf group map example")
-    group_map_pandas_udf_example(spark)
+    print("Running pandas_udf grouped map example")
+    grouped_map_pandas_udf_example(spark)
 
     spark.stop()

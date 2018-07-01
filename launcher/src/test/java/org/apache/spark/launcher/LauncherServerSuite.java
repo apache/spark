@@ -94,8 +94,8 @@ public class LauncherServerSuite extends BaseSuite {
       Message stopMsg = client.inbound.poll(30, TimeUnit.SECONDS);
       assertTrue(stopMsg instanceof Stop);
     } finally {
-      handle.kill();
       close(client);
+      handle.kill();
       client.clientThread.join();
     }
   }
@@ -178,6 +178,34 @@ public class LauncherServerSuite extends BaseSuite {
 
       waitForError(client, secret);
       assertEquals(0, EvilPayload.EVIL_BIT);
+    } finally {
+      handle.kill();
+      close(client);
+      client.clientThread.join();
+    }
+  }
+
+  @Test
+  public void testAppHandleDisconnect() throws Exception {
+    LauncherServer server = LauncherServer.getOrCreateServer();
+    ChildProcAppHandle handle = new ChildProcAppHandle(server);
+    String secret = server.registerHandle(handle);
+
+    TestClient client = null;
+    try {
+      Socket s = new Socket(InetAddress.getLoopbackAddress(), server.getPort());
+      client = new TestClient(s);
+      client.send(new Hello(secret, "1.4.0"));
+      client.send(new SetAppId("someId"));
+
+      // Wait until we know the server has received the messages and matched the handle to the
+      // connection before disconnecting.
+      eventually(Duration.ofSeconds(1), Duration.ofMillis(10), () -> {
+        assertEquals("someId", handle.getAppId());
+      });
+
+      handle.disconnect();
+      waitForError(client, secret);
     } finally {
       handle.kill();
       close(client);

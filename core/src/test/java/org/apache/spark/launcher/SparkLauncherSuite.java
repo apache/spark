@@ -109,7 +109,7 @@ public class SparkLauncherSuite extends BaseSuite {
       .addSparkArg(opts.CONF,
         String.format("%s=-Dfoo=ShouldBeOverriddenBelow", SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
-        "-Dfoo=bar -Dtest.appender=childproc")
+        "-Dfoo=bar -Dtest.appender=console")
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
@@ -157,12 +157,24 @@ public class SparkLauncherSuite extends BaseSuite {
 
     SparkAppHandle handle = null;
     try {
-      handle = new InProcessLauncher()
-        .setMaster("local")
-        .setAppResource(SparkLauncher.NO_RESOURCE)
-        .setMainClass(InProcessTestApp.class.getName())
-        .addAppArgs("hello")
-        .startApplication(listener);
+      synchronized (InProcessTestApp.LOCK) {
+        handle = new InProcessLauncher()
+          .setMaster("local")
+          .setAppResource(SparkLauncher.NO_RESOURCE)
+          .setMainClass(InProcessTestApp.class.getName())
+          .addAppArgs("hello")
+          .startApplication(listener);
+
+        // SPARK-23020: see doc for InProcessTestApp.LOCK for a description of the race. Here
+        // we wait until we know that the connection between the app and the launcher has been
+        // established before allowing the app to finish.
+        final SparkAppHandle _handle = handle;
+        eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () -> {
+          assertNotEquals(SparkAppHandle.State.UNKNOWN, _handle.getState());
+        });
+
+        InProcessTestApp.LOCK.wait(5000);
+      }
 
       waitFor(handle);
       assertEquals(SparkAppHandle.State.FINISHED, handle.getState());
@@ -180,6 +192,41 @@ public class SparkLauncherSuite extends BaseSuite {
     }
   }
 
+  @Test
+  public void testInProcessLauncherDoesNotKillJvm() throws Exception {
+    SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
+    List<String[]> wrongArgs = Arrays.asList(
+      new String[] { "--unknown" },
+      new String[] { opts.DEPLOY_MODE, "invalid" });
+
+    for (String[] args : wrongArgs) {
+      InProcessLauncher launcher = new InProcessLauncher()
+        .setAppResource(SparkLauncher.NO_RESOURCE);
+      switch (args.length) {
+        case 2:
+          launcher.addSparkArg(args[0], args[1]);
+          break;
+
+        case 1:
+          launcher.addSparkArg(args[0]);
+          break;
+
+        default:
+          fail("FIXME: invalid test.");
+      }
+
+      SparkAppHandle handle = launcher.startApplication();
+      waitFor(handle);
+      assertEquals(SparkAppHandle.State.FAILED, handle.getState());
+    }
+
+    // Run --version, which is useless as a use case, but should succeed and not exit the JVM.
+    // The expected state is "LOST" since "--version" doesn't report state back to the handle.
+    SparkAppHandle handle = new InProcessLauncher().addSparkArg(opts.VERSION).startApplication();
+    waitFor(handle);
+    assertEquals(SparkAppHandle.State.LOST, handle.getState());
+  }
+
   public static class SparkLauncherTestApp {
 
     public static void main(String[] args) throws Exception {
@@ -193,10 +240,26 @@ public class SparkLauncherSuite extends BaseSuite {
 
   public static class InProcessTestApp {
 
+    /**
+     * SPARK-23020: there's a race caused by a child app finishing too quickly. This would cause
+     * the InProcessAppHandle to dispose of itself even before the child connection was properly
+     * established, so no state changes would be detected for the application and its final
+     * state would be LOST.
+     *
+     * It's not really possible to fix that race safely in the handle code itself without changing
+     * the way in-process apps talk to the launcher library, so we work around that in the test by
+     * synchronizing on this object.
+     */
+    public static final Object LOCK = new Object();
+
     public static void main(String[] args) throws Exception {
       assertNotEquals(0, args.length);
       assertEquals(args[0], "hello");
       new SparkContext().stop();
+
+      synchronized (LOCK) {
+        LOCK.notifyAll();
+      }
     }
 
   }

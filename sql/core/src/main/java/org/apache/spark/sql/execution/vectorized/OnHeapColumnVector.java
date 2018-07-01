@@ -69,7 +69,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   private float[] floatData;
   private double[] doubleData;
 
-  // Only set if type is Array.
+  // Only set if type is Array or Map.
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
@@ -119,7 +119,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (numNulls == 0) return;
+    if (!hasNull()) return;
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
     }
@@ -231,7 +231,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putShorts(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, shortData,
-      Platform.SHORT_ARRAY_OFFSET + rowId * 2, count * 2);
+      Platform.SHORT_ARRAY_OFFSET + rowId * 2L, count * 2L);
   }
 
   @Override
@@ -276,7 +276,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putInts(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, intData,
-      Platform.INT_ARRAY_OFFSET + rowId * 4, count * 4);
+      Platform.INT_ARRAY_OFFSET + rowId * 4L, count * 4L);
   }
 
   @Override
@@ -342,7 +342,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putLongs(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, longData,
-      Platform.LONG_ARRAY_OFFSET + rowId * 8, count * 8);
+      Platform.LONG_ARRAY_OFFSET + rowId * 8L, count * 8L);
   }
 
   @Override
@@ -394,7 +394,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, floatData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 4, count * 4);
+          Platform.DOUBLE_ARRAY_OFFSET + rowId * 4L, count * 4L);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       for (int i = 0; i < count; ++i) {
@@ -443,7 +443,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 8, count * 8);
+          Platform.DOUBLE_ARRAY_OFFSET + rowId * 8L, count * 8L);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       for (int i = 0; i < count; ++i) {
@@ -503,7 +503,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    if (isArray()) {
+    if (isArray() || type instanceof MapType) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {

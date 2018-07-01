@@ -154,6 +154,16 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("SPARK-23778: empty RDD in union should not produce a UnionRDD") {
+    val rddWithPartitioner = sc.parallelize(Seq(1 -> true)).partitionBy(new HashPartitioner(1))
+    val emptyRDD = sc.emptyRDD[(Int, Boolean)]
+    val unionRDD = sc.union(emptyRDD, rddWithPartitioner)
+    assert(unionRDD.isInstanceOf[PartitionerAwareUnionRDD[_]])
+    val unionAllEmptyRDD = sc.union(emptyRDD, emptyRDD)
+    assert(unionAllEmptyRDD.isInstanceOf[UnionRDD[_]])
+    assert(unionAllEmptyRDD.collect().isEmpty)
+  }
+
   test("partitioner aware union") {
     def makeRDDWithPartitioner(seq: Seq[Int]): RDD[Int] = {
       sc.makeRDD(seq, 1)
@@ -1047,7 +1057,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   private class CyclicalDependencyRDD[T: ClassTag] extends RDD[T](sc, Nil) {
     private val mutableDependencies: ArrayBuffer[Dependency[_]] = ArrayBuffer.empty
     override def compute(p: Partition, c: TaskContext): Iterator[T] = Iterator.empty
-    override def getPartitions: Array[Partition] = Array.empty
+    override def getPartitions: Array[Partition] = Array(new Partition {
+      override def index: Int = 0
+    })
     override def getDependencies: Seq[Dependency[_]] = mutableDependencies
     def addDependency(dep: Dependency[_]) {
       mutableDependencies += dep
@@ -1127,6 +1139,35 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
         iter
       }
     }.collect()
+  }
+
+  test("SPARK-23496: order of input partitions can result in severe skew in coalesce") {
+    val numInputPartitions = 100
+    val numCoalescedPartitions = 50
+    val locations = Array("locA", "locB")
+
+    val inputRDD = sc.makeRDD(Range(0, numInputPartitions).toArray[Int], numInputPartitions)
+    assert(inputRDD.getNumPartitions == numInputPartitions)
+
+    val locationPrefRDD = new LocationPrefRDD(inputRDD, { (p: Partition) =>
+      if (p.index < numCoalescedPartitions) {
+        Seq(locations(0))
+      } else {
+        Seq(locations(1))
+      }
+    })
+    val coalescedRDD = new CoalescedRDD(locationPrefRDD, numCoalescedPartitions)
+
+    val numPartsPerLocation = coalescedRDD
+      .getPartitions
+      .map(coalescedRDD.getPreferredLocations(_).head)
+      .groupBy(identity)
+      .mapValues(_.size)
+
+    // Make sure the coalesced partitions are distributed fairly evenly between the two locations.
+    // This should not become flaky since the DefaultPartitionsCoalescer uses a fixed seed.
+    assert(numPartsPerLocation(locations(0)) > 0.4 * numCoalescedPartitions)
+    assert(numPartsPerLocation(locations(1)) > 0.4 * numCoalescedPartitions)
   }
 
   // NOTE
@@ -1209,4 +1250,17 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
     }
     groups.toArray
   }
+}
+
+/** Alters the preferred locations of the parent RDD using provided function. */
+class LocationPrefRDD[T: ClassTag](
+    @transient var prev: RDD[T],
+    val locationPicker: Partition => Seq[String]) extends RDD[T](prev) {
+  override protected def getPartitions: Array[Partition] = prev.partitions
+
+  override def compute(partition: Partition, context: TaskContext): Iterator[T] =
+    null.asInstanceOf[Iterator[T]]
+
+  override def getPreferredLocations(partition: Partition): Seq[String] =
+    locationPicker(partition)
 }

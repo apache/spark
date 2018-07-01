@@ -89,6 +89,8 @@ class OrcFileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    DataSourceUtils.verifyWriteSchema(this, dataSchema)
+
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
 
     val conf = job.getConfiguration
@@ -141,6 +143,8 @@ class OrcFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    DataSourceUtils.verifyReadSchema(this, dataSchema)
+
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       OrcFilters.createFilter(dataSchema, filters).foreach { f =>
         OrcInputFormat.setSearchArgument(hadoopConf, f, dataSchema.fieldNames)
@@ -151,6 +155,7 @@ class OrcFileFormat
     val sqlConf = sparkSession.sessionState.conf
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
+    val capacity = sqlConf.orcVectorizedReaderBatchSize
     val copyToSpark = sparkSession.sessionState.conf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK)
 
     val broadcastedConf =
@@ -186,7 +191,13 @@ class OrcFileFormat
         val taskContext = Option(TaskContext.get())
         if (enableVectorizedReader) {
           val batchReader = new OrcColumnarBatchReader(
-            enableOffHeapColumnVector && taskContext.isDefined, copyToSpark)
+            enableOffHeapColumnVector && taskContext.isDefined, copyToSpark, capacity)
+          // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
+          // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
+          // after opening a file.
+          val iter = new RecordReaderIterator(batchReader)
+          Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
             reader.getSchema,
@@ -195,8 +206,6 @@ class OrcFileFormat
             partitionSchema,
             file.partitionValues)
 
-          val iter = new RecordReaderIterator(batchReader)
-          Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
           iter.asInstanceOf[Iterator[InternalRow]]
         } else {
           val orcRecordReader = new OrcInputFormat[OrcStruct]

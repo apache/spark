@@ -24,10 +24,14 @@
    :members:
 """
 
+import sys
+
 import numpy as np
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
 from pyspark.sql import DataFrame, SparkSession
+
+__all__ = ["ImageSchema"]
 
 
 class _ImageSchema(object):
@@ -40,6 +44,7 @@ class _ImageSchema(object):
     def __init__(self):
         self._imageSchema = None
         self._ocvTypes = None
+        self._columnSchema = None
         self._imageFields = None
         self._undefinedImageType = None
 
@@ -49,7 +54,7 @@ class _ImageSchema(object):
         Returns the image schema.
 
         :return: a :class:`StructType` with a single column of images
-               named "image" (nullable).
+               named "image" (nullable) and having the same type returned by :meth:`columnSchema`.
 
         .. versionadded:: 2.3.0
         """
@@ -74,6 +79,23 @@ class _ImageSchema(object):
             ctx = SparkContext._active_spark_context
             self._ocvTypes = dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema.javaOcvTypes())
         return self._ocvTypes
+
+    @property
+    def columnSchema(self):
+        """
+        Returns the schema for the image column.
+
+        :return: a :class:`StructType` for image column,
+            ``struct<origin:string, height:int, width:int, nChannels:int, mode:int, data:binary>``.
+
+        .. versionadded:: 2.4.0
+        """
+
+        if self._columnSchema is None:
+            ctx = SparkContext._active_spark_context
+            jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.columnSchema()
+            self._columnSchema = _parse_datatype_json_string(jschema.json())
+        return self._columnSchema
 
     @property
     def imageFields(self):
@@ -233,7 +255,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
