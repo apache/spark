@@ -186,8 +186,8 @@ private[v1] class StagesResource extends BaseAppResource {
   }
 
   // Performs pagination on the server side
-  def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int, stageAttemptId: Int):
-  Seq[TaskData] = {
+  def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int,
+    stageAttemptId: Int): Seq[TaskData] = {
     val queryParams = queryParameters.keySet()
     var columnToSort = 0
     if (queryParams.contains("order[0][column]")) {
