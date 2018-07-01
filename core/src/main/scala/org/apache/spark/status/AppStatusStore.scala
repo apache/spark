@@ -391,6 +391,7 @@ private[spark] class AppStatusStore(
     ordered.skip(offset).max(length).asScala.map(_.toApi).toSeq
   }
 
+  // Filters task list based on search parameter
   def filterTaskList(
       taskDataList: Seq[v1.TaskData],
       searchValue: String): Seq[v1.TaskData] = {
@@ -415,6 +416,8 @@ private[spark] class AppStatusStore(
         || f.taskMetrics.get.inputMetrics.recordsRead.toString.contains(searchValue)
         || f.taskMetrics.get.outputMetrics.bytesWritten.toString.contains(searchValue)
         || f.taskMetrics.get.outputMetrics.recordsWritten.toString.contains(searchValue)
+        || f.taskMetrics.get.shuffleReadMetrics.fetchWaitTime.toString.contains(searchValue)
+        || f.taskMetrics.get.shuffleReadMetrics.recordsRead.toString.contains(searchValue)
         || f.taskMetrics.get.shuffleWriteMetrics.bytesWritten.toString.contains(searchValue)
         || f.taskMetrics.get.shuffleWriteMetrics.recordsWritten.toString.contains(searchValue)
         || f.taskMetrics.get.shuffleWriteMetrics.writeTime.toString.contains(searchValue)

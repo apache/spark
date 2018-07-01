@@ -51,7 +51,6 @@ private[v1] class StagesResource extends BaseAppResource {
             var executorLogs = ui.store.executorSummary(execId).executorLogs
             var hostPort = ui.store.executorSummary(execId).hostPort
             var taskDataArray = ret(i).tasks.get.keys.toArray
-            var executorStageSummaryArray = ret(i).executorSummary.get.keys.toArray
             ret(i).executorSummary.get.get(execId).get.executorLogs = executorLogs
             ret(i).executorSummary.get.get(execId).get.hostPort = hostPort
             for (taskData <- taskDataArray) {
@@ -128,18 +127,18 @@ private[v1] class StagesResource extends BaseAppResource {
     @PathParam("stageAttemptId") stageAttemptId: Int,
     @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo): util.HashMap[String, Object] = {
     withUI { ui =>
-      val abc = uriInfo.getQueryParameters(true)
-      val totalRecords = abc.getFirst("numTasks")
+      val uriQueryParameters = uriInfo.getQueryParameters(true)
+      val totalRecords = uriQueryParameters.getFirst("numTasks")
       var isSearch = false
       var searchValue: String = null
       var _tasksToShow: Seq[TaskData] = null
-      if (abc.getFirst("search[value]") != null && abc.getFirst("search[value]").length > 0) {
+      if (uriQueryParameters.getFirst("search[value]") != null && uriQueryParameters.getFirst("search[value]").length > 0) {
         _tasksToShow = ui.store.taskList(stageId, stageAttemptId, 0, totalRecords.toInt,
           indexName("Index"), true)
         isSearch = true
-        searchValue = abc.getFirst("search[value]")
+        searchValue = uriQueryParameters.getFirst("search[value]")
       } else {
-        _tasksToShow = doPagination(abc, stageId, stageAttemptId)
+        _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId)
       }
       if (_tasksToShow.nonEmpty) {
         val iterator = _tasksToShow.iterator
@@ -151,13 +150,14 @@ private[v1] class StagesResource extends BaseAppResource {
           t1.schedulerDelay = AppStatusUtils.schedulerDelay(t1)
           t1.gettingResultTime = AppStatusUtils.gettingResultTime(t1)
         }
-        val ret5 = new util.HashMap[String, Object]()
+        val ret = new util.HashMap[String, Object]()
+        // Performs server-side search based on input from user
         if (isSearch) {
           val filteredTaskList = ui.store.filterTaskList(_tasksToShow, searchValue)
           if (filteredTaskList.length > 0) {
-            ret5.put("aaData", filteredTaskList)
+            ret.put("aaData", filteredTaskList)
           } else {
-            _tasksToShow = doPagination(abc, stageId, stageAttemptId)
+            _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId)
             val iterator = _tasksToShow.iterator
             while(iterator.hasNext) {
               val t1: TaskData = iterator.next()
@@ -167,20 +167,21 @@ private[v1] class StagesResource extends BaseAppResource {
               t1.schedulerDelay = AppStatusUtils.schedulerDelay(t1)
               t1.gettingResultTime = AppStatusUtils.gettingResultTime(t1)
             }
-            ret5.put("aaData", _tasksToShow)
+            ret.put("aaData", _tasksToShow)
           }
         } else {
-          ret5.put("aaData", _tasksToShow)
+          ret.put("aaData", _tasksToShow)
         }
-        ret5.put("recordsTotal", totalRecords)
-        ret5.put("recordsFiltered", totalRecords)
-        ret5
+        ret.put("recordsTotal", totalRecords)
+        ret.put("recordsFiltered", totalRecords)
+        ret
       } else {
         throw new NotFoundException(s"unknown stage: $stageId")
       }
     }
   }
 
+  // Performs pagination on the server side
   def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int, stageAttemptId: Int): Seq[TaskData] = {
     val queryParams = queryParameters.keySet()
     var columnToSort = 0

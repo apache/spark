@@ -98,6 +98,9 @@ function getColumnNameForTaskMetricSummary(columnKey) {
     else if(columnKey == "memoryBytesSpilled") {
         return "Shuffle spill (memory)";
     }
+    else if(columnKey == "shuffleReadMetrics") {
+        return "Shuffle Read Size / Records";
+    }
     else if(columnKey == "shuffleWriteMetrics") {
         return "Shuffle Write Size / Records";
     }
@@ -176,7 +179,24 @@ $(document).ready(function () {
                     var taskMetricIndices = Object.keys(response1);
                     taskMetricIndices.forEach(function (ix) {
                         var columnName = getColumnNameForTaskMetricSummary(ix);
-                        if (columnName != "NA") {
+                        if (columnName == "Shuffle Read Size / Records") {
+                            var row1 = {
+                                "metric": columnName,
+                                "data": response1[ix]
+                            };
+                            var row2 = {
+                                "metric": "Shuffle Read Blocked Time",
+                                "data": response1[ix]
+                            };
+                            var row3 = {
+                                "metric": "Shuffle Remote Reads",
+                                "data": response1[ix]
+                            };
+                            task_metrics_table.push(row1);
+                            task_metrics_table.push(row2);
+                            task_metrics_table.push(row3);
+                        }
+                        else if (columnName != "NA") {
                             var row = {
                                 "metric": columnName,
                                 "data": response1[ix]
@@ -202,6 +222,19 @@ $(document).ready(function () {
                                         var str2arr = JSON.stringify(row.data.recordsWritten).split("[")[1].split("]")[0].split(",");
                                         var str = formatBytes(str1arr[0], type) + " / " + str2arr[0];
                                         return str;
+                                    } else if (row.metric == 'Shuffle Read Size / Records') {
+                                        var str1arr = JSON.stringify(row.data.readBytes).split("[")[1].split("]")[0].split(",");
+                                        var str2arr = JSON.stringify(row.data.readRecords).split("[")[1].split("]")[0].split(",");
+                                        var str = formatBytes(str1arr[0], type) + " / " + str2arr[0];
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Read Blocked Time') {
+                                        var str1arr = JSON.stringify(row.data.fetchWaitTime).split("[")[1].split("]")[0].split(",");
+                                        var str = formatDuration(str1arr[0]);
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Remote Reads') {
+                                        var str1arr = JSON.stringify(row.data.remoteBytesRead).split("[")[1].split("]")[0].split(",");
+                                        var str = formatBytes(str1arr[0], type);
+                                        return str;
                                     } else if (row.metric == 'Shuffle Write Size / Records') {
                                         var str1arr = JSON.stringify(row.data.writeBytes).split("[")[1].split("]")[0].split(",");
                                         var str2arr = JSON.stringify(row.data.writeRecords).split("[")[1].split("]")[0].split(",");
@@ -224,6 +257,19 @@ $(document).ready(function () {
                                         var str1arr = JSON.stringify(row.data.bytesWritten).split("[")[1].split("]")[0].split(",");
                                         var str2arr = JSON.stringify(row.data.recordsWritten).split("[")[1].split("]")[0].split(",");
                                         var str = formatBytes(str1arr[1], type) + " / " + str2arr[1];
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Read Size / Records') {
+                                        var str1arr = JSON.stringify(row.data.readBytes).split("[")[1].split("]")[0].split(",");
+                                        var str2arr = JSON.stringify(row.data.readRecords).split("[")[1].split("]")[0].split(",");
+                                        var str = formatBytes(str1arr[1], type) + " / " + str2arr[1];
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Read Blocked Time') {
+                                        var str1arr = JSON.stringify(row.data.fetchWaitTime).split("[")[1].split("]")[0].split(",");
+                                        var str = formatDuration(str1arr[1]);
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Remote Reads') {
+                                        var str1arr = JSON.stringify(row.data.remoteBytesRead).split("[")[1].split("]")[0].split(",");
+                                        var str = formatBytes(str1arr[1], type);
                                         return str;
                                     } else if (row.metric == 'Shuffle Write Size / Records') {
                                         var str1arr = JSON.stringify(row.data.writeBytes).split("[")[1].split("]")[0].split(",");
@@ -248,6 +294,19 @@ $(document).ready(function () {
                                         var str2arr = JSON.stringify(row.data.recordsWritten).split("[")[1].split("]")[0].split(",");
                                         var str = formatBytes(str1arr[2], type) + " / " + str2arr[2];
                                         return str;
+                                    } else if (row.metric == 'Shuffle Read Size / Records') {
+                                        var str1arr = JSON.stringify(row.data.readBytes).split("[")[1].split("]")[0].split(",");
+                                        var str2arr = JSON.stringify(row.data.readRecords).split("[")[1].split("]")[0].split(",");
+                                        var str = formatBytes(str1arr[2], type) + " / " + str2arr[2];
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Read Blocked Time') {
+                                        var str1arr = JSON.stringify(row.data.fetchWaitTime).split("[")[1].split("]")[0].split(",");
+                                        var str = formatDuration(str1arr[2]);
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Remote Reads') {
+                                        var str1arr = JSON.stringify(row.data.remoteBytesRead).split("[")[1].split("]")[0].split(",");
+                                        var str = formatBytes(str1arr[2], type);
+                                        return str;
                                     } else if (row.metric == 'Shuffle Write Size / Records') {
                                         var str1arr = JSON.stringify(row.data.writeBytes).split("[")[1].split("]")[0].split(",");
                                         var str2arr = JSON.stringify(row.data.writeRecords).split("[")[1].split("]")[0].split(",");
@@ -270,6 +329,19 @@ $(document).ready(function () {
                                         var str1arr = JSON.stringify(row.data.bytesWritten).split("[")[1].split("]")[0].split(",");
                                         var str2arr = JSON.stringify(row.data.recordsWritten).split("[")[1].split("]")[0].split(",");
                                         var str = formatBytes(str1arr[3], type) + " / " + str2arr[3];
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Read Size / Records') {
+                                        var str1arr = JSON.stringify(row.data.readBytes).split("[")[1].split("]")[0].split(",");
+                                        var str2arr = JSON.stringify(row.data.readRecords).split("[")[1].split("]")[0].split(",");
+                                        var str = formatBytes(str1arr[3], type) + " / " + str2arr[3];
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Read Blocked Time') {
+                                        var str1arr = JSON.stringify(row.data.fetchWaitTime).split("[")[1].split("]")[0].split(",");
+                                        var str = formatDuration(str1arr[3]);
+                                        return str;
+                                    } else if (row.metric == 'Shuffle Remote Reads') {
+                                        var str1arr = JSON.stringify(row.data.remoteBytesRead).split("[")[1].split("]")[0].split(",");
+                                        var str = formatBytes(str1arr[3], type);
                                         return str;
                                     } else if (row.metric == 'Shuffle Write Size / Records') {
                                         var str1arr = JSON.stringify(row.data.writeBytes).split("[")[1].split("]")[0].split(",");
@@ -294,7 +366,20 @@ $(document).ready(function () {
                                         var str2arr = JSON.stringify(row.data.recordsWritten).split("[")[1].split("]")[0].split(",");
                                         var str = formatBytes(str1arr[4], type) + " / " + str2arr[4];
                                         return str;
-                                    } else if (row.metric == 'Shuffle Write Size / Records') {
+                                    } else if (row.metric == 'Shuffle Read Size / Records') {
+                                        var str1arr = JSON.stringify(row.data.readBytes).split("[")[1].split("]")[0].split(",");
+                                        var str2arr = JSON.stringify(row.data.readRecords).split("[")[1].split("]")[0].split(",");
+                                        var str = formatBytes(str1arr[4], type) + " / " + str2arr[4];
+                                        return str;
+                                      } else if (row.metric == 'Shuffle Read Blocked Time') {
+                                          var str1arr = JSON.stringify(row.data.fetchWaitTime).split("[")[1].split("]")[0].split(",");
+                                          var str = formatDuration(str1arr[4]);
+                                          return str;
+                                      } else if (row.metric == 'Shuffle Remote Reads') {
+                                          var str1arr = JSON.stringify(row.data.remoteBytesRead).split("[")[1].split("]")[0].split(",");
+                                          var str = formatBytes(str1arr[4], type);
+                                          return str;
+                                      } else if (row.metric == 'Shuffle Write Size / Records') {
                                         var str1arr = JSON.stringify(row.data.writeBytes).split("[")[1].split("]")[0].split(",");
                                         var str2arr = JSON.stringify(row.data.writeRecords).split("[")[1].split("]")[0].split(",");
                                         var str = formatBytes(str1arr[4], type) + " / " + str2arr[4];
@@ -394,14 +479,7 @@ $(document).ready(function () {
                 }
                 $(accumulatorTable).DataTable(accumulator_conf);
 
-                var showInputMetrics = false;
-                var showOutputMetrics = false;
-                var showShuffleWriteTimeMetrics = false;
-                var showShuffleWriteBytesMetrics = false;
-                var showDiskSpill = false;
-                var showMemSpill = false;
-
-                // building tasks table
+                // building tasks table that uses server side functionality
                 var taskTable = "#active-tasks-table";
                 var task_conf = {
                     "serverSide": true,
@@ -534,7 +612,6 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 if ("taskMetrics" in row) {
                                     if (row.taskMetrics.inputMetrics.bytesRead > 0) {
-                                        showInputMetrics = true;
                                         if (type === 'display') {
                                             return formatBytes(row.taskMetrics.inputMetrics.bytesRead, type) + " / " + row.taskMetrics.inputMetrics.recordsRead;
                                         } else {
@@ -553,7 +630,6 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 if ("taskMetrics" in row) {
                                     if (row.taskMetrics.outputMetrics.bytesWritten > 0) {
-                                        showOutputMetrics = true;
                                         if (type === 'display') {
                                             return formatBytes(row.taskMetrics.outputMetrics.bytesWritten, type) + " / " + row.taskMetrics.outputMetrics.recordsWritten;
                                         } else {
@@ -572,7 +648,6 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 if ("taskMetrics" in row) {
                                     if (row.taskMetrics.shuffleWriteMetrics.writeTime > 0) {
-                                        showShuffleWriteTimeMetrics = true;
                                         return type === 'display' ? formatDuration(parseInt(row.taskMetrics.shuffleWriteMetrics.writeTime) / 1000000) : row.taskMetrics.shuffleWriteMetrics.writeTime;
                                     } else {
                                         return "";
@@ -587,7 +662,6 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 if ("taskMetrics" in row) {
                                     if (row.taskMetrics.shuffleWriteMetrics.bytesWritten > 0) {
-                                        showShuffleWriteBytesMetrics = true;
                                         if (type === 'display') {
                                             return formatBytes(row.taskMetrics.shuffleWriteMetrics.bytesWritten, type) + " / " + row.taskMetrics.shuffleWriteMetrics.recordsWritten;
                                         } else {
@@ -605,8 +679,26 @@ $(document).ready(function () {
                         {
                             data : function (row, type) {
                                 if ("taskMetrics" in row) {
+                                    if (row.taskMetrics.shuffleReadMetrics.localBytesRead > 0) {
+                                        var totalBytesRead = parseInt(row.taskMetrics.shuffleReadMetrics.localBytesRead) + parseInt(row.taskMetrics.shuffleReadMetrics.remoteBytesRead);
+                                        if (type === 'display') {
+                                            return formatBytes(totalBytesRead, type) + " / " + row.taskMetrics.shuffleReadMetrics.recordsRead;
+                                        } else {
+                                            return totalBytesRead + " / " + row.taskMetrics.shuffleReadMetrics.recordsRead;
+                                        }
+                                    } else {
+                                        return "";
+                                    }
+                                } else {
+                                    return "";
+                                }
+                            },
+                            name: "Shuffle Read Size / Records"
+                        },
+                        {
+                            data : function (row, type) {
+                                if ("taskMetrics" in row) {
                                     if (row.taskMetrics.memoryBytesSpilled > 0) {
-                                        showMemSpill = true;
                                         return type === 'display' ? formatBytes(row.taskMetrics.memoryBytesSpilled, type) : row.taskMetrics.memoryBytesSpilled;
                                     } else {
                                         return "";
@@ -621,7 +713,6 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 if ("taskMetrics" in row) {
                                     if (row.taskMetrics.diskBytesSpilled > 0) {
-                                        showDiskSpill = true;
                                         return type === 'display' ? formatBytes(row.taskMetrics.diskBytesSpilled, type) : row.taskMetrics.diskBytesSpilled;
                                     } else {
                                         return "";
@@ -655,13 +746,7 @@ $(document).ready(function () {
                         { "visible": false, "targets": 15 },
                         { "visible": false, "targets": 16 },
                         { "visible": false, "targets": 17 },
-                        { "visible": false, "targets": 18 },
-                        { "visible": false, "targets": 19 },
-                        { "visible": false, "targets": 20 },
-                        { "visible": false, "targets": 21 },
-                        { "visible": false, "targets": 22 },
-                        { "visible": false, "targets": 23 },
-                        { "visible": false, "targets": 24 }
+                        { "visible": false, "targets": 18 }
                     ],
                 };
                 var taskTableSelector = $(taskTable).DataTable(task_conf);
@@ -715,25 +800,6 @@ $(document).ready(function () {
                 } else {
                     taskTableSelector.column(18).visible(true);
                     $("#accumulator-update-table").show();
-                }
-
-                if (showInputMetrics) {
-                    taskTableSelector.column(19).visible(true);
-                }
-                if (showOutputMetrics) {
-                    taskTableSelector.column(20).visible(true);
-                }
-                if (showShuffleWriteTimeMetrics) {
-                    taskTableSelector.column(21).visible(true);
-                }
-                if (showShuffleWriteBytesMetrics) {
-                    taskTableSelector.column(22).visible(true);
-                }
-                if (showMemSpill) {
-                    taskTableSelector.column(23).visible(true);
-                }
-                if (showDiskSpill) {
-                    taskTableSelector.column(24).visible(true);
                 }
             });
         });
