@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.TimeZone
 
+import scala.reflect.{classTag, ClassTag}
+
 import org.scalatest.Matchers
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -518,9 +520,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-22614 RepartitionByExpression partitioning") {
-    def checkPartitioning[T <: Partitioning](numPartitions: Int, exprs: Expression*): Unit = {
+    def checkPartitioning[T <: Partitioning: ClassTag](numPartitions: Int,
+                                                       exprs: Expression*): Unit = {
       val partitioning = RepartitionByExpression(exprs, testRelation2, numPartitions).partitioning
-      assert(partitioning.isInstanceOf[T])
+      assert(classTag[T].runtimeClass.isInstance(partitioning))
     }
 
     checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))
