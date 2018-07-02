@@ -22,12 +22,12 @@ import java.util.TreeMap;
 
 /**
  * This class implements bounded {@link java.util.SortedMap} based on {@link java.util.TreeMap}.
- * <p/>
+ *
  * As TreeMap does, this implementation sorts elements in natural order, and cuts off
  * smaller elements to retain at most bigger N elements.
- * <p/>
+ *
  * You can provide reversed order of comparator to retain smaller elements instead.
- * <p/>
+ * 
  * This class is not thread-safe, so synchronization would be needed to use this concurrently.
  *
  * @param <K> key type
