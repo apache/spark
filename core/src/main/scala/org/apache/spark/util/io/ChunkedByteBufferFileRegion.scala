@@ -37,7 +37,7 @@ private[io] class ChunkedByteBufferFileRegion(
   private var _transferred: Long = 0
   // this duplicates the original chunks, so we're free to modify the position, limit, etc.
   private val chunks = chunkedByteBuffer.getChunks()
-  private val size = chunks.foldLeft(0) { _ + _.remaining() }
+  private val size = chunks.foldLeft(0L) { _ + _.remaining() }
 
   protected def deallocate: Unit = {}
 
