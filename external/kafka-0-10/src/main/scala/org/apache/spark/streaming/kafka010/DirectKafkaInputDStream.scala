@@ -188,6 +188,9 @@ private[spark] class DirectKafkaInputDStream[K, V](
     paranoidPoll(c)
     val parts = c.assignment().asScala
 
+    // no need to read data, so pause
+    c.pause(parts.asJava)
+
     // make sure new partitions are reflected in currentOffsets
     val newPartitions = parts.diff(currentOffsets.keySet)
 
@@ -208,7 +211,11 @@ private[spark] class DirectKafkaInputDStream[K, V](
     c.pause(newPartitions.asJava)
     // find latest available offsets
     c.seekToEnd(currentOffsets.keySet.asJava)
-    parts.map(tp => tp -> c.position(tp)).toMap
+
+    val result = parts.map(tp => tp -> c.position(tp))
+    // pause here because of c.position(tp)
+    c.pause(parts.asJava)
+    result.toMap
   }
 
   // limits the maximum number of messages per partition
