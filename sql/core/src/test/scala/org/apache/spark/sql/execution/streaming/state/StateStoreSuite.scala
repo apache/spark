@@ -522,6 +522,12 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(loadedMapSize.isDefined)
     val initialLoadedMapSize = loadedMapSize.get._2
     assert(initialLoadedMapSize >= 0)
+    var cacheHitCount = store.metrics.customMetrics.find(_._1.name == "loadedMapCacheHitCount")
+    assert(cacheHitCount.isDefined)
+    assert(cacheHitCount.get._2 == 0)
+    var cacheMissCount = store.metrics.customMetrics.find(_._1.name == "loadedMapCacheMissCount")
+    assert(cacheMissCount.isDefined)
+    assert(cacheMissCount.get._2 == 0)
 
     put(store, "a", 1)
     assert(store.metrics.numKeys === 1)
@@ -540,6 +546,12 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(loadedMapSize.isDefined)
     val loadedMapSizeForVersion1 = loadedMapSize.get._2
     assert(loadedMapSizeForVersion1 > initialLoadedMapSize)
+    cacheHitCount = store.metrics.customMetrics.find(_._1.name == "loadedMapCacheHitCount")
+    assert(cacheHitCount.isDefined)
+    assert(cacheHitCount.get._2 == 0)
+    cacheMissCount = store.metrics.customMetrics.find(_._1.name == "loadedMapCacheMissCount")
+    assert(cacheMissCount.isDefined)
+    assert(cacheMissCount.get._2 == 0)
 
     val storeV2 = provider.getStore(1)
     assert(!storeV2.hasCommitted)
@@ -556,6 +568,12 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(loadedMapSize.isDefined)
     val loadedMapSizeForVersion1And2 = loadedMapSize.get._2
     assert(loadedMapSizeForVersion1And2 > loadedMapSizeForVersion1)
+    cacheHitCount = store.metrics.customMetrics.find(_._1.name == "loadedMapCacheHitCount")
+    assert(cacheHitCount.isDefined)
+    assert(cacheHitCount.get._2 == 1)
+    cacheMissCount = store.metrics.customMetrics.find(_._1.name == "loadedMapCacheMissCount")
+    assert(cacheMissCount.isDefined)
+    assert(cacheMissCount.get._2 == 0)
 
     val reloadedProvider = newStoreProvider(store.id)
     // intended to load version 2 instead of 1
@@ -569,6 +587,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       .find(_._1.name == "providerLoadedMapSizeBytes")
     assert(loadedMapSize.isDefined)
     assert(loadedMapSize.get._2 === loadedMapSizeForVersion1)
+    cacheHitCount = reloadedStore.metrics.customMetrics
+      .find(_._1.name == "loadedMapCacheHitCount")
+    assert(cacheHitCount.isDefined)
+    assert(cacheHitCount.get._2 == 0)
+    cacheMissCount = reloadedStore.metrics.customMetrics
+      .find(_._1.name == "loadedMapCacheMissCount")
+    assert(cacheMissCount.isDefined)
+    assert(cacheMissCount.get._2 == 1)
 
     // now we are loading version 2
     val reloadedStoreV2 = reloadedProvider.getStore(2)
@@ -580,6 +606,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       .find(_._1.name == "providerLoadedMapSizeBytes")
     assert(loadedMapSize.isDefined)
     assert(loadedMapSize.get._2 > loadedMapSizeForVersion1)
+    cacheHitCount = reloadedStoreV2.metrics.customMetrics
+      .find(_._1.name == "loadedMapCacheHitCount")
+    assert(cacheHitCount.isDefined)
+    assert(cacheHitCount.get._2 == 0)
+    cacheMissCount = reloadedStoreV2.metrics.customMetrics
+      .find(_._1.name == "loadedMapCacheMissCount")
+    assert(cacheMissCount.isDefined)
+    assert(cacheMissCount.get._2 == 2)
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {

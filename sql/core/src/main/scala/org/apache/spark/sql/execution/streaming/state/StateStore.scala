@@ -139,6 +139,7 @@ trait StateStoreCustomMetric {
   def desc: String
 }
 
+case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric
 case class StateStoreCustomAverageMetric(name: String, desc: String) extends StateStoreCustomMetric
 case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric
 case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric

@@ -60,6 +60,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |    "numRowsUpdated" : 1,
         |    "memoryUsedBytes" : 2,
         |    "customMetrics" : {
+        |      "loadedMapCacheHitCount" : 1,
+        |      "loadedMapCacheMissCount" : 0,
         |      "providerLoadedMapSizeBytes" : 3
         |    }
         |  } ],
@@ -234,7 +236,8 @@ object StreamingQueryStatusAndProgressSuite {
       "watermark" -> "2016-12-05T20:54:20.827Z").asJava),
     stateOperators = Array(new StateOperatorProgress(
       numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 2,
-      customMetrics = new java.util.HashMap(Map("providerLoadedMapSizeBytes" -> 3L)
+      customMetrics = new java.util.HashMap(Map("providerLoadedMapSizeBytes" -> 3L,
+        "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
         .mapValues(long2Long).asJava)
     )),
     sources = Array(
