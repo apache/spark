@@ -1323,7 +1323,7 @@ class DAGScheduler(
         }
 
       case FetchFailed(bmAddress, shuffleId, mapId, _, failureMessage) =>
-        val failedStage = stageIdToStage(task.stageId)
+        val failedStage = stage
         val mapStage = shuffleIdToMapStage(shuffleId)
 
         if (failedStage.latestInfo.attemptNumber != task.stageAttemptId) {
@@ -1331,9 +1331,9 @@ class DAGScheduler(
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
-          failedStage.fetchFailedAttemptIds.add(task.stageAttemptId)
+          failedStage.failedAttemptIds.add(task.stageAttemptId)
           val shouldAbortStage =
-            failedStage.fetchFailedAttemptIds.size >= maxConsecutiveStageAttempts ||
+            failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
             disallowStageRetryForTest
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
@@ -1386,8 +1386,12 @@ class DAGScheduler(
               )
             }
           }
-          // Mark the map whose fetch failed as broken in the map stage
-          if (mapId != -1) {
+
+          if (mapStage.rdd.recomputeAllPartitionsOnFailure()) {
+            // Mark all the map as broken in the map stage, to ensure recompute all the partitions
+            // on resubmitted stage attempt.
+            mapOutputTracker.unregisterAllMapOutput(shuffleId)
+          } else if (mapId != -1) {
             mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
           }
 

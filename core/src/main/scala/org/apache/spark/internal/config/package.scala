@@ -559,4 +559,16 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
+
+  private[spark] val RECOMPUTE_ALL_PARTITIONS_ON_REPARTITION_FAILURE =
+    ConfigBuilder("spark.shuffle.recomputeAllPartitionsOnRepartitionFailure")
+      .internal()
+      .doc("When perform repartition on an RDD, there may be data correctness issue if " +
+        "only a sub-set of partitions are recomputed on fetch failure and the input data " +
+        "sequence is not deterministic. Turn on this config to always recompute all the " +
+        "partitions before the repartition shuffle on fetch failure to ensure we always get " +
+        "correct result. Please note that turning on this config may increase the risk of job " +
+        "failing due to reach max consequence stage failure limit.")
+      .booleanConf
+      .createWithDefault(true)
 }
