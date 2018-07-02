@@ -8,7 +8,7 @@ endif
 endif
 
 ifdef SPHINXBUILD
-# User-friendly check for sphinx-build if explicitly specified.
+# User-friendly check for sphinx-build.
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
 $(error The '$(SPHINXBUILD)' command was not found. Make sure you have Sphinx installed, then set the SPHINXBUILD environment variable to point to the full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the directory with the executable to your PATH. If you don't have Sphinx installed, grab it from http://sphinx-doc.org/)
 endif
@@ -23,7 +23,7 @@ endif
 ifeq ($(shell $(SPHINXPYTHON) -c 'import sphinx' >/dev/null 2>&1; echo $$?), 1)
 $(error Python executable '$(SPHINXPYTHON)' did not have Sphinx installed. Make sure you have Sphinx installed, then set the SPHINXPYTHON environment variable to point to the Python executable having Sphinx installed. If you don't have Sphinx installed, grab it from http://sphinx-doc.org/)
 endif
-# Use 'SPHINXPYTHON -msphinx' instead of 'sphinx-build' by default. See https://github.com/sphinx-doc/sphinx/pull/3523 for more details.
+# Use 'SPHINXPYTHON -msphinx' instead of 'sphinx-build'. See https://github.com/sphinx-doc/sphinx/pull/3523 for more details.
 SPHINXBUILD = $(SPHINXPYTHON) -msphinx
 endif
 
