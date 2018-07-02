@@ -76,8 +76,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
         binaryColumn(n),
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
     // DateType
-    case ParquetSchemaType(DATE, INT32, null)
-        if pushDownDate =>
+    case ParquetSchemaType(DATE, INT32, null) if pushDownDate =>
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
