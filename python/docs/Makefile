@@ -1,8 +1,13 @@
 # Makefile for Sphinx documentation
 #
 
+ifndef SPHINXBUILD
 ifndef SPHINXPYTHON
-SPHINXBUILD ?= sphinx-build
+SPHINXBUILD = sphinx-build
+endif
+endif
+
+ifdef SPHINXBUILD
 # User-friendly check for sphinx-build if explicitly specified.
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
 $(error The '$(SPHINXBUILD)' command was not found. Make sure you have Sphinx installed, then set the SPHINXBUILD environment variable to point to the full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the directory with the executable to your PATH. If you don't have Sphinx installed, grab it from http://sphinx-doc.org/)
@@ -12,7 +17,7 @@ else
 # Please remove this check below when this issue is fixed. See SPARK-24530 for more details.
 PYTHON_VERSION_CHECK = $(shell $(SPHINXPYTHON) -c 'import sys; print(sys.version_info < (3, 0, 0))')
 ifeq ($(PYTHON_VERSION_CHECK), True)
-$(warning Note that Python 3 is required to generate PySpark documentation correctly for now. Current Python executable was less than Python 3. See SPARK-24530. To force Sphinx to use a specific Python executable, please set SPHINXPYTHON to point to the Python 3 executable.)
+$(error Note that Python 3 is required to generate PySpark documentation correctly for now. Current Python executable was less than Python 3. See SPARK-24530. To force Sphinx to use a specific Python executable, please set SPHINXPYTHON to point to the Python 3 executable.)
 endif
 # Check if Sphinx is installed.
 ifeq ($(shell $(SPHINXPYTHON) -c 'import sphinx' >/dev/null 2>&1; echo $$?), 1)
@@ -26,7 +31,11 @@ endif
 SPHINXOPTS    ?=
 PAPER         ?=
 BUILDDIR      ?= _build
-# Also, you can set SPHINXBUILD to specify Sphinx build executable or SPHINXPYTHON to specify the Python executable used in Sphinx.
+# You can set SPHINXBUILD to specify Sphinx build executable or SPHINXPYTHON to specify the Python executable used in Sphinx.
+# They follow:
+#   1. if SPHINXPYTHON is set, use Python. If SPHINXBUILD is set, use sphinx-build.
+#   2. If both are set, SPHINXBUILD has a higher priority over SPHINXPYTHON
+#   3. By default, SPHINXBUILD is used as 'sphinx-build'.
 
 export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.7-src.zip)
 
