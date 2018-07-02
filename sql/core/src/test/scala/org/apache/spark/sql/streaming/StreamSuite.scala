@@ -866,6 +866,16 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 2), Row(2, 2), Row(3, 2), Row(4, 1), Row(5, 1)))
   }
 
+  test("streaming limits in complete mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(4).groupBy("value").count().orderBy("value").limit(3)
+    testStream(limited, OutputMode.Complete())(
+      AddData(inputData, 1 to 9: _*),
+      CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
+      AddData(inputData, 2 to 6: _*),
+      CheckAnswer(Row(1, 1), Row(2, 2), Row(3, 2)))
+  }
+
   test("streaming limit in update mode") {
     val inputData = MemoryStream[Int]
     val e = intercept[AnalysisException] {
@@ -875,6 +885,33 @@ class StreamSuite extends StreamTest {
     }
     assert(e.getMessage.contains(
       "Limits are not supported on streaming DataFrames/Datasets in Update output mode"))
+  }
+
+  test("streaming limit in multiple partitions") {
+    val inputData = MemoryStream[Int]
+    testStream(inputData.toDF().repartition(2).limit(7))(
+      AddData(inputData, 1 to 10: _*),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 10)),
+        false),
+      AddData(inputData, 11 to 20: _*),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 10)),
+        false))
+  }
+
+  test("streaming limit in multiple partitions by column") {
+    val inputData = MemoryStream[(Int, Int)]
+    val df = inputData.toDF().repartition(2, $"_2").limit(7)
+    testStream(df)(
+      AddData(inputData, (1, 0), (2, 0), (3, 1), (4, 1)),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 4 && rows.forall(r => r.getInt(0) <= 4)),
+        false),
+      AddData(inputData, (5, 0), (6, 0), (7, 1), (8, 1)),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 8)),
+        false))
   }
 
   for (e <- Seq(
