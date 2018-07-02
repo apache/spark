@@ -38,10 +38,6 @@ private[spark] class YarnClusterSchedulerSource(yarnAllocator: YarnAllocator) ex
     override def getValue: Int = yarnAllocator.getNumReleasedContainers
   })
 
-  metricRegistry.register(MetricRegistry.name("numPendingLossReasonRequests"), new Gauge[Int] {
-    override def getValue: Int = yarnAllocator.getNumPendingLossReasonRequests
-  })
-
   metricRegistry.register(MetricRegistry.name("numLocalityAwareTasks"), new Gauge[Int] {
     override def getValue: Int = yarnAllocator.numLocalityAwareTasks
   })
