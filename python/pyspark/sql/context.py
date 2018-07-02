@@ -95,7 +95,7 @@ class SQLContext(object):
 
     @property
     def _conf(self):
-        """Get SQLConf from current SqlContext"""
+        """Accessor for the JVM SQL-specific configurations"""
         return self.sparkSession._jsparkSession.sessionState().conf()
 
     @classmethod
