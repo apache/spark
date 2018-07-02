@@ -2320,23 +2320,62 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 
-  test("SPARK-24165: nullability of nested types") {
+  test("SPARK-24165: CaseWhen/If - nullability of nested types") {
     val rows = new java.util.ArrayList[Row]()
-    rows.add(Row(true, ("a", 1)))
-    rows.add(Row(false, (null, 2)))
+    rows.add(Row(true, ("x", 1), Seq("x", "y"), Map(0 -> "x")))
+    rows.add(Row(false, (null, 2), Seq(null, "z"), Map(0 -> null)))
     val schema = StructType(Seq(
-      StructField("cond", BooleanType, false),
+      StructField("cond", BooleanType, true),
       StructField("s", StructType(Seq(
         StructField("val1", StringType, true),
         StructField("val2", IntegerType, false)
-      )), false)))
+      )), false),
+      StructField("a", ArrayType(StringType, true)),
+      StructField("m", MapType(IntegerType, StringType, true))
+    ))
 
-    val df = spark
-      .createDataFrame(rows, schema)
-      .select(when('cond, struct(lit("x").as("val1"), lit(10).as("val2"))).otherwise('s) as "res")
+    val sourceDF = spark.createDataFrame(rows, schema)
+
+    val structWhenDF = sourceDF
+      .select(when('cond, struct(lit("a").as("val1"), lit(10).as("val2"))).otherwise('s) as "res")
       .select('res.getField("val1"))
+    val arrayWhenDF = sourceDF
+      .select(when('cond, array(lit("a"), lit("b"))).otherwise('a) as "res")
+      .select('res.getItem(0))
+    val mapWhenDF = sourceDF
+      .select(when('cond, map(lit(0), lit("a"))).otherwise('m) as "res")
+      .select('res.getItem(0))
 
-    checkAnswer(df, Seq(Row("x"), Row(null)))
+    val structIfDF = sourceDF
+      .select(expr("if(cond, struct('a' as val1, 10 as val2), s)") as "res")
+      .select('res.getField("val1"))
+    val arrayIfDF = sourceDF
+      .select(expr("if(cond, array('a', 'b'), a)") as "res")
+      .select('res.getItem(0))
+    val mapIfDF = sourceDF
+      .select(expr("if(cond, map(0, 'a'), m)") as "res")
+      .select('res.getItem(0))
+
+    def checkResult(df: DataFrame, codegenExpected: Boolean): Unit = {
+      assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] == codegenExpected)
+      checkAnswer(df, Seq(Row("a"), Row(null)))
+    }
+
+    // without codegen
+    checkResult(structWhenDF, false)
+    checkResult(arrayWhenDF, false)
+    checkResult(mapWhenDF, false)
+    checkResult(structIfDF, false)
+    checkResult(arrayIfDF, false)
+    checkResult(mapIfDF, false)
+
+    // with codegen
+    checkResult(structWhenDF.filter('cond.isNotNull), true)
+    checkResult(arrayWhenDF.filter('cond.isNotNull), true)
+    checkResult(mapWhenDF.filter('cond.isNotNull), true)
+    checkResult(structIfDF.filter('cond.isNotNull), true)
+    checkResult(arrayIfDF.filter('cond.isNotNull), true)
+    checkResult(mapIfDF.filter('cond.isNotNull), true)
   }
 
   test("Uuid expressions should produce same results at retries in the same DataFrame") {

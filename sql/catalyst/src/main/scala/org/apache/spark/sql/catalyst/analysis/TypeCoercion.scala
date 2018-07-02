@@ -660,7 +660,7 @@ object TypeCoercion {
         maybeCommonType.map { commonType =>
           var changed = false
           val newBranches = c.branches.map { case (condition, value) =>
-            if (value.dataType.sameType(commonType)) {
+            if (value.dataType == commonType) {
               (condition, value)
             } else {
               changed = true
@@ -668,7 +668,7 @@ object TypeCoercion {
             }
           }
           val newElseValue = c.elseValue.map { value =>
-            if (value.dataType.sameType(commonType)) {
+            if (value.dataType == commonType) {
               value
             } else {
               changed = true

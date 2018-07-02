@@ -43,7 +43,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       TypeCheckResult.TypeCheckFailure(
         "type of predicate expression in If should be boolean, " +
           s"not ${predicate.dataType.simpleString}")
-    } else if (!trueValue.dataType.sameType(falseValue.dataType)) {
+    } else if (trueValue.dataType != falseValue.dataType) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
     } else {
@@ -126,10 +126,10 @@ case class CaseWhen(
   def valueTypes: Seq[DataType] = branches.map(_._2.dataType) ++ elseValue.map(_.dataType)
 
   def valueTypesEqual: Boolean = valueTypes.size <= 1 || valueTypes.sliding(2, 1).forall {
-    case Seq(dt1, dt2) => dt1.sameType(dt2)
+    case Seq(dt1, dt2) => dt1 == dt2
   }
 
-  override def dataType: DataType = valueTypes.reduce(TypeCoercion.findTightestCommonType(_, _).get)
+  override def dataType: DataType = branches.head._2.dataType
 
   override def nullable: Boolean = {
     // Result is nullable if any of the branch is nullable, or if the else value is nullable
