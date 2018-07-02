@@ -2176,6 +2176,8 @@ the input data stream (using `inputStream.repartition(<number of partitions>)`).
 This distributes the received batches of data across the specified number of machines in the cluster
 before further processing.
 
+For direct stream, please refer to [Spark Streaming + Kafka Integration Guide](streaming-kafka-integration.html)
+
 ### Level of Parallelism in Data Processing
 {:.no_toc}
 Cluster resources can be under-utilized if the number of parallel tasks used in any stage of the
