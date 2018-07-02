@@ -78,6 +78,9 @@ class DataFrame(object):
         self.is_cached = False
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
+        # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
+        # by __repr__ and _repr_html_ while eager evaluation opened.
+        self._support_repr_html = False
 
     @property
     @since(1.3)
@@ -352,7 +355,46 @@ class DataFrame(object):
             print(self._jdf.showString(n, int(truncate), vertical))
 
     def __repr__(self):
-        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+        if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
+            vertical = False
+            return self._jdf.showString(
+                self.sql_ctx._conf.replEagerEvalMaxNumRows(),
+                self.sql_ctx._conf.replEagerEvalTruncate(), vertical)
+        else:
+            return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    def _repr_html_(self):
+        """Returns a dataframe with html code when you enabled eager evaluation
+        by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
+        using support eager evaluation with HTML.
+        """
+        import cgi
+        if not self._support_repr_html:
+            self._support_repr_html = True
+        if self.sql_ctx._conf.isReplEagerEvalEnabled():
+            max_num_rows = max(self.sql_ctx._conf.replEagerEvalMaxNumRows(), 0)
+            sock_info = self._jdf.getRowsToPython(
+                max_num_rows, self.sql_ctx._conf.replEagerEvalTruncate())
+            rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+            head = rows[0]
+            row_data = rows[1:]
+            has_more_data = len(row_data) > max_num_rows
+            row_data = row_data[:max_num_rows]
+
+            html = "<table border='1'>\n"
+            # generate table head
+            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
+            # generate table rows
+            for row in row_data:
+                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
+                    map(lambda x: cgi.escape(x), row))
+            html += "</table>\n"
+            if has_more_data:
+                html += "only showing top %d %s\n" % (
+                    max_num_rows, "row" if max_num_rows == 1 else "rows")
+            return html
+        else:
+            return None
 
     @since(2.1)
     def checkpoint(self, eager=True):
@@ -1987,13 +2029,12 @@ class DataFrame(object):
 
         import pandas as pd
 
-        if self.sql_ctx.getConf("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
-           == "true":
-            timezone = self.sql_ctx.getConf("spark.sql.session.timeZone")
+        if self.sql_ctx._conf.pandasRespectSessionTimeZone():
+            timezone = self.sql_ctx._conf.sessionLocalTimeZone()
         else:
             timezone = None
 
-        if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
+        if self.sql_ctx._conf.arrowEnabled():
             use_arrow = True
             try:
                 from pyspark.sql.types import to_arrow_schema
@@ -2003,8 +2044,7 @@ class DataFrame(object):
                 to_arrow_schema(self.schema)
             except Exception as e:
 
-                if self.sql_ctx.getConf("spark.sql.execution.arrow.fallback.enabled", "true") \
-                        .lower() == "true":
+                if self.sql_ctx._conf.arrowFallbackEnabled():
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.enabled' is set to true; however, "

@@ -23,9 +23,13 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.log4j.{AppenderSkeleton, LogManager}
+import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
@@ -736,39 +740,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(numbers.count() == 8)
   }
 
-  test("error handling for unsupported data types.") {
-    withTempDir { dir =>
-      val csvDir = new File(dir, "csv").getCanonicalPath
-      var msg = intercept[UnsupportedOperationException] {
-        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b)").write.csv(csvDir)
-      }.getMessage
-      assert(msg.contains("CSV data source does not support struct<a:int,b:string> data type"))
-
-      msg = intercept[UnsupportedOperationException] {
-        Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.csv(csvDir)
-      }.getMessage
-      assert(msg.contains("CSV data source does not support map<string,int> data type"))
-
-      msg = intercept[UnsupportedOperationException] {
-        Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands").write.csv(csvDir)
-      }.getMessage
-      assert(msg.contains("CSV data source does not support array<string> data type"))
-
-      msg = intercept[UnsupportedOperationException] {
-        Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
-          .write.csv(csvDir)
-      }.getMessage
-      assert(msg.contains("CSV data source does not support array<double> data type"))
-
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
-        spark.range(1).write.csv(csvDir)
-        spark.read.schema(schema).csv(csvDir).collect()
-      }.getMessage
-      assert(msg.contains("CSV data source does not support array<double> data type."))
-    }
-  }
-
   test("SPARK-15585 turn off quotations") {
     val cars = spark.read
       .format("csv")
@@ -1408,6 +1379,204 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
       assert(idf.count() == 2)
       checkAnswer(idf, List(Row(15, 10, 5), Row(-15, -10, -5)))
+    }
+  }
+
+  def checkHeader(multiLine: Boolean): Unit = {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTempPath { path =>
+        val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
+        val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
+        odf.write.option("header", true).csv(path.getCanonicalPath)
+        val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
+        val exception = intercept[SparkException] {
+          spark.read
+            .schema(ischema)
+            .option("multiLine", multiLine)
+            .option("header", true)
+            .option("enforceSchema", false)
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(exception.getMessage.contains("CSV header does not conform to the schema"))
+
+        val shortSchema = new StructType().add("f1", DoubleType)
+        val exceptionForShortSchema = intercept[SparkException] {
+          spark.read
+            .schema(shortSchema)
+            .option("multiLine", multiLine)
+            .option("header", true)
+            .option("enforceSchema", false)
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(exceptionForShortSchema.getMessage.contains(
+          "Number of column in CSV header is not equal to number of fields in the schema"))
+
+        val longSchema = new StructType()
+          .add("f1", DoubleType)
+          .add("f2", DoubleType)
+          .add("f3", DoubleType)
+
+        val exceptionForLongSchema = intercept[SparkException] {
+          spark.read
+            .schema(longSchema)
+            .option("multiLine", multiLine)
+            .option("header", true)
+            .option("enforceSchema", false)
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(exceptionForLongSchema.getMessage.contains("Header length: 2, schema size: 3"))
+
+        val caseSensitiveSchema = new StructType().add("F1", DoubleType).add("f2", DoubleType)
+        val caseSensitiveException = intercept[SparkException] {
+          spark.read
+            .schema(caseSensitiveSchema)
+            .option("multiLine", multiLine)
+            .option("header", true)
+            .option("enforceSchema", false)
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(caseSensitiveException.getMessage.contains(
+          "CSV header does not conform to the schema"))
+      }
+    }
+  }
+
+  test(s"SPARK-23786: Checking column names against schema in the multiline mode") {
+    checkHeader(multiLine = true)
+  }
+
+  test(s"SPARK-23786: Checking column names against schema in the per-line mode") {
+    checkHeader(multiLine = false)
+  }
+
+  test("SPARK-23786: CSV header must not be checked if it doesn't exist") {
+    withTempPath { path =>
+      val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
+      val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
+      odf.write.option("header", false).csv(path.getCanonicalPath)
+      val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
+      val idf = spark.read
+          .schema(ischema)
+          .option("header", false)
+          .option("enforceSchema", false)
+          .csv(path.getCanonicalPath)
+
+      checkAnswer(idf, odf)
+    }
+  }
+
+  test("SPARK-23786: Ignore column name case if spark.sql.caseSensitive is false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        val oschema = new StructType().add("A", StringType)
+        val odf = spark.createDataFrame(List(Row("0")).asJava, oschema)
+        odf.write.option("header", true).csv(path.getCanonicalPath)
+        val ischema = new StructType().add("a", StringType)
+        val idf = spark.read.schema(ischema)
+          .option("header", true)
+          .option("enforceSchema", false)
+          .csv(path.getCanonicalPath)
+        checkAnswer(idf, odf)
+      }
+    }
+  }
+
+  test("SPARK-23786: check header on parsing of dataset of strings") {
+    val ds = Seq("columnA,columnB", "1.0,1000.0").toDS()
+    val ischema = new StructType().add("columnB", DoubleType).add("columnA", DoubleType)
+    val exception = intercept[IllegalArgumentException] {
+      spark.read.schema(ischema).option("header", true).option("enforceSchema", false).csv(ds)
+    }
+
+    assert(exception.getMessage.contains("CSV header does not conform to the schema"))
+  }
+
+  test("SPARK-23786: enforce inferred schema") {
+    val expectedSchema = new StructType().add("_c0", DoubleType).add("_c1", StringType)
+    val withHeader = spark.read
+      .option("inferSchema", true)
+      .option("enforceSchema", false)
+      .option("header", true)
+      .csv(Seq("_c0,_c1", "1.0,a").toDS())
+    assert(withHeader.schema == expectedSchema)
+    checkAnswer(withHeader, Seq(Row(1.0, "a")))
+
+    // Ignore the inferSchema flag if an user sets a schema
+    val schema = new StructType().add("colA", DoubleType).add("colB", StringType)
+    val ds = spark.read
+      .option("inferSchema", true)
+      .option("enforceSchema", false)
+      .option("header", true)
+      .schema(schema)
+      .csv(Seq("colA,colB", "1.0,a").toDS())
+    assert(ds.schema == schema)
+    checkAnswer(ds, Seq(Row(1.0, "a")))
+
+    val exception = intercept[IllegalArgumentException] {
+      spark.read
+        .option("inferSchema", true)
+        .option("enforceSchema", false)
+        .option("header", true)
+        .schema(schema)
+        .csv(Seq("col1,col2", "1.0,a").toDS())
+    }
+    assert(exception.getMessage.contains("CSV header does not conform to the schema"))
+  }
+
+  test("SPARK-23786: warning should be printed if CSV header doesn't conform to schema") {
+    class TestAppender extends AppenderSkeleton {
+      var events = new java.util.ArrayList[LoggingEvent]
+      override def close(): Unit = {}
+      override def requiresLayout: Boolean = false
+      protected def append(event: LoggingEvent): Unit = events.add(event)
+    }
+
+    val testAppender1 = new TestAppender
+    LogManager.getRootLogger.addAppender(testAppender1)
+    try {
+      val ds = Seq("columnA,columnB", "1.0,1000.0").toDS()
+      val ischema = new StructType().add("columnB", DoubleType).add("columnA", DoubleType)
+
+      spark.read.schema(ischema).option("header", true).option("enforceSchema", true).csv(ds)
+    } finally {
+      LogManager.getRootLogger.removeAppender(testAppender1)
+    }
+    assert(testAppender1.events.asScala
+      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+
+    val testAppender2 = new TestAppender
+    LogManager.getRootLogger.addAppender(testAppender2)
+    try {
+      withTempPath { path =>
+        val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
+        val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
+        odf.write.option("header", true).csv(path.getCanonicalPath)
+        val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
+        spark.read
+          .schema(ischema)
+          .option("header", true)
+          .option("enforceSchema", true)
+          .csv(path.getCanonicalPath)
+          .collect()
+      }
+    } finally {
+      LogManager.getRootLogger.removeAppender(testAppender2)
+    }
+    assert(testAppender2.events.asScala
+      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+  }
+
+  test("SPARK-24645 skip parsing when columnPruning enabled and partitions scanned only") {
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
+      withTempPath { path =>
+        val dir = path.getAbsolutePath
+        spark.range(10).selectExpr("id % 2 AS p", "id").write.partitionBy("p").csv(dir)
+        checkAnswer(spark.read.csv(dir).selectExpr("sum(p)"), Row(5))
+      }
     }
   }
 }

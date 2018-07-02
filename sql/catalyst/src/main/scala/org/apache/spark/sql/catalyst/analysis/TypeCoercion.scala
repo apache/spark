@@ -536,6 +536,21 @@ object TypeCoercion {
           case None => c
         }
 
+      case aj @ ArrayJoin(arr, d, nr) if !ArrayType(StringType).acceptsType(arr.dataType) &&
+        ArrayType.acceptsType(arr.dataType) =>
+        val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
+        ImplicitTypeCasts.implicitCast(arr, ArrayType(StringType, containsNull)) match {
+          case Some(castedArr) => ArrayJoin(castedArr, d, nr)
+          case None => aj
+        }
+
+      case s @ Sequence(_, _, _, timeZoneId) if !haveSameType(s.coercibleChildren) =>
+        val types = s.coercibleChildren.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(widerDataType) => s.castChildrenTo(widerDataType)
+          case None => s
+        }
+
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
         (!haveSameType(m.keys) || !haveSameType(m.values)) =>
         val newKeys = if (haveSameType(m.keys)) {
