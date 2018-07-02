@@ -27,28 +27,40 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("pivot courses") {
+    val expected = Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
     checkAnswer(
       courseSales.groupBy("year").pivot("course", Seq("dotNET", "Java"))
         .agg(sum($"earnings")),
-      Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy($"year").pivot($"course", Seq("dotNET", "Java"))
+        .agg(sum($"earnings")),
+      expected)
   }
 
   test("pivot year") {
+    val expected = Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     checkAnswer(
       courseSales.groupBy("course").pivot("year", Seq(2012, 2013)).agg(sum($"earnings")),
-      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy('course).pivot('year, Seq(2012, 2013)).agg(sum('earnings)),
+      expected)
   }
 
   test("pivot courses with multiple aggregations") {
+    val expected = Row(2012, 15000.0, 7500.0, 20000.0, 20000.0) ::
+      Row(2013, 48000.0, 48000.0, 30000.0, 30000.0) :: Nil
     checkAnswer(
       courseSales.groupBy($"year")
         .pivot("course", Seq("dotNET", "Java"))
         .agg(sum($"earnings"), avg($"earnings")),
-      Row(2012, 15000.0, 7500.0, 20000.0, 20000.0) ::
-        Row(2013, 48000.0, 48000.0, 30000.0, 30000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy($"year")
+        .pivot($"course", Seq("dotNET", "Java"))
+        .agg(sum($"earnings"), avg($"earnings")),
+      expected)
   }
 
   test("pivot year with string values (cast)") {
@@ -181,10 +193,13 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
   }
 
   test("pivot with datatype not supported by PivotFirst") {
+    val expected = Row(Seq(1, 1, 1), Seq(2, 2, 2)) :: Nil
     checkAnswer(
       complexData.groupBy().pivot("b", Seq(true, false)).agg(max("a")),
-      Row(Seq(1, 1, 1), Seq(2, 2, 2)) :: Nil
-    )
+      expected)
+    checkAnswer(
+      complexData.groupBy().pivot('b, Seq(true, false)).agg(max('a)),
+      expected)
   }
 
   test("pivot with datatype not supported by PivotFirst 2") {
