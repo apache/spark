@@ -508,43 +508,31 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       )
     )
 
-    // check assertions using normal Trigger.Processing
-    windowAggregation {
-      (source, sink) => testStream(sink)(
-        AddData(source, one: _*),
-        resultsAfterOne,
-        statsAfterOne,
+    Seq(Trigger.ProcessingTime(0), Trigger.Once) foreach { trigger =>
+      windowAggregation {
+        (source, sink) => testStream(sink)(
+          StartStream(trigger),
+          StopStream,
 
-        AddData(source, two: _*),
-        resultsAfterTwo,
-        statsAfterTwo,
+          AddData(source, one: _*),
+          StartStream(trigger),
+          resultsAfterOne,
+          statsAfterOne,
+          StopStream,
 
-        AddData(source, three: _*),
-        resultsAfterThree,
-        statsAfterThree
-      )
-    }
+          AddData(source, two: _*),
+          StartStream(trigger),
+          resultsAfterTwo,
+          statsAfterTwo,
+          StopStream,
 
-    // check assertions while using Trigger.Once
-    windowAggregation {
-      (source, sink) => testStream(sink)(
-        AddData(source, one: _*),
-        StartStream(Trigger.Once),
-        resultsAfterOne,
-        statsAfterOne,
-        StopStream,
-
-        AddData(source, two: _*),
-        StartStream(Trigger.Once),
-        resultsAfterTwo,
-        statsAfterTwo,
-        StopStream,
-
-        AddData(source, three: _*),
-        StartStream(Trigger.Once),
-        resultsAfterThree,
-        statsAfterThree
-      )
+          AddData(source, three: _*),
+          StartStream(trigger),
+          resultsAfterThree,
+          statsAfterThree,
+          StopStream
+        )
+      }
     }
   }
 
