@@ -262,7 +262,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("pivot trainings - nested columns") {
+  test("SPARK-24722: pivot trainings - nested columns") {
     val expected = Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
     checkAnswer(
       trainingSales
