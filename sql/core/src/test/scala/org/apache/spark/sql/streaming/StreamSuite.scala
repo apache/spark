@@ -638,7 +638,7 @@ class StreamSuite extends StreamTest {
 
         QueryTest.checkAnswer(spark.table("counts").toDF(),
           Row("1", 1) :: Row("2", 1) :: Row("3", 2) :: Row("4", 2) ::
-            Row("5", 2) :: Row("6", 2) :: Row("7", 1) :: Row("8", 1) :: Row("9", 1) :: Nil)
+          Row("5", 2) :: Row("6", 2) :: Row("7", 1) :: Row("8", 1) :: Row("9", 1) :: Nil)
       } finally {
         if (streamingQuery ne null) {
           streamingQuery.stop()
@@ -698,7 +698,6 @@ class StreamSuite extends StreamTest {
   test("batch id is updated correctly in the job description") {
     val queryName = "memStream"
     @volatile var jobDescription: String = null
-
     def assertDescContainsQueryNameAnd(batch: Integer): Unit = {
       // wait for listener event to be processed
       spark.sparkContext.listenerBus.waitUntilEmpty(streamingTimeout.toMillis)
@@ -790,7 +789,7 @@ class StreamSuite extends StreamTest {
     withTempDir { dir =>
       val checkpointLoc1 = new File(dir, "1").getCanonicalPath
       withSQLConf(providerConf1) {
-        runQuery("query1", checkpointLoc1) // generate checkpoints
+        runQuery("query1", checkpointLoc1)  // generate checkpoints
       }
 
       val checkpointLoc2 = new File(dir, "2").getCanonicalPath
