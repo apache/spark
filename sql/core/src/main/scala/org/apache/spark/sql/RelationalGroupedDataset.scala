@@ -348,7 +348,7 @@ class RelationalGroupedDataset protected[sql](
    *
    * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
-   * @since 1.6.0
+   * @since 2.4.0
    */
   def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
     groupType match {
