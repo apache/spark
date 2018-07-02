@@ -118,13 +118,11 @@ private[spark] class ExecutorPodsAllocator(
         logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
         for ( _ <- 0 until numExecutorsToAllocate) {
           val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
-          // TODO: HADOOP_CONF_DIR
           val executorConf = KubernetesConf.createExecutorConf(
             conf,
             newExecutorId.toString,
             applicationId,
-            driverPod,
-            None)
+            driverPod)
           val executorPod = executorBuilder.buildFromFeatures(executorConf)
           val podWithAttachedContainer = new PodBuilder(executorPod.pod)
             .editOrNewSpec()

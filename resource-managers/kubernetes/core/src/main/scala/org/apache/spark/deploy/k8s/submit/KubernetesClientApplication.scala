@@ -109,7 +109,14 @@ private[spark] class Client(
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(kubernetesConf)
     val configMapName = s"$kubernetesResourceNamePrefix-driver-conf-map"
-    val configMap = buildConfigMap(configMapName, resolvedDriverSpec.systemProperties)
+    val isKerberosEnabled = kubernetesConf.sparkConf.get(KUBERNETES_KERBEROS_SUPPORT)
+    // HADOOP_SECURITY_AUTHENTICATION is defined as simple for the driver and executors as
+    // they need only the delegation token to access secure HDFS, no need to sign in to Kerberos
+    val maybeSimpleAuthentication =
+      if (isKerberosEnabled) Some((s"-D$HADOOP_SECURITY_AUTHENTICATION", "simple")) else None
+    val configMap =
+      buildConfigMap(configMapName,
+        resolvedDriverSpec.systemProperties ++ maybeSimpleAuthentication)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
     val resolvedDriverContainer = new ContainerBuilder(resolvedDriverSpec.pod.container)

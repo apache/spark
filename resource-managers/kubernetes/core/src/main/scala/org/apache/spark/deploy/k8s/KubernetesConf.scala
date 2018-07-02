@@ -195,8 +195,7 @@ private[spark] object KubernetesConf {
       sparkConf: SparkConf,
       executorId: String,
       appId: String,
-      driverPod: Pod,
-      hadoopConfDir: Option[String]): KubernetesConf[KubernetesExecutorSpecificConf] = {
+      driverPod: Pod): KubernetesConf[KubernetesExecutorSpecificConf] = {
     val executorCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
     require(
@@ -233,6 +232,6 @@ private[spark] object KubernetesConf {
       executorEnvSecrets,
       executorEnv,
       Seq.empty[String],
-      hadoopConfDir)
+      None)
   }
 }

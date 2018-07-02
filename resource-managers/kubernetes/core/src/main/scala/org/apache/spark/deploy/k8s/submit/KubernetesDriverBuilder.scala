@@ -45,14 +45,10 @@ private[spark] class KubernetesDriverBuilder(
       KubernetesConf[KubernetesDriverSpecificConf]
       => PythonDriverFeatureStep) =
       new PythonDriverFeatureStep(_),
-    provideHadoopConfStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => HadoopConfFeatureStep) =
-    new HadoopConfFeatureStep(_),
     provideHadoopGlobalStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
-        => HadoopGlobalFeatureStep) =
-    new HadoopGlobalFeatureStep(_)) {
+        => HadoopGlobalFeatureDriverStep) =
+    new HadoopGlobalFeatureDriverStep(_)) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -74,18 +70,15 @@ private[spark] class KubernetesDriverBuilder(
         case PythonMainAppResource(_) =>
           providePythonStep(kubernetesConf)}.getOrElse(provideJavaStep(kubernetesConf))
 
-    val maybeHadoopConfigSteps =
+    val maybeHadoopConfigStep =
       kubernetesConf.hadoopConfDir.map { _ =>
-        Seq(
-          provideHadoopConfStep(kubernetesConf),
-          provideHadoopGlobalStep(kubernetesConf))
-      }.getOrElse(Seq.empty[KubernetesFeatureConfigStep])
+          provideHadoopGlobalStep(kubernetesConf)}
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       (baseFeatures :+ bindingsStep) ++
         maybeRoleSecretNamesStep.toSeq ++
         maybeProvideSecretsStep.toSeq ++
-        maybeHadoopConfigSteps
+        maybeHadoopConfigStep.toSeq
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {

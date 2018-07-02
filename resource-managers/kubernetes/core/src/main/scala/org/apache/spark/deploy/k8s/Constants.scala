@@ -112,6 +112,6 @@ private[spark] object Constants {
   val KERBEROS_REFRESH_LABEL_VALUE = "yes"
 
   // Hadoop credentials secrets for the Spark app.
-  private[spark] val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"
-  private[spark] val SPARK_APP_HADOOP_SECRET_VOLUME_NAME = "hadoop-secret"
+  val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"
+  val SPARK_APP_HADOOP_SECRET_VOLUME_NAME = "hadoop-secret"
 }

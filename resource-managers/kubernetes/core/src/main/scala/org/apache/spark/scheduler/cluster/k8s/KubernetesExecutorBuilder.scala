@@ -34,8 +34,8 @@ private[spark] class KubernetesExecutorBuilder(
       new LocalDirsFeatureStep(_),
     provideHadoopConfStep: (
       KubernetesConf[KubernetesExecutorSpecificConf]
-        => HadoopConfFeatureStep) =
-    new HadoopConfFeatureStep(_),
+        => HadoopConfExecutorFeatureStep) =
+    new HadoopConfExecutorFeatureStep(_),
     provideKerberosConfStep: (
       KubernetesConf[KubernetesExecutorSpecificConf]
         => KerberosConfExecutorFeatureStep) =
@@ -63,7 +63,7 @@ private[spark] class KubernetesExecutorBuilder(
     val maybeProvideSecretsStep = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
       Some(provideEnvSecretsStep(kubernetesConf)) } else None
 
-    val maybeHadoopConfFeatureSteps = if (maybeHadoopConfigMap.isDefined) {
+    val maybeHadoopConfFeatureSteps = maybeHadoopConfigMap.map { _ =>
       val maybeKerberosStep =
         for {
           _ <- maybeDTSecretName
@@ -71,12 +71,10 @@ private[spark] class KubernetesExecutorBuilder(
         } yield {
           provideKerberosConfStep(kubernetesConf)
         }
-      val maybeSparkUserStep = maybeSparkUserName.map {_ =>
-        provideHadoopSparkUserStep(kubernetesConf)}
       Seq(provideHadoopConfStep(kubernetesConf)) ++
-        maybeKerberosStep.toSeq ++
-        maybeSparkUserStep.toSeq
-    } else Seq.empty[KubernetesFeatureConfigStep]
+        maybeKerberosStep :+ maybeKerberosStep.getOrElse(
+        provideHadoopSparkUserStep(kubernetesConf))
+    }.getOrElse(Seq.empty[KubernetesFeatureConfigStep])
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       baseFeatures ++

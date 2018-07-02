@@ -16,12 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
-
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, KeyToPathBuilder, PodBuilder}
+import io.fabric8.kubernetes.api.model.HasMetadata
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features.hadoopsteps.HadoopBootstrapUtil
 import org.apache.spark.internal.Logging
 
  /**
@@ -30,49 +29,21 @@ import org.apache.spark.internal.Logging
   * pointed to the mounted file directory. This is run by both the driver
   * and executor, as they both require Hadoop config files.
   */
-private[spark] class HadoopConfFeatureStep(
+private[spark] class HadoopConfExecutorFeatureStep(
   kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
   extends KubernetesFeatureConfigStep with Logging{
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    require(kubernetesConf.hadoopConfDir.isDefined, "Ensure that HADOOP_CONF_DIR is defined")
+    val maybeHadoopConfDir = kubernetesConf.sparkConf.getOption(HADOOP_CONF_DIR_LOC)
+    val maybeHadoopConfigMap = kubernetesConf.sparkConf.getOption(HADOOP_CONFIG_MAP_SPARK_CONF_NAME)
+    require(maybeHadoopConfDir.isDefined && maybeHadoopConfigMap.isDefined,
+      "Ensure that HADOOP_CONF_DIR is defined")
     logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific files")
-    val kubeTokenManager = kubernetesConf.getTokenManager
-    // TODO: For executors they should be taking from
-    // sparkConf move logic into a bootstrap
-    val hadoopConfigFiles =
-      kubeTokenManager.getHadoopConfFiles(kubernetesConf.hadoopConfDir.get)
-    val keyPaths = hadoopConfigFiles.map { file =>
-      val fileStringPath = file.toPath.getFileName.toString
-      new KeyToPathBuilder()
-        .withKey(fileStringPath)
-        .withPath(fileStringPath)
-        .build() }
-
-    val hadoopSupportedPod = new PodBuilder(pod.pod)
-      .editSpec()
-        .addNewVolume()
-          .withName(HADOOP_FILE_VOLUME)
-          .withNewConfigMap()
-            .withName(kubernetesConf.getHadoopConfigMapName)
-            .withItems(keyPaths.asJava)
-            .endConfigMap()
-          .endVolume()
-        .endSpec()
-      .build()
-
-    val hadoopSupportedContainer = new ContainerBuilder(pod.container)
-      .addNewVolumeMount()
-        .withName(HADOOP_FILE_VOLUME)
-        .withMountPath(HADOOP_CONF_DIR_PATH)
-        .endVolumeMount()
-      .addNewEnv()
-        .withName(ENV_HADOOP_CONF_DIR)
-        .withValue(HADOOP_CONF_DIR_PATH)
-        .endEnv()
-      .build()
-
-    SparkPod(hadoopSupportedPod, hadoopSupportedContainer)
+    HadoopBootstrapUtil.bootstrapHadoopConfDir(
+      maybeHadoopConfDir.get,
+      maybeHadoopConfigMap.get,
+      kubernetesConf.getTokenManager,
+      pod)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty

@@ -16,11 +16,13 @@
  */
 package org.apache.spark.deploy.k8s.features.hadoopsteps
 
-import io.fabric8.kubernetes.api.model.ContainerBuilder
-import io.fabric8.kubernetes.api.model.PodBuilder
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, KeyToPathBuilder, PodBuilder}
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkPod
+import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 
 private[spark] object HadoopBootstrapUtil {
 
@@ -82,5 +84,54 @@ private[spark] object HadoopBootstrapUtil {
          .endEnv()
        .build()
     SparkPod(pod.pod, envModifiedContainer)
+  }
+
+   /**
+    * bootstraping the container with ConfigMaps that store
+    * Hadoop conifiguration files
+    *
+    * @param hadoopConfDir location of HADOOP_CONF_DIR
+    * @param hadoopConfigMapName name of the configMap for HADOOP_CONF_DIR
+    * @param kubeTokenManager KubernetesHadoopDelegationTokenManager
+    * @param pod Input pod to be appended to
+    * @return a modified SparkPod
+    */
+  def bootstrapHadoopConfDir(
+    hadoopConfDir: String,
+    hadoopConfigMapName: String,
+    kubeTokenManager: KubernetesHadoopDelegationTokenManager,
+    pod: SparkPod) : SparkPod = {
+    val hadoopConfigFiles =
+      kubeTokenManager.getHadoopConfFiles(hadoopConfDir)
+    val keyPaths = hadoopConfigFiles.map { file =>
+      val fileStringPath = file.toPath.getFileName.toString
+      new KeyToPathBuilder()
+        .withKey(fileStringPath)
+        .withPath(fileStringPath)
+        .build() }
+
+    val hadoopSupportedPod = new PodBuilder(pod.pod)
+      .editSpec()
+        .addNewVolume()
+          .withName(HADOOP_FILE_VOLUME)
+          .withNewConfigMap()
+            .withName(hadoopConfigMapName)
+            .withItems(keyPaths.asJava)
+            .endConfigMap()
+          .endVolume()
+        .endSpec()
+      .build()
+
+    val hadoopSupportedContainer = new ContainerBuilder(pod.container)
+      .addNewVolumeMount()
+        .withName(HADOOP_FILE_VOLUME)
+        .withMountPath(HADOOP_CONF_DIR_PATH)
+        .endVolumeMount()
+      .addNewEnv()
+        .withName(ENV_HADOOP_CONF_DIR)
+        .withValue(HADOOP_CONF_DIR_PATH)
+        .endEnv()
+      .build()
+    SparkPod(hadoopSupportedPod, hadoopSupportedContainer)
   }
 }

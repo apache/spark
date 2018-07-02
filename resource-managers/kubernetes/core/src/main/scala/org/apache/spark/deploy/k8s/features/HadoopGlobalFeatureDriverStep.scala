@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
   * by the HadoopStepsOrchestrator. These steps are run to modify the
   * SparkPod and Kubernetes Resources using the additive method of the feature steps
   */
-private[spark] class HadoopGlobalFeatureStep(
+private[spark] class HadoopGlobalFeatureDriverStep(
   kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
   extends KubernetesFeatureConfigStep with Logging {
    private val hadoopTestOrchestrator =
@@ -69,6 +69,12 @@ private[spark] class HadoopGlobalFeatureStep(
       .addAllToVolumeMounts(currentHadoopSpec.containerVMs.asJava)
       .build()
 
+    val hadoopBasedSparkPod = HadoopBootstrapUtil.bootstrapHadoopConfDir(
+      kubernetesConf.hadoopConfDir.get,
+      kubernetesConf.getHadoopConfigMapName,
+      kubernetesConf.getTokenManager,
+      SparkPod(hadoopBasedPod, hadoopBasedContainer))
+
     val maybeKerberosModification =
       for {
         secretItemKey <- currentHadoopSpec.dtSecretItemKey
@@ -78,12 +84,12 @@ private[spark] class HadoopGlobalFeatureStep(
           currentHadoopSpec.dtSecretName,
           secretItemKey,
           userName,
-          SparkPod(hadoopBasedPod, hadoopBasedContainer))
+          hadoopBasedSparkPod)
       }
     maybeKerberosModification.getOrElse(
       HadoopBootstrapUtil.bootstrapSparkUserPod(
         kubernetesConf.getTokenManager.getCurrentUser.getShortUserName,
-        SparkPod(hadoopBasedPod, hadoopBasedContainer)))
+        hadoopBasedSparkPod))
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
@@ -103,7 +109,6 @@ private[spark] class HadoopGlobalFeatureStep(
     Map(HADOOP_CONFIG_MAP_SPARK_CONF_NAME -> kubernetesConf.getHadoopConfigMapName,
       HADOOP_CONF_DIR_LOC -> kubernetesConf.hadoopConfDir.get) ++ resolvedConfValues
   }
-
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     val configMap =
