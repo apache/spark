@@ -353,19 +353,6 @@ class ParquetFileFormat
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
-      // Try to push down filters when filter push-down is enabled.
-      val pushed = if (enableParquetFilterPushDown) {
-        filters
-          // Collects all converted Parquet filter predicates. Notice that not all predicates can be
-          // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
-          // is used here.
-          .flatMap(new ParquetFilters(pushDownDate, pushDownStringStartWith)
-          .createFilter(requiredSchema, _))
-          .reduceOption(FilterApi.and)
-      } else {
-        None
-      }
-
       val fileSplit =
         new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
 
@@ -379,14 +366,29 @@ class ParquetFileFormat
           null)
 
       val sharedConf = broadcastedHadoopConf.value.value
+
+      val fileMetaData =
+        ParquetFileReader.readFooter(sharedConf, fileSplit.getPath, SKIP_ROW_GROUPS).getFileMetaData
+
+      // Try to push down filters when filter push-down is enabled.
+      val pushed = if (enableParquetFilterPushDown) {
+        filters
+          // Collects all converted Parquet filter predicates. Notice that not all predicates can be
+          // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
+          // is used here.
+          .flatMap(new ParquetFilters(pushDownDate, pushDownStringStartWith)
+          .createFilter(fileMetaData.getSchema, _))
+          .reduceOption(FilterApi.and)
+      } else {
+        None
+      }
+
       // PARQUET_INT96_TIMESTAMP_CONVERSION says to apply timezone conversions to int96 timestamps'
       // *only* if the file was created by something other than "parquet-mr", so check the actual
       // writer here for this file.  We have to do this per-file, as each file in the table may
       // have different writers.
-      def isCreatedByParquetMr(): Boolean = {
-        val footer = ParquetFileReader.readFooter(sharedConf, fileSplit.getPath, SKIP_ROW_GROUPS)
-        footer.getFileMetaData().getCreatedBy().startsWith("parquet-mr")
-      }
+      def isCreatedByParquetMr(): Boolean = fileMetaData.getCreatedBy.startsWith("parquet-mr")
+
       val convertTz =
         if (timestampConversion && !isCreatedByParquetMr()) {
           Some(DateTimeUtils.getTimeZone(sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
