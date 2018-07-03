@@ -229,6 +229,10 @@ package object dsl {
       /** Creates a new AttributeReference of type date */
       def date: AttributeReference = AttributeReference(s, DateType, nullable = true)()
 
+      /** Creates a new AttributeReference of type calendar interval */
+      def calendarinterval: AttributeReference =
+        AttributeReference(s, CalendarIntervalType, nullable = true)()
+
       /** Creates a new AttributeReference of type decimal */
       def decimal: AttributeReference =
         AttributeReference(s, DecimalType.SYSTEM_DEFAULT, nullable = true)()

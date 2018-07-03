@@ -1708,6 +1708,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case ("float", Nil) => FloatType
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
+      case ("calendarinterval", Nil) => CalendarIntervalType
       case ("timestamp", Nil) => TimestampType
       case ("string", Nil) => StringType
       case ("char", length :: Nil) => CharType(length.getText.toInt)
