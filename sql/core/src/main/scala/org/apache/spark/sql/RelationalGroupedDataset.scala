@@ -315,28 +315,7 @@ class RelationalGroupedDataset protected[sql](
    * @param pivotColumn Name of the column to pivot.
    * @since 1.6.0
    */
-  def pivot(pivotColumn: String): RelationalGroupedDataset = {
-    // This is to prevent unintended OOM errors when the number of distinct values is large
-    val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
-    // Get the distinct values of the column and sort them so its consistent
-    val values = df.select(pivotColumn)
-      .distinct()
-      .limit(maxValues + 1)
-      .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
-      .collect()
-      .map(_.get(0))
-      .toSeq
-
-    if (values.length > maxValues) {
-      throw new AnalysisException(
-        s"The pivot column $pivotColumn has more than $maxValues distinct values, " +
-          "this could indicate an error. " +
-          s"If this was intended, set ${SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key} " +
-          "to at least the number of distinct values of the pivot column.")
-    }
-
-    pivot(pivotColumn, values)
-  }
+  def pivot(pivotColumn: String): RelationalGroupedDataset = pivot(Column(pivotColumn))
 
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
@@ -382,6 +361,40 @@ class RelationalGroupedDataset protected[sql](
    */
   def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset = {
     pivot(pivotColumn, values.asScala)
+  }
+
+  /**
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   *
+   * {{{
+   *   // Or without specifying column values (less efficient)
+   *   df.groupBy($"year").pivot($"course").sum($"earnings");
+   * }}}
+   *
+   * @param pivotColumn he column to pivot.
+   * @since 2.4.0
+   */
+  def pivot(pivotColumn: Column): RelationalGroupedDataset = {
+    // This is to prevent unintended OOM errors when the number of distinct values is large
+    val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
+    // Get the distinct values of the column and sort them so its consistent
+    val values = df.select(pivotColumn)
+      .distinct()
+      .limit(maxValues + 1)
+      .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
+      .collect()
+      .map(_.get(0))
+      .toSeq
+
+    if (values.length > maxValues) {
+      throw new AnalysisException(
+        s"The pivot column $pivotColumn has more than $maxValues distinct values, " +
+          "this could indicate an error. " +
+          s"If this was intended, set ${SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key} " +
+          "to at least the number of distinct values of the pivot column.")
+    }
+
+    pivot(pivotColumn, values)
   }
 
   /**

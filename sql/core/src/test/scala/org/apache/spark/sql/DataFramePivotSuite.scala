@@ -79,17 +79,23 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
 
   test("pivot courses with no values") {
     // Note Java comes before dotNet in sorted order
+    val expected = Row(2012, 20000.0, 15000.0) :: Row(2013, 30000.0, 48000.0) :: Nil
     checkAnswer(
       courseSales.groupBy("year").pivot("course").agg(sum($"earnings")),
-      Row(2012, 20000.0, 15000.0) :: Row(2013, 30000.0, 48000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy($"year").pivot($"course").agg(sum($"earnings")),
+      expected)
   }
 
   test("pivot year with no values") {
+    val expected = Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     checkAnswer(
       courseSales.groupBy("course").pivot("year").agg(sum($"earnings")),
-      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
-    )
+      expected)
+    checkAnswer(
+      courseSales.groupBy($"course").pivot($"year").agg(sum($"earnings")),
+      expected)
   }
 
   test("pivot max values enforced") {
