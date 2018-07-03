@@ -516,6 +516,7 @@ object FunctionRegistry {
     castAlias("decimal", DecimalType.USER_DEFAULT),
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
+    castAlias("calendarinterval", CalendarIntervalType),
     castAlias("binary", BinaryType),
     castAlias("string", StringType)
   )
