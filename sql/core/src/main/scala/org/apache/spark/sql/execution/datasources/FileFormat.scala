@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{CalendarIntervalType, DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 /**
@@ -153,15 +153,11 @@ trait FileFormat {
   }
 
   /**
-   * Returns whether this format supports the given [[DataType]] in read/write path.
-   *
-   * By default all data types are supported except [[CalendarIntervalType]] in write path.
+   * Validate the given [[DataType]] in read/write path for this file format.
+   * If the [[DataType]] is not supported, an exception will be thrown.
+   * By default all data types are supported.
    */
-  def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
-    case _: CalendarIntervalType if !isReadPath => false
-    case _ => true
-  }
-
+  def validateDataType(dataType: DataType, isReadPath: Boolean): Unit = {}
 }
 
 /**

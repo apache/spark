@@ -41,26 +41,6 @@ object DataSourceUtils {
    * in a driver side.
    */
   private def verifySchema(format: FileFormat, schema: StructType, isReadPath: Boolean): Unit = {
-    def verifyType(dataType: DataType): Unit = {
-      if (!format.supportDataType(dataType, isReadPath)) {
-        throw new UnsupportedOperationException(
-          s"$format data source does not support ${dataType.simpleString} data type.")
-      }
-      dataType match {
-        case st: StructType => st.foreach { f => verifyType(f.dataType) }
-
-        case ArrayType(elementType, _) => verifyType(elementType)
-
-        case MapType(keyType, valueType, _) =>
-          verifyType(keyType)
-          verifyType(valueType)
-
-        case udt: UserDefinedType[_] => verifyType(udt.sqlType)
-
-        case _ =>
-      }
-    }
-
-    schema.foreach(field => verifyType(field.dataType))
+    schema.foreach(field => format.validateDataType(field.dataType, isReadPath))
   }
 }

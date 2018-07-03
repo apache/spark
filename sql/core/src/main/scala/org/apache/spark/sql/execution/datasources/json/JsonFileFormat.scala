@@ -145,9 +145,26 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
 
-  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
-    case _: CalendarIntervalType if !isReadPath => false
-    case _ => true
+  override def validateDataType(dataType: DataType, isReadPath: Boolean): Unit = dataType match {
+    case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
+         StringType | BinaryType | DateType | TimestampType | _: DecimalType =>
+
+    case st: StructType => st.foreach { f => validateDataType(f.dataType, isReadPath) }
+
+    case ArrayType(elementType, _) => validateDataType(elementType, isReadPath)
+
+    case MapType(keyType, valueType, _) =>
+      validateDataType(keyType, isReadPath)
+      validateDataType(valueType, isReadPath)
+
+    case udt: UserDefinedType[_] => validateDataType(udt.sqlType, isReadPath)
+
+    case _: NullType =>
+
+    case _: CalendarIntervalType if isReadPath =>
+
+    case _ => throw new UnsupportedOperationException(
+      s"$this data source does not support ${dataType.simpleString} data type.")
   }
 }
 
