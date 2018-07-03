@@ -68,10 +68,11 @@ private[spark] class KubernetesDriverBuilder(
     } else Nil
 
     val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
-      case JavaMainAppResource(_) =>
-        provideJavaStep(kubernetesConf)
-      case PythonMainAppResource(_) =>
-        providePythonStep(kubernetesConf)}.getOrElse(provideJavaStep(kubernetesConf))
+        case JavaMainAppResource(_) =>
+          provideJavaStep(kubernetesConf)
+        case PythonMainAppResource(_) =>
+          providePythonStep(kubernetesConf)}
+      .getOrElse(provideJavaStep(kubernetesConf))
 
     val allFeatures = (baseFeatures :+ bindingsStep) ++
       secretFeature ++ envSecretFeature ++ volumesFeature

@@ -926,7 +926,7 @@ event time. For a specific window starting at time `T`, the engine will maintain
 data to update the state until `(max event time seen by the engine - late threshold > T)`. 
 In other words, late data within the threshold will be aggregated, 
 but data later than the threshold will start getting dropped
-(see [later]((#semantic-guarantees-of-aggregation-with-watermarking))
+(see [later](#semantic-guarantees-of-aggregation-with-watermarking)
 in the section for the exact guarantees). Let's understand this with an example. We can
 easily define watermarking on the previous example using `withWatermark()` as shown below.
 
