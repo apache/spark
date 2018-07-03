@@ -61,11 +61,6 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
 }
 
 checkJavaVersion <- function() {
-  if (is_windows()) {
-    # See SPARK-24535
-    return(NULL)
-  }
-
   javaBin <- "java"
   javaHome <- Sys.getenv("JAVA_HOME")
   javaReqs <- utils::packageDescription(utils::packageName(), fields = c("SystemRequirements"))
@@ -76,15 +71,20 @@ checkJavaVersion <- function() {
 
   # If java is missing from PATH, we get an error in Unix and a warning in Windows
   javaVersionOut <- tryCatch(
-      launchScript(javaBin, "-version", wait = TRUE, stdout = TRUE, stderr = TRUE),
-                   error = function(e) {
-                     stop("Java version check failed. Please make sure Java is installed",
-                          " and set JAVA_HOME to point to the installation directory.", e)
-                   },
-                   warning = function(w) {
-                     stop("Java version check failed. Please make sure Java is installed",
-                          " and set JAVA_HOME to point to the installation directory.", w)
-                   })
+    if (is_windows()) {
+      # See SPARK-24535
+      system2(javaBin, "-version", wait = TRUE, stdout = TRUE, stderr = TRUE)
+    } else {
+      launchScript(javaBin, "-version", wait = TRUE, stdout = TRUE, stderr = TRUE)
+    },
+    error = function(e) {
+      stop("Java version check failed. Please make sure Java is installed",
+           " and set JAVA_HOME to point to the installation directory.", e)
+    },
+    warning = function(w) {
+      stop("Java version check failed. Please make sure Java is installed",
+          " and set JAVA_HOME to point to the installation directory.", w)
+    })
   javaVersionFilter <- Filter(
       function(x) {
         grepl(" version", x)
