@@ -61,7 +61,7 @@ class MicroBatchExecution(
     case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
   }
 
-  private val watermarkTracker = new WatermarkTracker()
+  private var watermarkTracker: WatermarkTracker = _
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -257,6 +257,7 @@ class MicroBatchExecution(
           OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.conf)
           offsetSeqMetadata = OffsetSeqMetadata(
             metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
+          watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
           watermarkTracker.setWatermark(metadata.batchWatermarkMs)
         }
 
@@ -295,6 +296,7 @@ class MicroBatchExecution(
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
+        watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
     }
   }
 

@@ -26,6 +26,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
@@ -482,6 +483,70 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testWithFlag(true)
     testWithFlag(false)
+  }
+
+  test("MultipleWatermarkPolicy: max") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+    val df2 = input2.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "15 seconds")
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+      testStream(df1.union(df2).select($"eventTime".cast("int")))(
+        MultiAddData(input1, 20)(input2, 30),
+        CheckLastBatch(20, 30),
+        checkWatermark(input1, 15), // max(20 - 10, 30 - 15) = 15
+        StopStream,
+        StartStream(),
+        checkWatermark(input1, 15), // watermark recovered correctly
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input1, 115), // max(120 - 10, 130 - 15) = 115, policy recovered correctly
+        AddData(input1, 150),
+        CheckLastBatch(150),
+        checkWatermark(input1, 140)  // should advance even if one of the input has data
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: min") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+    val df2 = input2.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "15 seconds")
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "min") {
+      testStream(df1.union(df2).select($"eventTime".cast("int")))(
+        MultiAddData(input1, 20)(input2, 30),
+        CheckLastBatch(20, 30),
+        checkWatermark(input1, 10), // min(20 - 10, 30 - 15) = 10
+        StopStream,
+        StartStream(),
+        checkWatermark(input1, 10), // watermark recovered correctly
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input2, 110), // min(120 - 10, 130 - 15) = 110, policy recovered correctly
+        AddData(input2, 150),
+        CheckLastBatch(150),
+        checkWatermark(input2, 110)  // does not advance when only one of the input has data
+      )
+    }
+  }
+
+  private def checkWatermark(input: MemoryStream[Int], watermark: Long) = Execute { q =>
+    input.addData(1)
+    q.processAllAvailable()
+    assert(q.lastProgress.eventTime.get("watermark") == formatTimestamp(watermark))
   }
 
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
