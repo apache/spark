@@ -2249,7 +2249,7 @@ def schema_of_json(col):
     :param col: string column in json format
 
     >>> from pyspark.sql.types import *
-    >>> data = [(1, '''{"a": 1}''')]
+    >>> data = [(1, '{"a": 1}')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(schema_of_json(df.value).alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
