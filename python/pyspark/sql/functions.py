@@ -2253,7 +2253,7 @@ def schema_of_json(col):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(schema_of_json(df.value).alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
-    >>> df.select(schema_of_json(lit('''{"a": 0}''')).alias("json")).collect()
+    >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
     """
 

@@ -756,12 +756,14 @@ case class StructsToJson(
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
        array<struct<col:int>>
-  """)
+  """,
+  since = "2.4.0")
 case class SchemaOfJson(child: Expression)
   extends UnaryExpression with String2StringExpression with CodegenFallback {
 
   private val jsonOptions = new JSONOptions(Map.empty, "UTC")
   private val jsonFactory = new JsonFactory()
+  jsonOptions.setJacksonOptions(jsonFactory)
 
   override def convert(v: UTF8String): UTF8String = {
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
@@ -782,7 +784,7 @@ object JsonExprUtils {
       DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
       "Schema should be specified in DDL format as a string literal" +
-      s" or output of the schema_of_json function instead of $e")
+      s" or output of the schema_of_json function instead of ${e.prettyName}")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {

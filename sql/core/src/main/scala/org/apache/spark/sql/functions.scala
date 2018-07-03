@@ -3397,7 +3397,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
@@ -3410,7 +3410,7 @@ object functions {
    * @since 2.4.0
    */
   def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
-    withExpr {new JsonToStructs(e.expr, schema.expr, options.asScala.toMap)}
+    withExpr(new JsonToStructs(e.expr, schema.expr, options.asScala.toMap))
   }
 
   /**
