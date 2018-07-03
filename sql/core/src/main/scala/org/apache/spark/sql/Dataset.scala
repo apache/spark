@@ -995,6 +995,11 @@ class Dataset[T] private[sql](
         catalyst.expressions.EqualTo(
           withPlan(plan.left).resolve(a.name),
           withPlan(plan.right).resolve(b.name))
+      case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
+        if a.sameRef(b) =>
+        catalyst.expressions.EqualNullSafe(
+          withPlan(plan.left).resolve(a.name),
+          withPlan(plan.right).resolve(b.name))
     }}
 
     withPlan {
