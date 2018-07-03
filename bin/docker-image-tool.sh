@@ -71,11 +71,11 @@ function build {
   local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
   local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/spark/bindings/R/Dockerfile"}
 
-  docker build "${BUILD_ARGS[@]}" \
+  docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .
 
-    docker build "${BINDING_BUILD_ARGS[@]}" \
+  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-py) \
     -f "$PYDOCKERFILE" .
 
@@ -107,6 +107,7 @@ Options:
   -r repo     Repository address.
   -t tag      Tag to apply to the built image, or to identify the image to be pushed.
   -m          Use minikube's Docker daemon.
+  -n          Build docker image with --no-cache
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
 There is no need to push the images into minikube in that case, they'll be automatically
@@ -136,7 +137,8 @@ TAG=
 BASEDOCKERFILE=
 PYDOCKERFILE=
 RDOCKERFILE=
-while getopts f:mr:t: option
+NOCACHEARG=
+while getopts f:mr:t:n option
 do
  case "${option}"
  in
@@ -145,6 +147,7 @@ do
  R) RDOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
+ n) NOCACHEARG="--no-cache";;
  m)
    if ! which minikube 1>/dev/null; then
      error "Cannot find minikube."

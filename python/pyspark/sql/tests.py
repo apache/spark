@@ -1918,7 +1918,7 @@ class SQLTests(ReusedSQLTestCase):
                 self.fail("invalid writer %s did not fail the query" % str(writer))  # not expected
             except Exception as e:
                 if msg:
-                    assert(msg in str(e), "%s not in %s" % (msg, str(e)))
+                    assert msg in str(e), "%s not in %s" % (msg, str(e))
 
             finally:
                 self.stop_all()
@@ -2125,6 +2125,42 @@ class SQLTests(ReusedSQLTestCase):
 
         tester.assert_invalid_writer(WriterWithNonCallableClose(),
                                      "'close' in provided object is not callable")
+
+    def test_streaming_foreachBatch(self):
+        q = None
+        collected = dict()
+
+        def collectBatch(batch_df, batch_id):
+            collected[batch_id] = batch_df.collect()
+
+        try:
+            df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+            q = df.writeStream.foreachBatch(collectBatch).start()
+            q.processAllAvailable()
+            self.assertTrue(0 in collected)
+            self.assertTrue(len(collected[0]), 2)
+        finally:
+            if q:
+                q.stop()
+
+    def test_streaming_foreachBatch_propagates_python_errors(self):
+        from pyspark.sql.utils import StreamingQueryException
+
+        q = None
+
+        def collectBatch(df, id):
+            raise Exception("this should fail the query")
+
+        try:
+            df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+            q = df.writeStream.foreachBatch(collectBatch).start()
+            q.processAllAvailable()
+            self.fail("Expected a failure")
+        except StreamingQueryException as e:
+            self.assertTrue("this should fail" in str(e))
+        finally:
+            if q:
+                q.stop()
 
     def test_help_command(self):
         # Regression test for SPARK-5464
@@ -3315,11 +3351,41 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
-    def test_repr_html(self):
+    def test_repr_behaviors(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)
         df = self.spark.createDataFrame([(1, "1"), (22222, "22222")], ("key", "value"))
-        self.assertEquals(None, df._repr_html_())
+
+        # test when eager evaluation is enabled and _repr_html_ will not be called
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
+            expected1 = """+-----+-----+
+                ||  key|value|
+                |+-----+-----+
+                ||    1|    1|
+                ||22222|22222|
+                |+-----+-----+
+                |"""
+            self.assertEquals(re.sub(pattern, '', expected1), df.__repr__())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                expected2 = """+---+-----+
+                ||key|value|
+                |+---+-----+
+                ||  1|    1|
+                ||222|  222|
+                |+---+-----+
+                |"""
+                self.assertEquals(re.sub(pattern, '', expected2), df.__repr__())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    expected3 = """+---+-----+
+                    ||key|value|
+                    |+---+-----+
+                    ||  1|    1|
+                    |+---+-----+
+                    |only showing top 1 row
+                    |"""
+                    self.assertEquals(re.sub(pattern, '', expected3), df.__repr__())
+
+        # test when eager evaluation is enabled and _repr_html_ will be called
         with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
             expected1 = """<table border='1'>
                 |<tr><th>key</th><th>value</th></tr>
@@ -3344,6 +3410,18 @@ class SQLTests(ReusedSQLTestCase):
                         |only showing top 1 row
                         |"""
                     self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
+
+        # test when eager evaluation is disabled and _repr_html_ will be called
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": False}):
+            expected = "DataFrame[key: bigint, value: string]"
+            self.assertEquals(None, df._repr_html_())
+            self.assertEquals(expected, df.__repr__())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                self.assertEquals(None, df._repr_html_())
+                self.assertEquals(expected, df.__repr__())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    self.assertEquals(None, df._repr_html_())
+                    self.assertEquals(expected, df.__repr__())
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
@@ -4706,7 +4784,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     def test_vectorized_udf_wrong_return_type(self):
         from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
@@ -5290,6 +5367,109 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         result4 = df.groupby().apply(udf3).sort('id', 'v').toPandas()
         expected4 = udf3.func((), pdf)
         self.assertPandasEqual(expected4, result4)
+
+    def test_column_order(self):
+        from collections import OrderedDict
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        # Helper function to set column names from a list
+        def rename_pdf(pdf, names):
+            pdf.rename(columns={old: new for old, new in
+                                zip(pd_result.columns, names)}, inplace=True)
+
+        df = self.data
+        grouped_df = df.groupby('id')
+        grouped_pdf = df.toPandas().groupby('id')
+
+        # Function returns a pdf with required column names, but order could be arbitrary using dict
+        def change_col_order(pdf):
+            # Constructing a DataFrame from a dict should result in the same order,
+            # but use from_items to ensure the pdf column order is different than schema
+            return pd.DataFrame.from_items([
+                ('id', pdf.id),
+                ('u', pdf.v * 2),
+                ('v', pdf.v)])
+
+        ordered_udf = pandas_udf(
+            change_col_order,
+            'id long, v int, u int',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        # The UDF result should assign columns by name from the pdf
+        result = grouped_df.apply(ordered_udf).sort('id', 'v')\
+            .select('id', 'u', 'v').toPandas()
+        pd_result = grouped_pdf.apply(change_col_order)
+        expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
+        # Function returns a pdf with positional columns, indexed by range
+        def range_col_order(pdf):
+            # Create a DataFrame with positional columns, fix types to long
+            return pd.DataFrame(list(zip(pdf.id, pdf.v * 3, pdf.v)), dtype='int64')
+
+        range_udf = pandas_udf(
+            range_col_order,
+            'id long, u long, v long',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        # The UDF result uses positional columns from the pdf
+        result = grouped_df.apply(range_udf).sort('id', 'v') \
+            .select('id', 'u', 'v').toPandas()
+        pd_result = grouped_pdf.apply(range_col_order)
+        rename_pdf(pd_result, ['id', 'u', 'v'])
+        expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
+        # Function returns a pdf with columns indexed with integers
+        def int_index(pdf):
+            return pd.DataFrame(OrderedDict([(0, pdf.id), (1, pdf.v * 4), (2, pdf.v)]))
+
+        int_index_udf = pandas_udf(
+            int_index,
+            'id long, u int, v int',
+            PandasUDFType.GROUPED_MAP
+        )
+
+        # The UDF result should assign columns by position of integer index
+        result = grouped_df.apply(int_index_udf).sort('id', 'v') \
+            .select('id', 'u', 'v').toPandas()
+        pd_result = grouped_pdf.apply(int_index)
+        rename_pdf(pd_result, ['id', 'u', 'v'])
+        expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected, result)
+
+        @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
+        def column_name_typo(pdf):
+            return pd.DataFrame({'iid': pdf.id, 'v': pdf.v})
+
+        @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
+        def invalid_positional_types(pdf):
+            return pd.DataFrame([(u'a', 1.2)])
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
+                grouped_df.apply(column_name_typo).collect()
+            with self.assertRaisesRegexp(Exception, "No cast implemented"):
+                grouped_df.apply(invalid_positional_types).collect()
+
+    def test_positional_assignment_conf(self):
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        with self.sql_conf({"spark.sql.execution.pandas.groupedMap.assignColumnsByPosition": True}):
+
+            @pandas_udf("a string, b float", PandasUDFType.GROUPED_MAP)
+            def foo(_):
+                return pd.DataFrame([('hi', 1)], columns=['x', 'y'])
+
+            df = self.data
+            result = df.groupBy('id').apply(foo).select('a', 'b').collect()
+            for r in result:
+                self.assertEqual(r.a, 'hi')
+                self.assertEqual(r.b, 1)
 
 
 @unittest.skipIf(
