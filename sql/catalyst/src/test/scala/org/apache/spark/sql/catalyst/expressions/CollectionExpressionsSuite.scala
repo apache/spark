@@ -912,11 +912,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("Concat") {
     // Primitive-type elements
-    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
-    val ai1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
-    val ai2 = Literal.create(Seq(4, null, 5), ArrayType(IntegerType))
-    val ai3 = Literal.create(Seq(null, null), ArrayType(IntegerType))
-    val ai4 = Literal.create(null, ArrayType(IntegerType))
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType, containsNull = false))
+    val ai2 = Literal.create(Seq(4, null, 5), ArrayType(IntegerType, containsNull = true))
+    val ai3 = Literal.create(Seq(null, null), ArrayType(IntegerType, containsNull = true))
+    val ai4 = Literal.create(null, ArrayType(IntegerType, containsNull = true))
 
     checkEvaluation(Concat(Seq(ai0)), Seq(1, 2, 3))
     checkEvaluation(Concat(Seq(ai0, ai1)), Seq(1, 2, 3))
@@ -929,11 +929,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Concat(Seq(ai4, ai0)), null)
 
     // Non-primitive-type elements
-    val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType))
-    val as1 = Literal.create(Seq.empty[String], ArrayType(StringType))
-    val as2 = Literal.create(Seq("d", null, "e"), ArrayType(StringType))
-    val as3 = Literal.create(Seq(null, null), ArrayType(StringType))
-    val as4 = Literal.create(null, ArrayType(StringType))
+    val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq.empty[String], ArrayType(StringType, containsNull = false))
+    val as2 = Literal.create(Seq("d", null, "e"), ArrayType(StringType, containsNull = true))
+    val as3 = Literal.create(Seq(null, null), ArrayType(StringType, containsNull = true))
+    val as4 = Literal.create(null, ArrayType(StringType, containsNull = true))
 
     val aa0 = Literal.create(Seq(Seq("a", "b"), Seq("c")), ArrayType(ArrayType(StringType)))
     val aa1 = Literal.create(Seq(Seq("d"), Seq("e", "f")), ArrayType(ArrayType(StringType)))
@@ -949,6 +949,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Concat(Seq(as4, as0)), null)
 
     checkEvaluation(Concat(Seq(aa0, aa1)), Seq(Seq("a", "b"), Seq("c"), Seq("d"), Seq("e", "f")))
+
+    assert(Concat(Seq(ai0, ai1)).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(Concat(Seq(ai0, ai2)).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(Concat(Seq(as0, as1)).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(Concat(Seq(as0, as2)).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
 
   test("Flatten") {

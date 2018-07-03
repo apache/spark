@@ -2007,7 +2007,14 @@ case class Concat(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
+  override def dataType: DataType = {
+    val dataTypes = children.map(_.dataType)
+    dataTypes.headOption.map {
+      case ArrayType(et, _) =>
+        ArrayType(et, dataTypes.exists(_.asInstanceOf[ArrayType].containsNull))
+      case dt => dt
+    }.getOrElse(StringType)
+  }
 
   lazy val javaType: String = CodeGenerator.javaType(dataType)
 
