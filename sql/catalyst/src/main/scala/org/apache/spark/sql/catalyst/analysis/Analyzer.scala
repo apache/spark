@@ -506,7 +506,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case p: Pivot if !p.childrenResolved || !p.aggregates.forall(_.resolved)
         || (p.groupByExprsOpt.isDefined && !p.groupByExprsOpt.get.forall(_.resolved))
-        || !p.pivotColumn.resolved => p
+        || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
       case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         // Check all aggregate expressions.
         aggregates.foreach { e =>
@@ -515,13 +515,33 @@ class Analyzer(
                 s"Aggregate expression required for pivot, found '$e'")
           }
         }
+        // Check all pivot values are literal and match pivot column data type.
+        val evalPivotValues = pivotValues.map { value =>
+          if (!Cast.canCast(value.dataType, pivotColumn.dataType)) {
+            throw new AnalysisException(s"Invalid pivot value '$value': " +
+              s"value data type ${value.dataType.simpleString} does not match " +
+              s"pivot column data type ${pivotColumn.dataType.simpleString}")
+          }
+          try {
+            Cast(value, pivotColumn.dataType).eval(EmptyRow)
+          } catch {
+            case _: UnsupportedOperationException =>
+              throw new AnalysisException(
+                s"Literal expressions required for pivot values, found '$value'")
+          }
+        }
         // Group-by expressions coming from SQL are implicit and need to be deduced.
         val groupByExprs = groupByExprsOpt.getOrElse(
           (child.outputSet -- aggregates.flatMap(_.references) -- pivotColumn.references).toSeq)
         val singleAgg = aggregates.size == 1
-        def outputName(value: Literal, aggregate: Expression): String = {
-          val utf8Value = Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
-          val stringValue: String = Option(utf8Value).map(_.toString).getOrElse("null")
+        def outputName(value: Expression, aggregate: Expression): String = {
+          val stringValue = value match {
+            case n: NamedExpression => n.name
+            case _ =>
+              val utf8Value =
+                Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
+              Option(utf8Value).map(_.toString).getOrElse("null")
+          }
           if (singleAgg) {
             stringValue
           } else {
@@ -536,15 +556,10 @@ class Analyzer(
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
           // alternate plan that instead uses two steps of aggregation.
           val namedAggExps: Seq[NamedExpression] = aggregates.map(a => Alias(a, a.sql)())
-          val namedPivotCol = pivotColumn match {
-            case n: NamedExpression => n
-            case _ => Alias(pivotColumn, "__pivot_col")()
-          }
-          val bigGroup = groupByExprs :+ namedPivotCol
+          val bigGroup = groupByExprs ++ pivotColumn.references
           val firstAgg = Aggregate(bigGroup, bigGroup ++ namedAggExps, child)
-          val castPivotValues = pivotValues.map(Cast(_, pivotColumn.dataType).eval(EmptyRow))
           val pivotAggs = namedAggExps.map { a =>
-            Alias(PivotFirst(namedPivotCol.toAttribute, a.toAttribute, castPivotValues)
+            Alias(PivotFirst(pivotColumn, a.toAttribute, evalPivotValues)
               .toAggregateExpression()
             , "__pivot_" + a.sql)()
           }
@@ -559,8 +574,8 @@ class Analyzer(
           Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
         } else {
           val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
-            def ifExpr(expr: Expression) = {
-              If(EqualNullSafe(pivotColumn, value), expr, Literal(null))
+            def ifExpr(e: Expression) = {
+              If(EqualNullSafe(pivotColumn, Cast(value, pivotColumn.dataType)), e, Literal(null))
             }
             aggregates.map { aggregate =>
               val filteredAggregate = aggregate.transformDown {
