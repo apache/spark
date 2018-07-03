@@ -3906,10 +3906,10 @@ setMethod("rollup",
           })
 
 isTypeAllowedForSqlHint <- function(x) {
-  if (is.character(x) | is.numeric(x)) {
+  if (is.character(x) || is.numeric(x)) {
     TRUE
   } else if (is.list(x)) {
-    all (sapply(x, (function (y) is.character(y) | is.numeric(y))))
+    all(sapply(x, (function(y) is.character(y) || is.numeric(y))))
   } else {
     FALSE
   }
