@@ -360,7 +360,7 @@ class RelationalGroupedDataset protected[sql](
    * @since 1.6.0
    */
   def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset = {
-    pivot(pivotColumn, values.asScala)
+    pivot(Column(pivotColumn), values)
   }
 
   /**
@@ -421,6 +421,18 @@ class RelationalGroupedDataset protected[sql](
       case _ =>
         throw new UnsupportedOperationException("pivot is only supported after a groupBy")
     }
+  }
+
+  /**
+   * (Java-specific) Pivots a column of the current `DataFrame`
+   * and performs the specified aggregation.
+   *
+   * @param pivotColumn the column to pivot.
+   * @param values List of values that will be translated to columns in the output DataFrame.
+   * @since 2.4.0
+   */
+  def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
+    pivot(pivotColumn, values.asScala)
   }
 
   /**
