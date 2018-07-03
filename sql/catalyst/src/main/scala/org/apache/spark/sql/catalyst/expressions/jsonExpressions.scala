@@ -784,7 +784,7 @@ object JsonExprUtils {
       DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
       "Schema should be specified in DDL format as a string literal" +
-      s" or output of the schema_of_json function instead of ${e.prettyName}")
+      s" or output of the schema_of_json function instead of ${e.sql}")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
