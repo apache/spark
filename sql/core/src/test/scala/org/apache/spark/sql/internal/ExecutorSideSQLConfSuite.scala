@@ -40,7 +40,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     spark = null
   }
 
-  private def withStaticSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+  override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     pairs.foreach { case (k, v) =>
       SQLConf.get.setConfString(k, v)
     }
@@ -73,11 +73,11 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("SPARK-24727 CODEGEN_CACHE_SIZE is correctly referenced at the executor side") {
-    withStaticSQLConf(StaticSQLConf.CODEGEN_CACHE_SIZE.key -> "300") {
+    withSQLConf(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES.key -> "300") {
       val checks = spark.range(10).mapPartitions { _ =>
         val conf = SQLConf.get
         Iterator(conf.isInstanceOf[ReadOnlySQLConf] &&
-          conf.getConfString(StaticSQLConf.CODEGEN_CACHE_SIZE.key) == "300")
+          conf.getConfString(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES.key) == "300")
       }.collect()
       assert(checks.forall(_ == true))
     }

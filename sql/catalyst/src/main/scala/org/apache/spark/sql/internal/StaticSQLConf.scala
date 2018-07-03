@@ -66,10 +66,12 @@ object StaticSQLConf {
       .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
       .createWithDefault(1000)
 
-  val CODEGEN_CACHE_SIZE = buildStaticConf("spark.sql.codegen.cacheSize")
-      .doc("The maximum cache size for generated classes.")
+  val CODEGEN_CACHE_MAX_ENTRIES = buildStaticConf("spark.sql.codegen.cache.maxEntries")
+      .internal()
+      .doc("When nonzero, enable caching of generated classes for operators and expressions. " +
+        "All jobs share the cache that can use up to the specified number for generated classes.")
       .intConf
-      .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
+      .checkValue(maxEntries => maxEntries >= 0, "The maximum must not be negative")
       .createWithDefault(100)
 
   // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
