@@ -71,7 +71,7 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll
         createNativeFile(dir, filename, contents, false)
       }
       // ensure spark job runs successfully without exceptions from the CombineFileInputFormat
-      assert(sc.wholeTextFiles(dir.toString).count == 1)
+      assert(sc.wholeTextFiles(dir.toString).count == 3)
     } finally {
       Utils.deleteRecursively(dir)
     }
