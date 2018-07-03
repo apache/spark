@@ -62,6 +62,14 @@
       <artifactId>kubernetes-client</artifactId>
       <version>${kubernetes-client.version}</version>
     </dependency>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-tags_${scala.binary.version}</artifactId>
+        <type>test-jar</type>
+        <scope>compile</scope>
+      </dependency>
+    </dependencies>
   </dependencies>
 
   <build>
