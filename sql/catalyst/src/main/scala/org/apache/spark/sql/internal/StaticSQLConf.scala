@@ -66,6 +66,12 @@ object StaticSQLConf {
       .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
       .createWithDefault(1000)
 
+  val CODEGEN_CACHE_SIZE = buildStaticConf("spark.sql.codegen.cacheSize")
+      .doc("The maximum cache size for generated classes.")
+      .intConf
+      .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
+      .createWithDefault(100)
+
   // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
   // some related DDL commands (e.g., ANALYZE TABLE and CREATE TABLE LIKE) might not work properly.
   val DEBUG_MODE = buildStaticConf("spark.sql.debug")
