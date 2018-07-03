@@ -340,32 +340,6 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
-   *
-   * {{{
-   *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy($"year").pivot($"course", Seq("dotNET", "Java")).sum($"earnings")
-   * }}}
-   *
-   * @param pivotColumn the column to pivot.
-   * @param values List of values that will be translated to columns in the output DataFrame.
-   * @since 2.4.0
-   */
-  def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
-    groupType match {
-      case RelationalGroupedDataset.GroupByType =>
-        new RelationalGroupedDataset(
-          df,
-          groupingExprs,
-          RelationalGroupedDataset.PivotType(pivotColumn.expr, values.map(Literal.apply)))
-      case _: RelationalGroupedDataset.PivotType =>
-        throw new UnsupportedOperationException("repeated pivots are not supported")
-      case _ =>
-        throw new UnsupportedOperationException("pivot is only supported after a groupBy")
-    }
-  }
-
-  /**
-   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
@@ -408,6 +382,32 @@ class RelationalGroupedDataset protected[sql](
    */
   def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset = {
     pivot(pivotColumn, values.asScala)
+  }
+
+  /**
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   *
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column
+   *   df.groupBy($"year").pivot($"course", Seq("dotNET", "Java")).sum($"earnings")
+   * }}}
+   *
+   * @param pivotColumn the column to pivot.
+   * @param values List of values that will be translated to columns in the output DataFrame.
+   * @since 2.4.0
+   */
+  def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
+    groupType match {
+      case RelationalGroupedDataset.GroupByType =>
+        new RelationalGroupedDataset(
+          df,
+          groupingExprs,
+          RelationalGroupedDataset.PivotType(pivotColumn.expr, values.map(Literal.apply)))
+      case _: RelationalGroupedDataset.PivotType =>
+        throw new UnsupportedOperationException("repeated pivots are not supported")
+      case _ =>
+        throw new UnsupportedOperationException("pivot is only supported after a groupBy")
+    }
   }
 
   /**
