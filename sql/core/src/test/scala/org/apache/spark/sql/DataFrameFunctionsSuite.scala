@@ -18,12 +18,15 @@
 package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
+import java.util.TimeZone
 
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -487,26 +490,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }.getMessage().contains("only supports array input"))
   }
 
-  test("array size function") {
+  def testSizeOfArray(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
       (Seq[Int](), "y"),
       (Seq[Int](1, 2, 3), "z"),
       (null, "empty")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
-    checkAnswer(
-      df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
 
-    checkAnswer(
-      df.selectExpr("cardinality(a)"),
-      Seq(Row(2L), Row(0L), Row(3L), Row(-1L))
-    )
+    checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("cardinality(a)"), Seq(Row(2L), Row(0L), Row(3L), Row(sizeOfNull)))
+  }
+
+  test("array size function - legacy") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSizeOfArray(sizeOfNull = -1)
+    }
+  }
+
+  test("array size function") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSizeOfArray(sizeOfNull = null)
+    }
   }
 
   test("dataframe arrays_zip function") {
@@ -556,21 +562,39 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df8.selectExpr("arrays_zip(v1, v2)"), expectedValue8)
   }
 
-  test("map size function") {
+  test("SPARK-24633: arrays_zip splits input processing correctly") {
+    Seq("true", "false").foreach { wholestageCodegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholestageCodegenEnabled) {
+        val df = spark.range(1)
+        val exprs = (0 to 5).map(x => array($"id" + lit(x)))
+        checkAnswer(df.select(arrays_zip(exprs: _*)),
+          Row(Seq(Row(0, 1, 2, 3, 4, 5))))
+      }
+    }
+  }
+
+  def testSizeOfMap(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
       (Map[Int, Int](), "y"),
       (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z"),
       (null, "empty")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
-    checkAnswer(
-      df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
+
+    checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+  }
+
+  test("map size function - legacy") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSizeOfMap(sizeOfNull = -1: Int)
+    }
+  }
+
+  test("map size function") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSizeOfMap(sizeOfNull = null)
+    }
   }
 
   test("map_keys/map_values function") {
@@ -633,11 +657,61 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
   }
 
+  test("map_from_entries function") {
+    def dummyFilter(c: Column): Column = c.isNull || c.isNotNull
+    val oneRowDF = Seq(3215).toDF("i")
+
+    // Test cases with primitive-type keys and values
+    val idf = Seq(
+      Seq((1, 10), (2, 20), (3, 10)),
+      Seq((1, 10), null, (2, 20)),
+      Seq.empty,
+      null
+    ).toDF("a")
+    val iExpected = Seq(
+      Row(Map(1 -> 10, 2 -> 20, 3 -> 10)),
+      Row(null),
+      Row(Map.empty),
+      Row(null))
+
+    checkAnswer(idf.select(map_from_entries('a)), iExpected)
+    checkAnswer(idf.selectExpr("map_from_entries(a)"), iExpected)
+    checkAnswer(idf.filter(dummyFilter('a)).select(map_from_entries('a)), iExpected)
+    checkAnswer(
+      oneRowDF.selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
+      Seq(Row(Map(1 -> null, 2 -> null)))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('i))
+        .selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
+      Seq(Row(Map(1 -> null, 2 -> null)))
+    )
+
+    // Test cases with non-primitive-type keys and values
+    val sdf = Seq(
+      Seq(("a", "aa"), ("b", "bb"), ("c", "aa")),
+      Seq(("a", "aa"), null, ("b", "bb")),
+      Seq(("a", null), ("b", null)),
+      Seq.empty,
+      null
+    ).toDF("a")
+    val sExpected = Seq(
+      Row(Map("a" -> "aa", "b" -> "bb", "c" -> "aa")),
+      Row(null),
+      Row(Map("a" -> null, "b" -> null)),
+      Row(Map.empty),
+      Row(null))
+
+    checkAnswer(sdf.select(map_from_entries('a)), sExpected)
+    checkAnswer(sdf.selectExpr("map_from_entries(a)"), sExpected)
+    checkAnswer(sdf.filter(dummyFilter('a)).select(map_from_entries('a)), sExpected)
+  }
+
   test("array contains function") {
     val df = Seq(
-      (Seq[Int](1, 2), "x"),
-      (Seq[Int](), "x")
-    ).toDF("a", "b")
+      (Seq[Int](1, 2), "x", 1),
+      (Seq[Int](), "x", 1)
+    ).toDF("a", "b", "c")
 
     // Simple test cases
     checkAnswer(
@@ -646,6 +720,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
     checkAnswer(
       df.selectExpr("array_contains(a, 1)"),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df.select(array_contains(df("a"), df("c"))),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df.selectExpr("array_contains(a, c)"),
       Seq(Row(true), Row(false))
     )
 
@@ -736,6 +818,23 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("array_join(x, delimiter, 'NULL')"),
       Seq(Row("a,b"), Row("a,NULL,b"), Row("")))
+
+    val idf = Seq(Seq(1, 2, 3)).toDF("x")
+
+    checkAnswer(
+      idf.select(array_join(idf("x"), ", ")),
+      Seq(Row("1, 2, 3"))
+    )
+    checkAnswer(
+      idf.selectExpr("array_join(x, ', ')"),
+      Seq(Row("1, 2, 3"))
+    )
+    intercept[AnalysisException] {
+      idf.selectExpr("array_join(x, 1)")
+    }
+    intercept[AnalysisException] {
+      idf.selectExpr("array_join(x, ', ', 1)")
+    }
   }
 
   test("array_min function") {
@@ -764,6 +863,59 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(df.select(array_max(df("a"))), answer)
     checkAnswer(df.selectExpr("array_max(a)"), answer)
+  }
+
+  test("sequence") {
+    checkAnswer(Seq((-2, 2)).toDF().select(sequence('_1, '_2)), Seq(Row(Array(-2, -1, 0, 1, 2))))
+    checkAnswer(Seq((7, 2, -2)).toDF().select(sequence('_1, '_2, '_3)), Seq(Row(Array(7, 5, 3))))
+
+    checkAnswer(
+      spark.sql("select sequence(" +
+        "   cast('2018-01-01 00:00:00' as timestamp)" +
+        ",  cast('2018-01-02 00:00:00' as timestamp)" +
+        ",  interval 12 hours)"),
+      Seq(Row(Array(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))))
+
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+      checkAnswer(
+        spark.sql("select sequence(" +
+          "   cast('2018-01-01' as date)" +
+          ",  cast('2018-03-01' as date)" +
+          ",  interval 1 month)"),
+        Seq(Row(Array(
+          Date.valueOf("2018-01-01"),
+          Date.valueOf("2018-02-01"),
+          Date.valueOf("2018-03-01")))))
+    }
+
+    // test type coercion
+    checkAnswer(
+      Seq((1.toByte, 3L, 1)).toDF().select(sequence('_1, '_2, '_3)),
+      Seq(Row(Array(1L, 2L, 3L))))
+
+    checkAnswer(
+      spark.sql("select sequence(" +
+        "   cast('2018-01-01' as date)" +
+        ",  cast('2018-01-02 00:00:00' as timestamp)" +
+        ",  interval 12 hours)"),
+      Seq(Row(Array(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))))
+
+    // test invalid data types
+    intercept[AnalysisException] {
+      Seq((true, false)).toDF().selectExpr("sequence(_1, _2)")
+    }
+    intercept[AnalysisException] {
+      Seq((true, false, 42)).toDF().selectExpr("sequence(_1, _2, _3)")
+    }
+    intercept[AnalysisException] {
+      Seq((1, 2, 0.5)).toDF().selectExpr("sequence(_1, _2, _3)")
+    }
   }
 
   test("reverse function") {
@@ -862,9 +1014,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("array position function") {
     val df = Seq(
-      (Seq[Int](1, 2), "x"),
-      (Seq[Int](), "x")
-    ).toDF("a", "b")
+      (Seq[Int](1, 2), "x", 1),
+      (Seq[Int](), "x", 1)
+    ).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(array_position(df("a"), 1)),
@@ -874,7 +1026,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_position(a, 1)"),
       Seq(Row(1L), Row(0L))
     )
-
+    checkAnswer(
+      df.selectExpr("array_position(a, c)"),
+      Seq(Row(1L), Row(0L))
+    )
+    checkAnswer(
+      df.select(array_position(df("a"), df("c"))),
+      Seq(Row(1L), Row(0L))
+    )
     checkAnswer(
       df.select(array_position(df("a"), null)),
       Seq(Row(null), Row(null))
@@ -901,10 +1060,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("element_at function") {
     val df = Seq(
-      (Seq[String]("1", "2", "3")),
-      (Seq[String](null, "")),
-      (Seq[String]())
-    ).toDF("a")
+      (Seq[String]("1", "2", "3"), 1),
+      (Seq[String](null, ""), -1),
+      (Seq[String](), 2)
+    ).toDF("a", "b")
 
     intercept[Exception] {
       checkAnswer(
@@ -921,6 +1080,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(element_at(df("a"), 4)),
       Seq(Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(element_at(df("a"), df("b"))),
+      Seq(Row("1"), Row(""), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("element_at(a, b)"),
+      Seq(Row("1"), Row(""), Row(null))
     )
 
     checkAnswer(
@@ -1189,16 +1356,32 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("array remove") {
     val df = Seq(
-      (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", "")),
-      (Array.empty[Int], Array.empty[String], Array.empty[String]),
-      (null, null, null)
-    ).toDF("a", "b", "c")
+      (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", ""), 2),
+      (Array.empty[Int], Array.empty[String], Array.empty[String], 2),
+      (null, null, null, 2)
+    ).toDF("a", "b", "c", "d")
     checkAnswer(
       df.select(array_remove($"a", 2), array_remove($"b", "a"), array_remove($"c", "")),
       Seq(
         Row(Seq(1, 3), Seq("b", "c"), Seq.empty[String]),
         Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),
         Row(null, null, null))
+    )
+
+    checkAnswer(
+      df.select(array_remove($"a", $"d")),
+      Seq(
+        Row(Seq(1, 3)),
+        Row(Seq.empty[Int]),
+        Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_remove(a, d)"),
+      Seq(
+        Row(Seq(1, 3)),
+        Row(Seq.empty[Int]),
+        Row(null))
     )
 
     checkAnswer(
@@ -1214,6 +1397,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(("a string element", "a")).toDF().selectExpr("array_remove(_1, _2)")
     }
     assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+  }
+
+  test("array_distinct functions") {
+    val df = Seq(
+      (Array[Int](2, 1, 3, 4, 3, 5), Array("b", "c", "a", "c", "b", "", "")),
+      (Array.empty[Int], Array.empty[String]),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(array_distinct($"a"), array_distinct($"b")),
+      Seq(
+        Row(Seq(2, 1, 3, 4, 5), Seq("b", "c", "a", "")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("array_distinct(a)", "array_distinct(b)"),
+      Seq(
+        Row(Seq(2, 1, 3, 4, 5), Seq("b", "c", "a", "")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

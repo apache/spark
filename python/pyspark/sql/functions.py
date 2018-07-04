@@ -1999,6 +1999,20 @@ def array_remove(col, element):
     return Column(sc._jvm.functions.array_remove(_to_java_column(col), element))
 
 
+@since(2.4)
+def array_distinct(col):
+    """
+    Collection function: removes duplicate values from the array.
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([1, 2, 3, 2],), ([4, 5, 5, 4],)], ['data'])
+    >>> df.select(array_distinct(df.data)).collect()
+    [Row(array_distinct(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
@@ -2175,11 +2189,16 @@ def from_json(col, schema, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
     [Row(json=[Row(a=1)])]
+    >>> schema = schema_of_json(lit('''{"a": 0}'''))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
     """
 
     sc = SparkContext._active_spark_context
     if isinstance(schema, DataType):
         schema = schema.json()
+    elif isinstance(schema, Column):
+        schema = _to_java_column(schema)
     jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
     return Column(jc)
 
@@ -2218,6 +2237,28 @@ def to_json(col, options={}):
 
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.to_json(_to_java_column(col), options)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def schema_of_json(col):
+    """
+    Parses a column containing a JSON string and infers its schema in DDL format.
+
+    :param col: string column in json format
+
+    >>> from pyspark.sql.types import *
+    >>> data = [(1, '{"a": 1}')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(schema_of_json(df.value).alias("json")).collect()
+    [Row(json=u'struct<a:bigint>')]
+    >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
+    [Row(json=u'struct<a:bigint>')]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.schema_of_json(_to_java_column(col))
     return Column(jc)
 
 
@@ -2398,6 +2439,26 @@ def map_entries(col):
     return Column(sc._jvm.functions.map_entries(_to_java_column(col)))
 
 
+@since(2.4)
+def map_from_entries(col):
+    """
+    Collection function: Returns a map created from the given array of entries.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_from_entries
+    >>> df = spark.sql("SELECT array(struct(1, 'a'), struct(2, 'b')) as data")
+    >>> df.select(map_from_entries("data").alias("map")).show()
+    +----------------+
+    |             map|
+    +----------------+
+    |[1 -> a, 2 -> b]|
+    +----------------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
+
+
 @ignore_unicode_prefix
 @since(2.4)
 def array_repeat(col, count):
@@ -2550,9 +2611,10 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        A grouped map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
        The returnType should be a :class:`StructType` describing the schema of the returned
-       `pandas.DataFrame`.
-       The length of the returned `pandas.DataFrame` can be arbitrary and the columns must be
-       indexed so that their position matches the corresponding field in the schema.
+       `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
+       the field names in the defined returnType schema if specified as strings, or match the
+       field data types by position if not strings, e.g. integer indices.
+       The length of the returned `pandas.DataFrame` can be arbitrary.
 
        Grouped map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
 

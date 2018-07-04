@@ -702,6 +702,8 @@ private[spark] class SparkSubmit extends Logging {
           childArgs ++= Array("--primary-java-resource", args.primaryResource)
           childArgs ++= Array("--main-class", args.mainClass)
         }
+      } else {
+        childArgs ++= Array("--main-class", args.mainClass)
       }
       if (args.childArgs != null) {
         args.childArgs.foreach { arg =>
