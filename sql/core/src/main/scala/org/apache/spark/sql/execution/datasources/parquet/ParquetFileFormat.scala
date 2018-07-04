@@ -355,10 +355,11 @@ class ParquetFileFormat
 
       val fileSplit =
         new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
+      val filePath = fileSplit.getPath
 
       val split =
         new org.apache.parquet.hadoop.ParquetInputSplit(
-          fileSplit.getPath,
+          filePath,
           fileSplit.getStart,
           fileSplit.getStart + fileSplit.getLength,
           fileSplit.getLength,
@@ -367,17 +368,16 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
 
-      val fileMetaData =
-        ParquetFileReader.readFooter(sharedConf, fileSplit.getPath, SKIP_ROW_GROUPS).getFileMetaData
-
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
+        val parquetSchema = ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS)
+          .getFileMetaData.getSchema
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.
           .flatMap(new ParquetFilters(pushDownDate, pushDownStringStartWith)
-          .createFilter(fileMetaData.getSchema, _))
+          .createFilter(parquetSchema, _))
           .reduceOption(FilterApi.and)
       } else {
         None
@@ -387,8 +387,10 @@ class ParquetFileFormat
       // *only* if the file was created by something other than "parquet-mr", so check the actual
       // writer here for this file.  We have to do this per-file, as each file in the table may
       // have different writers.
-      def isCreatedByParquetMr(): Boolean = fileMetaData.getCreatedBy.startsWith("parquet-mr")
-
+      def isCreatedByParquetMr(): Boolean = {
+        val footer = ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS)
+        footer.getFileMetaData().getCreatedBy().startsWith("parquet-mr")
+      }
       val convertTz =
         if (timestampConversion && !isCreatedByParquetMr()) {
           Some(DateTimeUtils.getTimeZone(sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
