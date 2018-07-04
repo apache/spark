@@ -2005,6 +2005,24 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
+    val expectedMsg = "Cannot create a table having a nested column whose name contains invalid " +
+      "characters (',', ':', ';') in Hive metastore."
+
+    Seq("nested,column", "nested:column", "nested;column").foreach { nestedColumnName =>
+      withTable("t") {
+        val e = intercept[AnalysisException] {
+          spark.range(1)
+            .select(struct(lit(0).as(nestedColumnName)).as("toplevel"))
+            .write
+            .format("hive")
+            .saveAsTable("t")
+        }.getMessage
+        assert(e.contains(expectedMsg))
+      }
+    }
+  }
+
   test("SPARK-19912 String literals should be escaped for Hive metastore partition pruning") {
     withTable("spark_19912") {
       Seq(
