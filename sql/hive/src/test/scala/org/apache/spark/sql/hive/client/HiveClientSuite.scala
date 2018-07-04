@@ -130,7 +130,7 @@ class HiveClientSuite(version: String)
       "aa" :: "ab" :: "ba" :: "bb" :: Nil)
   }
 
-  test("getPartitionsByFilter: cast(chunk as boolean)=1 (not a valid partition predicate)") {
+  test("getPartitionsByFilter: cast(chunk as boolean)=true (not a valid partition predicate)") {
     testMetastorePartitionFiltering(
       attr("chunk").cast(BooleanType) === true,
       20170101 to 20170103,
