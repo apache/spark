@@ -179,6 +179,12 @@ object TypeCoercion {
       .orElse((t1, t2) match {
         case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
           findWiderTypeForTwo(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+        case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
+          findWiderTypeForTwo(kt1, kt2).flatMap { kt =>
+            findWiderTypeForTwo(vt1, vt2).map { vt =>
+              MapType(kt, vt, valueContainsNull1 || valueContainsNull2)
+            }
+          }
         case _ => None
       })
   }
@@ -220,6 +226,12 @@ object TypeCoercion {
         case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
           findWiderTypeWithoutStringPromotionForTwo(et1, et2)
             .map(ArrayType(_, containsNull1 || containsNull2))
+        case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
+          findWiderTypeWithoutStringPromotionForTwo(kt1, kt2).flatMap { kt =>
+            findWiderTypeWithoutStringPromotionForTwo(vt1, vt2).map { vt =>
+              MapType(kt, vt, valueContainsNull1 || valueContainsNull2)
+            }
+          }
         case _ => None
       })
   }

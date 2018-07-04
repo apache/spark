@@ -1032,14 +1032,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the absolute value.
-   *
-   * @group normal_funcs
-   * @since 1.3.0
-   */
-  def abs(e: Column): Column = withExpr { Abs(e.expr) }
-
-  /**
    * Creates a new array column. The input columns must all have the same data type.
    *
    * @group normal_funcs
@@ -1336,7 +1328,7 @@ object functions {
   }
 
   /**
-   * Computes bitwise NOT.
+   * Computes bitwise NOT (~) of a number.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1363,6 +1355,14 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Computes the absolute value of a numeric value.
+   *
+   * @group math_funcs
+   * @since 1.3.0
+   */
+  def abs(e: Column): Column = withExpr { Abs(e.expr) }
 
   /**
    * @return inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
@@ -3380,6 +3380,48 @@ object functions {
     }
     from_json(e, dataType, options)
   }
+
+  /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column): Column = {
+    from_json(e, schema, Map.empty[String, String].asJava)
+  }
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(new JsonToStructs(e.expr, schema.expr, options.asScala.toMap))
+  }
+
+  /**
+   * Parses a column containing a JSON string and infers its schema.
+   *
+   * @param e a string column containing JSON data.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def schema_of_json(e: Column): Column = withExpr(new SchemaOfJson(e.expr))
 
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
