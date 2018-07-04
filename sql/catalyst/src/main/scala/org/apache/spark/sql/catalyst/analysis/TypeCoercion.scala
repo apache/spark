@@ -185,6 +185,15 @@ object TypeCoercion {
               MapType(kt, vt, valueContainsNull1 || valueContainsNull2)
             }
           }
+        case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
+          val resolver = SQLConf.get.resolver
+          fields1.zip(fields2).foldLeft(Option(new StructType())) {
+            case (Some(struct), (field1, field2)) if resolver(field1.name, field2.name) =>
+              findWiderTypeForTwo(field1.dataType, field2.dataType).map {
+                dt => struct.add(field1.name, dt, field1.nullable || field2.nullable)
+              }
+            case _ => None
+          }
         case _ => None
       })
   }
@@ -231,6 +240,15 @@ object TypeCoercion {
             findWiderTypeWithoutStringPromotionForTwo(vt1, vt2).map { vt =>
               MapType(kt, vt, valueContainsNull1 || valueContainsNull2)
             }
+          }
+        case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
+          val resolver = SQLConf.get.resolver
+          fields1.zip(fields2).foldLeft(Option(new StructType())) {
+            case (Some(struct), (field1, field2)) if resolver(field1.name, field2.name) =>
+              findWiderTypeWithoutStringPromotionForTwo(field1.dataType, field2.dataType).map {
+                dt => struct.add(field1.name, dt, field1.nullable || field2.nullable)
+              }
+            case _ => None
           }
         case _ => None
       })

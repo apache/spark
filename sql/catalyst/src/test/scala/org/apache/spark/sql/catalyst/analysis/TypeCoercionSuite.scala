@@ -54,7 +54,7 @@ class TypeCoercionSuite extends AnalysisTest {
   // | NullType             | ByteType | ShortType | IntegerType | LongType | DoubleType | FloatType | Dec(10, 2) | BinaryType | BooleanType | StringType | DateType | TimestampType | ArrayType  | MapType  | StructType  | NullType | CalendarIntervalType | DecimalType(38, 18) | DoubleType  | IntegerType  |
   // | CalendarIntervalType | X        | X         | X           | X        | X          | X         | X          | X          | X           | X          | X        | X             | X          | X        | X           | X        | CalendarIntervalType | X                   | X           | X            |
   // +----------------------+----------+-----------+-------------+----------+------------+-----------+------------+------------+-------------+------------+----------+---------------+------------+----------+-------------+----------+----------------------+---------------------+-------------+--------------+
-  // Note: StructType* is castable only when the internal child types also match; otherwise, not castable.
+  // Note: StructType* is castable when all the internal child types are castable according to the table.
   // Note: ArrayType* is castable when the element type is castable according to the table.
   // Note: MapType* is castable when both the key type and the value type are castable according to the table.
   // scalastyle:on line.size.limit
@@ -454,15 +454,18 @@ class TypeCoercionSuite extends AnalysisTest {
     def widenTestWithStringPromotion(
         t1: DataType,
         t2: DataType,
-        expected: Option[DataType]): Unit = {
-      checkWidenType(TypeCoercion.findWiderTypeForTwo, t1, t2, expected)
+        expected: Option[DataType],
+        isSymmetric: Boolean = true): Unit = {
+      checkWidenType(TypeCoercion.findWiderTypeForTwo, t1, t2, expected, isSymmetric)
     }
 
     def widenTestWithoutStringPromotion(
         t1: DataType,
         t2: DataType,
-        expected: Option[DataType]): Unit = {
-      checkWidenType(TypeCoercion.findWiderTypeWithoutStringPromotionForTwo, t1, t2, expected)
+        expected: Option[DataType],
+        isSymmetric: Boolean = true): Unit = {
+      checkWidenType(
+        TypeCoercion.findWiderTypeWithoutStringPromotionForTwo, t1, t2, expected, isSymmetric)
     }
 
     // Decimal
@@ -492,6 +495,10 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(MapType(IntegerType, FloatType), containsNull = false),
       ArrayType(MapType(LongType, DoubleType), containsNull = false),
       Some(ArrayType(MapType(LongType, DoubleType), containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(new StructType().add("num", ShortType), containsNull = false),
+      ArrayType(new StructType().add("num", LongType), containsNull = false),
+      Some(ArrayType(new StructType().add("num", LongType), containsNull = false)))
 
     // MapType
     widenTestWithStringPromotion(
@@ -506,6 +513,64 @@ class TypeCoercionSuite extends AnalysisTest {
       MapType(IntegerType, MapType(ShortType, TimestampType), valueContainsNull = false),
       MapType(LongType, MapType(DoubleType, StringType), valueContainsNull = false),
       Some(MapType(LongType, MapType(DoubleType, StringType), valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, new StructType().add("num", ShortType), valueContainsNull = false),
+      MapType(LongType, new StructType().add("num", LongType), valueContainsNull = false),
+      Some(MapType(LongType, new StructType().add("num", LongType), valueContainsNull = false)))
+
+    // StructType
+    widenTestWithStringPromotion(
+      new StructType()
+        .add("num", ShortType, nullable = true).add("ts", StringType, nullable = false),
+      new StructType()
+        .add("num", DoubleType, nullable = false).add("ts", TimestampType, nullable = true),
+      Some(new StructType()
+        .add("num", DoubleType, nullable = true).add("ts", StringType, nullable = true)))
+    widenTestWithStringPromotion(
+      new StructType()
+        .add("arr", ArrayType(ShortType, containsNull = false), nullable = false),
+      new StructType()
+        .add("arr", ArrayType(DoubleType, containsNull = true), nullable = false),
+      Some(new StructType()
+        .add("arr", ArrayType(DoubleType, containsNull = true), nullable = false)))
+    widenTestWithStringPromotion(
+      new StructType()
+        .add("map", MapType(ShortType, TimestampType, valueContainsNull = true), nullable = false),
+      new StructType()
+        .add("map", MapType(DoubleType, StringType, valueContainsNull = false), nullable = false),
+      Some(new StructType()
+        .add("map", MapType(DoubleType, StringType, valueContainsNull = true), nullable = false)))
+
+    widenTestWithStringPromotion(
+      new StructType().add("num", IntegerType),
+      new StructType().add("num", LongType).add("str", StringType),
+      None)
+    widenTestWithoutStringPromotion(
+      new StructType().add("num", IntegerType),
+      new StructType().add("num", LongType).add("str", StringType),
+      None)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      widenTestWithStringPromotion(
+        new StructType().add("a", IntegerType),
+        new StructType().add("A", LongType),
+        None)
+      widenTestWithoutStringPromotion(
+        new StructType().add("a", IntegerType),
+        new StructType().add("A", LongType),
+        None)
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      widenTestWithStringPromotion(
+        new StructType().add("a", IntegerType),
+        new StructType().add("A", LongType),
+        Some(new StructType().add("a", LongType)),
+        isSymmetric = false)
+      widenTestWithoutStringPromotion(
+        new StructType().add("a", IntegerType),
+        new StructType().add("A", LongType),
+        Some(new StructType().add("a", LongType)),
+        isSymmetric = false)
+    }
 
     // Without string promotion
     widenTestWithoutStringPromotion(IntegerType, StringType, None)
@@ -520,6 +585,14 @@ class TypeCoercionSuite extends AnalysisTest {
       MapType(StringType, IntegerType), MapType(TimestampType, IntegerType), None)
     widenTestWithoutStringPromotion(
       MapType(IntegerType, StringType), MapType(IntegerType, TimestampType), None)
+    widenTestWithoutStringPromotion(
+      new StructType().add("a", IntegerType),
+      new StructType().add("a", StringType),
+      None)
+    widenTestWithoutStringPromotion(
+      new StructType().add("a", StringType),
+      new StructType().add("a", IntegerType),
+      None)
 
     // String promotion
     widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
@@ -544,6 +617,14 @@ class TypeCoercionSuite extends AnalysisTest {
       MapType(IntegerType, StringType),
       MapType(IntegerType, TimestampType),
       Some(MapType(IntegerType, StringType)))
+    widenTestWithStringPromotion(
+      new StructType().add("a", IntegerType),
+      new StructType().add("a", StringType),
+      Some(new StructType().add("a", StringType)))
+    widenTestWithStringPromotion(
+      new StructType().add("a", StringType),
+      new StructType().add("a", IntegerType),
+      Some(new StructType().add("a", StringType)))
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
