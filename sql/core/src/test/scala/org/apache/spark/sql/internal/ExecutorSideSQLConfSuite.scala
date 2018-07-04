@@ -18,7 +18,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.test.SQLTestUtils
 
 class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
@@ -40,16 +40,24 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     spark = null
   }
 
+  override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    pairs.foreach { case (k, v) =>
+      SQLConf.get.setConfString(k, v)
+    }
+    try f finally {
+      pairs.foreach { case (k, _) =>
+        SQLConf.get.unsetConf(k)
+      }
+    }
+  }
+
   test("ReadOnlySQLConf is correctly created at the executor side") {
-    SQLConf.get.setConfString("spark.sql.x", "a")
-    try {
-      val checks = spark.range(10).mapPartitions { it =>
+    withSQLConf("spark.sql.x" -> "a") {
+      val checks = spark.range(10).mapPartitions { _ =>
         val conf = SQLConf.get
         Iterator(conf.isInstanceOf[ReadOnlySQLConf] && conf.getConfString("spark.sql.x") == "a")
       }.collect()
       assert(checks.forall(_ == true))
-    } finally {
-      SQLConf.get.unsetConf("spark.sql.x")
     }
   }
 
@@ -61,6 +69,17 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         spark.range(10).write.mode("append").json(pathString)
         assert(spark.read.json(pathString).columns.toSet == Set("id", "ID"))
       }
+    }
+  }
+
+  test("SPARK-24727 CODEGEN_CACHE_MAX_ENTRIES is correctly referenced at the executor side") {
+    withSQLConf(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES.key -> "300") {
+      val checks = spark.range(10).mapPartitions { _ =>
+        val conf = SQLConf.get
+        Iterator(conf.isInstanceOf[ReadOnlySQLConf] &&
+          conf.getConfString(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES.key) == "300")
+      }.collect()
+      assert(checks.forall(_ == true))
     }
   }
 }
