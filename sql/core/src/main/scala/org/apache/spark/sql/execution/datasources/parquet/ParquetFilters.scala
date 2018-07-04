@@ -202,7 +202,7 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
       // Here we don't flatten the fields in the nested schema but just look up through
       // root fields. Currently, accessing to nested fields does not push down filters
       // and it does not support to create filters for them.
-      m.getFields.asScala.filter(_.isInstanceOf[PrimitiveType]).map(_.asPrimitiveType()).map { f =>
+      m.getFields.asScala.filter(_.isPrimitive).map(_.asPrimitiveType()).map { f =>
         f.getName -> ParquetSchemaType(
           f.getOriginalType, f.getPrimitiveTypeName, f.getDecimalMetadata)
       }.toMap
