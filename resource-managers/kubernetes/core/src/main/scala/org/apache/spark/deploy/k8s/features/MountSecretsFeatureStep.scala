@@ -54,9 +54,5 @@ private[spark] class MountSecretsFeatureStep(
     SparkPod(podWithVolumes, containerWithMounts)
   }
 
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
-
   private def secretVolumeName(secretName: String): String = s"$secretName-volume"
 }

@@ -16,16 +16,19 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Job, JobBuilder}
 
-private[spark] case class KubernetesDriverSpec(
-    job: SparkJob,
-    driverKubernetesResources: Seq[HasMetadata],
-    systemProperties: Map[String, String])
+private[spark] case class SparkJob(job: Job, container: Container)
 
-private[spark] object KubernetesDriverSpec {
-  def initialSpec(initialProps: Map[String, String]): KubernetesDriverSpec = KubernetesDriverSpec(
-    SparkJob.initialJob(),
-    Seq.empty,
-    initialProps)
+private[spark] object SparkJob {
+  def initialJob(): SparkJob = {
+    SparkJob(
+      new JobBuilder()
+        .withNewMetadata()
+        .endMetadata()
+        .withNewSpec()
+        .endSpec()
+        .build(),
+      new ContainerBuilder().build())
+  }
 }

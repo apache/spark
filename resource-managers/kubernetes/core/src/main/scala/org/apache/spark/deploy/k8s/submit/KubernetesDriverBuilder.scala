@@ -16,7 +16,9 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
+import io.fabric8.kubernetes.api.model.JobBuilder
+
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
 
@@ -77,16 +79,36 @@ private[spark] class KubernetesDriverBuilder(
     val allFeatures = (baseFeatures :+ bindingsStep) ++
       secretFeature ++ envSecretFeature ++ volumesFeature
 
-    var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
-    for (feature <- allFeatures) {
-      val configuredPod = feature.configurePod(spec.pod)
-      val addedSystemProperties = feature.getAdditionalPodSystemProperties()
-      val addedResources = feature.getAdditionalKubernetesResources()
-      spec = KubernetesDriverSpec(
-        configuredPod,
-        spec.driverKubernetesResources ++ addedResources,
-        spec.systemProperties ++ addedSystemProperties)
+    val spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
+    val (configuredSparkPod, configuredKubernetesResources, configuredSystemProperties) =
+      allFeatures.foldLeft(
+      (SparkPod.initialPod(), spec.driverKubernetesResources, spec.systemProperties)) {
+      (init, feature) =>
+        init match {
+          case (sparkPod, driverKubernetesResource, systemProperties) =>
+            (feature.configurePod(sparkPod),
+              feature.getAdditionalKubernetesResources() ++ driverKubernetesResource,
+              feature.getAdditionalPodSystemProperties() ++ systemProperties)
+        }
     }
-    spec
+    new KubernetesDriverSpec(
+      createJobFromPod(spec.job, configuredSparkPod),
+      configuredKubernetesResources,
+      configuredSystemProperties
+    )
+  }
+
+  def createJobFromPod(sparkJob: SparkJob, sparkPod: SparkPod): SparkJob = {
+    val job = new JobBuilder(sparkJob.job)
+      .editOrNewMetadata()
+      .withName(sparkPod.pod.getMetadata.getName)
+      .endMetadata()
+      .editOrNewSpec()
+        .editOrNewTemplate()
+          .withMetadata(sparkPod.pod.getMetadata)
+          .withSpec(sparkPod.pod.getSpec)
+        .endTemplate()
+      .endSpec().build()
+    new SparkJob(job, sparkPod.container)
   }
 }

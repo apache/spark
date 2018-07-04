@@ -216,7 +216,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     : Unit = {
     assert(resolvedSpec.systemProperties.size === stepTypes.size)
     stepTypes.foreach { stepType =>
-      assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)
+      assert(resolvedSpec.job.job.getSpec.getTemplate
+        .getMetadata.getLabels.get(stepType) === stepType)
       assert(resolvedSpec.driverKubernetesResources.containsSlice(
         KubernetesFeaturesTestUtils.getSecretsForStepType(stepType)))
       assert(resolvedSpec.systemProperties(stepType) === stepType)

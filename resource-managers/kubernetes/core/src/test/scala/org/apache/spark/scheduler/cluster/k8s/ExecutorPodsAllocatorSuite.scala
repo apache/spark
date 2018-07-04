@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentMatcher, Matchers, Mock, MockitoAnnotations}
@@ -38,16 +38,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val driverPodName = "driver"
 
-  private val driverPod = new PodBuilder()
-    .withNewMetadata()
-      .withName(driverPodName)
-      .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
-      .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_DRIVER_ROLE)
-      .withUid("driver-pod-uid")
-      .endMetadata()
-    .build()
-
-  private val conf = new SparkConf().set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
+  private val conf = new SparkConf().set(KUBERNETES_DRIVER_POD_NAME_PREFIX, driverPodName)
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
@@ -65,20 +56,42 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private var labeledPods: LABELED_PODS = _
 
   @Mock
+  private var podList: PodList = _
+
+  @Mock
   private var driverPodOperations: PodResource[Pod, DoneablePod] = _
 
   @Mock
   private var executorBuilder: KubernetesExecutorBuilder = _
 
+  private val podListElements = new java.util.ArrayList[Pod]()
+
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
 
   private var podsAllocatorUnderTest: ExecutorPodsAllocator = _
 
+  private val driverPod = new PodBuilder()
+    .withNewMetadata()
+    .withName(driverPodName)
+    .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
+    .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_DRIVER_ROLE)
+    .addToLabels("job-name", driverPodName)
+    .withUid("driver-pod-uid")
+    .endMetadata()
+    .withNewStatus()
+    .withPhase("Running")
+    .endStatus()
+    .build()
+
+  podListElements.add(driverPod)
+
+
   before {
     MockitoAnnotations.initMocks(this)
     when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.withName(driverPodName)).thenReturn(driverPodOperations)
-    when(driverPodOperations.get).thenReturn(driverPod)
+    when(podOperations.withLabel("job-name", driverPodName)).thenReturn(labeledPods)
+    when(labeledPods.list()).thenReturn(podList)
+    when(podList.getItems).thenReturn(podListElements)
     when(executorBuilder.buildFromFeatures(kubernetesConfWithCorrectFields()))
       .thenAnswer(executorPodAnswer())
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()

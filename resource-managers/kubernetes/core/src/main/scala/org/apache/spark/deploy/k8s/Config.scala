@@ -104,11 +104,18 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  val KUBERNETES_DRIVER_POD_NAME =
-    ConfigBuilder("spark.kubernetes.driver.pod.name")
-      .doc("Name of the driver pod.")
+  val KUBERNETES_DRIVER_POD_NAME_PREFIX =
+    ConfigBuilder("spark.kubernetes.driver.pod.namePrefix")
+      .doc("Prefix to use in front of the driver pod names.")
       .stringConf
       .createOptional
+
+  val KUBERNETES_DRIVER_JOB_BACKOFFLIMIT =
+    ConfigBuilder("spark.kubernetes.driver.job.backofflimit")
+      .doc("Driver job backofflimit.")
+      .intConf
+      .checkValue(value => value > 0, "Backofflimit must be a positive number")
+      .createWithDefault(6)
 
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")

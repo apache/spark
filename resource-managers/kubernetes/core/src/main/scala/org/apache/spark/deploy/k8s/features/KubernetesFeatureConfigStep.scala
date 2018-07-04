@@ -61,11 +61,11 @@ private[spark] trait KubernetesFeatureConfigStep {
   /**
    * Return any system properties that should be set on the JVM in accordance to this feature.
    */
-  def getAdditionalPodSystemProperties(): Map[String, String]
+  def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
 
   /**
    * Return any additional Kubernetes resources that should be added to support this feature. Only
    * applicable when creating the driver in cluster mode.
    */
-  def getAdditionalKubernetesResources(): Seq[HasMetadata]
+  def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

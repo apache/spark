@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -46,13 +47,15 @@ private[spark] class ExecutorPodsAllocator(
 
   private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000)
 
-  private val kubernetesDriverPodName = conf
-    .get(KUBERNETES_DRIVER_POD_NAME)
+  private val kubernetesDriverPodNamePrefix = conf
+    .get(KUBERNETES_DRIVER_POD_NAME_PREFIX)
     .getOrElse(throw new SparkException("Must specify the driver pod name"))
 
   private val driverPod = kubernetesClient.pods()
-    .withName(kubernetesDriverPodName)
-    .get()
+    .withLabel("job-name", kubernetesDriverPodNamePrefix).list()
+    .getItems.asScala.find(p =>
+      p.getMetadata.getName.startsWith(kubernetesDriverPodNamePrefix) &&
+      p.getStatus.getPhase == "Running").get
 
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
   // snapshot yet. Mapped to the timestamp when they were created.

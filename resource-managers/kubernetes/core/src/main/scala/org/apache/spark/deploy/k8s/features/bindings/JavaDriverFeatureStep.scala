@@ -38,7 +38,4 @@ private[spark] class JavaDriverFeatureStep(
       .build()
     SparkPod(pod.pod, withDriverArgs)
   }
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

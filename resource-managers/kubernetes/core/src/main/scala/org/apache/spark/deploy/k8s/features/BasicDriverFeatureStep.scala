@@ -32,8 +32,8 @@ private[spark] class BasicDriverFeatureStep(
     conf: KubernetesConf[KubernetesDriverSpecificConf])
   extends KubernetesFeatureConfigStep {
 
-  private val driverPodName = conf
-    .get(KUBERNETES_DRIVER_POD_NAME)
+  private val driverPodNamePrefix = conf
+    .get(KUBERNETES_DRIVER_POD_NAME_PREFIX)
     .getOrElse(s"${conf.appResourceNamePrefix}-driver")
 
   private val driverContainerImage = conf
@@ -93,7 +93,7 @@ private[spark] class BasicDriverFeatureStep(
 
     val driverPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
-        .withName(driverPodName)
+        .withName(driverPodNamePrefix)
         .addToLabels(conf.roleLabels.asJava)
         .addToAnnotations(conf.roleAnnotations.asJava)
         .endMetadata()
@@ -109,7 +109,7 @@ private[spark] class BasicDriverFeatureStep(
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
     val additionalProps = mutable.Map(
-      KUBERNETES_DRIVER_POD_NAME.key -> driverPodName,
+      KUBERNETES_DRIVER_POD_NAME_PREFIX.key -> driverPodNamePrefix,
       "spark.app.id" -> conf.appId,
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> conf.appResourceNamePrefix,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true")
@@ -127,5 +127,4 @@ private[spark] class BasicDriverFeatureStep(
     additionalProps.toMap
   }
 
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

@@ -59,7 +59,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
   test("Check the pod respects all configurations from the user.") {
     val sparkConf = new SparkConf()
-      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(KUBERNETES_DRIVER_POD_NAME_PREFIX, "spark-driver-pod")
       .set("spark.driver.cores", "2")
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
       .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "256M")
@@ -118,7 +118,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(driverPodMetadata.getAnnotations.asScala === DRIVER_ANNOTATIONS)
     assert(configuredPod.pod.getSpec.getRestartPolicy === "Never")
     val expectedSparkConf = Map(
-      KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
+      KUBERNETES_DRIVER_POD_NAME_PREFIX.key -> "spark-driver-pod",
       "spark.app.id" -> APP_ID,
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX,
       "spark.kubernetes.submitInDriver" -> "true")
@@ -175,7 +175,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val allJars = Seq("local:///opt/spark/jar1.jar", "hdfs:///opt/spark/jar2.jar")
     val allFiles = Seq("https://localhost:9000/file1.txt", "local:///opt/spark/file2.txt")
     val sparkConf = new SparkConf()
-      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(KUBERNETES_DRIVER_POD_NAME_PREFIX, "spark-driver-pod")
       .setJars(allJars)
       .set("spark.files", allFiles.mkString(","))
       .set(CONTAINER_IMAGE, "spark-driver:latest")
@@ -195,7 +195,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val step = new BasicDriverFeatureStep(kubernetesConf)
     val additionalProperties = step.getAdditionalPodSystemProperties()
     val expectedSparkConf = Map(
-      KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
+      KUBERNETES_DRIVER_POD_NAME_PREFIX.key -> "spark-driver-pod",
       "spark.app.id" -> APP_ID,
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX,
       "spark.kubernetes.submitInDriver" -> "true",

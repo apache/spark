@@ -68,7 +68,7 @@ class BasicExecutorFeatureStepSuite
   before {
     MockitoAnnotations.initMocks(this)
     baseConf = new SparkConf()
-      .set(KUBERNETES_DRIVER_POD_NAME, DRIVER_POD_NAME)
+      .set(KUBERNETES_DRIVER_POD_NAME_PREFIX, DRIVER_POD_NAME)
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, RESOURCE_NAME_PREFIX)
       .set(CONTAINER_IMAGE, EXECUTOR_IMAGE)
       .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
