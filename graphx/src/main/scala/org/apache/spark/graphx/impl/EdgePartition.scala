@@ -82,6 +82,13 @@ class EdgePartition[
       Some(activeSet))
   }
 
+  /** Return a new `EdgePartition` with the specified vertex attributes. */
+  def withVertexAttributes[VD2: ClassTag](newVertexAttrs: Array[VD2]): EdgePartition[ED, VD2] = {
+    new EdgePartition(
+      localSrcIds, localDstIds, data, index, global2local, local2global, newVertexAttrs,
+      activeSet)
+  }
+
   /** Return a new `EdgePartition` with updates to vertex attributes specified in `iter`. */
   def updateVertices(iter: Iterator[(VertexId, VD)]): EdgePartition[ED, VD] = {
     val newVertexAttrs = new Array[VD](vertexAttrs.length)
