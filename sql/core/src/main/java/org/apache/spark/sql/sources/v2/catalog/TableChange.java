@@ -21,7 +21,7 @@ import org.apache.spark.sql.types.DataType;
 
 /**
  * TableChange subclasses represent requested changes to a table. These are passed to
- * {@link DataSourceCatalog#alterTable}.
+ * {@link TableCatalog#alterTable}.
  */
 public interface TableChange {
 

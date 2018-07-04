@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.sql.sources.v2.catalog.DataSourceCatalog;
+import org.apache.spark.sql.sources.v2.catalog.TableCatalog;
 
 /**
  * A mix-in interface for {@link DataSourceV2} catalog support. Data sources can implement this
@@ -26,11 +26,11 @@ import org.apache.spark.sql.sources.v2.catalog.DataSourceCatalog;
  * Data sources must implement this interface to support logical operations that combine writing
  * data with catalog tasks, like create-table-as-select.
  */
-public interface CatalogSupport {
+public interface TableSupport {
   /**
-   * Return a {@link DataSourceCatalog catalog} for tables.
+   * Return a {@link TableCatalog catalog} for tables.
    *
    * @return a catalog
    */
-  DataSourceCatalog catalog();
+  TableCatalog catalog();
 }

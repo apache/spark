@@ -28,7 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public interface DataSourceCatalog {
+public interface TableCatalog {
   /**
    * Load table metadata by {@link TableIdentifier identifier} from the catalog.
    *
