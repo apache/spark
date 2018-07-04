@@ -384,19 +384,23 @@ class RowMatrix @Since("1.0.0") (
     val n = numCols().toInt
     require(k > 0 && k <= n, s"k = $k out of range (0, n = $n]")
 
-    val Cov = computeCovariance().asBreeze.asInstanceOf[BDM[Double]]
-
-    val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
-
-    val eigenSum = s.data.sum
-    val explainedVariance = s.data.map(_ / eigenSum)
-
-    if (k == n) {
-      (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
+    // Check matrix is standarized with mean 0
+    val mean = computeColumnSummaryStatistics().mean
+    val stdMat = if (mean.toArray.sum < 1E-9) {
+      this  // If matrix is already centered in 0, then no need to standarize
     } else {
-      (Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k)),
-        Vectors.dense(Arrays.copyOfRange(explainedVariance, 0, k)))
+      // X' = X - µ
+      def subPairs = (vPair: (Double, Double)) => vPair._1 - vPair._2
+      def subMean = (v: Vector) => Vectors.dense(v.toArray.zip(mean.toArray).map(subPairs))
+      val stdData = rows.map(subMean)
+      new RowMatrix(stdData)
     }
+    val svd = stdMat.computeSVD(n, computeU = false, rCond = 0)
+    val eigenSum = svd.s.toArray.map(math.pow(_, 2)).sum
+    val explainedVariance = Vectors.dense(svd.s.toArray.slice(0, k).map(math.pow(_, 2)/eigenSum))
+    val pc = Matrices.dense(n, k, svd.V.toArray.slice(0, k*n))
+
+    (pc, explainedVariance)
   }
 
   /**
