@@ -178,7 +178,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test(s"filter pushdown - ByteType") {
+  test("filter pushdown - tinyint") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toByte)))) { implicit df =>
       assert(df.schema.head.dataType === ByteType)
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
@@ -206,7 +206,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test(s"filter pushdown - ShortType") {
+  test("filter pushdown - smallint") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toShort)))) { implicit df =>
       assert(df.schema.head.dataType === ShortType)
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
