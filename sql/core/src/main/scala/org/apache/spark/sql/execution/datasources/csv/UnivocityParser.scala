@@ -45,10 +45,13 @@ class UnivocityParser(
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
+  // This index is used to reorder parsed tokens
+  private val tokenIndexArr =
+    requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f)))
+
   val tokenizer = {
     val parserSetting = options.asParserSettings
     if (options.columnPruning && requiredSchema.length < dataSchema.length) {
-      val tokenIndexArr = requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f)))
       parserSetting.selectIndexes(tokenIndexArr: _*)
     }
     new CsvParser(parserSetting)
@@ -84,11 +87,6 @@ class UnivocityParser(
   //   output row - ["A", 2]
   private val valueConverters: Array[ValueConverter] = {
     requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
-  }
-
-  // If `columnPruning` disabled, this index is used to reorder parsed tokens
-  private lazy val tokenIndexArr: Array[Int] = {
-    requiredSchema.map(f => dataSchema.indexOf(f)).toArray
   }
 
   /**
