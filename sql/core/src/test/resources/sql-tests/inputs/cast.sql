@@ -42,4 +42,23 @@ SELECT CAST('9223372036854775808' AS long);
 
 DESC FUNCTION boolean;
 DESC FUNCTION EXTENDED boolean;
+
+-- cast null to calendar interval should return null
+SELECT CAST(NULL as calendarinterval);
+
+-- cast invalid strings to calendar interval should return null
+SELECT CAST('5 minutes' as calendarinterval);
+SELECT CAST('10' as calendarinterval);
+
+-- cast valid strings to calendar interval should return calendar interval
+SELECT CAST('interval 5 minutes' as calendarinterval);
+SELECT CAST('interval 10 hours' as calendarinterval);
+SELECT CAST('interval 1 second' as calendarinterval);
+
+-- casting to calendar interval using the function should also work
+SELECT CALENDARINTERVAL('interval 5 minutes');
+SELECT CALENDARINTERVAL('interval 10 hours');
+SELECT CALENDARINTERVAL('interval 1 second');
+
+DESC FUNCTION calendarinterval;
 -- TODO: migrate all cast tests here.
