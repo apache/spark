@@ -405,7 +405,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *   will be run on edges with *both* vertices in the active set. The active set must have the
    *   same index as the graph's vertices.
    */
-  private[graphx] def aggregateMessagesWithActiveSet[A: ClassTag](
+  def aggregateMessagesWithActiveSet[A: ClassTag](
       sendMsg: EdgeContext[VD, ED, A] => Unit,
       mergeMsg: (A, A) => A,
       tripletFields: TripletFields,
