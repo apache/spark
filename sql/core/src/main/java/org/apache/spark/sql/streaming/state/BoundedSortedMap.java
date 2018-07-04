@@ -27,7 +27,7 @@ import java.util.TreeMap;
  * smaller elements to retain at most bigger N elements.
  *
  * You can provide reversed order of comparator to retain smaller elements instead.
- * 
+ *
  * This class is not thread-safe, so synchronization would be needed to use this concurrently.
  *
  * @param <K> key type
