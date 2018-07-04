@@ -142,6 +142,7 @@
     <codahale.metrics.version>3.1.5</codahale.metrics.version>
     <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+    <javax.activation.version>1.1.1</javax.activation.version>
     <aws.kinesis.client.version>1.7.3</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.76</aws.java.sdk.version>
@@ -986,6 +987,16 @@
             <artifactId>velocity</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <!-- See SPARK-23654 for info on this dependency;
+      It is used to keep javax.activation at v1.1.1 after dropping
+      jets3t as a dependency.
+       -->
+      <dependency>
+        <groupId>javax.activation</groupId>
+        <artifactId>activation</artifactId>
+        <version>${javax.activation.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.bouncycastle</groupId>
