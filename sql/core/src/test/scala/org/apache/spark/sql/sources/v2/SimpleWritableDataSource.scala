@@ -209,10 +209,10 @@ class SimpleCSVDataWriterFactory(path: String, jobId: String, conf: Serializable
 
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): DataWriter[Row] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
-    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
+    val filePath = new Path(jobPath, s"$jobId-$partitionId-$taskId")
     val fs = filePath.getFileSystem(conf.value)
     new SimpleCSVDataWriter(fs, filePath)
   }
@@ -245,10 +245,10 @@ class InternalRowCSVDataWriterFactory(path: String, jobId: String, conf: Seriali
 
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
-    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
+    val filePath = new Path(jobPath, s"$jobId-$partitionId-$taskId")
     val fs = filePath.getFileSystem(conf.value)
     new InternalRowCSVDataWriter(fs, filePath)
   }
