@@ -69,7 +69,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     val createCombiner = (v: V) => ArrayBuffer[V](v)
     val mergeValue = (c: ArrayBuffer[V], v: V) => (c += v)
     val mergeCombiner = (c1: ArrayBuffer[V], c2: ArrayBuffer[V]) => (c1 ++ c2)
-    combineByKey(createCombiner, mergeValue, mergeCombiner, partitioner)
+    combineByKey(createCombiner, mergeValue, mergeCombiner, partitioner, mapSideCombine = false)
       .asInstanceOf[DStream[(K, Iterable[V])]]
   }
 
