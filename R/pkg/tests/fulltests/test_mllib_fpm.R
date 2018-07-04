@@ -82,4 +82,26 @@ test_that("spark.fpGrowth", {
 
 })
 
+test_that("spark.prefixSpan", {
+    df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
+                          list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+                          list(list(list(1L, 2L), list(5L))),
+                          list(list(list(6L)))), schema = c("sequence"))
+    prefix_Span1 <- spark.prefixSpan(minSupport = 0.5, maxPatternLength = 5L,
+                                     maxLocalProjDBSize = 32000000L)
+    result1 <- spark.findFrequentSequentialPatterns(prefix_Span1, df)
+
+    expected_result <- createDataFrame(list(list(list(list(1L)), 3L),
+                                            list(list(list(3L)), 2L),
+                                            list(list(list(2L)), 3L),
+                                            list(list(list(1L, 2L)), 3L),
+                                            list(list(list(1L), list(3L)), 2L)),
+                                            schema = c("sequence", "freq"))
+    expect_equivalent(expected_result, result1)
+
+    prefix_Span2 <- spark.prefixSpan(minSupport = 0.5, maxPatternLength = 5L)
+    result2 <- spark.findFrequentSequentialPatterns(prefix_Span2, df)
+    expect_equivalent(expected_result, result2)
+  })
+
 sparkR.session.stop()
