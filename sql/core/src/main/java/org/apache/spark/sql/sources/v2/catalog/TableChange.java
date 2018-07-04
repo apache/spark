@@ -21,7 +21,16 @@ import org.apache.spark.sql.types.DataType;
 
 /**
  * TableChange subclasses represent requested changes to a table. These are passed to
- * {@link TableCatalog#alterTable}.
+ * {@link TableCatalog#alterTable}. For example,
+ * <pre>
+ *   import TableChange._
+ *   val catalog = source.asInstanceOf[TableSupport].catalog()
+ *   catalog.alterTable(ident,
+ *       addColumn("x", IntegerType),
+ *       renameColumn("a", "b"),
+ *       deleteColumn("c")
+ *     )
+ * </pre>
  */
 public interface TableChange {
 
