@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types._
 
 
@@ -41,6 +42,11 @@ object DataSourceUtils {
    * in a driver side.
    */
   private def verifySchema(format: FileFormat, schema: StructType, isReadPath: Boolean): Unit = {
-    schema.foreach(field => format.validateDataType(field.dataType, isReadPath))
+    schema.foreach { field =>
+      if (!format.supportDataType(field.dataType, isReadPath)) {
+        throw new AnalysisException(
+          s"$format data source does not support ${field.dataType.simpleString} data type.")
+      }
+    }
   }
 }

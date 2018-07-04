@@ -153,11 +153,10 @@ trait FileFormat {
   }
 
   /**
-   * Validate the given [[DataType]] in read/write path for this file format.
-   * If the [[DataType]] is not supported, an exception will be thrown.
+   * Returns whether this format supports the given [[DataType]] in read/write path.
    * By default all data types are supported.
    */
-  def validateDataType(dataType: DataType, isReadPath: Boolean): Unit = {}
+  def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = true
 }
 
 /**

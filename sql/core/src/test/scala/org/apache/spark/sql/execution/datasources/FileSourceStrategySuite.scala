@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -36,7 +36,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 import org.apache.spark.util.Utils
 
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
@@ -634,6 +634,8 @@ class TestFileFormat extends TextBasedFileFormat {
 
     (file: PartitionedFile) => { Iterator.empty }
   }
+
+  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = false
 }
 
 

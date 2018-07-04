@@ -152,14 +152,13 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 
-  override def validateDataType(dataType: DataType, isReadPath: Boolean): Unit = dataType match {
+  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
     case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
-         StringType | BinaryType | DateType | TimestampType | _: DecimalType =>
+         StringType | BinaryType | DateType | TimestampType | _: DecimalType => true
 
-    case udt: UserDefinedType[_] => validateDataType(udt.sqlType, isReadPath)
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
 
-    case _ => throw new UnsupportedOperationException(
-      s"$this data source does not support ${dataType.simpleString} data type.")
+    case _ => false
   }
 
 }
