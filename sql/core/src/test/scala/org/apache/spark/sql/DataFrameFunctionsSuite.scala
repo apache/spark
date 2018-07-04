@@ -1492,6 +1492,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       assert(errMsg.contains(s"input to function $name requires at least two arguments"))
     }
   }
+
+  test("SPARK-24734: Fix containsNull of Concat for array type") {
+    val df = Seq((Seq(1), Seq[Integer](null), Seq("a", "b"))).toDF("k1", "k2", "v")
+    val ex = intercept[RuntimeException] {
+      df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
+    }
+    assert(ex.getMessage.contains("Cannot use null as map key"))
+  }
 }
 
 object DataFrameFunctionsSuite {
