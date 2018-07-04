@@ -72,7 +72,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     }
   }
 
-  test("SPARK-24727 CODEGEN_CACHE_SIZE is correctly referenced at the executor side") {
+  test("SPARK-24727 CODEGEN_CACHE_MAX_ENTRIES is correctly referenced at the executor side") {
     withSQLConf(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES.key -> "300") {
       val checks = spark.range(10).mapPartitions { _ =>
         val conf = SQLConf.get
