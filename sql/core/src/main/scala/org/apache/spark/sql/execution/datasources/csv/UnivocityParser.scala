@@ -38,7 +38,7 @@ class UnivocityParser(
     requiredSchema: StructType,
     val options: CSVOptions) extends Logging {
   require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
-    "requiredSchema should be the subset of schema.")
+    "requiredSchema should be the subset of dataSchema.")
 
   def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
 
@@ -53,9 +53,10 @@ class UnivocityParser(
     }
     new CsvParser(parserSetting)
   }
-  private val schema = if (options.columnPruning) requiredSchema else dataSchema
 
-  private val row = new GenericInternalRow(schema.length)
+  private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
+
+  private val row = new GenericInternalRow(requiredSchema.length)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -82,7 +83,12 @@ class UnivocityParser(
   //
   //   output row - ["A", 2]
   private val valueConverters: Array[ValueConverter] = {
-    schema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+  }
+
+  // If `columnPruning` disabled, this index is used to reorder parsed tokens
+  private lazy val tokenIndexArr: Array[Int] = {
+    requiredSchema.map(f => dataSchema.indexOf(f)).toArray
   }
 
   /**
@@ -183,7 +189,7 @@ class UnivocityParser(
     }
   }
 
-  private val doParse = if (schema.nonEmpty) {
+  private val doParse = if (requiredSchema.nonEmpty) {
     (input: String) => convert(tokenizer.parseLine(input))
   } else {
     // If `columnPruning` enabled and partition attributes scanned only,
@@ -197,15 +203,21 @@ class UnivocityParser(
    */
   def parse(input: String): InternalRow = doParse(input)
 
+  private val getToken = if (options.columnPruning) {
+    (tokens: Array[String], index: Int) => tokens(index)
+  } else {
+    (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
+  }
+
   private def convert(tokens: Array[String]): InternalRow = {
-    if (tokens.length != schema.length) {
+    if (tokens.length != parsedSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
       // However, we still have chance to parse some of the tokens, by adding extra null tokens in
       // the tail if the number is smaller, or by dropping extra tokens if the number is larger.
-      val checkedTokens = if (schema.length > tokens.length) {
-        tokens ++ new Array[String](schema.length - tokens.length)
+      val checkedTokens = if (parsedSchema.length > tokens.length) {
+        tokens ++ new Array[String](parsedSchema.length - tokens.length)
       } else {
-        tokens.take(schema.length)
+        tokens.take(parsedSchema.length)
       }
       def getPartialResult(): Option[InternalRow] = {
         try {
@@ -223,8 +235,8 @@ class UnivocityParser(
     } else {
       try {
         var i = 0
-        while (i < schema.length) {
-          row(i) = valueConverters(i).apply(tokens(i))
+        while (i < requiredSchema.length) {
+          row(i) = valueConverters(i).apply(getToken(tokens, i))
           i += 1
         }
         row

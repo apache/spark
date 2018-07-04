@@ -24,7 +24,6 @@ import org.apache.hadoop.mapreduce._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -132,7 +131,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       )
     }
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
@@ -140,22 +138,13 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         parsedOptions)
-      val inputRows = CSVDataSource(parsedOptions).readFile(
+      CSVDataSource(parsedOptions).readFile(
         conf,
         file,
         parser,
         requiredSchema,
         dataSchema,
         caseSensitive)
-
-      if (columnPruning) {
-        inputRows
-      } else {
-        val inputAttrs = dataSchema.toAttributes
-        val outputAttrs = requiredSchema.map(dataSchema.indexOf).map(inputAttrs)
-        val outputProjection = GenerateUnsafeProjection.generate(outputAttrs, inputAttrs)
-        inputRows.map(outputProjection)
-      }
     }
   }
 
