@@ -28,7 +28,7 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
     f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
     preservesPartitioning: Boolean = false,
-    recomputeOnFailure: Boolean = false)
+    retryOnAllPartitionsOnFailure: Boolean = false)
   extends RDD[U](prev) {
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
@@ -43,5 +43,5 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     prev = null
   }
 
-  override def recomputeAllPartitionsOnFailure(): Boolean = recomputeOnFailure
+  override def recomputeAllPartitionsOnFailure(): Boolean = retryOnAllPartitionsOnFailure
 }
