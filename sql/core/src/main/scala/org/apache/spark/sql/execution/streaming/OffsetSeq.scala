@@ -107,11 +107,14 @@ object OffsetSeqMetadata extends Logging {
         case Some(valueInMetadata) =>
           // Config value exists in the metadata, update the session config with this value
           val optionalValueInSession = sessionConf.getOption(confKey)
+
           if (optionalValueInSession.isDefined && optionalValueInSession.get != valueInMetadata) {
+            sessionConf.set(confKey, optionalValueInSession.get)
+          } else {
             logWarning(s"Updating the value of conf '$confKey' in current session from " +
               s"'${optionalValueInSession.get}' to '$valueInMetadata'.")
+            sessionConf.set(confKey, valueInMetadata)
           }
-          sessionConf.set(confKey, valueInMetadata)
 
         case None =>
           // For backward compatibility, if a config was not recorded in the offset log,
