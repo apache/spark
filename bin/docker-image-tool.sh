@@ -29,6 +29,10 @@ if [ -z "${SPARK_HOME}" ]; then
 fi
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
+if [ -z "${RVERSION}" ]; then
+  RVERSION="3.4.2-r0"
+fi
+
 function image_ref {
   local image="$1"
   local add_repo="${2:-1}"
@@ -63,9 +67,15 @@ function build {
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
-  local BINDING_BUILD_ARGS=(
+  local PYBINDING_BUILD_ARGS=(
     --build-arg
     base_img=$(image_ref spark)
+  )
+  local RBINDING_BUILD_ARGS=(
+    --build-arg
+    base_img=$(image_ref spark)
+    --build-arg
+    spark_r_version="$RVERSION"
   )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
@@ -75,11 +85,11 @@ function build {
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .
 
-  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+  docker build $NOCACHEARG "${PYBINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-py) \
     -f "$PYDOCKERFILE" .
 
-    docker build "${BINDING_BUILD_ARGS[@]}" \
+    docker build "${RBINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-r) \
     -f "$RDOCKERFILE" .
 }
@@ -101,13 +111,14 @@ Commands:
   push        Push a pre-built image to a registry. Requires a repository address to be provided.
 
 Options:
-  -f file     Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
-  -p file     Dockerfile with Python baked in. By default builds the Dockerfile shipped with Spark.
-  -R file     Dockerfile with R baked in. By default builds the Dockerfile shipped with Spark.
-  -r repo     Repository address.
-  -t tag      Tag to apply to the built image, or to identify the image to be pushed.
-  -m          Use minikube's Docker daemon.
-  -n          Build docker image with --no-cache
+  -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
+  -p file               Dockerfile with Python baked in. By default builds the Dockerfile shipped with Spark.
+  -R file               Dockerfile with R baked in. By default builds the Dockerfile shipped with Spark.
+  -v version            Version of R which you wish the Dockerfile to be built with. This defaults to 3.5.0-r1
+  -r repo               Repository address.
+  -t tag                Tag to apply to the built image, or to identify the image to be pushed.
+  -m                    Use minikube's Docker daemon.
+  -n                    Build docker image with --no-cache
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
 There is no need to push the images into minikube in that case, they'll be automatically
@@ -138,13 +149,15 @@ BASEDOCKERFILE=
 PYDOCKERFILE=
 RDOCKERFILE=
 NOCACHEARG=
-while getopts f:mr:t:n option
+RVERSION=
+while getopts f:mr:t:n:p:R:v option
 do
  case "${option}"
  in
  f) BASEDOCKERFILE=${OPTARG};;
  p) PYDOCKERFILE=${OPTARG};;
  R) RDOCKERFILE=${OPTARG};;
+ v) RVERSION=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  n) NOCACHEARG="--no-cache";;

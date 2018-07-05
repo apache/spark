@@ -217,7 +217,7 @@ private[spark] object Config extends Logging {
       .createWithDefault(0.1)
 
   val PYSPARK_MAJOR_PYTHON_VERSION =
-    ConfigBuilder("spark.kubernetes.pyspark.pythonversion")
+    ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")
       .doc("This sets the major Python version. Either 2 or 3. (Python2 or Python3)")
       .stringConf
       .checkValue(pv => List("2", "3").contains(pv),

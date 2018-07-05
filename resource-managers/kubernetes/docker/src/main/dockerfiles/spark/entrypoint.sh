@@ -38,7 +38,7 @@ fi
 
 SPARK_K8S_CMD="$1"
 case "$SPARK_K8S_CMD" in
-    driver | driver-py | executor)
+    driver | driver-py | driver-r | executor)
       shift 1
       ;;
     "")

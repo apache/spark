@@ -38,9 +38,9 @@ private[spark] class RDriverFeatureStep(
           .build())
     val envSeq =
       Seq(new EnvVarBuilder()
-          .withName(ENV_R_PRIMARY)
-          .withValue(KubernetesUtils.resolveFileUri(kubernetesConf.sparkRMainResource().get))
-        .build())
+            .withName(ENV_R_PRIMARY)
+            .withValue(KubernetesUtils.resolveFileUri(kubernetesConf.sparkRMainResource().get))
+          .build())
     val rEnvs = envSeq ++
       maybeRArgs.toSeq
 
