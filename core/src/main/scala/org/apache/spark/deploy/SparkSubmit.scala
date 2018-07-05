@@ -285,8 +285,6 @@ private[spark] class SparkSubmit extends Logging {
       case (STANDALONE, CLUSTER) if args.isR =>
         error("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
-      case (KUBERNETES, _) if args.isPython =>
-        error("Python applications are currently not supported for Kubernetes.")
       case (KUBERNETES, _) if args.isR =>
         error("R applications are currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
@@ -310,6 +308,7 @@ private[spark] class SparkSubmit extends Logging {
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
     val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
     val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
+    val isMesosClient = clusterManager == MESOS && deployMode == CLIENT
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
@@ -337,7 +336,7 @@ private[spark] class SparkSubmit extends Logging {
     val targetDir = Utils.createTempDir()
 
     // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL || clusterManager == MESOS) {
+    if (clusterManager == YARN || clusterManager == LOCAL || isMesosClient) {
       if (args.principal != null) {
         if (args.keytab != null) {
           require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")
@@ -429,18 +428,15 @@ private[spark] class SparkSubmit extends Logging {
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
         args.childArgs = ArrayBuffer(localPrimaryResource, localPyFiles) ++ args.childArgs
-        if (clusterManager != YARN) {
-          // The YARN backend distributes the primary file differently, so don't merge it.
-          args.files = mergeFileLists(args.files, args.primaryResource)
-        }
       }
       if (clusterManager != YARN) {
         // The YARN backend handles python files differently, so don't merge the lists.
         args.files = mergeFileLists(args.files, args.pyFiles)
       }
-      if (localPyFiles != null) {
-        sparkConf.set("spark.submit.pyFiles", localPyFiles)
-      }
+    }
+
+    if (localPyFiles != null) {
+      sparkConf.set("spark.submit.pyFiles", localPyFiles)
     }
 
     // In YARN mode for an R app, add the SparkR package archive and the R package
@@ -696,9 +692,19 @@ private[spark] class SparkSubmit extends Logging {
     if (isKubernetesCluster) {
       childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
       if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
-        childArgs ++= Array("--primary-java-resource", args.primaryResource)
+        if (args.isPython) {
+          childArgs ++= Array("--primary-py-file", args.primaryResource)
+          childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
+          if (args.pyFiles != null) {
+            childArgs ++= Array("--other-py-files", args.pyFiles)
+          }
+        } else {
+          childArgs ++= Array("--primary-java-resource", args.primaryResource)
+          childArgs ++= Array("--main-class", args.mainClass)
+        }
+      } else {
+        childArgs ++= Array("--main-class", args.mainClass)
       }
-      childArgs ++= Array("--main-class", args.mainClass)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg =>
           childArgs += ("--arg", arg)

@@ -81,6 +81,8 @@ can be run using:
 Please see the guidance on how to
 [run tests for a module, or individual tests](http://spark.apache.org/developer-tools.html#individual-tests).
 
+There is also a Kubernetes integration test, see resource-managers/kubernetes/integration-tests/README.md
+
 ## A Note About Hadoop Versions
 
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported

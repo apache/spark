@@ -37,17 +37,15 @@ import org.apache.spark.util.ThreadUtils
  * offsets across epochs. Each compute() should call the next() method here until null is returned.
  */
 class ContinuousQueuedDataReader(
-    partition: InputPartition[UnsafeRow],
+    partition: ContinuousDataSourceRDDPartition,
     context: TaskContext,
     dataQueueSize: Int,
     epochPollIntervalMs: Long) extends Closeable {
-  private val reader = partition.createPartitionReader()
+  private val reader = partition.inputPartition.createPartitionReader()
 
   // Important sequencing - we must get our starting point before the provider threads start running
   private var currentOffset: PartitionOffset =
     ContinuousDataSourceRDD.getContinuousReader(reader).getOffset
-  private var currentEpoch: Long =
-    context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
   /**
    * The record types in the read buffer.
@@ -115,8 +113,7 @@ class ContinuousQueuedDataReader(
     currentEntry match {
       case EpochMarker =>
         epochCoordEndpoint.send(ReportPartitionOffset(
-          context.partitionId(), currentEpoch, currentOffset))
-        currentEpoch += 1
+          partition.index, EpochTracker.getCurrentEpoch.get, currentOffset))
         null
       case ContinuousRow(row, offset) =>
         currentOffset = offset
@@ -184,7 +181,7 @@ class ContinuousQueuedDataReader(
 
     private val epochCoordEndpoint = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
-    // Note that this is *not* the same as the currentEpoch in [[ContinuousDataQueuedReader]]! That
+    // Note that this is *not* the same as the currentEpoch in [[ContinuousWriteRDD]]! That
     // field represents the epoch wrt the data being processed. The currentEpoch here is just a
     // counter to ensure we send the appropriate number of markers if we fall behind the driver.
     private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong

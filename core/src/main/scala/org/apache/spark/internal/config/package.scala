@@ -72,6 +72,9 @@ package object config {
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 
+  private[spark] val EVENT_LOG_CALLSITE_FORM =
+    ConfigBuilder("spark.eventLog.callsite").stringConf.createWithDefault("short")
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
 
@@ -342,7 +345,7 @@ package object config {
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
       .regexConf
-      .createWithDefault("(?i)secret|password|url|user|username".r)
+      .createWithDefault("(?i)secret|password".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -552,4 +555,11 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
+  private[spark] val SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS =
+    ConfigBuilder("spark.shuffle.minNumPartitionsToHighlyCompress")
+      .internal()
+      .doc("Number of partitions to determine if MapStatus should use HighlyCompressedMapStatus")
+      .intConf
+      .checkValue(v => v > 0, "The value should be a positive integer.")
+      .createWithDefault(2000)
 }

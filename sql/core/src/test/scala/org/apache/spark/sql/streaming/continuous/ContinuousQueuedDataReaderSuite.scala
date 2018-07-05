@@ -51,6 +51,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
       startEpoch,
       spark,
       SparkEnv.get)
+    EpochTracker.initializeCurrentEpoch(0)
   }
 
   override def afterEach(): Unit = {
@@ -91,7 +92,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
       }
     }
     val reader = new ContinuousQueuedDataReader(
-      factory,
+      new ContinuousDataSourceRDDPartition(0, factory),
       mockContext,
       dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize,
       epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs)

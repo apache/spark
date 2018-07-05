@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions.{from_json, lit, map, struct, to_json}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -311,7 +311,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val errMsg1 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 1)")
     }
-    assert(errMsg1.getMessage.startsWith("Expected a string literal instead of"))
+    assert(errMsg1.getMessage.startsWith("Schema should be specified in DDL format as a string"))
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
@@ -354,8 +354,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-24027: from_json - map<string, map<string, int>>") {
     val in = Seq("""{"a": {"b": 1}}""").toDS()
-    val schema = MapType(StringType, MapType(StringType, IntegerType))
-    val out = in.select(from_json($"value", schema))
+    val schema = "map<string, map<string, int>>"
+    val out = in.select(from_json($"value", schema, Map.empty[String, String]))
 
     checkAnswer(out, Row(Map("a" -> Map("b" -> 1))))
   }
@@ -391,5 +391,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null))
     checkAnswer(Seq("""{"{"f": 1}": "a"}""").toDS().select(from_json($"value", schema)),
       Row(null))
+  }
+
+  test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
+    val in = Seq("""{"a": [1, 2, 3]}""").toDS()
+    val out = in.select(from_json('value, schema_of_json(lit("""{"a": [1]}"""))) as "parsed")
+    val expected = StructType(StructField(
+      "parsed",
+      StructType(StructField(
+        "a",
+        ArrayType(LongType, true), true) :: Nil),
+      true) :: Nil)
+
+    assert(out.schema == expected)
   }
 }

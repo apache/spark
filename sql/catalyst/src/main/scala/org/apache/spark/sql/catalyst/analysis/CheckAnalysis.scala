@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
@@ -24,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -113,11 +113,18 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis("An offset window function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
+          case _ @ WindowExpression(_: PythonUDF,
+            WindowSpecDefinition(_, _, frame: SpecifiedWindowFrame))
+              if !frame.isUnbounded =>
+            failAnalysis("Only unbounded window frame is supported with Pandas UDFs.")
+
           case w @ WindowExpression(e, s) =>
             // Only allow window functions with an aggregate expression or an offset window
-            // function.
+            // function or a Pandas window UDF.
             e match {
               case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+                w
+              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
                 w
               case _ =>
                 failAnalysis(s"Expression '$e' not supported within a window function.")
@@ -155,7 +162,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression) = {
-              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupAggPandasUDF(expr)
+              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
 
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
@@ -261,9 +268,7 @@ trait CheckAnalysis extends PredicateHelper {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                val widerType = TypeCoercion.findWiderTypeForTwo(
-                  dt1.asNullable, dt2.asNullable, SQLConf.get.caseSensitiveAnalysis)
-                if (widerType.isEmpty) {
+                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
