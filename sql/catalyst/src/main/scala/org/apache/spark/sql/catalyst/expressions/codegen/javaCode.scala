@@ -28,11 +28,9 @@ import org.apache.spark.sql.types.{BooleanType, DataType}
 /**
  * Trait representing an opaque fragments of java code.
  */
-trait JavaCode extends TreeNode[JavaCode] {
+trait JavaCode {
   def code: String
   override def toString: String = code
-
-  override def verboseString: String = toString
 }
 
 /**
@@ -121,7 +119,7 @@ object JavaCode {
 /**
  * A trait representing a block of java code.
  */
-trait Block extends JavaCode {
+trait Block extends TreeNode[Block] with JavaCode {
   import Block._
 
   // All expressions to be evaluated inside this block and underlying blocks.
@@ -160,7 +158,7 @@ trait Block extends JavaCode {
 
     @inline def transform(e: ExprValue): ExprValue = {
       val newE = f lift e
-      if (!newE.isDefined || newE.get.fastEquals(e)) {
+      if (!newE.isDefined || newE.get.equals(e)) {
         e
       } else {
         changed = true
@@ -184,6 +182,8 @@ trait Block extends JavaCode {
     case EmptyBlock => this
     case _ => code"$this\n$other"
   }
+
+  override def verboseString: String = toString
 }
 
 object Block {
@@ -286,8 +286,6 @@ case object EmptyBlock extends Block with Serializable {
 trait ExprValue extends JavaCode {
   def javaType: Class[_]
   def isPrimitive: Boolean = javaType.isPrimitive
-
-  override def children: Seq[ExprValue] = Seq.empty
 }
 
 object ExprValue {
