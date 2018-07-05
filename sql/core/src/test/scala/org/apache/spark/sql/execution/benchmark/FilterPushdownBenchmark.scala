@@ -65,15 +65,22 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
 
   override def beforeEach(td: TestData) {
     super.beforeEach(td)
-    val testName = "[ " + td.name + " ]"
-    val halfLength = (97 - testName.length) / 2
-    val testHeader = (("".padTo(halfLength, '#') + testName).padTo(97, '#') + "\n").getBytes
+    val separator = "=" * 96
+    val testHeader = (separator + '\n' + td.name + '\n' + separator + '\n' + '\n').getBytes
     out.write(testHeader)
   }
 
+  override def afterEach(td: TestData) {
+    out.write('\n')
+    super.afterEach(td)
+  }
+
   override def afterAll() {
-    super.afterAll()
-    out.close()
+    try {
+      out.close()
+    } finally {
+      super.afterAll()
+    }
   }
 
   def withTempPath(f: File => Unit): Unit = {

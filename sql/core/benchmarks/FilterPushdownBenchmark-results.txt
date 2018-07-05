@@ -1,556 +1,580 @@
-############################[ Pushdown for many distinct value case ]############################
+================================================================================================
+Pushdown for many distinct value case
+================================================================================================
+
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 0 string row (value IS NULL):     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7928 / 8019          2.0         504.0       1.0X
-Parquet Vectorized (Pushdown)                  260 /  277         60.4          16.6      30.4X
-Native ORC Vectorized                         7958 / 8510          2.0         506.0       1.0X
-Native ORC Vectorized (Pushdown)               909 /  916         17.3          57.8       8.7X
+Parquet Vectorized                            8970 / 9122          1.8         570.3       1.0X
+Parquet Vectorized (Pushdown)                  471 /  491         33.4          30.0      19.0X
+Native ORC Vectorized                         7661 / 7853          2.1         487.0       1.2X
+Native ORC Vectorized (Pushdown)              1134 / 1161         13.9          72.1       7.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 0 string row ('7864320' < value < '7864320'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            8039 / 8779          2.0         511.1       1.0X
-Parquet Vectorized (Pushdown)                  269 /  279         58.5          17.1      29.9X
-Native ORC Vectorized                         7224 / 7367          2.2         459.3       1.1X
-Native ORC Vectorized (Pushdown)               927 /  953         17.0          59.0       8.7X
+Parquet Vectorized                            9246 / 9297          1.7         587.8       1.0X
+Parquet Vectorized (Pushdown)                  480 /  488         32.8          30.5      19.3X
+Native ORC Vectorized                         7838 / 7850          2.0         498.3       1.2X
+Native ORC Vectorized (Pushdown)              1054 / 1118         14.9          67.0       8.8X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 string row (value = '7864320'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            8071 / 8164          1.9         513.2       1.0X
-Parquet Vectorized (Pushdown)                  257 /  268         61.3          16.3      31.5X
-Native ORC Vectorized                         7121 / 7240          2.2         452.8       1.1X
-Native ORC Vectorized (Pushdown)               866 /  907         18.2          55.0       9.3X
+Parquet Vectorized                            8989 / 9100          1.7         571.5       1.0X
+Parquet Vectorized (Pushdown)                  448 /  467         35.1          28.5      20.1X
+Native ORC Vectorized                         7680 / 7768          2.0         488.3       1.2X
+Native ORC Vectorized (Pushdown)              1067 / 1118         14.7          67.8       8.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 string row (value <=> '7864320'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7981 / 8097          2.0         507.4       1.0X
-Parquet Vectorized (Pushdown)                  251 /  268         62.6          16.0      31.8X
-Native ORC Vectorized                         7128 / 7221          2.2         453.2       1.1X
-Native ORC Vectorized (Pushdown)               866 /  926         18.2          55.0       9.2X
+Parquet Vectorized                            9115 / 9266          1.7         579.5       1.0X
+Parquet Vectorized (Pushdown)                  466 /  492         33.7          29.7      19.5X
+Native ORC Vectorized                         7800 / 7914          2.0         495.9       1.2X
+Native ORC Vectorized (Pushdown)              1075 / 1102         14.6          68.4       8.5X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 string row ('7864320' <= value <= '7864320'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            8032 / 8180          2.0         510.6       1.0X
-Parquet Vectorized (Pushdown)                  256 /  263         61.3          16.3      31.3X
-Native ORC Vectorized                         7234 / 7299          2.2         459.9       1.1X
-Native ORC Vectorized (Pushdown)               889 /  917         17.7          56.5       9.0X
+Parquet Vectorized                            9099 / 9237          1.7         578.5       1.0X
+Parquet Vectorized (Pushdown)                  462 /  475         34.1          29.3      19.7X
+Native ORC Vectorized                         7847 / 7925          2.0         498.9       1.2X
+Native ORC Vectorized (Pushdown)              1078 / 1114         14.6          68.5       8.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select all string rows (value IS NOT NULL): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          16913 / 16974          0.9        1075.3       1.0X
-Parquet Vectorized (Pushdown)               16763 / 16853          0.9        1065.8       1.0X
-Native ORC Vectorized                       16546 / 16680          1.0        1052.0       1.0X
-Native ORC Vectorized (Pushdown)            16796 / 16989          0.9        1067.9       1.0X
+Parquet Vectorized                          19303 / 19547          0.8        1227.3       1.0X
+Parquet Vectorized (Pushdown)               19924 / 20089          0.8        1266.7       1.0X
+Native ORC Vectorized                       18725 / 19079          0.8        1190.5       1.0X
+Native ORC Vectorized (Pushdown)            19310 / 19492          0.8        1227.7       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 0 int row (value IS NULL):        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7213 / 7272          2.2         458.6       1.0X
-Parquet Vectorized (Pushdown)                  251 /  258         62.7          16.0      28.7X
-Native ORC Vectorized                         6490 / 7068          2.4         412.6       1.1X
-Native ORC Vectorized (Pushdown)               880 /  910         17.9          56.0       8.2X
+Parquet Vectorized                            8117 / 8323          1.9         516.1       1.0X
+Parquet Vectorized (Pushdown)                  484 /  494         32.5          30.8      16.8X
+Native ORC Vectorized                         6811 / 7036          2.3         433.0       1.2X
+Native ORC Vectorized (Pushdown)              1061 / 1082         14.8          67.5       7.6X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 0 int row (7864320 < value < 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7206 / 7316          2.2         458.1       1.0X
-Parquet Vectorized (Pushdown)                  264 /  270         59.5          16.8      27.3X
-Native ORC Vectorized                         6415 / 6454          2.5         407.8       1.1X
-Native ORC Vectorized (Pushdown)               884 /  916         17.8          56.2       8.2X
+Parquet Vectorized                            8105 / 8140          1.9         515.3       1.0X
+Parquet Vectorized (Pushdown)                  478 /  505         32.9          30.4      17.0X
+Native ORC Vectorized                         6914 / 7211          2.3         439.6       1.2X
+Native ORC Vectorized (Pushdown)              1044 / 1064         15.1          66.4       7.8X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 int row (value = 7864320):      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7217 / 7354          2.2         458.8       1.0X
-Parquet Vectorized (Pushdown)                  257 /  268         61.1          16.4      28.0X
-Native ORC Vectorized                         6437 / 6572          2.4         409.3       1.1X
-Native ORC Vectorized (Pushdown)               900 /  919         17.5          57.2       8.0X
+Parquet Vectorized                            7983 / 8116          2.0         507.6       1.0X
+Parquet Vectorized (Pushdown)                  464 /  487         33.9          29.5      17.2X
+Native ORC Vectorized                         6703 / 6774          2.3         426.1       1.2X
+Native ORC Vectorized (Pushdown)              1017 / 1058         15.5          64.6       7.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 int row (value <=> 7864320):    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7330 / 7461          2.1         466.0       1.0X
-Parquet Vectorized (Pushdown)                  255 /  268         61.6          16.2      28.7X
-Native ORC Vectorized                         6467 / 6525          2.4         411.1       1.1X
-Native ORC Vectorized (Pushdown)               886 /  924         17.8          56.3       8.3X
+Parquet Vectorized                            7942 / 7983          2.0         504.9       1.0X
+Parquet Vectorized (Pushdown)                  468 /  479         33.6          29.7      17.0X
+Native ORC Vectorized                         6677 / 6779          2.4         424.5       1.2X
+Native ORC Vectorized (Pushdown)              1021 / 1068         15.4          64.9       7.8X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 int row (7864320 <= value <= 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7128 / 7237          2.2         453.2       1.0X
-Parquet Vectorized (Pushdown)                  265 /  273         59.5          16.8      26.9X
-Native ORC Vectorized                         6471 / 6594          2.4         411.4       1.1X
-Native ORC Vectorized (Pushdown)               872 /  884         18.0          55.4       8.2X
+Parquet Vectorized                            7909 / 7958          2.0         502.8       1.0X
+Parquet Vectorized (Pushdown)                  485 /  494         32.4          30.8      16.3X
+Native ORC Vectorized                         6751 / 6846          2.3         429.2       1.2X
+Native ORC Vectorized (Pushdown)              1043 / 1077         15.1          66.3       7.6X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 int row (7864319 < value < 7864321): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7187 / 7318          2.2         456.9       1.0X
-Parquet Vectorized (Pushdown)                  249 /  266         63.1          15.9      28.8X
-Native ORC Vectorized                         6522 / 6577          2.4         414.7       1.1X
-Native ORC Vectorized (Pushdown)               858 /  885         18.3          54.5       8.4X
+Parquet Vectorized                            8010 / 8033          2.0         509.2       1.0X
+Parquet Vectorized (Pushdown)                  472 /  489         33.3          30.0      17.0X
+Native ORC Vectorized                         6655 / 6808          2.4         423.1       1.2X
+Native ORC Vectorized (Pushdown)              1015 / 1067         15.5          64.5       7.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 10% int rows (value < 1572864):   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            8165 / 8313          1.9         519.1       1.0X
-Parquet Vectorized (Pushdown)                 1795 / 1825          8.8         114.1       4.5X
-Native ORC Vectorized                         7420 / 7597          2.1         471.8       1.1X
-Native ORC Vectorized (Pushdown)              2374 / 2437          6.6         150.9       3.4X
+Parquet Vectorized                            8983 / 9035          1.8         571.1       1.0X
+Parquet Vectorized (Pushdown)                 2204 / 2231          7.1         140.1       4.1X
+Native ORC Vectorized                         7864 / 8011          2.0         500.0       1.1X
+Native ORC Vectorized (Pushdown)              2674 / 2789          5.9         170.0       3.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 50% int rows (value < 7864320):   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          11249 / 11496          1.4         715.2       1.0X
-Parquet Vectorized (Pushdown)                 7719 / 7874          2.0         490.8       1.5X
-Native ORC Vectorized                       10676 / 10895          1.5         678.7       1.1X
-Native ORC Vectorized (Pushdown)              8184 / 8294          1.9         520.3       1.4X
+Parquet Vectorized                          12723 / 12903          1.2         808.9       1.0X
+Parquet Vectorized (Pushdown)                 9112 / 9282          1.7         579.3       1.4X
+Native ORC Vectorized                       12090 / 12230          1.3         768.7       1.1X
+Native ORC Vectorized (Pushdown)              9242 / 9372          1.7         587.6       1.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 90% int rows (value < 14155776):  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          14400 / 14492          1.1         915.5       1.0X
-Parquet Vectorized (Pushdown)               13817 / 13927          1.1         878.5       1.0X
-Native ORC Vectorized                       14192 / 14247          1.1         902.3       1.0X
-Native ORC Vectorized (Pushdown)            13963 / 14044          1.1         887.8       1.0X
+Parquet Vectorized                          16453 / 16678          1.0        1046.1       1.0X
+Parquet Vectorized (Pushdown)               15997 / 16262          1.0        1017.0       1.0X
+Native ORC Vectorized                       16652 / 17070          0.9        1058.7       1.0X
+Native ORC Vectorized (Pushdown)            15843 / 16112          1.0        1007.2       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select all int rows (value IS NOT NULL): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          15036 / 15229          1.0         956.0       1.0X
-Parquet Vectorized (Pushdown)               15283 / 15367          1.0         971.7       1.0X
-Native ORC Vectorized                       14722 / 14863          1.1         936.0       1.0X
-Native ORC Vectorized (Pushdown)            15217 / 15287          1.0         967.5       1.0X
+Parquet Vectorized                          17098 / 17254          0.9        1087.1       1.0X
+Parquet Vectorized (Pushdown)               17302 / 17529          0.9        1100.1       1.0X
+Native ORC Vectorized                       16790 / 17098          0.9        1067.5       1.0X
+Native ORC Vectorized (Pushdown)            17329 / 17914          0.9        1101.7       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select all int rows (value > -1):        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          15316 / 15478          1.0         973.8       1.0X
-Parquet Vectorized (Pushdown)               15115 / 15220          1.0         961.0       1.0X
-Native ORC Vectorized                       14869 / 14992          1.1         945.3       1.0X
-Native ORC Vectorized (Pushdown)            15163 / 15373          1.0         964.0       1.0X
+Parquet Vectorized                          17088 / 17392          0.9        1086.4       1.0X
+Parquet Vectorized (Pushdown)               17609 / 17863          0.9        1119.5       1.0X
+Native ORC Vectorized                       18334 / 69831          0.9        1165.7       0.9X
+Native ORC Vectorized (Pushdown)            17465 / 17629          0.9        1110.4       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select all int rows (value != -1):       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          15137 / 15239          1.0         962.4       1.0X
-Parquet Vectorized (Pushdown)               15240 / 15350          1.0         968.9       1.0X
-Native ORC Vectorized                       14746 / 15074          1.1         937.5       1.0X
-Native ORC Vectorized (Pushdown)            15089 / 15170          1.0         959.4       1.0X
+Parquet Vectorized                          16903 / 17233          0.9        1074.6       1.0X
+Parquet Vectorized (Pushdown)               16945 / 17032          0.9        1077.3       1.0X
+Native ORC Vectorized                       16377 / 16762          1.0        1041.2       1.0X
+Native ORC Vectorized (Pushdown)            16950 / 17212          0.9        1077.7       1.0X
 
-###############[ Pushdown for few distinct value case (use dictionary encoding) ]################
+
+================================================================================================
+Pushdown for few distinct value case (use dictionary encoding)
+================================================================================================
+
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 0 distinct string row (value IS NULL): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            6965 / 7053          2.3         442.8       1.0X
-Parquet Vectorized (Pushdown)                  219 /  235         71.8          13.9      31.8X
-Native ORC Vectorized                         6444 / 6668          2.4         409.7       1.1X
-Native ORC Vectorized (Pushdown)               862 /  893         18.2          54.8       8.1X
+Parquet Vectorized                            7245 / 7322          2.2         460.7       1.0X
+Parquet Vectorized (Pushdown)                  378 /  389         41.6          24.0      19.2X
+Native ORC Vectorized                         6720 / 6778          2.3         427.2       1.1X
+Native ORC Vectorized (Pushdown)              1009 / 1032         15.6          64.2       7.2X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 0 distinct string row ('100' < value < '100'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7318 / 7366          2.1         465.3       1.0X
-Parquet Vectorized (Pushdown)                  219 /  230         71.8          13.9      33.4X
-Native ORC Vectorized                         6857 / 6945          2.3         435.9       1.1X
-Native ORC Vectorized (Pushdown)               868 /  910         18.1          55.2       8.4X
+Parquet Vectorized                            7627 / 7795          2.1         484.9       1.0X
+Parquet Vectorized (Pushdown)                  384 /  406         41.0          24.4      19.9X
+Native ORC Vectorized                         6724 / 7824          2.3         427.5       1.1X
+Native ORC Vectorized (Pushdown)               968 /  986         16.3          61.5       7.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 distinct string row (value = '100'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7281 / 7357          2.2         462.9       1.0X
-Parquet Vectorized (Pushdown)                  397 /  407         39.6          25.3      18.3X
-Native ORC Vectorized                         6819 / 6903          2.3         433.5       1.1X
-Native ORC Vectorized (Pushdown)              1056 / 1081         14.9          67.2       6.9X
+Parquet Vectorized                            7157 / 7534          2.2         455.0       1.0X
+Parquet Vectorized (Pushdown)                  542 /  565         29.0          34.5      13.2X
+Native ORC Vectorized                         6716 / 7214          2.3         427.0       1.1X
+Native ORC Vectorized (Pushdown)              1212 / 1288         13.0          77.0       5.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 distinct string row (value <=> '100'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7218 / 7342          2.2         458.9       1.0X
-Parquet Vectorized (Pushdown)                  390 /  401         40.3          24.8      18.5X
-Native ORC Vectorized                         6768 / 6830          2.3         430.3       1.1X
-Native ORC Vectorized (Pushdown)              1044 / 1073         15.1          66.4       6.9X
+Parquet Vectorized                            7368 / 7552          2.1         468.4       1.0X
+Parquet Vectorized (Pushdown)                  544 /  556         28.9          34.6      13.5X
+Native ORC Vectorized                         6740 / 6867          2.3         428.5       1.1X
+Native ORC Vectorized (Pushdown)              1230 / 1426         12.8          78.2       6.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 distinct string row ('100' <= value <= '100'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7501 / 7575          2.1         476.9       1.0X
-Parquet Vectorized (Pushdown)                  398 /  414         39.5          25.3      18.9X
-Native ORC Vectorized                         6964 / 7046          2.3         442.8       1.1X
-Native ORC Vectorized (Pushdown)              1053 / 1100         14.9          67.0       7.1X
+Parquet Vectorized                            7427 / 7734          2.1         472.2       1.0X
+Parquet Vectorized (Pushdown)                  556 /  568         28.3          35.4      13.3X
+Native ORC Vectorized                         6847 / 7059          2.3         435.3       1.1X
+Native ORC Vectorized (Pushdown)              1226 / 1230         12.8          77.9       6.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select all distinct string rows (value IS NOT NULL): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          16690 / 16840          0.9        1061.1       1.0X
-Parquet Vectorized (Pushdown)               16688 / 16787          0.9        1061.0       1.0X
-Native ORC Vectorized                       16252 / 16518          1.0        1033.3       1.0X
-Native ORC Vectorized (Pushdown)            16537 / 16948          1.0        1051.4       1.0X
+Parquet Vectorized                          16998 / 17311          0.9        1080.7       1.0X
+Parquet Vectorized (Pushdown)               16977 / 17250          0.9        1079.4       1.0X
+Native ORC Vectorized                       18447 / 19852          0.9        1172.8       0.9X
+Native ORC Vectorized (Pushdown)            16614 / 17102          0.9        1056.3       1.0X
 
-###########################[ Pushdown benchmark for StringStartsWith ]###########################
+
+================================================================================================
+Pushdown benchmark for StringStartsWith
+================================================================================================
+
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 StringStartsWith filter: (value like '10%'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          10104 / 11125          1.6         642.4       1.0X
-Parquet Vectorized (Pushdown)                 3002 / 3608          5.2         190.8       3.4X
-Native ORC Vectorized                        9589 / 10454          1.6         609.7       1.1X
-Native ORC Vectorized (Pushdown)             9798 / 10509          1.6         622.9       1.0X
+Parquet Vectorized                           9705 / 10814          1.6         617.0       1.0X
+Parquet Vectorized (Pushdown)                 3086 / 3574          5.1         196.2       3.1X
+Native ORC Vectorized                       10094 / 10695          1.6         641.8       1.0X
+Native ORC Vectorized (Pushdown)              9611 / 9999          1.6         611.0       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 StringStartsWith filter: (value like '1000%'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            8437 / 8563          1.9         536.4       1.0X
-Parquet Vectorized (Pushdown)                  279 /  289         56.3          17.8      30.2X
-Native ORC Vectorized                         7354 / 7568          2.1         467.5       1.1X
-Native ORC Vectorized (Pushdown)              7730 / 7972          2.0         491.4       1.1X
+Parquet Vectorized                            8016 / 8183          2.0         509.7       1.0X
+Parquet Vectorized (Pushdown)                  444 /  457         35.4          28.2      18.0X
+Native ORC Vectorized                         6970 / 7169          2.3         443.2       1.2X
+Native ORC Vectorized (Pushdown)              7447 / 7503          2.1         473.5       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 StringStartsWith filter: (value like '786432%'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            8290 / 8510          1.9         527.0       1.0X
-Parquet Vectorized (Pushdown)                  260 /  272         60.5          16.5      31.9X
-Native ORC Vectorized                         7361 / 7395          2.1         468.0       1.1X
-Native ORC Vectorized (Pushdown)              7694 / 7811          2.0         489.2       1.1X
+Parquet Vectorized                            7908 / 8046          2.0         502.8       1.0X
+Parquet Vectorized (Pushdown)                  408 /  429         38.6          25.9      19.4X
+Native ORC Vectorized                         7021 / 7100          2.2         446.4       1.1X
+Native ORC Vectorized (Pushdown)              7310 / 7490          2.2         464.8       1.1X
 
-###############################[ Pushdown benchmark for decimal ]################################
+
+================================================================================================
+Pushdown benchmark for decimal
+================================================================================================
+
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 decimal(9, 2) row (value = 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            3621 / 3686          4.3         230.2       1.0X
-Parquet Vectorized (Pushdown)                 3616 / 3666          4.3         229.9       1.0X
-Native ORC Vectorized                         3976 / 4067          4.0         252.8       0.9X
-Native ORC Vectorized (Pushdown)               623 /  643         25.3          39.6       5.8X
+Parquet Vectorized                            3785 / 3867          4.2         240.6       1.0X
+Parquet Vectorized (Pushdown)                 3820 / 3928          4.1         242.9       1.0X
+Native ORC Vectorized                         3981 / 4049          4.0         253.1       1.0X
+Native ORC Vectorized (Pushdown)               702 /  735         22.4          44.6       5.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 10% decimal(9, 2) rows (value < 1572864): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            4510 / 4640          3.5         286.7       1.0X
-Parquet Vectorized (Pushdown)                 4495 / 4575          3.5         285.8       1.0X
-Native ORC Vectorized                         4854 / 4946          3.2         308.6       0.9X
-Native ORC Vectorized (Pushdown)              1889 / 1988          8.3         120.1       2.4X
+Parquet Vectorized                            4694 / 4813          3.4         298.4       1.0X
+Parquet Vectorized (Pushdown)                 4839 / 4907          3.3         307.6       1.0X
+Native ORC Vectorized                         4943 / 5032          3.2         314.2       0.9X
+Native ORC Vectorized (Pushdown)              2043 / 2085          7.7         129.9       2.3X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 50% decimal(9, 2) rows (value < 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7918 / 8018          2.0         503.4       1.0X
-Parquet Vectorized (Pushdown)                 7914 / 8027          2.0         503.2       1.0X
-Native ORC Vectorized                         8342 / 8512          1.9         530.3       0.9X
-Native ORC Vectorized (Pushdown)              7224 / 7320          2.2         459.3       1.1X
+Parquet Vectorized                            8321 / 8472          1.9         529.0       1.0X
+Parquet Vectorized (Pushdown)                 8125 / 8471          1.9         516.6       1.0X
+Native ORC Vectorized                         8524 / 8616          1.8         541.9       1.0X
+Native ORC Vectorized (Pushdown)              7961 / 8383          2.0         506.1       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 90% decimal(9, 2) rows (value < 14155776): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            9301 / 9348          1.7         591.3       1.0X
-Parquet Vectorized (Pushdown)                 9239 / 9338          1.7         587.4       1.0X
-Native ORC Vectorized                         9741 / 9901          1.6         619.3       1.0X
-Native ORC Vectorized (Pushdown)              9146 / 9335          1.7         581.5       1.0X
+Parquet Vectorized                           9587 / 10112          1.6         609.5       1.0X
+Parquet Vectorized (Pushdown)                9726 / 10370          1.6         618.3       1.0X
+Native ORC Vectorized                       10119 / 11147          1.6         643.4       0.9X
+Native ORC Vectorized (Pushdown)              9366 / 9497          1.7         595.5       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 decimal(18, 2) row (value = 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            3893 / 3947          4.0         247.5       1.0X
-Parquet Vectorized (Pushdown)                 3898 / 3936          4.0         247.8       1.0X
-Native ORC Vectorized                         4728 / 4808          3.3         300.6       0.8X
-Native ORC Vectorized (Pushdown)               777 /  810         20.2          49.4       5.0X
+Parquet Vectorized                            4060 / 4093          3.9         258.1       1.0X
+Parquet Vectorized (Pushdown)                 4037 / 4125          3.9         256.6       1.0X
+Native ORC Vectorized                         4756 / 4811          3.3         302.4       0.9X
+Native ORC Vectorized (Pushdown)               824 /  889         19.1          52.4       4.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 10% decimal(18, 2) rows (value < 1572864): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            4835 / 4857          3.3         307.4       1.0X
-Parquet Vectorized (Pushdown)                 4788 / 4863          3.3         304.4       1.0X
-Native ORC Vectorized                         5551 / 5664          2.8         352.9       0.9X
-Native ORC Vectorized (Pushdown)              2074 / 2134          7.6         131.9       2.3X
+Parquet Vectorized                            5157 / 5271          3.0         327.9       1.0X
+Parquet Vectorized (Pushdown)                 5051 / 5141          3.1         321.1       1.0X
+Native ORC Vectorized                         5723 / 6146          2.7         363.9       0.9X
+Native ORC Vectorized (Pushdown)              2198 / 2317          7.2         139.8       2.3X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 50% decimal(18, 2) rows (value < 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            8243 / 8317          1.9         524.1       1.0X
-Parquet Vectorized (Pushdown)                 8277 / 8314          1.9         526.3       1.0X
-Native ORC Vectorized                         9190 / 9335          1.7         584.3       0.9X
-Native ORC Vectorized (Pushdown)              7426 / 7507          2.1         472.1       1.1X
+Parquet Vectorized                            8608 / 8647          1.8         547.3       1.0X
+Parquet Vectorized (Pushdown)                 8471 / 8584          1.9         538.6       1.0X
+Native ORC Vectorized                        9249 / 10048          1.7         588.0       0.9X
+Native ORC Vectorized (Pushdown)              7645 / 8091          2.1         486.1       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 90% decimal(18, 2) rows (value < 14155776): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          11441 / 11561          1.4         727.4       1.0X
-Parquet Vectorized (Pushdown)               11386 / 11666          1.4         723.9       1.0X
-Native ORC Vectorized                       12756 / 12920          1.2         811.0       0.9X
-Native ORC Vectorized (Pushdown)            12638 / 12817          1.2         803.5       0.9X
+Parquet Vectorized                          11658 / 11888          1.3         741.2       1.0X
+Parquet Vectorized (Pushdown)               11812 / 12098          1.3         751.0       1.0X
+Native ORC Vectorized                       12943 / 13312          1.2         822.9       0.9X
+Native ORC Vectorized (Pushdown)            13139 / 13465          1.2         835.4       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 decimal(38, 2) row (value = 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            5344 / 5393          2.9         339.8       1.0X
-Parquet Vectorized (Pushdown)                 5239 / 5406          3.0         333.1       1.0X
-Native ORC Vectorized                         4675 / 4742          3.4         297.2       1.1X
-Native ORC Vectorized (Pushdown)               801 /  836         19.6          50.9       6.7X
+Parquet Vectorized                            5491 / 5716          2.9         349.1       1.0X
+Parquet Vectorized (Pushdown)                 5515 / 5615          2.9         350.6       1.0X
+Native ORC Vectorized                         4582 / 4654          3.4         291.3       1.2X
+Native ORC Vectorized (Pushdown)               815 /  861         19.3          51.8       6.7X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 10% decimal(38, 2) rows (value < 1572864): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            6424 / 6507          2.4         408.4       1.0X
-Parquet Vectorized (Pushdown)                 6364 / 6465          2.5         404.6       1.0X
-Native ORC Vectorized                         5744 / 5847          2.7         365.2       1.1X
-Native ORC Vectorized (Pushdown)              2221 / 2249          7.1         141.2       2.9X
+Parquet Vectorized                            6432 / 6527          2.4         409.0       1.0X
+Parquet Vectorized (Pushdown)                 6513 / 6607          2.4         414.1       1.0X
+Native ORC Vectorized                         5618 / 6085          2.8         357.2       1.1X
+Native ORC Vectorized (Pushdown)              2403 / 2443          6.5         152.8       2.7X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 50% decimal(38, 2) rows (value < 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          10524 / 10642          1.5         669.1       1.0X
-Parquet Vectorized (Pushdown)               10510 / 10634          1.5         668.2       1.0X
-Native ORC Vectorized                         9796 / 9892          1.6         622.8       1.1X
-Native ORC Vectorized (Pushdown)              8035 / 8160          2.0         510.9       1.3X
+Parquet Vectorized                          11041 / 11467          1.4         701.9       1.0X
+Parquet Vectorized (Pushdown)               10909 / 11484          1.4         693.5       1.0X
+Native ORC Vectorized                        9860 / 10436          1.6         626.9       1.1X
+Native ORC Vectorized (Pushdown)              7908 / 8069          2.0         502.8       1.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 90% decimal(38, 2) rows (value < 14155776): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          14674 / 14807          1.1         933.0       1.0X
-Parquet Vectorized (Pushdown)               14567 / 14703          1.1         926.1       1.0X
-Native ORC Vectorized                       13811 / 13906          1.1         878.1       1.1X
-Native ORC Vectorized (Pushdown)            13785 / 13853          1.1         876.4       1.1X
+Parquet Vectorized                          14816 / 16877          1.1         942.0       1.0X
+Parquet Vectorized (Pushdown)               15383 / 15740          1.0         978.0       1.0X
+Native ORC Vectorized                       14408 / 14771          1.1         916.0       1.0X
+Native ORC Vectorized (Pushdown)            13968 / 14805          1.1         888.1       1.1X
 
-##########################[ Pushdown benchmark for InSet -> InFilters ]##########################
+
+================================================================================================
+Pushdown benchmark for InSet -> InFilters
+================================================================================================
+
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 5, distribution: 10): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7657 / 7918          2.1         486.8       1.0X
-Parquet Vectorized (Pushdown)                 7581 / 7658          2.1         482.0       1.0X
-Native ORC Vectorized                         7338 / 7682          2.1         466.6       1.0X
-Native ORC Vectorized (Pushdown)              1345 / 1354         11.7          85.5       5.7X
+Parquet Vectorized                            7477 / 7587          2.1         475.4       1.0X
+Parquet Vectorized (Pushdown)                 7862 / 8346          2.0         499.9       1.0X
+Native ORC Vectorized                         6447 / 7021          2.4         409.9       1.2X
+Native ORC Vectorized (Pushdown)               983 / 1003         16.0          62.5       7.6X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 5, distribution: 50): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7647 / 7707          2.1         486.2       1.0X
-Parquet Vectorized (Pushdown)                 7600 / 7758          2.1         483.2       1.0X
-Native ORC Vectorized                         7376 / 8002          2.1         469.0       1.0X
-Native ORC Vectorized (Pushdown)              1324 / 1359         11.9          84.2       5.8X
+Parquet Vectorized                            7107 / 7290          2.2         451.9       1.0X
+Parquet Vectorized (Pushdown)                 7196 / 7258          2.2         457.5       1.0X
+Native ORC Vectorized                         6102 / 6222          2.6         388.0       1.2X
+Native ORC Vectorized (Pushdown)               926 /  958         17.0          58.9       7.7X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 5, distribution: 90): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7587 / 7642          2.1         482.3       1.0X
-Parquet Vectorized (Pushdown)                 7570 / 7631          2.1         481.3       1.0X
-Native ORC Vectorized                         7440 / 8116          2.1         473.0       1.0X
-Native ORC Vectorized (Pushdown)              1325 / 1338         11.9          84.2       5.7X
+Parquet Vectorized                            7374 / 7692          2.1         468.8       1.0X
+Parquet Vectorized (Pushdown)                 7771 / 7848          2.0         494.1       0.9X
+Native ORC Vectorized                         6184 / 6356          2.5         393.2       1.2X
+Native ORC Vectorized (Pushdown)               920 /  963         17.1          58.5       8.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 10, distribution: 10): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7613 / 8941          2.1         484.0       1.0X
-Parquet Vectorized (Pushdown)                 7657 / 7777          2.1         486.8       1.0X
-Native ORC Vectorized                         7422 / 8243          2.1         471.9       1.0X
-Native ORC Vectorized (Pushdown)              1361 / 1463         11.6          86.6       5.6X
+Parquet Vectorized                            7073 / 7326          2.2         449.7       1.0X
+Parquet Vectorized (Pushdown)                 7304 / 7647          2.2         464.4       1.0X
+Native ORC Vectorized                         6222 / 6579          2.5         395.6       1.1X
+Native ORC Vectorized (Pushdown)               958 /  994         16.4          60.9       7.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 10, distribution: 50): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7643 / 7719          2.1         485.9       1.0X
-Parquet Vectorized (Pushdown)                 7598 / 7644          2.1         483.1       1.0X
-Native ORC Vectorized                         7311 / 7404          2.2         464.8       1.0X
-Native ORC Vectorized (Pushdown)              1279 / 1313         12.3          81.3       6.0X
+Parquet Vectorized                            7121 / 7501          2.2         452.7       1.0X
+Parquet Vectorized (Pushdown)                 7751 / 8334          2.0         492.8       0.9X
+Native ORC Vectorized                         6225 / 6680          2.5         395.8       1.1X
+Native ORC Vectorized (Pushdown)               998 / 1020         15.8          63.5       7.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 10, distribution: 90): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7580 / 7649          2.1         482.0       1.0X
-Parquet Vectorized (Pushdown)                 7553 / 7634          2.1         480.2       1.0X
-Native ORC Vectorized                         7477 / 7576          2.1         475.4       1.0X
-Native ORC Vectorized (Pushdown)              1317 / 1361         11.9          83.7       5.8X
+Parquet Vectorized                            7157 / 7399          2.2         455.1       1.0X
+Parquet Vectorized (Pushdown)                 7806 / 7911          2.0         496.3       0.9X
+Native ORC Vectorized                         6548 / 6720          2.4         416.3       1.1X
+Native ORC Vectorized (Pushdown)              1016 / 1050         15.5          64.6       7.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 50, distribution: 10): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7783 / 7850          2.0         494.8       1.0X
-Parquet Vectorized (Pushdown)                 7866 / 7876          2.0         500.1       1.0X
-Native ORC Vectorized                         7633 / 7750          2.1         485.3       1.0X
-Native ORC Vectorized (Pushdown)              1432 / 1457         11.0          91.0       5.4X
+Parquet Vectorized                            7662 / 7805          2.1         487.1       1.0X
+Parquet Vectorized (Pushdown)                 7590 / 7861          2.1         482.5       1.0X
+Native ORC Vectorized                         6840 / 8073          2.3         434.9       1.1X
+Native ORC Vectorized (Pushdown)              1041 / 1075         15.1          66.2       7.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 50, distribution: 50): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7785 / 7854          2.0         495.0       1.0X
-Parquet Vectorized (Pushdown)                 7860 / 7874          2.0         499.7       1.0X
-Native ORC Vectorized                         7665 / 7712          2.1         487.3       1.0X
-Native ORC Vectorized (Pushdown)              1457 / 1479         10.8          92.6       5.3X
+Parquet Vectorized                            8230 / 9266          1.9         523.2       1.0X
+Parquet Vectorized (Pushdown)                 7735 / 7960          2.0         491.8       1.1X
+Native ORC Vectorized                         6945 / 7109          2.3         441.6       1.2X
+Native ORC Vectorized (Pushdown)              1123 / 1144         14.0          71.4       7.3X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 50, distribution: 90): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7868 / 7900          2.0         500.2       1.0X
-Parquet Vectorized (Pushdown)                 7832 / 7888          2.0         498.0       1.0X
-Native ORC Vectorized                         7678 / 7716          2.0         488.2       1.0X
-Native ORC Vectorized (Pushdown)              1473 / 1540         10.7          93.6       5.3X
+Parquet Vectorized                            7656 / 8058          2.1         486.7       1.0X
+Parquet Vectorized (Pushdown)                 7860 / 8247          2.0         499.7       1.0X
+Native ORC Vectorized                         6684 / 7003          2.4         424.9       1.1X
+Native ORC Vectorized (Pushdown)              1085 / 1172         14.5          69.0       7.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 100, distribution: 10): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7739 / 7761          2.0         492.0       1.0X
-Parquet Vectorized (Pushdown)                 7733 / 7778          2.0         491.6       1.0X
-Native ORC Vectorized                         7549 / 7596          2.1         480.0       1.0X
-Native ORC Vectorized (Pushdown)              1536 / 1544         10.2          97.7       5.0X
+Parquet Vectorized                            7594 / 8128          2.1         482.8       1.0X
+Parquet Vectorized (Pushdown)                 7845 / 7923          2.0         498.8       1.0X
+Native ORC Vectorized                         5859 / 6421          2.7         372.5       1.3X
+Native ORC Vectorized (Pushdown)              1037 / 1054         15.2          66.0       7.3X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 100, distribution: 50): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7794 / 7806          2.0         495.5       1.0X
-Parquet Vectorized (Pushdown)                 7799 / 7880          2.0         495.8       1.0X
-Native ORC Vectorized                         7576 / 7599          2.1         481.7       1.0X
-Native ORC Vectorized (Pushdown)              1554 / 1576         10.1          98.8       5.0X
+Parquet Vectorized                            6762 / 6775          2.3         429.9       1.0X
+Parquet Vectorized (Pushdown)                 6911 / 6970          2.3         439.4       1.0X
+Native ORC Vectorized                         5884 / 5960          2.7         374.1       1.1X
+Native ORC Vectorized (Pushdown)              1028 / 1052         15.3          65.4       6.6X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 InSet -> InFilters (values count: 100, distribution: 90): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7778 / 7832          2.0         494.5       1.0X
-Parquet Vectorized (Pushdown)                 7772 / 7837          2.0         494.1       1.0X
-Native ORC Vectorized                         7615 / 7647          2.1         484.1       1.0X
-Native ORC Vectorized (Pushdown)              1541 / 1577         10.2          98.0       5.0X
+Parquet Vectorized                            6718 / 6767          2.3         427.1       1.0X
+Parquet Vectorized (Pushdown)                 6812 / 6909          2.3         433.1       1.0X
+Native ORC Vectorized                         5842 / 5883          2.7         371.4       1.1X
+Native ORC Vectorized (Pushdown)              1040 / 1058         15.1          66.1       6.5X
 
-###############################[ Pushdown benchmark for tinyint ]################################
+
+================================================================================================
+Pushdown benchmark for tinyint
+================================================================================================
+
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 tinyint row (value = CAST(63 AS tinyint)): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            4477 / 4626          3.5         284.6       1.0X
-Parquet Vectorized (Pushdown)                 4329 / 4366          3.6         275.2       1.0X
-Native ORC Vectorized                         3584 / 3679          4.4         227.9       1.2X
-Native ORC Vectorized (Pushdown)               641 /  986         24.5          40.8       7.0X
+Parquet Vectorized                            3726 / 3775          4.2         236.9       1.0X
+Parquet Vectorized (Pushdown)                 3741 / 3789          4.2         237.9       1.0X
+Native ORC Vectorized                         2793 / 2909          5.6         177.6       1.3X
+Native ORC Vectorized (Pushdown)               530 /  561         29.7          33.7       7.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
-Select 10% tinyint rows (value < CAST(12 AS tinyint)):    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+Select 10% tinyint rows (value < CAST(12 AS tinyint)): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            5007 / 5511          3.1         318.3       1.0X
-Parquet Vectorized (Pushdown)                 5093 / 5159          3.1         323.8       1.0X
-Native ORC Vectorized                         4388 / 4844          3.6         279.0       1.1X
-Native ORC Vectorized (Pushdown)              1753 / 2271          9.0         111.5       2.9X
+Parquet Vectorized                            4385 / 4406          3.6         278.8       1.0X
+Parquet Vectorized (Pushdown)                 4398 / 4454          3.6         279.6       1.0X
+Native ORC Vectorized                         3420 / 3501          4.6         217.4       1.3X
+Native ORC Vectorized (Pushdown)              1395 / 1432         11.3          88.7       3.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
-Select 50% tinyint rows (value < CAST(63 AS tinyint)):    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+Select 50% tinyint rows (value < CAST(63 AS tinyint)): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                           8766 / 10085          1.8         557.3       1.0X
-Parquet Vectorized (Pushdown)                9732 / 11845          1.6         618.7       0.9X
-Native ORC Vectorized                        7782 / 10141          2.0         494.8       1.1X
-Native ORC Vectorized (Pushdown)             6643 / 10009          2.4         422.4       1.3X
+Parquet Vectorized                            7307 / 7394          2.2         464.6       1.0X
+Parquet Vectorized (Pushdown)                 7411 / 7461          2.1         471.2       1.0X
+Native ORC Vectorized                         6501 / 7814          2.4         413.4       1.1X
+Native ORC Vectorized (Pushdown)              7341 / 8637          2.1         466.7       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
-Select 90% tinyint rows (value < CAST(114 AS tinyint)):   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+Select 90% tinyint rows (value < CAST(114 AS tinyint)): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          12071 / 16726          1.3         767.4       1.0X
-Parquet Vectorized (Pushdown)               11776 / 12005          1.3         748.7       1.0X
-Native ORC Vectorized                       13914 / 17542          1.1         884.6       0.9X
-Native ORC Vectorized (Pushdown)            11173 / 12826          1.4         710.4       1.1X
+Parquet Vectorized                          11886 / 13122          1.3         755.7       1.0X
+Parquet Vectorized (Pushdown)               12557 / 14173          1.3         798.4       0.9X
+Native ORC Vectorized                       10758 / 11971          1.5         684.0       1.1X
+Native ORC Vectorized (Pushdown)            10564 / 10713          1.5         671.6       1.1X
+
 
