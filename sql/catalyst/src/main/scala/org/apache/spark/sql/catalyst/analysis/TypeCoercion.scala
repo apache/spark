@@ -166,6 +166,30 @@ object TypeCoercion {
     case (l, r) => None
   }
 
+  private def mergeComplexTypes(
+      t1: DataType,
+      t2: DataType,
+      mergeFunc: (DataType, DataType) => Option[DataType]): Option[DataType] = (t1, t2) match {
+    case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
+      mergeFunc(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+    case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
+      mergeFunc(kt1, kt2).flatMap { kt =>
+        mergeFunc(vt1, vt2).map { vt =>
+          MapType(kt, vt, valueContainsNull1 || valueContainsNull2)
+        }
+      }
+    case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
+      val resolver = SQLConf.get.resolver
+      fields1.zip(fields2).foldLeft(Option(new StructType())) {
+        case (Some(struct), (field1, field2)) if resolver(field1.name, field2.name) =>
+          mergeFunc(field1.dataType, field2.dataType).map {
+            dt => struct.add(field1.name, dt, field1.nullable || field2.nullable)
+          }
+        case _ => None
+      }
+    case _ => None
+  }
+
   /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
@@ -176,26 +200,7 @@ object TypeCoercion {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
       .orElse(stringPromotion(t1, t2))
-      .orElse((t1, t2) match {
-        case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
-          findWiderTypeForTwo(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
-        case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
-          findWiderTypeForTwo(kt1, kt2).flatMap { kt =>
-            findWiderTypeForTwo(vt1, vt2).map { vt =>
-              MapType(kt, vt, valueContainsNull1 || valueContainsNull2)
-            }
-          }
-        case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
-          val resolver = SQLConf.get.resolver
-          fields1.zip(fields2).foldLeft(Option(new StructType())) {
-            case (Some(struct), (field1, field2)) if resolver(field1.name, field2.name) =>
-              findWiderTypeForTwo(field1.dataType, field2.dataType).map {
-                dt => struct.add(field1.name, dt, field1.nullable || field2.nullable)
-              }
-            case _ => None
-          }
-        case _ => None
-      })
+      .orElse(mergeComplexTypes(t1, t2, findWiderTypeForTwo))
   }
 
   /**
@@ -231,27 +236,7 @@ object TypeCoercion {
       t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
-      .orElse((t1, t2) match {
-        case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
-          findWiderTypeWithoutStringPromotionForTwo(et1, et2)
-            .map(ArrayType(_, containsNull1 || containsNull2))
-        case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
-          findWiderTypeWithoutStringPromotionForTwo(kt1, kt2).flatMap { kt =>
-            findWiderTypeWithoutStringPromotionForTwo(vt1, vt2).map { vt =>
-              MapType(kt, vt, valueContainsNull1 || valueContainsNull2)
-            }
-          }
-        case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
-          val resolver = SQLConf.get.resolver
-          fields1.zip(fields2).foldLeft(Option(new StructType())) {
-            case (Some(struct), (field1, field2)) if resolver(field1.name, field2.name) =>
-              findWiderTypeWithoutStringPromotionForTwo(field1.dataType, field2.dataType).map {
-                dt => struct.add(field1.name, dt, field1.nullable || field2.nullable)
-              }
-            case _ => None
-          }
-        case _ => None
-      })
+      .orElse(mergeComplexTypes(t1, t2, findWiderTypeWithoutStringPromotionForTwo))
   }
 
   def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
