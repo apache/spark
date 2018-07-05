@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import scala.util.control.NonFatal
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -58,19 +58,16 @@ object CommandUtils extends Logging {
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
-      val numParallelism = Math.min(partitions.size,
-        Math.min(spark.sparkContext.defaultParallelism, 10000))
       val paths = partitions.map(x => new Path(x.storage.locationUri.get.getPath))
+      val pathFilter = new PathFilter {
+        override def accept(path: Path): Boolean = {
+          !path.getName.startsWith(stagingDir)
+        }
+      }
       val status = InMemoryFileIndex.bulkListLeafFiles(paths,
-        sessionState.newHadoopConf(), null, spark).map(x => x._2)
+        sessionState.newHadoopConf(), pathFilter, spark).map(x => x._2)
 
       status.map(x => x.map(y => y.getLen).reduce(_ + _)).sum
-//      spark.sparkContext.parallelize(partitions, numParallelism).mapPartitions {
-//        part => part.map { p =>
-//          calculateLocationSize(serializableConfiguration, catalogTable.identifier,
-//            p.storage.locationUri, stagingDir)
-//        }
-//      }.reduce(_ + _)
     }
   }
 
