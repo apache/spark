@@ -101,15 +101,19 @@ object CSVBenchmarks {
       benchmark.addCase(s"Select one column", 3) { _ =>
         ds.select($"col1").filter((row: Row) => true).count()
       }
+      benchmark.addCase(s"count()", 3) { _ =>
+        ds.count()
+      }
 
       /*
       Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
 
       Wide rows with 1000 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       --------------------------------------------------------------------------------------------
-      Select 1000 columns                     76910 / 78065          0.0       76909.8       1.0X
-      Select 100 columns                      28625 / 32884          0.0       28625.1       2.7X
-      Select one column                       22498 / 22669          0.0       22497.8       3.4X
+      Select 1000 columns                     81091 / 81692          0.0       81090.7       1.0X
+      Select 100 columns                      30003 / 34448          0.0       30003.0       2.7X
+      Select one column                       24792 / 24855          0.0       24792.0       3.3X
+      count()                                 24344 / 24642          0.0       24343.8       3.3X
       */
       benchmark.run()
     }

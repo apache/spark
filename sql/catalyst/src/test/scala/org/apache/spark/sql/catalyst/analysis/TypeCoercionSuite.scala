@@ -54,8 +54,9 @@ class TypeCoercionSuite extends AnalysisTest {
   // | NullType             | ByteType | ShortType | IntegerType | LongType | DoubleType | FloatType | Dec(10, 2) | BinaryType | BooleanType | StringType | DateType | TimestampType | ArrayType  | MapType  | StructType  | NullType | CalendarIntervalType | DecimalType(38, 18) | DoubleType  | IntegerType  |
   // | CalendarIntervalType | X        | X         | X           | X        | X          | X         | X          | X          | X           | X          | X        | X             | X          | X        | X           | X        | CalendarIntervalType | X                   | X           | X            |
   // +----------------------+----------+-----------+-------------+----------+------------+-----------+------------+------------+-------------+------------+----------+---------------+------------+----------+-------------+----------+----------------------+---------------------+-------------+--------------+
-  // Note: MapType*, StructType* are castable only when the internal child types also match; otherwise, not castable.
+  // Note: StructType* is castable only when the internal child types also match; otherwise, not castable.
   // Note: ArrayType* is castable when the element type is castable according to the table.
+  // Note: MapType* is castable when both the key type and the value type are castable according to the table.
   // scalastyle:on line.size.limit
 
   private def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
@@ -487,12 +488,38 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(ArrayType(IntegerType), containsNull = false),
       ArrayType(ArrayType(LongType), containsNull = false),
       Some(ArrayType(ArrayType(LongType), containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(MapType(IntegerType, FloatType), containsNull = false),
+      ArrayType(MapType(LongType, DoubleType), containsNull = false),
+      Some(ArrayType(MapType(LongType, DoubleType), containsNull = false)))
+
+    // MapType
+    widenTestWithStringPromotion(
+      MapType(ShortType, TimestampType, valueContainsNull = true),
+      MapType(DoubleType, StringType, valueContainsNull = false),
+      Some(MapType(DoubleType, StringType, valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, ArrayType(TimestampType), valueContainsNull = false),
+      MapType(LongType, ArrayType(StringType), valueContainsNull = true),
+      Some(MapType(LongType, ArrayType(StringType), valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, MapType(ShortType, TimestampType), valueContainsNull = false),
+      MapType(LongType, MapType(DoubleType, StringType), valueContainsNull = false),
+      Some(MapType(LongType, MapType(DoubleType, StringType), valueContainsNull = false)))
 
     // Without string promotion
     widenTestWithoutStringPromotion(IntegerType, StringType, None)
     widenTestWithoutStringPromotion(StringType, TimestampType, None)
     widenTestWithoutStringPromotion(ArrayType(LongType), ArrayType(StringType), None)
     widenTestWithoutStringPromotion(ArrayType(StringType), ArrayType(TimestampType), None)
+    widenTestWithoutStringPromotion(
+      MapType(LongType, IntegerType), MapType(StringType, IntegerType), None)
+    widenTestWithoutStringPromotion(
+      MapType(IntegerType, LongType), MapType(IntegerType, StringType), None)
+    widenTestWithoutStringPromotion(
+      MapType(StringType, IntegerType), MapType(TimestampType, IntegerType), None)
+    widenTestWithoutStringPromotion(
+      MapType(IntegerType, StringType), MapType(IntegerType, TimestampType), None)
 
     // String promotion
     widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
@@ -501,6 +528,22 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(LongType), ArrayType(StringType), Some(ArrayType(StringType)))
     widenTestWithStringPromotion(
       ArrayType(StringType), ArrayType(TimestampType), Some(ArrayType(StringType)))
+    widenTestWithStringPromotion(
+      MapType(LongType, IntegerType),
+      MapType(StringType, IntegerType),
+      Some(MapType(StringType, IntegerType)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, LongType),
+      MapType(IntegerType, StringType),
+      Some(MapType(IntegerType, StringType)))
+    widenTestWithStringPromotion(
+      MapType(StringType, IntegerType),
+      MapType(TimestampType, IntegerType),
+      Some(MapType(StringType, IntegerType)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, StringType),
+      MapType(IntegerType, TimestampType),
+      Some(MapType(IntegerType, StringType)))
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {

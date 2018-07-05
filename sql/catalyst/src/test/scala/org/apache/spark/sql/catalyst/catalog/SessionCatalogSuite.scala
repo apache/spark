@@ -1114,11 +1114,13 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     // And for hive serde table, hive metastore will set some values(e.g.transient_lastDdlTime)
     // in table's parameters and storage's properties, here we also ignore them.
     val actualPartsNormalize = actualParts.map(p =>
-      p.copy(parameters = Map.empty, storage = p.storage.copy(
+      p.copy(parameters = Map.empty, createTime = -1, lastAccessTime = -1,
+        storage = p.storage.copy(
         properties = Map.empty, locationUri = None, serde = None))).toSet
 
     val expectedPartsNormalize = expectedParts.map(p =>
-        p.copy(parameters = Map.empty, storage = p.storage.copy(
+        p.copy(parameters = Map.empty, createTime = -1, lastAccessTime = -1,
+          storage = p.storage.copy(
           properties = Map.empty, locationUri = None, serde = None))).toSet
 
     actualPartsNormalize == expectedPartsNormalize

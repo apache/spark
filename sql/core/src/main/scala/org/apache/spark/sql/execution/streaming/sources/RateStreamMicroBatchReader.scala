@@ -202,7 +202,7 @@ class RateStreamMicroBatchInputPartitionReader(
     rangeEnd: Long,
     localStartTimeMs: Long,
     relativeMsPerValue: Double) extends InputPartitionReader[Row] {
-  private var count = 0
+  private var count: Long = 0
 
   override def next(): Boolean = {
     rangeStart + partitionId + numPartitions * count < rangeEnd

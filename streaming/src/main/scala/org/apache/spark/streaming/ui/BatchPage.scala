@@ -109,7 +109,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       flatMap(info => info.failureReason).headOption.getOrElse("")
     val formattedDuration = duration.map(d => SparkUIUtils.formatDuration(d)).getOrElse("-")
     val detailUrl = s"${SparkUIUtils.prependBaseUri(
-      request, parent.basePath)}/jobs/job?id=${sparkJob.jobId}"
+      request, parent.basePath)}/jobs/job/?id=${sparkJob.jobId}"
 
     // In the first row, output op id and its information needs to be shown. In other rows, these
     // cells will be taken up due to "rowspan".

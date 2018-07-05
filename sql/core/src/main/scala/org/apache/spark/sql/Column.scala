@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.InterfaceStability
@@ -103,7 +104,7 @@ class TypedColumn[-T, U](
  *
  * {{{
  *   df("columnName")            // On a specific `df` DataFrame.
- *   col("columnName")           // A generic column no yet associated with a DataFrame.
+ *   col("columnName")           // A generic column not yet associated with a DataFrame.
  *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
@@ -780,11 +781,53 @@ class Column(val expr: Expression) extends Logging {
    * A boolean expression that is evaluated to true if the value of this expression is contained
    * by the evaluated values of the arguments.
    *
+   * Note: Since the type of the elements in the list are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
    * @group expr_ops
    * @since 1.5.0
    */
   @scala.annotation.varargs
   def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group java_expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
 
   /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
