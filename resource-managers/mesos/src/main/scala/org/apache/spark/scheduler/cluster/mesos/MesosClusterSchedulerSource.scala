@@ -17,12 +17,12 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.util.concurrent.TimeUnit
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.HashMap
 
-import com.codahale.metrics.{Counter, Gauge, MetricRegistry, Timer}
+import com.codahale.metrics.{Gauge, MetricRegistry, Timer}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState}
 
 import org.apache.spark.TaskState
@@ -144,7 +144,7 @@ private[mesos] class MesosClusterSchedulerSource(scheduler: MesosClusterSchedule
 
   // Records when a submission is launched.
   def recordLaunchedDriver(desc: MesosDriverDescription): Unit = {
-    if (!desc.retryState.isDefined) {
+    if (desc.retryState.isEmpty) {
       recordTimeSince(desc.submissionDate, submitToFirstLaunch)
     }
     launchedCounter.inc

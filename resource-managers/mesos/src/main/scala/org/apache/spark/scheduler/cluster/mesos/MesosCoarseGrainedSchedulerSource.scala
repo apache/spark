@@ -17,17 +17,16 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
+import java.util.Date
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.Date
 
 import scala.collection.mutable.HashMap
 
-import com.codahale.metrics.{Counter, Gauge, MetricRegistry, Timer}
+import com.codahale.metrics.{Gauge, MetricRegistry, Timer}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState}
 
 import org.apache.spark.TaskState
-import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.metrics.source.Source
 
 private[mesos] class MesosCoarseGrainedSchedulerSource(
