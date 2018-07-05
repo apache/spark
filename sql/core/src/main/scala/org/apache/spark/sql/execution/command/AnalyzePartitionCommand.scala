@@ -107,14 +107,9 @@ case class AnalyzePartitionCommand(
 
     // Update the metastore if newly computed statistics are different from those
     // recorded in the metastore.
-
-    val hadoopConf = sessionState.newHadoopConf()
-    val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-    val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
-
     val newPartitions = partitions.flatMap { p =>
       val newTotalSize = CommandUtils.calculateLocationSize(
-        serializableConfiguration, tableMeta.identifier, p.storage.locationUri, stagingDir)
+        sessionState, tableMeta.identifier, p.storage.locationUri)
       val newRowCount = rowCounts.get(p.spec)
       val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
       newStats.map(_ => p.copy(stats = newStats))
