@@ -20,13 +20,12 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.execution.datasources.InMemoryFileIndex
 import org.apache.spark.util.SerializableConfiguration
 
 
@@ -61,12 +60,17 @@ object CommandUtils extends Logging {
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       val numParallelism = Math.min(partitions.size,
         Math.min(spark.sparkContext.defaultParallelism, 10000))
-      spark.sparkContext.parallelize(partitions, numParallelism).mapPartitions {
-        part => part.map(p =>
-          calculateLocationSize(serializableConfiguration, catalogTable.identifier,
-            p.storage.locationUri, stagingDir)
-        )
-      }.reduce(_ + _)
+      val paths = partitions.map(x => new Path(x.storage.locationUri.get.getPath))
+      val status = InMemoryFileIndex.bulkListLeafFiles(paths,
+        sessionState.newHadoopConf(), null, spark).map(x => x._2)
+
+      status.map(x => x.map(y => y.getLen).reduce(_ + _)).sum
+//      spark.sparkContext.parallelize(partitions, numParallelism).mapPartitions {
+//        part => part.map { p =>
+//          calculateLocationSize(serializableConfiguration, catalogTable.identifier,
+//            p.storage.locationUri, stagingDir)
+//        }
+//      }.reduce(_ + _)
     }
   }
 
