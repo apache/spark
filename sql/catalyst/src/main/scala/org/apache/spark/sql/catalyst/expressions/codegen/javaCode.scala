@@ -43,7 +43,7 @@ object JavaCode {
   def literal(v: String, dataType: DataType): LiteralValue = dataType match {
     case BooleanType if v == "true" => TrueLiteral
     case BooleanType if v == "false" => FalseLiteral
-    case _ => new LiteralExpr(v, CodeGenerator.javaClass(dataType))
+    case _ => new LiteralValue(v, CodeGenerator.javaClass(dataType))
   }
 
   /**
@@ -51,7 +51,7 @@ object JavaCode {
    * -1 for other primitive types.
    */
   def defaultLiteral(dataType: DataType): LiteralValue = {
-    new LiteralExpr(
+    new LiteralValue(
       CodeGenerator.defaultValue(dataType, typedNull = true),
       CodeGenerator.javaClass(dataType))
   }
@@ -304,8 +304,7 @@ case class GlobalValue(value: String, javaType: Class[_]) extends ExprValue {
 /**
  * A literal java expression.
  */
-abstract class LiteralValue(val value: String, val javaType: Class[_])
-    extends ExprValue with Serializable {
+class LiteralValue(val value: String, val javaType: Class[_]) extends ExprValue with Serializable {
   override def code: String = value
 
   override def equals(arg: Any): Boolean = arg match {
@@ -315,9 +314,6 @@ abstract class LiteralValue(val value: String, val javaType: Class[_])
 
   override def hashCode(): Int = value.hashCode() * 31 + javaType.hashCode()
 }
-
-case class LiteralExpr(override val value: String, override val javaType: Class[_])
-    extends LiteralValue(value, javaType)
 
 case object TrueLiteral extends LiteralValue("true", JBool.TYPE)
 case object FalseLiteral extends LiteralValue("false", JBool.TYPE)
