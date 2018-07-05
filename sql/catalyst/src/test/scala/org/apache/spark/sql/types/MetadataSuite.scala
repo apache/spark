@@ -22,6 +22,7 @@ import org.apache.spark.SparkFunSuite
 class MetadataSuite extends SparkFunSuite {
     test("String Metadata") {
         val meta = new MetadataBuilder().putString("key", "value").build()
+        assert(meta == meta)
         assert(meta.## != 0)
         assert(meta.getString("key") == "value")
         assert(meta.contains("key"))
@@ -31,6 +32,7 @@ class MetadataSuite extends SparkFunSuite {
 
     test("Long Metadata") {
         val meta = new MetadataBuilder().putLong("key", 12).build()
+        assert(meta == meta)
         assert(meta.## != 0)
         assert(meta.getLong("key") == 12)
         assert(meta.contains("key"))
@@ -40,6 +42,7 @@ class MetadataSuite extends SparkFunSuite {
 
     test("Double Metadata") {
         val meta = new MetadataBuilder().putDouble("key", 12).build()
+        assert(meta == meta)
         assert(meta.## != 0)
         assert(meta.getDouble("key") == 12)
         assert(meta.contains("key"))
@@ -49,6 +52,7 @@ class MetadataSuite extends SparkFunSuite {
 
     test("Boolean Metadata") {
         val meta = new MetadataBuilder().putBoolean("key", true).build()
+        assert(meta == meta)
         assert(meta.## != 0)
         assert(meta.getBoolean("key") == true)
         assert(meta.contains("key"))
@@ -58,6 +62,7 @@ class MetadataSuite extends SparkFunSuite {
 
     test("Null Metadata") {
         val meta = new MetadataBuilder().putNull("key").build()
+        assert(meta == meta)
         assert(meta.## != 0)
         assert(meta.getString("key") == null)
         assert(meta.getDouble("key") == 0)
