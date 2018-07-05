@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.lang.{Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.Date
 
@@ -25,17 +26,14 @@ import scala.collection.JavaConverters.asScalaBufferConverter
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
-import org.apache.parquet.schema.{DecimalMetadata, MessageType, OriginalType, PrimitiveComparator}
+import org.apache.parquet.schema.{MessageType, OriginalType, PrimitiveComparator}
 import org.apache.parquet.schema.OriginalType._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
-import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter.minBytesForPrecision
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.Decimal
-import org.apache.spark.sql.types.DecimalType
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -49,25 +47,30 @@ private[parquet] class ParquetFilters(
   private case class ParquetSchemaType(
       originalType: OriginalType,
       primitiveTypeName: PrimitiveTypeName,
-      decimalMetadata: DecimalMetadata)
+      length: Int)
 
-  private val ParquetBooleanType = ParquetSchemaType(null, BOOLEAN, null)
-  private val ParquetIntegerType = ParquetSchemaType(null, INT32, null)
-  private val ParquetLongType = ParquetSchemaType(null, INT64, null)
-  private val ParquetFloatType = ParquetSchemaType(null, FLOAT, null)
-  private val ParquetDoubleType = ParquetSchemaType(null, DOUBLE, null)
-  private val ParquetStringType = ParquetSchemaType(UTF8, BINARY, null)
-  private val ParquetBinaryType = ParquetSchemaType(null, BINARY, null)
-  private val ParquetDateType = ParquetSchemaType(DATE, INT32, null)
+  private val ParquetBooleanType = ParquetSchemaType(null, BOOLEAN, 0)
+  private val ParquetIntegerType = ParquetSchemaType(null, INT32, 0)
+  private val ParquetLongType = ParquetSchemaType(null, INT64, 0)
+  private val ParquetFloatType = ParquetSchemaType(null, FLOAT, 0)
+  private val ParquetDoubleType = ParquetSchemaType(null, DOUBLE, 0)
+  private val ParquetStringType = ParquetSchemaType(UTF8, BINARY, 0)
+  private val ParquetBinaryType = ParquetSchemaType(null, BINARY, 0)
+  private val ParquetDateType = ParquetSchemaType(DATE, INT32, 0)
+  private val Parquet32BitDecimalType = ParquetSchemaType(DECIMAL, INT32, 0)
+  private val Parquet64BitDecimalType = ParquetSchemaType(DECIMAL, INT64, 0)
 
   private def dateToDays(date: Date): SQLDate = {
     DateTimeUtils.fromJavaDate(date)
   }
 
-  private def decimalToBinaryUsingUnscaledBytes(precision: Int, decimal: JBigDecimal): Binary = {
-    val numBytes = minBytesForPrecision(precision)
+  private def decimalToInt32(decimal: JBigDecimal): Integer = decimal.unscaledValue().intValue()
+
+  private def decimalToInt64(decimal: JBigDecimal): JLong = decimal.unscaledValue().longValue()
+
+  private def decimalToByteArray(decimal: JBigDecimal, numBytes: Int): Binary = {
+    val decimalBuffer = new Array[Byte](numBytes)
     val bytes = decimal.unscaledValue().toByteArray
-    val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
 
     val fixedLengthBytes = if (bytes.length == numBytes) {
       bytes
@@ -78,21 +81,6 @@ private[parquet] class ParquetFilters(
       decimalBuffer
     }
     Binary.fromReusedByteArray(fixedLengthBytes, 0, numBytes)
-  }
-
-  private def decimalToBinaryUsingUnscaledLong(precision: Int, decimal: JBigDecimal): Binary = {
-    val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
-    val numBytes = minBytesForPrecision(precision)
-    val unscaled = decimal.unscaledValue().longValue()
-    var i = 0
-    var shift = 8 * (numBytes - 1)
-
-    while (i < numBytes) {
-      decimalBuffer(i) = (unscaled >> shift).toByte
-      i += 1
-      shift -= 8
-    }
-    Binary.fromReusedByteArray(decimalBuffer, 0, numBytes)
   }
 
   private val makeEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -121,29 +109,18 @@ private[parquet] class ParquetFilters(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
 
-    case ParquetSchemaType(DECIMAL, INT32, decimal) if pushDownDecimal =>
+    case Parquet32BitDecimalType if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
-        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().intValue()
-          .asInstanceOf[Integer]).orNull)
-    case ParquetSchemaType(DECIMAL, INT64, decimal) if pushDownDecimal =>
+        Option(v).map(d => decimalToInt32(d.asInstanceOf[JBigDecimal])).orNull)
+    case Parquet64BitDecimalType if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.eq(
         longColumn(n),
-        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().longValue()
-          .asInstanceOf[java.lang.Long]).orNull)
-    // Legacy DecimalType
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision <= Decimal.MAX_LONG_DIGITS =>
+        Option(v).map(d => decimalToInt64(d.asInstanceOf[JBigDecimal])).orNull)
+    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length) if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
-        Option(v).map(c => decimalToBinaryUsingUnscaledLong(decimal.getPrecision,
-          c.asInstanceOf[JBigDecimal])).orNull)
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision > Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.eq(
-        binaryColumn(n),
-        Option(v).map(c => decimalToBinaryUsingUnscaledBytes(decimal.getPrecision,
-          c.asInstanceOf[JBigDecimal])).orNull)
+        Option(v).map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length)).orNull)
   }
 
   private val makeNotEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -171,28 +148,18 @@ private[parquet] class ParquetFilters(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
 
-    case ParquetSchemaType(DECIMAL, INT32, decimal) if pushDownDecimal =>
+    case Parquet32BitDecimalType if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n),
-        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().intValue()
-          .asInstanceOf[Integer]).orNull)
-    case ParquetSchemaType(DECIMAL, INT64, decimal) if pushDownDecimal =>
+        Option(v).map(d => decimalToInt32(d.asInstanceOf[JBigDecimal])).orNull)
+    case Parquet64BitDecimalType if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.notEq(
         longColumn(n),
-        Option(v).map(_.asInstanceOf[JBigDecimal].unscaledValue().longValue()
-          .asInstanceOf[java.lang.Long]).orNull)
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision <= Decimal.MAX_LONG_DIGITS =>
+        Option(v).map(d => decimalToInt64(d.asInstanceOf[JBigDecimal])).orNull)
+    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length) if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
-        Option(v).map(c => decimalToBinaryUsingUnscaledLong(decimal.getPrecision,
-          c.asInstanceOf[JBigDecimal])).orNull)
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision > Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.notEq(
-        binaryColumn(n),
-        Option(v).map(c => decimalToBinaryUsingUnscaledBytes(decimal.getPrecision,
-          c.asInstanceOf[JBigDecimal])).orNull)
+        Option(v).map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length)).orNull)
   }
 
   private val makeLt: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -215,24 +182,15 @@ private[parquet] class ParquetFilters(
       (n: String, v: Any) =>
         FilterApi.lt(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
 
-    case ParquetSchemaType(DECIMAL, INT32, decimal) if pushDownDecimal =>
-      (n: String, v: Any) => FilterApi.lt(
-        intColumn(n),
-        v.asInstanceOf[JBigDecimal].unscaledValue().intValue().asInstanceOf[Integer])
-    case ParquetSchemaType(DECIMAL, INT64, decimal) if pushDownDecimal =>
-      (n: String, v: Any) => FilterApi.lt(
-        longColumn(n),
-        v.asInstanceOf[JBigDecimal].unscaledValue().longValue().asInstanceOf[java.lang.Long])
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision <= Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.lt(
-        binaryColumn(n),
-        decimalToBinaryUsingUnscaledLong(decimal.getPrecision, v.asInstanceOf[JBigDecimal]))
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision > Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.lt(
-        binaryColumn(n),
-        decimalToBinaryUsingUnscaledBytes(decimal.getPrecision, v.asInstanceOf[JBigDecimal]))
+    case Parquet32BitDecimalType if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.lt(intColumn(n), decimalToInt32(v.asInstanceOf[JBigDecimal]))
+    case Parquet64BitDecimalType if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.lt(longColumn(n), decimalToInt64(v.asInstanceOf[JBigDecimal]))
+    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length) if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.lt(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
   private val makeLtEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -255,24 +213,15 @@ private[parquet] class ParquetFilters(
       (n: String, v: Any) =>
         FilterApi.ltEq(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
 
-    case ParquetSchemaType(DECIMAL, INT32, decimal) if pushDownDecimal =>
-      (n: String, v: Any) => FilterApi.ltEq(
-        intColumn(n),
-        v.asInstanceOf[JBigDecimal].unscaledValue().intValue().asInstanceOf[Integer])
-    case ParquetSchemaType(DECIMAL, INT64, decimal) if pushDownDecimal =>
-      (n: String, v: Any) => FilterApi.ltEq(
-        longColumn(n),
-        v.asInstanceOf[JBigDecimal].unscaledValue().longValue().asInstanceOf[java.lang.Long])
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision <= Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.ltEq(
-        binaryColumn(n),
-        decimalToBinaryUsingUnscaledLong(decimal.getPrecision, v.asInstanceOf[JBigDecimal]))
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision > Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.ltEq(
-        binaryColumn(n),
-        decimalToBinaryUsingUnscaledBytes(decimal.getPrecision, v.asInstanceOf[JBigDecimal]))
+    case Parquet32BitDecimalType if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.ltEq(intColumn(n), decimalToInt32(v.asInstanceOf[JBigDecimal]))
+    case Parquet64BitDecimalType if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.ltEq(longColumn(n), decimalToInt64(v.asInstanceOf[JBigDecimal]))
+    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length) if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.ltEq(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
   private val makeGt: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -295,24 +244,15 @@ private[parquet] class ParquetFilters(
       (n: String, v: Any) =>
         FilterApi.gt(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
 
-    case ParquetSchemaType(DECIMAL, INT32, decimal) if pushDownDecimal =>
-      (n: String, v: Any) => FilterApi.gt(
-        intColumn(n),
-        v.asInstanceOf[JBigDecimal].unscaledValue().intValue().asInstanceOf[Integer])
-    case ParquetSchemaType(DECIMAL, INT64, decimal) if pushDownDecimal =>
-      (n: String, v: Any) => FilterApi.gt(
-        longColumn(n),
-        v.asInstanceOf[JBigDecimal].unscaledValue().longValue().asInstanceOf[java.lang.Long])
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision <= Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.gt(
-        binaryColumn(n),
-        decimalToBinaryUsingUnscaledLong(decimal.getPrecision, v.asInstanceOf[JBigDecimal]))
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision > Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.gt(
-        binaryColumn(n),
-        decimalToBinaryUsingUnscaledBytes(decimal.getPrecision, v.asInstanceOf[JBigDecimal]))
+    case Parquet32BitDecimalType if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.gt(intColumn(n), decimalToInt32(v.asInstanceOf[JBigDecimal]))
+    case Parquet64BitDecimalType if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.gt(longColumn(n), decimalToInt64(v.asInstanceOf[JBigDecimal]))
+    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length) if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.gt(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
   private val makeGtEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -335,24 +275,15 @@ private[parquet] class ParquetFilters(
       (n: String, v: Any) =>
         FilterApi.gtEq(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
 
-    case ParquetSchemaType(DECIMAL, INT32, decimal) if pushDownDecimal =>
-      (n: String, v: Any) => FilterApi.gtEq(
-        intColumn(n),
-        v.asInstanceOf[JBigDecimal].unscaledValue().intValue().asInstanceOf[Integer])
-    case ParquetSchemaType(DECIMAL, INT64, decimal) if pushDownDecimal =>
-      (n: String, v: Any) => FilterApi.gtEq(
-        longColumn(n),
-        v.asInstanceOf[JBigDecimal].unscaledValue().longValue().asInstanceOf[java.lang.Long])
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision <= Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.gtEq(
-        binaryColumn(n),
-        decimalToBinaryUsingUnscaledLong(decimal.getPrecision, v.asInstanceOf[JBigDecimal]))
-    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, decimal) if pushDownDecimal &&
-      decimal.getPrecision > Decimal.MAX_LONG_DIGITS =>
-      (n: String, v: Any) => FilterApi.gtEq(
-        binaryColumn(n),
-        decimalToBinaryUsingUnscaledBytes(decimal.getPrecision, v.asInstanceOf[JBigDecimal]))
+    case Parquet32BitDecimalType if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.gtEq(intColumn(n), decimalToInt32(v.asInstanceOf[JBigDecimal]))
+    case Parquet64BitDecimalType if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.gtEq(longColumn(n), decimalToInt64(v.asInstanceOf[JBigDecimal]))
+    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length) if pushDownDecimal =>
+      (n: String, v: Any) =>
+        FilterApi.gtEq(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
   /**
@@ -364,8 +295,7 @@ private[parquet] class ParquetFilters(
       // root fields. Currently, accessing to nested fields does not push down filters
       // and it does not support to create filters for them.
       m.getFields.asScala.filter(_.isPrimitive).map(_.asPrimitiveType()).map { f =>
-        f.getName -> ParquetSchemaType(
-          f.getOriginalType, f.getPrimitiveTypeName, f.getDecimalMetadata)
+        f.getName -> ParquetSchemaType(f.getOriginalType, f.getPrimitiveTypeName, f.getTypeLength)
       }.toMap
     case _ => Map.empty[String, ParquetSchemaType]
   }
