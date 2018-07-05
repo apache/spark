@@ -28,8 +28,8 @@ import scala.Tuple2;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-
 import org.apache.kafka.common.serialization.StringDeserializer;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.streaming.api.java.*;
 import org.apache.spark.streaming.kafka010.ConsumerStrategies;
@@ -53,7 +53,7 @@ public final class JavaDirectKafkaWordCount {
 
   public static void main(String[] args) throws Exception {
     if (args.length < 3) {
-      System.err.println("Usage: JavaDirectKafkaWordCount <brokers> <groupId > <topics>\n" +
+      System.err.println("Usage: JavaDirectKafkaWordCount <brokers> <groupId> <topics>\n" +
                          "  <brokers> is a list of one or more Kafka brokers\n" +
                          "  <groupId> is a consumer group name to consume from topics\n" +
                          "  <topics> is a list of one or more kafka topics to consume from\n\n");
