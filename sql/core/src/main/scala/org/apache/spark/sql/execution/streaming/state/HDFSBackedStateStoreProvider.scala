@@ -204,9 +204,9 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     this.valueSchema = valueSchema
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
-    this.numberOfVersionsRetainInMemory = storeConf.maxVersionsToRetainInMemory
+    this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
     this.loadedMaps = new BoundedSortedMap[Long, MapType](Ordering[Long].reverse,
-      numberOfVersionsRetainInMemory)
+      numberOfVersionsToRetainInMemory)
     fm.mkdirs(baseDir)
   }
 
@@ -245,9 +245,9 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   @volatile private var hadoopConf: Configuration = _
 
   // taking default value first: this will be updated by init method with configuration
-  @volatile private var numberOfVersionsRetainInMemory: Int = 2
+  @volatile private var numberOfVersionsToRetainInMemory: Int = 2
   @volatile private var loadedMaps = new BoundedSortedMap[Long, MapType](Ordering[Long].reverse,
-    numberOfVersionsRetainInMemory)
+    numberOfVersionsToRetainInMemory)
 
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
   private lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
