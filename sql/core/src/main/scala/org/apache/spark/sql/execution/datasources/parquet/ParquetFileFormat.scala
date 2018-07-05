@@ -452,8 +452,7 @@ class ParquetFileFormat
   }
 
   override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
-         StringType | BinaryType | DateType | TimestampType | _: DecimalType => true
+    case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType, isReadPath) }
 

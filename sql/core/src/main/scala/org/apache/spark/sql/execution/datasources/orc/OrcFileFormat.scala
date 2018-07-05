@@ -226,8 +226,7 @@ class OrcFileFormat
   }
 
   override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
-         StringType | BinaryType | DateType | TimestampType | _: DecimalType => true
+    case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType, isReadPath) }
 
@@ -238,7 +237,7 @@ class OrcFileFormat
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
 
-    case _: NullType if isReadPath => true
+    case _: NullType => isReadPath
 
     case _ => false
   }

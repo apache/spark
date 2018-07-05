@@ -146,8 +146,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
 
   override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
-         StringType | BinaryType | DateType | TimestampType | _: DecimalType => true
+    case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType, isReadPath) }
 
@@ -155,6 +154,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     case MapType(keyType, valueType, _) =>
       supportDataType(keyType, isReadPath) && supportDataType(valueType, isReadPath)
+
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
 
     case _: NullType => true
 

@@ -153,8 +153,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 
   override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
-         StringType | BinaryType | DateType | TimestampType | _: DecimalType => true
+    case _: AtomicType => true
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
 
