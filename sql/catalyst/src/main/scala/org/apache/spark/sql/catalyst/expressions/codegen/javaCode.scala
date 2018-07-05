@@ -122,9 +122,6 @@ object JavaCode {
 trait Block extends TreeNode[Block] with JavaCode {
   import Block._
 
-  // All expressions to be evaluated inside this block and underlying blocks.
-  def exprValues: Set[ExprValue]
-
   // Returns java code string for this code block.
   override def toString: String = _marginChar match {
     case Some(c) => code.stripMargin(c).trim
@@ -250,13 +247,6 @@ object Block {
  * method splitting.
  */
 case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends Block {
-  override lazy val exprValues: Set[ExprValue] = {
-    blockInputs.flatMap {
-      case b: Block => b.exprValues
-      case e: ExprValue => Set(e)
-    }.toSet
-  }
-
   override def children: Seq[Block] =
     blockInputs.filter(_.isInstanceOf[Block]).asInstanceOf[Seq[Block]]
 
@@ -275,8 +265,6 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
 
 case object EmptyBlock extends Block with Serializable {
   override val code: String = ""
-  override val exprValues: Set[ExprValue] = Set.empty
-
   override def children: Seq[Block] = Seq.empty
 }
 

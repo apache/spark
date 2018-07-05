@@ -65,7 +65,9 @@ class CodeBlockSuite extends SparkFunSuite {
            |boolean $isNull = false;
            |int $value = -1;
           """.stripMargin
-    val exprValues = code.exprValues
+    val exprValues = code.asInstanceOf[CodeBlock].blockInputs.collect {
+      case e: ExprValue => e
+    }.toSet
     assert(exprValues.size == 2)
     assert(exprValues === Set(value, isNull))
   }
@@ -94,7 +96,9 @@ class CodeBlockSuite extends SparkFunSuite {
 
     assert(code.toString == expected)
 
-    val exprValues = code.exprValues
+    val exprValues = code.children.flatMap(_.asInstanceOf[CodeBlock].blockInputs.collect {
+      case e: ExprValue => e
+    }).toSet
     assert(exprValues.size == 5)
     assert(exprValues === Set(isNull1, value1, isNull2, value2, literal))
   }
@@ -178,10 +182,16 @@ class CodeBlockSuite extends SparkFunSuite {
         |  int expr1 = aliased + 1;
         |}""".stripMargin
 
+    val exprValues = transformedBlock.children.flatMap { block =>
+      block.asInstanceOf[CodeBlock].blockInputs.collect {
+        case e: ExprValue => e
+      }
+    }.toSet
+
     assert(transformedBlock.children(0).toString == expected1.toString)
     assert(transformedBlock.children(1).toString == expected2.toString)
     assert(transformedBlock.children(2).toString == expected3.toString)
     assert(transformedBlock.toString == (expected1 + expected2 + expected3).toString)
-    assert(transformedBlock.exprValues === Set(isNull, exprInFunc, aliasedParam))
+    assert(exprValues === Set(isNull, exprInFunc, aliasedParam))
   }
 }
