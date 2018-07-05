@@ -362,6 +362,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(query.lastProgress.batchId === 1)
         assert(query.lastProgress.inputRowsPerSecond === 2.0)
         assert(query.lastProgress.sources(0).inputRowsPerSecond === 2.0)
+        assert(query.lastProgress.sources(0).startOffset.toInt <
+          query.lastProgress.sources(0).endOffset.toInt)
         true
       },
 
