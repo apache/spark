@@ -122,7 +122,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
  *               alias. Auto-assigned if left blank.
  * @param qualifier An optional string that can be used to referred to this attribute in a fully
- *                   qualified way. Consider the examples tableName.name, subQueryAlias.name.li
+ *                   qualified way. Consider the examples tableName.name, subQueryAlias.name.
  *                   tableName and subQueryAlias are possible qualifiers.
  * @param explicitMetadata Explicit metadata associated with this alias that overwrites child's.
  */
