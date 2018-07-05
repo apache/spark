@@ -43,13 +43,12 @@ private[spark] class Instrumentation extends Logging {
   private val shortId = id.toString.take(8)
   private var prefix = s"$shortId:"
 
-  // TODO: update spark.ml to use new Instrumentation APIs and remove these
+  // TODO: update spark.ml to use new Instrumentation APIs and remove this constructor
   var estimator: Estimator[_] = _
   private def this(estimator: Estimator[_], dataset: RDD[_]) = {
     this()
     logContext(estimator, dataset)
   }
-  // end of remove
 
   /**
    * Log info about the estimator and dataset being fit.
@@ -171,11 +170,16 @@ private[spark] class Instrumentation extends Logging {
   }
 
 
+  // TODO: Remove this (possibly replace with logModel?)
   /**
    * Logs the successful completion of the training session.
    */
   def logSuccess(model: Model[_]): Unit = {
     log(s"training finished")
+  }
+
+  def logSuccess(): Unit = {
+    log("training finished")
   }
 
   /**
@@ -216,14 +220,14 @@ private[spark] object Instrumentation {
   }
   // end remove
 
-  def instrumented[M <: Model[_]](body: (Instrumentation => M)): M = {
+  def instrumented[T](body: (Instrumentation => T)): T = {
     val instr = new Instrumentation()
     Try(body(new Instrumentation())) match {
       case Failure(NonFatal(e)) =>
         instr.logFailure(e)
         throw e
       case Success(model) =>
-        instr.logSuccess(model)
+        instr.logSuccess()
         model
     }
   }
