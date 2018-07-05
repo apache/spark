@@ -166,7 +166,7 @@ object TypeCoercion {
     case (l, r) => None
   }
 
-  private def mergeComplexTypes(
+  private def findWiderTypeForComplex(
       t1: DataType,
       t2: DataType,
       mergeFunc: (DataType, DataType) => Option[DataType]): Option[DataType] = (t1, t2) match {
@@ -200,7 +200,7 @@ object TypeCoercion {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
       .orElse(stringPromotion(t1, t2))
-      .orElse(mergeComplexTypes(t1, t2, findWiderTypeForTwo))
+      .orElse(findWiderTypeForComplex(t1, t2, findWiderTypeForTwo))
   }
 
   /**
@@ -236,7 +236,7 @@ object TypeCoercion {
       t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
-      .orElse(mergeComplexTypes(t1, t2, findWiderTypeWithoutStringPromotionForTwo))
+      .orElse(findWiderTypeForComplex(t1, t2, findWiderTypeWithoutStringPromotionForTwo))
   }
 
   def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
