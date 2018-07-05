@@ -397,7 +397,7 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTest(
       StructType(Seq(StructField("a", IntegerType, nullable = false))),
       StructType(Seq(StructField("a", DoubleType, nullable = false))),
-      None)
+      Some(StructType(Seq(StructField("a", DoubleType, nullable = false)))))
 
     widenTest(
       StructType(Seq(StructField("a", IntegerType, nullable = false))),
