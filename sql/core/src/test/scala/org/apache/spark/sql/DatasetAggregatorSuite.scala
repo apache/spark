@@ -149,7 +149,6 @@ object VeryComplexResultAgg extends Aggregator[Row, String, ComplexAggData] {
 
 
 case class OptionBooleanData(name: String, isGood: Option[Boolean])
-case class OptionBooleanIntData(name: String, isGood: Option[(Boolean, Int)])
 
 case class OptionBooleanAggregator(colName: String)
     extends Aggregator[Row, Option[Boolean], Option[Boolean]] {
