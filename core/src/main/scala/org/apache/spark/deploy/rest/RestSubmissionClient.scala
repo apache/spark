@@ -236,12 +236,12 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       val responseCode = connection.getResponseCode
 
       if (responseCode != HttpServletResponse.SC_OK) {
-        if (connection.getErrorStream() == null) {
-          throw new SubmitRestProtocolException("Server returned empty body")
-        }
         val errString = Some(Source.fromInputStream(connection.getErrorStream())
           .getLines().mkString("\n"))
         logError(s"Server responded with error:\n${errString}")
+        if (responseCode == HttpServletResponse.SC_INTERNAL_SERVER_ERROR && connection.getRequestMethod == "GET") {
+          throw new SubmitRestProtocolException(s"Server responded with exception:\n${errString}")
+        }
         val error = new ErrorResponse
         if (responseCode == RestSubmissionServer.SC_UNKNOWN_PROTOCOL_VERSION) {
           error.highestProtocolVersion = RestSubmissionServer.PROTOCOL_VERSION
