@@ -227,8 +227,9 @@ private[parquet] class ParquetFilters(
 
     // All DataTypes that support `makeEq` can provide better performance.
     def shouldConvertInPredicate(name: String): Boolean = nameToType(name) match {
-      case IntegerType | LongType | FloatType | DoubleType | StringType | BinaryType => true
-      case DateType if pushDownDate => true
+      case ParquetBooleanType | ParquetIntegerType | ParquetLongType | ParquetFloatType |
+           ParquetDoubleType | ParquetStringType | ParquetBinaryType => true
+      case ParquetDateType if pushDownDate => true
       case _ => false
     }
 

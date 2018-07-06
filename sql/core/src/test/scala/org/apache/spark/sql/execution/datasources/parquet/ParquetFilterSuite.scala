@@ -754,24 +754,26 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       StructField("a", IntegerType, nullable = false)
     ))
 
+    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+
     assertResult(Some(FilterApi.eq(intColumn("a"), null: Integer))) {
-      parquetFilters.createFilter(schema, sources.In("a", Array(null)))
+      parquetFilters.createFilter(parquetSchema, sources.In("a", Array(null)))
     }
 
     assertResult(Some(FilterApi.eq(intColumn("a"), 10: Integer))) {
-      parquetFilters.createFilter(schema, sources.In("a", Array(10)))
+      parquetFilters.createFilter(parquetSchema, sources.In("a", Array(10)))
     }
 
     // Remove duplicates
     assertResult(Some(FilterApi.eq(intColumn("a"), 10: Integer))) {
-      parquetFilters.createFilter(schema, sources.In("a", Array(10, 10)))
+      parquetFilters.createFilter(parquetSchema, sources.In("a", Array(10, 10)))
     }
 
     assertResult(Some(or(
       FilterApi.eq(intColumn("a"), 10: Integer),
       FilterApi.eq(intColumn("a"), 20: Integer)))
     ) {
-      parquetFilters.createFilter(schema, sources.In("a", Array(10, 20)))
+      parquetFilters.createFilter(parquetSchema, sources.In("a", Array(10, 20)))
     }
 
     assertResult(Some(or(or(
@@ -779,18 +781,13 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       FilterApi.eq(intColumn("a"), 20: Integer)),
       FilterApi.eq(intColumn("a"), 30: Integer)))
     ) {
-      parquetFilters.createFilter(schema, sources.In("a", Array(10, 20, 30)))
+      parquetFilters.createFilter(parquetSchema, sources.In("a", Array(10, 20, 30)))
     }
 
-    assert(parquetFilters.createFilter(schema, sources.In("a",
+    assert(parquetFilters.createFilter(parquetSchema, sources.In("a",
       Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray)).isDefined)
-    assert(parquetFilters.createFilter(schema, sources.In("a",
+    assert(parquetFilters.createFilter(parquetSchema, sources.In("a",
       Range(0, conf.parquetFilterPushDownInFilterThreshold + 1).toArray)).isEmpty)
-    // These DataType can't provide better performance.
-    Seq(DecimalType.DoubleDecimal, TimestampType, BooleanType).foreach { t =>
-      val s = StructType(Seq(StructField("a", t)))
-      assert(parquetFilters.createFilter(s, sources.In("a", Array(1))).isEmpty)
-    }
 
     import testImplicits._
     withTempPath { path =>
