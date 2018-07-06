@@ -76,22 +76,12 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  private def matchDistribution(
+  private def avoidShuffleIfPossible(
       joinKeys: Seq[Expression],
       expressions: Seq[Expression]): Seq[Distribution] = {
     val indices = expressions.map(x => joinKeys.indexWhere(_.semanticEquals(x)))
     HashClusteredDistribution(indices.map(leftKeys(_))) ::
       HashClusteredDistribution(indices.map(rightKeys(_))) :: Nil
-  }
-
-  private def omitExchangeIfPossible(
-      joinKeys: Seq[Expression],
-      partitioning: Partitioning): Seq[Distribution] = {
-    partitioning match {
-      case e: HashPartitioning => matchDistribution(joinKeys, e.expressions)
-      case e: RangePartitioning => matchDistribution(joinKeys, e.ordering.map(_.child))
-      case _ => HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
-    }
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
@@ -101,12 +91,19 @@ case class SortMergeJoinExec(
 
     val leftPartitioning = left.outputPartitioning
     val rightPartitioning = right.outputPartitioning
-    if (leftPartitioning.satisfies(ClusteredDistribution(leftKeys))) {
-      omitExchangeIfPossible(leftKeys, leftPartitioning)
-    } else if (rightPartitioning.satisfies(ClusteredDistribution(rightKeys))) {
-      omitExchangeIfPossible(rightKeys, rightPartitioning)
-    } else {
-      HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+    leftPartitioning match {
+      case HashPartitioning(leftExpressions, _)
+        if leftPartitioning.satisfies(ClusteredDistribution(leftKeys)) =>
+        avoidShuffleIfPossible(leftKeys, leftExpressions)
+
+      case _ => rightPartitioning match {
+        case HashPartitioning(rightExpressions, _)
+          if rightPartitioning.satisfies(ClusteredDistribution(rightKeys)) =>
+          avoidShuffleIfPossible(rightKeys, rightExpressions)
+
+        case _ =>
+          HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+      }
     }
   }
 
