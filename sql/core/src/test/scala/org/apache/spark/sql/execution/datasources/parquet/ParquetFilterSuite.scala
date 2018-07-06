@@ -668,21 +668,25 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
   test("SPARK-17213: Broken Parquet filter push-down for string columns") {
-    withTempPath { dir =>
-      import testImplicits._
+    Seq(true, false).foreach { vectorizedEnabled =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedEnabled.toString) {
+        withTempPath { dir =>
+          import testImplicits._
 
-      val path = dir.getCanonicalPath
-      // scalastyle:off nonascii
-      Seq("a", "é").toDF("name").write.parquet(path)
-      // scalastyle:on nonascii
+          val path = dir.getCanonicalPath
+          // scalastyle:off nonascii
+          Seq("a", "é").toDF("name").write.parquet(path)
+          // scalastyle:on nonascii
 
-      assert(spark.read.parquet(path).where("name > 'a'").count() == 1)
-      assert(spark.read.parquet(path).where("name >= 'a'").count() == 2)
+          assert(spark.read.parquet(path).where("name > 'a'").count() == 1)
+          assert(spark.read.parquet(path).where("name >= 'a'").count() == 2)
 
-      // scalastyle:off nonascii
-      assert(spark.read.parquet(path).where("name < 'é'").count() == 1)
-      assert(spark.read.parquet(path).where("name <= 'é'").count() == 2)
-      // scalastyle:on nonascii
+          // scalastyle:off nonascii
+          assert(spark.read.parquet(path).where("name < 'é'").count() == 1)
+          assert(spark.read.parquet(path).where("name <= 'é'").count() == 2)
+          // scalastyle:on nonascii
+        }
+      }
     }
   }
 

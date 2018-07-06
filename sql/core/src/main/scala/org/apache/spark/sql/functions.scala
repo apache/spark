@@ -2935,6 +2935,17 @@ object functions {
   }
 
   /**
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+   * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+   * '2017-07-14 03:40:00.0'.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
+    FromUTCTimestamp(ts.expr, tz.expr)
+  }
+
+  /**
    * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
    * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
    * '2017-07-14 01:40:00.0'.
@@ -2943,6 +2954,17 @@ object functions {
    */
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
+  }
+
+  /**
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
+   * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+   * '2017-07-14 01:40:00.0'.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
+    ToUTCTimestamp(ts.expr, tz.expr)
   }
 
   /**

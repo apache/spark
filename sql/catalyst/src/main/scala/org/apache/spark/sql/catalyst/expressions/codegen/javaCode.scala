@@ -22,6 +22,7 @@ import java.lang.{Boolean => JBool}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.{existentials, implicitConversions}
 
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
@@ -118,11 +119,8 @@ object JavaCode {
 /**
  * A trait representing a block of java code.
  */
-trait Block extends JavaCode {
+trait Block extends TreeNode[Block] with JavaCode {
   import Block._
-
-  // The expressions to be evaluated inside this block.
-  def exprValues: Set[ExprValue]
 
   // Returns java code string for this code block.
   override def toString: String = _marginChar match {
@@ -148,11 +146,41 @@ trait Block extends JavaCode {
     this
   }
 
+  /**
+   * Apply a map function to each java expression codes present in this java code, and return a new
+   * java code based on the mapped java expression codes.
+   */
+  def transformExprValues(f: PartialFunction[ExprValue, ExprValue]): this.type = {
+    var changed = false
+
+    @inline def transform(e: ExprValue): ExprValue = {
+      val newE = f lift e
+      if (!newE.isDefined || newE.get.equals(e)) {
+        e
+      } else {
+        changed = true
+        newE.get
+      }
+    }
+
+    def doTransform(arg: Any): AnyRef = arg match {
+      case e: ExprValue => transform(e)
+      case Some(value) => Some(doTransform(value))
+      case seq: Traversable[_] => seq.map(doTransform)
+      case other: AnyRef => other
+    }
+
+    val newArgs = mapProductIterator(doTransform)
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
+  }
+
   // Concatenates this block with other block.
   def + (other: Block): Block = other match {
     case EmptyBlock => this
     case _ => code"$this\n$other"
   }
+
+  override def verboseString: String = toString
 }
 
 object Block {
@@ -219,12 +247,8 @@ object Block {
  * method splitting.
  */
 case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends Block {
-  override lazy val exprValues: Set[ExprValue] = {
-    blockInputs.flatMap {
-      case b: Block => b.exprValues
-      case e: ExprValue => Set(e)
-    }.toSet
-  }
+  override def children: Seq[Block] =
+    blockInputs.filter(_.isInstanceOf[Block]).asInstanceOf[Seq[Block]]
 
   override lazy val code: String = {
     val strings = codeParts.iterator
@@ -239,9 +263,9 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
   }
 }
 
-object EmptyBlock extends Block with Serializable {
+case object EmptyBlock extends Block with Serializable {
   override val code: String = ""
-  override val exprValues: Set[ExprValue] = Set.empty
+  override def children: Seq[Block] = Seq.empty
 }
 
 /**
