@@ -177,9 +177,11 @@ setMethod("write.ml", signature(object = "FPGrowthModel", path = "character"),
 #'                           storage format) allowed in a projected database before local
 #'                           processing.
 #' @param sequenceCol name of the sequence column in dataset.
+#' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.prefixSpan} returns an instance of PrefixSpan
 #' @rdname spark.prefixSpan
 #' @name spark.prefixSpan
+#' @aliases spark.prefixSpan,ANY-method
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
@@ -191,7 +193,7 @@ setMethod("write.ml", signature(object = "FPGrowthModel", path = "character"),
 #' frequency <- spark.findFrequentSequentialPatterns(prefix_Span, df)
 #' showDF(frequency)
 #' }
-#' @note spark.prefixSpan(...) since 2.4.0
+#' @note spark.prefixSpan since 2.4.0
 setMethod("spark.prefixSpan", signature(),
           function(minSupport=0.1, maxPatternLength=10L,
                    maxLocalProjDBSize=32000000L, sequenceCol="sequence") {
@@ -213,13 +215,15 @@ setMethod("spark.prefixSpan", signature(),
 
 # Find frequent sequential patterns.
 
+#' @param object a prefixSpan object.
+#' @param data A SparkDataFrame.
 #' @return A complete set of frequent sequential patterns in the input sequences of itemsets.
 #'         The returned \code{SparkDataFrame} contains columns of sequence and corresponding
 #'         frequency. The schema of it will be:
 #'         \code{sequence: ArrayType(ArrayType(T))} (T is the item type)
 #'         \code{freq: Long}
 #' @rdname spark.prefixSpan
-#' @aliases findFrequentSequentialPatterns,PrefixSpan-method
+#' @aliases findFrequentSequentialPatterns,PrefixSpan,SparkDataFrame-method
 #' @note spark.findFrequentSequentialPatterns(PrefixSpan, SparkDataFrame) since 2.4.0
 
 setMethod("spark.findFrequentSequentialPatterns",
