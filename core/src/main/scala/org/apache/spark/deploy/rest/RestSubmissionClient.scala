@@ -234,15 +234,15 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     import scala.concurrent.ExecutionContext.Implicits.global
     val responseFuture = Future {
       val responseCode = connection.getResponseCode
-      val dataStream =
-        if (responseCode == HttpServletResponse.SC_OK) {
-          connection.getInputStream
-        } else if (responseCode == HttpServletResponse.SC_NOT_FOUND) {
-          throw new SubmitRestProtocolException(s"Got a ${HttpServletResponse.SC_NOT_FOUND}." +
-            s"Please verify your master url is correct.")
-        } else {
-          connection.getErrorStream
-        }
+
+      if (responseCode != HttpServletResponse.SC_OK) {
+        val errString = Some(Source.fromInputStream(connection.getErrorStream())
+          .getLines().mkString("\n"))
+        throw new SubmitRestProtocolException(s"Server responded with error:\n${errString}")
+      }
+
+      val dataStream = connection.getInputStream
+
       // If the server threw an exception while writing a response, it will not have a body
       if (dataStream == null) {
         throw new SubmitRestProtocolException("Server returned empty body")
