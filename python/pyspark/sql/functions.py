@@ -1300,12 +1300,19 @@ def to_utc_timestamp(timestamp, tz):
     zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
     '2017-07-14 01:40:00.0'.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
+    >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
+    [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
+
+    if isinstance(tz, Column):
+        timezone = _to_java_column(tz)
+    else:
+        timezone = tz
+    return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), timezone))
 
 
 @since(2.0)
