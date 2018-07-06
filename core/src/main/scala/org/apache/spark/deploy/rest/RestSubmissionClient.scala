@@ -245,8 +245,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
         }
         error.message = errString.get
         error
-      }
-      else {
+      } else {
         val dataStream = connection.getInputStream
 
         // If the server threw an exception while writing a response, it will not have a body
