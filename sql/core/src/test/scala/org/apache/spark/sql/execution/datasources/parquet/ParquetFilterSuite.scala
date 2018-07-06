@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.Date
 
@@ -434,6 +435,52 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           }
         }
       }
+    }
+  }
+
+  test("Ensure that filter value matched the parquet file schema") {
+    val scale = 2
+    val schema = StructType(Seq(
+      StructField("cint", IntegerType),
+      StructField("cdecimal1", DecimalType(Decimal.MAX_INT_DIGITS, scale)),
+      StructField("cdecimal2", DecimalType(Decimal.MAX_LONG_DIGITS, scale)),
+      StructField("cdecimal3", DecimalType(DecimalType.MAX_PRECISION, scale))
+    ))
+
+    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+
+    assertResult(Some(lt(intColumn("cint"), 10: Integer))) {
+      parquetFilters.createFilter(parquetSchema, sources.LessThan("cint", 10))
+    }
+    assertResult(None) {
+      parquetFilters.createFilter(parquetSchema, sources.LessThan("cint", 10L))
+    }
+    assertResult(None) {
+      parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal1", 10L))
+    }
+
+    val decimal = new JBigDecimal(10).setScale(scale)
+    assert(decimal.scale() === scale)
+    assertResult(Some(lt(intColumn("cdecimal1"), 1000: Integer))) {
+      parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal1", decimal))
+    }
+
+    val decimal1 = new JBigDecimal(10).setScale(scale + 1)
+    assert(decimal1.scale() === scale + 1)
+
+    assertResult(None) {
+      parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal1", decimal1))
+    }
+
+    assertResult(Some(lt(longColumn("cdecimal2"), 1000L: java.lang.Long))) {
+      parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal2", decimal))
+    }
+    assertResult(None) {
+      parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal2", decimal1))
+    }
+
+    assertResult(None) {
+      parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal3", decimal1))
     }
   }
 
