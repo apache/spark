@@ -236,6 +236,9 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       val responseCode = connection.getResponseCode
 
       if (responseCode != HttpServletResponse.SC_OK) {
+        if (connection.getErrorStream() == null) {
+          throw new SubmitRestProtocolException("Server returned empty body")
+        }
         val errString = Some(Source.fromInputStream(connection.getErrorStream())
           .getLines().mkString("\n"))
         logError(s"Server responded with error:\n${errString}")

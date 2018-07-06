@@ -366,8 +366,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     // server explodes internally beyond recovery
     // client should throw an appropriate exception to indicate server failure
     val conn3 = sendHttpRequest(statusRequestPath, "GET")
-    val response3 = client.readResponse(conn3)
-    getErrorResponse(response3)
+    intercept[SubmitRestProtocolException] { client.readResponse(conn3) } // empty response
     assert(conn3.getResponseCode === HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
   }
 
