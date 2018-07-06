@@ -1285,11 +1285,21 @@ def from_utc_timestamp(timestamp, tz):
     that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
     '2017-07-14 03:40:00.0'.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(from_utc_timestamp(df.t, "PST").alias('local_time')).collect()
+    :param timestamp: the column that contains timestamps
+    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+
+    .. versionchanged:: 2.4
+       `tz` can take a :class:`Column` containing timezone ID strings.
+
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
+    >>> df.select(from_utc_timestamp(df.ts, "PST").alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
+    >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
+    [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
     """
     sc = SparkContext._active_spark_context
+    if isinstance(tz, Column):
+        tz = _to_java_column(tz)
     return Column(sc._jvm.functions.from_utc_timestamp(_to_java_column(timestamp), tz))
 
 
@@ -1300,11 +1310,21 @@ def to_utc_timestamp(timestamp, tz):
     zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
     '2017-07-14 01:40:00.0'.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    :param timestamp: the column that contains timestamps
+    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+
+    .. versionchanged:: 2.4
+       `tz` can take a :class:`Column` containing timezone ID strings.
+
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
+    >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
+    [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
     sc = SparkContext._active_spark_context
+    if isinstance(tz, Column):
+        tz = _to_java_column(tz)
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
 
 
