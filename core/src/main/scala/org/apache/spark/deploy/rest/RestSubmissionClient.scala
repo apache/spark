@@ -240,6 +240,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
           .getLines().mkString("\n"))
         logError(s"Server responded with error:\n${errString}")
         val error = new ErrorResponse
+        if (responseCode == RestSubmissionServer.SC_UNKNOWN_PROTOCOL_VERSION)
+          error.highestProtocolVersion = RestSubmissionServer.PROTOCOL_VERSION
         error.message = errString.get
         error
       }
