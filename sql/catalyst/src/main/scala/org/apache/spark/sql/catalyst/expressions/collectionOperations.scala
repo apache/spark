@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.{Comparator, TimeZone}
-import java.util
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
