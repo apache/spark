@@ -36,7 +36,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
 
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
@@ -634,8 +634,6 @@ class TestFileFormat extends TextBasedFileFormat {
 
     (file: PartitionedFile) => { Iterator.empty }
   }
-
-  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = true
 }
 
 
