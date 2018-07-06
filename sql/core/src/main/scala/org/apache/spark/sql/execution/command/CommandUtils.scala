@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
-
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -48,11 +47,9 @@ object CommandUtils extends Logging {
     }
   }
 
-    def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
-
+  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
     val sessionState = spark.sessionState
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
-
     if (catalogTable.partitionColumnNames.isEmpty) {
       calculateLocationSize(sessionState, catalogTable.identifier,
           catalogTable.storage.locationUri)
@@ -65,8 +62,10 @@ object CommandUtils extends Logging {
           !path.getName.startsWith(stagingDir)
         }
       }
+      val pathFilter2 = FileInputFormat.getInputPathFilter(
+        new JobConf(sessionState.newHadoopConf(), this.getClass))
       val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,
-        sessionState.newHadoopConf(), pathFilter, spark).flatMap(x => x._2)
+        sessionState.newHadoopConf(), pathFilter2, spark).flatMap(x => x._2)
       fileStatusSeq.map(fileStatus => fileStatus.getLen).sum
     }
   }

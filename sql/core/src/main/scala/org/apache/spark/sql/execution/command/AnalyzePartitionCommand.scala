@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.util.SerializableConfiguration
 
 /**
  * Analyzes a given set of partitions to generate per-partition statistics, which will be used in

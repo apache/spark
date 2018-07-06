@@ -38,8 +38,11 @@ case class AnalyzeTableCommand(
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
 
+    val startTime = System.currentTimeMillis()
     // Compute stats for the whole table
     val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+    val endTime = System.currentTimeMillis()
+    logInfo(s"time taken for analyze: ${endTime - startTime}ms")
     val newRowCount =
       if (noscan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
