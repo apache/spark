@@ -115,6 +115,8 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
       }
     }
   }
+
+  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = true
 }
 
 class SimpleTextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
