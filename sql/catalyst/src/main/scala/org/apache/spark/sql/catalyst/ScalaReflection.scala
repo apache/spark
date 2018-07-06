@@ -799,6 +799,7 @@ object ScalaReflection extends ScalaReflection {
    */
   def definedByConstructorParams(tpe: Type): Boolean = cleanUpReflectionObjects {
     tpe.dealias match {
+      // `Option` is a `Product`, but we don't wanna treat `Option[Int]` as a struct type.
       case t if t <:< localTypeOf[Option[_]] => definedByConstructorParams(t.typeArgs.head)
       case _ => tpe.dealias <:< localTypeOf[Product] ||
         tpe.dealias <:< localTypeOf[DefinedByConstructorParams]
