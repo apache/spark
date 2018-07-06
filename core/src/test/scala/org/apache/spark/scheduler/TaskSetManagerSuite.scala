@@ -1372,7 +1372,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates)
   }
 
-  test("SPARK-13343 speculative tasks that didn't commit shouldn't be marked as success"){
+  test("SPARK-13343 speculative tasks that didn't commit shouldn't be marked as success") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
@@ -1384,13 +1384,12 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
       task.metrics.internalAccums
     }
-
     // Offer resources for 4 tasks to start
     for ((k, v) <- List(
-      "exec1" -> "host1",
-      "exec1" -> "host1",
-      "exec2" -> "host2",
-      "exec2" -> "host2")) {
+        "exec1" -> "host1",
+        "exec1" -> "host1",
+        "exec2" -> "host2",
+        "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(k, v, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -1403,7 +1402,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
       assert(sched.endedTasks(id) === Success)
     }
-
     // checkSpeculatableTasks checks that the task runtime is greater than the threshold for
     // speculating. Since we use a threshold of 0 for speculation, tasks need to be running for
     // > 0ms, so advance the clock by 1ms here.
@@ -1420,15 +1418,27 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(task5.executorId === "exec1")
     assert(task5.attemptNumber === 1)
     sched.backend = mock(classOf[SchedulerBackend])
-
+    sched.dagScheduler.stop()
+    sched.dagScheduler = mock(classOf[DAGScheduler])
     // Complete one attempt for the running task
-    manager.handleSuccessfulTask(3, createTaskResult(3, accumUpdatesByTask(3)))
-    // Verify that it kills other running attempt
+    val result = createTaskResult(3, accumUpdatesByTask(3))
+    manager.handleSuccessfulTask(3, result)
+    // There is a race between the scheduler asking to kill the other task, and that task
+    // actually finishing. We simulate what happens if the other task finishes before we kill it.
     verify(sched.backend).killTask(4, "exec1", true, "another attempt succeeded")
-    // Complete another attempt for the running task
-    manager.handleSuccessfulTask(4, createTaskResult(3, accumUpdatesByTask(3)))
+    manager.handleSuccessfulTask(4, result)
 
-    assert(manager.taskInfos(3).successful == true)
-    assert(manager.taskInfos(4).killed == true)
+    val info3 = manager.taskInfos(3)
+    val info4 = manager.taskInfos(4)
+    assert(info3.successful)
+    assert(info4.killed)
+    verify(sched.dagScheduler).taskEnded(
+      manager.tasks(3),
+      TaskKilled("Finish but did not commit due to another attempt succeeded"),
+      null,
+      Seq.empty,
+      info4)
+    verify(sched.dagScheduler).taskEnded(manager.tasks(3), Success, result.value(),
+      result.accumUpdates, info3)
   }
 }

@@ -725,7 +725,7 @@ private[spark] class TaskSetManager(
     val index = info.index
     // Check if any other attempt succeeded before this and this attempt has not been handled
     if (successful(index) && killedByOtherAttempt(index)) {
-      handleFailedTask(tid, TaskState.KILLED, TaskKilled("another attempt succeeded"))
+      handleFailedTask(tid, TaskState.KILLED, TaskKilled("Finish but did not commit due to another attempt succeeded"))
       return
     }
 
