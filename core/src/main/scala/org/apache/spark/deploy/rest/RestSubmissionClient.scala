@@ -238,29 +238,33 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       if (responseCode != HttpServletResponse.SC_OK) {
         val errString = Some(Source.fromInputStream(connection.getErrorStream())
           .getLines().mkString("\n"))
-        throw new SubmitRestProtocolException(s"Server responded with error:\n${errString}")
+        logError(s"Server responded with error:\n${errString}")
+        val error = new ErrorResponse
+        error.message = errString.get
+        error
       }
+      else {
+        val dataStream = connection.getInputStream
 
-      val dataStream = connection.getInputStream
-
-      // If the server threw an exception while writing a response, it will not have a body
-      if (dataStream == null) {
-        throw new SubmitRestProtocolException("Server returned empty body")
-      }
-      val responseJson = Source.fromInputStream(dataStream).mkString
-      logDebug(s"Response from the server:\n$responseJson")
-      val response = SubmitRestProtocolMessage.fromJson(responseJson)
-      response.validate()
-      response match {
-        // If the response is an error, log the message
-        case error: ErrorResponse =>
-          logError(s"Server responded with error:\n${error.message}")
-          error
-        // Otherwise, simply return the response
-        case response: SubmitRestProtocolResponse => response
-        case unexpected =>
-          throw new SubmitRestProtocolException(
-            s"Message received from server was not a response:\n${unexpected.toJson}")
+        // If the server threw an exception while writing a response, it will not have a body
+        if (dataStream == null) {
+          throw new SubmitRestProtocolException("Server returned empty body")
+        }
+        val responseJson = Source.fromInputStream(dataStream).mkString
+        logDebug(s"Response from the server:\n$responseJson")
+        val response = SubmitRestProtocolMessage.fromJson(responseJson)
+        response.validate()
+        response match {
+          // If the response is an error, log the message
+          case error: ErrorResponse =>
+            logError(s"Server responded with error:\n${error.message}")
+            error
+          // Otherwise, simply return the response
+          case response: SubmitRestProtocolResponse => response
+          case unexpected =>
+            throw new SubmitRestProtocolException(
+              s"Message received from server was not a response:\n${unexpected.toJson}")
+        }
       }
     }
 
