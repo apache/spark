@@ -655,12 +655,12 @@ object TypeCoercion {
   object CaseWhenCoercion extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case c: CaseWhen if c.childrenResolved && !c.valueTypesEqual =>
-        val maybeCommonType = findWiderCommonType(c.valueTypes)
+      case c: CaseWhen if c.childrenResolved && !c.areInputTypesForMergingEqual =>
+        val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
         maybeCommonType.map { commonType =>
           var changed = false
           val newBranches = c.branches.map { case (condition, value) =>
-            if (value.dataType == commonType) {
+            if (value.dataType.sameType(commonType)) {
               (condition, value)
             } else {
               changed = true
@@ -668,7 +668,7 @@ object TypeCoercion {
             }
           }
           val newElseValue = c.elseValue.map { value =>
-            if (value.dataType == commonType) {
+            if (value.dataType.sameType(commonType)) {
               value
             } else {
               changed = true
@@ -688,10 +688,10 @@ object TypeCoercion {
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
-      case i @ If(pred, left, right) if left.dataType != right.dataType =>
-        findWiderTypeForTwo(left.dataType, right.dataType).map { widestType =>
-          val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
-          val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
+      case i @ If(pred, left, right) if !i.areInputTypesForMergingEqual =>
+        findWiderTypeForTwo(left.dataType, right.dataType).map { commonType =>
+          val newLeft = if (left.dataType.sameType(commonType)) left else Cast(left, commonType)
+          val newRight = if (right.dataType.sameType(commonType)) right else Cast(right, commonType)
           If(pred, newLeft, newRight)
         }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
       case If(Literal(null, NullType), left, right) =>

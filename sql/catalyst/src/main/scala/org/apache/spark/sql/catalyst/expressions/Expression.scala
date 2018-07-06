@@ -696,6 +696,56 @@ abstract class TernaryExpression extends Expression {
 }
 
 /**
+ * A trait resolving nullable, containsNull, valueContainsNull flags of the output date type.
+ * This logic is usually utilized by expressions combining data from multiple child expressions
+ * of non-primitive types (e.g. [[CaseWhen]]).
+ */
+trait NonPrimitiveTypeMergingExpression extends Expression
+{
+  /**
+   * A collection of data types used for resolution the output type of the expression. By default,
+   * data types of all child expressions. The collection must not be empty.
+   */
+  @transient
+  lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
+
+  /**
+   * A method determining whether the input types are equal ignoring nullable, containsNull and
+   * valueContainsNull flags and thus convenient for resolution of the final data type.
+   */
+  def areInputTypesForMergingEqual: Boolean = {
+    inputTypesForMerging.lengthCompare(1) <= 0 || inputTypesForMerging.sliding(2, 1).forall {
+      case Seq(dt1, dt2) => dt1.sameType(dt2)
+    }
+  }
+
+  private def mergeTwoDataTypes(dt1: DataType, dt2: DataType): DataType = (dt1, dt2) match {
+    case (t1, t2) if t1 == t2 => t1
+    case (ArrayType(et1, cn1), ArrayType(et2, cn2)) =>
+      ArrayType(mergeTwoDataTypes(et1, et2), cn1 || cn2)
+    case (MapType(kt1, vt1, vcn1), MapType(kt2, vt2, vcn2)) =>
+      MapType(mergeTwoDataTypes(kt1, kt2), mergeTwoDataTypes(vt1, vt2), vcn1 || vcn2)
+    case (StructType(fields1), StructType(fields2)) =>
+      val newFields = fields1.zip(fields2).map {
+        case (f1, f2) if f1 == f2 => f1
+        case (StructField(name, fdt1, nl1, _), StructField(_, fdt2, nl2, _)) =>
+          StructField(name, mergeTwoDataTypes(fdt1, fdt2), nl1 || nl2)
+      }
+      StructType(newFields)
+  }
+
+  override def dataType: DataType = {
+    require(
+      inputTypesForMerging.nonEmpty,
+      "The collection of input data types must not be empty.")
+    require(
+      areInputTypesForMergingEqual,
+      "All input types must be the same except nullable, containsNull, valueContainsNull flags.")
+    inputTypesForMerging.reduceLeft(mergeTwoDataTypes)
+  }
+}
+
+/**
  * Common base trait for user-defined functions, including UDF/UDAF/UDTF of different languages
  * and Hive function wrappers.
  */
