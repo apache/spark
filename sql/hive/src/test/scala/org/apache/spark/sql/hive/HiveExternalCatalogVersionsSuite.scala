@@ -67,26 +67,26 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       logInfo(s"Downloading Spark $version from $url")
       try {
         getFileFromUrl(url, path, filename)
-        return
+        val downloaded = new File(sparkTestingDir, filename).getCanonicalPath
+        val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath
+
+        Seq("mkdir", targetDir).!
+        val exitCode = Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1").!
+        Seq("rm", downloaded).!
+
+        // For a corrupted file, `tar` returns non-zero values. However, we also need to check
+        // the extracted file because `tar` returns 0 for empty file.
+        val sparkSubmit = new File(sparkTestingDir, s"spark-$version/bin/spark-submit")
+        if (exitCode == 0 && sparkSubmit.exists()) {
+          return
+        } else {
+          Seq("rm", "-rf", targetDir).!
+        }
       } catch {
         case ex: Exception => logWarning(s"Failed to download Spark $version from $url", ex)
       }
     }
     fail(s"Unable to download Spark $version")
-  }
-
-
-  private def downloadSpark(version: String): Unit = {
-    tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
-
-    val downloaded = new File(sparkTestingDir, s"spark-$version-bin-hadoop2.7.tgz").getCanonicalPath
-    val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath
-
-    Seq("mkdir", targetDir).!
-
-    Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1").!
-
-    Seq("rm", downloaded).!
   }
 
   private def genDataDir(name: String): String = {
@@ -161,7 +161,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
       val sparkHome = new File(sparkTestingDir, s"spark-$version")
       if (!sparkHome.exists()) {
-        downloadSpark(version)
+        tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
 
       val args = Seq(
@@ -195,7 +195,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
-  val testingVersions = Seq("2.0.2", "2.1.2", "2.2.0", "2.2.1", "2.3.0")
+  val testingVersions = Seq("2.0.2", "2.1.2", "2.2.1", "2.3.1")
 
   protected var spark: SparkSession = _
 

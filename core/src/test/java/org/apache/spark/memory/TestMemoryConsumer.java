@@ -17,6 +17,10 @@
 
 package org.apache.spark.memory;
 
+import com.google.common.annotations.VisibleForTesting;
+
+import org.apache.spark.unsafe.memory.MemoryBlock;
+
 import java.io.IOException;
 
 public class TestMemoryConsumer extends MemoryConsumer {
@@ -42,6 +46,12 @@ public class TestMemoryConsumer extends MemoryConsumer {
   void free(long size) {
     used -= size;
     taskMemoryManager.releaseExecutionMemory(size, this);
+  }
+
+  @VisibleForTesting
+  public void freePage(MemoryBlock page) {
+    used -= page.size();
+    taskMemoryManager.freePage(page, this);
   }
 }
 

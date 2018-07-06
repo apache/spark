@@ -94,6 +94,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     blockHandler.applicationRemoved(appId, true /* cleanupLocalDirs */)
   }
 
+  /** Clean up all the non-shuffle files associated with an executor that has exited. */
+  def executorRemoved(executorId: String, appId: String): Unit = {
+    blockHandler.executorRemoved(executorId, appId)
+  }
+
   def stop() {
     if (server != null) {
       server.close()

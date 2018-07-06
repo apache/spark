@@ -64,16 +64,26 @@ function build {
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
+  local BINDING_BUILD_ARGS=(
+    ${BUILD_PARAMS}
+    --build-arg
+    base_img=$(image_ref spark)
+  )
+  local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
+  local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
 
-  local DOCKERFILE=${DOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
-
-  docker build "${BUILD_ARGS[@]}" \
+  docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
-    -f "$DOCKERFILE" .
+    -f "$BASEDOCKERFILE" .
+
+  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    -t $(image_ref spark-py) \
+    -f "$PYDOCKERFILE" .
 }
 
 function push {
   docker push "$(image_ref spark)"
+  docker push "$(image_ref spark-py)"
 }
 
 function usage {
@@ -87,12 +97,14 @@ Commands:
   push        Push a pre-built image to a registry. Requires a repository address to be provided.
 
 Options:
-  -f file     Dockerfile to build. By default builds the Dockerfile shipped with Spark.
+  -f file     Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
+  -p file     Dockerfile with Python baked in. By default builds the Dockerfile shipped with Spark.
   -r repo     Repository address.
   -t tag      Tag to apply to the built image, or to identify the image to be pushed.
+  -m          Use minikube's Docker daemon.
+  -n          Build docker image with --no-cache
   -b arg      Build arg to build or push the image. For multiple build args, this option needs to
               be used separately for each build arg.
-  -m          Use minikube's Docker daemon.
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
 There is no need to push the images into minikube in that case, they'll be automatically
@@ -119,15 +131,19 @@ fi
 
 REPO=
 TAG=
-DOCKERFILE=
+BASEDOCKERFILE=
+PYDOCKERFILE=
+NOCACHEARG=
 BUILD_PARAMS=
-while getopts f:mr:t:b: option
+while getopts f:mr:t:n:b: option
 do
  case "${option}"
  in
- f) DOCKERFILE=${OPTARG};;
+ f) BASEDOCKERFILE=${OPTARG};;
+ p) PYDOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
+ n) NOCACHEARG="--no-cache";;
  b) BUILD_PARAMS=${BUILD_PARAMS}" --build-arg "${OPTARG};;
  m)
    if ! which minikube 1>/dev/null; then
