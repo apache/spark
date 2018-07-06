@@ -117,13 +117,6 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Backofflimit must be a positive number")
       .createWithDefault(6)
 
-  val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
-    ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
-      .doc("Prefix to use in front of the executor pod names.")
-      .internal()
-      .stringConf
-      .createWithDefault("spark")
-
   val KUBERNETES_PYSPARK_PY_FILES =
     ConfigBuilder("spark.kubernetes.python.pyFiles")
       .doc("The PyFiles that are distributed via client arguments")

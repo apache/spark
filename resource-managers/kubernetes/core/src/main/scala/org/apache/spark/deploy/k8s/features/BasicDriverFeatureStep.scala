@@ -111,7 +111,6 @@ private[spark] class BasicDriverFeatureStep(
     val additionalProps = mutable.Map(
       KUBERNETES_DRIVER_POD_NAME_PREFIX.key -> driverPodNamePrefix,
       "spark.app.id" -> conf.appId,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> conf.appResourceNamePrefix,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true")
 
     val resolvedSparkJars = KubernetesUtils.resolveFileUrisAndPath(

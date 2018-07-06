@@ -353,7 +353,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   }
 
   private def doBasicDriverPyPodCheck(driverPod: Pod): Unit = {
-    assert(driverPod.getMetadata.getName === driverPodName)
+    assert(driverPod.getMetadata.getName === driverPodNamePrefix)
     assert(driverPod.getSpec.getContainers.get(0).getImage === pyImage)
     assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
   }
