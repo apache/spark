@@ -51,7 +51,7 @@ case class DataSourceV2Relation(
   import DataSourceV2Relation._
 
   override def name: String = {
-    tableIdent.map(_.unquotedString).getOrElse("unknown")
+    tableIdent.map(_.unquotedString).getOrElse(s"${source.name}:unknown")
   }
 
   override def pushedFilters: Seq[Expression] = Seq.empty
