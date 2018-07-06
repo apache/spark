@@ -17,6 +17,9 @@
 # limitations under the License.
 #
 
+SELF=$(cd $(dirname $0) && pwd)
+. "$SELF/release-util.sh"
+
 function exit_with_usage {
   cat << EOF
 usage: release-build.sh <package|docs|publish-snapshot|publish-release>
@@ -87,49 +90,56 @@ NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
 
-MVN="build/mvn --force"
-
-# Hive-specific profiles for some builds
-HIVE_PROFILES="-Phive -Phive-thriftserver"
-# Profiles for publishing snapshots and release to Maven Central
-PUBLISH_PROFILES="-Pmesos -Pyarn -Pkubernetes -Pflume $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
-# Profiles for building binary releases
-BASE_RELEASE_PROFILES="-Pmesos -Pyarn -Pkubernetes -Pflume -Psparkr"
-# Scala 2.11 only profiles for some builds
-SCALA_2_11_PROFILES="-Pkafka-0-8"
-# Scala 2.12 only profiles for some builds
-SCALA_2_12_PROFILES="-Pscala-2.12"
+init_java
+init_maven_sbt
 
 rm -rf spark
-git clone https://git-wip-us.apache.org/repos/asf/spark.git
+git clone "$ASF_REPO"
 cd spark
 git checkout $GIT_REF
 git_hash=`git rev-parse --short HEAD`
 echo "Checked out Spark git hash $git_hash"
 
 if [ -z "$SPARK_VERSION" ]; then
-  SPARK_VERSION=$($MVN help:evaluate -Dexpression=project.version \
-    | grep -v INFO | grep -v WARNING | grep -v Download)
+  # Run $MVN in a separate command so that 'set -e' does the right thing.
+  TMP=$(mktemp)
+  $MVN help:evaluate -Dexpression=project.version > $TMP
+  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -v Download)
+  rm $TMP
 fi
 
-# Verify we have the right java version set
-if [ -z "$JAVA_HOME" ]; then
-  echo "Please set JAVA_HOME."
-  exit 1
+# Depending on the version being built, certain extra profiles need to be activated, and
+# different versions of Scala are supported.
+BASE_PROFILES="-Pmesos -Pyarn"
+PUBLISH_SCALA_2_10=0
+SCALA_2_10_PROFILES="-Pscala-2.10"
+SCALA_2_11_PROFILES=
+SCALA_2_12_PROFILES="-Pscala-2.12"
+
+if [[ $SPARK_VERSION > "2.3" ]]; then
+  BASE_PROFILES="$BASE_PROFILES -Pkubernetes -Pflume"
+  SCALA_2_11_PROFILES="-Pkafka-0-8"
+else
+  PUBLISH_SCALA_2_10=1
 fi
 
-java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
+# Hive-specific profiles for some builds
+HIVE_PROFILES="-Phive -Phive-thriftserver"
+# Profiles for publishing snapshots and release to Maven Central
+PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
+# Profiles for building binary releases
+BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
 if [[ ! $SPARK_VERSION < "2.2." ]]; then
-  if [[ $java_version < "1.8." ]]; then
-    echo "Java version $java_version is less than required 1.8 for 2.2+"
+  if [[ $JAVA_VERSION < "1.8." ]]; then
+    echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
     echo "Please set JAVA_HOME correctly."
     exit 1
   fi
 else
-  if [[ $java_version > "1.7." ]]; then
+  if ! [[ $JAVA_VERSION =~ 1\.7\..* ]]; then
     if [ -z "$JAVA_7_HOME" ]; then
-      echo "Java version $java_version is higher than required 1.7 for pre-2.2"
+      echo "Java version $JAVA_VERSION is higher than required 1.7 for pre-2.2"
       echo "Please set JAVA_HOME correctly."
       exit 1
     else
@@ -174,8 +184,9 @@ if [[ "$1" == "package" ]]; then
     FLAGS=$2
     ZINC_PORT=$3
     BUILD_PACKAGE=$4
-    cp -r spark spark-$SPARK_VERSION-bin-$NAME
 
+    echo "Building binary dist $NAME"
+    cp -r spark spark-$SPARK_VERSION-bin-$NAME
     cd spark-$SPARK_VERSION-bin-$NAME
 
     # TODO There should probably be a flag to make-distribution to allow 2.12 support
@@ -244,31 +255,39 @@ if [[ "$1" == "package" ]]; then
       spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
   }
 
-  # TODO: Check exit codes of children here:
-  # http://stackoverflow.com/questions/1570262/shell-get-exit-code-of-background-process
-
   # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
   # share the same Zinc server.
-  make_binary_release "hadoop2.6" "-Phadoop-2.6 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3035" "withr" &
-  make_binary_release "hadoop2.7" "-Phadoop-2.7 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3036" "withpip" &
-  make_binary_release "without-hadoop" "-Phadoop-provided $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3038" &
-  wait
+  if ! make_binary_release "hadoop2.6" "$MVN_EXTRA_OPTS -B -Phadoop-2.6 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3035" "withr"; then
+    error "Failed to build hadoop2.6 package. Check logs for details."
+  fi
+  if ! is_dry_run; then
+    if ! make_binary_release "hadoop2.7" "$MVN_EXTRA_OPTS -B -Phadoop-2.7 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3036" "withpip"; then
+      error "Failed to build hadoop2.7 package. Check logs for details."
+    fi
+    if ! make_binary_release "without-hadoop" "$MVN_EXTRA_OPTS -B -Phadoop-provided $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3037"; then
+      error "Failed to build without-hadoop package. Check logs for details."
+    fi
+  fi
+
   rm -rf spark-$SPARK_VERSION-bin-*/
 
-  svn co --depth=empty $RELEASE_STAGING_LOCATION svn-spark
-  rm -rf "svn-spark/${DEST_DIR_NAME}-bin"
-  mkdir -p "svn-spark/${DEST_DIR_NAME}-bin"
+  if ! is_dry_run; then
+    svn co --depth=empty $RELEASE_STAGING_LOCATION svn-spark
+    rm -rf "svn-spark/${DEST_DIR_NAME}-bin"
+    mkdir -p "svn-spark/${DEST_DIR_NAME}-bin"
 
-  echo "Copying release tarballs"
-  cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-  cp pyspark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-  cp SparkR_* "svn-spark/${DEST_DIR_NAME}-bin/"
-  svn add "svn-spark/${DEST_DIR_NAME}-bin"
+    echo "Copying release tarballs"
+    cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
+    cp pyspark-* "svn-spark/${DEST_DIR_NAME}-bin/"
+    cp SparkR_* "svn-spark/${DEST_DIR_NAME}-bin/"
+    svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
-  cd svn-spark
-  svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION"
-  cd ..
-  rm -rf svn-spark
+    cd svn-spark
+    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION"
+    cd ..
+    rm -rf svn-spark
+  fi
+
   exit 0
 fi
 
@@ -282,18 +301,22 @@ if [[ "$1" == "docs" ]]; then
   cd ..
   cd ..
 
-  svn co --depth=empty $RELEASE_STAGING_LOCATION svn-spark
-  rm -rf "svn-spark/${DEST_DIR_NAME}-docs"
-  mkdir -p "svn-spark/${DEST_DIR_NAME}-docs"
+  if ! is_dry_run; then
+    svn co --depth=empty $RELEASE_STAGING_LOCATION svn-spark
+    rm -rf "svn-spark/${DEST_DIR_NAME}-docs"
+    mkdir -p "svn-spark/${DEST_DIR_NAME}-docs"
 
-  echo "Copying release documentation"
-  cp -R "spark/docs/_site" "svn-spark/${DEST_DIR_NAME}-docs/"
-  svn add "svn-spark/${DEST_DIR_NAME}-docs"
+    echo "Copying release documentation"
+    cp -R "spark/docs/_site" "svn-spark/${DEST_DIR_NAME}-docs/"
+    svn add "svn-spark/${DEST_DIR_NAME}-docs"
 
-  cd svn-spark
-  svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION docs"
-  cd ..
-  rm -rf svn-spark
+    cd svn-spark
+    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION docs"
+    cd ..
+    rm -rf svn-spark
+  fi
+
+  mv "spark/docs/_site" docs/
   exit 0
 fi
 
@@ -341,13 +364,15 @@ if [[ "$1" == "publish-release" ]]; then
 
   # Using Nexus API documented here:
   # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
-  echo "Creating Nexus staging repository"
-  repo_request="<promoteRequest><data><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-  out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
-    -H "Content-Type:application/xml" -v \
-    $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
-  staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
-  echo "Created Nexus staging repository: $staged_repo_id"
+  if ! is_dry_run; then
+    echo "Creating Nexus staging repository"
+    repo_request="<promoteRequest><data><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
+    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+      -H "Content-Type:application/xml" -v \
+      $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
+    staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
+    echo "Created Nexus staging repository: $staged_repo_id"
+  fi
 
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
@@ -355,6 +380,12 @@ if [[ "$1" == "publish-release" ]]; then
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
   $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
+
+  if ! is_dry_run && [[ $PUBLISH_SCALA_2_10 = 1 ]]; then
+    ./dev/change-scala-version.sh 2.10
+    $MVN -DzincPort=$((ZINC_PORT + 1)) -Dmaven.repo.local=$tmp_repo -Dscala-2.10 \
+      -DskipTests $PUBLISH_PROFILES $SCALA_2_10_PROFILES clean install
+  fi
 
   #./dev/change-scala-version.sh 2.12
   #$MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo \
@@ -386,23 +417,26 @@ if [[ "$1" == "publish-release" ]]; then
     sha1sum $file | cut -f1 -d' ' > $file.sha1
   done
 
-  nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
-  echo "Uplading files to $nexus_upload"
-  for file in $(find . -type f)
-  do
-    # strip leading ./
-    file_short=$(echo $file | sed -e "s/\.\///")
-    dest_url="$nexus_upload/org/apache/spark/$file_short"
-    echo "  Uploading $file_short"
-    curl -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
-  done
+  if ! is_dry_run; then
+    nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
+    echo "Uplading files to $nexus_upload"
+    for file in $(find . -type f)
+    do
+      # strip leading ./
+      file_short=$(echo $file | sed -e "s/\.\///")
+      dest_url="$nexus_upload/org/apache/spark/$file_short"
+      echo "  Uploading $file_short"
+      curl -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
+    done
 
-  echo "Closing nexus staging repository"
-  repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
-  out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
-    -H "Content-Type:application/xml" -v \
-    $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
-  echo "Closed Nexus staging repository: $staged_repo_id"
+    echo "Closing nexus staging repository"
+    repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
+    out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+      -H "Content-Type:application/xml" -v \
+      $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
+    echo "Closed Nexus staging repository: $staged_repo_id"
+  fi
+
   popd
   rm -rf $tmp_repo
   cd ..

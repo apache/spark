@@ -371,7 +371,7 @@ private[scheduler] class BlacklistTracker (
 
 }
 
-private[scheduler] object BlacklistTracker extends Logging {
+private[spark] object BlacklistTracker extends Logging {
 
   private val DEFAULT_TIMEOUT = "1h"
 

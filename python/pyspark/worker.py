@@ -35,8 +35,11 @@ from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type
-from pyspark.util import _get_argspec
+from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
+
+if sys.version >= '3':
+    basestring = str
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -92,10 +95,12 @@ def wrap_scalar_pandas_udf(f, return_type):
     return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 
-def wrap_grouped_map_pandas_udf(f, return_type):
+def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
+    assign_cols_by_pos = runner_conf.get(
+        "spark.sql.execution.pandas.groupedMap.assignColumnsByPosition", False)
+
     def wrapped(key_series, value_series):
         import pandas as pd
-        argspec = _get_argspec(f)
 
         if len(argspec.args) == 1:
             result = f(pd.concat(value_series, axis=1))
@@ -111,9 +116,13 @@ def wrap_grouped_map_pandas_udf(f, return_type):
                 "Number of columns of the returned pandas.DataFrame "
                 "doesn't match specified schema. "
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
-        arrow_return_types = (to_arrow_type(field.dataType) for field in return_type)
-        return [(result[result.columns[i]], arrow_type)
-                for i, arrow_type in enumerate(arrow_return_types)]
+
+        # Assign result columns by schema name if user labeled with strings, else use position
+        if not assign_cols_by_pos and any(isinstance(name, basestring) for name in result.columns):
+            return [(result[field.name], to_arrow_type(field.dataType)) for field in return_type]
+        else:
+            return [(result[result.columns[i]], to_arrow_type(field.dataType))
+                    for i, field in enumerate(return_type)]
 
     return wrapped
 
@@ -129,7 +138,22 @@ def wrap_grouped_agg_pandas_udf(f, return_type):
     return lambda *a: (wrapped(*a), arrow_return_type)
 
 
-def read_single_udf(pickleSer, infile, eval_type):
+def wrap_window_agg_pandas_udf(f, return_type):
+    # This is similar to grouped_agg_pandas_udf, the only difference
+    # is that window_agg_pandas_udf needs to repeat the return value
+    # to match window length, where grouped_agg_pandas_udf just returns
+    # the scalar value.
+    arrow_return_type = to_arrow_type(return_type)
+
+    def wrapped(*series):
+        import pandas as pd
+        result = f(*series)
+        return pd.Series([result]).repeat(len(series[0]))
+
+    return lambda *a: (wrapped(*a), arrow_return_type)
+
+
+def read_single_udf(pickleSer, infile, eval_type, runner_conf):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
     row_func = None
@@ -140,20 +164,47 @@ def read_single_udf(pickleSer, infile, eval_type):
         else:
             row_func = chain(row_func, f)
 
+    # make sure StopIteration's raised in the user code are not ignored
+    # when they are processed in a for loop, raise them as RuntimeError's instead
+    func = fail_on_stopiteration(row_func)
+
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        return arg_offsets, wrap_scalar_pandas_udf(row_func, return_type)
+        return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        return arg_offsets, wrap_grouped_map_pandas_udf(row_func, return_type)
+        argspec = _get_argspec(row_func)  # signature was lost when wrapping it
+        return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_grouped_agg_pandas_udf(row_func, return_type)
+        return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
+    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
+        return arg_offsets, wrap_window_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        return arg_offsets, wrap_udf(row_func, return_type)
+        return arg_offsets, wrap_udf(func, return_type)
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
 def read_udfs(pickleSer, infile, eval_type):
+    runner_conf = {}
+
+    if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                     PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF):
+
+        # Load conf used for pandas_udf evaluation
+        num_conf = read_int(infile)
+        for i in range(num_conf):
+            k = utf8_deserializer.loads(infile)
+            v = utf8_deserializer.loads(infile)
+            runner_conf[k] = v
+
+        # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
+        timezone = runner_conf.get("spark.sql.session.timeZone", None)
+        ser = ArrowStreamPandasSerializer(timezone)
+    else:
+        ser = BatchedSerializer(PickleSerializer(), 100)
+
     num_udfs = read_int(infile)
     udfs = {}
     call_udf = []
@@ -168,7 +219,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type)
+        arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type, runner_conf)
         udfs['f'] = udf
         split_offset = arg_offsets[0] + 1
         arg0 = ["a[%d]" % o for o in arg_offsets[1: split_offset]]
@@ -180,7 +231,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # In the special case of a single UDF this will return a single result rather
         # than a tuple of results; this is the format that the JVM side expects.
         for i in range(num_udfs):
-            arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type)
+            arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type, runner_conf)
             udfs['f%d' % i] = udf
             args = ["a[%d]" % o for o in arg_offsets]
             call_udf.append("f%d(%s)" % (i, ", ".join(args)))
@@ -188,14 +239,6 @@ def read_udfs(pickleSer, infile, eval_type):
 
     mapper = eval(mapper_str, udfs)
     func = lambda _, it: map(mapper, it)
-
-    if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
-        timezone = utf8_deserializer.loads(infile)
-        ser = ArrowStreamPandasSerializer(timezone)
-    else:
-        ser = BatchedSerializer(PickleSerializer(), 100)
 
     # profiling is not supported for UDF
     return func, None, ser, ser
