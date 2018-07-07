@@ -515,6 +515,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
               finish(FinalApplicationStatus.FAILED,
                 ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
                 s"Max number of executor failures ($maxNumExecutorFailures) reached")
+            } else if (allocator.isAllNodeBlacklisted) {
+              finish(FinalApplicationStatus.FAILED,
+                ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
+                "Due to executor failures all available nodes are blacklisted")
             } else {
               logDebug("Sending progress")
               allocator.allocateResources()
