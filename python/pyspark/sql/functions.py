@@ -1285,11 +1285,21 @@ def from_utc_timestamp(timestamp, tz):
     that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
     '2017-07-14 03:40:00.0'.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(from_utc_timestamp(df.t, "PST").alias('local_time')).collect()
+    :param timestamp: the column that contains timestamps
+    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+
+    .. versionchanged:: 2.4
+       `tz` can take a :class:`Column` containing timezone ID strings.
+
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
+    >>> df.select(from_utc_timestamp(df.ts, "PST").alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
+    >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
+    [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
     """
     sc = SparkContext._active_spark_context
+    if isinstance(tz, Column):
+        tz = _to_java_column(tz)
     return Column(sc._jvm.functions.from_utc_timestamp(_to_java_column(timestamp), tz))
 
 
@@ -1300,11 +1310,21 @@ def to_utc_timestamp(timestamp, tz):
     zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
     '2017-07-14 01:40:00.0'.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    :param timestamp: the column that contains timestamps
+    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+
+    .. versionchanged:: 2.4
+       `tz` can take a :class:`Column` containing timezone ID strings.
+
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
+    >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
+    [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
     sc = SparkContext._active_spark_context
+    if isinstance(tz, Column):
+        tz = _to_java_column(tz)
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
 
 
@@ -2189,11 +2209,16 @@ def from_json(col, schema, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
     [Row(json=[Row(a=1)])]
+    >>> schema = schema_of_json(lit('''{"a": 0}'''))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
     """
 
     sc = SparkContext._active_spark_context
     if isinstance(schema, DataType):
         schema = schema.json()
+    elif isinstance(schema, Column):
+        schema = _to_java_column(schema)
     jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
     return Column(jc)
 
@@ -2232,6 +2257,28 @@ def to_json(col, options={}):
 
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.to_json(_to_java_column(col), options)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def schema_of_json(col):
+    """
+    Parses a column containing a JSON string and infers its schema in DDL format.
+
+    :param col: string column in json format
+
+    >>> from pyspark.sql.types import *
+    >>> data = [(1, '{"a": 1}')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(schema_of_json(df.value).alias("json")).collect()
+    [Row(json=u'struct<a:bigint>')]
+    >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
+    [Row(json=u'struct<a:bigint>')]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.schema_of_json(_to_java_column(col))
     return Column(jc)
 
 
@@ -2412,6 +2459,26 @@ def map_entries(col):
     return Column(sc._jvm.functions.map_entries(_to_java_column(col)))
 
 
+@since(2.4)
+def map_from_entries(col):
+    """
+    Collection function: Returns a map created from the given array of entries.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_from_entries
+    >>> df = spark.sql("SELECT array(struct(1, 'a'), struct(2, 'b')) as data")
+    >>> df.select(map_from_entries("data").alias("map")).show()
+    +----------------+
+    |             map|
+    +----------------+
+    |[1 -> a, 2 -> b]|
+    +----------------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
+
+
 @ignore_unicode_prefix
 @since(2.4)
 def array_repeat(col, count):
@@ -2564,9 +2631,10 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        A grouped map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
        The returnType should be a :class:`StructType` describing the schema of the returned
-       `pandas.DataFrame`.
-       The length of the returned `pandas.DataFrame` can be arbitrary and the columns must be
-       indexed so that their position matches the corresponding field in the schema.
+       `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
+       the field names in the defined returnType schema if specified as strings, or match the
+       field data types by position if not strings, e.g. integer indices.
+       The length of the returned `pandas.DataFrame` can be arbitrary.
 
        Grouped map UDFs are used with :meth:`pyspark.sql.GroupedData.apply`.
 
