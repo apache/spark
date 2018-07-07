@@ -318,21 +318,20 @@ private[parquet] class ParquetFilters(
     // which would cause data corruption.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
       value == null || (nameToType(name) match {
-        case ParquetBooleanType if value.isInstanceOf[JBoolean] => true
-        case ParquetIntegerType if value.isInstanceOf[Integer] => true
-        case ParquetLongType if value.isInstanceOf[JLong] => true
-        case ParquetFloatType if value.isInstanceOf[JFloat] => true
-        case ParquetDoubleType if value.isInstanceOf[JDouble] => true
-        case ParquetStringType if value.isInstanceOf[String] => true
-        case ParquetBinaryType if value.isInstanceOf[Array[Byte]] => true
-        case ParquetDateType if value.isInstanceOf[Date] => true
-        case ParquetBinaryType if value.isInstanceOf[Date] => true
-        case ParquetSchemaType(DECIMAL, INT32, 0, decimalMeta)
-          if isDecimalMatched(value, decimalMeta) => true
-        case ParquetSchemaType(DECIMAL, INT64, 0, decimalMeta)
-          if isDecimalMatched(value, decimalMeta) => true
-        case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, _, decimalMeta)
-          if isDecimalMatched(value, decimalMeta) => true
+        case ParquetBooleanType => value.isInstanceOf[JBoolean]
+        case ParquetIntegerType => value.isInstanceOf[Integer]
+        case ParquetLongType => value.isInstanceOf[JLong]
+        case ParquetFloatType => value.isInstanceOf[JFloat]
+        case ParquetDoubleType => value.isInstanceOf[JDouble]
+        case ParquetStringType => value.isInstanceOf[String]
+        case ParquetBinaryType => value.isInstanceOf[Array[Byte]]
+        case ParquetDateType => value.isInstanceOf[Date]
+        case ParquetSchemaType(DECIMAL, INT32, 0, decimalMeta) =>
+          isDecimalMatched(value, decimalMeta)
+        case ParquetSchemaType(DECIMAL, INT64, 0, decimalMeta) =>
+          isDecimalMatched(value, decimalMeta)
+        case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, _, decimalMeta) =>
+          isDecimalMatched(value, decimalMeta)
         case _ => false
       })
     }
