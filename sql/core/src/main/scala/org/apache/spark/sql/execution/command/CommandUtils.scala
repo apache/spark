@@ -59,13 +59,13 @@ object CommandUtils extends Logging {
 
   def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
     val sessionState = spark.sessionState
-    val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
     if (catalogTable.partitionColumnNames.isEmpty) {
       calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       val paths = partitions.map(x => new Path(x.storage.locationUri.get.getPath))
+      val stagiqngDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
       val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,
         sessionState.newHadoopConf(), new PathFilterIgnoreNonData(stagingDir),
         spark).flatMap(x => x._2)
