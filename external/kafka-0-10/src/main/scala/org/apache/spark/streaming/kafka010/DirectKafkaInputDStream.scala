@@ -166,6 +166,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
    * which would throw off consumer position.  Fix position if this happens.
    */
   private def paranoidPoll(c: Consumer[K, V]): Unit = {
+    // don't actually want to consume any messages, so pause all partitions
+    c.pause(c.assignment())
     val msgs = c.poll(0)
     if (!msgs.isEmpty) {
       // position should be minimum offset per topicpartition
@@ -188,9 +190,6 @@ private[spark] class DirectKafkaInputDStream[K, V](
     paranoidPoll(c)
     val parts = c.assignment().asScala
 
-    // no need to read data, so pause
-    c.pause(parts.asJava)
-
     // make sure new partitions are reflected in currentOffsets
     val newPartitions = parts.diff(currentOffsets.keySet)
 
@@ -207,15 +206,9 @@ private[spark] class DirectKafkaInputDStream[K, V](
     // position for new partitions determined by auto.offset.reset if no commit
     currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
 
-    // don't want to consume messages, so pause
-    c.pause(newPartitions.asJava)
     // find latest available offsets
     c.seekToEnd(currentOffsets.keySet.asJava)
-
-    val result = parts.map(tp => tp -> c.position(tp))
-    // pause here because of c.position(tp)
-    c.pause(parts.asJava)
-    result.toMap
+    parts.map(tp => tp -> c.position(tp)).toMap
   }
 
   // limits the maximum number of messages per partition
