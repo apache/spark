@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
-import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -57,16 +58,11 @@ object CommandUtils extends Logging {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       val paths = partitions.map(x => new Path(x.storage.locationUri.get.getPath))
-      val pathFilter = new PathFilter {
-        override def accept(path: Path): Boolean = {
-          !path.getName.startsWith(stagingDir)
-        }
-      }
-      val pathFilter2 = FileInputFormat.getInputPathFilter(
-        new JobConf(sessionState.newHadoopConf(), this.getClass))
       val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,
-        sessionState.newHadoopConf(), pathFilter2, spark).flatMap(x => x._2)
-      fileStatusSeq.map(fileStatus => fileStatus.getLen).sum
+        sessionState.newHadoopConf(),
+        new PathFilterIgnoreNonData(stagingDir), spark).flatMap(x => x._2)
+      fileStatusSeq.filter(fileStatus => fileStatus.getPath.getName != stagingDir)
+        .map(fileStatus => fileStatus.getLen).sum
     }
   }
 
@@ -121,6 +117,15 @@ object CommandUtils extends Logging {
     logInfo(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
 
     size
+  }
+
+  class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serializable {
+    override def accept(path: Path): Boolean = {
+      val fileName = path.getName
+      (!fileName.startsWith(stagingDir) &&
+        // Ignore metadata files starting with "_"
+        !fileName.startsWith("_"))
+    }
   }
 
   def compareAndGetNewStats(
