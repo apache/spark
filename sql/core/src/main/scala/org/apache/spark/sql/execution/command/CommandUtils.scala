@@ -48,6 +48,15 @@ object CommandUtils extends Logging {
     }
   }
 
+  class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serializable {
+    override def accept(path: Path): Boolean = {
+      val fileName = path.getName
+      (!fileName.startsWith(stagingDir) &&
+        // Ignore metadata files starting with "_"
+        !fileName.startsWith("_"))
+    }
+  }
+
   def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
     val sessionState = spark.sessionState
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
@@ -59,10 +68,9 @@ object CommandUtils extends Logging {
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       val paths = partitions.map(x => new Path(x.storage.locationUri.get.getPath))
       val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,
-        sessionState.newHadoopConf(),
-        new PathFilterIgnoreNonData(stagingDir), spark).flatMap(x => x._2)
-      fileStatusSeq.filter(fileStatus => fileStatus.getPath.getName != stagingDir)
-        .map(fileStatus => fileStatus.getLen).sum
+        sessionState.newHadoopConf(), new PathFilterIgnoreNonData(stagingDir),
+        spark).flatMap(x => x._2)
+      fileStatusSeq.map(fileStatus => fileStatus.getLen).sum
     }
   }
 
@@ -117,15 +125,6 @@ object CommandUtils extends Logging {
     logInfo(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
 
     size
-  }
-
-  class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serializable {
-    override def accept(path: Path): Boolean = {
-      val fileName = path.getName
-      (!fileName.startsWith(stagingDir) &&
-        // Ignore metadata files starting with "_"
-        !fileName.startsWith("_"))
-    }
   }
 
   def compareAndGetNewStats(
