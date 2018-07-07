@@ -61,8 +61,7 @@ object CommandUtils extends Logging {
     val sessionState = spark.sessionState
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
     if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateLocationSize(sessionState, catalogTable.identifier,
-          catalogTable.storage.locationUri)
+      calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
