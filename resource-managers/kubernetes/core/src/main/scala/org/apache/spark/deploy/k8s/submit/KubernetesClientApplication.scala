@@ -109,7 +109,7 @@ private[spark] class Client(
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(kubernetesConf)
     val configMapName = s"$kubernetesResourceNamePrefix-driver-conf-map"
-    val isKerberosEnabled = kubernetesConf.sparkConf.get(KUBERNETES_KERBEROS_SUPPORT)
+    val isKerberosEnabled = kubernetesConf.getTokenManager.isSecurityEnabled
     // HADOOP_SECURITY_AUTHENTICATION is defined as simple for the driver and executors as
     // they need only the delegation token to access secure HDFS, no need to sign in to Kerberos
     val maybeSimpleAuthentication =

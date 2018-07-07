@@ -28,9 +28,9 @@ private[spark] class HadoopStepsOrchestrator(
   conf: SparkConf,
   kubernetesResourceNamePrefix: String,
   hadoopConfDir: String,
-  hadoopConfigMapName: String) extends Logging {
+  hadoopConfigMapName: String,
+  isKerberosEnabled: Boolean) extends Logging {
 
-  private val isKerberosEnabled = conf.get(KUBERNETES_KERBEROS_SUPPORT)
   private val maybePrincipal = conf.get(KUBERNETES_KERBEROS_PRINCIPAL)
   private val maybeKeytab = conf.get(KUBERNETES_KERBEROS_KEYTAB)
     .map(k => new File(k))

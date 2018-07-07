@@ -51,7 +51,6 @@ private[spark] class KubernetesExecutorBuilder(
     val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_SPARK_CONF_NAME)
     val maybeDTSecretName = sparkConf.getOption(KERBEROS_KEYTAB_SECRET_NAME)
     val maybeDTDataItem = sparkConf.getOption(KERBEROS_KEYTAB_SECRET_KEY)
-    val maybeSparkUserName = sparkConf.getOption(KERBEROS_SPARK_USER_NAME)
 
     val baseFeatures = Seq(
       provideBasicStep(kubernetesConf),

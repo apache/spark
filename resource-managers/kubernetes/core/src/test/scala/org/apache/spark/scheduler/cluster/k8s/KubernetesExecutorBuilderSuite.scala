@@ -103,7 +103,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     val HADOOPFS_PROVIDER = s"$HADOOP_CREDS_PREFIX.hadoopfs.enabled"
     val conf = KubernetesConf(
       new SparkConf(false)
-        .set(KUBERNETES_KERBEROS_SUPPORT, true)
         .set(HADOOP_CONFIG_MAP_SPARK_CONF_NAME, "hadoop-conf-map-loc")
         .set(HADOOP_CONF_DIR_LOC, "hadoop-conf-dir-loc")
         .set(KERBEROS_SPARK_USER_NAME, "spark-user")
@@ -130,7 +129,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   test("Apply kerberos step if DT secrets created") {
     val conf = KubernetesConf(
       new SparkConf(false)
-        .set(KUBERNETES_KERBEROS_SUPPORT, true)
         .set(HADOOP_CONFIG_MAP_SPARK_CONF_NAME, "hadoop-conf-map-loc")
         .set(HADOOP_CONF_DIR_LOC, "hadoop-conf-dir-loc")
         .set(KERBEROS_SPARK_USER_NAME, "spark-user")

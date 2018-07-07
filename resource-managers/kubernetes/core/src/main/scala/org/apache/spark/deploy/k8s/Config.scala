@@ -211,12 +211,6 @@ private[spark] object Config extends Logging {
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
 
-  val KUBERNETES_KERBEROS_SUPPORT =
-    ConfigBuilder("spark.kubernetes.kerberos.enabled")
-      .doc("Specify whether your job is a job that will require a Delegation Token to access HDFS")
-      .booleanConf
-      .createWithDefault(false)
-
   val KUBERNETES_KERBEROS_KEYTAB =
     ConfigBuilder("spark.kubernetes.kerberos.keytab")
       .doc("Specify the location of keytab " +

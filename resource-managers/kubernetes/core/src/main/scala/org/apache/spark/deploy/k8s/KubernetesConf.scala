@@ -71,7 +71,8 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
       sparkConf,
       appResourceNamePrefix,
       hConf,
-      getHadoopConfigMapName)}
+      getHadoopConfigMapName,
+      getTokenManager.isSecurityEnabled)}
 
   def getTokenManager : KubernetesHadoopDelegationTokenManager =
     new KubernetesHadoopDelegationTokenManager
