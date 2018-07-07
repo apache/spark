@@ -531,8 +531,14 @@ class MultilabelMetrics(JavaModelWrapper):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
     import pyspark.mllib.evaluation
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.mllib.evaluation.__dict__.copy()
     spark = SparkSession.builder\
         .master("local[4]")\

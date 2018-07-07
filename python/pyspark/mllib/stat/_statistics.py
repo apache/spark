@@ -303,7 +303,13 @@ class Statistics(object):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = globals().copy()
     spark = SparkSession.builder\
         .master("local[4]")\
