@@ -47,7 +47,7 @@ class UnivocityParser(
 
   // This index is used to reorder parsed tokens
   private val tokenIndexArr =
-    requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f)))
+    requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
 
   val tokenizer = {
     val parserSetting = options.asParserSettings
