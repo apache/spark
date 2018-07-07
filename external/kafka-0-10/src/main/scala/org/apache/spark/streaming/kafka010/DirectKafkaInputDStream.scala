@@ -262,9 +262,6 @@ private[spark] class DirectKafkaInputDStream[K, V](
         tp -> c.position(tp)
       }.toMap
     }
-
-    // don't actually want to consume any messages, so pause all partitions
-    c.pause(currentOffsets.keySet.asJava)
   }
 
   override def stop(): Unit = this.synchronized {
