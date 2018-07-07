@@ -1085,7 +1085,7 @@ case class ArrayContains(left: Expression, right: Expression)
     if (right.dataType == NullType) {
       TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
     } else if (!left.dataType.isInstanceOf[ArrayType]
-      || left.dataType.asInstanceOf[ArrayType].elementType != right.dataType) {
+      || !left.dataType.asInstanceOf[ArrayType].elementType.sameType(right.dataType)) {
       TypeCheckResult.TypeCheckFailure(
         "Arguments must be an array followed by a value of same type as the array members")
     } else {
