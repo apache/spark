@@ -133,7 +133,8 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   }
 
   /**
-   * Can the configuration property be modified at runtime.
+   * Indicates whether the configuration property with the given key
+   * is modifiable in the current session.
    *
    * @since 2.4.0
    */

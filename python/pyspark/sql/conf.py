@@ -66,7 +66,9 @@ class RuntimeConfig(object):
     @ignore_unicode_prefix
     @since(2.4)
     def isModifiable(self, key):
-        """Is the configuration property modifiable or not."""
+        """Indicates whether the configuration property with the given key
+        is modifiable in the current session.
+        """
         return self._jconf.isModifiable(key)
 
 
