@@ -2232,7 +2232,7 @@ class Analyzer(
    */
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case append @ AppendData(table: NamedRelation, query, isByName)
+      case append @ AppendData(table, query, isByName)
           if table.resolved && query.resolved && !append.resolved =>
         val projection = resolveOutputColumns(table.name, table.output, query, isByName)
 
@@ -2264,7 +2264,7 @@ class Analyzer(
               errors += s"Cannot write nullable values to non-null column '${outAttr.name}'"
               None
 
-            case Some(inAttr) if !outAttr.dataType.sameType(inAttr.dataType) =>
+            case Some(inAttr) if !DataType.canWrite(outAttr.dataType, inAttr.dataType, resolver) =>
               Some(upcast(inAttr, outAttr))
 
             case Some(inAttr) =>
@@ -2290,7 +2290,8 @@ class Analyzer(
             None
 
           case (inAttr, outAttr)
-            if !inAttr.dataType.sameType(outAttr.dataType) || inAttr.name != outAttr.name =>
+            if !DataType.canWrite(inAttr.dataType, outAttr.dataType, resolver) ||
+                inAttr.name != outAttr.name =>
             Some(upcast(inAttr, outAttr))
 
           case (inAttr, _) =>

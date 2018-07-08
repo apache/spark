@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-trait NamedRelation {
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+
+trait NamedRelation extends LogicalPlan {
   def name: String
 }

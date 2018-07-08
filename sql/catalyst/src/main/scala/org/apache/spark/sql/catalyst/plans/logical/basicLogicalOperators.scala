@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
-  RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -356,7 +355,7 @@ case class Join(
  * Append data to an existing DataSourceV2 table.
  */
 case class AppendData(
-    table: LogicalPlan,
+    table: NamedRelation,
     query: LogicalPlan,
     isByName: Boolean) extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
@@ -373,11 +372,11 @@ case class AppendData(
 }
 
 object AppendData {
-  def byName(table: LogicalPlan, df: LogicalPlan): AppendData = {
+  def byName(table: NamedRelation, df: LogicalPlan): AppendData = {
     new AppendData(table, df, true)
   }
 
-  def byPosition(table: LogicalPlan, query: LogicalPlan): AppendData = {
+  def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
     new AppendData(table, query, false)
   }
 }
