@@ -63,6 +63,12 @@ class RuntimeConfig(object):
             raise TypeError("expected %s '%s' to be a string (was '%s')" %
                             (identifier, obj, type(obj).__name__))
 
+    @ignore_unicode_prefix
+    @since(2.4)
+    def isModifiable(self, key):
+        """Is the configuration property modifiable or not."""
+        return self._jconf.isModifiable(key)
+
 
 def _test():
     import os

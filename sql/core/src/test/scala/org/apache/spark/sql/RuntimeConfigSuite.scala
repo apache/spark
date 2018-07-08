@@ -54,4 +54,15 @@ class RuntimeConfigSuite extends SparkFunSuite {
       conf.get("k1")
     }
   }
+
+  test("is a config parameter modifiable") {
+    val conf = newConf()
+
+    // SQL configs
+    assert(!conf.isModifiable("spark.sql.sources.schemaStringLengthThreshold"))
+    assert(conf.isModifiable("spark.sql.streaming.checkpointLocation"))
+    // Core configs
+    assert(!conf.isModifiable("spark.task.cpus"))
+    assert(!conf.isModifiable("spark.executor.cores"))
+  }
 }

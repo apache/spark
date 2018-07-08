@@ -133,6 +133,13 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   }
 
   /**
+   * Can the configuration property be modified at runtime.
+   *
+   * @since 2.4.0
+   */
+  def isModifiable(key: String): Boolean = sqlConf.isModifiable(key)
+
+  /**
    * Returns whether a particular key is set.
    */
   protected[sql] def contains(key: String): Boolean = {
