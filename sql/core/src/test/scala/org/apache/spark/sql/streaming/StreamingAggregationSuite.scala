@@ -53,7 +53,36 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
 
   import testImplicits._
 
-  test("simple count, update mode") {
+  def testWithAggrOptions(testName: String, pairs: (String, String)*)(testFun: => Any): Unit = {
+    val confAndTestNamePostfixMatrix = List(
+      (Seq("spark.sql.streaming.advanced.removeRedundantInStatefulAggregation" -> "false"), ""),
+      (Seq("spark.sql.streaming.advanced.removeRedundantInStatefulAggregation" -> "true"),
+        " : enable remove redundant in stateful aggregation")
+    )
+
+    confAndTestNamePostfixMatrix.foreach {
+      case (conf, testNamePostfix) => withSQLConf(pairs ++ conf: _*) {
+        test(testName + testNamePostfix)(testFun)
+      }
+    }
+  }
+
+  def testQuietlyWithAggrOptions(testName: String, pairs: (String, String)*)
+                                (testFun: => Any): Unit = {
+    val confAndTestNamePostfixMatrix = List(
+      (Seq("spark.sql.streaming.advanced.removeRedundantInStatefulAggregation" -> "false"), ""),
+      (Seq("spark.sql.streaming.advanced.removeRedundantInStatefulAggregation" -> "true"),
+        " : enable remove redundant in stateful aggregation")
+    )
+
+    confAndTestNamePostfixMatrix.foreach {
+      case (conf, testNamePostfix) => withSQLConf(pairs ++ conf: _*) {
+        testQuietly(testName + testNamePostfix)(testFun)
+      }
+    }
+  }
+
+  testWithAggrOptions("simple count, update mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
@@ -77,7 +106,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("count distinct") {
+  testWithAggrOptions("count distinct") {
     val inputData = MemoryStream[(Int, Seq[Int])]
 
     val aggregated =
@@ -93,7 +122,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("simple count, complete mode") {
+  testWithAggrOptions("simple count, complete mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
@@ -116,7 +145,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("simple count, append mode") {
+  testWithAggrOptions("simple count, append mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
@@ -133,7 +162,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     }
   }
 
-  test("sort after aggregate in complete mode") {
+  testWithAggrOptions("sort after aggregate in complete mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
@@ -158,7 +187,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("state metrics") {
+  testWithAggrOptions("state metrics") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
@@ -211,7 +240,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("multiple keys") {
+  testWithAggrOptions("multiple keys") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
@@ -228,7 +257,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  testQuietly("midbatch failure") {
+  testQuietlyWithAggrOptions("midbatch failure") {
     val inputData = MemoryStream[Int]
     FailureSingleton.firstTime = true
     val aggregated =
@@ -254,7 +283,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("typed aggregators") {
+  testWithAggrOptions("typed aggregators") {
     val inputData = MemoryStream[(String, Int)]
     val aggregated = inputData.toDS().groupByKey(_._1).agg(typed.sumLong(_._2))
 
@@ -264,7 +293,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("prune results by current_time, complete mode") {
+  testWithAggrOptions("prune results by current_time, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
     val inputData = MemoryStream[Long]
@@ -316,7 +345,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("prune results by current_date, complete mode") {
+  testWithAggrOptions("prune results by current_date, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
     val tz = TimeZone.getDefault.getID
@@ -365,7 +394,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("SPARK-19690: do not convert batch aggregation in streaming query to streaming") {
+  testWithAggrOptions("SPARK-19690: do not convert batch aggregation in streaming query " +
+    "to streaming") {
     val streamInput = MemoryStream[Int]
     val batchDF = Seq(1, 2, 3, 4, 5)
         .toDF("value")
@@ -429,7 +459,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     true
   }
 
-  test("SPARK-21977: coalesce(1) with 0 partition RDD should be repartitioned to 1") {
+  testWithAggrOptions("SPARK-21977: coalesce(1) with 0 partition RDD should be " +
+    "repartitioned to 1") {
     val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
       // `coalesce(1)` changes the partitioning of data to `SinglePartition` which by default
@@ -467,8 +498,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     }
   }
 
-  test("SPARK-21977: coalesce(1) with aggregation should still be repartitioned when it " +
-    "has non-empty grouping keys") {
+  testWithAggrOptions("SPARK-21977: coalesce(1) with aggregation should still be repartitioned " +
+    "when it has non-empty grouping keys") {
     val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
       withTempDir { tempDir =>
@@ -520,7 +551,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     }
   }
 
-  test("SPARK-22230: last should change with new batches") {
+  testWithAggrOptions("SPARK-22230: last should change with new batches") {
     val input = MemoryStream[Int]
 
     val aggregated = input.toDF().agg(last('value))
@@ -536,7 +567,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("SPARK-23004: Ensure that TypedImperativeAggregate functions do not throw errors") {
+  testWithAggrOptions("SPARK-23004: Ensure that TypedImperativeAggregate functions " +
+    "do not throw errors", "spark.sql.shuffle.partitions" -> "1") {
     // See the JIRA SPARK-23004 for more details. In short, this test reproduces the error
     // by ensuring the following.
     // - A streaming query with a streaming aggregation.
@@ -545,20 +577,18 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     //   ObjectHashAggregateExec falls back to sort-based aggregation). This is done by having a
     //   micro-batch with 128 records that shuffle to a single partition.
     // This test throws the exact error reported in SPARK-23004 without the corresponding fix.
-    withSQLConf("spark.sql.shuffle.partitions" -> "1") {
-      val input = MemoryStream[Int]
-      val df = input.toDF().toDF("value")
-        .selectExpr("value as group", "value")
-        .groupBy("group")
-        .agg(collect_list("value"))
-      testStream(df, outputMode = OutputMode.Update)(
-        AddData(input, (1 to spark.sqlContext.conf.objectAggSortBasedFallbackThreshold): _*),
-        AssertOnQuery { q =>
-          q.processAllAvailable()
-          true
-        }
-      )
-    }
+    val input = MemoryStream[Int]
+    val df = input.toDF().toDF("value")
+      .selectExpr("value as group", "value")
+      .groupBy("group")
+      .agg(collect_list("value"))
+    testStream(df, outputMode = OutputMode.Update)(
+      AddData(input, (1 to spark.sqlContext.conf.objectAggSortBasedFallbackThreshold): _*),
+      AssertOnQuery { q =>
+        q.processAllAvailable()
+        true
+      }
+    )
   }
 
   /** Add blocks of data to the `BlockRDDBackedSource`. */

@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner, Predicate}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -204,30 +204,64 @@ case class StateStoreRestoreExec(
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader {
 
+  val removeRedundant: Boolean = sqlContext.conf.advancedRemoveRedundantInStatefulAggregation
+  if (removeRedundant) {
+    log.info("Advanced option removeRedundantInStatefulAggregation activated!")
+  }
+
+  val valueExpressions: Seq[Attribute] = if (removeRedundant) {
+    child.output.diff(keyExpressions)
+  } else {
+    child.output
+  }
+  val keyValueJoinedExpressions: Seq[Attribute] = keyExpressions ++ valueExpressions
+  val needToProjectToRestoreValue: Boolean = keyValueJoinedExpressions != child.output
+
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      child.output.toStructType,
+      valueExpressions.toStructType,
       indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        val joiner = GenerateUnsafeRowJoiner.create(StructType.fromAttributes(keyExpressions),
+          StructType.fromAttributes(valueExpressions))
+        val restoreValueProject = GenerateUnsafeProjection.generate(
+            keyValueJoinedExpressions, child.output)
+
         val hasInput = iter.hasNext
         if (!hasInput && keyExpressions.isEmpty) {
           // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
           // the `HashAggregateExec` will output a 0 value for the partial merge. We need to
           // restore the value, so that we don't overwrite our state with a 0 value, but rather
           // merge the 0 with existing state.
+          // In this case the value should represent origin row, so no need to restore.
           store.iterator().map(_.value)
         } else {
           iter.flatMap { row =>
             val key = getKey(row)
             val savedState = store.get(key)
+            val restoredRow = if (removeRedundant) {
+              if (savedState == null) {
+                savedState
+              } else {
+                val joinedRow = joiner.join(key, savedState)
+                if (needToProjectToRestoreValue) {
+                  restoreValueProject(joinedRow)
+                } else {
+                  joinedRow
+                }
+              }
+            } else {
+              savedState
+            }
+
             numOutputRows += 1
-            Option(savedState).toSeq :+ row
+            Option(restoredRow).toSeq :+ row
           }
         }
     }
@@ -257,6 +291,19 @@ case class StateStoreSaveExec(
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
+  val removeRedundant: Boolean = sqlContext.conf.advancedRemoveRedundantInStatefulAggregation
+  if (removeRedundant) {
+    log.info("Advanced option removeRedundantInStatefulAggregation activated!")
+  }
+
+  val valueExpressions: Seq[Attribute] = if (removeRedundant) {
+    child.output.diff(keyExpressions)
+  } else {
+    child.output
+  }
+  val keyValueJoinedExpressions: Seq[Attribute] = keyExpressions ++ valueExpressions
+  val needToProjectToRestoreValue: Boolean = keyValueJoinedExpressions != child.output
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
     assert(outputMode.nonEmpty,
@@ -265,11 +312,17 @@ case class StateStoreSaveExec(
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      child.output.toStructType,
+      valueExpressions.toStructType,
       indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        val getValue = GenerateUnsafeProjection.generate(valueExpressions, child.output)
+        val joiner = GenerateUnsafeRowJoiner.create(StructType.fromAttributes(keyExpressions),
+          StructType.fromAttributes(valueExpressions))
+        val restoreValueProject = GenerateUnsafeProjection.generate(
+          keyValueJoinedExpressions, child.output)
+
         val numOutputRows = longMetric("numOutputRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
         val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
@@ -283,7 +336,12 @@ case class StateStoreSaveExec(
               while (iter.hasNext) {
                 val row = iter.next().asInstanceOf[UnsafeRow]
                 val key = getKey(row)
-                store.put(key, row)
+                val value = if (removeRedundant) {
+                  getValue(row)
+                } else {
+                  row
+                }
+                store.put(key, value)
                 numUpdatedStateRows += 1
               }
             }
@@ -294,7 +352,18 @@ case class StateStoreSaveExec(
             setStoreMetrics(store)
             store.iterator().map { rowPair =>
               numOutputRows += 1
-              rowPair.value
+
+              if (removeRedundant) {
+                val joinedRow = joiner.join(rowPair.key, rowPair.value)
+                if (needToProjectToRestoreValue) {
+                  restoreValueProject(joinedRow)
+                } else {
+                  joinedRow
+                }
+              } else {
+                rowPair.value
+              }
+
             }
 
           // Update and output only rows being evicted from the StateStore
@@ -305,7 +374,12 @@ case class StateStoreSaveExec(
               while (filteredIter.hasNext) {
                 val row = filteredIter.next().asInstanceOf[UnsafeRow]
                 val key = getKey(row)
-                store.put(key, row)
+                val value = if (removeRedundant) {
+                  getValue(row)
+                } else {
+                  row
+                }
+                store.put(key, value)
                 numUpdatedStateRows += 1
               }
             }
@@ -320,7 +394,17 @@ case class StateStoreSaveExec(
                   val rowPair = rangeIter.next()
                   if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
                     store.remove(rowPair.key)
-                    removedValueRow = rowPair.value
+
+                    if (removeRedundant) {
+                      val joinedRow = joiner.join(rowPair.key, rowPair.value)
+                      removedValueRow = if (needToProjectToRestoreValue) {
+                        restoreValueProject(joinedRow)
+                      } else {
+                        joinedRow
+                      }
+                    } else {
+                      removedValueRow = rowPair.value
+                    }
                   }
                 }
                 if (removedValueRow == null) {
@@ -353,7 +437,12 @@ case class StateStoreSaveExec(
                 if (baseIterator.hasNext) {
                   val row = baseIterator.next().asInstanceOf[UnsafeRow]
                   val key = getKey(row)
-                  store.put(key, row)
+                  val value = if (removeRedundant) {
+                    getValue(row)
+                  } else {
+                    row
+                  }
+                  store.put(key, value)
                   numOutputRows += 1
                   numUpdatedStateRows += 1
                   row
