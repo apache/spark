@@ -55,7 +55,7 @@ class RuntimeConfigSuite extends SparkFunSuite {
     }
   }
 
-  test("is a config parameter modifiable") {
+  test("SPARK-24761: is a config parameter modifiable") {
     val conf = newConf()
 
     // SQL configs
