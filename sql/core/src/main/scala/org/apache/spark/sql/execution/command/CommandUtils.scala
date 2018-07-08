@@ -68,8 +68,8 @@ object CommandUtils extends Logging {
       val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
       val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,
         sessionState.newHadoopConf(), new PathFilterIgnoreNonData(stagingDir),
-        spark).flatMap(x => x._2)
-      fileStatusSeq.map(fileStatus => fileStatus.getLen).sum
+        spark).flatMap(_._2)
+      fileStatusSeq.map(_.getLen).sum
     }
   }
 
