@@ -287,4 +287,14 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(df, expected)
   }
+
+  test("SPARK-24722: pivoting by a constant") {
+    val expected = Row(2012, 35000.0) :: Row(2013, 78000.0) :: Nil
+    val df1 = trainingSales
+      .groupBy($"sales.year")
+      .pivot(lit(123), Seq(123))
+      .agg(sum($"sales.earnings"))
+
+    checkAnswer(df1, expected)
+  }
 }
