@@ -3409,7 +3409,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
             new GenericArrayData(new Array[Any](elements))
           } else {
             UnsafeArrayData.forPrimitiveArray(
-              Platform.INT_ARRAY_OFFSET, elements, IntegerType.defaultSize);
+              Platform.INT_ARRAY_OFFSET, elements, IntegerType.defaultSize)
           }
           evalIntLongPrimitiveType(array1, array2, elements, resultArray, false)
         case LongType =>
@@ -3440,7 +3440,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
             new GenericArrayData(new Array[Any](elements))
           } else {
             UnsafeArrayData.forPrimitiveArray(
-              Platform.LONG_ARRAY_OFFSET, elements, LongType.defaultSize);
+              Platform.LONG_ARRAY_OFFSET, elements, LongType.defaultSize)
           }
           evalIntLongPrimitiveType(array1, array2, elements, resultArray, true)
         case _ =>
