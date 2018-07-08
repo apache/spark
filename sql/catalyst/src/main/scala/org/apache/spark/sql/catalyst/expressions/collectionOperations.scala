@@ -3272,7 +3272,14 @@ object ArraySetLike {
 
 
 abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
-  override def dataType: DataType = left.dataType
+  override def dataType: DataType = {
+    val dataTypes = children.map(_.dataType)
+    dataTypes.headOption.map {
+      case ArrayType(et, _) =>
+        ArrayType(et, dataTypes.exists(_.asInstanceOf[ArrayType].containsNull))
+      case dt => dt
+    }.getOrElse(StringType)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
@@ -3379,7 +3386,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
           // calculate result array size
           val hsSize = new OpenHashSet[Int]
           var nullElementSize = 0
-          Seq(array1, array2).foreach(array => {
+          Seq(array1, array2).foreach { array =>
             var i = 0
             while (i < array.numElements()) {
               if (hsSize.size + nullElementSize > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
@@ -3394,11 +3401,11 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
               }
               i += 1
             }
-          })
+          }
           val elements = hsSize.size + nullElementSize
           hsInt = new OpenHashSet[Int]
           val resultArray = if (UnsafeArrayData.useGenericArrayData(
-              IntegerType.defaultSize, elements)) {
+            IntegerType.defaultSize, elements)) {
             new GenericArrayData(new Array[Any](elements))
           } else {
             UnsafeArrayData.forPrimitiveArray(
@@ -3410,10 +3417,10 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
           // calculate result array size
           val hsSize = new OpenHashSet[Long]
           var nullElementSize = 0
-          Seq(array1, array2).foreach(array => {
+          Seq(array1, array2).foreach { array =>
             var i = 0
             while (i < array.numElements()) {
-              if (hsSize.size + nullElementSize> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+              if (hsSize.size + nullElementSize > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
                 ArraySetLike.throwUnionLengthOverflowException(hsSize.size)
               }
               if (array.isNullAt(i)) {
@@ -3425,7 +3432,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
               }
               i += 1
             }
-          })
+          }
           val elements = hsSize.size + nullElementSize
           hsLong = new OpenHashSet[Long]
           val resultArray = if (UnsafeArrayData.useGenericArrayData(
@@ -3440,7 +3447,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
           val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
           val hs = new OpenHashSet[Any]
           var foundNullElement = false
-          Seq(array1, array2).foreach(array => {
+          Seq(array1, array2).foreach { array =>
             var i = 0
             while (i < array.numElements()) {
               if (array.isNullAt(i)) {
@@ -3460,7 +3467,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
               }
               i += 1
             }
-          })
+          }
           new GenericArrayData(arrayBuffer)
       }
     } else {

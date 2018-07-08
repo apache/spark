@@ -1168,25 +1168,25 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Array Union") {
-    val a00 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
-    val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType))
-    val a02 = Literal.create(Seq(1, 2, null, 4, 5), ArrayType(IntegerType))
-    val a03 = Literal.create(Seq(-5, 4, -3, 2, -1), ArrayType(IntegerType))
-    val a04 = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
-    val a05 = Literal.create(Seq[Byte](1, 2, 3), ArrayType(ByteType))
-    val a06 = Literal.create(Seq[Byte](4, 2), ArrayType(ByteType))
-    val a07 = Literal.create(Seq[Short](1, 2, 3), ArrayType(ShortType))
-    val a08 = Literal.create(Seq[Short](4, 2), ArrayType(ShortType))
+    val a00 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, containsNull = false))
+    val a02 = Literal.create(Seq(1, 2, null, 4, 5), ArrayType(IntegerType, containsNull = true))
+    val a03 = Literal.create(Seq(-5, 4, -3, 2, -1), ArrayType(IntegerType, containsNull = false))
+    val a04 = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
+    val a05 = Literal.create(Seq[Byte](1, 2, 3), ArrayType(ByteType, containsNull = false))
+    val a06 = Literal.create(Seq[Byte](4, 2), ArrayType(ByteType, containsNull = false))
+    val a07 = Literal.create(Seq[Short](1, 2, 3), ArrayType(ShortType, containsNull = false))
+    val a08 = Literal.create(Seq[Short](4, 2), ArrayType(ShortType, containsNull = false))
 
-    val a10 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType))
-    val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType))
-    val a12 = Literal.create(Seq(1L, 2L, null, 4L, 5L), ArrayType(LongType))
-    val a13 = Literal.create(Seq(-5L, 4L, -3L, 2L, -1L), ArrayType(LongType))
-    val a14 = Literal.create(Seq.empty[Long], ArrayType(LongType))
+    val a10 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
+    val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType, containsNull = false))
+    val a12 = Literal.create(Seq(1L, 2L, null, 4L, 5L), ArrayType(LongType, containsNull = true))
+    val a13 = Literal.create(Seq(-5L, 4L, -3L, 2L, -1L), ArrayType(LongType, containsNull = false))
+    val a14 = Literal.create(Seq.empty[Long], ArrayType(LongType, containsNull = false))
 
-    val a20 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType))
-    val a21 = Literal.create(Seq("c", "d", "a", "f"), ArrayType(StringType))
-    val a22 = Literal.create(Seq("b", null, "a", "g"), ArrayType(StringType))
+    val a20 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, containsNull = false))
+    val a21 = Literal.create(Seq("c", "d", "a", "f"), ArrayType(StringType, containsNull = false))
+    val a22 = Literal.create(Seq("b", null, "a", "g"), ArrayType(StringType, containsNull = true))
 
     val a30 = Literal.create(Seq(null, null), ArrayType(IntegerType))
     val a31 = Literal.create(null, ArrayType(StringType))
@@ -1244,5 +1244,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayType(ArrayType(IntegerType)))
     checkEvaluation(ArrayUnion(aa0, aa1),
       Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](5, 6), Seq[Int](2, 1)))
+
+    assert(ArrayUnion(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(ArrayUnion(a00, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayUnion(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(ArrayUnion(a20, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
 }
