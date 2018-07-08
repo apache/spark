@@ -3322,7 +3322,9 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
   def assignInt(array: ArrayData, idx: Int, resultArray: ArrayData, pos: Int): Boolean = {
     val elem = array.getInt(idx)
     if (!hsInt.contains(elem)) {
-      resultArray.setInt(pos, elem)
+      if (resultArray != null) {
+        resultArray.setInt(pos, elem)
+      }
       hsInt.add(elem)
       true
     } else {
@@ -3333,7 +3335,9 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
   def assignLong(array: ArrayData, idx: Int, resultArray: ArrayData, pos: Int): Boolean = {
     val elem = array.getLong(idx)
     if (!hsLong.contains(elem)) {
-      resultArray.setLong(pos, elem)
+      if (resultArray != null) {
+        resultArray.setLong(pos, elem)
+      }
       hsLong.add(elem)
       true
     } else {
@@ -3344,20 +3348,25 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
   def evalIntLongPrimitiveType(
       array1: ArrayData,
       array2: ArrayData,
-      size: Int,
       resultArray: ArrayData,
-      isLongType: Boolean): ArrayData = {
+      isLongType: Boolean): Int = {
     // store elements into resultArray
-    var foundNullElement = false
+    var nullElementSize = 0
     var pos = 0
     Seq(array1, array2).foreach(array => {
       var i = 0
       while (i < array.numElements()) {
+        val size = if (!isLongType) hsInt.size else hsLong.size
+        if (size + nullElementSize > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+          ArraySetLike.throwUnionLengthOverflowException(size)
+        }
         if (array.isNullAt(i)) {
-          if (!foundNullElement) {
-            resultArray.setNullAt(pos)
+          if (nullElementSize == 0) {
+            if (resultArray != null) {
+              resultArray.setNullAt(pos)
+            }
             pos += 1
-            foundNullElement = true
+            nullElementSize = 1
           }
         } else {
           val assigned = if (!isLongType) {
@@ -3372,7 +3381,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
         i += 1
       }
     })
-    resultArray
+    pos
   }
 
   override def nullSafeEval(input1: Any, input2: Any): Any = {
@@ -3384,25 +3393,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
         case IntegerType =>
           // avoid boxing of primitive int array elements
           // calculate result array size
-          val hsSize = new OpenHashSet[Int]
-          var nullElementSize = 0
-          Seq(array1, array2).foreach { array =>
-            var i = 0
-            while (i < array.numElements()) {
-              if (hsSize.size + nullElementSize > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                ArraySetLike.throwUnionLengthOverflowException(hsSize.size)
-              }
-              if (array.isNullAt(i)) {
-                if (nullElementSize == 0) {
-                  nullElementSize = 1
-                }
-              } else {
-                hsSize.add(array.getInt(i))
-              }
-              i += 1
-            }
-          }
-          val elements = hsSize.size + nullElementSize
+          hsInt = new OpenHashSet[Int]
+          val elements = evalIntLongPrimitiveType(array1, array2, null, false)
           hsInt = new OpenHashSet[Int]
           val resultArray = if (UnsafeArrayData.useGenericArrayData(
             IntegerType.defaultSize, elements)) {
@@ -3411,29 +3403,13 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
             UnsafeArrayData.forPrimitiveArray(
               Platform.INT_ARRAY_OFFSET, elements, IntegerType.defaultSize)
           }
-          evalIntLongPrimitiveType(array1, array2, elements, resultArray, false)
+          evalIntLongPrimitiveType(array1, array2, resultArray, false)
+          resultArray
         case LongType =>
           // avoid boxing of primitive long array elements
           // calculate result array size
-          val hsSize = new OpenHashSet[Long]
-          var nullElementSize = 0
-          Seq(array1, array2).foreach { array =>
-            var i = 0
-            while (i < array.numElements()) {
-              if (hsSize.size + nullElementSize > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                ArraySetLike.throwUnionLengthOverflowException(hsSize.size)
-              }
-              if (array.isNullAt(i)) {
-                if (nullElementSize == 0) {
-                  nullElementSize = 1
-                }
-              } else {
-                hsSize.add(array.getLong(i))
-              }
-              i += 1
-            }
-          }
-          val elements = hsSize.size + nullElementSize
+          hsLong = new OpenHashSet[Long]
+          val elements = evalIntLongPrimitiveType(array1, array2, null, true)
           hsLong = new OpenHashSet[Long]
           val resultArray = if (UnsafeArrayData.useGenericArrayData(
             LongType.defaultSize, elements)) {
@@ -3442,7 +3418,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
             UnsafeArrayData.forPrimitiveArray(
               Platform.LONG_ARRAY_OFFSET, elements, LongType.defaultSize)
           }
-          evalIntLongPrimitiveType(array1, array2, elements, resultArray, true)
+          evalIntLongPrimitiveType(array1, array2, resultArray, true)
+          resultArray
         case _ =>
           val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
           val hs = new OpenHashSet[Any]
