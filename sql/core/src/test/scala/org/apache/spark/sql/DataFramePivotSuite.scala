@@ -268,11 +268,21 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-24722: pivot trainings - nested columns") {
+  test("SPARK-24722: pivoting nested columns") {
     val expected = Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
     val df = trainingSales
       .groupBy($"sales.year")
       .pivot(lower($"sales.course"), Seq("dotNet", "Java").map(_.toLowerCase))
+      .agg(sum($"sales.earnings"))
+
+    checkAnswer(df, expected)
+  }
+
+  test("SPARK-24722: references to multiple columns in the pivot column") {
+    val expected = Row(2012, 10000.0) :: Row(2013, 48000.0) :: Nil
+    val df = trainingSales
+      .groupBy($"sales.year")
+      .pivot(concat_ws("-", $"training", $"sales.course"), Seq("Experts-dotNET"))
       .agg(sum($"sales.earnings"))
 
     checkAnswer(df, expected)
