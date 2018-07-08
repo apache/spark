@@ -1467,6 +1467,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     intercept[NullPointerException](ds.as[(Int, Int)].collect())
   }
 
+  test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val a = Seq(Some(1)).toDS
+      val b = Seq(Some(1.2)).toDS
+      val expected = Seq((Some(1), Some(1.2))).toDS
+      val joined = a.joinWith(b, lit(true))
+      assert(joined.schema == expected.schema)
+      checkDataset(joined, expected.collect: _*)
+    }
+  }
+
   test("SPARK-24548: Dataset with tuple encoders should have correct schema") {
     val encoder = Encoders.tuple(newStringEncoder,
       Encoders.tuple(newStringEncoder, newStringEncoder))

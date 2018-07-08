@@ -35,3 +35,7 @@ DROP VIEW IF EXISTS jsonTable;
 -- from_json - complex types
 select from_json('{"a":1, "b":2}', 'map<string, int>');
 select from_json('{"a":1, "b":"2"}', 'struct<a:int,b:string>');
+
+-- infer schema of json literal
+select schema_of_json('{"c1":0, "c2":[1]}');
+select from_json('{"c1":[1, 2, 3]}', schema_of_json('{"c1":[0]}'));
