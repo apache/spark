@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -525,7 +525,8 @@ case class Least(children: Seq[Expression]) extends Expression {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least two arguments")
-    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+    } else if (
+      children.map(_.dataType).sliding(2, 1).exists { case Seq(t1, t2) => !t1.sameType(t2) }) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
@@ -534,7 +535,8 @@ case class Least(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: DataType = children.head.dataType
+  override def dataType: DataType =
+    TypeCoercion.findWiderNullablilityType(children.map(_.dataType)).get
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {
@@ -600,7 +602,8 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least two arguments")
-    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+    } else if (
+      children.map(_.dataType).sliding(2, 1).exists { case Seq(t1, t2) => !t1.sameType(t2) }) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
@@ -609,7 +612,8 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: DataType = children.head.dataType
+  override def dataType: DataType =
+    TypeCoercion.findWiderNullablilityType(children.map(_.dataType)).get
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {
