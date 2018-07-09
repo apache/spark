@@ -93,4 +93,16 @@ class GroupedDatasetSuite extends QueryTest with SharedSQLContext {
     }
     datasetWithUDF.unpersist(true)
   }
+
+  test("SPARK-24208: analysis fails on self-join with FlatMapGroupsInPandas") {
+    val df = datasetWithUDF.groupBy("s").flatMapGroupsInPandas(PythonUDF(
+      "pyUDF",
+      null,
+      StructType(Seq(StructField("s", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      true))
+    val df1 = df.alias("temp0").join(df.alias("temp1"), $"temp0.s" === $"temp1.s")
+    df1.queryExecution.assertAnalyzed()
+  }
 }
