@@ -86,6 +86,24 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Coalesce(Seq(nullLit, lit, lit)), value)
       checkEvaluation(Coalesce(Seq(nullLit, nullLit, lit)), value)
     }
+
+    val coalesce1 = Coalesce(Seq(
+      Literal.create(null, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 2, 3, null), ArrayType(IntegerType, containsNull = true))))
+    assert(coalesce1.dataType === ArrayType(IntegerType, containsNull = false))
+    checkEvaluation(coalesce1, Seq(1, 2, 3))
+    val coalesce2 = Coalesce(Seq(
+      Literal.create(null, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 2, 3, null), ArrayType(IntegerType, containsNull = true)),
+      Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))))
+    assert(coalesce2.dataType === ArrayType(IntegerType, containsNull = true))
+    checkEvaluation(coalesce2, Seq(1, 2, 3, null))
+    val coalesce3 = Coalesce(Seq(
+      Literal.create(null, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(null, ArrayType(IntegerType, containsNull = true))))
+    assert(coalesce3.dataType === ArrayType(IntegerType, containsNull = true))
+    checkEvaluation(coalesce3, null)
   }
 
   test("SPARK-16602 Nvl should support numeric-string cases") {

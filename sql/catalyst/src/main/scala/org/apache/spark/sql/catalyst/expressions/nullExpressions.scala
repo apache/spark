@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -61,7 +61,11 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: DataType = children.head.dataType
+  override def dataType: DataType = {
+    val idx = children.indexWhere(!_.nullable)
+    val dataTypes = (if (idx >= 0) children.take(idx + 1) else children).map(_.dataType)
+    TypeCoercion.findWiderNullablilityType(dataTypes).get
+  }
 
   override def eval(input: InternalRow): Any = {
     var result: Any = null
