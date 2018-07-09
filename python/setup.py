@@ -201,7 +201,7 @@ try:
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
-        install_requires=['py4j==0.10.6'],
+        install_requires=['py4j==0.10.7'],
         setup_requires=['pypandoc'],
         extras_require={
             'ml': ['numpy>=1.7'],
@@ -219,6 +219,7 @@ try:
             'Programming Language :: Python :: 3.4',
             'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: 3.6',
+            'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: Implementation :: CPython',
             'Programming Language :: Python :: Implementation :: PyPy']
     )

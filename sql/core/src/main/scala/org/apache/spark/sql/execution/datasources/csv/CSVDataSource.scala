@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.TaskContext
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -50,7 +51,10 @@ abstract class CSVDataSource extends Serializable {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      schema: StructType): Iterator[InternalRow]
+      requiredSchema: StructType,
+      // Actual schema of data in the csv file
+      dataSchema: StructType,
+      caseSensitive: Boolean): Iterator[InternalRow]
 
   /**
    * Infers the schema from `inputPaths` files.
@@ -110,13 +114,91 @@ abstract class CSVDataSource extends Serializable {
   }
 }
 
-object CSVDataSource {
+object CSVDataSource extends Logging {
   def apply(options: CSVOptions): CSVDataSource = {
     if (options.multiLine) {
       MultiLineCSVDataSource
     } else {
       TextInputCSVDataSource
     }
+  }
+
+  /**
+   * Checks that column names in a CSV header and field names in the schema are the same
+   * by taking into account case sensitivity.
+   *
+   * @param schema - provided (or inferred) schema to which CSV must conform.
+   * @param columnNames - names of CSV columns that must be checked against to the schema.
+   * @param fileName - name of CSV file that are currently checked. It is used in error messages.
+   * @param enforceSchema - if it is `true`, column names are ignored otherwise the CSV column
+   *                        names are checked for conformance to the schema. In the case if
+   *                        the column name don't conform to the schema, an exception is thrown.
+   * @param caseSensitive - if it is set to `false`, comparison of column names and schema field
+   *                        names is not case sensitive.
+   */
+  def checkHeaderColumnNames(
+      schema: StructType,
+      columnNames: Array[String],
+      fileName: String,
+      enforceSchema: Boolean,
+      caseSensitive: Boolean): Unit = {
+    if (columnNames != null) {
+      val fieldNames = schema.map(_.name).toIndexedSeq
+      val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
+      var errorMessage: Option[String] = None
+
+      if (headerLen == schemaSize) {
+        var i = 0
+        while (errorMessage.isEmpty && i < headerLen) {
+          var (nameInSchema, nameInHeader) = (fieldNames(i), columnNames(i))
+          if (!caseSensitive) {
+            nameInSchema = nameInSchema.toLowerCase
+            nameInHeader = nameInHeader.toLowerCase
+          }
+          if (nameInHeader != nameInSchema) {
+            errorMessage = Some(
+              s"""|CSV header does not conform to the schema.
+                  | Header: ${columnNames.mkString(", ")}
+                  | Schema: ${fieldNames.mkString(", ")}
+                  |Expected: ${fieldNames(i)} but found: ${columnNames(i)}
+                  |CSV file: $fileName""".stripMargin)
+          }
+          i += 1
+        }
+      } else {
+        errorMessage = Some(
+          s"""|Number of column in CSV header is not equal to number of fields in the schema:
+              | Header length: $headerLen, schema size: $schemaSize
+              |CSV file: $fileName""".stripMargin)
+      }
+
+      errorMessage.foreach { msg =>
+        if (enforceSchema) {
+          logWarning(msg)
+        } else {
+          throw new IllegalArgumentException(msg)
+        }
+      }
+    }
+  }
+
+  /**
+   * Checks that CSV header contains the same column names as fields names in the given schema
+   * by taking into account case sensitivity.
+   */
+  def checkHeader(
+      header: String,
+      parser: CsvParser,
+      schema: StructType,
+      fileName: String,
+      enforceSchema: Boolean,
+      caseSensitive: Boolean): Unit = {
+    checkHeaderColumnNames(
+        schema,
+        parser.parseLine(header),
+        fileName,
+        enforceSchema,
+        caseSensitive)
   }
 }
 
@@ -127,7 +209,9 @@ object TextInputCSVDataSource extends CSVDataSource {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      schema: StructType): Iterator[InternalRow] = {
+      requiredSchema: StructType,
+      dataSchema: StructType,
+      caseSensitive: Boolean): Iterator[InternalRow] = {
     val lines = {
       val linesReader = new HadoopFileLinesReader(file, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
@@ -136,8 +220,24 @@ object TextInputCSVDataSource extends CSVDataSource {
       }
     }
 
-    val shouldDropHeader = parser.options.headerFlag && file.start == 0
-    UnivocityParser.parseIterator(lines, shouldDropHeader, parser, schema)
+    val hasHeader = parser.options.headerFlag && file.start == 0
+    if (hasHeader) {
+      // Checking that column names in the header are matched to field names of the schema.
+      // The header will be removed from lines.
+      // Note: if there are only comments in the first block, the header would probably
+      // be not extracted.
+      CSVUtils.extractHeader(lines, parser.options).foreach { header =>
+        CSVDataSource.checkHeader(
+          header,
+          parser.tokenizer,
+          dataSchema,
+          file.filePath,
+          parser.options.enforceSchema,
+          caseSensitive)
+      }
+    }
+
+    UnivocityParser.parseIterator(lines, parser, requiredSchema)
   }
 
   override def infer(
@@ -185,7 +285,8 @@ object TextInputCSVDataSource extends CSVDataSource {
         DataSource.apply(
           sparkSession,
           paths = paths,
-          className = classOf[TextFileFormat].getName
+          className = classOf[TextFileFormat].getName,
+          options = options.parameters
         ).resolveRelation(checkFilesExist = false))
         .select("value").as[String](Encoders.STRING)
     } else {
@@ -205,12 +306,24 @@ object MultiLineCSVDataSource extends CSVDataSource {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      schema: StructType): Iterator[InternalRow] = {
+      requiredSchema: StructType,
+      dataSchema: StructType,
+      caseSensitive: Boolean): Iterator[InternalRow] = {
+    def checkHeader(header: Array[String]): Unit = {
+      CSVDataSource.checkHeaderColumnNames(
+        dataSchema,
+        header,
+        file.filePath,
+        parser.options.enforceSchema,
+        caseSensitive)
+    }
+
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
       parser.options.headerFlag,
       parser,
-      schema)
+      requiredSchema,
+      checkHeader)
   }
 
   override def infer(
@@ -250,7 +363,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
       options: CSVOptions): RDD[PortableDataStream] = {
     val paths = inputPaths.map(_.getPath)
     val name = paths.mkString(",")
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
+    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
+      options.parameters))
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration
 

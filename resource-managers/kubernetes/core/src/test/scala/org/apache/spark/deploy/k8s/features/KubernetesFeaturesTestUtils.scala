@@ -16,7 +16,9 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.{HasMetadata, PodBuilder, SecretBuilder}
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.{Container, HasMetadata, PodBuilder, SecretBuilder}
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -58,4 +60,7 @@ object KubernetesFeaturesTestUtils {
       .build())
   }
 
+  def containerHasEnvVar(container: Container, envVarName: String): Boolean = {
+    container.getEnv.asScala.exists(envVar => envVar.getName == envVarName)
+  }
 }

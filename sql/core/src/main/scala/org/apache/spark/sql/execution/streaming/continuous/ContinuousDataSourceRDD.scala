@@ -21,14 +21,14 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, RowToUnsafeDataReader}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, RowToUnsafeInputPartitionReader}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, PartitionOffset}
 import org.apache.spark.util.{NextIterator, ThreadUtils}
 
 class ContinuousDataSourceRDDPartition(
     val index: Int,
-    val readerFactory: DataReaderFactory[UnsafeRow])
+    val inputPartition: InputPartition[UnsafeRow])
   extends Partition with Serializable {
 
   // This is semantically a lazy val - it's initialized once the first time a call to
@@ -51,12 +51,12 @@ class ContinuousDataSourceRDD(
     sc: SparkContext,
     dataQueueSize: Int,
     epochPollIntervalMs: Long,
-    @transient private val readerFactories: Seq[DataReaderFactory[UnsafeRow]])
+    private val readerInputPartitions: Seq[InputPartition[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
-    readerFactories.zipWithIndex.map {
-      case (readerFactory, index) => new ContinuousDataSourceRDDPartition(index, readerFactory)
+    readerInputPartitions.zipWithIndex.map {
+      case (inputPartition, index) => new ContinuousDataSourceRDDPartition(index, inputPartition)
     }.toArray
   }
 
@@ -74,8 +74,7 @@ class ContinuousDataSourceRDD(
       val partition = split.asInstanceOf[ContinuousDataSourceRDDPartition]
       if (partition.queueReader == null) {
         partition.queueReader =
-          new ContinuousQueuedDataReader(
-            partition.readerFactory, context, dataQueueSize, epochPollIntervalMs)
+          new ContinuousQueuedDataReader(partition, context, dataQueueSize, epochPollIntervalMs)
       }
 
       partition.queueReader
@@ -96,17 +95,17 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[ContinuousDataSourceRDDPartition].readerFactory.preferredLocations()
+    split.asInstanceOf[ContinuousDataSourceRDDPartition].inputPartition.preferredLocations()
   }
 }
 
 object ContinuousDataSourceRDD {
   private[continuous] def getContinuousReader(
-      reader: DataReader[UnsafeRow]): ContinuousDataReader[_] = {
+      reader: InputPartitionReader[UnsafeRow]): ContinuousInputPartitionReader[_] = {
     reader match {
-      case r: ContinuousDataReader[UnsafeRow] => r
-      case wrapped: RowToUnsafeDataReader =>
-        wrapped.rowReader.asInstanceOf[ContinuousDataReader[Row]]
+      case r: ContinuousInputPartitionReader[UnsafeRow] => r
+      case wrapped: RowToUnsafeInputPartitionReader =>
+        wrapped.rowReader.asInstanceOf[ContinuousInputPartitionReader[Row]]
       case _ =>
         throw new IllegalStateException(s"Unknown continuous reader type ${reader.getClass}")
     }

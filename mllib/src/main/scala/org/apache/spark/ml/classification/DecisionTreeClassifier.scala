@@ -97,9 +97,11 @@ class DecisionTreeClassifier @Since("1.4.0") (
   override def setSeed(value: Long): this.type = set(seed, value)
 
   override protected def train(dataset: Dataset[_]): DecisionTreeClassificationModel = {
+    val instr = Instrumentation.create(this, dataset)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses: Int = getNumClasses(dataset)
+    instr.logNumClasses(numClasses)
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -110,8 +112,8 @@ class DecisionTreeClassifier @Since("1.4.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
 
-    val instr = Instrumentation.create(this, oldDataset)
-    instr.logParams(params: _*)
+    instr.logParams(maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
+      cacheNodeIds, checkpointInterval, impurity, seed)
 
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
@@ -125,7 +127,8 @@ class DecisionTreeClassifier @Since("1.4.0") (
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
     val instr = Instrumentation.create(this, data)
-    instr.logParams(params: _*)
+    instr.logParams(maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
+      cacheNodeIds, checkpointInterval, impurity, seed)
 
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 0L, instr = Some(instr), parentUID = Some(uid))

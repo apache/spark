@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, CharArrayWriter, InputStreamReader, StringWriter}
+import java.io._
 
 import scala.util.parsing.combinator.RegexParsers
 
@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.json.JsonInferSchema.inferField
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -526,17 +526,19 @@ case class JsonToStructs(
   override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
-  def this(child: Expression, schema: Expression) =
+  def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
-      schema = JsonExprUtils.validateSchemaLiteral(schema),
-      options = Map.empty[String, String],
+      schema = JsonExprUtils.evalSchemaExpr(schema),
+      options = options,
       child = child,
       timeZoneId = None,
       forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
+  def this(child: Expression, schema: Expression) = this(child, schema, Map.empty[String, String])
+
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
-      schema = JsonExprUtils.validateSchemaLiteral(schema),
+      schema = JsonExprUtils.evalSchemaExpr(schema),
       options = JsonExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None,
@@ -548,7 +550,7 @@ case class JsonToStructs(
       forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+    case _: StructType | ArrayType(_: StructType, _) | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input schema ${nullableSchema.simpleString} must be a struct or an array of structs.")
@@ -558,6 +560,7 @@ case class JsonToStructs(
   lazy val rowSchema = nullableSchema match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
   }
 
   // This converts parsed rows to the desired output by the given schema.
@@ -567,6 +570,8 @@ case class JsonToStructs(
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
     case ArrayType(_: StructType, _) =>
       (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+    case _: MapType =>
+      (rows: Seq[InternalRow]) => rows.head.getMap(0)
   }
 
   @transient
@@ -613,6 +618,11 @@ case class JsonToStructs(
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+
+  override def sql: String = schema match {
+    case _: MapType => "entries"
+    case _ => super.sql
+  }
 }
 
 /**
@@ -737,11 +747,44 @@ case class StructsToJson(
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
 }
 
+/**
+ * A function infers schema of JSON string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(json[, options]) - Returns schema in the DDL format of JSON string.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('[{"col":0}]');
+       array<struct<col:int>>
+  """,
+  since = "2.4.0")
+case class SchemaOfJson(child: Expression)
+  extends UnaryExpression with String2StringExpression with CodegenFallback {
+
+  private val jsonOptions = new JSONOptions(Map.empty, "UTC")
+  private val jsonFactory = new JsonFactory()
+  jsonOptions.setJacksonOptions(jsonFactory)
+
+  override def convert(v: UTF8String): UTF8String = {
+    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
+      parser.nextToken()
+      inferField(parser, jsonOptions)
+    }
+
+    UTF8String.fromString(dt.catalogString)
+  }
+}
+
 object JsonExprUtils {
 
-  def validateSchemaLiteral(exp: Expression): StructType = exp match {
-    case Literal(s, StringType) => CatalystSqlParser.parseTableSchema(s.toString)
-    case e => throw new AnalysisException(s"Expected a string literal instead of $e")
+  def evalSchemaExpr(exp: Expression): DataType = exp match {
+    case Literal(s, StringType) => DataType.fromDDL(s.toString)
+    case e @ SchemaOfJson(_: Literal) =>
+      val ddlSchema = e.eval().asInstanceOf[UTF8String]
+      DataType.fromDDL(ddlSchema.toString)
+    case e => throw new AnalysisException(
+      "Schema should be specified in DDL format as a string literal" +
+      s" or output of the schema_of_json function instead of ${e.sql}")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {

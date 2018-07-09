@@ -127,6 +127,30 @@ class MicroBatchExecution(
   }
 
   /**
+   * Signifies whether current batch (i.e. for the batch `currentBatchId`) has been constructed
+   * (i.e. written to the offsetLog) and is ready for execution.
+   */
+  private var isCurrentBatchConstructed = false
+
+  /**
+   * Signals to the thread executing micro-batches that it should stop running after the next
+   * batch. This method blocks until the thread stops running.
+   */
+  override def stop(): Unit = {
+    // Set the state to TERMINATED so that the batching thread knows that it was interrupted
+    // intentionally
+    state.set(TERMINATED)
+    if (queryExecutionThread.isAlive) {
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+      queryExecutionThread.interrupt()
+      queryExecutionThread.join()
+      // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+    }
+    logInfo(s"Query $prettyIdString was stopped")
+  }
+
+  /**
    * Repeatedly attempts to run batches as data arrives.
    */
   protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
@@ -136,7 +160,6 @@ class MicroBatchExecution(
 
     triggerExecutor.execute(() => {
       if (isActive) {
-        var currentBatchIsRunnable = false // Whether the current batch is runnable / has been run
         var currentBatchHasNewData = false // Whether the current batch had new data
 
         startTrigger()
@@ -157,7 +180,9 @@ class MicroBatchExecution(
           // new data to process as `constructNextBatch` may decide to run a batch for
           // state cleanup, etc. `isNewDataAvailable` will be updated to reflect whether new data
           // is available or not.
-          currentBatchIsRunnable = constructNextBatch(noDataBatchesEnabled)
+          if (!isCurrentBatchConstructed) {
+            isCurrentBatchConstructed = constructNextBatch(noDataBatchesEnabled)
+          }
 
           // Remember whether the current batch has data or not. This will be required later
           // for bookkeeping after running the batch, when `isNewDataAvailable` will have changed
@@ -165,7 +190,7 @@ class MicroBatchExecution(
           currentBatchHasNewData = isNewDataAvailable
 
           currentStatus = currentStatus.copy(isDataAvailable = isNewDataAvailable)
-          if (currentBatchIsRunnable) {
+          if (isCurrentBatchConstructed) {
             if (currentBatchHasNewData) updateStatusMessage("Processing new data")
             else updateStatusMessage("No new data but cleaning up state")
             runBatch(sparkSessionForStream)
@@ -176,9 +201,12 @@ class MicroBatchExecution(
 
         finishTrigger(currentBatchHasNewData)  // Must be outside reportTimeTaken so it is recorded
 
-        // If the current batch has been executed, then increment the batch id, else there was
-        // no data to execute the batch
-        if (currentBatchIsRunnable) currentBatchId += 1 else Thread.sleep(pollingDelayMs)
+        // If the current batch has been executed, then increment the batch id and reset flag.
+        // Otherwise, there was no data to execute the batch and sleep for some time
+        if (isCurrentBatchConstructed) {
+          currentBatchId += 1
+          isCurrentBatchConstructed = false
+        } else Thread.sleep(pollingDelayMs)
       }
       updateStatusMessage("Waiting for next trigger")
       isActive
@@ -213,6 +241,7 @@ class MicroBatchExecution(
         /* First assume that we are re-executing the latest known batch
          * in the offset log */
         currentBatchId = latestBatchId
+        isCurrentBatchConstructed = true
         availableOffsets = nextOffsets.toStreamProgress(sources)
         /* Initialize committed offsets to a committed batch, which at this
          * is the second latest batch id in the offset log. */
@@ -251,6 +280,7 @@ class MicroBatchExecution(
                   // here, so we do nothing here.
               }
               currentBatchId = latestCommittedBatchId + 1
+              isCurrentBatchConstructed = false
               committedOffsets ++= availableOffsets
               // Construct a new batch be recomputing availableOffsets
             } else if (latestCommittedBatchId < latestBatchId - 1) {
@@ -295,11 +325,8 @@ class MicroBatchExecution(
    * - If either of the above is true, then construct the next batch by committing to the offset
    *   log that range of offsets that the next batch will process.
    */
-  private def constructNextBatch(noDataBatchesEnables: Boolean): Boolean = withProgressLocked {
-    // If new data is already available that means this method has already been called before
-    // and it must have already committed the offset range of next batch to the offset log.
-    // Hence do nothing, just return true.
-    if (isNewDataAvailable) return true
+  private def constructNextBatch(noDataBatchesEnabled: Boolean): Boolean = withProgressLocked {
+    if (isCurrentBatchConstructed) return true
 
     // Generate a map from each unique source to the next available offset.
     val latestOffsets: Map[BaseStreamingSource, Option[Offset]] = uniqueSources.map {
@@ -330,9 +357,14 @@ class MicroBatchExecution(
       batchTimestampMs = triggerClock.getTimeMillis())
 
     // Check whether next batch should be constructed
-    val lastExecutionRequiresAnotherBatch = noDataBatchesEnables &&
+    val lastExecutionRequiresAnotherBatch = noDataBatchesEnabled &&
       Option(lastExecution).exists(_.shouldRunAnotherBatch(offsetSeqMetadata))
     val shouldConstructNextBatch = isNewDataAvailable || lastExecutionRequiresAnotherBatch
+    logTrace(
+      s"noDataBatchesEnabled = $noDataBatchesEnabled, " +
+      s"lastExecutionRequiresAnotherBatch = $lastExecutionRequiresAnotherBatch, " +
+      s"isNewDataAvailable = $isNewDataAvailable, " +
+      s"shouldConstructNextBatch = $shouldConstructNextBatch")
 
     if (shouldConstructNextBatch) {
       // Commit the next batch offset range to the offset log
