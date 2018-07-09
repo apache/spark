@@ -179,11 +179,13 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure(
         s"$prettyName expects a positive even number of arguments.")
-    } else if (keys.map(_.dataType).distinct.length > 1) {
+    } else if (keys.length > 1 &&
+      keys.map(_.dataType).sliding(2, 1).exists { case Seq(t1, t2) => !t1.sameType(t2) }) {
       TypeCheckResult.TypeCheckFailure(
         "The given keys of function map should all be the same type, but they are " +
           keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else if (values.map(_.dataType).distinct.length > 1) {
+    } else if (values.length > 1 &&
+      values.map(_.dataType).sliding(2, 1).exists { case Seq(t1, t2) => !t1.sameType(t2) }) {
       TypeCheckResult.TypeCheckFailure(
         "The given values of function map should all be the same type, but they are " +
           values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
@@ -194,8 +196,10 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def dataType: DataType = {
     MapType(
-      keyType = keys.headOption.map(_.dataType).getOrElse(StringType),
-      valueType = values.headOption.map(_.dataType).getOrElse(StringType),
+      keyType =
+        TypeCoercion.findWiderNullablilityType(keys.map(_.dataType)).getOrElse(StringType),
+      valueType =
+        TypeCoercion.findWiderNullablilityType(values.map(_.dataType)).getOrElse(StringType),
       valueContainsNull = values.exists(_.nullable))
   }
 

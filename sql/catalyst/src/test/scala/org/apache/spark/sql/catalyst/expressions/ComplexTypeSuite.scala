@@ -191,6 +191,18 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
         null, null)
     }
+
+    val map = CreateMap(Seq(
+      Literal.create(intSeq, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(strSeq, ArrayType(StringType, containsNull = false)),
+      Literal.create(intSeq :+ null, ArrayType(IntegerType, containsNull = true)),
+      Literal.create(strSeq :+ null, ArrayType(StringType, containsNull = true))))
+    assert(map.dataType ===
+      MapType(
+        ArrayType(IntegerType, containsNull = true),
+        ArrayType(StringType, containsNull = true),
+        valueContainsNull = false))
+    checkEvaluation(map, createMap(Seq(intSeq, intSeq :+ null), Seq(strSeq, strSeq :+ null)))
   }
 
   test("MapFromArrays") {
