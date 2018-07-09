@@ -3262,23 +3262,13 @@ case class ArrayDistinct(child: Expression)
   override def prettyName: String = "array_distinct"
 }
 
-object ArraySetLike {
-  def throwUnionLengthOverflowException(length: Int): Unit = {
-    throw new RuntimeException(s"Unsuccessful try to union arrays with $length " +
-      s"elements due to exceeding the array size limit " +
-      s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
-  }
-}
-
-
+/**
+ * Will become common base class for [[ArrayUnion]], ArrayIntersect, and ArrayExcept.
+ */
 abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
   override def dataType: DataType = {
-    val dataTypes = children.map(_.dataType)
-    dataTypes.headOption.map {
-      case ArrayType(et, _) =>
-        ArrayType(et, dataTypes.exists(_.asInstanceOf[ArrayType].containsNull))
-      case dt => dt
-    }.getOrElse(StringType)
+    val dataTypes = children.map(_.dataType.asInstanceOf[ArrayType])
+    ArrayType(elementType, dataTypes.exists(_.containsNull))
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -3300,6 +3290,15 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
     case _ => false
   }
 }
+
+object ArraySetLike {
+  def throwUnionLengthOverflowException(length: Int): Unit = {
+    throw new RuntimeException(s"Unsuccessful try to union arrays with $length " +
+      s"elements due to exceeding the array size limit " +
+      s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+  }
+}
+
 
 /**
  * Returns an array of the elements in the union of x and y, without duplicates
@@ -3353,7 +3352,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
     // store elements into resultArray
     var nullElementSize = 0
     var pos = 0
-    Seq(array1, array2).foreach(array => {
+    Seq(array1, array2).foreach { array =>
       var i = 0
       while (i < array.numElements()) {
         val size = if (!isLongType) hsInt.size else hsLong.size
@@ -3380,7 +3379,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
         }
         i += 1
       }
-    })
+    }
     pos
   }
 
@@ -3396,7 +3395,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
           hsInt = new OpenHashSet[Int]
           val elements = evalIntLongPrimitiveType(array1, array2, null, false)
           hsInt = new OpenHashSet[Int]
-          val resultArray = if (UnsafeArrayData.useGenericArrayData(
+          val resultArray = if (UnsafeArrayData.canUseGenericArrayData(
             IntegerType.defaultSize, elements)) {
             new GenericArrayData(new Array[Any](elements))
           } else {
@@ -3411,7 +3410,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
           hsLong = new OpenHashSet[Long]
           val elements = evalIntLongPrimitiveType(array1, array2, null, true)
           hsLong = new OpenHashSet[Long]
-          val resultArray = if (UnsafeArrayData.useGenericArrayData(
+          val resultArray = if (UnsafeArrayData.canUseGenericArrayData(
             LongType.defaultSize, elements)) {
             new GenericArrayData(new Array[Any](elements))
           } else {

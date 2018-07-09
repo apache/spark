@@ -1171,7 +1171,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a00 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, containsNull = false))
     val a02 = Literal.create(Seq(1, 2, null, 4, 5), ArrayType(IntegerType, containsNull = true))
-    val a03 = Literal.create(Seq(-5, 4, -3, 2, -1), ArrayType(IntegerType, containsNull = false))
+    val a03 = Literal.create(Seq(-5, 4, -3, 2, 4), ArrayType(IntegerType, containsNull = false))
     val a04 = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
     val a05 = Literal.create(Seq[Byte](1, 2, 3), ArrayType(ByteType, containsNull = false))
     val a06 = Literal.create(Seq[Byte](4, 2), ArrayType(ByteType, containsNull = false))
@@ -1191,17 +1191,14 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a30 = Literal.create(Seq(null, null), ArrayType(IntegerType))
     val a31 = Literal.create(null, ArrayType(StringType))
 
-    checkEvaluation(ArrayUnion(a00, a01), UnsafeArrayData.fromPrimitiveArray(Array(1, 2, 3, 4)))
-    checkEvaluation(ArrayUnion(a02, a03), Seq(1, 2, null, 4, 5, -5, -3, -1))
-    checkEvaluation(ArrayUnion(a03, a02), Seq(-5, 4, -3, 2, -1, 1, null, 5))
+    checkEvaluation(ArrayUnion(a00, a01), Seq(1, 2, 3, 4))
+    checkEvaluation(ArrayUnion(a02, a03), Seq(1, 2, null, 4, 5, -5, -3))
+    checkEvaluation(ArrayUnion(a03, a02), Seq(-5, 4, -3, 2, 1, null, 5))
     checkEvaluation(ArrayUnion(a02, a04), Seq(1, 2, null, 4, 5))
-    checkEvaluation(
-      ArrayUnion(a05, a06), UnsafeArrayData.fromPrimitiveArray(Array[Byte](1, 2, 3, 4)))
-    checkEvaluation(
-      ArrayUnion(a07, a08), UnsafeArrayData.fromPrimitiveArray(Array[Short](1, 2, 3, 4)))
+    checkEvaluation(ArrayUnion(a05, a06), Seq[Byte](1, 2, 3, 4))
+    checkEvaluation(ArrayUnion(a07, a08), Seq[Short](1, 2, 3, 4))
 
-    checkEvaluation(
-      ArrayUnion(a10, a11), UnsafeArrayData.fromPrimitiveArray(Array(1L, 2L, 3L, 4L)))
+    checkEvaluation(ArrayUnion(a10, a11), Seq(1L, 2L, 3L, 4L))
     checkEvaluation(ArrayUnion(a12, a13), Seq(1L, 2L, null, 4L, 5L, -5L, -3L, -1L))
     checkEvaluation(ArrayUnion(a13, a12), Seq(-5L, 4L, -3L, 2L, -1L, 1L, null, 5L))
     checkEvaluation(ArrayUnion(a12, a14), Seq(1L, 2L, null, 4L, 5L))
