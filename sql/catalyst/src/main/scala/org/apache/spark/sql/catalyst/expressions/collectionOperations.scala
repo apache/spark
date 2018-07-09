@@ -2007,7 +2007,8 @@ case class Concat(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
+  override def dataType: DataType =
+    TypeCoercion.findWiderNullablilityType(children.map(_.dataType)).getOrElse(StringType)
 
   lazy val javaType: String = CodeGenerator.javaType(dataType)
 
