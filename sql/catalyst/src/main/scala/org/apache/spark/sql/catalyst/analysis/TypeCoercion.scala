@@ -264,6 +264,23 @@ object TypeCoercion {
     }
   }
 
+  def findWiderNullablilityType(types: Seq[DataType]): Option[DataType] = {
+    def find(dt1: DataType, dt2: DataType): Option[DataType] = {
+      (dt1, dt2) match {
+        case (t1, t2) if t1 == t2 => Some(t1)
+        case _ => findTypeForComplex(dt1, dt2, find)
+      }
+    }
+    if (types.isEmpty) {
+      None
+    } else {
+      types.tail.foldLeft(Option(types.head)) {
+        case (Some(t1), t2) => find(t1, t2)
+        case _ => None
+      }
+    }
+  }
+
   /**
    * Widens numeric types and converts strings to numbers when appropriate.
    *
