@@ -304,9 +304,9 @@ case class LoadDataCommand(
       }
     }
 
-    val loadPath =
+    val loadPath = {
+      val uri = Utils.resolveURI(path)
       if (isLocal) {
-        val uri = Utils.resolveURI(path)
         val file = new File(uri.getPath)
         val exists = if (file.getAbsolutePath.contains("*")) {
           val fileSystem = FileSystems.getDefault
@@ -341,7 +341,6 @@ case class LoadDataCommand(
         }
         uri
       } else {
-        val uri = new URI(path)
         val hdfsUri = if (uri.getScheme() != null && uri.getAuthority() != null) {
           uri
         } else {
@@ -390,6 +389,7 @@ case class LoadDataCommand(
         }
         hdfsUri
       }
+    }
 
     if (partition.nonEmpty) {
       catalog.loadPartition(
