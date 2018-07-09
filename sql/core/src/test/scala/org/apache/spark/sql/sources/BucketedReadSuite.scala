@@ -409,14 +409,25 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   }
 
   test("avoid shuffle when join keys are a super-set of bucket keys") {
-    val bucketSpec = Some(BucketSpec(8, Seq("i"), Nil))
-    val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
-    val bucketedTableTestSpecRight = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
-    testBucketing(
-      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
-      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
-      joinCondition = joinCondition(Seq("i", "j"))
-    )
+    Seq("i", "j").foreach { bucketColumn =>
+      val bucketSpec = Some(BucketSpec(8, Seq(s"$bucketColumn"), Nil))
+
+      val bucketedTableTestSpecLeft1 = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
+      val bucketedTableTestSpecRight1 = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
+      testBucketing(
+        bucketedTableTestSpecLeft = bucketedTableTestSpecLeft1,
+        bucketedTableTestSpecRight = bucketedTableTestSpecRight1,
+        joinCondition = joinCondition(Seq("i", "j"))
+      )
+
+      val bucketedTableTestSpecLeft2 = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
+      val bucketedTableTestSpecRight2 = BucketedTableTestSpec(None, expectedShuffle = true)
+      testBucketing(
+        bucketedTableTestSpecLeft = bucketedTableTestSpecLeft2,
+        bucketedTableTestSpecRight = bucketedTableTestSpecRight2,
+        joinCondition = joinCondition(Seq("i", "j"))
+      )
+    }
   }
 
   test("only shuffle one side when join bucketed table and non-bucketed table") {
