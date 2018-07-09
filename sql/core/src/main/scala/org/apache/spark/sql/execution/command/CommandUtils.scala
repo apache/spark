@@ -48,7 +48,8 @@ object CommandUtils extends Logging {
     }
   }
 
-  class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serializable {
+  private case class SerializablePathFilter(stagingDir: String)
+    extends PathFilter with Serializable {
     override def accept(path: Path): Boolean = {
       val fileName = path.getName
       (!fileName.startsWith(stagingDir) &&
@@ -67,7 +68,7 @@ object CommandUtils extends Logging {
       val paths = partitions.map(x => new Path(x.storage.locationUri.get.getPath))
       val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
       val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,
-        sessionState.newHadoopConf(), new PathFilterIgnoreNonData(stagingDir),
+        sessionState.newHadoopConf(), SerializablePathFilter(stagingDir),
         spark).flatMap(_._2)
       fileStatusSeq.map(_.getLen).sum
     }
