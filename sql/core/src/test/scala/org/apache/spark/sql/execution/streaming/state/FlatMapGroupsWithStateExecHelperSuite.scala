@@ -35,7 +35,6 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
   // ============================ StateManagerImplV1 ============================
 
-
   test(s"StateManager v1 - primitive type - without timestamp") {
     val schema = new StructType().add("value", IntegerType, nullable = false)
     testStateManagerWithoutTimestamp[Int](version = 1, schema, Seq(0, 10))
@@ -64,7 +63,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
     testStateManagerWithoutTimestamp[NestedStruct](version = 1, schema, testValues)
 
-    // Verify the limitation of v1 with null
+    // Verify the limitation of v1 with null state
     intercept[Exception] {
       testStateManagerWithoutTimestamp[NestedStruct](version = 1, schema, Seq(null))
     }
@@ -87,7 +86,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
     testStateManagerWithTimestamp[NestedStruct](version = 1, schema, testValues)
 
-    // Verify the limitation of v1 with null
+    // Verify the limitation of v1 with null state
     intercept[Exception] {
       testStateManagerWithTimestamp[NestedStruct](version = 1, schema, Seq(null))
     }

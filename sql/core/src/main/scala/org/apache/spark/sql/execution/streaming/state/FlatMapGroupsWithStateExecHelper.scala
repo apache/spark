@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, CaseWhen, CreateNamedStruct, GenericInternalRow, GetStructField, If, IsNull, Literal, SpecificInternalRow, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, CaseWhen, CreateNamedStruct, Expression, GenericInternalRow, GetStructField, If, IsNull, Literal, SpecificInternalRow, UnsafeRow}
 import org.apache.spark.sql.execution.ObjectOperator
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
@@ -27,6 +26,9 @@ import org.apache.spark.sql.types._
 
 
 object FlatMapGroupsWithStateExecHelper {
+
+  val DEFAULT_STATE_MANAGER_VERSION = 2
+
   /**
    * Class to capture deserialized state and timestamp return by the state manager.
    * This is intended for reuse.
@@ -75,19 +77,19 @@ object FlatMapGroupsWithStateExecHelper {
 
   private abstract class StateManagerImplBase(shouldStoreTimestamp: Boolean) extends StateManager {
 
-    protected def stateRowToObject(row: UnsafeRow): Any
-    protected def stateObjectToRow(state: Any): UnsafeRow
+    protected def stateSerializerExprs: Seq[Expression]
+    protected def stateDeserializerExpr: Expression
     protected def timeoutTimestampOrdinalInRow: Int
 
     /** Get deserialized state and corresponding timeout timestamp for a key */
     override def getState(store: StateStore, keyRow: UnsafeRow): StateData = {
       val stateRow = store.get(keyRow)
-      stateDataForGets.withNew(keyRow, stateRow, stateRowToObject(stateRow), getTimestamp(stateRow))
+      stateDataForGets.withNew(keyRow, stateRow, getStateObject(stateRow), getTimestamp(stateRow))
     }
 
     /** Put state and timeout timestamp for a key */
     override def putState(store: StateStore, key: UnsafeRow, state: Any, timestamp: Long): Unit = {
-      val stateRow = stateObjectToRow(state)
+      val stateRow = getStateRow(state)
       setTimestamp(stateRow, timestamp)
       store.put(key, stateRow)
     }
@@ -99,11 +101,23 @@ object FlatMapGroupsWithStateExecHelper {
     override def getAllState(store: StateStore): Iterator[StateData] = {
       val stateData = StateData()
       store.getRange(None, None).map { p =>
-        stateData.withNew(p.key, p.value, stateRowToObject(p.value), getTimestamp(p.value))
+        stateData.withNew(p.key, p.value, getStateObject(p.value), getTimestamp(p.value))
       }
     }
 
+    private lazy val stateSerializerFunc = ObjectOperator.serializeObjectToRow(stateSerializerExprs)
+    private lazy val stateDeserializerFunc = {
+      ObjectOperator.deserializeRowToObject(stateDeserializerExpr, stateSchema.toAttributes)
+    }
     private lazy val stateDataForGets = StateData()
+
+    protected def getStateObject(row: UnsafeRow): Any = {
+      if (row != null) stateDeserializerFunc(row) else null
+    }
+
+    protected def getStateRow(obj: Any): UnsafeRow = {
+      stateSerializerFunc(obj)
+    }
 
     /** Returns the timeout timestamp of a state row is set */
     private def getTimestamp(stateRow: UnsafeRow): Long = {
@@ -133,11 +147,11 @@ object FlatMapGroupsWithStateExecHelper {
 
     override val stateSchema: StructType = stateAttributes.toStructType
 
-    override protected val timeoutTimestampOrdinalInRow: Int = {
+    override val timeoutTimestampOrdinalInRow: Int = {
       stateAttributes.indexOf(timestampTimeoutAttribute)
     }
 
-    private val stateSerializerExprs = {
+    override val stateSerializerExprs: Seq[Expression] = {
       val encoderSerializer = stateEncoder.namedExpressions
       if (shouldStoreTimestamp) {
         encoderSerializer :+ Literal(GroupStateImpl.NO_TIMESTAMP)
@@ -146,25 +160,11 @@ object FlatMapGroupsWithStateExecHelper {
       }
     }
 
-    private val stateDeserializerExpr = {
-      // Note that this must be done in the driver, as resolving and binding of deserializer
-      // expressions to the encoded type can be safely done only in the driver.
-      stateEncoder.resolveAndBind().deserializer
-    }
+    override val stateDeserializerExpr: Expression = stateEncoder.resolveAndBind().deserializer
 
-    private lazy val stateSerializerFunc = ObjectOperator.serializeObjectToRow(stateSerializerExprs)
-
-    private lazy val stateDeserializerFunc = {
-      ObjectOperator.deserializeRowToObject(stateDeserializerExpr, stateSchema.toAttributes)
-    }
-
-    override protected def stateRowToObject(row: UnsafeRow): Any = {
-      if (row != null) stateDeserializerFunc(row) else null
-    }
-
-    override protected def stateObjectToRow(obj: Any): UnsafeRow = {
+    override protected def getStateRow(obj: Any): UnsafeRow = {
       require(obj != null, "State object cannot be null")
-      stateSerializerFunc(obj)
+      super.getStateRow(obj)
     }
   }
 
@@ -182,9 +182,9 @@ object FlatMapGroupsWithStateExecHelper {
 
     // Ordinals of the information stored in the state row
     private val nestedStateOrdinal = 0
-    override protected val timeoutTimestampOrdinalInRow = 1
+    override val timeoutTimestampOrdinalInRow = 1
 
-    private val stateSerializerExprs = {
+    override val stateSerializerExprs: Seq[Expression] = {
       val boundRefToSpecificInternalRow = BoundReference(
         0, stateEncoder.serializer.head.collect { case b: BoundReference => b.dataType }.head, true)
 
@@ -203,7 +203,7 @@ object FlatMapGroupsWithStateExecHelper {
       }
     }
 
-    private val stateDeserializerExpr = {
+    override val stateDeserializerExpr: Expression = {
       // Note that this must be done in the driver, as resolving and binding of deserializer
       // expressions to the encoded type can be safely done only in the driver.
       val boundRefToNestedState =
@@ -212,20 +212,6 @@ object FlatMapGroupsWithStateExecHelper {
         case BoundReference(ordinal, _, _) => GetStructField(boundRefToNestedState, ordinal)
       }
       CaseWhen(Seq(IsNull(boundRefToNestedState) -> Literal(null)), elseValue = deserExpr)
-    }
-
-    private lazy val stateSerializerFunc = ObjectOperator.serializeObjectToRow(stateSerializerExprs)
-
-    private lazy val stateDeserializerFunc = {
-      ObjectOperator.deserializeRowToObject(stateDeserializerExpr, stateSchema.toAttributes)
-    }
-
-    override protected def stateRowToObject(row: UnsafeRow): Any = {
-      if (row != null) stateDeserializerFunc(row) else null
-    }
-
-    override protected def stateObjectToRow(obj: Any): UnsafeRow = {
-      stateSerializerFunc(obj)
     }
   }
 }
