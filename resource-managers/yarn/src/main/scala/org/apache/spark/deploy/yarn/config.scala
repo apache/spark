@@ -243,6 +243,14 @@ package object config {
       "that hosts fs.defaultFS does not need to be listed here.")
     .fallbackConf(NAMENODES_TO_ACCESS)
 
+  private[spark] val FILESYSTEMS_TO_ACCESS_ALL =
+    ConfigBuilder("spark.yarn.access.all.hadoopFileSystems")
+      .doc("Whether to get tokens of all filesystem configured in hdfs-site.xml. " +
+        "The default value is false. " +
+        "If true, a filesystem failed to get token may cause the entire job failed.")
+      .booleanConf
+      .createWithDefault(false)
+
   /* Rolled log aggregation configuration. */
 
   private[spark] val ROLLED_LOG_INCLUDE_PATTERN =
