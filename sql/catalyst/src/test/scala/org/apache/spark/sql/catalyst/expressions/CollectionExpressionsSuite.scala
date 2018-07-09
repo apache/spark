@@ -222,6 +222,27 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(MapConcat(Seq(m6, m5)).dataType.valueContainsNull)
     assert(!MapConcat(Seq(m1, m2)).nullable)
     assert(MapConcat(Seq(m1, mNull)).nullable)
+
+    val mapConcat = MapConcat(Seq(
+      Literal.create(Map(Seq(1, 2) -> Seq("a", "b")),
+        MapType(
+          ArrayType(IntegerType, containsNull = false),
+          ArrayType(StringType, containsNull = false),
+          valueContainsNull = false)),
+      Literal.create(Map(Seq(3, 4, null) -> Seq("c", "d", null), Seq(6) -> null),
+        MapType(
+          ArrayType(IntegerType, containsNull = true),
+          ArrayType(StringType, containsNull = true),
+          valueContainsNull = true))))
+    assert(mapConcat.dataType ===
+      MapType(
+        ArrayType(IntegerType, containsNull = true),
+        ArrayType(StringType, containsNull = true),
+        valueContainsNull = true))
+    checkEvaluation(mapConcat, Map(
+      Seq(1, 2) -> Seq("a", "b"),
+      Seq(3, 4, null) -> Seq("c", "d", null),
+      Seq(6) -> null))
   }
 
   test("MapFromEntries") {

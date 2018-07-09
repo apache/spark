@@ -526,17 +526,10 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: MapType = {
-    val dt = children.map(_.dataType.asInstanceOf[MapType]).headOption
+  override def dataType: MapType =
+    TypeCoercion.findWiderNullablilityType(children.map(_.dataType))
+      .map(_.asInstanceOf[MapType])
       .getOrElse(MapType(StringType, StringType))
-    val valueContainsNull = children.map(_.dataType.asInstanceOf[MapType])
-      .exists(_.valueContainsNull)
-    if (dt.valueContainsNull != valueContainsNull) {
-      dt.copy(valueContainsNull = valueContainsNull)
-    } else {
-      dt
-    }
-  }
 
   override def nullable: Boolean = children.exists(_.nullable)
 
