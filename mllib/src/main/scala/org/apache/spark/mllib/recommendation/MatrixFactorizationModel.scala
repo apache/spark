@@ -27,7 +27,7 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.internal.Logging
@@ -75,27 +75,16 @@ class MatrixFactorizationModel @Since("0.8.0") (
     }
   }
 
-  /** Check for the invalid user. */
-  private def validateUser(user: Int): Unit = {
-    if (userFeatures.lookup(user).isEmpty) {
-      throw new SparkException(s"UserId: $user not found in the model")
-    }
-  }
-
-  /** Check for the invalid product. */
-  private def validateProduct(product: Int): Unit = {
-    if (productFeatures.lookup(product).isEmpty) {
-      throw new SparkException(s"ProductId: $product not found in the model")
-    }
-  }
-
   /** Predict the rating of one user for one product. */
   @Since("0.8.0")
   def predict(user: Int, product: Int): Double = {
-    validateUser(user)
-    val userVector = userFeatures.lookup(user).head
-    validateProduct(product)
-    val productVector = productFeatures.lookup(product).head
+    val userFeatureSeq = userFeatures.lookup(user)
+    require(userFeatureSeq.nonEmpty, s"userId: $user not found in the model")
+    val productFeatureSeq = productFeatures.lookup(product)
+    require(productFeatureSeq.nonEmpty, s"productId: $product not found in the model")
+
+    val userVector = userFeatureSeq.head
+    val productVector = productFeatureSeq.head
     blas.ddot(rank, userVector, 1, productVector, 1)
   }
 
@@ -181,8 +170,9 @@ class MatrixFactorizationModel @Since("0.8.0") (
    */
   @Since("1.1.0")
   def recommendProducts(user: Int, num: Int): Array[Rating] = {
-    validateUser(user)
-    MatrixFactorizationModel.recommend(userFeatures.lookup(user).head, productFeatures, num)
+    val userFeatureSeq = userFeatures.lookup(user)
+    require(userFeatureSeq.nonEmpty, s"userId: $user not found in the model")
+    MatrixFactorizationModel.recommend(userFeatureSeq.head, productFeatures, num)
       .map(t => Rating(user, t._1, t._2))
   }
 
@@ -200,8 +190,9 @@ class MatrixFactorizationModel @Since("0.8.0") (
    */
   @Since("1.1.0")
   def recommendUsers(product: Int, num: Int): Array[Rating] = {
-    validateProduct(product)
-    MatrixFactorizationModel.recommend(productFeatures.lookup(product).head, userFeatures, num)
+    val productFeatureSeq = productFeatures.lookup(product)
+    require(productFeatureSeq.nonEmpty, s"productId: $product not found in the model")
+    MatrixFactorizationModel.recommend(productFeatureSeq.head, userFeatures, num)
       .map(t => Rating(t._1, product, t._2))
   }
 

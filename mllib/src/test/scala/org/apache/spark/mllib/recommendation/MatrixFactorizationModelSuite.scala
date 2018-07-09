@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
@@ -74,18 +74,23 @@ class MatrixFactorizationModelSuite extends SparkFunSuite with MLlibTestSparkCon
 
   test("invalid user and product") {
     val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
-    assert(intercept[SparkException] {
+
+    intercept[IllegalArgumentException] {
+      // invalid user
       model.predict(5, 2)
-    }.getMessage.contains("UserId: 5 not found in the model"))
-    assert(intercept[SparkException] {
+    }
+    intercept[IllegalArgumentException] {
+      // invalid product
       model.predict(0, 5)
-   }.getMessage.contains("ProductId: 5 not found in the model"))
-    assert(intercept[SparkException] {
+    }
+    intercept[IllegalArgumentException] {
+      // invalid user
       model.recommendProducts(5, 2)
-    }.getMessage.contains("UserId: 5 not found in the model"))
-    assert(intercept[SparkException] {
+    }
+    intercept[IllegalArgumentException] {
+      // invalid product
       model.recommendUsers(5, 2)
-    }.getMessage.contains("ProductId: 5 not found in the model"))
+    }
   }
 
   test("batch predict API recommendProductsForUsers") {
