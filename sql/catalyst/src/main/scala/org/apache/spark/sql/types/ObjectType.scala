@@ -43,7 +43,7 @@ case class ObjectType(cls: Class[_]) extends DataType {
 
   def asNullable: DataType = this
 
-  override def simpleString: String = cls.getName
+  override def simpleString: String = s"Object[${cls.getName}]"
 
   override def acceptsType(other: DataType): Boolean = other match {
     case ObjectType(otherCls) => cls.isAssignableFrom(otherCls)
