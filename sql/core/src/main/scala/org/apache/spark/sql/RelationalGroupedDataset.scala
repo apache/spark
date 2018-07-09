@@ -452,7 +452,7 @@ class RelationalGroupedDataset protected[sql](
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       "Must pass a grouped map udf")
     require(expr.dataType.isInstanceOf[StructType],
-      "The returnType of the udf must be a StructType")
+      s"The returnType of the udf must be a ${StructType.simpleString}")
 
     val groupingNamedExpressions = groupingExprs.map {
       case ne: NamedExpression => ne

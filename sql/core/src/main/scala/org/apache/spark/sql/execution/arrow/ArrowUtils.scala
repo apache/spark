@@ -47,7 +47,8 @@ object ArrowUtils {
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType =>
       if (timeZoneId == null) {
-        throw new UnsupportedOperationException("TimestampType must supply timeZoneId parameter")
+        throw new UnsupportedOperationException(
+          s"${TimestampType.simpleString} must supply timeZoneId parameter")
       } else {
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       }

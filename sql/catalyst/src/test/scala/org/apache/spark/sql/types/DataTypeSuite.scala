@@ -154,7 +154,7 @@ class DataTypeSuite extends SparkFunSuite {
       left.merge(right)
     }.getMessage
     assert(message.equals("Failed to merge fields 'b' and 'b'. " +
-      "Failed to merge incompatible data types FloatType and LongType"))
+      "Failed to merge incompatible data types float and bigint"))
   }
 
   test("existsRecursively") {
