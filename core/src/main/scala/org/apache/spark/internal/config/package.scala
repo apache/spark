@@ -563,4 +563,12 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
+
+  private[spark] val BUFFER_PAGE_SIZE =
+    ConfigBuilder("spark.buffer.pageSize")
+      .internal()
+      .doc("The page size(in bytes) of the data buffers used in Sorter, HashMap, etc.")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "page size must be positive.")
+      .createOptional
 }
