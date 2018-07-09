@@ -205,7 +205,7 @@ object YarnSparkHadoopUtil {
     // Add the list of available namenodes for all namespaces in HDFS federation.
     // If ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens for its
     // namespaces.
-    val hadoopFilesystems = if (accessAllFileSystem || stagingFS.getScheme == "viewfs") {
+    val hadoopFilesystems = if (!accessAllFileSystem || stagingFS.getScheme == "viewfs") {
       Set.empty
     } else {
       val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
