@@ -5930,7 +5930,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
         @F.pandas_udf('key long, col string', F.PandasUDFType.GROUPED_MAP)
         def dummy_pandas_udf(df):
-            return df[['key','col']]
+            return df[['key', 'col']]
 
         df = self.spark.createDataFrame([Row(key=1, col='A'), Row(key=1, col='B'),
                                          Row(key=2, col='C')])
