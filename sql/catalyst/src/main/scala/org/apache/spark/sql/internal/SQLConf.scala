@@ -740,21 +740,21 @@ object SQLConf {
   val PARALLEL_GET_GLOBBED_PATH_THRESHOLD =
     buildConf("spark.sql.sources.parallelGetGlobbedPath.threshold")
       .doc("The maximum number of subfiles or directories allowed after a globbed path " +
-        "expansion. If the number of paths exceeds this value during expansion, it tries to " +
-        "expand the globbed in parallel with multi-thread.")
+        "expansion.")
       .intConf
-      .checkValue(threshlod => threshlod >= 0, "The maximum number of subfiles or directories " +
+      .checkValue(threshold => threshold >= 0, "The maximum number of subfiles or directories " +
         "must not be negative")
       .createWithDefault(32)
 
   val PARALLEL_GET_GLOBBED_PATH_NUM_THREADS =
     buildConf("spark.sql.sources.parallelGetGlobbedPath.numThreads")
       .doc("The number of threads to get a collection of path in parallel. Set the " +
-        "number to avoid generating too many threads.")
+        "number to avoid generating too many threads. The default value 0 means the parallel" +
+        "mode is closed by default.")
       .intConf
       .checkValue(parallel => parallel >= 0, "The maximum number of threads allowed for getting " +
         "globbed paths at driver side must not be negative")
-      .createWithDefault(32)
+      .createWithDefault(0)
 
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
@@ -1831,6 +1831,9 @@ class SQLConf extends Serializable with Logging {
 
   def parallelGetGlobbedPathNumThreads: Int =
     getConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_NUM_THREADS)
+
+  def parallelGetGlobbedPathEnabled: Boolean =
+    parallelGetGlobbedPathNumThreads > 0
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 

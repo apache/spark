@@ -738,18 +738,20 @@ object DataSource extends Logging {
 
   /**
    * Return all paths represented by the wildcard string.
-   * Use a local thread pool to do this while there's too many paths.
+   * This will be done in main thread by default while the value of config
+   * `spark.sql.sources.parallelGetGlobbedPath.numThreads` > 0, a local thread
+   * pool will expand the globbed paths.
    */
   private def getGlobbedPaths(
       sparkSession: SparkSession,
       fs: FileSystem,
       hadoopConf: Configuration,
       qualified: Path): Seq[Path] = {
-    val getGlobbedPathThreshold = sparkSession.sessionState.conf.parallelGetGlobbedPathThreshold
-    val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified, getGlobbedPathThreshold)
-    if (paths.size < getGlobbedPathThreshold) {
+    if (!sparkSession.sessionState.conf.parallelGetGlobbedPathEnabled) {
       SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
     } else {
+      val getGlobbedPathThreshold = sparkSession.sessionState.conf.parallelGetGlobbedPathThreshold
+      val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified, getGlobbedPathThreshold)
       val numThreads =
         Math.min(paths.size, sparkSession.sessionState.conf.parallelGetGlobbedPathNumThreads)
       val threadPool = ThreadUtils.newDaemonCachedThreadPool(
