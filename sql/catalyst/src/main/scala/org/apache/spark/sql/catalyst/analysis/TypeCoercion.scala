@@ -247,8 +247,22 @@ object TypeCoercion {
     }
   }
 
-  private def haveSameType(exprs: Seq[Expression]): Boolean =
-    exprs.map(_.dataType).distinct.length == 1
+  private def haveSameType(exprs: Seq[Expression]): Boolean = {
+    if (exprs.size <= 1) {
+      true
+    } else {
+      val head = exprs.head.dataType
+      exprs.tail.forall(_.dataType.sameType(head))
+    }
+  }
+
+  private def castIfNotSameType(expr: Expression, dt: DataType): Expression = {
+    if (!expr.dataType.sameType(dt)) {
+      Cast(expr, dt)
+    } else {
+      expr
+    }
+  }
 
   /**
    * Widens numeric types and converts strings to numbers when appropriate.
@@ -513,6 +527,7 @@ object TypeCoercion {
    * This ensure that the types for various functions are as expected.
    */
   object FunctionArgumentConversion extends TypeCoercionRule {
+
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
@@ -521,7 +536,7 @@ object TypeCoercion {
       case a @ CreateArray(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
-          case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
+          case Some(finalDataType) => CreateArray(children.map(castIfNotSameType(_, finalDataType)))
           case None => a
         }
 
@@ -529,7 +544,7 @@ object TypeCoercion {
         !haveSameType(children) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
-          case Some(finalDataType) => Concat(children.map(Cast(_, finalDataType)))
+          case Some(finalDataType) => Concat(children.map(castIfNotSameType(_, finalDataType)))
           case None => c
         }
 
@@ -555,7 +570,7 @@ object TypeCoercion {
         } else {
           val types = m.keys.map(_.dataType)
           findWiderCommonType(types) match {
-            case Some(finalDataType) => m.keys.map(Cast(_, finalDataType))
+            case Some(finalDataType) => m.keys.map(castIfNotSameType(_, finalDataType))
             case None => m.keys
           }
         }
@@ -565,7 +580,7 @@ object TypeCoercion {
         } else {
           val types = m.values.map(_.dataType)
           findWiderCommonType(types) match {
-            case Some(finalDataType) => m.values.map(Cast(_, finalDataType))
+            case Some(finalDataType) => m.values.map(castIfNotSameType(_, finalDataType))
             case None => m.values
           }
         }
@@ -593,7 +608,7 @@ object TypeCoercion {
       case c @ Coalesce(es) if !haveSameType(es) =>
         val types = es.map(_.dataType)
         findWiderCommonType(types) match {
-          case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
+          case Some(finalDataType) => Coalesce(es.map(castIfNotSameType(_, finalDataType)))
           case None => c
         }
 
@@ -603,14 +618,14 @@ object TypeCoercion {
       case g @ Greatest(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findWiderTypeWithoutStringPromotion(types) match {
-          case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
+          case Some(finalDataType) => Greatest(children.map(castIfNotSameType(_, finalDataType)))
           case None => g
         }
 
       case l @ Least(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findWiderTypeWithoutStringPromotion(types) match {
-          case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
+          case Some(finalDataType) => Least(children.map(castIfNotSameType(_, finalDataType)))
           case None => l
         }
 
