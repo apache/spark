@@ -135,13 +135,12 @@ class IncrementalExecution(
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              Some(offsetSeqMetadata.batchWatermarkMs))
-        )
+              Some(offsetSeqMetadata.batchWatermarkMs)))
 
       case l: StreamingGlobalLimitExec =>
         l.copy(
-        stateInfo = Some(nextStatefulOperationStateInfo),
-        outputMode = Some(outputMode))
+          stateInfo = Some(nextStatefulOperationStateInfo),
+          outputMode = Some(outputMode))
     }
   }
 

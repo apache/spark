@@ -356,10 +356,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Used to plan the streaming global limit operator.
+   * Used to plan the streaming global limit operator for streams in append mode.
    * We need to check for either a direct Limit or a Limit wrapped in a ReturnAnswer operator,
-   * following the example of the SpecialLimits Strategy above, because we want to use
-   * the normal limit exec for streams that are not in Append mode.
+   * following the example of the SpecialLimits Strategy above.
+   * Streams with limit in Append mode use the stateful StreamingGlobalLimitExec.
+   * Streams with limit in Complete mode use the stateless CollectLimitExec operator.
+   * Limit is unsupported for streams in Update mode.
    */
   case class StreamingGlobalLimitStrategy(outputMode: OutputMode) extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {

@@ -66,22 +66,22 @@ case class StreamingGlobalLimitExec(
       val commitTimeMs = longMetric("commitTimeMs")
       val updatesStartTimeNs = System.nanoTime
 
-      val startCount: Long = Option(store.get(key)).map(_.getLong(0)).getOrElse(0L)
-      var rowCount = startCount
+      val preBatchRowCount: Long = Option(store.get(key)).map(_.getLong(0)).getOrElse(0L)
+      var cumulativeRowCount = preBatchRowCount
 
       val result = iter.filter { r =>
-        val x = rowCount < streamLimit
+        val x = cumulativeRowCount < streamLimit
         if (x) {
-          rowCount += 1
+          cumulativeRowCount += 1
         }
         x
       }
 
       CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
-        if (rowCount > startCount) {
+        if (cumulativeRowCount > preBatchRowCount) {
           numUpdatedStateRows += 1
-          numOutputRows += rowCount - startCount
-          store.put(key, getValueRow(rowCount))
+          numOutputRows += cumulativeRowCount - preBatchRowCount
+          store.put(key, getValueRow(cumulativeRowCount))
         }
         allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
         commitTimeMs += timeTakenMs { store.commit() }
