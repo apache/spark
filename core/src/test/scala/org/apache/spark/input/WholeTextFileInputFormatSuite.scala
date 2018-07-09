@@ -65,9 +65,11 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll
       logInfo(s"Local disk address is ${dir.toString}.")
 
       // Set the minsize per node and rack to be larger than the size of the input file.
-      sc.hadoopConfiguration.setLong("mapreduce.input.fileinputformat.split.minsize.per.node", 123456)
-      sc.hadoopConfiguration.setLong("mapreduce.input.fileinputformat.split.minsize.per.rack", 123456)
-      
+      sc.hadoopConfiguration.setLong(
+        "mapreduce.input.fileinputformat.split.minsize.per.node", 123456)
+      sc.hadoopConfiguration.setLong(
+        "mapreduce.input.fileinputformat.split.minsize.per.rack", 123456)
+
       WholeTextFileInputFormatSuite.files.foreach { case (filename, contents) =>
         createNativeFile(dir, filename, contents, false)
       }
