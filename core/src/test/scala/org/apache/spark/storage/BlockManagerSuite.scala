@@ -1422,6 +1422,24 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(mockBlockTransferService.tempFileManager === store.remoteBlockTempFileManager)
   }
 
+  test("query locations of blockIds") {
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val blockLocations = Seq(BlockManagerId("1", "host1", 100), BlockManagerId("2", "host2", 200))
+    when(mockBlockManagerMaster.getLocations(mc.any[Array[BlockId]]))
+      .thenReturn(Array(blockLocations))
+
+    val bm = mock(classOf[BlockManager])
+    when(bm.master).thenReturn(mockBlockManagerMaster)
+
+    val env = mock(classOf[SparkEnv])
+    when(env.blockManager).thenReturn(bm)
+
+    val blockId = StreamBlockId(1, 2)
+    val locs = BlockManager.blockIdsToLocations(Array(blockId), env)
+    val expectedLocs = Seq("executor_host1_1", "executor_host2_2")
+    assert(locs(blockId) == expectedLocs)
+  }
+
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
     var numCalls = 0
     var tempFileManager: TempFileManager = null

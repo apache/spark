@@ -1570,8 +1570,9 @@ private[spark] object BlockManager {
 
     val blockManagers = new HashMap[BlockId, Seq[String]]
     for (i <- 0 until blockIds.length) {
-      blockManagers(blockIds(i)) = blockLocations(i).map(
-        loc => ExecutorCacheTaskLocation(loc.host, loc.executorId).toString)
+      blockManagers(blockIds(i)) = blockLocations(i).map { loc =>
+        ExecutorCacheTaskLocation(loc.host, loc.executorId).toString
+      }
     }
     blockManagers.toMap
   }
