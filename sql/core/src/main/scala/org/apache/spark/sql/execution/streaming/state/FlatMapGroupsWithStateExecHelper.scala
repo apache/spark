@@ -160,7 +160,11 @@ object FlatMapGroupsWithStateExecHelper {
       }
     }
 
-    override val stateDeserializerExpr: Expression = stateEncoder.resolveAndBind().deserializer
+    override val stateDeserializerExpr: Expression = {
+      // Note that this must be done in the driver, as resolving and binding of deserializer
+      // expressions to the encoded type can be safely done only in the driver.
+      stateEncoder.resolveAndBind().deserializer
+    }
 
     override protected def getStateRow(obj: Any): UnsafeRow = {
       require(obj != null, "State object cannot be null")
@@ -215,4 +219,3 @@ object FlatMapGroupsWithStateExecHelper {
     }
   }
 }
-

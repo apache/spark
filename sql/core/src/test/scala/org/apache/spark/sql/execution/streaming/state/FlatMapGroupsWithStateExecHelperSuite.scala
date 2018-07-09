@@ -65,7 +65,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
     // Verify the limitation of v1 with null state
     intercept[Exception] {
-      testStateManagerWithoutTimestamp[NestedStruct](version = 1, schema, Seq(null))
+      testStateManagerWithoutTimestamp[NestedStruct](version = 1, schema, testValues = Seq(null))
     }
   }
 
@@ -88,7 +88,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
     // Verify the limitation of v1 with null state
     intercept[Exception] {
-      testStateManagerWithTimestamp[NestedStruct](version = 1, schema, Seq(null))
+      testStateManagerWithTimestamp[NestedStruct](version = 1, schema, testValues = Seq(null))
     }
   }
 
