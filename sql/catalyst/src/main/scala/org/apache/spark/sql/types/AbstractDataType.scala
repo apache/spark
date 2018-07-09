@@ -145,7 +145,7 @@ abstract class NumericType extends AtomicType {
 }
 
 
-private[sql] object NumericType extends AbstractDataType {
+private[spark] object NumericType extends AbstractDataType {
   /**
    * Enables matching against NumericType for expressions:
    * {{{
@@ -155,11 +155,12 @@ private[sql] object NumericType extends AbstractDataType {
    */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 
-  override private[sql] def defaultConcreteType: DataType = DoubleType
+  override private[spark] def defaultConcreteType: DataType = DoubleType
 
-  override private[sql] def simpleString: String = "numeric"
+  override private[spark] def simpleString: String = "numeric"
 
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[NumericType]
+  override private[spark] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[NumericType]
 }
 
 

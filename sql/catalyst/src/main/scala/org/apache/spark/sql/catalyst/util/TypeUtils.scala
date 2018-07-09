@@ -29,7 +29,7 @@ object TypeUtils {
     if (dt.isInstanceOf[NumericType] || dt == NullType) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller requires numeric types, not $dt")
+      TypeCheckResult.TypeCheckFailure(s"$caller requires numeric types, not ${dt.simpleString}")
     }
   }
 
@@ -37,7 +37,8 @@ object TypeUtils {
     if (RowOrdering.isOrderable(dt)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller does not support ordering on type $dt")
+      TypeCheckResult.TypeCheckFailure(
+        s"$caller does not support ordering on type ${dt.simpleString}")
     }
   }
 

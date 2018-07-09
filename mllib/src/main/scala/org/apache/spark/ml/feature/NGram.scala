@@ -65,7 +65,7 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
   override protected def validateInputType(inputType: DataType): Unit = {
     require(inputType.sameType(ArrayType(StringType)),
-      s"Input type must be ArrayType(StringType) but got $inputType.")
+      s"Input type must be ${ArrayType(StringType).simpleString} but got $inputType.")
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, false)

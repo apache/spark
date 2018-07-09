@@ -796,7 +796,7 @@ object JsonExprUtils {
       }
     case m: CreateMap =>
       throw new AnalysisException(
-        s"A type of keys and values in map() must be string, but got ${m.dataType}")
+        s"A type of keys and values in map() must be string, but got ${m.dataType.simpleString}")
     case _ =>
       throw new AnalysisException("Must use a map() function for options")
   }
