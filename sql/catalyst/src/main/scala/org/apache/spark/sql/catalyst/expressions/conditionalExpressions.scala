@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
   """)
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
-  extends NonPrimitiveTypeMergingExpression {
+  extends ComplexTypeMergingExpression {
 
   @transient
   override lazy val inputTypesForMerging: Seq[DataType] = {
@@ -121,7 +121,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 case class CaseWhen(
     branches: Seq[(Expression, Expression)],
     elseValue: Option[Expression] = None)
-  extends NonPrimitiveTypeMergingExpression with Serializable {
+  extends ComplexTypeMergingExpression with Serializable {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
 

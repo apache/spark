@@ -173,6 +173,18 @@ object TypeCoercion {
   }
 
   /**
+   * The method finds a common type for data types that differ only in nullable, containsNull
+   * and valueContainsNull flags. If the input types are too different, None is returned.
+   */
+  def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
+    if (t1 == t2) {
+      Some(t1)
+    } else {
+      findTypeForComplex(t1, t2, findCommonTypeDifferentOnlyInNullFlags)
+    }
+  }
+
+  /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
    * i.e. the main difference with [[findTightestCommonType]] is that here we allow some
@@ -685,10 +697,10 @@ object TypeCoercion {
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
-      case i @ If(pred, left, right) if !i.areInputTypesForMergingEqual =>
-        findWiderTypeForTwo(left.dataType, right.dataType).map { commonType =>
-          val newLeft = if (left.dataType.sameType(commonType)) left else Cast(left, commonType)
-          val newRight = if (right.dataType.sameType(commonType)) right else Cast(right, commonType)
+      case i @ If(pred, left, right) if !left.dataType.sameType(right.dataType) =>
+        findWiderTypeForTwo(left.dataType, right.dataType).map { widestType =>
+          val newLeft = if (left.dataType.sameType(widestType)) left else Cast(left, widestType)
+          val newRight = if (right.dataType.sameType(widestType)) right else Cast(right, widestType)
           If(pred, newLeft, newRight)
         }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
       case If(Literal(null, NullType), left, right) =>

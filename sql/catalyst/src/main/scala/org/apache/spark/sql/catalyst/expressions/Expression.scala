@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -700,8 +700,8 @@ abstract class TernaryExpression extends Expression {
  * This logic is usually utilized by expressions combining data from multiple child expressions
  * of non-primitive types (e.g. [[CaseWhen]]).
  */
-trait NonPrimitiveTypeMergingExpression extends Expression
-{
+trait ComplexTypeMergingExpression extends Expression {
+
   /**
    * A collection of data types used for resolution the output type of the expression. By default,
    * data types of all child expressions. The collection must not be empty.
@@ -714,24 +714,9 @@ trait NonPrimitiveTypeMergingExpression extends Expression
    * valueContainsNull flags and thus convenient for resolution of the final data type.
    */
   def areInputTypesForMergingEqual: Boolean = {
-    inputTypesForMerging.lengthCompare(1) <= 0 || inputTypesForMerging.sliding(2, 1).forall {
+    inputTypesForMerging.length <= 1 || inputTypesForMerging.sliding(2, 1).forall {
       case Seq(dt1, dt2) => dt1.sameType(dt2)
     }
-  }
-
-  private def mergeTwoDataTypes(dt1: DataType, dt2: DataType): DataType = (dt1, dt2) match {
-    case (t1, t2) if t1 == t2 => t1
-    case (ArrayType(et1, cn1), ArrayType(et2, cn2)) =>
-      ArrayType(mergeTwoDataTypes(et1, et2), cn1 || cn2)
-    case (MapType(kt1, vt1, vcn1), MapType(kt2, vt2, vcn2)) =>
-      MapType(mergeTwoDataTypes(kt1, kt2), mergeTwoDataTypes(vt1, vt2), vcn1 || vcn2)
-    case (StructType(fields1), StructType(fields2)) =>
-      val newFields = fields1.zip(fields2).map {
-        case (f1, f2) if f1 == f2 => f1
-        case (StructField(name, fdt1, nl1, _), StructField(_, fdt2, nl2, _)) =>
-          StructField(name, mergeTwoDataTypes(fdt1, fdt2), nl1 || nl2)
-      }
-      StructType(newFields)
   }
 
   override def dataType: DataType = {
@@ -741,7 +726,7 @@ trait NonPrimitiveTypeMergingExpression extends Expression
     require(
       areInputTypesForMergingEqual,
       "All input types must be the same except nullable, containsNull, valueContainsNull flags.")
-    inputTypesForMerging.reduceLeft(mergeTwoDataTypes)
+    inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
 }
 
