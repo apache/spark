@@ -40,8 +40,7 @@ class Tokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
-    require(inputType == StringType,
-      s"Input type must be ${StringType.simpleString} type but got ${inputType.simpleString}.")
+    require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, true)

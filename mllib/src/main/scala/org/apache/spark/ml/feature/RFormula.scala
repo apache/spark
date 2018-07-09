@@ -394,7 +394,7 @@ class RFormulaModel private[feature](
     require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(
       !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType.isInstanceOf[NumericType],
-      s"Label column already exists and is not of type ${NumericType.simpleString}.")
+      "Label column already exists and is not of type NumericType.")
   }
 
   @Since("2.0.0")

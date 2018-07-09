@@ -208,9 +208,8 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
       require(dataType.isInstanceOf[NumericType] ||
         dataType.isInstanceOf[StringType] ||
         dataType.isInstanceOf[BooleanType],
-        s"FeatureHasher requires columns to be of ${NumericType.simpleString}, " +
-          s"${BooleanType.simpleString} or ${StringType.simpleString}. " +
-          s"Column $fieldName was ${dataType.simpleString}")
+        s"FeatureHasher requires columns to be of NumericType, BooleanType or StringType. " +
+          s"Column $fieldName was $dataType")
     }
     val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
