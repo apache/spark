@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
@@ -53,13 +54,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
 
   import testImplicits._
 
-  def testWithAggrOptions(testName: String, pairs: (String, String)*)(testFun: => Any): Unit = {
-    val confAndTestNamePostfixMatrix = List(
-      (Seq("spark.sql.streaming.advanced.removeRedundantInStatefulAggregation" -> "false"), ""),
-      (Seq("spark.sql.streaming.advanced.removeRedundantInStatefulAggregation" -> "true"),
-        " : enable remove redundant in stateful aggregation")
-    )
+  val confAndTestNamePostfixMatrix = List(
+    (Seq(SQLConf.ADVANCED_REMOVE_REDUNDANT_IN_STATEFUL_AGGREGATION.key -> "false"), ""),
+    (Seq(SQLConf.ADVANCED_REMOVE_REDUNDANT_IN_STATEFUL_AGGREGATION.key -> "true"),
+      " : enable remove redundant in stateful aggregation")
+  )
 
+  def testWithAggrOptions(testName: String, pairs: (String, String)*)(testFun: => Any): Unit = {
     confAndTestNamePostfixMatrix.foreach {
       case (conf, testNamePostfix) => withSQLConf(pairs ++ conf: _*) {
         test(testName + testNamePostfix)(testFun)
@@ -69,12 +70,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
 
   def testQuietlyWithAggrOptions(testName: String, pairs: (String, String)*)
                                 (testFun: => Any): Unit = {
-    val confAndTestNamePostfixMatrix = List(
-      (Seq("spark.sql.streaming.advanced.removeRedundantInStatefulAggregation" -> "false"), ""),
-      (Seq("spark.sql.streaming.advanced.removeRedundantInStatefulAggregation" -> "true"),
-        " : enable remove redundant in stateful aggregation")
-    )
-
     confAndTestNamePostfixMatrix.foreach {
       case (conf, testNamePostfix) => withSQLConf(pairs ++ conf: _*) {
         testQuietly(testName + testNamePostfix)(testFun)
@@ -568,7 +563,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
   }
 
   testWithAggrOptions("SPARK-23004: Ensure that TypedImperativeAggregate functions " +
-    "do not throw errors", "spark.sql.shuffle.partitions" -> "1") {
+    "do not throw errors", SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
     // See the JIRA SPARK-23004 for more details. In short, this test reproduces the error
     // by ensuring the following.
     // - A streaming query with a streaming aggregation.
