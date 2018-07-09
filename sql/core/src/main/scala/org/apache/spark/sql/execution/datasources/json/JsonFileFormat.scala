@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import java.nio.charset.{Charset, StandardCharsets}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -24,7 +26,7 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions, JSONOptionsInRead}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -38,7 +40,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    val parsedOptions = new JSONOptions(
+    val parsedOptions = new JSONOptionsInRead(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
@@ -50,7 +52,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val parsedOptions = new JSONOptions(
+    val parsedOptions = new JSONOptionsInRead(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
@@ -63,6 +65,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    DataSourceUtils.verifyWriteSchema(this, dataSchema)
+
     val conf = job.getConfiguration
     val parsedOptions = new JSONOptions(
       options,
@@ -94,10 +98,12 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    DataSourceUtils.verifyReadSchema(this, dataSchema)
+
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val parsedOptions = new JSONOptions(
+    val parsedOptions = new JSONOptionsInRead(
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
@@ -151,7 +157,18 @@ private[json] class JsonOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
 
-  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
+  private val encoding = options.encoding match {
+    case Some(charsetName) => Charset.forName(charsetName)
+    case None => StandardCharsets.UTF_8
+  }
+
+  if (JSONOptionsInRead.blacklist.contains(encoding)) {
+    logWarning(s"The JSON file ($path) was written in the encoding ${encoding.displayName()}" +
+         " which can be read back by Spark only if multiLine is enabled.")
+  }
+
+  private val writer = CodecStreams.createOutputStreamWriter(
+    context, new Path(path), encoding)
 
   // create the Generator without separator inserted between 2 records
   private[this] val gen = new JacksonGenerator(dataSchema, writer, options)

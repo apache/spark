@@ -500,7 +500,7 @@ class LogisticRegression @Since("1.2.0") (
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(regParam, elasticNetParam, standardization, threshold,
       maxIter, tol, fitIntercept)
 
@@ -816,7 +816,7 @@ class LogisticRegression @Since("1.2.0") (
 
         if (state == null) {
           val msg = s"${optimizer.getClass.getName} failed."
-          logError(msg)
+          instr.logError(msg)
           throw new SparkException(msg)
         }
 
@@ -1202,6 +1202,11 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("1.6.0")
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
+
+  override def toString: String = {
+    s"LogisticRegressionModel: " +
+    s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures"
+  }
 }
 
 
@@ -1270,7 +1275,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
           numClasses, isMultinomial)
       }
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

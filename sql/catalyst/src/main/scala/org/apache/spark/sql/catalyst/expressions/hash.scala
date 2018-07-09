@@ -28,6 +28,7 @@ import org.apache.commons.codec.digest.DigestUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -293,7 +294,7 @@ abstract class HashExpression[E] extends Expression {
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
 
     ev.copy(code =
-      s"""
+      code"""
          |$hashResultType ${ev.value} = $seed;
          |$codes
        """.stripMargin)
@@ -674,7 +675,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
 
     ev.copy(code =
-      s"""
+      code"""
          |${CodeGenerator.JAVA_INT} ${ev.value} = $seed;
          |${CodeGenerator.JAVA_INT} $childHash = 0;
          |$codes

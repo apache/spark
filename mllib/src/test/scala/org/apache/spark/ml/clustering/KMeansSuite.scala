@@ -17,24 +17,26 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.language.existentials
 import scala.util.Random
 
 import org.dmg.pmml.{ClusteringModel, PMML}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils, PMMLReadWriteTest}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans,
   KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 private[clustering] case class TestRow(features: Vector)
 
-class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest
-  with PMMLReadWriteTest {
+class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTest {
+
+  import testImplicits._
 
   final val k = 5
   @transient var dataset: Dataset[_] = _
@@ -108,15 +110,13 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     val model = kmeans.fit(dataset)
     assert(model.clusterCenters.length === k)
 
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", predictionColName)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
+    testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataset.toDF(), model,
+      "features", predictionColName) { rows =>
+      val clusters = rows.map(_.getAs[Int](predictionColName)).toSet
+      assert(clusters.size === k)
+      assert(clusters === Set(0, 1, 2, 3, 4))
     }
-    val clusters =
-      transformed.select(predictionColName).rdd.map(_.getInt(0)).distinct().collect().toSet
-    assert(clusters.size === k)
-    assert(clusters === Set(0, 1, 2, 3, 4))
+
     assert(model.computeCost(dataset) < 0.1)
     assert(model.hasParent)
 
@@ -148,9 +148,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     model.setFeaturesCol(featuresColName).setPredictionCol(predictionColName)
 
     val transformed = model.transform(dataset.withColumnRenamed("features", featuresColName))
-    Seq(featuresColName, predictionColName).foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
+    assert(transformed.schema.fieldNames.toSet === Set(featuresColName, predictionColName))
     assert(model.getFeaturesCol == featuresColName)
     assert(model.getPredictionCol == predictionColName)
   }
@@ -198,6 +196,23 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(e.getCause.isInstanceOf[AssertionError])
     assert(e.getCause.getMessage.contains("Cosine distance is not defined"))
   }
+
+  test("KMean with Array input") {
+    def trainAndComputeCost(dataset: Dataset[_]): Double = {
+      val model = new KMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
+      model.computeCost(dataset)
+    }
+
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val trueCost = trainAndComputeCost(newDataset)
+    val doubleArrayCost = trainAndComputeCost(newDatasetD)
+    val floatArrayCost = trainAndComputeCost(newDatasetF)
+
+    // checking the cost is fine enough as a sanity check
+    assert(trueCost ~== doubleArrayCost absTol 1e-6)
+    assert(trueCost ~== floatArrayCost absTol 1e-6)
+  }
+
 
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
