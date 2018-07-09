@@ -352,7 +352,7 @@ case class Join(
 }
 
 /**
- * Append data to an existing DataSourceV2 table.
+ * Append data to an existing table.
  */
 case class AppendData(
     table: NamedRelation,
