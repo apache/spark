@@ -385,7 +385,7 @@ class AFTSurvivalRegressionSuite extends MLTest with DefaultReadWriteTest {
       aft.fit(dfWithStringCensors)
     }
     assert(thrown.getMessage.contains(
-      "Column censor must be of type numeric but was actually of type string"))
+      "Column censor must be of type NumericType but was actually of type StringType"))
   }
 
   test("numerical stability of standardization") {

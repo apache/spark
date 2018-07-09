@@ -98,7 +98,7 @@ private[orc] object OrcFilters {
     case DateType => PredicateLeaf.Type.DATE
     case TimestampType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
-    case _ => throw new UnsupportedOperationException(s"DataType: ${dataType.simpleString}")
+    case _ => throw new UnsupportedOperationException(s"DataType: $dataType")
   }
 
   /**

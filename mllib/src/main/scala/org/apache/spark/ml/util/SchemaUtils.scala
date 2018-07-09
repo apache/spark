@@ -41,8 +41,7 @@ private[spark] object SchemaUtils {
     val actualDataType = schema(colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(actualDataType.equals(dataType),
-      s"Column $colName must be of type ${dataType.simpleString} but was actually " +
-        s"${actualDataType.simpleString}.$message")
+      s"Column $colName must be of type $dataType but was actually $actualDataType.$message")
   }
 
   /**
@@ -59,8 +58,7 @@ private[spark] object SchemaUtils {
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(dataTypes.exists(actualDataType.equals),
       s"Column $colName must be of type equal to one of the following types: " +
-        s"${dataTypes.map(_.simpleString).mkString("[", ", ", "]")} but was actually of type " +
-        s"${actualDataType.simpleString}.$message")
+        s"${dataTypes.mkString("[", ", ", "]")} but was actually of type $actualDataType.$message")
   }
 
   /**
@@ -73,9 +71,8 @@ private[spark] object SchemaUtils {
       msg: String = ""): Unit = {
     val actualDataType = schema(colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
-    require(actualDataType.isInstanceOf[NumericType],
-      s"Column $colName must be of type ${NumericType.simpleString} but was actually of type " +
-      s"${actualDataType.simpleString}.$message")
+    require(actualDataType.isInstanceOf[NumericType], s"Column $colName must be of type " +
+      s"NumericType but was actually of type $actualDataType.$message")
   }
 
   /**
