@@ -45,20 +45,35 @@ DESC FUNCTION EXTENDED boolean;
 
 -- cast null to calendar interval should return null
 SELECT CAST(NULL as calendarinterval);
+SELECT CALENDARINTERVAL(NULL);
 
 -- cast invalid strings to calendar interval should return null
-SELECT CAST('5 minutes' as calendarinterval);
-SELECT CAST('10' as calendarinterval);
+SELECT CAST('interval 10' as calendarinterval);
+SELECT CAST('interval 100 nanoseconds' as calendarinterval);
+SELECT CAST('interval 1 second 10 years -10 months 1 minute' as calendarinterval);
+SELECT CAST('interval 60 hours + 1 minute' as calendarinterval);
+SELECT CAST('interval 1 day +5 minutes' as calendarinterval);
 
 -- cast valid strings to calendar interval should return calendar interval
 SELECT CAST('interval 5 minutes' as calendarinterval);
 SELECT CAST('interval 10 hours' as calendarinterval);
 SELECT CAST('interval 1 second' as calendarinterval);
+SELECT CAST('interval 3 years -3 month 7 week 123 microseconds' as calendarinterval);
+SELECT CAST('interval 100 years 15 months -24 weeks 66 seconds' as calendarinterval);
 
--- casting to calendar interval using the function should also work
-SELECT CALENDARINTERVAL('interval 5 minutes');
-SELECT CALENDARINTERVAL('interval 10 hours');
-SELECT CALENDARINTERVAL('interval 1 second');
+-- casting invalid strings to calendar interval using the function should return null
+SELECT CALENDARINTERVAL('interval 2 months 1 year 3 weeks 4 days 5 minutes 6 seconds');
+SELECT CALENDARINTERVAL('interval 1 seconds + 10 milliseconds');
+SELECT CALENDARINTERVAL('interval 1 day -1 day');
+SELECT CALENDARINTERVAL('interval 10 microseconds _ 1 microsecond');
+SELECT CALENDARINTERVAL('5 weeks 5 days 23 hours');
+
+-- casting to calendar interval using the function should return calendar interval
+SELECT CALENDARINTERVAL('interval 1 year 2 months 3 weeks 4 days 5 minutes 6 seconds');
+SELECT CALENDARINTERVAL('interval 10 hours -5 minutes');
+SELECT CALENDARINTERVAL('interval 15 second 1000 milliseconds');
+SELECT CALENDARINTERVAL('interval 10 hours      5 minutes');
+SELECT CALENDARINTERVAL('interval 1 minute -60 seconds');
 
 DESC FUNCTION calendarinterval;
 -- TODO: migrate all cast tests here.
