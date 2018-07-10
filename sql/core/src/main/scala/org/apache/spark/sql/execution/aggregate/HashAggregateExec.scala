@@ -324,7 +324,7 @@ case class HashAggregateExec(
       initialBuffer,
       bufferSchema,
       groupingKeySchema,
-      TaskContext.get().taskMemoryManager(),
+      TaskContext.get(),
       1024 * 16, // initial capacity
       TaskContext.get().taskMemoryManager().pageSizeBytes
     )
