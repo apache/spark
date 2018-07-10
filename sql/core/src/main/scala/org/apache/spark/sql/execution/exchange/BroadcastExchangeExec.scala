@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import java.util.concurrent.TimeoutException
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
@@ -140,7 +142,16 @@ case class BroadcastExchangeExec(
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    ThreadUtils.awaitResult(relationFuture, timeout).asInstanceOf[broadcast.Broadcast[T]]
+    try {
+      ThreadUtils.awaitResult(relationFuture, timeout).asInstanceOf[broadcast.Broadcast[T]]
+    } catch {
+      case ex: TimeoutException =>
+        logError(s"Could not execute broadcast in ${timeout.toSeconds} secs.", ex)
+        throw new SparkException(s"Could not execute broadcast in ${timeout.toSeconds} secs. " +
+          s"You can increase the timeout for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or " +
+          s"disable broadcast join by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1",
+          ex)
+    }
   }
 }
 

@@ -2935,6 +2935,17 @@ object functions {
   }
 
   /**
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+   * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+   * '2017-07-14 03:40:00.0'.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
+    FromUTCTimestamp(ts.expr, tz.expr)
+  }
+
+  /**
    * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
    * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
    * '2017-07-14 01:40:00.0'.
@@ -2943,6 +2954,17 @@ object functions {
    */
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
+  }
+
+  /**
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
+   * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+   * '2017-07-14 01:40:00.0'.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
+    ToUTCTimestamp(ts.expr, tz.expr)
   }
 
   /**
@@ -3382,6 +3404,48 @@ object functions {
   }
 
   /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column): Column = {
+    from_json(e, schema, Map.empty[String, String].asJava)
+  }
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(new JsonToStructs(e.expr, schema.expr, options.asScala.toMap))
+  }
+
+  /**
+   * Parses a column containing a JSON string and infers its schema.
+   *
+   * @param e a string column containing JSON data.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def schema_of_json(e: Column): Column = withExpr(new SchemaOfJson(e.expr))
+
+  /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
    * a `MapType` or `ArrayType` of `MapType`s into a JSON string with the specified schema.
    * Throws an exception, in the case of an unsupported type.
@@ -3562,6 +3626,14 @@ object functions {
    */
   @scala.annotation.varargs
   def arrays_zip(e: Column*): Column = withExpr { ArraysZip(e.map(_.expr)) }
+
+  /**
+   * Returns the union of all the given maps.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  @scala.annotation.varargs
+  def map_concat(cols: Column*): Column = withExpr { MapConcat(cols.map(_.expr)) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Mask functions

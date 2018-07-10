@@ -103,7 +103,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
         selectedFilters.foreach { pred =>
-          val maybeFilter = parquetFilters.createFilter(df.schema, pred)
+          val maybeFilter = parquetFilters.createFilter(
+            new SparkToParquetSchemaConverter(conf).convert(df.schema), pred)
           assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
           // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
           maybeFilter.exists(_.getClass === filterClass)
@@ -598,12 +599,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       StructField("c", DoubleType, nullable = true)
     ))
 
+    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+
     assertResult(Some(and(
       lt(intColumn("a"), 10: Integer),
       gt(doubleColumn("c"), 1.5: java.lang.Double)))
     ) {
       parquetFilters.createFilter(
-        schema,
+        parquetSchema,
         sources.And(
           sources.LessThan("a", 10),
           sources.GreaterThan("c", 1.5D)))
@@ -611,7 +614,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     assertResult(None) {
       parquetFilters.createFilter(
-        schema,
+        parquetSchema,
         sources.And(
           sources.LessThan("a", 10),
           sources.StringContains("b", "prefix")))
@@ -619,7 +622,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     assertResult(None) {
       parquetFilters.createFilter(
-        schema,
+        parquetSchema,
         sources.Not(
           sources.And(
             sources.GreaterThan("a", 1),
@@ -671,21 +674,25 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
   test("SPARK-17213: Broken Parquet filter push-down for string columns") {
-    withTempPath { dir =>
-      import testImplicits._
+    Seq(true, false).foreach { vectorizedEnabled =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedEnabled.toString) {
+        withTempPath { dir =>
+          import testImplicits._
 
-      val path = dir.getCanonicalPath
-      // scalastyle:off nonascii
-      Seq("a", "é").toDF("name").write.parquet(path)
-      // scalastyle:on nonascii
+          val path = dir.getCanonicalPath
+          // scalastyle:off nonascii
+          Seq("a", "é").toDF("name").write.parquet(path)
+          // scalastyle:on nonascii
 
-      assert(spark.read.parquet(path).where("name > 'a'").count() == 1)
-      assert(spark.read.parquet(path).where("name >= 'a'").count() == 2)
+          assert(spark.read.parquet(path).where("name > 'a'").count() == 1)
+          assert(spark.read.parquet(path).where("name >= 'a'").count() == 2)
 
-      // scalastyle:off nonascii
-      assert(spark.read.parquet(path).where("name < 'é'").count() == 1)
-      assert(spark.read.parquet(path).where("name <= 'é'").count() == 2)
-      // scalastyle:on nonascii
+          // scalastyle:off nonascii
+          assert(spark.read.parquet(path).where("name < 'é'").count() == 1)
+          assert(spark.read.parquet(path).where("name <= 'é'").count() == 2)
+          // scalastyle:on nonascii
+        }
+      }
     }
   }
 
@@ -785,7 +792,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
       assertResult(None) {
         parquetFilters.createFilter(
-          df.schema,
+          new SparkToParquetSchemaConverter(conf).convert(df.schema),
           sources.StringStartsWith("_1", null))
       }
     }
