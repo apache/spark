@@ -879,10 +879,15 @@ object SQLConf {
     buildConf("spark.sql.streaming.multipleWatermarkPolicy")
       .doc("Policy to calculate the global watermark value when there are multiple watermark " +
         "operators in a streaming query. The default value is 'min' which chooses " +
-        "the minimum watermark reported across multiple operators." +
+        "the minimum watermark reported across multiple operators. Other alternative value is" +
+        "'max' which chooses the maximum across multiple operators." +
         "Note: This configuration cannot be changed between query restarts from the same " +
         "checkpoint location.")
       .stringConf
+      .checkValue(
+        str => Set("min", "max").contains(str.toLowerCase),
+        "Invalid value for 'spark.sql.streaming.multipleWatermarkPolicy'. " +
+          "Valid values are 'min' and 'max'")
       .createWithDefault("min") // must be same as MultipleWatermarkPolicy.DEFAULT_POLICY_NAME
 
   val OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD =

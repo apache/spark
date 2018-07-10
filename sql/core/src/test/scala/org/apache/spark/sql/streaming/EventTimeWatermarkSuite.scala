@@ -583,6 +583,16 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  test("MultipleWatermarkPolicy: fail on incorrect conf values") {
+    val invalidValues = Seq("", "random")
+    invalidValues.foreach { value =>
+      val e = intercept[IllegalArgumentException] {
+        spark.conf.set(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key, value)
+      }
+      assert(e.getMessage.toLowerCase.contains("valid values are 'min' and 'max'"))
+    }
+  }
+
   private def checkWatermark(input: MemoryStream[Int], watermark: Long) = Execute { q =>
     input.addData(1)
     q.processAllAvailable()

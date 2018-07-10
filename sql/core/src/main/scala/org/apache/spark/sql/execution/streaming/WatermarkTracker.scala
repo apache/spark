@@ -55,7 +55,8 @@ object MultipleWatermarkPolicy {
  */
 case object MinWatermark extends MultipleWatermarkPolicy {
   def chooseGlobalWatermark(operatorWatermarks: Seq[Long]): Long = {
-    if (operatorWatermarks.nonEmpty) operatorWatermarks.min else 0
+    assert(operatorWatermarks.nonEmpty)
+    operatorWatermarks.min
   }
 }
 
@@ -69,7 +70,8 @@ case object MinWatermark extends MultipleWatermarkPolicy {
  */
 case object MaxWatermark extends MultipleWatermarkPolicy {
   def chooseGlobalWatermark(operatorWatermarks: Seq[Long]): Long = {
-    if (operatorWatermarks.nonEmpty) operatorWatermarks.max else 0
+    assert(operatorWatermarks.nonEmpty)
+    operatorWatermarks.max
   }
 }
 

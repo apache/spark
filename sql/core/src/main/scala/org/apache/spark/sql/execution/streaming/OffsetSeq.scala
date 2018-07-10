@@ -140,8 +140,10 @@ object OffsetSeqMetadata extends Logging {
                 s"using default value '$defaultValue'")
 
             case None =>
-              logWarning(s"Conf '$confKey' was not found in the offset log, " +
-                s"using existing value '${sessionConf.get(confKey, null)}")
+              val valueStr = sessionConf.getOption(confKey).map { v =>
+                s" Using existing session conf value '$v'."
+              }.getOrElse { " No value set in session conf." }
+              logWarning(s"Conf '$confKey' was not found in the offset log. $valueStr")
 
           }
       }
