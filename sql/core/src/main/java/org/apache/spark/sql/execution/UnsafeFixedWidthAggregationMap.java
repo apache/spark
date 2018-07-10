@@ -106,7 +106,7 @@ public final class UnsafeFixedWidthAggregationMap {
 
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
     // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
-    // does not fully consume the sorter's output (e.g. sort followed by limit).
+    // does not fully consume the aggregation map's output (e.g. aggregate followed by limit).
     taskContext.addTaskCompletionListener(context -> {
       free();
     });
