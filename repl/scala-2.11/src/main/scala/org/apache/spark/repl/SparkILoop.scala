@@ -44,7 +44,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def this() = this(None, new JPrintWriter(Console.out, true))
 
   override def createInterpreter(): Unit = {
-    intp = new SparkILoopInterpreter(settings, out, initializeSpark)
+    intp = new SparkILoopInterpreter(settings, out)
   }
 
   val initializationCommands: Seq[String] = Seq(
@@ -166,12 +166,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
         foreach (intp quietRun _)
         )
       // power mode setup
-      if (isReplPower) {
-        replProps.power setValue true
-        unleashAndSetPhase()
-        asyncMessage(power.banner)
-      }
-      initializeSpark()
+      if (isReplPower) enablePowerMode(true)
       loadInitFiles()
       // SI-7418 Now, and only now, can we enable TAB completion.
       in.postInit()
@@ -209,13 +204,17 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     }
     def startup(): String = withSuppressedSettings {
       // while we go fire up the REPL
+      val splash = preLoop
+
       try {
         // don't allow ancient sbt to hijack the reader
         savingReader {
           createInterpreter()
         }
         intp.initializeSynchronous()
-        globalFuture = Future successful true
+        initializeSpark()
+
+        // globalFuture = Future successful true
         if (intp.reporter.hasErrors) {
           echo("Interpreter encountered errors during initialization!")
           null
@@ -224,7 +223,6 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
 
           printWelcome()
           // let them start typing
-          val splash = preLoop
           splash.start()
 
           val line = splash.line           // what they typed in while they were waiting
