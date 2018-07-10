@@ -93,6 +93,15 @@ PIVOT (
 );
 
 -- pivot with aliases and projection
+SELECT 2012_s, 2013_s, 2012_a, 2013_a, c FROM (
+  SELECT year y, course c, earnings e FROM courseSales
+)
+PIVOT (
+  sum(e) s, avg(e) a
+  FOR y IN (2012, 2013)
+);
+
+-- pivot with projection and value aliases
 SELECT firstYear_s, secondYear_s, firstYear_a, secondYear_a, c FROM (
   SELECT year y, course c, earnings e FROM courseSales
 )
@@ -106,6 +115,15 @@ SELECT * FROM courseSales
 PIVOT (
   abs(earnings)
   FOR year IN (2012, 2013)
+);
+
+-- pivot with one of the expressions as non-aggregate function
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings), year
+  FOR course IN ('dotNET', 'Java')
 );
 
 -- pivot with unresolvable columns

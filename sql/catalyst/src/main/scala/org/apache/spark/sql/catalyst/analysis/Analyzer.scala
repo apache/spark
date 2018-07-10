@@ -517,18 +517,20 @@ class Analyzer(
         }
         // Check all pivot values are literal and match pivot column data type.
         val evalPivotValues = pivotValues.map { value =>
+          val foldable = value match {
+            case Alias(v, _) => v.foldable
+            case _ => value.foldable
+          }
+          if (!foldable) {
+            throw new AnalysisException(
+              s"Literal expressions required for pivot values, found '$value'")
+          }
           if (!Cast.canCast(value.dataType, pivotColumn.dataType)) {
             throw new AnalysisException(s"Invalid pivot value '$value': " +
               s"value data type ${value.dataType.simpleString} does not match " +
-              s"pivot column data type ${pivotColumn.dataType.simpleString}")
+              s"pivot column data type ${pivotColumn.dataType.catalogString}")
           }
-          try {
-            Cast(value, pivotColumn.dataType).eval(EmptyRow)
-          } catch {
-            case _: UnsupportedOperationException =>
-              throw new AnalysisException(
-                s"Literal expressions required for pivot values, found '$value'")
-          }
+          Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
         }
         // Group-by expressions coming from SQL are implicit and need to be deduced.
         val groupByExprs = groupByExprsOpt.getOrElse(
@@ -575,7 +577,11 @@ class Analyzer(
         } else {
           val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
             def ifExpr(e: Expression) = {
-              If(EqualNullSafe(pivotColumn, Cast(value, pivotColumn.dataType)), e, Literal(null))
+              If(
+                EqualNullSafe(
+                  pivotColumn,
+                  Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone))),
+                e, Literal(null))
             }
             aggregates.map { aggregate =>
               val filteredAggregate = aggregate.transformDown {
