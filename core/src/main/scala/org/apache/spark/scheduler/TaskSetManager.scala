@@ -758,7 +758,7 @@ private[spark] class TaskSetManager(
     }
     // There may be multiple tasksets for this stage -- we let all of them know that the partition
     // was completed.  This may result in some of the tasksets getting completed.
-    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId)
+    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, info)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -769,14 +769,11 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
+  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: TaskInfo): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
         if (speculationEnabled && !isZombie) {
-          taskAttempts(index).headOption.map { info =>
-            info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
-            successfulTaskDurations.insert(info.duration)
-          }
+          successfulTaskDurations.insert(taskInfo.duration)
         }
         tasksSuccessful += 1
         successful(index) = true
