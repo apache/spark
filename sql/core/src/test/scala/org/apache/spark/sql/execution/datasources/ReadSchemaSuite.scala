@@ -25,17 +25,17 @@ import org.apache.spark.sql.internal.SQLConf
  * to prevent future regressions.
  *
  *   ReadSchemaSuite
- *     -> CSVReadSchemaEvolutionSuite
- *     -> HeaderCSVReadSchemaEvolutionSuite
+ *     -> CSVReadSchemaSuite
+ *     -> HeaderCSVReadSchemaSuite
  *
- *     -> JsonReadSchemaEvolutionSuite
+ *     -> JsonReadSchemaSuite
  *
- *     -> OrcReadSchemaEvolutionSuite
- *     -> VectorizedOrcReadSchemaEvolutionSuite
+ *     -> OrcReadSchemaSuite
+ *     -> VectorizedOrcReadSchemaSuite
  *
- *     -> ParquetReadSchemaEvolutionSuite
- *     -> VectorizedParquetReadSchemaEvolutionSuite
- *     -> MergedParquetReadSchemaEvolutionSuite
+ *     -> ParquetReadSchemaSuite
+ *     -> VectorizedParquetReadSchemaSuite
+ *     -> MergedParquetReadSchemaSuite
  */
 
 /**
