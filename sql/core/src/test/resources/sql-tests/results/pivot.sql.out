@@ -293,10 +293,10 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query 19 schema
-struct<>
+struct<year:int,dotNET:array<int>,Java:array<int>>
 -- !query 19 output
-org.apache.spark.SparkException
-Job 17 cancelled because SparkContext was shut down
+2012	[1,1]	[1,1]
+2013	[2,2]	[2,2]
 
 
 -- !query 20
@@ -310,7 +310,7 @@ PIVOT (
   FOR (y, course) IN ((2012, 'dotNET'), (2013, 'Java'))
 )
 -- !query 20 schema
-struct<>
+struct<year:int,[2012, dotNET]:array<int>,[2013, Java]:array<int>>
 -- !query 20 output
-org.apache.spark.SparkException
-Exception thrown in awaitResult:
+2012	[1,1]	NULL
+2013	NULL	[2,2]
