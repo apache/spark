@@ -1365,7 +1365,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(taskOption4.get.addedJars === addedJarsMidTaskSet)
   }
 
-  test("[SPARK-24677] MedianHeap should not be empty when speculation is enabled") {
+  test("[SPARK-24677] Avoid NoSuchElementException from MedianHeap") {
     val conf = new SparkConf().set("spark.speculation", "true")
     sc = new SparkContext("local", "test", conf)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
