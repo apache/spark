@@ -527,7 +527,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
   }
 
   override def dataType: MapType =
-    TypeCoercion.findWiderNullablilityType(children.map(_.dataType))
+    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
       .map(_.asInstanceOf[MapType])
       .getOrElse(MapType(StringType, StringType))
 
@@ -2232,7 +2232,8 @@ case class Concat(children: Seq[Expression]) extends Expression {
   }
 
   override def dataType: DataType =
-    TypeCoercion.findWiderNullablilityType(children.map(_.dataType)).getOrElse(StringType)
+    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
+      .getOrElse(StringType)
 
   lazy val javaType: String = CodeGenerator.javaType(dataType)
 

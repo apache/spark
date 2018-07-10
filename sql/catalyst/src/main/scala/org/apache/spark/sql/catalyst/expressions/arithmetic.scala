@@ -536,7 +536,7 @@ case class Least(children: Seq[Expression]) extends Expression {
   }
 
   override def dataType: DataType =
-    TypeCoercion.findWiderNullablilityType(children.map(_.dataType)).get
+    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType)).get
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {
@@ -613,7 +613,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
   }
 
   override def dataType: DataType =
-    TypeCoercion.findWiderNullablilityType(children.map(_.dataType)).get
+    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType)).get
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {

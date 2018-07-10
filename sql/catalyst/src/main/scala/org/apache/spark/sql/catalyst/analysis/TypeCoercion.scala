@@ -179,6 +179,29 @@ object TypeCoercion {
   }
 
   /**
+   * The method finds a common type for data types that differ only in nullable, containsNull
+   * and valueContainsNull flags. If the input types are too different, None is returned.
+   */
+  def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
+    if (t1 == t2) {
+      Some(t1)
+    } else {
+      findTypeForComplex(t1, t2, findCommonTypeDifferentOnlyInNullFlags)
+    }
+  }
+
+  def findCommonTypeDifferentOnlyInNullFlags(types: Seq[DataType]): Option[DataType] = {
+    if (types.isEmpty) {
+      None
+    } else {
+      types.tail.foldLeft(Option(types.head)) {
+        case (Some(t1), t2) => findCommonTypeDifferentOnlyInNullFlags(t1, t2)
+        case _ => None
+      }
+    }
+  }
+
+  /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
    * i.e. the main difference with [[findTightestCommonType]] is that here we allow some
@@ -267,23 +290,6 @@ object TypeCoercion {
       Cast(expr, dt)
     } else {
       expr
-    }
-  }
-
-  def findWiderNullablilityType(types: Seq[DataType]): Option[DataType] = {
-    def find(dt1: DataType, dt2: DataType): Option[DataType] = {
-      (dt1, dt2) match {
-        case (t1, t2) if t1 == t2 => Some(t1)
-        case _ => findTypeForComplex(dt1, dt2, find)
-      }
-    }
-    if (types.isEmpty) {
-      None
-    } else {
-      types.tail.foldLeft(Option(types.head)) {
-        case (Some(t1), t2) => find(t1, t2)
-        case _ => None
-      }
     }
   }
 

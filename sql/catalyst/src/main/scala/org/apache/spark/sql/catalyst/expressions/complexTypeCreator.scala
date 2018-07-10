@@ -48,7 +48,8 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def dataType: ArrayType = {
     ArrayType(
-      TypeCoercion.findWiderNullablilityType(children.map(_.dataType)).getOrElse(StringType),
+      TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
+        .getOrElse(StringType),
       containsNull = children.exists(_.nullable))
   }
 
@@ -196,10 +197,10 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def dataType: DataType = {
     MapType(
-      keyType =
-        TypeCoercion.findWiderNullablilityType(keys.map(_.dataType)).getOrElse(StringType),
-      valueType =
-        TypeCoercion.findWiderNullablilityType(values.map(_.dataType)).getOrElse(StringType),
+      keyType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(keys.map(_.dataType))
+        .getOrElse(StringType),
+      valueType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(values.map(_.dataType))
+        .getOrElse(StringType),
       valueContainsNull = values.exists(_.nullable))
   }
 
