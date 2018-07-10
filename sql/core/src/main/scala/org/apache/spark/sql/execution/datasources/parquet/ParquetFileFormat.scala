@@ -348,6 +348,7 @@ class ParquetFileFormat
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
     val pushDownDate = sqlConf.parquetFilterPushDownDate
+    val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
 
     (file: PartitionedFile) => {
@@ -376,7 +377,7 @@ class ParquetFileFormat
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.
-          .flatMap(new ParquetFilters(pushDownDate, pushDownStringStartWith)
+          .flatMap(new ParquetFilters(pushDownDate, pushDownTimestamp, pushDownStringStartWith)
           .createFilter(parquetSchema, _))
           .reduceOption(FilterApi.and)
       } else {

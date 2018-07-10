@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.sql.Date
+import java.lang.{Long => JLong}
+import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters.asScalaBufferConverter
 
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
-import org.apache.parquet.schema.{DecimalMetadata, MessageType, OriginalType, PrimitiveComparator, PrimitiveType}
+import org.apache.parquet.schema.{DecimalMetadata, MessageType, OriginalType, PrimitiveComparator}
 import org.apache.parquet.schema.OriginalType._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
@@ -37,7 +38,10 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: Boolean) {
+private[parquet] class ParquetFilters(
+    pushDownDate: Boolean,
+    pushDownTimestamp: Boolean,
+    pushDownStartWith: Boolean) {
 
   private case class ParquetSchemaType(
       originalType: OriginalType,
@@ -52,6 +56,8 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
   private val ParquetStringType = ParquetSchemaType(UTF8, BINARY, null)
   private val ParquetBinaryType = ParquetSchemaType(null, BINARY, null)
   private val ParquetDateType = ParquetSchemaType(DATE, INT32, null)
+  private val ParquetTimestampMicrosType = ParquetSchemaType(TIMESTAMP_MICROS, INT64, null)
+  private val ParquetTimestampMillisType = ParquetSchemaType(TIMESTAMP_MILLIS, INT64, null)
 
   private def dateToDays(date: Date): SQLDate = {
     DateTimeUtils.fromJavaDate(date)
@@ -82,6 +88,15 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
+    case ParquetTimestampMicrosType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.eq(
+        longColumn(n),
+        Option(v).map(t => DateTimeUtils.fromJavaTimestamp(t.asInstanceOf[Timestamp])
+          .asInstanceOf[JLong]).orNull)
+    case ParquetTimestampMillisType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.eq(
+        longColumn(n),
+        Option(v).map(_.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong]).orNull)
   }
 
   private val makeNotEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -108,6 +123,15 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
+    case ParquetTimestampMicrosType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.notEq(
+        longColumn(n),
+        Option(v).map(t => DateTimeUtils.fromJavaTimestamp(t.asInstanceOf[Timestamp])
+          .asInstanceOf[JLong]).orNull)
+    case ParquetTimestampMillisType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.notEq(
+        longColumn(n),
+        Option(v).map(_.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong]).orNull)
   }
 
   private val makeLt: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -129,6 +153,14 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
     case ParquetDateType if pushDownDate =>
       (n: String, v: Any) =>
         FilterApi.lt(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
+    case ParquetTimestampMicrosType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.lt(
+        longColumn(n),
+        DateTimeUtils.fromJavaTimestamp(v.asInstanceOf[Timestamp]).asInstanceOf[JLong])
+    case ParquetTimestampMillisType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.lt(
+        longColumn(n),
+        v.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong])
   }
 
   private val makeLtEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -150,6 +182,14 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
     case ParquetDateType if pushDownDate =>
       (n: String, v: Any) =>
         FilterApi.ltEq(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
+    case ParquetTimestampMicrosType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.ltEq(
+        longColumn(n),
+        DateTimeUtils.fromJavaTimestamp(v.asInstanceOf[Timestamp]).asInstanceOf[JLong])
+    case ParquetTimestampMillisType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.ltEq(
+        longColumn(n),
+        v.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong])
   }
 
   private val makeGt: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -171,6 +211,14 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
     case ParquetDateType if pushDownDate =>
       (n: String, v: Any) =>
         FilterApi.gt(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
+    case ParquetTimestampMicrosType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.gt(
+        longColumn(n),
+        DateTimeUtils.fromJavaTimestamp(v.asInstanceOf[Timestamp]).asInstanceOf[JLong])
+    case ParquetTimestampMillisType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.gt(
+        longColumn(n),
+        v.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong])
   }
 
   private val makeGtEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -192,6 +240,14 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
     case ParquetDateType if pushDownDate =>
       (n: String, v: Any) =>
         FilterApi.gtEq(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
+    case ParquetTimestampMicrosType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.gtEq(
+        longColumn(n),
+        DateTimeUtils.fromJavaTimestamp(v.asInstanceOf[Timestamp]).asInstanceOf[JLong])
+    case ParquetTimestampMillisType if pushDownTimestamp =>
+      (n: String, v: Any) => FilterApi.gtEq(
+        longColumn(n),
+        v.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong])
   }
 
   /**
