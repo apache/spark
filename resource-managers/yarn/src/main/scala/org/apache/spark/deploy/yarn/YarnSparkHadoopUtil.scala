@@ -193,7 +193,7 @@ object YarnSparkHadoopUtil {
       sparkConf: SparkConf,
       hadoopConf: Configuration): Set[FileSystem] = {
     val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
-    val isRequestAllDelegationTokens = filesystemsToAccess.contains("*")
+    val isRequestAllDelegationTokens = filesystemsToAccess.isEmpty
 
     val stagingFS = sparkConf.get(STAGING_DIR)
       .map(new Path(_).getFileSystem(hadoopConf))

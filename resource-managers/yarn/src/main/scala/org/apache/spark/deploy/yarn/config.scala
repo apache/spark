@@ -236,7 +236,7 @@ package object config {
       "fs.defaultFS does not need to be listed here.")
     .stringConf
     .toSequence
-    .createWithDefault("*" :: Nil)
+    .createWithDefault(Nil)
 
   private[spark] val FILESYSTEMS_TO_ACCESS = ConfigBuilder("spark.yarn.access.hadoopFileSystems")
     .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
