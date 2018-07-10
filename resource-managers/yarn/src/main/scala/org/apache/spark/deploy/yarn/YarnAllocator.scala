@@ -169,7 +169,7 @@ private[yarn] class YarnAllocator(
    */
   def getPendingAllocate: Seq[ContainerRequest] = getPendingAtLocation(ANY_HOST)
 
-  def getNumPendingAllocate: Int = synchronized {
+  def numContainersPendingAllocate: Int = synchronized {
     getPendingAllocate.size
   }
 
