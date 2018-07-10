@@ -20,72 +20,72 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Schema evolution suites have the following hierarchy and aims to guarantee users
- * a backward-compatible schema evolution coverage on file-based data sources, and
+ * Read schema suites have the following hierarchy and aims to guarantee users
+ * a backward-compatible read-schema change coverage on file-based data sources, and
  * to prevent future regressions.
  *
- *   SchemaEvolutionSuite
- *     -> CSVSchemaEvolutionSuite
- *     -> HeaderCSVSchemaEvolutionSuite
+ *   ReadSchemaSuite
+ *     -> CSVReadSchemaEvolutionSuite
+ *     -> HeaderCSVReadSchemaEvolutionSuite
  *
- *     -> JsonSchemaEvolutionSuite
+ *     -> JsonReadSchemaEvolutionSuite
  *
- *     -> OrcSchemaEvolutionSuite
- *     -> VectorizedOrcSchemaEvolutionSuite
+ *     -> OrcReadSchemaEvolutionSuite
+ *     -> VectorizedOrcReadSchemaEvolutionSuite
  *
- *     -> ParquetSchemaEvolutionSuite
- *     -> VectorizedParquetSchemaEvolutionSuite
- *     -> MergedParquetSchemaEvolutionSuite
+ *     -> ParquetReadSchemaEvolutionSuite
+ *     -> VectorizedParquetReadSchemaEvolutionSuite
+ *     -> MergedParquetReadSchemaEvolutionSuite
  */
 
 /**
  * All file-based data sources supports column addition and removal at the end.
  */
-abstract class SchemaEvolutionSuite
-  extends AddColumnEvolutionTest
-  with HideColumnAtTheEndEvolutionTest {
+abstract class ReadSchemaSuite
+  extends AddColumnTest
+  with HideColumnAtTheEndTest {
 
   var originalConf: Boolean = _
 }
 
-class CSVSchemaEvolutionSuite
-  extends SchemaEvolutionSuite
-  with IntegralTypeEvolutionTest
-  with ToDoubleTypeEvolutionTest
-  with ToDecimalTypeEvolutionTest
-  with ToStringTypeEvolutionTest {
+class CSVReadSchemaSuite
+  extends ReadSchemaSuite
+  with IntegralTypeTest
+  with ToDoubleTypeTest
+  with ToDecimalTypeTest
+  with ToStringTypeTest {
 
   override val format: String = "csv"
 }
 
-class HeaderCSVSchemaEvolutionSuite
-  extends SchemaEvolutionSuite
-  with IntegralTypeEvolutionTest
-  with ToDoubleTypeEvolutionTest
-  with ToDecimalTypeEvolutionTest
-  with ToStringTypeEvolutionTest {
+class HeaderCSVReadSchemaSuite
+  extends ReadSchemaSuite
+  with IntegralTypeTest
+  with ToDoubleTypeTest
+  with ToDecimalTypeTest
+  with ToStringTypeTest {
 
   override val format: String = "csv"
 
   override val options = Map("header" -> "true")
 }
 
-class JsonSchemaEvolutionSuite
-  extends SchemaEvolutionSuite
-  with HideColumnInTheMiddleEvolutionTest
-  with ChangePositionEvolutionTest
-  with IntegralTypeEvolutionTest
-  with ToDoubleTypeEvolutionTest
-  with ToDecimalTypeEvolutionTest
-  with ToStringTypeEvolutionTest {
+class JsonReadSchemaSuite
+  extends ReadSchemaSuite
+  with HideColumnInTheMiddleTest
+  with ChangePositionTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest
+  with ToDecimalTypeTest
+  with ToStringTypeTest {
 
   override val format: String = "json"
 }
 
-class OrcSchemaEvolutionSuite
-  extends SchemaEvolutionSuite
-  with HideColumnInTheMiddleEvolutionTest
-  with ChangePositionEvolutionTest {
+class OrcReadSchemaSuite
+  extends ReadSchemaSuite
+  with HideColumnInTheMiddleTest
+  with ChangePositionTest {
 
   override val format: String = "orc"
 
@@ -101,13 +101,13 @@ class OrcSchemaEvolutionSuite
   }
 }
 
-class VectorizedOrcSchemaEvolutionSuite
-  extends SchemaEvolutionSuite
-  with HideColumnInTheMiddleEvolutionTest
-  with ChangePositionEvolutionTest
-  with BooleanTypeEvolutionTest
-  with IntegralTypeEvolutionTest
-  with ToDoubleTypeEvolutionTest {
+class VectorizedOrcReadSchemaSuite
+  extends ReadSchemaSuite
+  with HideColumnInTheMiddleTest
+  with ChangePositionTest
+  with BooleanTypeTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
 
   override val format: String = "orc"
 
@@ -123,10 +123,10 @@ class VectorizedOrcSchemaEvolutionSuite
   }
 }
 
-class ParquetSchemaEvolutionSuite
-  extends SchemaEvolutionSuite
-  with HideColumnInTheMiddleEvolutionTest
-  with ChangePositionEvolutionTest {
+class ParquetReadSchemaSuite
+  extends ReadSchemaSuite
+  with HideColumnInTheMiddleTest
+  with ChangePositionTest {
 
   override val format: String = "parquet"
 
@@ -142,10 +142,10 @@ class ParquetSchemaEvolutionSuite
   }
 }
 
-class VectorizedParquetSchemaEvolutionSuite
-  extends SchemaEvolutionSuite
-  with HideColumnInTheMiddleEvolutionTest
-  with ChangePositionEvolutionTest {
+class VectorizedParquetReadSchemaSuite
+  extends ReadSchemaSuite
+  with HideColumnInTheMiddleTest
+  with ChangePositionTest {
 
   override val format: String = "parquet"
 
@@ -161,10 +161,10 @@ class VectorizedParquetSchemaEvolutionSuite
   }
 }
 
-class MergedParquetSchemaEvolutionSuite
-  extends SchemaEvolutionSuite
-  with HideColumnInTheMiddleEvolutionTest
-  with ChangePositionEvolutionTest {
+class MergedParquetReadSchemaSuite
+  extends ReadSchemaSuite
+  with HideColumnInTheMiddleTest
+  with ChangePositionTest {
 
   override val format: String = "parquet"
 

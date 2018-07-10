@@ -24,7 +24,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 /**
- * Schema can evolve in several ways and the followings are supported in file-based data sources.
+ * The reader schema is said to be evolved (or projected) when it changed after the data is
+ * written by writers. The followings are supported in file-based data sources.
  * Note that partition columns are not maintained in files. Here, `column` means non-partition
  * column.
  *
@@ -33,10 +34,10 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
  *   3. Change a column position
  *   4. Change a column type (Upcast)
  *
- * Here, we consider safe evolution without data loss. For example, data type evolution should be
+ * Here, we consider safe changes without data loss. For example, data type changes should be
  * from small types to larger types like `int`-to-`long`, not vice versa.
  *
- * So far, file-based data sources have schema evolution coverages like the followings.
+ * So far, file-based data sources have the following coverages.
  *
  *   | File Format  | Coverage     | Note                                                   |
  *   | ------------ | ------------ | ------------------------------------------------------ |
@@ -46,23 +47,23 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
  *   | ORC          | 1, 2, 3, 4   | Native vectorized ORC reader has the widest coverage.  |
  *   | PARQUET      | 1, 2, 3      |                                                        |
  *
- * This aims to provide an explicit test coverage for schema evolution on file-based data sources.
- * Since a file format has its own coverage of schema evolution, we need a test suite
- * for each file-based data source with corresponding supported test case traits.
+ * This aims to provide an explicit test coverage for reader schema change on file-based data
+ * sources. Since a file format has its own coverage, we need a test suite for each file-based
+ * data source with corresponding supported test case traits.
  *
  * The following is a hierarchy of test traits.
  *
- *   SchemaEvolutionTest
- *     -> AddColumnEvolutionTest
- *     -> HideColumnEvolutionTest
- *     -> ChangePositionEvolutionTest
- *     -> BooleanTypeEvolutionTest
- *     -> IntegralTypeEvolutionTest
- *     -> ToDoubleTypeEvolutionTest
- *     -> ToDecimalTypeEvolutionTest
+ *   ReadSchemaTest
+ *     -> AddColumnTest
+ *     -> HideColumnTest
+ *     -> ChangePositionTest
+ *     -> BooleanTypeTest
+ *     -> IntegralTypeTest
+ *     -> ToDoubleTypeTest
+ *     -> ToDecimalTypeTest
  */
 
-trait SchemaEvolutionTest extends QueryTest with SQLTestUtils with SharedSQLContext {
+trait ReadSchemaTest extends QueryTest with SQLTestUtils with SharedSQLContext {
   val format: String
   val options: Map[String, String] = Map.empty[String, String]
 }
@@ -71,7 +72,7 @@ trait SchemaEvolutionTest extends QueryTest with SQLTestUtils with SharedSQLCont
  * Add column (Case 1).
  * This test suite assumes that the missing column should be `null`.
  */
-trait AddColumnEvolutionTest extends SchemaEvolutionTest {
+trait AddColumnTest extends ReadSchemaTest {
   import testImplicits._
 
   test("append column at the end") {
@@ -110,7 +111,7 @@ trait AddColumnEvolutionTest extends SchemaEvolutionTest {
 /**
  * Hide column (Case 2-1).
  */
-trait HideColumnAtTheEndEvolutionTest extends SchemaEvolutionTest {
+trait HideColumnAtTheEndTest extends ReadSchemaTest {
   import testImplicits._
 
   test("hide column at the end") {
@@ -156,7 +157,7 @@ trait HideColumnAtTheEndEvolutionTest extends SchemaEvolutionTest {
 /**
  * Hide column in the middle (Case 2-2).
  */
-trait HideColumnInTheMiddleEvolutionTest extends SchemaEvolutionTest {
+trait HideColumnInTheMiddleTest extends ReadSchemaTest {
   import testImplicits._
 
   test("hide column in the middle") {
@@ -191,7 +192,7 @@ trait HideColumnInTheMiddleEvolutionTest extends SchemaEvolutionTest {
  * Change column positions (Case 3).
  * This suite assumes that all data set have the same number of columns.
  */
-trait ChangePositionEvolutionTest extends SchemaEvolutionTest {
+trait ChangePositionTest extends ReadSchemaTest {
   import testImplicits._
 
   test("change column position") {
@@ -224,7 +225,7 @@ trait ChangePositionEvolutionTest extends SchemaEvolutionTest {
  * Change a column type (Case 4).
  * This suite assumes that a user gives a wider schema intentionally.
  */
-trait BooleanTypeEvolutionTest extends SchemaEvolutionTest {
+trait BooleanTypeTest extends ReadSchemaTest {
   import testImplicits._
 
   test("change column type from boolean to byte/short/int/long") {
@@ -255,7 +256,7 @@ trait BooleanTypeEvolutionTest extends SchemaEvolutionTest {
  * Change a column type (Case 4).
  * This suite assumes that a user gives a wider schema intentionally.
  */
-trait ToStringTypeEvolutionTest extends SchemaEvolutionTest {
+trait ToStringTypeTest extends ReadSchemaTest {
   import testImplicits._
 
   test("read as string") {
@@ -295,7 +296,7 @@ trait ToStringTypeEvolutionTest extends SchemaEvolutionTest {
  * Change a column type (Case 4).
  * This suite assumes that a user gives a wider schema intentionally.
  */
-trait IntegralTypeEvolutionTest extends SchemaEvolutionTest {
+trait IntegralTypeTest extends ReadSchemaTest {
 
   import testImplicits._
 
@@ -380,7 +381,7 @@ trait IntegralTypeEvolutionTest extends SchemaEvolutionTest {
  * Change a column type (Case 4).
  * This suite assumes that a user gives a wider schema intentionally.
  */
-trait ToDoubleTypeEvolutionTest extends SchemaEvolutionTest {
+trait ToDoubleTypeTest extends ReadSchemaTest {
   import testImplicits._
 
   private lazy val values = 1 to 10
@@ -426,7 +427,7 @@ trait ToDoubleTypeEvolutionTest extends SchemaEvolutionTest {
  * Change a column type (Case 4).
  * This suite assumes that a user gives a wider schema intentionally.
  */
-trait ToDecimalTypeEvolutionTest extends SchemaEvolutionTest {
+trait ToDecimalTypeTest extends ReadSchemaTest {
   import testImplicits._
 
   private lazy val values = 1 to 10
