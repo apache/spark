@@ -193,20 +193,17 @@ object YarnSparkHadoopUtil {
       sparkConf: SparkConf,
       hadoopConf: Configuration): Set[FileSystem] = {
     val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .toSet
+    val isRequestAllDelegationTokens = filesystemsToAccess.contains("*")
 
     val stagingFS = sparkConf.get(STAGING_DIR)
       .map(new Path(_).getFileSystem(hadoopConf))
       .getOrElse(FileSystem.get(hadoopConf))
 
-    val accessAllFileSystem = sparkConf.get(FILESYSTEMS_TO_ACCESS_ALL)
-
     // Add the list of available namenodes for all namespaces in HDFS federation.
     // If ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens for its
     // namespaces.
-    val hadoopFilesystems = if (!accessAllFileSystem || stagingFS.getScheme == "viewfs") {
-      Set.empty
+    val hadoopFilesystems = if (!isRequestAllDelegationTokens || stagingFS.getScheme == "viewfs") {
+      filesystemsToAccess.map(new Path(_).getFileSystem(hadoopConf)).toSet
     } else {
       val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
       // Retrieving the filesystem for the nameservices where HA is not enabled
@@ -224,7 +221,7 @@ object YarnSparkHadoopUtil {
       (filesystemsWithoutHA ++ filesystemsWithHA).toSet
     }
 
-    filesystemsToAccess ++ hadoopFilesystems + stagingFS
+    hadoopFilesystems + stagingFS
   }
 
 }

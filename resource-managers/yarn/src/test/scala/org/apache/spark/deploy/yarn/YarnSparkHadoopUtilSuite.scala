@@ -29,7 +29,6 @@ import org.scalatest.Matchers
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.config.FILESYSTEMS_TO_ACCESS_ALL
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
@@ -144,7 +143,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
   }
 
   test("SPARK-24149: retrieve all namenodes from HDFS") {
-    val sparkConf = new SparkConf().set(FILESYSTEMS_TO_ACCESS_ALL, true)
+    val sparkConf = new SparkConf()
     val basicFederationConf = new Configuration()
     basicFederationConf.set("fs.defaultFS", "hdfs://localhost:8020")
     basicFederationConf.set("dfs.nameservices", "ns1,ns2")
