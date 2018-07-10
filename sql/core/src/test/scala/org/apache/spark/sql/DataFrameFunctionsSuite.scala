@@ -18,12 +18,15 @@
 package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
+import java.util.TimeZone
 
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -487,26 +490,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }.getMessage().contains("only supports array input"))
   }
 
-  test("array size function") {
+  def testSizeOfArray(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
       (Seq[Int](), "y"),
       (Seq[Int](1, 2, 3), "z"),
       (null, "empty")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
-    checkAnswer(
-      df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
 
-    checkAnswer(
-      df.selectExpr("cardinality(a)"),
-      Seq(Row(2L), Row(0L), Row(3L), Row(-1L))
-    )
+    checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("cardinality(a)"), Seq(Row(2L), Row(0L), Row(3L), Row(sizeOfNull)))
+  }
+
+  test("array size function - legacy") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSizeOfArray(sizeOfNull = -1)
+    }
+  }
+
+  test("array size function") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSizeOfArray(sizeOfNull = null)
+    }
   }
 
   test("dataframe arrays_zip function") {
@@ -556,21 +562,39 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df8.selectExpr("arrays_zip(v1, v2)"), expectedValue8)
   }
 
-  test("map size function") {
+  test("SPARK-24633: arrays_zip splits input processing correctly") {
+    Seq("true", "false").foreach { wholestageCodegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholestageCodegenEnabled) {
+        val df = spark.range(1)
+        val exprs = (0 to 5).map(x => array($"id" + lit(x)))
+        checkAnswer(df.select(arrays_zip(exprs: _*)),
+          Row(Seq(Row(0, 1, 2, 3, 4, 5))))
+      }
+    }
+  }
+
+  def testSizeOfMap(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
       (Map[Int, Int](), "y"),
       (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z"),
       (null, "empty")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
-    checkAnswer(
-      df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
+
+    checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+  }
+
+  test("map size function - legacy") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSizeOfMap(sizeOfNull = -1: Int)
+    }
+  }
+
+  test("map size function") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSizeOfMap(sizeOfNull = null)
+    }
   }
 
   test("map_keys/map_values function") {
@@ -631,6 +655,84 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sdf.select(map_entries('m)), sExpected)
     checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
     checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
+  }
+
+  test("map_concat function") {
+    val df1 = Seq(
+      (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 4 -> 400)),
+      (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 1 -> 400)),
+      (null, Map[Int, Int](3 -> 300, 4 -> 400))
+    ).toDF("map1", "map2")
+
+    val expected1a = Seq(
+      Row(Map(1 -> 100, 2 -> 200, 3 -> 300, 4 -> 400)),
+      Row(Map(1 -> 400, 2 -> 200, 3 -> 300)),
+      Row(null)
+    )
+
+    checkAnswer(df1.selectExpr("map_concat(map1, map2)"), expected1a)
+    checkAnswer(df1.select(map_concat('map1, 'map2)), expected1a)
+
+    val expected1b = Seq(
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(null)
+    )
+
+    checkAnswer(df1.selectExpr("map_concat(map1)"), expected1b)
+    checkAnswer(df1.select(map_concat('map1)), expected1b)
+
+    val df2 = Seq(
+      (
+        Map[Array[Int], Int](Array(1) -> 100, Array(2) -> 200),
+        Map[String, Int]("3" -> 300, "4" -> 400)
+      )
+    ).toDF("map1", "map2")
+
+    val expected2 = Seq(Row(Map()))
+
+    checkAnswer(df2.selectExpr("map_concat()"), expected2)
+    checkAnswer(df2.select(map_concat()), expected2)
+
+    val df3 = {
+      val schema = StructType(
+        StructField("map1", MapType(StringType, IntegerType, true), false)  ::
+        StructField("map2", MapType(StringType, IntegerType, false), false) :: Nil
+      )
+      val data = Seq(
+        Row(Map[String, Any]("a" -> 1, "b" -> null), Map[String, Any]("c" -> 3, "d" -> 4)),
+        Row(Map[String, Any]("a" -> 1, "b" -> 2), Map[String, Any]("c" -> 3, "d" -> 4))
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val expected3 = Seq(
+      Row(Map[String, Any]("a" -> 1, "b" -> null, "c" -> 3, "d" -> 4)),
+      Row(Map[String, Any]("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4))
+    )
+
+    checkAnswer(df3.selectExpr("map_concat(map1, map2)"), expected3)
+    checkAnswer(df3.select(map_concat('map1, 'map2)), expected3)
+
+    val expectedMessage1 = "input to function map_concat should all be the same type"
+
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("map_concat(map1, map2)").collect()
+    }.getMessage().contains(expectedMessage1))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, 'map2)).collect()
+    }.getMessage().contains(expectedMessage1))
+
+    val expectedMessage2 = "input to function map_concat should all be of type map"
+
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("map_concat(map1, 12)").collect()
+    }.getMessage().contains(expectedMessage2))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, lit(12))).collect()
+    }.getMessage().contains(expectedMessage2))
   }
 
   test("map_from_entries function") {
@@ -794,6 +896,23 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("array_join(x, delimiter, 'NULL')"),
       Seq(Row("a,b"), Row("a,NULL,b"), Row("")))
+
+    val idf = Seq(Seq(1, 2, 3)).toDF("x")
+
+    checkAnswer(
+      idf.select(array_join(idf("x"), ", ")),
+      Seq(Row("1, 2, 3"))
+    )
+    checkAnswer(
+      idf.selectExpr("array_join(x, ', ')"),
+      Seq(Row("1, 2, 3"))
+    )
+    intercept[AnalysisException] {
+      idf.selectExpr("array_join(x, 1)")
+    }
+    intercept[AnalysisException] {
+      idf.selectExpr("array_join(x, ', ', 1)")
+    }
   }
 
   test("array_min function") {
@@ -822,6 +941,59 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(df.select(array_max(df("a"))), answer)
     checkAnswer(df.selectExpr("array_max(a)"), answer)
+  }
+
+  test("sequence") {
+    checkAnswer(Seq((-2, 2)).toDF().select(sequence('_1, '_2)), Seq(Row(Array(-2, -1, 0, 1, 2))))
+    checkAnswer(Seq((7, 2, -2)).toDF().select(sequence('_1, '_2, '_3)), Seq(Row(Array(7, 5, 3))))
+
+    checkAnswer(
+      spark.sql("select sequence(" +
+        "   cast('2018-01-01 00:00:00' as timestamp)" +
+        ",  cast('2018-01-02 00:00:00' as timestamp)" +
+        ",  interval 12 hours)"),
+      Seq(Row(Array(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))))
+
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+      checkAnswer(
+        spark.sql("select sequence(" +
+          "   cast('2018-01-01' as date)" +
+          ",  cast('2018-03-01' as date)" +
+          ",  interval 1 month)"),
+        Seq(Row(Array(
+          Date.valueOf("2018-01-01"),
+          Date.valueOf("2018-02-01"),
+          Date.valueOf("2018-03-01")))))
+    }
+
+    // test type coercion
+    checkAnswer(
+      Seq((1.toByte, 3L, 1)).toDF().select(sequence('_1, '_2, '_3)),
+      Seq(Row(Array(1L, 2L, 3L))))
+
+    checkAnswer(
+      spark.sql("select sequence(" +
+        "   cast('2018-01-01' as date)" +
+        ",  cast('2018-01-02 00:00:00' as timestamp)" +
+        ",  interval 12 hours)"),
+      Seq(Row(Array(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))))
+
+    // test invalid data types
+    intercept[AnalysisException] {
+      Seq((true, false)).toDF().selectExpr("sequence(_1, _2)")
+    }
+    intercept[AnalysisException] {
+      Seq((true, false, 42)).toDF().selectExpr("sequence(_1, _2, _3)")
+    }
+    intercept[AnalysisException] {
+      Seq((1, 2, 0.5)).toDF().selectExpr("sequence(_1, _2, _3)")
+    }
   }
 
   test("reverse function") {

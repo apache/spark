@@ -17,32 +17,50 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.{Date, Timestamp}
+import java.util.TimeZone
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("Array and Map Size") {
+  def testSize(legacySizeOfNull: Boolean, sizeOfNull: Any): Unit = {
     val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
     val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
     val a2 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
 
-    checkEvaluation(Size(a0), 3)
-    checkEvaluation(Size(a1), 0)
-    checkEvaluation(Size(a2), 2)
+    checkEvaluation(Size(a0, legacySizeOfNull), 3)
+    checkEvaluation(Size(a1, legacySizeOfNull), 0)
+    checkEvaluation(Size(a2, legacySizeOfNull), 2)
 
     val m0 = Literal.create(Map("a" -> "a", "b" -> "b"), MapType(StringType, StringType))
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
     val m2 = Literal.create(Map("a" -> "a"), MapType(StringType, StringType))
 
-    checkEvaluation(Size(m0), 2)
-    checkEvaluation(Size(m1), 0)
-    checkEvaluation(Size(m2), 1)
+    checkEvaluation(Size(m0, legacySizeOfNull), 2)
+    checkEvaluation(Size(m1, legacySizeOfNull), 0)
+    checkEvaluation(Size(m2, legacySizeOfNull), 1)
 
-    checkEvaluation(Size(Literal.create(null, MapType(StringType, StringType))), -1)
-    checkEvaluation(Size(Literal.create(null, ArrayType(StringType))), -1)
+    checkEvaluation(
+      Size(Literal.create(null, MapType(StringType, StringType)), legacySizeOfNull),
+      expected = sizeOfNull)
+    checkEvaluation(
+      Size(Literal.create(null, ArrayType(StringType)), legacySizeOfNull),
+      expected = sizeOfNull)
+  }
+
+  test("Array and Map Size - legacy") {
+    testSize(legacySizeOfNull = true, sizeOfNull = -1)
+  }
+
+  test("Array and Map Size") {
+    testSize(legacySizeOfNull = false, sizeOfNull = null)
   }
 
   test("MapKeys/MapValues") {
@@ -78,6 +96,132 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapEntries(ms0), Seq(r("a", "c"), r("b", null)))
     checkEvaluation(MapEntries(ms1), Seq.empty)
     checkEvaluation(MapEntries(ms2), null)
+  }
+
+  test("Map Concat") {
+    val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType,
+      valueContainsNull = false))
+    val m1 = Literal.create(Map("c" -> "3", "a" -> "4"), MapType(StringType, StringType,
+      valueContainsNull = false))
+    val m2 = Literal.create(Map("d" -> "4", "e" -> "5"), MapType(StringType, StringType))
+    val m3 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
+    val m4 = Literal.create(Map("a" -> null, "c" -> "3"), MapType(StringType, StringType))
+    val m5 = Literal.create(Map("a" -> 1, "b" -> 2), MapType(StringType, IntegerType))
+    val m6 = Literal.create(Map("a" -> null, "c" -> 3), MapType(StringType, IntegerType))
+    val m7 = Literal.create(Map(List(1, 2) -> 1, List(3, 4) -> 2),
+      MapType(ArrayType(IntegerType), IntegerType))
+    val m8 = Literal.create(Map(List(5, 6) -> 3, List(1, 2) -> 4),
+      MapType(ArrayType(IntegerType), IntegerType))
+    val m9 = Literal.create(Map(Map(1 -> 2, 3 -> 4) -> 1, Map(5 -> 6, 7 -> 8) -> 2),
+      MapType(MapType(IntegerType, IntegerType), IntegerType))
+    val m10 = Literal.create(Map(Map(9 -> 10, 11 -> 12) -> 3, Map(1 -> 2, 3 -> 4) -> 4),
+      MapType(MapType(IntegerType, IntegerType), IntegerType))
+    val m11 = Literal.create(Map(1 -> "1", 2 -> "2"), MapType(IntegerType, StringType,
+      valueContainsNull = false))
+    val m12 = Literal.create(Map(3 -> "3", 4 -> "4"), MapType(IntegerType, StringType,
+      valueContainsNull = false))
+    val mNull = Literal.create(null, MapType(StringType, StringType))
+
+    // overlapping maps
+    checkEvaluation(MapConcat(Seq(m0, m1)),
+      (
+        Array("a", "b", "c", "a"), // keys
+        Array("1", "2", "3", "4") // values
+      )
+    )
+
+    // maps with no overlap
+    checkEvaluation(MapConcat(Seq(m0, m2)),
+      Map("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5"))
+
+    // 3 maps
+    checkEvaluation(MapConcat(Seq(m0, m1, m2)),
+      (
+        Array("a", "b", "c", "a", "d", "e"), // keys
+        Array("1", "2", "3", "4", "4", "5") // values
+      )
+    )
+
+    // null reference values
+    checkEvaluation(MapConcat(Seq(m3, m4)),
+      (
+        Array("a", "b", "a", "c"), // keys
+        Array("1", "2", null, "3") // values
+      )
+    )
+
+    // null primitive values
+    checkEvaluation(MapConcat(Seq(m5, m6)),
+      (
+        Array("a", "b", "a", "c"), // keys
+        Array(1, 2, null, 3) // values
+      )
+    )
+
+    // keys that are primitive
+    checkEvaluation(MapConcat(Seq(m11, m12)),
+      (
+        Array(1, 2, 3, 4), // keys
+        Array("1", "2", "3", "4") // values
+      )
+    )
+
+    // keys that are arrays, with overlap
+    checkEvaluation(MapConcat(Seq(m7, m8)),
+      (
+        Array(List(1, 2), List(3, 4), List(5, 6), List(1, 2)), // keys
+        Array(1, 2, 3, 4) // values
+      )
+    )
+
+    // keys that are maps, with overlap
+    checkEvaluation(MapConcat(Seq(m9, m10)),
+      (
+        Array(Map(1 -> 2, 3 -> 4), Map(5 -> 6, 7 -> 8), Map(9 -> 10, 11 -> 12),
+          Map(1 -> 2, 3 -> 4)), // keys
+        Array(1, 2, 3, 4) // values
+      )
+    )
+
+    // null map
+    checkEvaluation(MapConcat(Seq(m0, mNull)), null)
+    checkEvaluation(MapConcat(Seq(mNull, m0)), null)
+    checkEvaluation(MapConcat(Seq(mNull, mNull)), null)
+    checkEvaluation(MapConcat(Seq(mNull)), null)
+
+    // single map
+    checkEvaluation(MapConcat(Seq(m0)), Map("a" -> "1", "b" -> "2"))
+
+    // no map
+    checkEvaluation(MapConcat(Seq.empty), Map.empty)
+
+    // force split expressions for input in generated code
+    val expectedKeys = Array.fill(65)(Seq("a", "b")).flatten ++ Array("d", "e")
+    val expectedValues = Array.fill(65)(Seq("1", "2")).flatten ++ Array("4", "5")
+    checkEvaluation(MapConcat(
+      Seq(
+        m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0,
+        m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0,
+        m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m2
+      )),
+      (expectedKeys, expectedValues))
+
+    // argument checking
+    assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
+    assert(MapConcat(Seq(m5, m6)).checkInputDataTypes().isSuccess)
+    assert(MapConcat(Seq(m0, m5)).checkInputDataTypes().isFailure)
+    assert(MapConcat(Seq(m0, Literal(12))).checkInputDataTypes().isFailure)
+    assert(MapConcat(Seq(m0, m1)).dataType.keyType == StringType)
+    assert(MapConcat(Seq(m0, m1)).dataType.valueType == StringType)
+    assert(!MapConcat(Seq(m0, m1)).dataType.valueContainsNull)
+    assert(MapConcat(Seq(m5, m6)).dataType.keyType == StringType)
+    assert(MapConcat(Seq(m5, m6)).dataType.valueType == IntegerType)
+    assert(MapConcat(Seq.empty).dataType.keyType == StringType)
+    assert(MapConcat(Seq.empty).dataType.valueType == StringType)
+    assert(MapConcat(Seq(m5, m6)).dataType.valueContainsNull)
+    assert(MapConcat(Seq(m6, m5)).dataType.valueContainsNull)
+    assert(!MapConcat(Seq(m1, m2)).nullable)
+    assert(MapConcat(Seq(m1, mNull)).nullable)
   }
 
   test("MapFromEntries") {
@@ -195,6 +339,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
     val a2 = Literal.create(Seq(null), ArrayType(LongType))
     val a3 = Literal.create(null, ArrayType(StringType))
+    val a4 = Literal.create(Seq(create_row(1)), ArrayType(StructType(Seq(
+      StructField("a", IntegerType, true)))))
 
     checkEvaluation(ArrayContains(a0, Literal(1)), true)
     checkEvaluation(ArrayContains(a0, Literal(0)), false)
@@ -209,6 +355,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
+
+    checkEvaluation(ArrayContains(a4, Literal.create(create_row(1), StructType(Seq(
+      StructField("a", IntegerType, false))))), true)
+    checkEvaluation(ArrayContains(a4, Literal.create(create_row(0), StructType(Seq(
+      StructField("a", IntegerType, false))))), false)
 
     // binary
     val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
@@ -470,6 +621,292 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayMax(Literal.create(null, ArrayType(StringType))), null)
     checkEvaluation(
       ArrayMax(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))), 1.123)
+  }
+
+  test("Sequence of numbers") {
+    // test null handling
+
+    checkEvaluation(new Sequence(Literal(null, LongType), Literal(1L)), null)
+    checkEvaluation(new Sequence(Literal(1L), Literal(null, LongType)), null)
+    checkEvaluation(new Sequence(Literal(null, LongType), Literal(1L), Literal(1L)), null)
+    checkEvaluation(new Sequence(Literal(1L), Literal(null, LongType), Literal(1L)), null)
+    checkEvaluation(new Sequence(Literal(1L), Literal(1L), Literal(null, LongType)), null)
+
+    // test sequence boundaries checking
+
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
+      EmptyRow, s"Too long sequence: 4294967296. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
+
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(1), Literal(2), Literal(0)), EmptyRow, "boundaries: 1 to 2 by 0")
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(2), Literal(1), Literal(0)), EmptyRow, "boundaries: 2 to 1 by 0")
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(2), Literal(1), Literal(1)), EmptyRow, "boundaries: 2 to 1 by 1")
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(1), Literal(2), Literal(-1)), EmptyRow, "boundaries: 1 to 2 by -1")
+
+    // test sequence with one element (zero step or equal start and stop)
+
+    checkEvaluation(new Sequence(Literal(1), Literal(1), Literal(-1)), Seq(1))
+    checkEvaluation(new Sequence(Literal(1), Literal(1), Literal(0)), Seq(1))
+    checkEvaluation(new Sequence(Literal(1), Literal(1), Literal(1)), Seq(1))
+    checkEvaluation(new Sequence(Literal(1), Literal(2), Literal(2)), Seq(1))
+    checkEvaluation(new Sequence(Literal(1), Literal(0), Literal(-2)), Seq(1))
+
+    // test sequence of different integral types (ascending and descending)
+
+    checkEvaluation(new Sequence(Literal(1L), Literal(3L), Literal(1L)), Seq(1L, 2L, 3L))
+    checkEvaluation(new Sequence(Literal(-3), Literal(3), Literal(3)), Seq(-3, 0, 3))
+    checkEvaluation(
+      new Sequence(Literal(3.toShort), Literal(-3.toShort), Literal(-3.toShort)),
+      Seq(3.toShort, 0.toShort, -3.toShort))
+    checkEvaluation(
+      new Sequence(Literal(-1.toByte), Literal(-3.toByte), Literal(-1.toByte)),
+      Seq(-1.toByte, -2.toByte, -3.toByte))
+  }
+
+  test("Sequence of timestamps") {
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+      Literal(CalendarInterval.fromString("interval 12 hours"))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-02 00:00:01")),
+      Literal(CalendarInterval.fromString("interval 12 hours"))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(CalendarInterval.fromString("interval 12 hours").negate())),
+      Seq(
+        Timestamp.valueOf("2018-01-02 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-01 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+      Literal(Timestamp.valueOf("2017-12-31 23:59:59")),
+      Literal(CalendarInterval.fromString("interval 12 hours").negate())),
+      Seq(
+        Timestamp.valueOf("2018-01-02 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-01 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+      Literal(CalendarInterval.fromString("interval 1 month"))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-02-01 00:00:00"),
+        Timestamp.valueOf("2018-03-01 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(CalendarInterval.fromString("interval 1 month").negate())),
+      Seq(
+        Timestamp.valueOf("2018-03-01 00:00:00"),
+        Timestamp.valueOf("2018-02-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-03-03 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(CalendarInterval.fromString("interval 1 month 1 day").negate())),
+      Seq(
+        Timestamp.valueOf("2018-03-03 00:00:00"),
+        Timestamp.valueOf("2018-02-02 00:00:00"),
+        Timestamp.valueOf("2018-01-01 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-31 00:00:00")),
+      Literal(Timestamp.valueOf("2018-04-30 00:00:00")),
+      Literal(CalendarInterval.fromString("interval 1 month"))),
+      Seq(
+        Timestamp.valueOf("2018-01-31 00:00:00"),
+        Timestamp.valueOf("2018-02-28 00:00:00"),
+        Timestamp.valueOf("2018-03-31 00:00:00"),
+        Timestamp.valueOf("2018-04-30 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+      Literal(CalendarInterval.fromString("interval 1 month 1 second"))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-02-01 00:00:01")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-03-01 00:04:06")),
+      Literal(CalendarInterval.fromString("interval 1 month 2 minutes 3 seconds"))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-02-01 00:02:03"),
+        Timestamp.valueOf("2018-03-01 00:04:06")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2023-01-01 00:00:00")),
+      Literal(CalendarInterval.fromYearMonthString("1-5"))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00.000"),
+        Timestamp.valueOf("2019-06-01 00:00:00.000"),
+        Timestamp.valueOf("2020-11-01 00:00:00.000"),
+        Timestamp.valueOf("2022-04-01 00:00:00.000")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2022-04-01 00:00:00")),
+      Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
+      Literal(CalendarInterval.fromYearMonthString("1-5").negate())),
+      Seq(
+        Timestamp.valueOf("2022-04-01 00:00:00.000"),
+        Timestamp.valueOf("2020-11-01 00:00:00.000"),
+        Timestamp.valueOf("2019-06-01 00:00:00.000"),
+        Timestamp.valueOf("2018-01-01 00:00:00.000")))
+  }
+
+  test("Sequence on DST boundaries") {
+    val timeZone = TimeZone.getTimeZone("Europe/Prague")
+    val dstOffset = timeZone.getDSTSavings
+
+    def noDST(t: Timestamp): Timestamp = new Timestamp(t.getTime - dstOffset)
+
+    DateTimeTestUtils.withDefaultTimeZone(timeZone) {
+      // Spring time change
+      checkEvaluation(new Sequence(
+        Literal(Timestamp.valueOf("2018-03-25 01:30:00")),
+        Literal(Timestamp.valueOf("2018-03-25 03:30:00")),
+        Literal(CalendarInterval.fromString("interval 30 minutes"))),
+        Seq(
+          Timestamp.valueOf("2018-03-25 01:30:00"),
+          Timestamp.valueOf("2018-03-25 03:00:00"),
+          Timestamp.valueOf("2018-03-25 03:30:00")))
+
+      // Autumn time change
+      checkEvaluation(new Sequence(
+        Literal(Timestamp.valueOf("2018-10-28 01:30:00")),
+        Literal(Timestamp.valueOf("2018-10-28 03:30:00")),
+        Literal(CalendarInterval.fromString("interval 30 minutes"))),
+        Seq(
+          Timestamp.valueOf("2018-10-28 01:30:00"),
+          noDST(Timestamp.valueOf("2018-10-28 02:00:00")),
+          noDST(Timestamp.valueOf("2018-10-28 02:30:00")),
+          Timestamp.valueOf("2018-10-28 02:00:00"),
+          Timestamp.valueOf("2018-10-28 02:30:00"),
+          Timestamp.valueOf("2018-10-28 03:00:00"),
+          Timestamp.valueOf("2018-10-28 03:30:00")))
+    }
+  }
+
+  test("Sequence of dates") {
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2018-01-05")),
+        Literal(CalendarInterval.fromString("interval 2 days"))),
+        Seq(
+          Date.valueOf("2018-01-01"),
+          Date.valueOf("2018-01-03"),
+          Date.valueOf("2018-01-05")))
+
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2018-03-01")),
+        Literal(CalendarInterval.fromString("interval 1 month"))),
+        Seq(
+          Date.valueOf("2018-01-01"),
+          Date.valueOf("2018-02-01"),
+          Date.valueOf("2018-03-01")))
+
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2018-01-31")),
+        Literal(Date.valueOf("2018-04-30")),
+        Literal(CalendarInterval.fromString("interval 1 month"))),
+        Seq(
+          Date.valueOf("2018-01-31"),
+          Date.valueOf("2018-02-28"),
+          Date.valueOf("2018-03-31"),
+          Date.valueOf("2018-04-30")))
+
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2023-01-01")),
+        Literal(CalendarInterval.fromYearMonthString("1-5"))),
+        Seq(
+          Date.valueOf("2018-01-01"),
+          Date.valueOf("2019-06-01"),
+          Date.valueOf("2020-11-01"),
+          Date.valueOf("2022-04-01")))
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("1970-01-02")),
+          Literal(Date.valueOf("1970-01-01")),
+          Literal(CalendarInterval.fromString("interval 1 day"))),
+        EmptyRow, "sequence boundaries: 1 to 0 by 1")
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("1970-01-01")),
+          Literal(Date.valueOf("1970-02-01")),
+          Literal(CalendarInterval.fromString("interval 1 month").negate())),
+        EmptyRow,
+        s"sequence boundaries: 0 to 2678400000000 by -${28 * CalendarInterval.MICROS_PER_DAY}")
+    }
+  }
+
+  test("Sequence with default step") {
+    // +/- 1 for integral type
+    checkEvaluation(new Sequence(Literal(1), Literal(3)), Seq(1, 2, 3))
+    checkEvaluation(new Sequence(Literal(3), Literal(1)), Seq(3, 2, 1))
+
+    // +/- 1 day for timestamps
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-03 00:00:00"))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00"),
+        Timestamp.valueOf("2018-01-03 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-03 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00"))),
+      Seq(
+        Timestamp.valueOf("2018-01-03 00:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00"),
+        Timestamp.valueOf("2018-01-01 00:00:00")))
+
+    // +/- 1 day for dates
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-03"))),
+      Seq(
+        Date.valueOf("2018-01-01"),
+        Date.valueOf("2018-01-02"),
+        Date.valueOf("2018-01-03")))
+
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-03")),
+      Literal(Date.valueOf("2018-01-01"))),
+      Seq(
+        Date.valueOf("2018-01-03"),
+        Date.valueOf("2018-01-02"),
+        Date.valueOf("2018-01-01")))
   }
 
   test("Reverse") {

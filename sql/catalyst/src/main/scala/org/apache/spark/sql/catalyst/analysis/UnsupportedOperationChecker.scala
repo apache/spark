@@ -349,6 +349,17 @@ object UnsupportedOperationChecker {
               _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
               _: TypedFilter) =>
         case node if node.nodeName == "StreamingRelationV2" =>
+        case Repartition(1, false, _) =>
+        case node: Aggregate =>
+          val aboveSinglePartitionCoalesce = node.find {
+            case Repartition(1, false, _) => true
+            case _ => false
+          }.isDefined
+
+          if (!aboveSinglePartitionCoalesce) {
+            throwError(s"In continuous processing mode, coalesce(1) must be called before " +
+              s"aggregate operation ${node.nodeName}.")
+          }
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")
       }

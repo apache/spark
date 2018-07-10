@@ -1044,6 +1044,65 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     testData.select($"*").show(1000)
   }
 
+  test("getRows: truncate = [0, 20]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = Seq(
+      Seq("value"),
+      Seq("1"),
+      Seq("111111111111111111111"))
+    assert(df.getRows(10, 0) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = Seq(
+      Seq("value"),
+      Seq("1"),
+      Seq("11111111111111111..."))
+    assert(df.getRows(10, 20) === expectedAnswerForTrue)
+  }
+
+  test("getRows: truncate = [3, 17]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = Seq(
+      Seq("value"),
+      Seq("1"),
+      Seq("111"))
+    assert(df.getRows(10, 3) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = Seq(
+      Seq("value"),
+      Seq("1"),
+      Seq("11111111111111..."))
+    assert(df.getRows(10, 17) === expectedAnswerForTrue)
+  }
+
+  test("getRows: numRows = 0") {
+    val expectedAnswer = Seq(Seq("key", "value"), Seq("1", "1"))
+    assert(testData.select($"*").getRows(0, 20) === expectedAnswer)
+  }
+
+  test("getRows: array") {
+    val df = Seq(
+      (Array(1, 2, 3), Array(1, 2, 3)),
+      (Array(2, 3, 4), Array(2, 3, 4))
+    ).toDF()
+    val expectedAnswer = Seq(
+      Seq("_1", "_2"),
+      Seq("[1, 2, 3]", "[1, 2, 3]"),
+      Seq("[2, 3, 4]", "[2, 3, 4]"))
+    assert(df.getRows(10, 20) === expectedAnswer)
+  }
+
+  test("getRows: binary") {
+    val df = Seq(
+      ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
+      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
+    ).toDF()
+    val expectedAnswer = Seq(
+      Seq("_1", "_2"),
+      Seq("[31 32]", "[41 42 43 2E]"),
+      Seq("[33 34]", "[31 32 33 34 36]"))
+    assert(df.getRows(10, 20) === expectedAnswer)
+  }
+
   test("showString: truncate = [0, 20]") {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()

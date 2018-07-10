@@ -40,6 +40,7 @@
     <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
     <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
     <test.exclude.tags></test.exclude.tags>
+    <test.include.tags></test.include.tags>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes Integration Tests</name>
@@ -102,6 +103,15 @@
           </execution>
         </executions>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <skipTests>true</skipTests>
+        </configuration>
+      </plugin>
+
       <plugin>
         <!-- Triggers scalatest plugin in the integration-test phase instead of
              the test phase. -->
@@ -126,6 +136,7 @@
             <spark.kubernetes.test.serviceAccountName>${spark.kubernetes.test.serviceAccountName}</spark.kubernetes.test.serviceAccountName>
           </systemProperties>
           <tagsToExclude>${test.exclude.tags}</tagsToExclude>
+          <tagsToInclude>${test.include.tags}</tagsToInclude>
         </configuration>
         <executions>
           <execution>

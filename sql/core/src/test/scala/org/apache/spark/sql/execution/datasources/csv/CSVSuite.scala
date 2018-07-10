@@ -740,39 +740,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(numbers.count() == 8)
   }
 
-  test("error handling for unsupported data types.") {
-    withTempDir { dir =>
-      val csvDir = new File(dir, "csv").getCanonicalPath
-      var msg = intercept[UnsupportedOperationException] {
-        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b)").write.csv(csvDir)
-      }.getMessage
-      assert(msg.contains("CSV data source does not support struct<a:int,b:string> data type"))
-
-      msg = intercept[UnsupportedOperationException] {
-        Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.csv(csvDir)
-      }.getMessage
-      assert(msg.contains("CSV data source does not support map<string,int> data type"))
-
-      msg = intercept[UnsupportedOperationException] {
-        Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands").write.csv(csvDir)
-      }.getMessage
-      assert(msg.contains("CSV data source does not support array<string> data type"))
-
-      msg = intercept[UnsupportedOperationException] {
-        Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
-          .write.csv(csvDir)
-      }.getMessage
-      assert(msg.contains("CSV data source does not support array<double> data type"))
-
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
-        spark.range(1).write.csv(csvDir)
-        spark.read.schema(schema).csv(csvDir).collect()
-      }.getMessage
-      assert(msg.contains("CSV data source does not support array<double> data type."))
-    }
-  }
-
   test("SPARK-15585 turn off quotations") {
     val cars = spark.read
       .format("csv")
@@ -1601,5 +1568,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
     assert(testAppender2.events.asScala
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+  }
+
+  test("SPARK-24645 skip parsing when columnPruning enabled and partitions scanned only") {
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
+      withTempPath { path =>
+        val dir = path.getAbsolutePath
+        spark.range(10).selectExpr("id % 2 AS p", "id").write.partitionBy("p").csv(dir)
+        checkAnswer(spark.read.csv(dir).selectExpr("sum(p)"), Row(5))
+      }
+    }
   }
 }
