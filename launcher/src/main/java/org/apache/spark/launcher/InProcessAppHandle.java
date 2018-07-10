@@ -17,7 +17,10 @@
 
 package org.apache.spark.launcher;
 
+import org.slf4j.MDC;
+
 import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -58,7 +61,9 @@ class InProcessAppHandle extends AbstractAppHandle {
       appName = "..." + appName.substring(appName.length() - MAX_APP_NAME_LEN);
     }
 
+    Map<String, String> mdcContextMap = MDC.getCopyOfContextMap();
     app = new Thread(() -> {
+      MDC.setContextMap(mdcContextMap);
       try {
         main.invoke(null, (Object) args);
       } catch (Throwable t) {
