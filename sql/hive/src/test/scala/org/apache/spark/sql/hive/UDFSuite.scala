@@ -216,7 +216,7 @@ class UDFSuite
         }
         sql(s"USE default")
 
-        assert(e.getMessage.contains("Can not get a evaluator of the empty UDAF"))
+        assert(e.getMessage.contains("Can not get an evaluator of the empty UDAF"))
       }
     }
   }

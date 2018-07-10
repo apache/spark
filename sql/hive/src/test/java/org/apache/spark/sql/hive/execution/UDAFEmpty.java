@@ -27,6 +27,6 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 public class UDAFEmpty extends AbstractGenericUDAFResolver {
     @Override
     public GenericUDAFEvaluator getEvaluator(TypeInfo[] info) throws SemanticException {
-        throw new SemanticException("Can not get a evaluator of the empty UDAF");
+        throw new SemanticException("Can not get an evaluator of the empty UDAF");
     }
 }
