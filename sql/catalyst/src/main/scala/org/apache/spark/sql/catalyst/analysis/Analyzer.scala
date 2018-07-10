@@ -1230,7 +1230,7 @@ class Analyzer(
       }
     }
 
-    private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
+    def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
       FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT),
         name.database.orElse(Some(catalog.getCurrentDatabase)))
     }

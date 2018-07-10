@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.net.URI
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -30,9 +30,9 @@ class LookupFunctionsSuite extends PlanTest {
 
   test("SPARK-23486: LookupFunctions should not check the same function name more than once") {
     val externalCatalog = new CustomInMemoryCatalog
+    val conf = new SQLConf()
+    val catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin, conf)
     val analyzer = {
-      val conf = new SQLConf()
-      val catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin, conf)
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI("loc"), Map.empty),
         ignoreIfExists = false)
@@ -47,6 +47,11 @@ class LookupFunctionsSuite extends PlanTest {
       table("TaBlE"))
     analyzer.LookupFunctions.apply(plan)
     assert(externalCatalog.getFunctionExistsCalledTimes == 1)
+
+    assert(analyzer.LookupFunctions.normalizeFuncName(unresolvedFunc.name).database == "default")
+    assert(catalog.isRegisteredFunction(unresolvedFunc.name) == false)
+    assert(catalog.isRegisteredFunction(FunctionIdentifier("max")) == true)
+
   }
 }
 
@@ -60,4 +65,5 @@ class CustomInMemoryCatalog extends InMemoryCatalog {
   }
 
   def getFunctionExistsCalledTimes: Int = functionExistsCalledTimes
+
 }
