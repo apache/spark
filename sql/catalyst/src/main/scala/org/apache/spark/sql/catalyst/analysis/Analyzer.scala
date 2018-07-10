@@ -739,7 +739,7 @@ class Analyzer(
           (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
 
         case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
-            if AttributeSet(output).intersect(conflictingAttributes).nonEmpty =>
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           (oldVersion, oldVersion.copy(output = output.map(_.newInstance())))
 
         case oldVersion: Generate
