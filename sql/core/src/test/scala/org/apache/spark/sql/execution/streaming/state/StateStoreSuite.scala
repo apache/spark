@@ -25,14 +25,15 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
+import java.util
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark._
+
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
@@ -62,6 +63,63 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   after {
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
+  }
+
+  test("retaining only latest configured size of versions in memory") {
+    val provider = newStoreProvider(opId = Random.nextInt, partition = 0,
+      numOfVersToRetainInMemory = 3)
+
+    var currentVersion = 0
+    def updateVersionTo(targetVersion: Int): Unit = {
+      for (i <- currentVersion + 1 to targetVersion) {
+        val store = provider.getStore(currentVersion)
+        put(store, "a", i)
+        store.commit()
+        currentVersion += 1
+      }
+      require(currentVersion === targetVersion)
+    }
+
+    def restoreOriginValues(map: provider.MapType): Map[String, Int] = {
+      map.asScala.map(entry => rowToString(entry._1) -> rowToInt(entry._2)).toMap
+    }
+
+    updateVersionTo(1)
+    assert(getData(provider) === Set("a" -> 1))
+    var loadedMaps = provider.getClonedLoadedMaps()
+    assert(loadedMaps.size() === 1)
+    assert(loadedMaps.firstKey() === 1L)
+    assert(restoreOriginValues(loadedMaps.get(1L)) === Map("a" -> 1))
+
+    updateVersionTo(2)
+    assert(getData(provider) === Set("a" -> 2))
+    loadedMaps = provider.getClonedLoadedMaps()
+    assert(loadedMaps.size() === 2)
+    assert(loadedMaps.firstKey() === 2L)
+    assert(loadedMaps.lastKey() === 1L)
+    assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> 2))
+    assert(restoreOriginValues(loadedMaps.get(1L)) === Map("a" -> 1))
+
+    updateVersionTo(3)
+    assert(getData(provider) === Set("a" -> 3))
+    loadedMaps = provider.getClonedLoadedMaps()
+    assert(loadedMaps.size() === 3)
+    assert(loadedMaps.firstKey() === 3L)
+    assert(loadedMaps.lastKey() === 1L)
+    assert(restoreOriginValues(loadedMaps.get(3L)) === Map("a" -> 3))
+    assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> 2))
+    assert(restoreOriginValues(loadedMaps.get(1L)) === Map("a" -> 1))
+
+    // this trigger exceeding cache and 1 will be evicted
+    updateVersionTo(4)
+    assert(getData(provider) === Set("a" -> 4))
+    loadedMaps = provider.getClonedLoadedMaps()
+    assert(loadedMaps.size() === 3)
+    assert(loadedMaps.firstKey() === 4L)
+    assert(loadedMaps.lastKey() === 2L)
+    assert(restoreOriginValues(loadedMaps.get(4L)) === Map("a" -> 4))
+    assert(restoreOriginValues(loadedMaps.get(3L)) === Map("a" -> 3))
+    assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> 2))
   }
 
   test("snapshotting") {
@@ -535,9 +593,11 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       partition: Int,
       dir: String = newDir(),
       minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
       hadoopConf: Configuration = new Configuration): HDFSBackedStateStoreProvider = {
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
+    sqlConf.setConf(SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY, numOfVersToRetainInMemory)
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     val provider = new HDFSBackedStateStoreProvider()
     provider.init(

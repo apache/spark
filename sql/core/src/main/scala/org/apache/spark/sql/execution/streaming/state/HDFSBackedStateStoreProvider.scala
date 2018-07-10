@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
+import java.util
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -35,7 +36,6 @@ import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
-import org.apache.spark.sql.streaming.state.BoundedSortedMap
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SizeEstimator, Utils}
 
@@ -205,8 +205,6 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
     this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
-    this.loadedMaps = new BoundedSortedMap[Long, MapType](Ordering[Long].reverse,
-      numberOfVersionsToRetainInMemory)
     fm.mkdirs(baseDir)
   }
 
@@ -243,12 +241,9 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   @volatile private var valueSchema: StructType = _
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
+  @volatile private var numberOfVersionsToRetainInMemory: Int = _
 
-  // taking default value first: this will be updated by init method with configuration
-  @volatile private var numberOfVersionsToRetainInMemory: Int = 2
-  @volatile private var loadedMaps = new BoundedSortedMap[Long, MapType](Ordering[Long].reverse,
-    numberOfVersionsToRetainInMemory)
-
+  private lazy val loadedMaps = new util.TreeMap[Long, MapType](Ordering[Long].reverse)
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
   private lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
@@ -258,7 +253,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   private def commitUpdates(newVersion: Long, map: MapType, output: DataOutputStream): Unit = {
     synchronized {
       finalizeDeltaFile(output)
-      loadedMaps.put(newVersion, map)
+      putStateIntoStateCache(newVersion, map)
     }
   }
 
@@ -278,6 +273,32 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     } else Iterator.empty
   }
 
+  /** This method is intended to be only used for unit test(s). DO NOT TOUCH ELEMENTS IN MAP! */
+  private[state] def getClonedLoadedMaps(): util.SortedMap[Long, MapType] = synchronized {
+    // shallow copy as a minimal guard
+    loadedMaps.clone().asInstanceOf[util.SortedMap[Long, MapType]]
+  }
+
+  private def putStateIntoStateCache(newVersion: Long, map: MapType): Unit = synchronized {
+    while (loadedMaps.size() > numberOfVersionsToRetainInMemory) {
+      loadedMaps.remove(loadedMaps.lastKey())
+    }
+
+    val size = loadedMaps.size()
+    if (size == numberOfVersionsToRetainInMemory) {
+      val versionIdForLastKey = loadedMaps.lastKey()
+      if (versionIdForLastKey > newVersion) {
+        // this is the only case which put doesn't need
+        return
+      } else if (versionIdForLastKey < newVersion) {
+        // this case needs removal of the last key before putting new one
+        loadedMaps.remove(versionIdForLastKey)
+      }
+    }
+
+    loadedMaps.put(newVersion, map)
+  }
+
   /** Load the required version of the map data from the backing files */
   private def loadMap(version: Long): MapType = {
 
@@ -294,7 +315,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     val (result, elapsedMs) = Utils.timeTakenMs {
       val snapshotCurrentVersionMap = readSnapshotFile(version)
       if (snapshotCurrentVersionMap.isDefined) {
-        synchronized { loadedMaps.put(version, snapshotCurrentVersionMap.get) }
+        synchronized { putStateIntoStateCache(version, snapshotCurrentVersionMap.get) }
         return snapshotCurrentVersionMap.get
       }
 
@@ -322,7 +343,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         updateFromDeltaFile(deltaVersion, resultMap)
       }
 
-      synchronized { loadedMaps.put(version, resultMap) }
+      synchronized { putStateIntoStateCache(version, resultMap) }
       resultMap
     }
 
