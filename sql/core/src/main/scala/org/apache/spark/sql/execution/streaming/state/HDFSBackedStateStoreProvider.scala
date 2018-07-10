@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
+import java.util
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -25,7 +26,6 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
-import java.util
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
