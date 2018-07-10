@@ -1427,17 +1427,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockLocations = Seq(BlockManagerId("1", "host1", 100), BlockManagerId("2", "host2", 200))
     when(mockBlockManagerMaster.getLocations(mc.any[Array[BlockId]]))
       .thenReturn(Array(blockLocations))
-
-    val bm = mock(classOf[BlockManager])
-    when(bm.master).thenReturn(mockBlockManagerMaster)
-
     val env = mock(classOf[SparkEnv])
-    when(env.blockManager).thenReturn(bm)
 
-    val blockId = StreamBlockId(1, 2)
-    val locs = BlockManager.blockIdsToLocations(Array(blockId), env)
+    val blockIds: Array[BlockId] = Array(StreamBlockId(1, 2))
+    val locs = BlockManager.blockIdsToLocations(blockIds, env, mockBlockManagerMaster)
     val expectedLocs = Seq("executor_host1_1", "executor_host2_2")
-    assert(locs(blockId) == expectedLocs)
+    assert(locs(blockIds(0)) == expectedLocs)
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
