@@ -772,7 +772,7 @@ private[spark] class TaskSetManager(
   private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
-        if (speculationEnabled) {
+        if (speculationEnabled && !isZombie) {
           taskAttempts(index).headOption.map { info =>
             info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
             successfulTaskDurations.insert(info.duration)
