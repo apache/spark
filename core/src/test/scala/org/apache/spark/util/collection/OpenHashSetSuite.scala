@@ -73,6 +73,27 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     assert(set.contains(50))
     assert(set.contains(999))
     assert(!set.contains(10000))
+
+    set.remove(999)
+    assert(set.size === 2)
+    assert(set.contains(10))
+    assert(set.contains(50))
+    assert(!set.contains(999))
+    assert(!set.contains(10000))
+
+    set.add(999)
+    assert(set.size === 3)
+    assert(set.contains(10))
+    assert(set.contains(50))
+    assert(set.contains(999))
+    assert(!set.contains(10000))
+
+    set.remove(10000)
+    assert(set.size === 3)
+    assert(set.contains(10))
+    assert(set.contains(50))
+    assert(set.contains(999))
+    assert(!set.contains(10000))
   }
 
   test("primitive long") {
@@ -109,6 +130,27 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     assert(set.contains(10L))
     assert(set.contains(50L))
     assert(set.contains(999L))
+    assert(!set.contains(10000L))
+
+    set.remove(999L)
+    assert(set.size === 2)
+    assert(set.contains(10L))
+    assert(set.contains(50L))
+    assert(!set.contains(999L))
+    assert(!set.contains(10000L))
+
+    set.add(999L)
+    assert(set.size === 3)
+    assert(set.contains(10L))
+    assert(set.contains(50L))
+    assert(set.contains(999L))
+    assert(!set.contains(10000L))
+
+    set.remove(10000L)
+    assert(set.size === 3)
+    assert(set.contains(10L))
+    assert(set.contains(50L))
+    assert(!set.contains(999L))
     assert(!set.contains(10000L))
   }
 
@@ -216,6 +258,27 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     assert(!set.contains(10000.toString))
 
     set.add(50.toString)
+    assert(set.size === 3)
+    assert(set.contains(10.toString))
+    assert(set.contains(50.toString))
+    assert(set.contains(999.toString))
+    assert(!set.contains(10000.toString))
+
+    set.remove(999.toString)
+    assert(set.size === 2)
+    assert(set.contains(10.toString))
+    assert(set.contains(50.toString))
+    assert(!set.contains(999.toString))
+    assert(!set.contains(10000.toString))
+
+    set.add(999.toString)
+    assert(set.size === 3)
+    assert(set.contains(10.toString))
+    assert(set.contains(50.toString))
+    assert(set.contains(999.toString))
+    assert(!set.contains(10000.toString))
+
+    set.remove(10000.toString)
     assert(set.size === 3)
     assert(set.contains(10.toString))
     assert(set.contains(50.toString))

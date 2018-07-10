@@ -1655,7 +1655,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df2 = Seq((Array[Integer](1, 2, null, 4, 5), Array[Integer](-5, 4, null, 2, -1)))
       .toDF("a", "b")
-    val ans2 = Row(Seq(2, null, 4))
+    val ans2 = Row(Seq(4, null, 2))
     checkAnswer(df2.select(array_intersect($"a", $"b")), ans2)
     checkAnswer(df2.selectExpr("array_intersect(a, b)"), ans2)
 
@@ -1664,7 +1664,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df3.select(array_intersect($"a", $"b")), ans3)
     checkAnswer(df3.selectExpr("array_intersect(a, b)"), ans3)
 
-    val ans4 = Row(Seq(2L, null, 4L))
+    val df4 = Seq(
+      (Array[java.lang.Long](1L, 2L, null, 4L, 5L), Array[java.lang.Long](-5L, 4L, null, 2L, -1L)))
+      .toDF("a", "b")
+    val ans4 = Row(Seq(4L, null, 2L))
     checkAnswer(df4.select(array_intersect($"a", $"b")), ans4)
     checkAnswer(df4.selectExpr("array_intersect(a, b)"), ans4)
 
@@ -1674,16 +1677,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df5.selectExpr("array_intersect(a, b)"), ans5)
 
     val df6 = Seq((null, null)).toDF("a", "b")
-    val ans6 = Row(null)
-    checkAnswer(df6.select(array_intersect($"a", $"b")), ans6)
-    checkAnswer(df6.selectExpr("array_intersect(a, b)"), ans6)
-
-    val df0 = Seq((Array(1), Array("a"))).toDF("a", "b")
     intercept[AnalysisException] {
-      df0.select(array_intersect($"a", $"b"))
+      df6.select(array_intersect($"a", $"b"))
     }
     intercept[AnalysisException] {
-      df0.selectExpr("array_intersect(a, b)")
+      df6.selectExpr("array_intersect(a, b)")
+    }
+
+    val df7 = Seq((Array(1), Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df7.select(array_intersect($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df7.selectExpr("array_intersect(a, b)")
+    }
+
+    val df8 = Seq((null, Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df8.select(array_intersect($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df8.selectExpr("array_intersect(a, b)")
     }
   }
 
