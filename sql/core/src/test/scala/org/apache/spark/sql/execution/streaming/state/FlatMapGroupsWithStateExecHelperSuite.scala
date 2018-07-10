@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.sql.{Encoder, QueryTest}
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite._
 import org.apache.spark.sql.streaming.StreamTest

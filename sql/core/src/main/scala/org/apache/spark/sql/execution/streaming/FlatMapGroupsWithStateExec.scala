@@ -50,6 +50,7 @@ case class FlatMapGroupsWithStateExec(
     outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     stateEncoder: ExpressionEncoder[Any],
+    stateFormatVersion: Int,
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
@@ -65,7 +66,8 @@ case class FlatMapGroupsWithStateExec(
     case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
     case _ => false
   }
-  private[sql] val stateManager = createStateManager(stateEncoder, isTimeoutEnabled, 2)
+  private[sql] val stateManager =
+    createStateManager(stateEncoder, isTimeoutEnabled, stateFormatVersion)
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, CaseWhen, CreateNamedStruct, Expression, GenericInternalRow, GetStructField, If, IsNull, Literal, SpecificInternalRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.ObjectOperator
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 
 object FlatMapGroupsWithStateExecHelper {
 
-  val DEFAULT_STATE_MANAGER_VERSION = 2
+  val supportedVersions = Seq(1, 2)
 
   /**
    * Class to capture deserialized state and timestamp return by the state manager.
@@ -58,16 +58,17 @@ object FlatMapGroupsWithStateExecHelper {
     def putState(store: StateStore, keyRow: UnsafeRow, state: Any, timeoutTimestamp: Long): Unit
     def removeState(store: StateStore, keyRow: UnsafeRow): Unit
     def getAllState(store: StateStore): Iterator[StateData]
+    def version: Int
   }
 
   def createStateManager(
       stateEncoder: ExpressionEncoder[Any],
       shouldStoreTimestamp: Boolean,
-      version: Int): StateManager = {
-    version match {
+      stateFormatVersion: Int): StateManager = {
+    stateFormatVersion match {
       case 1 => new StateManagerImplV1(stateEncoder, shouldStoreTimestamp)
       case 2 => new StateManagerImplV2(stateEncoder, shouldStoreTimestamp)
-      case _ => throw new IllegalArgumentException(s"Version $version")
+      case _ => throw new IllegalArgumentException(s"Version $stateFormatVersion is invalid")
     }
   }
 
@@ -75,7 +76,8 @@ object FlatMapGroupsWithStateExecHelper {
   // =========================== Private implementations of StateManager ===========================
   // ===============================================================================================
 
-  private abstract class StateManagerImplBase(shouldStoreTimestamp: Boolean) extends StateManager {
+  private abstract class StateManagerImplBase(val version: Int, shouldStoreTimestamp: Boolean)
+    extends StateManager {
 
     protected def stateSerializerExprs: Seq[Expression]
     protected def stateDeserializerExpr: Expression
@@ -135,7 +137,7 @@ object FlatMapGroupsWithStateExecHelper {
 
   private class StateManagerImplV1(
       stateEncoder: ExpressionEncoder[Any],
-      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(shouldStoreTimestamp) {
+      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(1, shouldStoreTimestamp) {
 
     private val timestampTimeoutAttribute =
       AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
@@ -175,7 +177,7 @@ object FlatMapGroupsWithStateExecHelper {
 
   private class StateManagerImplV2(
       stateEncoder: ExpressionEncoder[Any],
-      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(shouldStoreTimestamp) {
+      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(2, shouldStoreTimestamp) {
 
     /** Schema of the state rows saved in the state store */
     override val stateSchema: StructType = {

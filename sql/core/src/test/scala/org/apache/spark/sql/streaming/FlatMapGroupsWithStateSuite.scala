@@ -31,8 +31,9 @@ import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
-import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream}
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -601,7 +602,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     expectedState = Some(5),                                  // state should change
     expectedTimeoutTimestamp = 5000)                          // timestamp should change
 
-  test("flatMapGroupsWithState - streaming") {
+  testWithAllStateVersions("flatMapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
@@ -680,7 +681,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  test("flatMapGroupsWithState - streaming + aggregation") {
+  testWithAllStateVersions("flatMapGroupsWithState - streaming + aggregation") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
@@ -739,7 +740,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     checkAnswer(df, Seq(("a", 2), ("b", 1)).toDF)
   }
 
-  test("flatMapGroupsWithState - streaming with processing time timeout") {
+  testWithAllStateVersions("flatMapGroupsWithState - streaming with processing time timeout") {
     // Function to maintain the count as state and set the proc. time timeout delay of 10 seconds.
     // It returns the count if changed, or -1 if the state was removed by timeout.
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
@@ -803,7 +804,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  test("flatMapGroupsWithState - streaming with event time timeout + watermark") {
+  testWithAllStateVersions("flatMapGroupsWithState - streaming with event time timeout") {
     // Function to maintain the max event time as state and set the timeout timestamp based on the
     // current max event time seen. It returns the max event time in the state, or -1 if the state
     // was removed by timeout.
@@ -1135,7 +1136,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       .logicalPlan.collectFirst {
         case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, _) =>
           FlatMapGroupsWithStateExec(
-            f, k, v, g, d, o, None, s, m, t,
+            f, k, v, g, d, o, None, s, 2, m, t,
             Some(currentBatchTimestamp), Some(currentBatchWatermark), RDDScanExec(g, null, "rdd"))
       }.get
   }
@@ -1168,6 +1169,16 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
   }
 
   def rowToInt(row: UnsafeRow): Int = row.getInt(0)
+
+  def testWithAllStateVersions(name: String)(func: => Unit): Unit = {
+    for (version <- FlatMapGroupsWithStateExecHelper.supportedVersions) {
+      test(s"$name - state format version $version") {
+        withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> version.toString) {
+          func
+        }
+      }
+    }
+  }
 }
 
 object FlatMapGroupsWithStateSuite {
