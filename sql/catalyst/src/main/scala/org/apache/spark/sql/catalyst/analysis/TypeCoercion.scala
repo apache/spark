@@ -169,6 +169,12 @@ object TypeCoercion {
           }
         case _ => None
       }
+    case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) =>
+      findTypeFunc(udt1.sqlType, udt2.sqlType)
+    case (udt1: UserDefinedType[_], _) =>
+      findTypeFunc(udt1.sqlType, t2)
+    case (_, udt2: UserDefinedType[_]) =>
+      findTypeFunc(t1, udt2.sqlType)
     case _ => None
   }
 
