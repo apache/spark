@@ -18,9 +18,11 @@
 package org.apache.spark.sql.streaming
 
 import java.{util => ju}
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date}
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.internal.Logging
@@ -31,6 +33,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.util.Utils
 
 class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matchers with Logging {
 
@@ -539,6 +542,43 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
         AddData(input2, 150),
         CheckLastBatch(150),
         checkWatermark(input2, 110)  // does not advance when only one of the input has data
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: recovery from existing checkpoints, ignores session conf") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+    val df2 = input2.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "15 seconds")
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.3.1-for-multi-watermark-policy/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    input1.addData(20)
+    input2.addData(30)
+    input1.addData(10)
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+      testStream(df1.union(df2).select($"eventTime".cast("int")))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        Execute { _.processAllAvailable() },
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input2, 110), // should calculate 'min' even if session conf has 'max' policy
+        AddData(input2, 150),
+        CheckLastBatch(150),
+        checkWatermark(input2, 110)
       )
     }
   }
