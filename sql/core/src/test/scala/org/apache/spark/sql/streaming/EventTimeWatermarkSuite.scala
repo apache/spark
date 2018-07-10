@@ -26,7 +26,7 @@ import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
@@ -492,15 +492,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
-    val df1 = input1.toDF
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "10 seconds")
-    val df2 = input2.toDF
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "15 seconds")
-
     withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
-      testStream(df1.union(df2).select($"eventTime".cast("int")))(
+      testStream(dfWithMultipleWatermarks(input1, input2))(
         MultiAddData(input1, 20)(input2, 30),
         CheckLastBatch(20, 30),
         checkWatermark(input1, 15), // max(20 - 10, 30 - 15) = 15
@@ -521,15 +514,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
-    val df1 = input1.toDF
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "10 seconds")
-    val df2 = input2.toDF
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "15 seconds")
-
     withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "min") {
-      testStream(df1.union(df2).select($"eventTime".cast("int")))(
+      testStream(dfWithMultipleWatermarks(input1, input2))(
         MultiAddData(input1, 20)(input2, 30),
         CheckLastBatch(20, 30),
         checkWatermark(input1, 10), // min(20 - 10, 30 - 15) = 10
@@ -546,16 +532,37 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
-  test("MultipleWatermarkPolicy: recovery from existing checkpoints, ignores session conf") {
+  test("MultipleWatermarkPolicy: recovery from checkpoints ignores session conf") {
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
-    val df1 = input1.toDF
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "10 seconds")
-    val df2 = input2.toDF
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "15 seconds")
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(input1, 20)(input2, 30),
+        CheckLastBatch(20, 30),
+        checkWatermark(input1, 15) // max(20 - 10, 30 - 15) = 15
+      )
+    }
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "min") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        checkWatermark(input1, 15), // watermark recovered correctly
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input1, 115), // max(120 - 10, 130 - 15) = 115, policy recovered correctly
+        AddData(input1, 150),
+        CheckLastBatch(150),
+        checkWatermark(input1, 140) // should advance even if one of the input has data
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: recovery from Spark ver 2.3.1 checkpoints ensures min policy") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
 
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-2.3.1-for-multi-watermark-policy/").toURI
@@ -570,7 +577,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     input1.addData(10)
 
     withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
-      testStream(df1.union(df2).select($"eventTime".cast("int")))(
+      testStream(dfWithMultipleWatermarks(input1, input2))(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         Execute { _.processAllAvailable() },
         MultiAddData(input1, 120)(input2, 130),
@@ -591,6 +598,18 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       }
       assert(e.getMessage.toLowerCase.contains("valid values are 'min' and 'max'"))
     }
+  }
+
+  private def dfWithMultipleWatermarks(
+      input1: MemoryStream[Int],
+      input2: MemoryStream[Int]): Dataset[_] = {
+    val df1 = input1.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+    val df2 = input2.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "15 seconds")
+    df1.union(df2).select($"eventTime".cast("int"))
   }
 
   private def checkWatermark(input: MemoryStream[Int], watermark: Long) = Execute { q =>
