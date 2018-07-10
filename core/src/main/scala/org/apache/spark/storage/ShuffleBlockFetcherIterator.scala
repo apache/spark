@@ -48,7 +48,9 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  * @param blockManager [[BlockManager]] for reading local blocks
  * @param blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
  *                        For each block we also require the size (in bytes as a long field) in
- *                        order to throttle the memory usage.
+ *                        order to throttle the memory usage. Note that zero-sized blocks are
+ *                        already excluded, which happened in
+ *                        [[MapOutputTracker.convertMapStatuses]].
  * @param streamWrapper A function to wrap the returned input stream.
  * @param maxBytesInFlight max size (in bytes) of remote blocks to fetch at any given point.
  * @param maxReqsInFlight max number of remote requests to fetch blocks at any given point.
@@ -62,7 +64,7 @@ final class ShuffleBlockFetcherIterator(
     context: TaskContext,
     shuffleClient: ShuffleClient,
     blockManager: BlockManager,
-    blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
+    blocksByAddress: Iterator[(BlockManagerId, Seq[(BlockId, Long)])],
     streamWrapper: (BlockId, InputStream) => InputStream,
     maxBytesInFlight: Long,
     maxReqsInFlight: Int,
@@ -74,8 +76,8 @@ final class ShuffleBlockFetcherIterator(
   import ShuffleBlockFetcherIterator._
 
   /**
-   * Total number of blocks to fetch. This can be smaller than the total number of blocks
-   * in [[blocksByAddress]] because we filter out zero-sized blocks in [[initialize]].
+   * Total number of blocks to fetch. This should be equal to the total number of blocks
+   * in [[blocksByAddress]] because we already filter out zero-sized blocks in [[blocksByAddress]].
    *
    * This should equal localBlocks.size + remoteBlocks.size.
    */
@@ -267,13 +269,16 @@ final class ShuffleBlockFetcherIterator(
     // at most maxBytesInFlight in order to limit the amount of data in flight.
     val remoteRequests = new ArrayBuffer[FetchRequest]
 
-    // Tracks total number of blocks (including zero sized blocks)
-    var totalBlocks = 0
     for ((address, blockInfos) <- blocksByAddress) {
-      totalBlocks += blockInfos.size
       if (address.executorId == blockManager.blockManagerId.executorId) {
-        // Filter out zero-sized blocks
-        localBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
+        blockInfos.find(_._2 <= 0) match {
+          case Some((blockId, size)) if size < 0 =>
+            throw new BlockException(blockId, "Negative block size " + size)
+          case Some((blockId, size)) if size == 0 =>
+            throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
+          case None => // do nothing.
+        }
+        localBlocks ++= blockInfos.map(_._1)
         numBlocksToFetch += localBlocks.size
       } else {
         val iterator = blockInfos.iterator
@@ -281,14 +286,15 @@ final class ShuffleBlockFetcherIterator(
         var curBlocks = new ArrayBuffer[(BlockId, Long)]
         while (iterator.hasNext) {
           val (blockId, size) = iterator.next()
-          // Skip empty blocks
-          if (size > 0) {
+          if (size < 0) {
+            throw new BlockException(blockId, "Negative block size " + size)
+          } else if (size == 0) {
+            throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
+          } else {
             curBlocks += ((blockId, size))
             remoteBlocks += blockId
             numBlocksToFetch += 1
             curRequestSize += size
-          } else if (size < 0) {
-            throw new BlockException(blockId, "Negative block size " + size)
           }
           if (curRequestSize >= targetRequestSize ||
               curBlocks.size >= maxBlocksInFlightPerAddress) {
@@ -306,7 +312,8 @@ final class ShuffleBlockFetcherIterator(
         }
       }
     }
-    logInfo(s"Getting $numBlocksToFetch non-empty blocks out of $totalBlocks blocks")
+    logInfo(s"Getting $numBlocksToFetch non-empty blocks including ${localBlocks.size}" +
+        s" local blocks and ${remoteBlocks.size} remote blocks")
     remoteRequests
   }
 
@@ -405,6 +412,25 @@ final class ShuffleBlockFetcherIterator(
           if (isNetworkReqDone) {
             reqsInFlight -= 1
             logDebug("Number of requests in flight " + reqsInFlight)
+          }
+
+          if (buf.size == 0) {
+            // We will never legitimately receive a zero-size block. All blocks with zero records
+            // have zero size and all zero-size blocks have no records (and hence should never
+            // have been requested in the first place). This statement relies on behaviors of the
+            // shuffle writers, which are guaranteed by the following test cases:
+            //
+            // - BypassMergeSortShuffleWriterSuite: "write with some empty partitions"
+            // - UnsafeShuffleWriterSuite: "writeEmptyIterator"
+            // - DiskBlockObjectWriterSuite: "commit() and close() without ever opening or writing"
+            //
+            // There is not an explicit test for SortShuffleWriter but the underlying APIs that
+            // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
+            // which returns a zero-size from commitAndGet() in case no records were written
+            // since the last call.
+            val msg = s"Received a zero-size buffer for block $blockId from $address " +
+              s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
+            throwFetchFailedException(blockId, address, new IOException(msg))
           }
 
           val in = try {

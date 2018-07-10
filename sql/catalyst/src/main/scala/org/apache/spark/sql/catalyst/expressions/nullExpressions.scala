@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -111,7 +112,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
 
     ev.copy(code =
-      s"""
+      code"""
          |${ev.isNull} = true;
          |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |do {
@@ -232,7 +233,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
     val eval = child.genCode(ctx)
     child.dataType match {
       case DoubleType | FloatType =>
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${eval.code}
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = FalseLiteral)
@@ -278,7 +279,7 @@ case class NaNvl(left: Expression, right: Expression)
     val rightGen = right.genCode(ctx)
     left.dataType match {
       case DoubleType | FloatType =>
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${leftGen.code}
           boolean ${ev.isNull} = false;
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -440,7 +441,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       }.mkString)
 
     ev.copy(code =
-      s"""
+      code"""
          |${CodeGenerator.JAVA_INT} $nonnull = 0;
          |do {
          |  $codes

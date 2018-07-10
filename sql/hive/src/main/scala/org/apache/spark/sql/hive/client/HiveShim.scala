@@ -24,7 +24,6 @@ import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, S
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -46,7 +45,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegralType, StringType}
+import org.apache.spark.sql.types.{AtomicType, IntegralType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -343,7 +342,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 
   override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
-    conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000
+    conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000L
   }
 
   override def loadPartition(
@@ -657,17 +656,32 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
 
+    object ExtractAttribute {
+      def unapply(expr: Expression): Option[Attribute] = {
+        expr match {
+          case attr: Attribute => Some(attr)
+          case Cast(child @ AtomicType(), dt: AtomicType, _)
+              if Cast.canSafeCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
+          case _ => None
+        }
+      }
+    }
+
     def convert(expr: Expression): Option[String] = expr match {
-      case In(NonVarcharAttribute(name), ExtractableLiterals(values)) if useAdvanced =>
+      case In(ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiterals(values))
+          if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case InSet(NonVarcharAttribute(name), ExtractableValues(values)) if useAdvanced =>
+      case InSet(ExtractAttribute(NonVarcharAttribute(name)), ExtractableValues(values))
+          if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case op @ SpecialBinaryComparison(NonVarcharAttribute(name), ExtractableLiteral(value)) =>
+      case op @ SpecialBinaryComparison(
+          ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiteral(value)) =>
         Some(s"$name ${op.symbol} $value")
 
-      case op @ SpecialBinaryComparison(ExtractableLiteral(value), NonVarcharAttribute(name)) =>
+      case op @ SpecialBinaryComparison(
+          ExtractableLiteral(value), ExtractAttribute(NonVarcharAttribute(name))) =>
         Some(s"$value ${op.symbol} $name")
 
       case And(expr1, expr2) if useAdvanced =>

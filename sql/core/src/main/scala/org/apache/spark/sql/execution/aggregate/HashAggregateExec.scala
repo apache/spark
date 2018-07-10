@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -190,7 +191,7 @@ case class HashAggregateExec(
       val value = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue")
       // The initial expression should not access any column
       val ev = e.genCode(ctx)
-      val initVars = s"""
+      val initVars = code"""
          | $isNull = ${ev.isNull};
          | $value = ${ev.value};
        """.stripMargin
@@ -755,7 +756,10 @@ case class HashAggregateExec(
     }
 
     // generate hash code for key
-    val hashExpr = Murmur3Hash(groupingExpressions, 42)
+    // SPARK-24076: HashAggregate uses the same hash algorithm on the same expressions
+    // as ShuffleExchange, it may lead to bad hash conflict when shuffle.partitions=8192*n,
+    // pick a different seed to avoid this conflict
+    val hashExpr = Murmur3Hash(groupingExpressions, 48)
     val hashEval = BindReferences.bindReference(hashExpr, child.output).genCode(ctx)
 
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
@@ -770,8 +774,8 @@ case class HashAggregateExec(
     val findOrInsertRegularHashMap: String =
       s"""
          |// generate grouping key
-         |${unsafeRowKeyCode.code.trim}
-         |${hashEval.code.trim}
+         |${unsafeRowKeyCode.code}
+         |${hashEval.code}
          |if ($checkFallbackForBytesToBytesMap) {
          |  // try to get the buffer from hash map
          |  $unsafeRowBuffer =

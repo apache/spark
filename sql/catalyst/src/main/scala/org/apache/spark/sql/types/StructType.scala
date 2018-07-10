@@ -426,7 +426,7 @@ object StructType extends AbstractDataType {
   private[sql] def fromString(raw: String): StructType = {
     Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
       case t: StructType => t
-      case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+      case _ => throw new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
     }
   }
 
@@ -528,7 +528,8 @@ object StructType extends AbstractDataType {
         leftType
 
       case _ =>
-        throw new SparkException(s"Failed to merge incompatible data types $left and $right")
+        throw new SparkException(s"Failed to merge incompatible data types ${left.simpleString} " +
+          s"and ${right.simpleString}")
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {

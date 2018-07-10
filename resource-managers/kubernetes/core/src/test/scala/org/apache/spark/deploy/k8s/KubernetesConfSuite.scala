@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, PodBuilder}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
+import org.apache.spark.deploy.k8s.submit._
 
 class KubernetesConfSuite extends SparkFunSuite {
 
@@ -40,6 +40,9 @@ class KubernetesConfSuite extends SparkFunSuite {
   private val SECRET_NAMES_TO_MOUNT_PATHS = Map(
     "secret1" -> "/mnt/secrets/secret1",
     "secret2" -> "/mnt/secrets/secret2")
+  private val SECRET_ENV_VARS = Map(
+    "envName1" -> "name1:key1",
+    "envName2" -> "name2:key2")
   private val CUSTOM_ENVS = Map(
     "customEnvKey1" -> "customEnvValue1",
     "customEnvKey2" -> "customEnvValue2")
@@ -53,9 +56,10 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      None,
+      mainAppResource = None,
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      maybePyFiles = None)
     assert(conf.appId === APP_ID)
     assert(conf.sparkConf.getAll.toMap === sparkConf.getAll.toMap)
     assert(conf.appResourceNamePrefix === RESOURCE_NAME_PREFIX)
@@ -76,7 +80,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_ID,
       mainAppJar,
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      maybePyFiles = None)
     assert(kubernetesConfWithMainJar.sparkConf.get("spark.jars")
       .split(",")
       === Array("local:///opt/spark/jar1.jar", "local:///opt/spark/main.jar"))
@@ -85,15 +90,59 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      None,
+      mainAppResource = None,
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      maybePyFiles = None)
     assert(kubernetesConfWithoutMainJar.sparkConf.get("spark.jars").split(",")
       === Array("local:///opt/spark/jar1.jar"))
+    assert(kubernetesConfWithoutMainJar.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.1)
   }
 
-  test("Resolve driver labels, annotations, secret mount paths, and envs.") {
+  test("Creating driver conf with a python primary file") {
+    val mainResourceFile = "local:///opt/spark/main.py"
+    val inputPyFiles = Array("local:///opt/spark/example2.py", "local:///example3.py")
     val sparkConf = new SparkConf(false)
+      .setJars(Seq("local:///opt/spark/jar1.jar"))
+      .set("spark.files", "local:///opt/spark/example4.py")
+    val mainAppResource = Some(PythonMainAppResource(mainResourceFile))
+    val kubernetesConfWithMainResource = KubernetesConf.createDriverConf(
+      sparkConf,
+      APP_NAME,
+      RESOURCE_NAME_PREFIX,
+      APP_ID,
+      mainAppResource,
+      MAIN_CLASS,
+      APP_ARGS,
+      Some(inputPyFiles.mkString(",")))
+    assert(kubernetesConfWithMainResource.sparkConf.get("spark.jars").split(",")
+      === Array("local:///opt/spark/jar1.jar"))
+    assert(kubernetesConfWithMainResource.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.4)
+    assert(kubernetesConfWithMainResource.sparkFiles
+      === Array("local:///opt/spark/example4.py", mainResourceFile) ++ inputPyFiles)
+  }
+
+  test("Testing explicit setting of memory overhead on non-JVM tasks") {
+    val sparkConf = new SparkConf(false)
+      .set(MEMORY_OVERHEAD_FACTOR, 0.3)
+
+    val mainResourceFile = "local:///opt/spark/main.py"
+    val mainAppResource = Some(PythonMainAppResource(mainResourceFile))
+    val conf = KubernetesConf.createDriverConf(
+      sparkConf,
+      APP_NAME,
+      RESOURCE_NAME_PREFIX,
+      APP_ID,
+      mainAppResource,
+      MAIN_CLASS,
+      APP_ARGS,
+      None)
+    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
+  }
+
+  test("Resolve driver labels, annotations, secret mount paths, envs, and memory overhead") {
+    val sparkConf = new SparkConf(false)
+      .set(MEMORY_OVERHEAD_FACTOR, 0.3)
     CUSTOM_LABELS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$key", value)
     }
@@ -102,6 +151,9 @@ class KubernetesConfSuite extends SparkFunSuite {
     }
     SECRET_NAMES_TO_MOUNT_PATHS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$key", value)
+    }
+    SECRET_ENV_VARS.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX$key", value)
     }
     CUSTOM_ENVS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_ENV_PREFIX$key", value)
@@ -112,16 +164,19 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      None,
+      mainAppResource = None,
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      maybePyFiles = None)
     assert(conf.roleLabels === Map(
       SPARK_APP_ID_LABEL -> APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++
       CUSTOM_LABELS)
     assert(conf.roleAnnotations === CUSTOM_ANNOTATIONS)
     assert(conf.roleSecretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
+    assert(conf.roleSecretEnvNamesToKeyRefs === SECRET_ENV_VARS)
     assert(conf.roleEnvs === CUSTOM_ENVS)
+    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
   }
 
   test("Basic executor translated fields.") {
@@ -155,6 +210,9 @@ class KubernetesConfSuite extends SparkFunSuite {
     CUSTOM_ANNOTATIONS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_EXECUTOR_ANNOTATION_PREFIX$key", value)
     }
+    SECRET_ENV_VARS.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX$key", value)
+    }
     SECRET_NAMES_TO_MOUNT_PATHS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_EXECUTOR_SECRETS_PREFIX$key", value)
     }
@@ -170,6 +228,6 @@ class KubernetesConfSuite extends SparkFunSuite {
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++ CUSTOM_LABELS)
     assert(conf.roleAnnotations === CUSTOM_ANNOTATIONS)
     assert(conf.roleSecretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
+    assert(conf.roleSecretEnvNamesToKeyRefs === SECRET_ENV_VARS)
   }
-
 }

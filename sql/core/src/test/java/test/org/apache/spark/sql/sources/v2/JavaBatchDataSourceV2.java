@@ -42,14 +42,14 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<ColumnarBatch>> createBatchDataReaderFactories() {
+    public List<InputPartition<ColumnarBatch>> planBatchInputPartitions() {
       return java.util.Arrays.asList(
-               new JavaBatchDataReaderFactory(0, 50), new JavaBatchDataReaderFactory(50, 90));
+               new JavaBatchInputPartition(0, 50), new JavaBatchInputPartition(50, 90));
     }
   }
 
-  static class JavaBatchDataReaderFactory
-      implements DataReaderFactory<ColumnarBatch>, DataReader<ColumnarBatch> {
+  static class JavaBatchInputPartition
+      implements InputPartition<ColumnarBatch>, InputPartitionReader<ColumnarBatch> {
     private int start;
     private int end;
 
@@ -59,13 +59,13 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
     private OnHeapColumnVector j;
     private ColumnarBatch batch;
 
-    JavaBatchDataReaderFactory(int start, int end) {
+    JavaBatchInputPartition(int start, int end) {
       this.start = start;
       this.end = end;
     }
 
     @Override
-    public DataReader<ColumnarBatch> createDataReader() {
+    public InputPartitionReader<ColumnarBatch> createPartitionReader() {
       this.i = new OnHeapColumnVector(BATCH_SIZE, DataTypes.IntegerType);
       this.j = new OnHeapColumnVector(BATCH_SIZE, DataTypes.IntegerType);
       ColumnVector[] vectors = new ColumnVector[2];

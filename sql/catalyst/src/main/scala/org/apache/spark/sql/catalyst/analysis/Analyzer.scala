@@ -676,13 +676,13 @@ class Analyzer(
       try {
         catalog.lookupRelation(tableIdentWithDb)
       } catch {
-        case _: NoSuchTableException =>
-          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}")
+        case e: NoSuchTableException =>
+          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}", e)
         // If the database is defined and that database is not found, throw an AnalysisException.
         // Note that if the database is not defined, it is possible we are looking up a temp view.
         case e: NoSuchDatabaseException =>
           u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}, the " +
-            s"database ${e.db} doesn't exist.")
+            s"database ${e.db} doesn't exist.", e)
       }
     }
 
@@ -1739,15 +1739,16 @@ class Analyzer(
    * 1. For a list of [[Expression]]s (a projectList or an aggregateExpressions), partitions
    *    it two lists of [[Expression]]s, one for all [[WindowExpression]]s and another for
    *    all regular expressions.
-   * 2. For all [[WindowExpression]]s, groups them based on their [[WindowSpecDefinition]]s.
-   * 3. For every distinct [[WindowSpecDefinition]], creates a [[Window]] operator and inserts
-   *    it into the plan tree.
+   * 2. For all [[WindowExpression]]s, groups them based on their [[WindowSpecDefinition]]s
+   *    and [[WindowFunctionType]]s.
+   * 3. For every distinct [[WindowSpecDefinition]] and [[WindowFunctionType]], creates a
+   *    [[Window]] operator and inserts it into the plan tree.
    */
   object ExtractWindowExpressions extends Rule[LogicalPlan] {
-    private def hasWindowFunction(projectList: Seq[NamedExpression]): Boolean =
-      projectList.exists(hasWindowFunction)
+    private def hasWindowFunction(exprs: Seq[Expression]): Boolean =
+      exprs.exists(hasWindowFunction)
 
-    private def hasWindowFunction(expr: NamedExpression): Boolean = {
+    private def hasWindowFunction(expr: Expression): Boolean = {
       expr.find {
         case window: WindowExpression => true
         case _ => false
@@ -1830,6 +1831,10 @@ class Analyzer(
             seenWindowAggregates += newAgg
             WindowExpression(newAgg, spec)
 
+          case AggregateExpression(aggFunc, _, _, _) if hasWindowFunction(aggFunc.children) =>
+            failAnalysis("It is not allowed to use a window function inside an aggregate " +
+              "function. Please use the inner window function in a sub-query.")
+
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
           case agg: AggregateExpression if !seenWindowAggregates.contains(agg) =>
@@ -1897,7 +1902,7 @@ class Analyzer(
             s"Please file a bug report with this error message, stack trace, and the query.")
         } else {
           val spec = distinctWindowSpec.head
-          (spec.partitionSpec, spec.orderSpec)
+          (spec.partitionSpec, spec.orderSpec, WindowFunctionType.functionType(expr))
         }
       }.toSeq
 
@@ -1905,7 +1910,7 @@ class Analyzer(
       // setting this to the child of the next Window operator.
       val windowOps =
         groupedWindowExpressions.foldLeft(child) {
-          case (last, ((partitionSpec, orderSpec), windowExpressions)) =>
+          case (last, ((partitionSpec, orderSpec, _), windowExpressions)) =>
             Window(windowExpressions, partitionSpec, orderSpec, last)
         }
 
@@ -1917,6 +1922,9 @@ class Analyzer(
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+
+      case Filter(condition, _) if hasWindowFunction(condition) =>
+        failAnalysis("It is not allowed to use window functions inside WHERE and HAVING clauses")
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.

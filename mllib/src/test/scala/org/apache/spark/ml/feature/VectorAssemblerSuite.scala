@@ -99,9 +99,9 @@ class VectorAssemblerSuite
       assembler.transform(df)
     }
     assert(thrown.getMessage contains
-      "Data type StringType of column a is not supported.\n" +
-      "Data type StringType of column b is not supported.\n" +
-      "Data type StringType of column c is not supported.")
+      "Data type string of column a is not supported.\n" +
+      "Data type string of column b is not supported.\n" +
+      "Data type string of column c is not supported.")
   }
 
   test("ML attributes") {

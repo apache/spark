@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.r
 
-import java.io.{DataOutputStream, File, FileOutputStream, IOException}
-import java.net.{InetAddress, InetSocketAddress, ServerSocket}
+import java.io.{DataInputStream, DataOutputStream, File, FileOutputStream, IOException}
+import java.net.{InetAddress, InetSocketAddress, ServerSocket, Socket}
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
@@ -32,6 +32,8 @@ import io.netty.handler.timeout.ReadTimeoutHandler
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.Utils
 
 /**
  * Netty-based backend server that is used to communicate between R and Java.
@@ -45,7 +47,7 @@ private[spark] class RBackend {
   /** Tracks JVM objects returned to R for this RBackend instance. */
   private[r] val jvmObjectTracker = new JVMObjectTracker
 
-  def init(): Int = {
+  def init(): (Int, RAuthHelper) = {
     val conf = new SparkConf()
     val backendConnectionTimeout = conf.getInt(
       "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
@@ -53,6 +55,7 @@ private[spark] class RBackend {
       conf.getInt("spark.r.numRBackendThreads", SparkRDefaults.DEFAULT_NUM_RBACKEND_THREADS))
     val workerGroup = bossGroup
     val handler = new RBackendHandler(this)
+    val authHelper = new RAuthHelper(conf)
 
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
@@ -71,13 +74,16 @@ private[spark] class RBackend {
             new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4))
           .addLast("decoder", new ByteArrayDecoder())
           .addLast("readTimeoutHandler", new ReadTimeoutHandler(backendConnectionTimeout))
+          .addLast(new RBackendAuthHandler(authHelper.secret))
           .addLast("handler", handler)
       }
     })
 
     channelFuture = bootstrap.bind(new InetSocketAddress("localhost", 0))
     channelFuture.syncUninterruptibly()
-    channelFuture.channel().localAddress().asInstanceOf[InetSocketAddress].getPort()
+
+    val port = channelFuture.channel().localAddress().asInstanceOf[InetSocketAddress].getPort()
+    (port, authHelper)
   }
 
   def run(): Unit = {
@@ -116,7 +122,7 @@ private[spark] object RBackend extends Logging {
     val sparkRBackend = new RBackend()
     try {
       // bind to random port
-      val boundPort = sparkRBackend.init()
+      val (boundPort, authHelper) = sparkRBackend.init()
       val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
       val listenPort = serverSocket.getLocalPort()
       // Connection timeout is set by socket client. To make it configurable we will pass the
@@ -133,6 +139,7 @@ private[spark] object RBackend extends Logging {
       dos.writeInt(listenPort)
       SerDe.writeString(dos, RUtils.rPackages.getOrElse(""))
       dos.writeInt(backendConnectionTimeout)
+      SerDe.writeString(dos, authHelper.secret)
       dos.close()
       f.renameTo(new File(path))
 
@@ -144,12 +151,35 @@ private[spark] object RBackend extends Logging {
           val buf = new Array[Byte](1024)
           // shutdown JVM if R does not connect back in 10 seconds
           serverSocket.setSoTimeout(10000)
+
+          // Wait for the R process to connect back, ignoring any failed auth attempts. Allow
+          // a max number of connection attempts to avoid looping forever.
           try {
-            val inSocket = serverSocket.accept()
+            var remainingAttempts = 10
+            var inSocket: Socket = null
+            while (inSocket == null) {
+              inSocket = serverSocket.accept()
+              try {
+                authHelper.authClient(inSocket)
+              } catch {
+                case e: Exception =>
+                  remainingAttempts -= 1
+                  if (remainingAttempts == 0) {
+                    val msg = "Too many failed authentication attempts."
+                    logError(msg)
+                    throw new IllegalStateException(msg)
+                  }
+                  logInfo("Client connection failed authentication.")
+                  inSocket = null
+              }
+            }
+
             serverSocket.close()
+
             // wait for the end of socket, closed if R process die
             inSocket.getInputStream().read(buf)
           } finally {
+            serverSocket.close()
             sparkRBackend.close()
             System.exit(0)
           }
@@ -165,4 +195,5 @@ private[spark] object RBackend extends Logging {
     }
     System.exit(0)
   }
+
 }

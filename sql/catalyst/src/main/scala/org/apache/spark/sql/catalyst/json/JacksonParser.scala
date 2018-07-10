@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
  * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
  */
 class JacksonParser(
-    schema: StructType,
+    schema: DataType,
     val options: JSONOptions) extends Logging {
 
   import JacksonUtils._
@@ -57,7 +57,14 @@ class JacksonParser(
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
    */
-  private def makeRootConverter(st: StructType): JsonParser => Seq[InternalRow] = {
+  private def makeRootConverter(dt: DataType): JsonParser => Seq[InternalRow] = {
+    dt match {
+      case st: StructType => makeStructRootConverter(st)
+      case mt: MapType => makeMapRootConverter(mt)
+    }
+  }
+
+  private def makeStructRootConverter(st: StructType): JsonParser => Seq[InternalRow] = {
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, st) {
@@ -84,6 +91,13 @@ class JacksonParser(
         } else {
           array.toArray[InternalRow](schema).toSeq
         }
+    }
+  }
+
+  private def makeMapRootConverter(mt: MapType): JsonParser => Seq[InternalRow] = {
+    val fieldConverter = makeConverter(mt.valueType)
+    (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, mt) {
+      case START_OBJECT => Seq(InternalRow(convertMap(parser, fieldConverter)))
     }
   }
 
@@ -129,7 +143,8 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw new RuntimeException(s"Cannot parse $other as FloatType.")
+            case other => throw new RuntimeException(
+              s"Cannot parse $other as ${FloatType.simpleString}.")
           }
       }
 
@@ -144,7 +159,8 @@ class JacksonParser(
             case "NaN" => Double.NaN
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
-            case other => throw new RuntimeException(s"Cannot parse $other as DoubleType.")
+            case other =>
+              throw new RuntimeException(s"Cannot parse $other as ${DoubleType.simpleString}.")
           }
       }
 

@@ -1355,7 +1355,8 @@ class HiveDDLSuite
     val indexName = tabName + "_index"
     withTable(tabName) {
       // Spark SQL does not support creating index. Thus, we have to use Hive client.
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
       sql(s"CREATE TABLE $tabName(a int)")
 
       try {
@@ -1393,7 +1394,8 @@ class HiveDDLSuite
     val tabName = "tab1"
     withTable(tabName) {
       // Spark SQL does not support creating skewed table. Thus, we have to use Hive client.
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
       client.runSqlHive(
         s"""
            |CREATE Table $tabName(col1 int, col2 int)

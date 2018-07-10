@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
@@ -66,7 +67,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     val falseEval = falseValue.genCode(ctx)
 
     val code =
-      s"""
+      code"""
          |${condEval.code}
          |boolean ${ev.isNull} = false;
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -265,7 +266,7 @@ case class CaseWhen(
       }.mkString)
 
     ev.copy(code =
-      s"""
+      code"""
          |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
          |do {
          |  $codes

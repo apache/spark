@@ -21,8 +21,22 @@ import scala.collection.mutable
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter._
 
-class SparkILoopInterpreter(settings: Settings, out: JPrintWriter) extends IMain(settings, out) {
-  self =>
+class SparkILoopInterpreter(settings: Settings, out: JPrintWriter, initializeSpark: () => Unit)
+    extends IMain(settings, out) { self =>
+
+  /**
+   * We override `initializeSynchronous` to initialize Spark *after* `intp` is properly initialized
+   * and *before* the REPL sees any files in the private `loadInitFiles` functions, so that
+   * the Spark context is visible in those files.
+   *
+   * This is a bit of a hack, but there isn't another hook available to us at this point.
+   *
+   * See the discussion in Scala community https://github.com/scala/bug/issues/10913 for detail.
+   */
+  override def initializeSynchronous(): Unit = {
+    super.initializeSynchronous()
+    initializeSpark()
+  }
 
   override lazy val memberHandlers = new {
     val intp: self.type = self

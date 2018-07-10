@@ -23,6 +23,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 object ArrowUtils {
@@ -46,7 +47,8 @@ object ArrowUtils {
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType =>
       if (timeZoneId == null) {
-        throw new UnsupportedOperationException("TimestampType must supply timeZoneId parameter")
+        throw new UnsupportedOperationException(
+          s"${TimestampType.simpleString} must supply timeZoneId parameter")
       } else {
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       }
@@ -119,5 +121,20 @@ object ArrowUtils {
       val dt = fromArrowField(field)
       StructField(field.getName, dt, field.isNullable)
     })
+  }
+
+  /** Return Map with conf settings to be used in ArrowPythonRunner */
+  def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {
+    val timeZoneConf = if (conf.pandasRespectSessionTimeZone) {
+      Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> conf.sessionLocalTimeZone)
+    } else {
+      Nil
+    }
+    val pandasColsByPosition = if (conf.pandasGroupedMapAssignColumnssByPosition) {
+      Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_POSITION.key -> "true")
+    } else {
+      Nil
+    }
+    Map(timeZoneConf ++ pandasColsByPosition: _*)
   }
 }

@@ -17,26 +17,26 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.language.existentials
 import scala.util.Random
 
 import org.dmg.pmml.{ClusteringModel, PMML}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils, PMMLReadWriteTest}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans,
   KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
 
 private[clustering] case class TestRow(features: Vector)
 
-class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest
-  with PMMLReadWriteTest {
+class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTest {
+
+  import testImplicits._
 
   final val k = 5
   @transient var dataset: Dataset[_] = _
@@ -110,15 +110,13 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     val model = kmeans.fit(dataset)
     assert(model.clusterCenters.length === k)
 
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", predictionColName)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
+    testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataset.toDF(), model,
+      "features", predictionColName) { rows =>
+      val clusters = rows.map(_.getAs[Int](predictionColName)).toSet
+      assert(clusters.size === k)
+      assert(clusters === Set(0, 1, 2, 3, 4))
     }
-    val clusters =
-      transformed.select(predictionColName).rdd.map(_.getInt(0)).distinct().collect().toSet
-    assert(clusters.size === k)
-    assert(clusters === Set(0, 1, 2, 3, 4))
+
     assert(model.computeCost(dataset) < 0.1)
     assert(model.hasParent)
 
@@ -150,9 +148,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     model.setFeaturesCol(featuresColName).setPredictionCol(predictionColName)
 
     val transformed = model.transform(dataset.withColumnRenamed("features", featuresColName))
-    Seq(featuresColName, predictionColName).foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
+    assert(transformed.schema.fieldNames.toSet === Set(featuresColName, predictionColName))
     assert(model.getFeaturesCol == featuresColName)
     assert(model.getPredictionCol == predictionColName)
   }
@@ -202,38 +198,19 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   }
 
   test("KMean with Array input") {
-    val featuresColNameD = "array_double_features"
-    val featuresColNameF = "array_float_features"
-
-    val doubleUDF = udf { (features: Vector) =>
-      val featureArray = Array.fill[Double](features.size)(0.0)
-      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
-      featureArray
-    }
-    val floatUDF = udf { (features: Vector) =>
-      val featureArray = Array.fill[Float](features.size)(0.0f)
-      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
-      featureArray
+    def trainAndComputeCost(dataset: Dataset[_]): Double = {
+      val model = new KMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
+      model.computeCost(dataset)
     }
 
-    val newdatasetD = dataset.withColumn(featuresColNameD, doubleUDF(col("features")))
-      .drop("features")
-    val newdatasetF = dataset.withColumn(featuresColNameF, floatUDF(col("features")))
-      .drop("features")
-    assert(newdatasetD.schema(featuresColNameD).dataType.equals(new ArrayType(DoubleType, false)))
-    assert(newdatasetF.schema(featuresColNameF).dataType.equals(new ArrayType(FloatType, false)))
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val trueCost = trainAndComputeCost(newDataset)
+    val doubleArrayCost = trainAndComputeCost(newDatasetD)
+    val floatArrayCost = trainAndComputeCost(newDatasetF)
 
-    val kmeansD = new KMeans().setK(k).setMaxIter(1).setFeaturesCol(featuresColNameD).setSeed(1)
-    val kmeansF = new KMeans().setK(k).setMaxIter(1).setFeaturesCol(featuresColNameF).setSeed(1)
-    val modelD = kmeansD.fit(newdatasetD)
-    val modelF = kmeansF.fit(newdatasetF)
-    val transformedD = modelD.transform(newdatasetD)
-    val transformedF = modelF.transform(newdatasetF)
-
-    val predictDifference = transformedD.select("prediction")
-      .except(transformedF.select("prediction"))
-    assert(predictDifference.count() == 0)
-    assert(modelD.computeCost(newdatasetD) == modelF.computeCost(newdatasetF) )
+    // checking the cost is fine enough as a sanity check
+    assert(trueCost ~== doubleArrayCost absTol 1e-6)
+    assert(trueCost ~== floatArrayCost absTol 1e-6)
   }
 
 

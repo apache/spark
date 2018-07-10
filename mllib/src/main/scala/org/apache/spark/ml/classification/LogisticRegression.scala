@@ -1202,6 +1202,11 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("1.6.0")
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
+
+  override def toString: String = {
+    s"LogisticRegressionModel: " +
+    s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures"
+  }
 }
 
 

@@ -68,4 +68,8 @@ SELECT 1 from (
   FROM (select 1 as x) a
   WHERE false
 ) b
-where b.z != b.z
+where b.z != b.z;
+
+-- SPARK-24369 multiple distinct aggregations having the same argument set
+SELECT corr(DISTINCT x, y), corr(DISTINCT y, x), count(*)
+  FROM (VALUES (1, 1), (2, 2), (2, 2)) t(x, y);

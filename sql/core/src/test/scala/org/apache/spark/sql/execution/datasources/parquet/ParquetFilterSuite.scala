@@ -55,7 +55,8 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
-  private lazy val parquetFilters = new ParquetFilters(conf.parquetFilterPushDownDate)
+  private lazy val parquetFilters =
+    new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownStringStartWith)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -82,6 +83,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withSQLConf(
       SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         val query = df
           .select(output.map(e => Column(e)): _*)
@@ -101,7 +103,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
         selectedFilters.foreach { pred =>
-          val maybeFilter = parquetFilters.createFilter(df.schema, pred)
+          val maybeFilter = parquetFilters.createFilter(
+            new SparkToParquetSchemaConverter(conf).convert(df.schema), pred)
           assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
           // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
           maybeFilter.exists(_.getClass === filterClass)
@@ -138,6 +141,31 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Array[Byte])
       (implicit df: DataFrame): Unit = {
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
+  }
+
+  // This function tests that exactly go through the `canDrop` and `inverseCanDrop`.
+  private def testStringStartsWith(dataFrame: DataFrame, filter: String): Unit = {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      dataFrame.write.option("parquet.block.size", 512).parquet(path)
+      Seq(true, false).foreach { pushDown =>
+        withSQLConf(
+          SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> pushDown.toString) {
+          val accu = new NumRowGroupsAcc
+          sparkContext.register(accu)
+
+          val df = spark.read.parquet(path).filter(filter)
+          df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
+          if (pushDown) {
+            assert(accu.value == 0)
+          } else {
+            assert(accu.value > 0)
+          }
+
+          AccumulatorContext.remove(accu.id)
+        }
+      }
+    }
   }
 
   test("filter pushdown - boolean") {
@@ -515,12 +543,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       StructField("c", DoubleType, nullable = true)
     ))
 
+    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+
     assertResult(Some(and(
       lt(intColumn("a"), 10: Integer),
       gt(doubleColumn("c"), 1.5: java.lang.Double)))
     ) {
       parquetFilters.createFilter(
-        schema,
+        parquetSchema,
         sources.And(
           sources.LessThan("a", 10),
           sources.GreaterThan("c", 1.5D)))
@@ -528,7 +558,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     assertResult(None) {
       parquetFilters.createFilter(
-        schema,
+        parquetSchema,
         sources.And(
           sources.LessThan("a", 10),
           sources.StringContains("b", "prefix")))
@@ -536,7 +566,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     assertResult(None) {
       parquetFilters.createFilter(
-        schema,
+        parquetSchema,
         sources.Not(
           sources.And(
             sources.GreaterThan("a", 1),
@@ -574,7 +604,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
             val df = spark.read.parquet(path).filter("a < 100")
             df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
-            df.collect
 
             if (enablePushDown) {
               assert(accu.value == 0)
@@ -589,21 +618,25 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
   test("SPARK-17213: Broken Parquet filter push-down for string columns") {
-    withTempPath { dir =>
-      import testImplicits._
+    Seq(true, false).foreach { vectorizedEnabled =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedEnabled.toString) {
+        withTempPath { dir =>
+          import testImplicits._
 
-      val path = dir.getCanonicalPath
-      // scalastyle:off nonascii
-      Seq("a", "é").toDF("name").write.parquet(path)
-      // scalastyle:on nonascii
+          val path = dir.getCanonicalPath
+          // scalastyle:off nonascii
+          Seq("a", "é").toDF("name").write.parquet(path)
+          // scalastyle:on nonascii
 
-      assert(spark.read.parquet(path).where("name > 'a'").count() == 1)
-      assert(spark.read.parquet(path).where("name >= 'a'").count() == 2)
+          assert(spark.read.parquet(path).where("name > 'a'").count() == 1)
+          assert(spark.read.parquet(path).where("name >= 'a'").count() == 2)
 
-      // scalastyle:off nonascii
-      assert(spark.read.parquet(path).where("name < 'é'").count() == 1)
-      assert(spark.read.parquet(path).where("name <= 'é'").count() == 2)
-      // scalastyle:on nonascii
+          // scalastyle:off nonascii
+          assert(spark.read.parquet(path).where("name < 'é'").count() == 1)
+          assert(spark.read.parquet(path).where("name <= 'é'").count() == 2)
+          // scalastyle:on nonascii
+        }
+      }
     }
   }
 
@@ -647,6 +680,72 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         assert(actual > 1 && actual < data.length)
       }
     }
+  }
+
+  test("SPARK-23852: Broken Parquet push-down for partially-written stats") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      // parquet-1217.parquet contains a single column with values -1, 0, 1, 2 and null.
+      // The row-group statistics include null counts, but not min and max values, which
+      // triggers PARQUET-1217.
+      val df = readResourceParquetFile("test-data/parquet-1217.parquet")
+
+      // Will return 0 rows if PARQUET-1217 is not fixed.
+      assert(df.where("col > 0").count() === 2)
+    }
+  }
+
+  test("filter pushdown - StringStartsWith") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
+      checkFilterPredicate(
+        '_1.startsWith("").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]],
+        Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
+
+      Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
+        checkFilterPredicate(
+          '_1.startsWith(prefix).asInstanceOf[Predicate],
+          classOf[UserDefinedByInstance[_, _]],
+          "2str2")
+      }
+
+      Seq("2S", "null", "2str22").foreach { prefix =>
+        checkFilterPredicate(
+          '_1.startsWith(prefix).asInstanceOf[Predicate],
+          classOf[UserDefinedByInstance[_, _]],
+          Seq.empty[Row])
+      }
+
+      checkFilterPredicate(
+        !'_1.startsWith("").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]],
+        Seq().map(Row(_)))
+
+      Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
+        checkFilterPredicate(
+          !'_1.startsWith(prefix).asInstanceOf[Predicate],
+          classOf[UserDefinedByInstance[_, _]],
+          Seq("1str1", "3str3", "4str4").map(Row(_)))
+      }
+
+      Seq("2S", "null", "2str22").foreach { prefix =>
+        checkFilterPredicate(
+          !'_1.startsWith(prefix).asInstanceOf[Predicate],
+          classOf[UserDefinedByInstance[_, _]],
+          Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
+      }
+
+      assertResult(None) {
+        parquetFilters.createFilter(
+          new SparkToParquetSchemaConverter(conf).convert(df.schema),
+          sources.StringStartsWith("_1", null))
+      }
+    }
+
+    import testImplicits._
+    // Test canDrop() has taken effect
+    testStringStartsWith(spark.range(1024).map(_.toString).toDF(), "value like 'a%'")
+    // Test inverseCanDrop() has taken effect
+    testStringStartsWith(spark.range(1024).map(c => "100").toDF(), "value not like '10%'")
   }
 }
 

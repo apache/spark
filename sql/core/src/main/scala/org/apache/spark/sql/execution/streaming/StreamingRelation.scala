@@ -66,6 +66,7 @@ case class StreamingExecutionRelation(
     output: Seq[Attribute])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
+  override def otherCopyArgs: Seq[AnyRef] = session :: Nil
   override def isStreaming: Boolean = true
   override def toString: String = source.toString
 
@@ -97,6 +98,7 @@ case class StreamingRelationV2(
     output: Seq[Attribute],
     v1Relation: Option[StreamingRelation])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
+  override def otherCopyArgs: Seq[AnyRef] = session :: Nil
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
 
@@ -116,6 +118,7 @@ case class ContinuousExecutionRelation(
     output: Seq[Attribute])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
+  override def otherCopyArgs: Seq[AnyRef] = session :: Nil
   override def isStreaming: Boolean = true
   override def toString: String = source.toString
 
