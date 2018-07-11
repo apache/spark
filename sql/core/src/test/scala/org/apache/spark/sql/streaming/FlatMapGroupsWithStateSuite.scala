@@ -496,9 +496,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       testStateUpdateWithData(
         s"EventTimeTimeout - $testName - state and timeout timestamp updated",
         stateUpdates =
-          (state: GroupState[Int]) => {
-            state.update(5); state.setTimeoutTimestamp(5000)
-          },
+          (state: GroupState[Int]) => { state.update(5); state.setTimeoutTimestamp(5000) },
         timeoutConf = EventTimeTimeout,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
@@ -517,8 +515,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
         timeoutConf = EventTimeTimeout,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
-        expectedState = Some(5), // state should change
-        expectedTimeoutTimestamp = NO_TIMESTAMP) // timestamp should not update
+        expectedState = Some(5),                                 // state should change
+        expectedTimeoutTimestamp = NO_TIMESTAMP)                 // timestamp should not update
 
       testStateUpdateWithData(
         s"EventTimeTimeout - $testName - setting timeout with state removal not allowed",
