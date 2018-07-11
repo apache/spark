@@ -184,6 +184,9 @@ class MicroBatchExecution(
             isCurrentBatchConstructed = constructNextBatch(noDataBatchesEnabled)
           }
 
+          // Record the trigger offset range for progress reporting *before* processing the batch
+          recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
+
           // Remember whether the current batch has data or not. This will be required later
           // for bookkeeping after running the batch, when `isNewDataAvailable` will have changed
           // to false as the batch would have already processed the available data.
