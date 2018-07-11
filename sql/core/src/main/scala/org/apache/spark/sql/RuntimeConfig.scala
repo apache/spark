@@ -136,6 +136,9 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * Indicates whether the configuration property with the given key
    * is modifiable in the current session.
    *
+   * @return `true` if the configuration property is modifiable. For static SQL, Spark Core,
+   *         invalid (not existing) and other non-modifiable configuration properties,
+   *         the returned value is `false`.
    * @since 2.4.0
    */
   def isModifiable(key: String): Boolean = sqlConf.isModifiable(key)
