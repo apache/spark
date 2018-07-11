@@ -19,8 +19,6 @@ package org.apache.spark.repl
 
 import java.io.BufferedReader
 
-import scala.concurrent.Await
-
 // scalastyle:off println
 import scala.Predef.{println => _, _}
 // scalastyle:on println
@@ -132,10 +130,10 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
    * In newer version of Scala, `printWelcome` is the first thing to be called. As a result,
    * SparkUI URL information would be always shown after the welcome message.
    *
-   * However, this is inconsistent to the existing version of Spark which will always
+   * However, this is inconsistent compared with the existing version of Spark which will always
    * show SparkUI URL first.
    *
-   * The only way we can make it consistent will be duplicate the Scala code.
+   * The only way we can make it consistent will be duplicating the Scala code.
    *
    * We should remove this duplication once Scala provides a way to load our custom initialization
    * code, and also customize the ordering of printing welcome message.
@@ -221,7 +219,6 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
         field.setAccessible(true)
         field.set(this, Future successful true)
 
-        // val globalFuture: Future[Boolean] =
         if (intp.reporter.hasErrors) {
           echo("Interpreter encountered errors during initialization!")
           null
