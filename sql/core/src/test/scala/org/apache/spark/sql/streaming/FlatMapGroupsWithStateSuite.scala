@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
 import java.sql.Date
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.exceptions.TestFailedException
 
@@ -36,6 +38,7 @@ import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExe
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.util.Utils
 
 /** Class to check custom state types */
 case class RunningCount(count: Long)
@@ -854,6 +857,73 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       CheckNewAnswer(("a", -1), ("b", 31))           // State for "a" should timeout and emit -1
     )
   }
+
+
+  test("flatMapGroupsWithState - recovery from checkpoint uses state format version 1") {
+    // Function to maintain the max event time as state and set the timeout timestamp based on the
+    // current max event time seen. It returns the max event time in the state, or -1 if the state
+    // was removed by timeout.
+    val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+      assertCanGetWatermark { state.getCurrentWatermarkMs() >= -1 }
+
+      val timeoutDelaySec = 5
+      if (state.hasTimedOut) {
+        state.remove()
+        Iterator((key, -1))
+      } else {
+        val valuesSeq = values.toSeq
+        val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
+        val timeoutTimestampSec = maxEventTimeSec + timeoutDelaySec
+        state.update(maxEventTimeSec)
+        state.setTimeoutTimestamp(timeoutTimestampSec * 1000)
+        Iterator((key, maxEventTimeSec.toInt))
+      }
+    }
+    val inputData = MemoryStream[(String, Int)]
+    val result =
+      inputData.toDS
+        .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
+        .withWatermark("eventTime", "10 seconds")
+        .as[(String, Long)]
+        .groupByKey(_._1)
+        .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.3.1-flatMapGroupsWithState-state-format-1/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    inputData.addData(("a", 11), ("a", 13), ("a", 15))
+    inputData.addData(("a", 4))
+
+    testStream(result, Update)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      /*
+      Note: The checkpoint was generated using the following input in Spark version 2.3.1
+
+      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+      // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+      CheckNewAnswer(("a", 15)),  // Output = max event time of a
+
+      AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
+      CheckNewAnswer(),                   // No output as data should get filtered by watermark
+      */
+
+      AddData(inputData, ("a", 10)),      // Add data newer than watermark for "a"
+      CheckNewAnswer(("a", 15)),          // Max event time is still the same
+      // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
+      // Watermark is still 5 as max event time for all data is still 15.
+
+      AddData(inputData, ("b", 31)),      // Add data newer than watermark for "b", not "a"
+      // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
+      CheckNewAnswer(("a", -1), ("b", 31))           // State for "a" should timeout and emit -1
+    )
+  }
+
 
   test("mapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count

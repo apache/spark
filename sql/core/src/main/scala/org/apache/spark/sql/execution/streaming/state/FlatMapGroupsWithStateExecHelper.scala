@@ -28,6 +28,7 @@ import org.apache.spark.sql.types._
 object FlatMapGroupsWithStateExecHelper {
 
   val supportedVersions = Seq(1, 2)
+  val legacyVersion = 1
 
   /**
    * Class to capture deserialized state and timestamp return by the state manager.
@@ -217,7 +218,8 @@ object FlatMapGroupsWithStateExecHelper {
       val deserExpr = stateEncoder.resolveAndBind().deserializer.transformUp {
         case BoundReference(ordinal, _, _) => GetStructField(boundRefToNestedState, ordinal)
       }
-      CaseWhen(Seq(IsNull(boundRefToNestedState) -> Literal(null)), elseValue = deserExpr)
+      val nullLiteral = Literal(null, deserExpr.dataType)
+      CaseWhen(Seq(IsNull(boundRefToNestedState) -> nullLiteral), elseValue = deserExpr)
     }
   }
 }
