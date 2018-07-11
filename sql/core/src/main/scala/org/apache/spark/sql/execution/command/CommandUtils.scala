@@ -48,16 +48,6 @@ object CommandUtils extends Logging {
     }
   }
 
-  private case class SerializablePathFilter(stagingDir: String)
-    extends PathFilter with Serializable {
-    override def accept(path: Path): Boolean = {
-      val fileName = path.getName
-      (!fileName.startsWith(stagingDir) &&
-        // Ignore metadata files starting with "_"
-        !fileName.startsWith("_"))
-    }
-  }
-
   def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
     val sessionState = spark.sessionState
     if (catalogTable.partitionColumnNames.isEmpty) {
@@ -67,8 +57,16 @@ object CommandUtils extends Logging {
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       val paths = partitions.map(x => new Path(x.storage.locationUri.get))
       val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+      val pathFilter = new PathFilter with Serializable {
+        override def accept(path: Path): Boolean = {
+          val fileName = path.getName
+          (!fileName.startsWith(stagingDir) &&
+            // Ignore metadata files starting with "_"
+            !fileName.startsWith("_"))
+        }
+      }
       val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,
-        sessionState.newHadoopConf(), SerializablePathFilter(stagingDir),
+        sessionState.newHadoopConf(), pathFilter,
         spark).flatMap(_._2)
       fileStatusSeq.map(_.getLen).sum
     }
