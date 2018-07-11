@@ -38,7 +38,8 @@ class UnivocityParser(
     requiredSchema: StructType,
     val options: CSVOptions) extends Logging {
   require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
-    "requiredSchema should be the subset of dataSchema.")
+    s"requiredSchema (${requiredSchema.catalogString}) should be the subset of " +
+      s"dataSchema (${dataSchema.catalogString}).")
 
   def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
 
