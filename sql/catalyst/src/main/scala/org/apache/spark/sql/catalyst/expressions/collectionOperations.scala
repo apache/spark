@@ -91,7 +91,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
   """)
 case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  @transient lazy val legacySizeOfNull = SQLConf.get.legacySizeOfNull
+  @transient val legacySizeOfNull = SQLConf.get.legacySizeOfNull
 
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
