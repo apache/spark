@@ -160,27 +160,35 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     val labels = Map("spark-app-selector" -> driverPodName)
     val driverPort = 7077
     val blockManagerPort = 10000
-    val driverService = testBackend.getKubernetesClient.services().createNew()
-      .withNewMetadata()
-        .withName(s"$driverPodName-svc")
-        .endMetadata()
-      .withNewSpec()
-        .withClusterIP("None")
-        .withSelector(labels.asJava)
-        .addNewPort()
-          .withName("driver-port")
-          .withPort(driverPort)
-          .withNewTargetPort(driverPort)
-          .endPort()
-        .addNewPort()
-          .withName("block-manager")
-          .withPort(blockManagerPort)
-          .withNewTargetPort(blockManagerPort)
-          .endPort()
-        .endSpec()
-      .done()
+    val driverService = testBackend
+      .getKubernetesClient
+      .services()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .createNew()
+        .withNewMetadata()
+          .withName(s"$driverPodName-svc")
+          .endMetadata()
+        .withNewSpec()
+          .withClusterIP("None")
+          .withSelector(labels.asJava)
+          .addNewPort()
+            .withName("driver-port")
+            .withPort(driverPort)
+            .withNewTargetPort(driverPort)
+            .endPort()
+          .addNewPort()
+            .withName("block-manager")
+            .withPort(blockManagerPort)
+            .withNewTargetPort(blockManagerPort)
+            .endPort()
+          .endSpec()
+        .done()
     try {
-      val driverPod = testBackend.getKubernetesClient.pods().createNew()
+      val driverPod = testBackend
+        .getKubernetesClient
+        .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
+        .createNew()
         .withNewMetadata()
           .withName(driverPodName)
           .withLabels(labels.asJava)
@@ -223,7 +231,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       }
     } finally {
       // Have to delete the service manually since it doesn't have an owner reference
-      kubernetesTestComponents.kubernetesClient.services.delete(driverService)
+      kubernetesTestComponents
+        .kubernetesClient
+        .services()
+        .inNamespace(kubernetesTestComponents.namespace)
+        .delete(driverService)
     }
   }
 
