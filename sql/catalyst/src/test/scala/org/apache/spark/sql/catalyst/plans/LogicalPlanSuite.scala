@@ -119,4 +119,16 @@ class LogicalPlanSuite extends SparkFunSuite {
       OneRowRelation())
     assert(result.sameResult(expected))
   }
+
+  test("Logical plan with missing inputs should be unresolved") {
+    // Normally we won't add a missing resolved reference into a logical plan,
+    // but a valid query like `df.select(df("name")).filter(df("id") === 0)` can make a query
+    // like this.
+    val relation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
+    val plan = Project(Stream(AttributeReference("b", IntegerType, nullable = true)()), relation)
+    assert(plan.expressions.forall(_.resolved))
+    assert(plan.childrenResolved)
+    assert(plan.missingInput.nonEmpty)
+    assert(!plan.resolved)
+  }
 }

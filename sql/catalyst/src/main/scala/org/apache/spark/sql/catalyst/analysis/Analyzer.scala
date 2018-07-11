@@ -1149,7 +1149,7 @@ class Analyzer(
 
     private def resolveExprsAndAddMissingAttrs(
         exprs: Seq[Expression], plan: LogicalPlan): (Seq[Expression], LogicalPlan) = {
-      if (exprs.forall(_.resolved)) {
+      if (exprs.forall(e => e.resolved && e.references.subsetOf(plan.outputSet))) {
         // All given expressions are resolved, no need to continue anymore.
         (exprs, plan)
       } else {
@@ -1163,7 +1163,8 @@ class Analyzer(
           case p: Project =>
             val maybeResolvedExprs = exprs.map(resolveExpression(_, p))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, p.child)
-            val missingAttrs = AttributeSet(newExprs) -- AttributeSet(maybeResolvedExprs)
+            val missingAttrs = AttributeSet(newExprs) --
+              AttributeSet(maybeResolvedExprs.filter(_.references.subsetOf(p.outputSet)))
             (newExprs, Project(p.projectList ++ missingAttrs, newChild))
 
           case a @ Aggregate(groupExprs, aggExprs, child) =>

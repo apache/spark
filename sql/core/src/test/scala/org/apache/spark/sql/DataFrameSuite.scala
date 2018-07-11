@@ -2329,4 +2329,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val mapWithBinaryKey = map(lit(Array[Byte](1.toByte)), lit(1))
     checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
   }
+
+  test("SPARK-24781: Using a reference from Dataset in Filter/Sort might not work") {
+    val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
+    val filter1 = df.select(df("name")).filter(df("id") === 0)
+    val filter2 = df.select(col("name")).filter(col("id") === 0)
+    checkAnswer(filter1, filter2.collect())
+
+    val sort1 = df.select(df("name")).orderBy(df("id"))
+    val sort2 = df.select(col("name")).orderBy(col("id"))
+    checkAnswer(sort1, sort2.collect())
+  }
 }
