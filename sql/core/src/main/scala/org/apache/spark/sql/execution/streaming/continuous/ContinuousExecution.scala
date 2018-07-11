@@ -311,7 +311,7 @@ class ContinuousExecution(
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
     synchronized {
       if (queryExecutionThread.isAlive) {
-        commitLog.add(epoch)
+        commitLog.add(epoch, CommitMetadata())
         val offset =
           continuousSources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
         committedOffsets ++= Seq(continuousSources(0) -> offset)

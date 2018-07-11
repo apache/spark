@@ -465,79 +465,87 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   test("SPARK-24699: watermark should behave the same for Trigger ProcessingTime / Once") {
     val watermarkSeconds = 2
     val windowSeconds = 5
-    def windowAggregation(body: (MemoryStream[Int], Dataset[(Long, Long)]) => Unit): Unit = {
-      val source = MemoryStream[Int]
-      val sink = {
-        source
-          .toDF()
-          .withColumn("eventTime", 'value cast "timestamp")
-          .withWatermark("eventTime", s"$watermarkSeconds seconds")
-          .groupBy(window($"eventTime", s"$windowSeconds seconds") as 'window)
-          .count()
-          .select('window.getField("start").cast("long").as[Long], 'count.as[Long])
-      }
-      body(source, sink)
+    val source = MemoryStream[Int]
+    val df = {
+      source
+        .toDF()
+        .withColumn("eventTime", 'value cast "timestamp")
+        .withWatermark("eventTime", s"$watermarkSeconds seconds")
+        .groupBy(window($"eventTime", s"$windowSeconds seconds") as 'window)
+        .count()
+        .select('window.getField("start").cast("long").as[Long], 'count.as[Long])
     }
-    val (one, two, three) = (
+    val (one, two, three, four) = (
       Seq(1, 1, 2, 3, 4, 4, 6),
       Seq(7, 8, 9),
-      Seq(11, 12, 13, 14, 14)
+      Seq(11, 12, 13, 14, 14),
+      Seq(15)
     )
-    val (resultsAfterOne, resultsAfterTwo, resultsAfterThree) = (
+    val (resultsAfterOne, resultsAfterTwo, resultsAfterThree, resultsAfterFour) = (
+      CheckAnswer(),
       CheckAnswer(),
       CheckAnswer(0 -> 6),
       CheckAnswer(0 -> 6, 5 -> 4)
     )
-    val (statsAfterOne, statsAfterTwo, statsAfterThree) = (
-      checkEventStats(
+    val (statsAfterOne, statsAfterTwo, statsAfterThree, statsAfterFour) = (
+      assertEventStats(
         min = one.min,
         max = one.max,
         avg = one.sum.toDouble / one.size,
         watermark = 0,
         "first"
       ),
-      checkEventStats(
+      assertEventStats(
         min = two.min,
         max = two.max,
         avg = two.sum.toDouble / two.size,
         watermark = one.max - watermarkSeconds,
         "second"
       ),
-      checkEventStats(
+      assertEventStats(
         min = three.min,
         max = three.max,
         avg = three.sum.toDouble / three.size,
         watermark = two.max - watermarkSeconds,
         "third"
+      ),
+      assertEventStats(
+        min = four.min,
+        max = four.max,
+        avg = four.sum.toDouble / four.size,
+        watermark = three.max - watermarkSeconds,
+        "fourth"
       )
     )
 
-    Seq(Trigger.ProcessingTime(0), Trigger.Once) foreach { trigger =>
-      windowAggregation {
-        (source, sink) => testStream(sink)(
-          StartStream(trigger),
-          StopStream,
+    testStream(df)(
+      StartStream(Trigger.Once),
+      StopStream,
 
-          AddData(source, one: _*),
-          StartStream(trigger),
-          resultsAfterOne,
-          statsAfterOne,
-          StopStream,
+      AddData(source, one: _*),
+      StartStream(Trigger.Once),
+      resultsAfterOne,
+      statsAfterOne,
+      StopStream,
 
-          AddData(source, two: _*),
-          StartStream(trigger),
-          resultsAfterTwo,
-          statsAfterTwo,
-          StopStream,
+      AddData(source, two: _*),
+      StartStream(Trigger.Once),
+      resultsAfterTwo,
+      statsAfterTwo,
+      StopStream,
 
-          AddData(source, three: _*),
-          StartStream(trigger),
-          resultsAfterThree,
-          statsAfterThree,
-          StopStream
-        )
-      }
-    }
+      AddData(source, three: _*),
+      StartStream(Trigger.Once),
+      resultsAfterThree,
+      statsAfterThree,
+      StopStream,
+
+      AddData(source, four: _*),
+      StartStream(Trigger.Once),
+      resultsAfterFour,
+      statsAfterFour,
+      StopStream
+    )
   }
 
   test("test no-data flag") {
@@ -564,19 +572,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testWithFlag(true)
     testWithFlag(false)
-  }
-
-  private def checkEventStats(
-    min: Long,
-    max: Long,
-    avg: Double,
-    watermark: Long,
-    name: String = "event stats"
-  ): AssertOnQuery = assertEventStats { e =>
-    assert(e.get("min") === formatTimestamp(min), s"[$name]: min value")
-    assert(e.get("max") === formatTimestamp(max), s"[$name]: max value")
-    assert(e.get("avg") === formatTimestamp(avg), s"[$name]: avg value")
-    assert(e.get("watermark") === formatTimestamp(watermark), s"[$name]: watermark value")
   }
 
   test("MultipleWatermarkPolicy: max") {
@@ -721,6 +716,18 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       body(q.recentProgress.filter(_.numInputRows > 0).lastOption.get.eventTime)
       true
     }
+  }
+
+  private def assertEventStats(
+      min: Long,
+      max: Long,
+      avg: Double,
+      watermark: Long,
+      name: String = "event stats"): AssertOnQuery = assertEventStats { e =>
+    assert(e.get("min") === formatTimestamp(min), s"[$name]: min value")
+    assert(e.get("max") === formatTimestamp(max), s"[$name]: max value")
+    assert(e.get("avg") === formatTimestamp(avg), s"[$name]: avg value")
+    assert(e.get("watermark") === formatTimestamp(watermark), s"[$name]: watermark value")
   }
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
