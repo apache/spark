@@ -45,6 +45,8 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
       decimalMetadata: DecimalMetadata)
 
   private val ParquetBooleanType = ParquetSchemaType(null, BOOLEAN, null)
+  private val ParquetByteType = ParquetSchemaType(INT_8, INT32, null)
+  private val ParquetShortType = ParquetSchemaType(INT_16, INT32, null)
   private val ParquetIntegerType = ParquetSchemaType(null, INT32, null)
   private val ParquetLongType = ParquetSchemaType(null, INT64, null)
   private val ParquetFloatType = ParquetSchemaType(null, FLOAT, null)
@@ -60,8 +62,10 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
   private val makeEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
     case ParquetBooleanType =>
       (n: String, v: Any) => FilterApi.eq(booleanColumn(n), v.asInstanceOf[java.lang.Boolean])
-    case ParquetIntegerType =>
-      (n: String, v: Any) => FilterApi.eq(intColumn(n), v.asInstanceOf[Integer])
+    case ParquetByteType | ParquetShortType | ParquetIntegerType =>
+      (n: String, v: Any) => FilterApi.eq(
+        intColumn(n),
+        Option(v).map(_.asInstanceOf[Number].intValue.asInstanceOf[Integer]).orNull)
     case ParquetLongType =>
       (n: String, v: Any) => FilterApi.eq(longColumn(n), v.asInstanceOf[java.lang.Long])
     case ParquetFloatType =>
@@ -87,8 +91,10 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
   private val makeNotEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
     case ParquetBooleanType =>
       (n: String, v: Any) => FilterApi.notEq(booleanColumn(n), v.asInstanceOf[java.lang.Boolean])
-    case ParquetIntegerType =>
-      (n: String, v: Any) => FilterApi.notEq(intColumn(n), v.asInstanceOf[Integer])
+    case ParquetByteType | ParquetShortType | ParquetIntegerType =>
+      (n: String, v: Any) => FilterApi.notEq(
+        intColumn(n),
+        Option(v).map(_.asInstanceOf[Number].intValue.asInstanceOf[Integer]).orNull)
     case ParquetLongType =>
       (n: String, v: Any) => FilterApi.notEq(longColumn(n), v.asInstanceOf[java.lang.Long])
     case ParquetFloatType =>
@@ -111,8 +117,9 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
   }
 
   private val makeLt: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
-    case ParquetIntegerType =>
-      (n: String, v: Any) => FilterApi.lt(intColumn(n), v.asInstanceOf[Integer])
+    case ParquetByteType | ParquetShortType | ParquetIntegerType =>
+      (n: String, v: Any) =>
+        FilterApi.lt(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
     case ParquetLongType =>
       (n: String, v: Any) => FilterApi.lt(longColumn(n), v.asInstanceOf[java.lang.Long])
     case ParquetFloatType =>
@@ -132,8 +139,9 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
   }
 
   private val makeLtEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
-    case ParquetIntegerType =>
-      (n: String, v: Any) => FilterApi.ltEq(intColumn(n), v.asInstanceOf[Integer])
+    case ParquetByteType | ParquetShortType | ParquetIntegerType =>
+      (n: String, v: Any) =>
+        FilterApi.ltEq(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
     case ParquetLongType =>
       (n: String, v: Any) => FilterApi.ltEq(longColumn(n), v.asInstanceOf[java.lang.Long])
     case ParquetFloatType =>
@@ -153,8 +161,9 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
   }
 
   private val makeGt: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
-    case ParquetIntegerType =>
-      (n: String, v: Any) => FilterApi.gt(intColumn(n), v.asInstanceOf[Integer])
+    case ParquetByteType | ParquetShortType | ParquetIntegerType =>
+      (n: String, v: Any) =>
+        FilterApi.gt(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
     case ParquetLongType =>
       (n: String, v: Any) => FilterApi.gt(longColumn(n), v.asInstanceOf[java.lang.Long])
     case ParquetFloatType =>
@@ -174,8 +183,9 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
   }
 
   private val makeGtEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
-    case ParquetIntegerType =>
-      (n: String, v: Any) => FilterApi.gtEq(intColumn(n), v.asInstanceOf[Integer])
+    case ParquetByteType | ParquetShortType | ParquetIntegerType =>
+      (n: String, v: Any) =>
+        FilterApi.gtEq(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
     case ParquetLongType =>
       (n: String, v: Any) => FilterApi.gtEq(longColumn(n), v.asInstanceOf[java.lang.Long])
     case ParquetFloatType =>
