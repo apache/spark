@@ -64,33 +64,36 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     require(!StateStore.isMaintenanceRunning)
   }
 
-  test("retaining only latest configured size of versions in memory") {
-    val provider = newStoreProvider(opId = Random.nextInt, partition = 0,
-      numOfVersToRetainInMemory = 3)
-
-    var currentVersion = 0
-    def updateVersionTo(targetVersion: Int): Unit = {
-      for (i <- currentVersion + 1 to targetVersion) {
-        val store = provider.getStore(currentVersion)
-        put(store, "a", i)
-        store.commit()
-        currentVersion += 1
-      }
-      require(currentVersion === targetVersion)
+  def updateVersionTo(provider: StateStoreProvider, currentVersion: => Int,
+                      targetVersion: Int): Int = {
+    var newCurrentVersion = currentVersion
+    for (i <- newCurrentVersion + 1 to targetVersion) {
+      val store = provider.getStore(newCurrentVersion)
+      put(store, "a", i)
+      store.commit()
+      newCurrentVersion += 1
     }
+    require(newCurrentVersion === targetVersion)
+    newCurrentVersion
+  }
+
+  test("retaining only two latest versions when MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 2") {
+    val provider = newStoreProvider(opId = Random.nextInt, partition = 0,
+      numOfVersToRetainInMemory = 2)
 
     def restoreOriginValues(map: provider.MapType): Map[String, Int] = {
       map.asScala.map(entry => rowToString(entry._1) -> rowToInt(entry._2)).toMap
     }
 
-    updateVersionTo(1)
+    var currentVersion = 0
+    currentVersion = updateVersionTo(provider, currentVersion, 1)
     assert(getData(provider) === Set("a" -> 1))
     var loadedMaps = provider.getClonedLoadedMaps()
     assert(loadedMaps.size() === 1)
     assert(loadedMaps.firstKey() === 1L)
     assert(restoreOriginValues(loadedMaps.get(1L)) === Map("a" -> 1))
 
-    updateVersionTo(2)
+    currentVersion = updateVersionTo(provider, currentVersion, 2)
     assert(getData(provider) === Set("a" -> 2))
     loadedMaps = provider.getClonedLoadedMaps()
     assert(loadedMaps.size() === 2)
@@ -99,43 +102,84 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> 2))
     assert(restoreOriginValues(loadedMaps.get(1L)) === Map("a" -> 1))
 
-    updateVersionTo(3)
+    // this trigger exceeding cache and 1 will be evicted
+    currentVersion = updateVersionTo(provider, currentVersion, 3)
     assert(getData(provider) === Set("a" -> 3))
     loadedMaps = provider.getClonedLoadedMaps()
-    assert(loadedMaps.size() === 3)
+    assert(loadedMaps.size() === 2)
     assert(loadedMaps.firstKey() === 3L)
-    assert(loadedMaps.lastKey() === 1L)
+    assert(loadedMaps.lastKey() === 2L)
     assert(restoreOriginValues(loadedMaps.get(3L)) === Map("a" -> 3))
     assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> 2))
+  }
+
+  test("failure after committing with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 1") {
+    val provider = newStoreProvider(opId = Random.nextInt, partition = 0,
+      numOfVersToRetainInMemory = 1)
+
+    var currentVersion = 0
+
+    def restoreOriginValues(map: provider.MapType): Map[String, Int] = {
+      map.asScala.map(entry => rowToString(entry._1) -> rowToInt(entry._2)).toMap
+    }
+
+    currentVersion = updateVersionTo(provider, currentVersion, 1)
+    assert(getData(provider) === Set("a" -> 1))
+    var loadedMaps = provider.getClonedLoadedMaps()
+    assert(loadedMaps.size() === 1)
+    assert(loadedMaps.firstKey() === 1L)
     assert(restoreOriginValues(loadedMaps.get(1L)) === Map("a" -> 1))
 
-    // this trigger exceeding cache and 1 will be evicted
-    updateVersionTo(4)
-    assert(getData(provider) === Set("a" -> 4))
+    currentVersion = updateVersionTo(provider, currentVersion, 2)
+    assert(getData(provider) === Set("a" -> 2))
     loadedMaps = provider.getClonedLoadedMaps()
-    assert(loadedMaps.size() === 3)
-    assert(loadedMaps.firstKey() === 4L)
-    assert(loadedMaps.lastKey() === 2L)
-    assert(restoreOriginValues(loadedMaps.get(4L)) === Map("a" -> 4))
-    assert(restoreOriginValues(loadedMaps.get(3L)) === Map("a" -> 3))
+    // now version 1 is evicted and not stored in cache
+    // this fact ensures cache miss will occur when this partition succeeds commit
+    // but there's a failure afterwards so have to reprocess previous batch
+    assert(loadedMaps.size() === 1)
+    assert(loadedMaps.firstKey() === 2L)
     assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> 2))
+
+    // suppose there has been failure after committing, and it decided to reprocess previous batch
+    currentVersion = 1
+
+    val store = provider.getStore(currentVersion)
+    // negative value to represent reprocessing
+    put(store, "a", -2)
+    store.commit()
+    currentVersion += 1
+
+    // make sure newly committed version is reflected to the cache (overwritten)
+    assert(getData(provider) === Set("a" -> -2))
+    loadedMaps = provider.getClonedLoadedMaps()
+    assert(loadedMaps.size() === 1)
+    assert(loadedMaps.firstKey() === 2L)
+    assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> -2))
+  }
+
+  test("no cache data with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 0") {
+    val provider = newStoreProvider(opId = Random.nextInt, partition = 0,
+      numOfVersToRetainInMemory = 0)
+
+    var currentVersion = 0
+
+    currentVersion = updateVersionTo(provider, currentVersion, 1)
+    assert(getData(provider) === Set("a" -> 1))
+    var loadedMaps = provider.getClonedLoadedMaps()
+    assert(loadedMaps.size() === 0)
+
+    currentVersion = updateVersionTo(provider, currentVersion, 2)
+    assert(getData(provider) === Set("a" -> 2))
+    loadedMaps = provider.getClonedLoadedMaps()
+    assert(loadedMaps.size() === 0)
   }
 
   test("snapshotting") {
     val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
 
     var currentVersion = 0
-    def updateVersionTo(targetVersion: Int): Unit = {
-      for (i <- currentVersion + 1 to targetVersion) {
-        val store = provider.getStore(currentVersion)
-        put(store, "a", i)
-        store.commit()
-        currentVersion += 1
-      }
-      require(currentVersion === targetVersion)
-    }
 
-    updateVersionTo(2)
+    currentVersion = updateVersionTo(provider, currentVersion, 2)
     require(getData(provider) === Set("a" -> 2))
     provider.doMaintenance()               // should not generate snapshot files
     assert(getData(provider) === Set("a" -> 2))
@@ -146,7 +190,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
 
     // After version 6, snapshotting should generate one snapshot file
-    updateVersionTo(6)
+    currentVersion = updateVersionTo(provider, currentVersion, 6)
     require(getData(provider) === Set("a" -> 6), "store not updated correctly")
     provider.doMaintenance()       // should generate snapshot files
 
@@ -161,7 +205,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       "snapshotting messed up the data of the final version")
 
     // After version 20, snapshotting should generate newer snapshot files
-    updateVersionTo(20)
+    currentVersion = updateVersionTo(provider, currentVersion, 20)
     require(getData(provider) === Set("a" -> 20), "store not updated correctly")
     provider.doMaintenance()       // do snapshot
 

@@ -280,6 +280,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   private def putStateIntoStateCache(newVersion: Long, map: MapType): Unit = synchronized {
+    if (numberOfVersionsToRetainInMemory <= 0) {
+      if (loadedMaps.size() > 0) loadedMaps.clear()
+      return
+    }
+
     while (loadedMaps.size() > numberOfVersionsToRetainInMemory) {
       loadedMaps.remove(loadedMaps.lastKey())
     }
