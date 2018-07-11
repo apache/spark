@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.ReadSupport;
-import org.apache.spark.sql.sources.v2.reader.DataReader;
-import org.apache.spark.sql.sources.v2.reader.DataReaderFactory;
+import org.apache.spark.sql.sources.v2.reader.InputPartitionReader;
+import org.apache.spark.sql.sources.v2.reader.InputPartition;
 import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 import org.apache.spark.sql.types.StructType;
 
@@ -41,25 +41,25 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createDataReaderFactories() {
+    public List<InputPartition<Row>> planInputPartitions() {
       return java.util.Arrays.asList(
-        new JavaSimpleDataReaderFactory(0, 5),
-        new JavaSimpleDataReaderFactory(5, 10));
+        new JavaSimpleInputPartition(0, 5),
+        new JavaSimpleInputPartition(5, 10));
     }
   }
 
-  static class JavaSimpleDataReaderFactory implements DataReaderFactory<Row>, DataReader<Row> {
+  static class JavaSimpleInputPartition implements InputPartition<Row>, InputPartitionReader<Row> {
     private int start;
     private int end;
 
-    JavaSimpleDataReaderFactory(int start, int end) {
+    JavaSimpleInputPartition(int start, int end) {
       this.start = start;
       this.end = end;
     }
 
     @Override
-    public DataReader<Row> createDataReader() {
-      return new JavaSimpleDataReaderFactory(start - 1, end);
+    public InputPartitionReader<Row> createPartitionReader() {
+      return new JavaSimpleInputPartition(start - 1, end);
     }
 
     @Override

@@ -54,8 +54,8 @@ object SessionCatalog {
  * This class must be thread-safe.
  */
 class SessionCatalog(
-    val externalCatalog: ExternalCatalog,
-    globalTempViewManager: GlobalTempViewManager,
+    externalCatalogBuilder: () => ExternalCatalog,
+    globalTempViewManagerBuilder: () => GlobalTempViewManager,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
     hadoopConf: Configuration,
@@ -70,8 +70,8 @@ class SessionCatalog(
       functionRegistry: FunctionRegistry,
       conf: SQLConf) {
     this(
-      externalCatalog,
-      new GlobalTempViewManager("global_temp"),
+      () => externalCatalog,
+      () => new GlobalTempViewManager("global_temp"),
       functionRegistry,
       conf,
       new Configuration(),
@@ -86,6 +86,9 @@ class SessionCatalog(
       new SimpleFunctionRegistry,
       new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   }
+
+  lazy val externalCatalog = externalCatalogBuilder()
+  lazy val globalTempViewManager = globalTempViewManagerBuilder()
 
   /** List of temporary views, mapping from table name to their logical plan. */
   @GuardedBy("this")
@@ -283,9 +286,13 @@ class SessionCatalog(
    * Create a metastore table in the database specified in `tableDefinition`.
    * If no such database is specified, create it in the current database.
    */
-  def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
+  def createTable(
+      tableDefinition: CatalogTable,
+      ignoreIfExists: Boolean,
+      validateLocation: Boolean = true): Unit = {
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
     validateName(table)
 
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
@@ -295,13 +302,35 @@ class SessionCatalog(
         makeQualifiedPath(tableDefinition.storage.locationUri.get)
       tableDefinition.copy(
         storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
-        identifier = TableIdentifier(table, Some(db)))
+        identifier = tableIdentifier)
     } else {
-      tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+      tableDefinition.copy(identifier = tableIdentifier)
     }
 
     requireDbExists(db)
+    if (tableExists(newTableDefinition.identifier)) {
+      if (!ignoreIfExists) {
+        throw new TableAlreadyExistsException(db = db, table = table)
+      }
+    } else if (validateLocation) {
+      validateTableLocation(newTableDefinition)
+    }
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
+  }
+
+  def validateTableLocation(table: CatalogTable): Unit = {
+    // SPARK-19724: the default location of a managed table should be non-existent or empty.
+    if (table.tableType == CatalogTableType.MANAGED &&
+      !conf.allowCreatingManagedTableUsingNonemptyLocation) {
+      val tableLocation =
+        new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
+      val fs = tableLocation.getFileSystem(hadoopConf)
+
+      if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
+        throw new AnalysisException(s"Can not create the managed table('${table.identifier}')" +
+          s". The associated location('${tableLocation.toString}') already exists.")
+      }
+    }
   }
 
   /**
@@ -590,6 +619,7 @@ class SessionCatalog(
         requireTableExists(TableIdentifier(oldTableName, Some(db)))
         requireTableNotExists(TableIdentifier(newTableName, Some(db)))
         validateName(newTableName)
+        validateNewLocationOfRename(oldName, newName)
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
         if (newName.database.isDefined) {
@@ -1336,5 +1366,24 @@ class SessionCatalog(
     target.currentDb = currentDb
     // copy over temporary views
     tempViews.foreach(kv => target.tempViews.put(kv._1, kv._2))
+  }
+
+  /**
+   * Validate the new locatoin before renaming a managed table, which should be non-existent.
+   */
+  private def validateNewLocationOfRename(
+      oldName: TableIdentifier,
+      newName: TableIdentifier): Unit = {
+    val oldTable = getTableMetadata(oldName)
+    if (oldTable.tableType == CatalogTableType.MANAGED) {
+      val databaseLocation =
+        externalCatalog.getDatabase(oldName.database.getOrElse(currentDb)).locationUri
+      val newTableLocation = new Path(new Path(databaseLocation), formatTableName(newName.table))
+      val fs = newTableLocation.getFileSystem(hadoopConf)
+      if (fs.exists(newTableLocation)) {
+        throw new AnalysisException(s"Can not rename the managed table('$oldName')" +
+          s". The associated location('$newTableLocation') already exists.")
+      }
+    }
   }
 }

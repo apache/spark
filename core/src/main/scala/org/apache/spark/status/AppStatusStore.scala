@@ -95,7 +95,11 @@ private[spark] class AppStatusStore(
   }
 
   def lastStageAttempt(stageId: Int): v1.StageData = {
-    val it = store.view(classOf[StageDataWrapper]).index("stageId").reverse().first(stageId)
+    val it = store.view(classOf[StageDataWrapper])
+      .index("stageId")
+      .reverse()
+      .first(stageId)
+      .last(stageId)
       .closeableIterator()
     try {
       if (it.hasNext()) {
@@ -467,7 +471,7 @@ private[spark] class AppStatusStore(
 
   def operationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = {
     val job = store.read(classOf[JobDataWrapper], jobId)
-    val stages = job.info.stageIds
+    val stages = job.info.stageIds.sorted
 
     stages.map { id =>
       val g = store.read(classOf[RDDOperationGraphWrapper], id).toRDDOperationGraph()

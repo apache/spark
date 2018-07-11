@@ -59,10 +59,11 @@ class IncrementalExecution(
       StatefulAggregationStrategy ::
       FlatMapGroupsWithStateStrategy ::
       StreamingRelationStrategy ::
-      StreamingDeduplicationStrategy :: Nil
+      StreamingDeduplicationStrategy ::
+      StreamingGlobalLimitStrategy(outputMode) :: Nil
   }
 
-  private val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
+  private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
@@ -134,8 +135,12 @@ class IncrementalExecution(
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              Some(offsetSeqMetadata.batchWatermarkMs))
-        )
+              Some(offsetSeqMetadata.batchWatermarkMs)))
+
+      case l: StreamingGlobalLimitExec =>
+        l.copy(
+          stateInfo = Some(nextStatefulOperationStateInfo),
+          outputMode = Some(outputMode))
     }
   }
 
@@ -143,4 +148,14 @@ class IncrementalExecution(
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
+
+  /**
+   * Should the MicroBatchExecution run another batch based on this execution and the current
+   * updated metadata.
+   */
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    executedPlan.collect {
+      case p: StateStoreWriter => p.shouldRunAnotherBatch(newMetadata)
+    }.exists(_ == true)
+  }
 }

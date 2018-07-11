@@ -227,7 +227,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
+    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions").map {
+      Utils.substituteAppNExecIds(_, appId, taskId)
+    }.getOrElse("")
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
@@ -632,7 +634,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             slave.hostname,
             externalShufflePort,
             sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
-              s"${sc.conf.getTimeAsMs("spark.network.timeout", "120s")}ms"),
+              s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s")}s"),
             sc.conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
         slave.shuffleRegistered = true
       }

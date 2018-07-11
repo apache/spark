@@ -37,7 +37,6 @@ setOldClass("jobj")
 #' @name crosstab
 #' @aliases crosstab,SparkDataFrame,character,character-method
 #' @family stat functions
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- read.json("/path/to/file.json")
@@ -63,7 +62,6 @@ setMethod("crosstab",
 #' @rdname cov
 #' @aliases cov,SparkDataFrame-method
 #' @family stat functions
-#' @export
 #' @examples
 #'
 #' \dontrun{
@@ -92,7 +90,6 @@ setMethod("cov",
 #' @name corr
 #' @aliases corr,SparkDataFrame-method
 #' @family stat functions
-#' @export
 #' @examples
 #'
 #' \dontrun{
@@ -124,7 +121,6 @@ setMethod("corr",
 #' @name freqItems
 #' @aliases freqItems,SparkDataFrame,character-method
 #' @family stat functions
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- read.json("/path/to/file.json")
@@ -168,7 +164,6 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' @name approxQuantile
 #' @aliases approxQuantile,SparkDataFrame,character,numeric,numeric-method
 #' @family stat functions
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- read.json("/path/to/file.json")
@@ -205,7 +200,6 @@ setMethod("approxQuantile",
 #' @aliases sampleBy,SparkDataFrame,character,list,numeric-method
 #' @name sampleBy
 #' @family stat functions
-#' @export
 #' @examples
 #'\dontrun{
 #' df <- read.json("/path/to/file.json")

@@ -135,7 +135,7 @@ object HashingTF {
 
   private[HashingTF] val Murmur3: String = "murmur3"
 
-  private val seed = 42
+  private[spark] val seed = 42
 
   /**
    * Calculate a hash code value for the term object using the native Scala implementation.
@@ -160,7 +160,7 @@ object HashingTF {
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case s: String =>
         val utf8 = UTF8String.fromString(s)
-        hashUnsafeBytes(utf8.getBaseObject, utf8.getBaseOffset, utf8.numBytes(), seed)
+        hashUnsafeBytesBlock(utf8.getMemoryBlock(), seed)
       case _ => throw new SparkException("HashingTF with murmur3 algorithm does not " +
         s"support type ${term.getClass.getCanonicalName} of input data.")
     }

@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, Literal, SpecificInternalRow, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -364,5 +364,15 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("_1", IntegerType, nullable = false),
         StructField("_2", NullType, nullable = true))),
       nullable = true))
+  }
+
+  test("SPARK-23835: add null check to non-nullable types in Tuples") {
+    def numberOfCheckedArguments(deserializer: Expression): Int = {
+      assert(deserializer.isInstanceOf[NewInstance])
+      deserializer.asInstanceOf[NewInstance].arguments.count(_.isInstanceOf[AssertNotNull])
+    }
+    assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
   }
 }

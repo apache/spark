@@ -22,7 +22,8 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -164,8 +165,8 @@ case class PreciseTimestampConversion(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     ev.copy(code = eval.code +
-      s"""boolean ${ev.isNull} = ${eval.isNull};
-         |${ctx.javaType(dataType)} ${ev.value} = ${eval.value};
+      code"""boolean ${ev.isNull} = ${eval.isNull};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${eval.value};
        """.stripMargin)
   }
   override def nullSafeEval(input: Any): Any = input

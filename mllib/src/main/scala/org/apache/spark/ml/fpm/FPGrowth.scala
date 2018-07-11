@@ -161,6 +161,8 @@ class FPGrowth @Since("2.2.0") (
   private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = {
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(params: _*)
     val data = dataset.select($(itemsCol))
     val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[Any](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
@@ -183,7 +185,9 @@ class FPGrowth @Since("2.2.0") (
       items.unpersist()
     }
 
-    copyValues(new FPGrowthModel(uid, frequentItems)).setParent(this)
+    val model = copyValues(new FPGrowthModel(uid, frequentItems)).setParent(this)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("2.2.0")
@@ -335,7 +339,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       val dataPath = new Path(path, "data").toString
       val frequentItems = sparkSession.read.parquet(dataPath)
       val model = new FPGrowthModel(metadata.uid, frequentItems)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

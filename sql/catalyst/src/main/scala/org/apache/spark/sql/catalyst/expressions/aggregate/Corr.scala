@@ -22,17 +22,13 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 /**
- * Compute Pearson correlation between two expressions.
+ * Base class for computing Pearson correlation between two expressions.
  * When applied on empty data (i.e., count is zero), it returns NULL.
  *
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.")
-// scalastyle:on line.size.limit
-case class Corr(x: Expression, y: Expression)
+abstract class PearsonCorrelation(x: Expression, y: Expression)
   extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(x, y)
@@ -51,7 +47,26 @@ case class Corr(x: Expression, y: Expression)
 
   override val initialValues: Seq[Expression] = Array.fill(6)(Literal(0.0))
 
-  override val updateExpressions: Seq[Expression] = {
+  override lazy val updateExpressions: Seq[Expression] = updateExpressionsDef
+
+  override val mergeExpressions: Seq[Expression] = {
+    val n1 = n.left
+    val n2 = n.right
+    val newN = n1 + n2
+    val dx = xAvg.right - xAvg.left
+    val dxN = If(newN === Literal(0.0), Literal(0.0), dx / newN)
+    val dy = yAvg.right - yAvg.left
+    val dyN = If(newN === Literal(0.0), Literal(0.0), dy / newN)
+    val newXAvg = xAvg.left + dxN * n2
+    val newYAvg = yAvg.left + dyN * n2
+    val newCk = ck.left + ck.right + dx * dyN * n1 * n2
+    val newXMk = xMk.left + xMk.right + dx * dxN * n1 * n2
+    val newYMk = yMk.left + yMk.right + dy * dyN * n1 * n2
+
+    Seq(newN, newXAvg, newYAvg, newCk, newXMk, newYMk)
+  }
+
+  protected def updateExpressionsDef: Seq[Expression] = {
     val newN = n + Literal(1.0)
     val dx = x - xAvg
     val dxN = dx / newN
@@ -73,24 +88,15 @@ case class Corr(x: Expression, y: Expression)
       If(isNull, yMk, newYMk)
     )
   }
+}
 
-  override val mergeExpressions: Seq[Expression] = {
 
-    val n1 = n.left
-    val n2 = n.right
-    val newN = n1 + n2
-    val dx = xAvg.right - xAvg.left
-    val dxN = If(newN === Literal(0.0), Literal(0.0), dx / newN)
-    val dy = yAvg.right - yAvg.left
-    val dyN = If(newN === Literal(0.0), Literal(0.0), dy / newN)
-    val newXAvg = xAvg.left + dxN * n2
-    val newYAvg = yAvg.left + dyN * n2
-    val newCk = ck.left + ck.right + dx * dyN * n1 * n2
-    val newXMk = xMk.left + xMk.right + dx * dxN * n1 * n2
-    val newYMk = yMk.left + yMk.right + dy * dyN * n1 * n2
-
-    Seq(newN, newXAvg, newYAvg, newCk, newXMk, newYMk)
-  }
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.")
+// scalastyle:on line.size.limit
+case class Corr(x: Expression, y: Expression)
+  extends PearsonCorrelation(x, y) {
 
   override val evaluateExpression: Expression = {
     If(n === Literal(0.0), Literal.create(null, DoubleType),

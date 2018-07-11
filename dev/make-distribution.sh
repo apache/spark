@@ -72,8 +72,16 @@ while (( "$#" )); do
     --help)
       exit_with_usage
       ;;
-    *)
+    --*)
+      echo "Error: $1 is not supported"
+      exit_with_usage
+      ;;
+    -*)
       break
+      ;;
+    *)
+      echo "Error: $1 is not supported"
+      exit_with_usage
       ;;
   esac
   shift
@@ -203,9 +211,10 @@ mkdir -p "$DISTDIR/examples/src/main"
 cp -r "$SPARK_HOME/examples/src/main" "$DISTDIR/examples/src/"
 
 # Copy license and ASF files
-cp "$SPARK_HOME/LICENSE" "$DISTDIR"
-cp -r "$SPARK_HOME/licenses" "$DISTDIR"
-cp "$SPARK_HOME/NOTICE" "$DISTDIR"
+cp "$SPARK_HOME/LICENSE-binary" "$DISTDIR/LICENSE"
+mkdir -p "$DISTDIR/licenses"
+cp -r "$SPARK_HOME/licenses-binary" "$DISTDIR/licenses"
+cp "$SPARK_HOME/NOTICE-binary" "$DISTDIR/NOTICE"
 
 if [ -e "$SPARK_HOME/CHANGES.txt" ]; then
   cp "$SPARK_HOME/CHANGES.txt" "$DISTDIR"

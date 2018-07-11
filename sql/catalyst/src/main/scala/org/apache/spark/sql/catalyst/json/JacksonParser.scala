@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayOutputStream, CharConversionException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
  * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
  */
 class JacksonParser(
-    schema: StructType,
+    schema: DataType,
     val options: JSONOptions) extends Logging {
 
   import JacksonUtils._
@@ -57,7 +57,14 @@ class JacksonParser(
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
    */
-  private def makeRootConverter(st: StructType): JsonParser => Seq[InternalRow] = {
+  private def makeRootConverter(dt: DataType): JsonParser => Seq[InternalRow] = {
+    dt match {
+      case st: StructType => makeStructRootConverter(st)
+      case mt: MapType => makeMapRootConverter(mt)
+    }
+  }
+
+  private def makeStructRootConverter(st: StructType): JsonParser => Seq[InternalRow] = {
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, st) {
@@ -84,6 +91,13 @@ class JacksonParser(
         } else {
           array.toArray[InternalRow](schema).toSeq
         }
+    }
+  }
+
+  private def makeMapRootConverter(mt: MapType): JsonParser => Seq[InternalRow] = {
+    val fieldConverter = makeConverter(mt.valueType)
+    (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, mt) {
+      case START_OBJECT => Seq(InternalRow(convertMap(parser, fieldConverter)))
     }
   }
 
@@ -357,7 +371,18 @@ class JacksonParser(
       }
     } catch {
       case e @ (_: RuntimeException | _: JsonProcessingException) =>
+        // JSON parser currently doesn't support partial results for corrupted records.
+        // For such records, all fields other than the field configured by
+        // `columnNameOfCorruptRecord` are set to `null`.
         throw BadRecordException(() => recordLiteral(record), () => None, e)
+      case e: CharConversionException if options.encoding.isEmpty =>
+        val msg =
+          """JSON parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        throw BadRecordException(() => recordLiteral(record), () => None, wrappedCharException)
     }
   }
 }

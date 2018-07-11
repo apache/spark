@@ -211,6 +211,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(DayOfWeek, DateType)
   }
 
+  test("WeekDay") {
+    checkEvaluation(WeekDay(Literal.create(null, DateType)), null)
+    checkEvaluation(WeekDay(Literal(d)), 2)
+    checkEvaluation(WeekDay(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 2)
+    checkEvaluation(WeekDay(Cast(Literal(ts), DateType, gmtId)), 4)
+    checkEvaluation(WeekDay(Cast(Literal("2011-05-06"), DateType, gmtId)), 4)
+    checkEvaluation(WeekDay(Literal(new Date(sdf.parse("2017-05-27 13:10:15").getTime))), 5)
+    checkEvaluation(WeekDay(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 4)
+    checkConsistencyBetweenInterpretedAndCodegen(WeekDay, DateType)
+  }
+
   test("WeekOfYear") {
     checkEvaluation(WeekOfYear(Literal.create(null, DateType)), null)
     checkEvaluation(WeekOfYear(Literal(d)), 15)
@@ -453,34 +464,47 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         MonthsBetween(
           Literal(new Timestamp(sdf.parse("1997-02-28 10:30:00").getTime)),
           Literal(new Timestamp(sdf.parse("1996-10-30 00:00:00").getTime)),
-          timeZoneId),
-        3.94959677)
+          Literal.TrueLiteral,
+          timeZoneId = timeZoneId), 3.94959677)
       checkEvaluation(
         MonthsBetween(
-          Literal(new Timestamp(sdf.parse("2015-01-30 11:52:00").getTime)),
-          Literal(new Timestamp(sdf.parse("2015-01-30 11:50:00").getTime)),
-          timeZoneId),
-        0.0)
-      checkEvaluation(
-        MonthsBetween(
-          Literal(new Timestamp(sdf.parse("2015-01-31 00:00:00").getTime)),
-          Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
-          timeZoneId),
-        -2.0)
-      checkEvaluation(
-        MonthsBetween(
-          Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
-          Literal(new Timestamp(sdf.parse("2015-02-28 00:00:00").getTime)),
-          timeZoneId),
-        1.0)
+          Literal(new Timestamp(sdf.parse("1997-02-28 10:30:00").getTime)),
+          Literal(new Timestamp(sdf.parse("1996-10-30 00:00:00").getTime)),
+          Literal.FalseLiteral,
+          timeZoneId = timeZoneId), 3.9495967741935485)
+
+      Seq(Literal.FalseLiteral, Literal.TrueLiteral). foreach { roundOff =>
+        checkEvaluation(
+          MonthsBetween(
+            Literal(new Timestamp(sdf.parse("2015-01-30 11:52:00").getTime)),
+            Literal(new Timestamp(sdf.parse("2015-01-30 11:50:00").getTime)),
+            roundOff,
+            timeZoneId = timeZoneId), 0.0)
+        checkEvaluation(
+          MonthsBetween(
+            Literal(new Timestamp(sdf.parse("2015-01-31 00:00:00").getTime)),
+            Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
+            roundOff,
+            timeZoneId = timeZoneId), -2.0)
+        checkEvaluation(
+          MonthsBetween(
+            Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
+            Literal(new Timestamp(sdf.parse("2015-02-28 00:00:00").getTime)),
+            roundOff,
+            timeZoneId = timeZoneId), 1.0)
+      }
       val t = Literal(Timestamp.valueOf("2015-03-31 22:00:00"))
       val tnull = Literal.create(null, TimestampType)
-      checkEvaluation(MonthsBetween(t, tnull, timeZoneId), null)
-      checkEvaluation(MonthsBetween(tnull, t, timeZoneId), null)
-      checkEvaluation(MonthsBetween(tnull, tnull, timeZoneId), null)
+      checkEvaluation(MonthsBetween(t, tnull, Literal.TrueLiteral, timeZoneId = timeZoneId), null)
+      checkEvaluation(MonthsBetween(tnull, t, Literal.TrueLiteral, timeZoneId = timeZoneId), null)
+      checkEvaluation(
+        MonthsBetween(tnull, tnull, Literal.TrueLiteral, timeZoneId = timeZoneId), null)
+      checkEvaluation(
+        MonthsBetween(t, t, Literal.create(null, BooleanType), timeZoneId = timeZoneId), null)
       checkConsistencyBetweenInterpretedAndCodegen(
-        (time1: Expression, time2: Expression) => MonthsBetween(time1, time2, timeZoneId),
-        TimestampType, TimestampType)
+        (time1: Expression, time2: Expression, roundOff: Expression) =>
+          MonthsBetween(time1, time2, roundOff, timeZoneId = timeZoneId),
+        TimestampType, TimestampType, BooleanType)
     }
   }
 
