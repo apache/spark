@@ -75,7 +75,4 @@ private[spark] object KubernetesUtils {
     }
   }
 
-  def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {
-    opt1.foreach { _ => require(opt2.isEmpty, errMessage) }
-  }
 }
