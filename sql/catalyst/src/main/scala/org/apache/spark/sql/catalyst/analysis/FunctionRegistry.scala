@@ -422,6 +422,7 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[MapEntries]("map_entries"),
     expression[MapFromEntries]("map_from_entries"),
+    expression[MapConcat]("map_concat"),
     expression[Size]("size"),
     expression[Slice]("slice"),
     expression[Size]("cardinality"),
@@ -505,6 +506,7 @@ object FunctionRegistry {
     // json
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
+    expression[SchemaOfJson]("schema_of_json"),
 
     // cast
     expression[Cast]("cast"),
