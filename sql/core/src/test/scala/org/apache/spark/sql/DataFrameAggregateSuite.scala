@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
-import org.scalatest.Matchers.the
+import org.scalatest.Matchers
 
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DecimalType
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
-class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
+class DataFrameAggregateSuite extends QueryTest with SharedSQLContext with Matchers {
   import testImplicits._
 
   val absTol = 1e-8
@@ -715,6 +715,11 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT a, MAX(b), RANK() OVER(ORDER BY a) FROM testData2 GROUP BY a HAVING SUM(b) = 3"),
       Row(1, 2, 1) :: Row(2, 2, 2) :: Row(3, 2, 3) :: Nil)
+  }
+
+  test("SPARK-24788: RelationalGroupedDataset.toString " +
+    "with unresolved grouping expressions should not throw an exception") {
+    noException should be thrownBy testData.groupBy('key).toString
   }
 
 }
