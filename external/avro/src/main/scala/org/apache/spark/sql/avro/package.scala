@@ -28,7 +28,7 @@ package object avro {
 
   /**
    * Adds a method, `avro`, to DataFrameReader that allows you to read avro files using
-   * the DataFileReade
+   * the DataFileReader
    */
   implicit class AvroDataFrameReader(reader: DataFrameReader) {
     def avro: String => DataFrame = reader.format("avro").load

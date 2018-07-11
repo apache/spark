@@ -70,13 +70,8 @@ private[avro] class AvroOutputWriter(
 
     }.getRecordWriter(context)
 
-  // this is the new api in spark 2.2+
-  def write(row: InternalRow): Unit = {
-    write(internalRowConverter(row))
-  }
-
-  // api in spark 2.0 - 2.1
-  def write(row: Row): Unit = {
+  def write(internalRow: InternalRow): Unit = {
+    val row = internalRowConverter(internalRow)
     val key = new AvroKey(converter(row).asInstanceOf[GenericRecord])
     recordWriter.write(key, NullWritable.get())
   }
