@@ -3395,7 +3395,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
           hsInt = new OpenHashSet[Int]
           val elements = evalIntLongPrimitiveType(array1, array2, null, false)
           hsInt = new OpenHashSet[Int]
-          val resultArray = if (UnsafeArrayData.canUseGenericArrayData(
+          val resultArray = if (UnsafeArrayData.shouldUseGenericArrayData(
             IntegerType.defaultSize, elements)) {
             new GenericArrayData(new Array[Any](elements))
           } else {
@@ -3410,7 +3410,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike 
           hsLong = new OpenHashSet[Long]
           val elements = evalIntLongPrimitiveType(array1, array2, null, true)
           hsLong = new OpenHashSet[Long]
-          val resultArray = if (UnsafeArrayData.canUseGenericArrayData(
+          val resultArray = if (UnsafeArrayData.shouldUseGenericArrayData(
             LongType.defaultSize, elements)) {
             new GenericArrayData(new Array[Any](elements))
           } else {
