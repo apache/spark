@@ -3627,6 +3627,14 @@ object functions {
   @scala.annotation.varargs
   def arrays_zip(e: Column*): Column = withExpr { ArraysZip(e.map(_.expr)) }
 
+  /**
+   * Returns the union of all the given maps.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  @scala.annotation.varargs
+  def map_concat(cols: Column*): Column = withExpr { MapConcat(cols.map(_.expr)) }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Mask functions
   //////////////////////////////////////////////////////////////////////////////////////////////
