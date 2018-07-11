@@ -805,7 +805,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  testWithAllStateVersions("flatMapGroupsWithState - streaming with event time timeout") {
+  testWithAllStateVersions("flatMapGroupsWithState - streaming w\ event time timeout + watermark") {
     // Function to maintain the max event time as state and set the timeout timestamp based on the
     // current max event time seen. It returns the max event time in the state, or -1 if the state
     // was removed by timeout.
@@ -1197,6 +1197,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       func: (Int, Iterator[Int], GroupState[Int]) => Iterator[Int],
       timeoutType: GroupStateTimeout = GroupStateTimeout.NoTimeout,
       batchTimestampMs: Long = NO_TIMESTAMP): FlatMapGroupsWithStateExec = {
+    val stateFormatVersion = spark.conf.get(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
     MemoryStream[Int]
       .toDS
       .groupByKey(x => x)
@@ -1204,7 +1205,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       .logicalPlan.collectFirst {
         case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, _) =>
           FlatMapGroupsWithStateExec(
-            f, k, v, g, d, o, None, s, 2, m, t,
+            f, k, v, g, d, o, None, s, stateFormatVersion, m, t,
             Some(currentBatchTimestamp), Some(currentBatchWatermark), RDDScanExec(g, null, "rdd"))
       }.get
   }
