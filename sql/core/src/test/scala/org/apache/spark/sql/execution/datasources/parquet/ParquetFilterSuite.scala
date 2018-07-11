@@ -505,25 +505,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
 
-    assertResult(Some(lt(intColumn("cint"), 10: Integer))) {
-      parquetFilters.createFilter(parquetSchema, sources.LessThan("cint", 10))
-    }
-    assertResult(None) {
-      parquetFilters.createFilter(parquetSchema, sources.LessThan("cint", 10L))
-    }
-    assertResult(None) {
-      parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal1", 10L))
-    }
-
     val decimal = new JBigDecimal(10).setScale(scale)
+    val decimal1 = new JBigDecimal(10).setScale(scale + 1)
     assert(decimal.scale() === scale)
+    assert(decimal1.scale() === scale + 1)
+
     assertResult(Some(lt(intColumn("cdecimal1"), 1000: Integer))) {
       parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal1", decimal))
     }
-
-    val decimal1 = new JBigDecimal(10).setScale(scale + 1)
-    assert(decimal1.scale() === scale + 1)
-
     assertResult(None) {
       parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal1", decimal1))
     }
@@ -535,6 +524,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal2", decimal1))
     }
 
+    assert(parquetFilters.createFilter(
+      parquetSchema, sources.LessThan("cdecimal3", decimal)).isDefined)
     assertResult(None) {
       parquetFilters.createFilter(parquetSchema, sources.LessThan("cdecimal3", decimal1))
     }
