@@ -190,12 +190,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite
             .withImage(image)
             .withImagePullPolicy("IfNotPresent")
             .withCommand("/opt/spark/bin/run-example")
-            .addToArgs("--master", s"k8s://${kubernetesTestComponents.clientConfig.getMasterUrl}")
+            .addToArgs("--master", s"k8s://https://kubernetes.default.svc")
             .addToArgs("--deploy-mode", "client")
             .addToArgs(
               "--conf",
               s"spark.kubernetes.namespace=${kubernetesTestComponents.namespace}")
-            .addToArgs("--conf", "spark.kubernetes.driver.pod.name=driverPodName")
+            .addToArgs("--conf", s"spark.kubernetes.driver.pod.name=$driverPodName")
             .addToArgs("--conf", "spark.executor.memory=500m")
             .addToArgs("--conf", "spark.executor.cores=1")
             .addToArgs("--conf", "spark.executor.instances=1")

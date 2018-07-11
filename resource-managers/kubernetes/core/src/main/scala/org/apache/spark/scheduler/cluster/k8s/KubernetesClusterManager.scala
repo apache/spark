@@ -50,6 +50,12 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       KUBERNETES_AUTH_CLIENT_MODE_PREFIX
     }
 
+    val apiServerUrl = if (wasSparkSubmitted) {
+      KUBERNETES_MASTER_INTERNAL_URL
+    } else {
+      masterURL.substring("k8s://".length())
+    }
+
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
       KUBERNETES_MASTER_INTERNAL_URL,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
