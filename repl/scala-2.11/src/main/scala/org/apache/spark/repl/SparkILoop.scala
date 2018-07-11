@@ -19,6 +19,8 @@ package org.apache.spark.repl
 
 import java.io.BufferedReader
 
+import scala.concurrent.Await
+
 // scalastyle:off println
 import scala.Predef.{println => _, _}
 // scalastyle:on println
@@ -167,6 +169,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
         )
       // power mode setup
       if (isReplPower) enablePowerMode(true)
+      initializeSpark()
       loadInitFiles()
       // SI-7418 Now, and only now, can we enable TAB completion.
       in.postInit()
@@ -203,26 +206,28 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
       }
     }
     def startup(): String = withSuppressedSettings {
-      // while we go fire up the REPL
+      // let them start typing
       val splash = preLoop
 
+      // while we go fire up the REPL
       try {
         // don't allow ancient sbt to hijack the reader
         savingReader {
           createInterpreter()
         }
         intp.initializeSynchronous()
-        initializeSpark()
 
-        // globalFuture = Future successful true
+        val field = classOf[ILoop].getDeclaredFields.filter(_.getName.contains("globalFuture")).head
+        field.setAccessible(true)
+        field.set(this, Future successful true)
+
+        // val globalFuture: Future[Boolean] =
         if (intp.reporter.hasErrors) {
           echo("Interpreter encountered errors during initialization!")
           null
         } else {
           loopPostInit()
-
           printWelcome()
-          // let them start typing
           splash.start()
 
           val line = splash.line           // what they typed in while they were waiting
