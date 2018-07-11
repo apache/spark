@@ -517,7 +517,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(!store.hasCommitted)
     assert(store.metrics.numKeys === 0)
 
-    assert(store.metrics.customMetrics.exists(_._1.name == "providerLoadedMapCountOfVersions"))
     var loadedMapSize = store.metrics.customMetrics.find(_._1.name == "providerLoadedMapSizeBytes")
     assert(loadedMapSize.isDefined)
     val initialLoadedMapSize = loadedMapSize.get._2
@@ -541,7 +540,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     assert(store.hasCommitted)
 
-    assert(store.metrics.customMetrics.exists(_._1.name == "providerLoadedMapCountOfVersions"))
     loadedMapSize = store.metrics.customMetrics.find(_._1.name == "providerLoadedMapSizeBytes")
     assert(loadedMapSize.isDefined)
     val loadedMapSizeForVersion1 = loadedMapSize.get._2
@@ -563,7 +561,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     assert(storeV2.hasCommitted)
 
-    assert(storeV2.metrics.customMetrics.exists(_._1.name == "providerLoadedMapCountOfVersions"))
     loadedMapSize = storeV2.metrics.customMetrics.find(_._1.name == "providerLoadedMapSizeBytes")
     assert(loadedMapSize.isDefined)
     val loadedMapSizeForVersion1And2 = loadedMapSize.get._2
@@ -581,8 +578,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val reloadedStore = reloadedProvider.getStore(1)
     assert(reloadedStore.metrics.numKeys === 1)
 
-    assert(reloadedStore.metrics.customMetrics
-      .exists(_._1.name == "providerLoadedMapCountOfVersions"))
     loadedMapSize = reloadedStore.metrics.customMetrics
       .find(_._1.name == "providerLoadedMapSizeBytes")
     assert(loadedMapSize.isDefined)
@@ -600,8 +595,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val reloadedStoreV2 = reloadedProvider.getStore(2)
     assert(reloadedStoreV2.metrics.numKeys === 2)
 
-    assert(reloadedStoreV2.metrics.customMetrics
-      .exists(_._1.name == "providerLoadedMapCountOfVersions"))
     loadedMapSize = reloadedStoreV2.metrics.customMetrics
       .find(_._1.name == "providerLoadedMapSizeBytes")
     assert(loadedMapSize.isDefined)

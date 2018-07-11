@@ -118,9 +118,6 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
     storeMetrics.customMetrics.foreach {
-      case (metric: StateStoreCustomAverageMetric, value) =>
-        longMetric(metric.name).set(value * 1.0d)
-
       case (metric, value) => longMetric(metric.name) += value
     }
   }
@@ -130,8 +127,6 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     provider.supportedCustomMetrics.map {
       case StateStoreCustomSumMetric(name, desc) =>
         name -> SQLMetrics.createMetric(sparkContext, desc)
-      case StateStoreCustomAverageMetric(name, desc) =>
-        name -> SQLMetrics.createAverageMetric(sparkContext, desc)
       case StateStoreCustomSizeMetric(name, desc) =>
         name -> SQLMetrics.createSizeMetric(sparkContext, desc)
       case StateStoreCustomTimingMetric(name, desc) =>
