@@ -186,6 +186,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
           .withLabels(labels.asJava)
           .endMetadata()
         .withNewSpec()
+          .withServiceAccountName("default")
           .addNewContainer()
             .withImage(image)
             .withImagePullPolicy("IfNotPresent")
@@ -195,6 +196,10 @@ private[spark] class KubernetesSuite extends SparkFunSuite
             .addToArgs(
               "--conf",
               s"spark.kubernetes.namespace=${kubernetesTestComponents.namespace}")
+            .addToArgs("--conf", "spark.kubernetes.authenticate.oauthTokenFile=" +
+              "/var/run/secrets/kubernetes.io/serviceaccount/token")
+            .addToArgs("--conf", "spark.kubernetes.authenticate.caCertFile=" +
+              "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
             .addToArgs("--conf", s"spark.kubernetes.driver.pod.name=$driverPodName")
             .addToArgs("--conf", "spark.executor.memory=500m")
             .addToArgs("--conf", "spark.executor.cores=1")

@@ -43,31 +43,31 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
     val wasSparkSubmitted = sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK).getOrElse(false)
-    val authConfPrefix = if (wasSparkSubmitted) {
-      KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX
-    } else {
-      KUBERNETES_AUTH_CLIENT_MODE_PREFIX
-    }
-
-    val apiServerUrl = if (wasSparkSubmitted) {
-      KUBERNETES_MASTER_INTERNAL_URL
-    } else {
-      masterURL.substring("k8s://".length())
-    }
-
-    if (wasSparkSubmitted) {
+    val (authConfPrefix,
+      apiServerUri,
+      defaultServiceAccountToken,
+      defaultServiceAccountCaCrt) = if (wasSparkSubmitted) {
       require(sc.conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
         "If the application is deployed using spark-submit, the driver pod name must" +
           " be provided.")
+      (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+        KUBERNETES_MASTER_INTERNAL_URL,
+        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
+        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+    } else {
+      (KUBERNETES_AUTH_CLIENT_MODE_PREFIX,
+        masterURL.substring("k8s://".length()),
+        None,
+        None)
     }
 
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
-      KUBERNETES_MASTER_INTERNAL_URL,
+      apiServerUri,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
       authConfPrefix,
       sc.conf,
-      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
-      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+      defaultServiceAccountToken,
+      defaultServiceAccountCaCrt)
 
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
       "kubernetes-executor-requests")
