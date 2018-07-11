@@ -25,11 +25,12 @@ import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.ReadSupportWithSchema;
 import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 import org.apache.spark.sql.sources.v2.reader.InputPartition;
+import org.apache.spark.sql.sources.v2.reader.SupportsDeprecatedScanRow;
 import org.apache.spark.sql.types.StructType;
 
 public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupportWithSchema {
 
-  class Reader implements DataSourceReader {
+  class Reader implements DataSourceReader, SupportsDeprecatedScanRow {
     private final StructType schema;
 
     Reader(StructType schema) {
@@ -42,7 +43,7 @@ public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupportWi
     }
 
     @Override
-    public List<InputPartition<Row>> planInputPartitions() {
+    public List<InputPartition<Row>> planRowInputPartitions() {
       return java.util.Collections.emptyList();
     }
   }
