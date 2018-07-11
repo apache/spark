@@ -156,6 +156,72 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       })
   }
 
+  test("Run in client mode.") {
+    val labels = Map("spark-app-selector" -> driverPodName)
+    val driverPort = 7077
+    val blockManagerPort = 10000
+    val driverService = testBackend.getKubernetesClient.services().createNew()
+      .withNewMetadata()
+        .withName(s"$driverPodName-svc")
+        .endMetadata()
+      .withNewSpec()
+        .withClusterIP("None")
+        .withSelector(labels.asJava)
+        .addNewPort()
+          .withName("driver-port")
+          .withPort(driverPort)
+          .withNewTargetPort(driverPort)
+          .endPort()
+        .addNewPort()
+          .withName("block-manager")
+          .withPort(blockManagerPort)
+          .withNewTargetPort(blockManagerPort)
+          .endPort()
+        .endSpec()
+      .done()
+    try {
+      val driverPod = testBackend.getKubernetesClient.pods().createNew()
+        .withNewMetadata()
+          .withName(driverPodName)
+          .withLabels(labels.asJava)
+          .endMetadata()
+        .withNewSpec()
+          .addNewContainer()
+            .withImage(image)
+            .withImagePullPolicy("IfNotPresent")
+            .withCommand("/opt/spark/bin/run-example")
+            .addToArgs("--master", s"k8s://${kubernetesTestComponents.clientConfig.getMasterUrl}")
+            .addToArgs("--deploy-mode", "client")
+            .addToArgs(
+              "--conf",
+              s"spark.kubernetes.namespace=${kubernetesTestComponents.namespace}")
+            .addToArgs("--conf", "spark.kubernetes.driver.pod.name=driverPodName")
+            .addToArgs("--conf", "spark.executor.memory=500m")
+            .addToArgs("--conf", "spark.executor.cores=1")
+            .addToArgs("--conf", "spark.executor.instances=1")
+            .addToArgs("--conf",
+              s"spark.driver.host=" +
+                s"${driverService.getMetadata.getName}.${kubernetesTestComponents.namespace}.svc")
+            .addToArgs("--conf", s"spark.driver.port=$driverPort")
+            .addToArgs("--conf", s"spark.driver.blockManager.port=$blockManagerPort")
+            .addToArgs("SparkPi")
+            .addToArgs("10")
+            .endContainer()
+          .endSpec()
+        .done()
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        assert(kubernetesTestComponents.kubernetesClient
+          .pods()
+          .withName(driverPodName)
+          .getLog
+          .contains("Pi is roughly 3"), "The application did not complete.")
+      }
+    } finally {
+      // Have to delete the service manually since it doesn't have an owner reference
+      kubernetesTestComponents.kubernetesClient.services.delete(driverService)
+    }
+  }
+
   // TODO(ssuchter): Enable the below after debugging
   // test("Run PageRank using remote data file") {
   //   sparkAppConf

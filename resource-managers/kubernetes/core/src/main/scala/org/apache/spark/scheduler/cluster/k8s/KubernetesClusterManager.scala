@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import com.google.common.cache.CacheBuilder
@@ -35,12 +36,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
   override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
 
   override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    if (masterURL.startsWith("k8s") &&
-      sc.deployMode == "client" &&
-      !sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK).getOrElse(false)) {
-      throw new SparkException("Client mode is currently not supported for Kubernetes.")
-    }
-
     new TaskSchedulerImpl(sc)
   }
 
@@ -48,10 +43,17 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       sc: SparkContext,
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
+    val wasSparkSubmitted = sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK).getOrElse(false)
+    val authConfPrefix = if (wasSparkSubmitted) {
+      KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX
+    } else {
+      KUBERNETES_AUTH_CLIENT_MODE_PREFIX
+    }
+
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
       KUBERNETES_MASTER_INTERNAL_URL,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
-      KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+      authConfPrefix,
       sc.conf,
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
