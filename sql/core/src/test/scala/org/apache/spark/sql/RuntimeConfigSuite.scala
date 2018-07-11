@@ -64,5 +64,8 @@ class RuntimeConfigSuite extends SparkFunSuite {
     // Core configs
     assert(!conf.isModifiable("spark.task.cpus"))
     assert(!conf.isModifiable("spark.executor.cores"))
+    // Invalid config parameters
+    assert(!conf.isModifiable(""))
+    assert(!conf.isModifiable("invalid config parameter"))
   }
 }
