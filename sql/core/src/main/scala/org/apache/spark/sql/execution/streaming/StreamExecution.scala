@@ -93,6 +93,13 @@ abstract class StreamExecution(
   def logicalPlan: LogicalPlan
 
   /**
+   * Tracks the previous committed offsets so that the progress reporter can report the
+   * start offsets correctly after the current batch of data is proccessed and committed.
+   */
+  @volatile
+  var prevCommittedOffsets = new StreamProgress
+
+  /**
    * Tracks how much data we have processed and committed to the sink or state store from each
    * input source.
    * Only the scheduler thread should modify this field, and only in atomic steps.

@@ -57,6 +57,7 @@ trait ProgressReporter extends Logging {
   protected def lastExecution: QueryExecution
   protected def newData: Map[BaseStreamingSource, LogicalPlan]
   protected def availableOffsets: StreamProgress
+  protected def prevCommittedOffsets: StreamProgress
   protected def committedOffsets: StreamProgress
   protected def sources: Seq[BaseStreamingSource]
   protected def sink: BaseStreamingSink
@@ -147,7 +148,7 @@ trait ProgressReporter extends Logging {
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
       new SourceProgress(
         description = source.toString,
-        startOffset = committedOffsets.get(source).map(_.json).orNull,
+        startOffset = prevCommittedOffsets.get(source).map(_.json).orNull,
         endOffset = availableOffsets.get(source).map(_.json).orNull,
         numInputRows = numRecords,
         inputRowsPerSecond = numRecords / inputTimeSec,

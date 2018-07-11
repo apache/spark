@@ -314,6 +314,7 @@ class ContinuousExecution(
         commitLog.add(epoch)
         val offset =
           continuousSources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
+        prevCommittedOffsets ++= committedOffsets
         committedOffsets ++= Seq(continuousSources(0) -> offset)
         continuousSources(0).commit(offset.asInstanceOf[v2.reader.streaming.Offset])
       } else {
