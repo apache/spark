@@ -260,7 +260,18 @@ RBAC authorization and how to configure Kubernetes service accounts for pods, pl
 
 ## Client Mode
 
-Client mode is not currently supported.
+Client mode is currently supported when launched `Out Cluster` (not in a Pod).
+
+Both `spark-submit` and `spark-shell` can be used.
+
+For this, you need to add to your launch configuration two properties:
+
+```
+spark.submit.deployMode="client"
+spark.kubernetes.driver.pod.name="$HOSTNAME"
+```
+
+Client mode is currently **not** supported when launched `In Cluster` (in a Pod).
 
 ## Future Work
 
