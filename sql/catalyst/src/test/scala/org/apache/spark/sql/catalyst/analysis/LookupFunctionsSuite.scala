@@ -48,7 +48,8 @@ class LookupFunctionsSuite extends PlanTest {
     analyzer.LookupFunctions.apply(plan)
     assert(externalCatalog.getFunctionExistsCalledTimes == 1)
 
-    assert(analyzer.LookupFunctions.normalizeFuncName(unresolvedFunc.name).database == "default")
+    assert(analyzer.LookupFunctions.normalizeFuncName
+      (unresolvedFunc.name).database == Some("default"))
     assert(catalog.isRegisteredFunction(unresolvedFunc.name) == false)
     assert(catalog.isRegisteredFunction(FunctionIdentifier("max")) == true)
 
