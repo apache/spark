@@ -56,6 +56,12 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       masterURL.substring("k8s://".length())
     }
 
+    if (wasSparkSubmitted) {
+      require(sc.conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
+        "If the application is deployed using spark-submit, the driver pod name must" +
+          " be provided.")
+    }
+
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
       KUBERNETES_MASTER_INTERNAL_URL,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
