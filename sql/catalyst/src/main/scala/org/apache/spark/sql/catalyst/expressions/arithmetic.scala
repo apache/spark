@@ -514,7 +514,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        2
   """)
-case class Least(children: Seq[Expression]) extends Expression {
+case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -525,8 +525,7 @@ case class Least(children: Seq[Expression]) extends Expression {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least two arguments")
-    } else if (
-      children.map(_.dataType).sliding(2, 1).exists { case Seq(t1, t2) => !t1.sameType(t2) }) {
+    } else if (!areInputTypesForMergingEqual) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
@@ -534,9 +533,6 @@ case class Least(children: Seq[Expression]) extends Expression {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
-
-  override def dataType: DataType =
-    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType)).get
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {
@@ -591,7 +587,7 @@ case class Least(children: Seq[Expression]) extends Expression {
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        10
   """)
-case class Greatest(children: Seq[Expression]) extends Expression {
+case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -602,8 +598,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least two arguments")
-    } else if (
-      children.map(_.dataType).sliding(2, 1).exists { case Seq(t1, t2) => !t1.sameType(t2) }) {
+    } else if (!areInputTypesForMergingEqual) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
@@ -611,9 +606,6 @@ case class Greatest(children: Seq[Expression]) extends Expression {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
-
-  override def dataType: DataType =
-    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType)).get
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {

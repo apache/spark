@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
        1
   """)
 // scalastyle:on line.size.limit
-case class Coalesce(children: Seq[Expression]) extends Expression {
+case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   override def nullable: Boolean = children.forall(_.nullable)
@@ -59,12 +59,6 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     } else {
       TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
     }
-  }
-
-  override def dataType: DataType = {
-    val idx = children.indexWhere(!_.nullable)
-    val dataTypes = (if (idx >= 0) children.take(idx + 1) else children).map(_.dataType)
-    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(dataTypes).get
   }
 
   override def eval(input: InternalRow): Any = {

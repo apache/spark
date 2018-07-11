@@ -513,7 +513,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
        [[1 -> "a"], [2 -> "b"], [2 -> "c"], [3 -> "d"]]
   """, since = "2.4.0")
-case class MapConcat(children: Seq[Expression]) extends Expression {
+case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     var funcName = s"function $prettyName"
@@ -526,10 +526,13 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: MapType =
-    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
-      .map(_.asInstanceOf[MapType])
-      .getOrElse(MapType(StringType, StringType))
+  override def dataType: MapType = {
+    if (children.isEmpty) {
+      MapType(StringType, StringType)
+    } else {
+      super.dataType.asInstanceOf[MapType]
+    }
+  }
 
   override def nullable: Boolean = children.exists(_.nullable)
 
@@ -2210,7 +2213,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
  |     [1,2,3,4,5,6]
   """)
-case class Concat(children: Seq[Expression]) extends Expression {
+case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private val MAX_ARRAY_LENGTH: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
@@ -2231,9 +2234,13 @@ case class Concat(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: DataType =
-    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
-      .getOrElse(StringType)
+  override def dataType: DataType = {
+    if (children.isEmpty) {
+      StringType
+    } else {
+      super.dataType
+    }
+  }
 
   lazy val javaType: String = CodeGenerator.javaType(dataType)
 
