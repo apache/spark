@@ -65,7 +65,7 @@ object CommandUtils extends Logging {
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
-      val paths = partitions.map(x => new Path(x.storage.locationUri.get.getPath))
+      val paths = partitions.map(x => new Path(x.storage.locationUri.get))
       val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
       val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,
         sessionState.newHadoopConf(), SerializablePathFilter(stagingDir),
