@@ -313,9 +313,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + StringUtils.stringifyException(e))
     } finally {
-      metricsSystem.foreach { ms =>
-        ms.report()
-        ms.stop()
+      try {
+        metricsSystem.foreach { ms =>
+          ms.report()
+          ms.stop()
+        }
+      } catch {
+        case e: Exception =>
+          logInfo("Exception during stopping of the metric system: ", e)
       }
     }
   }
