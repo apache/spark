@@ -509,12 +509,7 @@ class Analyzer(
         || !p.pivotColumn.resolved => p
       case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         // Check all aggregate expressions.
-        aggregates.foreach { e =>
-          if (!isAggregateExpression(e)) {
-              throw new AnalysisException(
-                s"Aggregate expression required for pivot, found '$e'")
-          }
-        }
+        aggregates.foreach(checkValidAggregateExpression)
         // Group-by expressions coming from SQL are implicit and need to be deduced.
         val groupByExprs = groupByExprsOpt.getOrElse(
           (child.outputSet -- aggregates.flatMap(_.references) -- pivotColumn.references).toSeq)
@@ -586,12 +581,17 @@ class Analyzer(
         }
     }
 
-    private def isAggregateExpression(expr: Expression): Boolean = {
-      expr match {
-        case Alias(e, _) => isAggregateExpression(e)
-        case AggregateExpression(_, _, _, _) => true
-        case _ => false
-      }
+    // Support any aggregate expression that can appear in an Aggregate plan except Pandas UDF.
+    // TODO: Support Pandas UDF.
+    private def checkValidAggregateExpression(expr: Expression): Unit = expr match {
+      case _: AggregateExpression => // OK and leave the argument check to CheckAnalysis.
+      case expr: PythonUDF if PythonUDF.isGroupedAggPandasUDF(expr) =>
+        failAnalysis("Pandas UDF aggregate expressions are currently not supported in pivot.")
+      case e: Attribute =>
+        failAnalysis(
+          s"Aggregate expression required for pivot, but '${e.sql}' " +
+          s"did not appear in any aggregate function.")
+      case e => e.children.foreach(checkValidAggregateExpression)
     }
   }
 
