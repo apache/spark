@@ -132,8 +132,6 @@ private[sql] class HiveSessionCatalog(
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        logWarning(s"Encounter a failure during looking up function:" +
-          s" ${Utils.exceptionString(error)}")
         if (functionRegistry.functionExists(funcName)) {
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
@@ -144,8 +142,10 @@ private[sql] class HiveSessionCatalog(
           // built-in function.
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
+          logWarning(s"Encounter a failure during looking up function:" +
+            s" ${Utils.exceptionString(error)}")
           if (!hiveFunctions.contains(functionName)) {
-            failFunctionLookup(funcName)
+            failFunctionLookup(funcName, Some(Utils.exceptionString(error)))
           }
 
           // TODO: Remove this fallback path once we implement the list of fallback functions
@@ -153,12 +153,12 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(funcName))
+                failFunctionLookup(funcName, Some(Utils.exceptionString(error))))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(funcName)
+              case NonFatal(e) => failFunctionLookup(funcName, Some(Utils.exceptionString(e)))
             }
           }
           val className = functionInfo.getFunctionClass.getName
