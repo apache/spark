@@ -359,6 +359,8 @@ package object config {
 
   private[spark] val HADOOP_OUTPUTCOMMITCOORDINATION_ENABLED =
     ConfigBuilder("spark.hadoop.outputCommitCoordination.enabled")
+      .doc("when enabled, tasks will coordinate with the driver to make sure that," +
+        " for a certain partition, at most one task attempt can commit.")
       .booleanConf
       .createWithDefault(true)
 
