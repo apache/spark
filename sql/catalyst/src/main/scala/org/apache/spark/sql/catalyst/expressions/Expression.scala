@@ -711,7 +711,7 @@ trait ComplexTypeMergingExpression extends Expression {
       inputTypesForMerging.nonEmpty,
       "The collection of input data types must not be empty.")
     require(
-      inputTypesForMerging.sliding(2, 1).forall {
+      inputTypesForMerging.length <= 1 || inputTypesForMerging.sliding(2, 1).forall {
         case Seq(dt1, dt2) => DataType.equalsIgnoreCaseAndNullability(dt1, dt2)
       },
       "All input types must be the same except nullable, containsNull, valueContainsNull flags.")
