@@ -48,14 +48,13 @@ class LookupFunctionsSuite extends PlanTest {
         Alias(unresolvedRegisteredFunc, "call5")()),
       table("TaBlE"))
     analyzer.LookupFunctions.apply(plan)
-   assert(externalCatalog.getFunctionExistsCalledTimes == 1)
 
+    assert(externalCatalog.getFunctionExistsCalledTimes == 1)
     assert(analyzer.LookupFunctions.normalizeFuncName
       (unresolvedPersistentFunc.name).database == Some("default"))
   }
 
   test("SPARK-23486: the functionExists for the Registered function check") {
-
     val externalCatalog = new InMemoryCatalog
     val conf = new SQLConf()
     val customerFunctionReg = new CustomerFunctionRegistry
@@ -73,11 +72,10 @@ class LookupFunctionsSuite extends PlanTest {
       Seq(Alias(unresolvedRegisteredFunc, "call1")(), Alias(unresolvedRegisteredFunc, "call2")()),
       table("TaBlE"))
     analyzer.LookupFunctions.apply(plan)
+
     assert(customerFunctionReg.getIsRegisteredFunctionCalledTimes == 2)
-
     assert(analyzer.LookupFunctions.normalizeFuncName
-    (unresolvedRegisteredFunc.name).database == Some("default"))
-
+      (unresolvedRegisteredFunc.name).database == Some("default"))
   }
 }
 
@@ -103,5 +101,4 @@ class CustomInMemoryCatalog extends InMemoryCatalog {
   }
 
   def getFunctionExistsCalledTimes: Int = functionExistsCalledTimes
-
 }

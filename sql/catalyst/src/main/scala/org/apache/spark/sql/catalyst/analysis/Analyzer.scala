@@ -1231,8 +1231,22 @@ class Analyzer(
     }
 
     def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-      FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT),
-        name.database.orElse(Some(catalog.getCurrentDatabase)))
+      val funcName = if (conf.caseSensitiveAnalysis) {
+        name.funcName
+      } else {
+        name.funcName.toLowerCase(Locale.ROOT)
+      }
+
+      val databaseName = name.database match {
+        case Some(a) => formatDatabaseName(a)
+        case None => catalog.getCurrentDatabase
+      }
+
+      FunctionIdentifier(funcName, Some(databaseName))
+    }
+
+    protected def formatDatabaseName(name: String): String = {
+      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
     }
   }
 
