@@ -1165,8 +1165,8 @@ class Analyzer(
           case p: Project =>
             val maybeResolvedExprs = exprs.map(resolveExpression(_, p))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, p.child)
-            // The resolved attributes might not come from `p.child`. Need to filter it.
-            val missingAttrs = (AttributeSet(newExprs).intersect(p.child.outputSet)) -- p.outputSet
+            // Only add missing attributes coming from `newChild`.
+            val missingAttrs = (AttributeSet(newExprs) -- p.outputSet).intersect(newChild.outputSet)
             (newExprs, Project(p.projectList ++ missingAttrs, newChild))
 
           case a @ Aggregate(groupExprs, aggExprs, child) =>
