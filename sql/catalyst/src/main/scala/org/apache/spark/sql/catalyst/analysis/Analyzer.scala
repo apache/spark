@@ -581,11 +581,12 @@ class Analyzer(
         }
     }
 
+    // Support any aggregate expression that can appear in an Aggregate plan except Pandas UDF.
     // TODO: Support Pandas UDF.
     private def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-      case expr: AggregateExpression =>
-        checkAggregateFunctionArguments(
-          expr.aggregateFunction, _.isInstanceOf[AggregateExpression])
+      case _: AggregateExpression => // OK and leave the argument check to CheckAnalysis.
+      case expr: PythonUDF if PythonUDF.isGroupedAggPandasUDF(expr) =>
+        failAnalysis("Pandas UDF aggregate expressions are currently not supported in pivot.")
       case e: Attribute =>
         failAnalysis(
           s"Aggregate expression required for pivot, but '${e.sql}' " +

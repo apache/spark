@@ -60,27 +60,6 @@ trait CheckAnalysis extends PredicateHelper {
     case _ => None
   }
 
-  protected def checkAggregateFunctionArguments(
-      aggFunction: Expression,
-      isAggregateExpression: Expression => Boolean): Unit = {
-    aggFunction.children.foreach { child =>
-      child.foreach {
-        case expr: Expression if isAggregateExpression(expr) =>
-          failAnalysis(
-            s"It is not allowed to use an aggregate function in the argument of " +
-              s"another aggregate function. Please use the inner aggregate function " +
-              s"in a sub-query.")
-        case _ => // OK
-      }
-
-      if (!child.deterministic) {
-        failAnalysis(
-          s"nondeterministic expression ${child.sql} should not " +
-            s"appear in the arguments of an aggregate function.")
-      }
-    }
-  }
-
   private def checkLimitClause(limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => failAnalysis(
@@ -192,7 +171,22 @@ trait CheckAnalysis extends PredicateHelper {
                   case agg: AggregateExpression => agg.aggregateFunction
                   case udf: PythonUDF => udf
                 }
-                checkAggregateFunctionArguments(aggFunction, isAggregateExpression)
+                aggFunction.children.foreach { child =>
+                  child.foreach {
+                    case expr: Expression if isAggregateExpression(expr) =>
+                      failAnalysis(
+                        s"It is not allowed to use an aggregate function in the argument of " +
+                          s"another aggregate function. Please use the inner aggregate function " +
+                          s"in a sub-query.")
+                    case other => // OK
+                  }
+
+                  if (!child.deterministic) {
+                    failAnalysis(
+                      s"nondeterministic expression ${expr.sql} should not " +
+                        s"appear in the arguments of an aggregate function.")
+                  }
+                }
               case e: Attribute if groupingExprs.isEmpty =>
                 // Collect all [[AggregateExpressions]]s.
                 val aggExprs = aggregateExprs.filter(_.collect {
