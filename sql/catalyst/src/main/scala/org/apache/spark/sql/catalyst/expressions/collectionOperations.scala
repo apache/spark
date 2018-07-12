@@ -3963,14 +3963,15 @@ object ArrayUnion {
     }))
     new GenericArrayData(arrayBuffer)
   }
+}
 
-  /**
-   * Returns an array of the elements in the intersect of x and y, without duplicates
-   */
-  @ExpressionDescription(
-    usage = """
-    _FUNC_(array1, array2) - Returns an array of the elements in the intersection of array1 and
-      array2, without duplicates.
+/**
+ * Returns an array of the elements in the intersect of x and y, without duplicates
+ */
+@ExpressionDescription(
+  usage = """
+  _FUNC_(array1, array2) - Returns an array of the elements in the intersection of array1 and
+    array2, without duplicates.
   """,
   examples = """
     Examples:Fun
@@ -4067,7 +4068,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
           val elements = evalIntLongPrimitiveType(array1, array2, null, false)
           // allocate result array
           hsInt = new OpenHashSet[Int]
-          val resultArray = if (UnsafeArrayData.canUseGenericArrayData(
+          val resultArray = if (UnsafeArrayData.shouldUseGenericArrayData(
             IntegerType.defaultSize, elements)) {
             new GenericArrayData(new Array[Any](elements))
           } else {
@@ -4084,7 +4085,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
           val elements = evalIntLongPrimitiveType(array1, array2, null, true)
           // allocate result array
           hsLong = new OpenHashSet[Long]
-          val resultArray = if (UnsafeArrayData.canUseGenericArrayData(
+          val resultArray = if (UnsafeArrayData.shouldUseGenericArrayData(
             LongType.defaultSize, elements)) {
             new GenericArrayData(new Array[Any](elements))
           } else {
