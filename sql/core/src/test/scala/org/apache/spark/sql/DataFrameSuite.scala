@@ -2397,5 +2397,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val sort1 = df.select(df("name")).orderBy(df("id"))
     val sort2 = df.select(col("name")).orderBy(col("id"))
     checkAnswer(sort1, sort2.collect())
+
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+      val aggPlusSort1 = df.groupBy(df("name")).agg(count(df("name"))).orderBy(df("name"))
+      val aggPlusSort2 = df.groupBy(col("name")).agg(count(col("name"))).orderBy(col("name"))
+      checkAnswer(aggPlusSort1, aggPlusSort2.collect())
+
+      val aggPlusFilter1 = df.groupBy(df("name")).agg(count(df("name"))).filter(df("name") === 0)
+      val aggPlusFilter2 = df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === 0)
+      checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
+    }
   }
 }
