@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.{CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.HiveExternalCatalog._
@@ -145,6 +145,19 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       intercept[AnalysisException] {
         sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
       }
+    }
+  }
+
+  test("verify table size calculation is accurate") {
+    // Partitioned table
+    val checkSizeTable = "checkSizeTable"
+    withTable(checkSizeTable) {
+      sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-01') SELECT * FROM src")
+
+      val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier(checkSizeTable))
+      val size = CommandUtils.calculateTotalSize(spark, tableMeta)
+      assert(size === BigInt(5812))
     }
   }
 
