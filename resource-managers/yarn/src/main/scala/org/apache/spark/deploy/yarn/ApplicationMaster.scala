@@ -447,8 +447,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
 
     allocator.allocateResources()
-    val ms = MetricsSystem.createMetricsSystem("yarn", sparkConf, securityMgr)
-    ms.registerSource(new YarnClusterSchedulerSource(allocator))
+    val ms = MetricsSystem.createMetricsSystem("applicationMaster", sparkConf, securityMgr)
+    ms.registerSource(new ApplicationMasterSource(allocator))
     ms.start()
     metricsSystem = Some(ms)
     reporterThread = launchReporterThread()
