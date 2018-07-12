@@ -81,7 +81,7 @@ private[parquet] class ParquetFilters(
       System.arraycopy(bytes, 0, decimalBuffer, numBytes - bytes.length, bytes.length)
       decimalBuffer
     }
-    Binary.fromReusedByteArray(fixedLengthBytes, 0, numBytes)
+    Binary.fromConstantByteArray(fixedLengthBytes, 0, numBytes)
   }
 
   private val makeEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
@@ -112,11 +112,11 @@ private[parquet] class ParquetFilters(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
 
-    case ParquetSchemaType(DECIMAL, INT32, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT32, _, _) if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
         Option(v).map(d => decimalToInt32(d.asInstanceOf[JBigDecimal])).orNull)
-    case ParquetSchemaType(DECIMAL, INT64, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT64, _, _) if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.eq(
         longColumn(n),
         Option(v).map(d => decimalToInt64(d.asInstanceOf[JBigDecimal])).orNull)
@@ -153,11 +153,11 @@ private[parquet] class ParquetFilters(
         intColumn(n),
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
 
-    case ParquetSchemaType(DECIMAL, INT32, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT32, _, _) if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n),
         Option(v).map(d => decimalToInt32(d.asInstanceOf[JBigDecimal])).orNull)
-    case ParquetSchemaType(DECIMAL, INT64, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT64, _, _) if pushDownDecimal =>
       (n: String, v: Any) => FilterApi.notEq(
         longColumn(n),
         Option(v).map(d => decimalToInt64(d.asInstanceOf[JBigDecimal])).orNull)
@@ -188,10 +188,10 @@ private[parquet] class ParquetFilters(
       (n: String, v: Any) =>
         FilterApi.lt(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
 
-    case ParquetSchemaType(DECIMAL, INT32, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT32, _, _) if pushDownDecimal =>
       (n: String, v: Any) =>
         FilterApi.lt(intColumn(n), decimalToInt32(v.asInstanceOf[JBigDecimal]))
-    case ParquetSchemaType(DECIMAL, INT64, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT64, _, _) if pushDownDecimal =>
       (n: String, v: Any) =>
         FilterApi.lt(longColumn(n), decimalToInt64(v.asInstanceOf[JBigDecimal]))
     case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length, _) if pushDownDecimal =>
@@ -220,10 +220,10 @@ private[parquet] class ParquetFilters(
       (n: String, v: Any) =>
         FilterApi.ltEq(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
 
-    case ParquetSchemaType(DECIMAL, INT32, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT32, _, _) if pushDownDecimal =>
       (n: String, v: Any) =>
         FilterApi.ltEq(intColumn(n), decimalToInt32(v.asInstanceOf[JBigDecimal]))
-    case ParquetSchemaType(DECIMAL, INT64, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT64, _, _) if pushDownDecimal =>
       (n: String, v: Any) =>
         FilterApi.ltEq(longColumn(n), decimalToInt64(v.asInstanceOf[JBigDecimal]))
     case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length, _) if pushDownDecimal =>
@@ -252,10 +252,10 @@ private[parquet] class ParquetFilters(
       (n: String, v: Any) =>
         FilterApi.gt(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
 
-    case ParquetSchemaType(DECIMAL, INT32, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT32, _, _) if pushDownDecimal =>
       (n: String, v: Any) =>
         FilterApi.gt(intColumn(n), decimalToInt32(v.asInstanceOf[JBigDecimal]))
-    case ParquetSchemaType(DECIMAL, INT64, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT64, _, _) if pushDownDecimal =>
       (n: String, v: Any) =>
         FilterApi.gt(longColumn(n), decimalToInt64(v.asInstanceOf[JBigDecimal]))
     case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length, _) if pushDownDecimal =>
@@ -284,10 +284,10 @@ private[parquet] class ParquetFilters(
       (n: String, v: Any) =>
         FilterApi.gtEq(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
 
-    case ParquetSchemaType(DECIMAL, INT32, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT32, _, _) if pushDownDecimal =>
       (n: String, v: Any) =>
         FilterApi.gtEq(intColumn(n), decimalToInt32(v.asInstanceOf[JBigDecimal]))
-    case ParquetSchemaType(DECIMAL, INT64, 0, _) if pushDownDecimal =>
+    case ParquetSchemaType(DECIMAL, INT64, _, _) if pushDownDecimal =>
       (n: String, v: Any) =>
         FilterApi.gtEq(longColumn(n), decimalToInt64(v.asInstanceOf[JBigDecimal]))
     case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length, _) if pushDownDecimal =>
@@ -322,10 +322,10 @@ private[parquet] class ParquetFilters(
       case _ => false
     }
 
-    // Since SPARK-24716, ParquetFilter accepts parquet file schema to convert to
-    // data source Filter. This must make sure that filter value matched the Filter.
-    // If doesn't matched, then the schema used to read the file is incorrect,
-    // which would cause data corruption.
+    // Decimal type must make sure that filter value's scale matched the file.
+    // If doesn't matched, which would cause data corruption.
+    // Other types must make sure that filter value's type matched the file.
+    // Otherwise may cause a cast exception.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
       value == null || (nameToType(name) match {
         case ParquetBooleanType => value.isInstanceOf[JBoolean]
@@ -336,9 +336,9 @@ private[parquet] class ParquetFilters(
         case ParquetStringType => value.isInstanceOf[String]
         case ParquetBinaryType => value.isInstanceOf[Array[Byte]]
         case ParquetDateType => value.isInstanceOf[Date]
-        case ParquetSchemaType(DECIMAL, INT32, 0, decimalMeta) =>
+        case ParquetSchemaType(DECIMAL, INT32, _, decimalMeta) =>
           isDecimalMatched(value, decimalMeta)
-        case ParquetSchemaType(DECIMAL, INT64, 0, decimalMeta) =>
+        case ParquetSchemaType(DECIMAL, INT64, _, decimalMeta) =>
           isDecimalMatched(value, decimalMeta)
         case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, _, decimalMeta) =>
           isDecimalMatched(value, decimalMeta)
