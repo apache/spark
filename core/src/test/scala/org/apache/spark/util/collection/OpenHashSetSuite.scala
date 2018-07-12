@@ -150,7 +150,7 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     assert(set.size === 3)
     assert(set.contains(10L))
     assert(set.contains(50L))
-    assert(!set.contains(999L))
+    assert(set.contains(999L))
     assert(!set.contains(10000L))
   }
 
