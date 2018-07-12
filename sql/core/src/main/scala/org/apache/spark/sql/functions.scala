@@ -3304,7 +3304,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    new JsonToStructs(schema, options, e.expr)
+    JsonToStructs(schema, options, e.expr)
   }
 
   /**
@@ -3495,7 +3495,7 @@ object functions {
    * @group collection_funcs
    * @since 1.5.0
    */
-  def size(e: Column): Column = withExpr { new Size(e.expr) }
+  def size(e: Column): Column = withExpr { Size(e.expr) }
 
   /**
    * Sorts the input array for the given column in ascending order,
