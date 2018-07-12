@@ -1695,19 +1695,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val b4 = Literal.create(Seq[Array[Byte]](null, Array[Byte](3, 4), null), ArrayType(BinaryType))
     val b5 = Literal.create(Seq.empty, ArrayType(BinaryType))
     val arrayWithBinaryNull = Literal.create(Seq(null), ArrayType(BinaryType))
-/*
     checkEvaluation(ArrayIntersect(b0, b1), Seq(Array[Byte](3, 4), Array[Byte](5, 6)))
     checkEvaluation(ArrayIntersect(b1, b0), Seq(Array[Byte](5, 6), Array[Byte](3, 4)))
     checkEvaluation(ArrayIntersect(b0, b2), Seq(Array[Byte](1, 2), Array[Byte](3, 4)))
     checkEvaluation(ArrayIntersect(b2, b0), Seq(Array[Byte](1, 2), Array[Byte](3, 4)))
     checkEvaluation(ArrayIntersect(b2, b3), Seq(Array[Byte](1, 2), Array[Byte](3, 4)))
     checkEvaluation(ArrayIntersect(b3, b2), Seq(Array[Byte](1, 2), Array[Byte](3, 4)))
-    checkEvaluation(ArrayIntersect(b3, b4), Seq(Array[Byte](null, Array[Byte](3, 4))))
-    checkEvaluation(ArrayIntersect(b4, b3), Seq(Array[Byte](Array[Byte](3, 4), null)))
+    checkEvaluation(ArrayIntersect(b3, b4), Seq(null, Array[Byte](3, 4)))
+    checkEvaluation(ArrayIntersect(b4, b3), Seq(Array[Byte](3, 4), null))
     checkEvaluation(ArrayIntersect(b4, b5), Seq.empty)
     checkEvaluation(ArrayIntersect(b5, b4), Seq.empty)
     checkEvaluation(ArrayIntersect(b4, arrayWithBinaryNull), Seq(null))
-*/
+
     val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](1, 2)),
       ArrayType(ArrayType(IntegerType)))
     val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](3, 4), Seq[Int](2, 1), Seq[Int](3, 4)),

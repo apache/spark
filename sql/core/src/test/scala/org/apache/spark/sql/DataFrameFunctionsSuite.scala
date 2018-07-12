@@ -1173,8 +1173,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("concat function - arrays") {
-    val nseqi: Seq[Int] = null
-    val nseqs: Seq[String] = null
+    val nseqi : Seq[Int] = null
+    val nseqs : Seq[String] = null
     val df = Seq(
       (Seq(1), Seq(2, 3), Seq(5L, 6L), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
       (Seq(1, 0), Seq.empty[Int], Seq(2L), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
