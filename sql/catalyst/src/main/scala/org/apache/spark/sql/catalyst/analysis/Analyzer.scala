@@ -1152,11 +1152,17 @@ class Analyzer(
         }
     }
 
+    /**
+     * This method tries to resolve expressions and find missing attributes recursively. Specially,
+     * when the expressions used in `Sort` or `Filter` contain unresolved attributes or resolved
+     * attributes which are missed from SELECT clause. This method tries to find the missing
+     * attributes out and add into the projection.
+     */
     private def resolveExprsAndAddMissingAttrs(
         exprs: Seq[Expression], plan: LogicalPlan): (Seq[Expression], LogicalPlan) = {
-      // An expression is possibly resolved but not in the output of `plan`.
+      // Missing attributes can be unresolved attributes or resolved attributes which are not in
+      // the output attributes of the plan.
       if (exprs.forall(e => e.resolved && e.references.subsetOf(plan.outputSet))) {
-        // All given expressions are resolved and in the plan's output, no need to continue anymore.
         (exprs, plan)
       } else {
         plan match {
@@ -1167,9 +1173,12 @@ class Analyzer(
             (newExprs, AnalysisBarrier(newChild))
 
           case p: Project =>
+            // Resolving expressions against current plan.
             val maybeResolvedExprs = exprs.map(resolveExpression(_, p))
+            // Recursively resolving expressions on the child of current plan.
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, p.child)
-            // Only add missing attributes coming from `newChild`.
+            // If some attributes used by expressions are resolvable only on the rewritten child
+            // plan, we need to add them into original projection.
             val missingAttrs = (AttributeSet(newExprs) -- p.outputSet).intersect(newChild.outputSet)
             (newExprs, Project(p.projectList ++ missingAttrs, newChild))
 
