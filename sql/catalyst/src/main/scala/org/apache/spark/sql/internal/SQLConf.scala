@@ -1092,11 +1092,12 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
-  val SORT_MERGE_JOIN_EXEC_CHILDREN_PARTITIONING_DETECTION =
+  val SHUFFLED_JOIN_CHILDREN_PARTITIONING_DETECTION =
     buildConf("spark.sql.sortMergeJoinExec.childrenPartitioningDetection")
       .internal()
-      .doc("When true, sort merge join detects children data partitioning to avoid shuffle, " +
-        "it is helpful when join keys are a super-set of bucket keys")
+      .doc("When true, sort merge join and shuffled hash join will detect children data " +
+        "partitioning to avoid shuffle, it is helpful when join keys are a super-set of " +
+        "bucket keys")
       .booleanConf
       .createWithDefault(true)
 
@@ -1677,8 +1678,8 @@ class SQLConf extends Serializable with Logging {
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
-  def sortMergeJoinExecChildrenPartitioningDetection: Boolean =
-    getConf(SORT_MERGE_JOIN_EXEC_CHILDREN_PARTITIONING_DETECTION)
+  def shuffledJoinChildrenPartitioningDetection: Boolean =
+    getConf(SHUFFLED_JOIN_CHILDREN_PARTITIONING_DETECTION)
 
   def sortMergeJoinExecBufferInMemoryThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)

@@ -77,35 +77,9 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  private def avoidShuffleIfPossible(
-      joinKeys: Seq[Expression],
-      expressions: Seq[Expression]): Seq[Distribution] = {
-    val indices = expressions.map(x => joinKeys.indexWhere(_.semanticEquals(x)))
-    HashClusteredDistribution(indices.map(leftKeys(_))) ::
-      HashClusteredDistribution(indices.map(rightKeys(_))) :: Nil
-  }
-
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (!conf.sortMergeJoinExecChildrenPartitioningDetection) {
-      return HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
-    }
-
-    val leftPartitioning = left.outputPartitioning
-    val rightPartitioning = right.outputPartitioning
-    leftPartitioning match {
-      case HashPartitioning(leftExpressions, _)
-        if leftPartitioning.satisfies(ClusteredDistribution(leftKeys)) =>
-        avoidShuffleIfPossible(leftKeys, leftExpressions)
-
-      case _ => rightPartitioning match {
-        case HashPartitioning(rightExpressions, _)
-          if rightPartitioning.satisfies(ClusteredDistribution(rightKeys)) =>
-          avoidShuffleIfPossible(rightKeys, rightExpressions)
-
-        case _ =>
-          HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
-      }
-    }
+    JoinUtils.requiredChildDistributionForShuffledJoin(
+      conf.shuffledJoinChildrenPartitioningDetection, leftKeys, rightKeys, left, right)
   }
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
