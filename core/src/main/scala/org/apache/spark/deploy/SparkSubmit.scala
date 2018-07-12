@@ -285,8 +285,6 @@ private[spark] class SparkSubmit extends Logging {
       case (STANDALONE, CLUSTER) if args.isR =>
         error("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
-      case (KUBERNETES, _) if args.isPython =>
-        error("Python applications are currently not supported for Kubernetes.")
       case (KUBERNETES, _) if args.isR =>
         error("R applications are currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
@@ -387,7 +385,7 @@ private[spark] class SparkSubmit extends Logging {
       val forceDownloadSchemes = sparkConf.get(FORCE_DOWNLOAD_SCHEMES)
 
       def shouldDownload(scheme: String): Boolean = {
-        forceDownloadSchemes.contains(scheme) ||
+        forceDownloadSchemes.contains("*") || forceDownloadSchemes.contains(scheme) ||
           Try { FileSystem.getFileSystemClass(scheme, hadoopConf) }.isFailure
       }
 
@@ -580,7 +578,8 @@ private[spark] class SparkSubmit extends Logging {
     }
     // Add the main application jar and any added jars to classpath in case YARN client
     // requires these jars.
-    // This assumes both primaryResource and user jars are local jars, otherwise it will not be
+    // This assumes both primaryResource and user jars are local jars, or already downloaded
+    // to local by configuring "spark.yarn.dist.forceDownloadSchemes", otherwise it will not be
     // added to the classpath of YARN client.
     if (isYarnCluster) {
       if (isUserJar(args.primaryResource)) {
@@ -694,9 +693,19 @@ private[spark] class SparkSubmit extends Logging {
     if (isKubernetesCluster) {
       childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
       if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
-        childArgs ++= Array("--primary-java-resource", args.primaryResource)
+        if (args.isPython) {
+          childArgs ++= Array("--primary-py-file", args.primaryResource)
+          childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
+          if (args.pyFiles != null) {
+            childArgs ++= Array("--other-py-files", args.pyFiles)
+          }
+        } else {
+          childArgs ++= Array("--primary-java-resource", args.primaryResource)
+          childArgs ++= Array("--main-class", args.mainClass)
+        }
+      } else {
+        childArgs ++= Array("--main-class", args.mainClass)
       }
-      childArgs ++= Array("--main-class", args.mainClass)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg =>
           childArgs += ("--arg", arg)

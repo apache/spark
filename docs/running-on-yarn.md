@@ -218,9 +218,10 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.dist.forceDownloadSchemes</code></td>
   <td><code>(none)</code></td>
   <td>
-    Comma-separated list of schemes for which files will be downloaded to the local disk prior to
+    Comma-separated list of schemes for which resources will be downloaded to the local disk prior to
     being added to YARN's distributed cache. For use in cases where the YARN service does not
-    support schemes that are supported by Spark, like http, https and ftp.
+    support schemes that are supported by Spark, like http, https and ftp, or jars required to be in the
+    local YARN client's classpath. Wildcard '*' is denoted to download resources for all the schemes.
   </td>
 </tr>
 <tr>
@@ -411,6 +412,16 @@ To use a custom metrics.properties for the application master and executors, upd
   name matches both the include and the exclude pattern, this file will be excluded eventually.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.blacklist.executor.launch.blacklisting.enabled</code></td>
+  <td>false</td>
+  <td>
+  Flag to enable blacklisting of nodes having YARN resource allocation problems.
+  The error limit for blacklisting can be configured by
+  <code>spark.blacklist.application.maxFailedExecutorsPerNode</code>.
+  </td>
+</tr>
+
 </table>
 
 # Important notes

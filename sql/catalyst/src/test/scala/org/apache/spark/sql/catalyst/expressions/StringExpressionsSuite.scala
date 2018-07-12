@@ -706,6 +706,30 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "15,159,339,180,002,773.2778")
     checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal(3)), null)
     assert(FormatNumber(Literal.create(null, NullType), Literal(3)).resolved === false)
+
+    checkEvaluation(FormatNumber(Literal(12332.123456), Literal("##############.###")), "12332.123")
+    checkEvaluation(FormatNumber(Literal(12332.123456), Literal("##.###")), "12332.123")
+    checkEvaluation(FormatNumber(Literal(4.asInstanceOf[Byte]), Literal("##.####")), "4")
+    checkEvaluation(FormatNumber(Literal(4.asInstanceOf[Short]), Literal("##.####")), "4")
+    checkEvaluation(FormatNumber(Literal(4.0f), Literal("##.###")), "4")
+    checkEvaluation(FormatNumber(Literal(4), Literal("##.###")), "4")
+    checkEvaluation(FormatNumber(Literal(12831273.23481d),
+      Literal("###,###,###,###,###.###")), "12,831,273.235")
+    checkEvaluation(FormatNumber(Literal(12831273.83421d), Literal("")), "12,831,274")
+    checkEvaluation(FormatNumber(Literal(123123324123L), Literal("###,###,###,###,###.###")),
+      "123,123,324,123")
+    checkEvaluation(
+      FormatNumber(Literal(Decimal(123123324123L) * Decimal(123123.21234d)),
+        Literal("###,###,###,###,###.####")), "15,159,339,180,002,773.2778")
+    checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal("##.###")), null)
+    assert(FormatNumber(Literal.create(null, NullType), Literal("##.###")).resolved === false)
+
+    checkEvaluation(FormatNumber(Literal(12332.123456), Literal("#,###,###,###,###,###,##0")),
+      "12,332")
+    checkEvaluation(FormatNumber(
+      Literal.create(null, IntegerType), Literal.create(null, StringType)), null)
+    checkEvaluation(FormatNumber(
+      Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
   }
 
   test("find in set") {

@@ -156,6 +156,12 @@ class CSVOptions(
   val samplingRatio =
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
+  /**
+   * Forcibly apply the specified or inferred schema to datasource files.
+   * If the option is enabled, headers of CSV files will be ignored.
+   */
+  val enforceSchema = getBool("enforceSchema", default = true)
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat

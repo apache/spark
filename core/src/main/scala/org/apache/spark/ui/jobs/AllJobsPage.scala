@@ -206,7 +206,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       jobs: Seq[v1.JobData],
       killEnabled: Boolean): Seq[Node] = {
     // stripXSS is called to remove suspicious characters used in XSS attacks
-    val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
+    val allParameters = request.getParameterMap.asScala.toMap.map { case (k, v) =>
+      UIUtils.stripXSS(k) -> v.map(UIUtils.stripXSS).toSeq
+    }
     val parameterOtherTable = allParameters.filterNot(_._1.startsWith(jobTag))
       .map(para => para._1 + "=" + para._2(0))
 
@@ -462,7 +464,7 @@ private[ui] class JobDataSource(
 
     val jobDescription = UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
 
-    val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
+    val detailUrl = "%s/jobs/job/?id=%s".format(basePath, jobData.jobId)
 
     new JobTableRowData(
       jobData,

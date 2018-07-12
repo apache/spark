@@ -753,6 +753,18 @@ See the [configuration page](configuration.html) for information on Spark config
     <code>spark.cores.max</code> is reached
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.appJar.local.resolution.mode</code></td>
+  <td><code>host</code></td>
+  <td>
+    Provides support for the `local:///` scheme to reference the app jar resource in cluster mode.
+    If user uses a local resource (`local:///path/to/jar`) and the config option is not used it defaults to `host` eg.
+    the mesos fetcher tries to get the resource from the host's file system.
+    If the value is unknown it prints a warning msg in the dispatcher logs and defaults to `host`.
+    If the value is `container` then spark submit in the container will use the jar in the container's path:
+    `/path/to/jar`.
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging

@@ -66,7 +66,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    CSVUtils.verifySchema(dataSchema)
+    DataSourceUtils.verifyWriteSchema(this, dataSchema)
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(
       options,
@@ -98,7 +98,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    CSVUtils.verifySchema(dataSchema)
+    DataSourceUtils.verifyReadSchema(this, dataSchema)
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
@@ -130,6 +130,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
           "df.filter($\"_corrupt_record\".isNotNull).count()."
       )
     }
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
@@ -137,7 +138,13 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         parsedOptions)
-      CSVDataSource(parsedOptions).readFile(conf, file, parser, requiredSchema)
+      CSVDataSource(parsedOptions).readFile(
+        conf,
+        file,
+        parser,
+        requiredSchema,
+        dataSchema,
+        caseSensitive)
     }
   }
 
