@@ -1907,4 +1907,8 @@ class SQLConf extends Serializable with Logging {
     }
     cloned
   }
+
+  def isModifiable(key: String): Boolean = {
+    sqlConfEntries.containsKey(key) && !staticConfKeys.contains(key)
+  }
 }
