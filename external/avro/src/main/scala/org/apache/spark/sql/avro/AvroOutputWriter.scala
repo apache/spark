@@ -70,7 +70,7 @@ private[avro] class AvroOutputWriter(
 
     }.getRecordWriter(context)
 
-  def write(internalRow: InternalRow): Unit = {
+  override def write(internalRow: InternalRow): Unit = {
     val row = internalRowConverter(internalRow)
     val key = new AvroKey(converter(row).asInstanceOf[GenericRecord])
     recordWriter.write(key, NullWritable.get())
