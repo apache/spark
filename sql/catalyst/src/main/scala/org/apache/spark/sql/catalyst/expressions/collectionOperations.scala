@@ -993,7 +993,7 @@ trait ArraySortLike extends ExpectsInputTypes {
         } else if (o2 == null) {
           nullOrder
         } else {
-          -ordering.compare(o1, o2)
+          ordering.compare(o2, o1)
         }
       }
     }
