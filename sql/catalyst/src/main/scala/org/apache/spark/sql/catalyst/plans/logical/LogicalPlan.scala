@@ -60,8 +60,7 @@ abstract class LogicalPlan
    * [[org.apache.spark.sql.catalyst.analysis.UnresolvedRelation UnresolvedRelation]]
    * should return `false`).
    */
-  lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved &&
-    missingInput.isEmpty
+  lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
 
   override protected def statePrefix = if (!resolved) "'" else super.statePrefix
 

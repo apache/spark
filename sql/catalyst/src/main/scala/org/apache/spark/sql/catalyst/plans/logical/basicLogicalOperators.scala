@@ -60,8 +60,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions &&
-      missingInput.isEmpty
+    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
   override def validConstraints: Set[Expression] =

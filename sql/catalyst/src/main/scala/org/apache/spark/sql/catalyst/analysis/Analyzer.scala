@@ -1125,7 +1125,8 @@ class Analyzer(
       case sa @ Sort(_, _, AnalysisBarrier(child: Aggregate)) => sa
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
+      case s @ Sort(order, _, child)
+          if (!s.resolved || s.missingInput.nonEmpty) && child.resolved =>
         val (newOrder, newChild) = resolveExprsAndAddMissingAttrs(order, child)
         val ordering = newOrder.map(_.asInstanceOf[SortOrder])
         if (child.output == newChild.output) {
@@ -1136,7 +1137,7 @@ class Analyzer(
           Project(child.output, newSort)
         }
 
-      case f @ Filter(cond, child) if !f.resolved && child.resolved =>
+      case f @ Filter(cond, child) if (!f.resolved || f.missingInput.nonEmpty) && child.resolved =>
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
         if (child.output == newChild.output) {
           f.copy(condition = newCond.head)
@@ -1149,8 +1150,9 @@ class Analyzer(
 
     private def resolveExprsAndAddMissingAttrs(
         exprs: Seq[Expression], plan: LogicalPlan): (Seq[Expression], LogicalPlan) = {
+      // An expression is possibly resolved but not in the output of `plan`.
       if (exprs.forall(e => e.resolved && e.references.subsetOf(plan.outputSet))) {
-        // All given expressions are resolved, no need to continue anymore.
+        // All given expressions are resolved and in the plan's output, no need to continue anymore.
         (exprs, plan)
       } else {
         plan match {
@@ -1163,8 +1165,8 @@ class Analyzer(
           case p: Project =>
             val maybeResolvedExprs = exprs.map(resolveExpression(_, p))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, p.child)
-            val missingAttrs = AttributeSet(newExprs) --
-              AttributeSet(maybeResolvedExprs.filter(_.references.subsetOf(p.outputSet)))
+            // The resolved attributes might not come from `p.child`. Need to filter it.
+            val missingAttrs = (AttributeSet(newExprs).intersect(p.child.outputSet)) -- p.outputSet
             (newExprs, Project(p.projectList ++ missingAttrs, newChild))
 
           case a @ Aggregate(groupExprs, aggExprs, child) =>
