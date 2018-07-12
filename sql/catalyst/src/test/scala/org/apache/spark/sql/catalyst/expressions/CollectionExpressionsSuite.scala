@@ -24,43 +24,48 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  def testSize(legacySizeOfNull: Boolean, sizeOfNull: Any): Unit = {
+  def testSize(sizeOfNull: Any): Unit = {
     val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
     val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
     val a2 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
 
-    checkEvaluation(Size(a0, legacySizeOfNull), 3)
-    checkEvaluation(Size(a1, legacySizeOfNull), 0)
-    checkEvaluation(Size(a2, legacySizeOfNull), 2)
+    checkEvaluation(Size(a0), 3)
+    checkEvaluation(Size(a1), 0)
+    checkEvaluation(Size(a2), 2)
 
     val m0 = Literal.create(Map("a" -> "a", "b" -> "b"), MapType(StringType, StringType))
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
     val m2 = Literal.create(Map("a" -> "a"), MapType(StringType, StringType))
 
-    checkEvaluation(Size(m0, legacySizeOfNull), 2)
-    checkEvaluation(Size(m1, legacySizeOfNull), 0)
-    checkEvaluation(Size(m2, legacySizeOfNull), 1)
+    checkEvaluation(Size(m0), 2)
+    checkEvaluation(Size(m1), 0)
+    checkEvaluation(Size(m2), 1)
 
     checkEvaluation(
-      Size(Literal.create(null, MapType(StringType, StringType)), legacySizeOfNull),
+      Size(Literal.create(null, MapType(StringType, StringType))),
       expected = sizeOfNull)
     checkEvaluation(
-      Size(Literal.create(null, ArrayType(StringType)), legacySizeOfNull),
+      Size(Literal.create(null, ArrayType(StringType))),
       expected = sizeOfNull)
   }
 
   test("Array and Map Size - legacy") {
-    testSize(legacySizeOfNull = true, sizeOfNull = -1)
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSize(sizeOfNull = -1)
+    }
   }
 
   test("Array and Map Size") {
-    testSize(legacySizeOfNull = false, sizeOfNull = null)
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSize(sizeOfNull = null)
+    }
   }
 
   test("MapKeys/MapValues") {
@@ -96,6 +101,132 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapEntries(ms0), Seq(r("a", "c"), r("b", null)))
     checkEvaluation(MapEntries(ms1), Seq.empty)
     checkEvaluation(MapEntries(ms2), null)
+  }
+
+  test("Map Concat") {
+    val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType,
+      valueContainsNull = false))
+    val m1 = Literal.create(Map("c" -> "3", "a" -> "4"), MapType(StringType, StringType,
+      valueContainsNull = false))
+    val m2 = Literal.create(Map("d" -> "4", "e" -> "5"), MapType(StringType, StringType))
+    val m3 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
+    val m4 = Literal.create(Map("a" -> null, "c" -> "3"), MapType(StringType, StringType))
+    val m5 = Literal.create(Map("a" -> 1, "b" -> 2), MapType(StringType, IntegerType))
+    val m6 = Literal.create(Map("a" -> null, "c" -> 3), MapType(StringType, IntegerType))
+    val m7 = Literal.create(Map(List(1, 2) -> 1, List(3, 4) -> 2),
+      MapType(ArrayType(IntegerType), IntegerType))
+    val m8 = Literal.create(Map(List(5, 6) -> 3, List(1, 2) -> 4),
+      MapType(ArrayType(IntegerType), IntegerType))
+    val m9 = Literal.create(Map(Map(1 -> 2, 3 -> 4) -> 1, Map(5 -> 6, 7 -> 8) -> 2),
+      MapType(MapType(IntegerType, IntegerType), IntegerType))
+    val m10 = Literal.create(Map(Map(9 -> 10, 11 -> 12) -> 3, Map(1 -> 2, 3 -> 4) -> 4),
+      MapType(MapType(IntegerType, IntegerType), IntegerType))
+    val m11 = Literal.create(Map(1 -> "1", 2 -> "2"), MapType(IntegerType, StringType,
+      valueContainsNull = false))
+    val m12 = Literal.create(Map(3 -> "3", 4 -> "4"), MapType(IntegerType, StringType,
+      valueContainsNull = false))
+    val mNull = Literal.create(null, MapType(StringType, StringType))
+
+    // overlapping maps
+    checkEvaluation(MapConcat(Seq(m0, m1)),
+      (
+        Array("a", "b", "c", "a"), // keys
+        Array("1", "2", "3", "4") // values
+      )
+    )
+
+    // maps with no overlap
+    checkEvaluation(MapConcat(Seq(m0, m2)),
+      Map("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5"))
+
+    // 3 maps
+    checkEvaluation(MapConcat(Seq(m0, m1, m2)),
+      (
+        Array("a", "b", "c", "a", "d", "e"), // keys
+        Array("1", "2", "3", "4", "4", "5") // values
+      )
+    )
+
+    // null reference values
+    checkEvaluation(MapConcat(Seq(m3, m4)),
+      (
+        Array("a", "b", "a", "c"), // keys
+        Array("1", "2", null, "3") // values
+      )
+    )
+
+    // null primitive values
+    checkEvaluation(MapConcat(Seq(m5, m6)),
+      (
+        Array("a", "b", "a", "c"), // keys
+        Array(1, 2, null, 3) // values
+      )
+    )
+
+    // keys that are primitive
+    checkEvaluation(MapConcat(Seq(m11, m12)),
+      (
+        Array(1, 2, 3, 4), // keys
+        Array("1", "2", "3", "4") // values
+      )
+    )
+
+    // keys that are arrays, with overlap
+    checkEvaluation(MapConcat(Seq(m7, m8)),
+      (
+        Array(List(1, 2), List(3, 4), List(5, 6), List(1, 2)), // keys
+        Array(1, 2, 3, 4) // values
+      )
+    )
+
+    // keys that are maps, with overlap
+    checkEvaluation(MapConcat(Seq(m9, m10)),
+      (
+        Array(Map(1 -> 2, 3 -> 4), Map(5 -> 6, 7 -> 8), Map(9 -> 10, 11 -> 12),
+          Map(1 -> 2, 3 -> 4)), // keys
+        Array(1, 2, 3, 4) // values
+      )
+    )
+
+    // null map
+    checkEvaluation(MapConcat(Seq(m0, mNull)), null)
+    checkEvaluation(MapConcat(Seq(mNull, m0)), null)
+    checkEvaluation(MapConcat(Seq(mNull, mNull)), null)
+    checkEvaluation(MapConcat(Seq(mNull)), null)
+
+    // single map
+    checkEvaluation(MapConcat(Seq(m0)), Map("a" -> "1", "b" -> "2"))
+
+    // no map
+    checkEvaluation(MapConcat(Seq.empty), Map.empty)
+
+    // force split expressions for input in generated code
+    val expectedKeys = Array.fill(65)(Seq("a", "b")).flatten ++ Array("d", "e")
+    val expectedValues = Array.fill(65)(Seq("1", "2")).flatten ++ Array("4", "5")
+    checkEvaluation(MapConcat(
+      Seq(
+        m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0,
+        m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0,
+        m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m2
+      )),
+      (expectedKeys, expectedValues))
+
+    // argument checking
+    assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
+    assert(MapConcat(Seq(m5, m6)).checkInputDataTypes().isSuccess)
+    assert(MapConcat(Seq(m0, m5)).checkInputDataTypes().isFailure)
+    assert(MapConcat(Seq(m0, Literal(12))).checkInputDataTypes().isFailure)
+    assert(MapConcat(Seq(m0, m1)).dataType.keyType == StringType)
+    assert(MapConcat(Seq(m0, m1)).dataType.valueType == StringType)
+    assert(!MapConcat(Seq(m0, m1)).dataType.valueContainsNull)
+    assert(MapConcat(Seq(m5, m6)).dataType.keyType == StringType)
+    assert(MapConcat(Seq(m5, m6)).dataType.valueType == IntegerType)
+    assert(MapConcat(Seq.empty).dataType.keyType == StringType)
+    assert(MapConcat(Seq.empty).dataType.valueType == StringType)
+    assert(MapConcat(Seq(m5, m6)).dataType.valueContainsNull)
+    assert(MapConcat(Seq(m6, m5)).dataType.valueContainsNull)
+    assert(!MapConcat(Seq(m1, m2)).nullable)
+    assert(MapConcat(Seq(m1, mNull)).nullable)
   }
 
   test("MapFromEntries") {
