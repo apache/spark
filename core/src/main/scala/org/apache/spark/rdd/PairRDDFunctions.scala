@@ -36,6 +36,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.io._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
@@ -1053,8 +1054,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // users that they may loss data if they are using a direct output committer.
     val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
     val outputCommitterClass = hadoopConf.get("mapred.output.committer.class", "")
-    val outputCommitCoordinationEnabled = self.conf.getBoolean(
-      "spark.hadoop.outputCommitCoordination.enabled", true)
+    val outputCommitCoordinationEnabled = self.conf.get(HADOOP_OUTPUTCOMMITCOORDINATION_ENABLED)
     if (speculationEnabled && outputCommitterClass.contains("Direct")
       && !outputCommitCoordinationEnabled) {
       val warningMessage =

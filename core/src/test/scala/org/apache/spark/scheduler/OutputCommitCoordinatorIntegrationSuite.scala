@@ -22,6 +22,7 @@ import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TaskContext}
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -40,7 +41,7 @@ class OutputCommitCoordinatorIntegrationSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
     val conf = new SparkConf()
-      .set("spark.hadoop.outputCommitCoordination.enabled", "true")
+      .set(HADOOP_OUTPUTCOMMITCOORDINATION_ENABLED.key, "true")
       .set("spark.hadoop.mapred.output.committer.class",
         classOf[ThrowExceptionOnFirstAttemptOutputCommitter].getCanonicalName)
     sc = new SparkContext("local[2, 4]", "test", conf)

@@ -357,6 +357,11 @@ package object config {
       .intConf
       .createWithDefault(256)
 
+  private[spark] val HADOOP_OUTPUTCOMMITCOORDINATION_ENABLED =
+    ConfigBuilder("spark.hadoop.outputCommitCoordination.enabled")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
       .booleanConf

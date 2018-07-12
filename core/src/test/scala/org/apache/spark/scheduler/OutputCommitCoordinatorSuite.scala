@@ -33,6 +33,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapRedCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -79,7 +80,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName(classOf[OutputCommitCoordinatorSuite].getSimpleName)
-      .set("spark.hadoop.outputCommitCoordination.enabled", "true")
+      .set(HADOOP_OUTPUTCOMMITCOORDINATION_ENABLED.key, "true")
     sc = new SparkContext(conf) {
       override private[spark] def createSparkEnv(
           conf: SparkConf,

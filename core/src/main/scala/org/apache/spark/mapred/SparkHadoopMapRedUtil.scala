@@ -25,6 +25,7 @@ import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 
 object SparkHadoopMapRedUtil extends Logging {
   /**
@@ -33,7 +34,7 @@ object SparkHadoopMapRedUtil extends Logging {
    * the driver in order to determine whether this attempt can commit (please see SPARK-4879 for
    * details).
    *
-   * Output commit coordinator is only used when `spark.hadoop.outputCommitCoordination.enabled`
+   * Output commit coordinator is only used when [[HADOOP_OUTPUTCOMMITCOORDINATION_ENABLED]]
    * is set to true (which is the default).
    */
   def commitTask(
@@ -64,7 +65,7 @@ object SparkHadoopMapRedUtil extends Logging {
         // We only need to coordinate with the driver if there are concurrent task attempts.
         // Note that this could happen even when speculation is not enabled (e.g. see SPARK-8029).
         // This (undocumented) setting is an escape-hatch in case the commit code introduces bugs.
-        sparkConf.getBoolean("spark.hadoop.outputCommitCoordination.enabled", defaultValue = true)
+        sparkConf.get(HADOOP_OUTPUTCOMMITCOORDINATION_ENABLED)
       }
 
       if (shouldCoordinateWithDriver) {
