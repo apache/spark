@@ -24,15 +24,13 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
-
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionExceptionWithRootCause, _}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
@@ -1208,10 +1206,10 @@ class SessionCatalog(
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     databaseExists(db) && externalCatalog.functionExists(db, name.funcName)
   }
-
-  protected def failFunctionLookup(name: FunctionIdentifier): Nothing = {
+  protected def failFunctionLookup(
+      name: FunctionIdentifier, rootCause: Option[String] = None): Nothing = {
     throw new NoSuchFunctionException(
-      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
+        db = name.database.getOrElse(getCurrentDatabase), func = name.funcName, rootCause)
   }
 
   /**
