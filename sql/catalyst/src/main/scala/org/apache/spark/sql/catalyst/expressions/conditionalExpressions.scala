@@ -34,8 +34,7 @@ import org.apache.spark.sql.types._
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends ComplexTypeMergingExpression {
 
-  @transient
-  override lazy val inputTypesForMerging: Seq[DataType] = {
+  @transient override lazy val inputTypesForMerging: Seq[DataType] = {
     Seq(trueValue.dataType, falseValue.dataType)
   }
 
@@ -125,8 +124,7 @@ case class CaseWhen(
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
 
   // both then and else expressions should be considered.
-  @transient
-  override lazy val inputTypesForMerging: Seq[DataType] = {
+  @transient override lazy val inputTypesForMerging: Seq[DataType] = {
     branches.map(_._2.dataType) ++ elseValue.map(_.dataType)
   }
 

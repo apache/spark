@@ -679,8 +679,7 @@ trait ComplexTypeMergingExpression extends Expression {
    * A collection of data types used for resolution the output type of the expression. By default,
    * data types of all child expressions. The collection must not be empty.
    */
-  @transient
-  lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
+  @transient lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
 
   /**
    * A method determining whether the input types are equal ignoring nullable, containsNull and
@@ -707,12 +706,14 @@ trait ComplexTypeMergingExpression extends Expression {
       StructType(newFields)
   }
 
-  override def dataType: DataType = {
+  @transient override lazy val dataType: DataType = {
     require(
       inputTypesForMerging.nonEmpty,
       "The collection of input data types must not be empty.")
     require(
-      areInputTypesForMergingEqual,
+      inputTypesForMerging.sliding(2, 1).forall {
+        case Seq(dt1, dt2) => DataType.equalsIgnoreCaseAndNullability(dt1, dt2)
+      },
       "All input types must be the same except nullable, containsNull, valueContainsNull flags.")
     inputTypesForMerging.reduceLeft(mergeTwoDataTypes)
   }
