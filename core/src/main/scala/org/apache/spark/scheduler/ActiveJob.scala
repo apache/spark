@@ -60,4 +60,10 @@ private[spark] class ActiveJob(
   val finished = Array.fill[Boolean](numPartitions)(false)
 
   var numFinished = 0
+
+  // Mark all the partitions of the stage to be not finished.
+  def clearResult(): Unit = {
+    (0 until numPartitions).map(finished.update(_, false))
+    numFinished = 0
+  }
 }

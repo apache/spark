@@ -274,7 +274,9 @@ private[spark] class TaskSchedulerImpl(
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
-      tasks: IndexedSeq[ArrayBuffer[TaskDescription]]) : Boolean = {
+      tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
+      hosts: ArrayBuffer[String],
+      taskDescs: ArrayBuffer[TaskDescription]) : Boolean = {
     var launchedTask = false
     // nodes and executors that are blacklisted for the entire application have already been
     // filtered out by this point
@@ -291,6 +293,12 @@ private[spark] class TaskSchedulerImpl(
             executorIdToRunningTaskIds(execId).add(tid)
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
+            // Only update hosts for a barrier task.
+            if (taskSet.isBarrier) {
+              // The executor address is expected to be non empty.
+              hosts += shuffledOffers(i).host
+              taskDescs += task
+            }
             launchedTask = true
           }
         } catch {
@@ -346,6 +354,7 @@ private[spark] class TaskSchedulerImpl(
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
+    val availableSlots = shuffledOffers.map(o => o.cores / CPUS_PER_TASK).sum
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -359,17 +368,49 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     for (taskSet <- sortedTaskSets) {
-      var launchedAnyTask = false
-      var launchedTaskAtCurrentMaxLocality = false
-      for (currentMaxLocality <- taskSet.myLocalityLevels) {
-        do {
-          launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(
-            taskSet, currentMaxLocality, shuffledOffers, availableCpus, tasks)
-          launchedAnyTask |= launchedTaskAtCurrentMaxLocality
-        } while (launchedTaskAtCurrentMaxLocality)
-      }
-      if (!launchedAnyTask) {
-        taskSet.abortIfCompletelyBlacklisted(hostToExecutors)
+      // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
+      if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {
+        // Skip the launch process.
+        logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
+          s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
+          s"number of available slots is ${availableSlots}.")
+      } else {
+        var launchedAnyTask = false
+        var launchedTaskAtCurrentMaxLocality = false
+        // Record all the executor IDs assigned barrier tasks on.
+        val hosts = ArrayBuffer[String]()
+        val taskDescs = ArrayBuffer[TaskDescription]()
+        for (currentMaxLocality <- taskSet.myLocalityLevels) {
+          do {
+            launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
+              currentMaxLocality, shuffledOffers, availableCpus, tasks, hosts, taskDescs)
+            launchedAnyTask |= launchedTaskAtCurrentMaxLocality
+          } while (launchedTaskAtCurrentMaxLocality)
+        }
+        if (!launchedAnyTask) {
+          taskSet.abortIfCompletelyBlacklisted(hostToExecutors)
+        }
+        if (launchedAnyTask && taskSet.isBarrier) {
+          // Check whether the barrier tasks are partially launched.
+          // TODO handle the assert failure case (that can happen when some locality requirements
+          // are not fulfilled, and we should revert the launched tasks)
+          require(taskDescs.size == taskSet.numTasks,
+            s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
+              s"because only ${taskDescs.size} out of a total number of ${taskSet.numTasks} " +
+              "tasks got resource offers. The resource offers may have been blacklisted or " +
+              "cannot fulfill task locality requirements.")
+
+          // Update the taskInfos into all the barrier task properties.
+          val hostsStr = hosts.zip(taskDescs)
+            // Addresses ordered by partitionId
+            .sortBy(_._2.partitionId)
+            .map(_._1)
+            .mkString(",")
+          taskDescs.foreach(_.properties.setProperty("hosts", hostsStr))
+
+          logInfo(s"Successfully scheduled all the ${taskDescs.size} tasks for barrier stage " +
+            s"${taskSet.stageId}.")
+        }
       }
     }
 

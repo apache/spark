@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark
 
-/**
- * Represents free resources available on an executor.
- */
-private[spark]
-case class WorkerOffer(
-    executorId: String,
-    host: String,
-    cores: Int,
-    address: Option[String] = None)
+/** A [[TaskContext]] with extra info and tooling for a barrier stage. */
+trait BarrierTaskContext extends TaskContext {
+
+  /** Sets a global barrier and waits until all tasks in this stage hit this barrier. */
+  def barrier(): Unit
+
+  /** Returns the all task infos in this barrier stage. */
+  def getTaskInfos(): Array[BarrierTaskInfo]
+}

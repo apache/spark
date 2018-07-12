@@ -15,14 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark
 
 /**
- * Represents free resources available on an executor.
+ * Carries all task infos of a barrier task.
  */
-private[spark]
-case class WorkerOffer(
-    executorId: String,
-    host: String,
-    cores: Int,
-    address: Option[String] = None)
+private[spark] class BarrierTaskInfo(val host: String)

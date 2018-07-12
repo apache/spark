@@ -1647,6 +1647,11 @@ abstract class RDD[T: ClassTag](
     }
   }
 
+  /**
+   * Indicates that Spark must launch the tasks together for the current stage.
+   */
+  def barrier(): RDDBarrier[T] = withScope(new RDDBarrier[T](this))
+
   // =======================================================================
   // Other internal methods and fields
   // =======================================================================
@@ -1839,6 +1844,16 @@ abstract class RDD[T: ClassTag](
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
   }
+
+  /**
+   * Whether the RDD is in a barrier stage. Spark must launch all the tasks at the same time for a
+   * barrier stage.
+   *
+   * An RDD is in a barrier stage, if at least one of its parent RDD(s), or itself, are mapped from
+   * a RDDBarrier. This function always returns false for a [[ShuffledRDD]], since a
+   * [[ShuffledRDD]] indicates start of a new stage.
+   */
+  def isBarrier(): Boolean = dependencies.exists(_.rdd.isBarrier())
 }
 
 

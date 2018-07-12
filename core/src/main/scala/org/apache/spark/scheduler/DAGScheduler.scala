@@ -1062,7 +1062,7 @@ class DAGScheduler(
             stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
-              Option(sc.applicationId), sc.applicationAttemptId)
+              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
           }
 
         case stage: ResultStage =>
@@ -1072,7 +1072,8 @@ class DAGScheduler(
             val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, id, properties, serializedTaskMetrics,
-              Option(jobId), Option(sc.applicationId), sc.applicationAttemptId)
+              Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
+              stage.rdd.isBarrier())
           }
       }
     } catch {
@@ -1311,17 +1312,6 @@ class DAGScheduler(
             }
         }
 
-      case Resubmitted =>
-        logInfo("Resubmitted " + task + ", so marking it as still running")
-        stage match {
-          case sms: ShuffleMapStage =>
-            sms.pendingPartitions += task.partitionId
-
-          case _ =>
-            assert(false, "TaskSetManagers should only send Resubmitted task statuses for " +
-              "tasks in ShuffleMapStages.")
-        }
-
       case FetchFailed(bmAddress, shuffleId, mapId, _, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
@@ -1331,9 +1321,9 @@ class DAGScheduler(
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
-          failedStage.fetchFailedAttemptIds.add(task.stageAttemptId)
+          failedStage.failedAttemptIds.add(task.stageAttemptId)
           val shouldAbortStage =
-            failedStage.fetchFailedAttemptIds.size >= maxConsecutiveStageAttempts ||
+            failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
             disallowStageRetryForTest
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
@@ -1347,6 +1337,48 @@ class DAGScheduler(
           } else {
             logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
               s"longer running")
+          }
+
+          if (mapStage.rdd.isBarrier()) {
+            // Mark all the map as broken in the map stage, to ensure retry all the tasks on
+            // resubmitted stage attempt.
+            mapOutputTracker.unregisterAllMapOutput(shuffleId)
+          } else if (mapId != -1) {
+            // Mark the map whose fetch failed as broken in the map stage
+            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+          }
+
+          if (failedStage.rdd.isBarrier()) {
+            failedStage match {
+              case mapStage: ShuffleMapStage =>
+                // Mark all the map as broken in the map stage, to ensure retry all the tasks on
+                // resubmitted stage attempt.
+                mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
+
+              case resultStage: ResultStage =>
+                // Mark all the partitions of the result stage to be not finished, to ensure retry
+                // all the tasks on resubmitted stage attempt.
+                resultStage.activeJob.map(_.clearResult())
+            }
+          }
+
+          // TODO: mark the executor as failed only if there were lots of fetch failures on it
+          if (bmAddress != null) {
+            val hostToUnregisterOutputs = if (env.blockManager.externalShuffleServiceEnabled &&
+              unRegisterOutputOnHostOnFetchFailure) {
+              // We had a fetch failure with the external shuffle service, so we
+              // assume all shuffle data on the node is bad.
+              Some(bmAddress.host)
+            } else {
+              // Unregister shuffle data just for one executor (we don't have any
+              // reason to believe shuffle data has been lost for the entire host).
+              None
+            }
+            removeExecutorAndUnregisterOutputs(
+              execId = bmAddress.executorId,
+              fileLost = true,
+              hostToUnregisterOutputs = hostToUnregisterOutputs,
+              maybeEpoch = Some(task.epoch))
           }
 
           if (shouldAbortStage) {
@@ -1375,7 +1407,7 @@ class DAGScheduler(
               // simpler while not producing an overwhelming number of scheduler events.
               logInfo(
                 s"Resubmitting $mapStage (${mapStage.name}) and " +
-                s"$failedStage (${failedStage.name}) due to fetch failure"
+                  s"$failedStage (${failedStage.name}) due to fetch failure"
               )
               messageScheduler.schedule(
                 new Runnable {
@@ -1386,29 +1418,90 @@ class DAGScheduler(
               )
             }
           }
-          // Mark the map whose fetch failed as broken in the map stage
-          if (mapId != -1) {
-            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+        }
+
+      case failure: TaskFailedReason if task.isBarrier =>
+        // Also handle the task failed reasons here.
+        failure match {
+          case Resubmitted =>
+            logInfo("Resubmitted " + task + ", so marking it as still running")
+            stage match {
+              case sms: ShuffleMapStage =>
+                sms.pendingPartitions += task.partitionId
+
+              case _ =>
+                assert(false, "TaskSetManagers should only send Resubmitted task statuses for " +
+                  "tasks in ShuffleMapStages.")
+            }
+
+          case _ => // Do nothing.
+        }
+
+        // Always fail the current stage and retry all the tasks when a barrier task fail.
+        val failedStage = stageIdToStage(task.stageId)
+        logInfo(s"Marking $failedStage (${failedStage.name}) as failed due to a barrier task " +
+          "failed.")
+        val message = "Stage failed because a barrier task finished unsuccessfully. " +
+          s"${failure.toErrorString}"
+        try {
+          // cancelTasks will fail if a SchedulerBackend does not implement killTask
+          taskScheduler.cancelTasks(stageId, interruptThread = false)
+        } catch {
+          case e: UnsupportedOperationException =>
+            // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.
+            logInfo(s"Could not cancel tasks for stage $stageId", e)
+            abortStage(failedStage, "Could not cancel zombie barrier tasks for stage " +
+              s"$failedStage (${failedStage.name})", Some(e))
+        }
+        markStageAsFinished(failedStage, Some(message))
+
+        failedStage.failedAttemptIds.add(task.stageAttemptId)
+        val shouldAbortStage =
+          failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
+            disallowStageRetryForTest
+
+        if (shouldAbortStage) {
+          val abortMessage = if (disallowStageRetryForTest) {
+            "Barrier stage will not retry stage due to testing config"
+          } else {
+            s"""$failedStage (${failedStage.name})
+               |has failed the maximum allowable number of
+               |times: $maxConsecutiveStageAttempts.
+               |Most recent failure reason: $message
+          """.stripMargin.replaceAll("\n", " ")
+          }
+          abortStage(failedStage, abortMessage, None)
+        } else {
+          failedStage match {
+            case mapStage: ShuffleMapStage =>
+              // Mark all the map as broken in the map stage, to ensure retry all the tasks on
+              // resubmitted stage attempt.
+              mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
+
+            case resultStage: ResultStage =>
+              // Mark all the partitions of the result stage to be not finished, to ensure retry
+              // all the tasks on resubmitted stage attempt.
+              resultStage.activeJob.map(_.clearResult())
           }
 
-          // TODO: mark the executor as failed only if there were lots of fetch failures on it
-          if (bmAddress != null) {
-            val hostToUnregisterOutputs = if (env.blockManager.externalShuffleServiceEnabled &&
-              unRegisterOutputOnHostOnFetchFailure) {
-              // We had a fetch failure with the external shuffle service, so we
-              // assume all shuffle data on the node is bad.
-              Some(bmAddress.host)
-            } else {
-              // Unregister shuffle data just for one executor (we don't have any
-              // reason to believe shuffle data has been lost for the entire host).
-              None
-            }
-            removeExecutorAndUnregisterOutputs(
-              execId = bmAddress.executorId,
-              fileLost = true,
-              hostToUnregisterOutputs = hostToUnregisterOutputs,
-              maybeEpoch = Some(task.epoch))
-          }
+          // update failedStages and make sure a ResubmitFailedStages event is enqueued
+          failedStages += failedStage
+          logInfo(s"Resubmitting $failedStage (${failedStage.name}) due to barrier stage " +
+            "failure.")
+          messageScheduler.schedule(new Runnable {
+            override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+          }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+        }
+
+      case Resubmitted =>
+        logInfo("Resubmitted " + task + ", so marking it as still running")
+        stage match {
+          case sms: ShuffleMapStage =>
+            sms.pendingPartitions += task.partitionId
+
+          case _ =>
+            assert(false, "TaskSetManagers should only send Resubmitted task statuses for " +
+              "tasks in ShuffleMapStages.")
         }
 
       case _: TaskCommitDenied =>
