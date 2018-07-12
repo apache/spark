@@ -85,6 +85,12 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
  */
 case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
 
+  private def supportReuseExchange(exchange: Exchange): Boolean = exchange match {
+    // If a coordinator defined in an exchange operator, the exchange cannot be reused
+    case ShuffleExchangeExec(_, _, Some(coordinator)) => false
+    case _ => true
+  }
+
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.exchangeReuseEnabled) {
       return plan
@@ -92,7 +98,7 @@ case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
     // Build a hash map using schema of exchanges to avoid O(N*N) sameResult calls.
     val exchanges = mutable.HashMap[StructType, ArrayBuffer[Exchange]]()
     plan.transformUp {
-      case exchange: Exchange =>
+      case exchange: Exchange if supportReuseExchange(exchange) =>
         // the exchanges that have same results usually also have same schemas (same column names).
         val sameSchema = exchanges.getOrElseUpdate(exchange.schema, ArrayBuffer[Exchange]())
         val samePlan = sameSchema.find { e =>

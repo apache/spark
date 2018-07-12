@@ -278,6 +278,25 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     try f(spark) finally spark.stop()
   }
 
+  def withSparkSession(pairs: (String, String)*)(f: SparkSession => Unit): Unit = {
+    val sparkConf = new SparkConf(false)
+      .setMaster("local[*]")
+      .setAppName("test")
+      .set("spark.ui.enabled", "false")
+      .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+      .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
+      .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+
+    pairs.foreach {
+      case (k, v) => sparkConf.set(k, v)
+    }
+
+    val spark = SparkSession.builder()
+      .config(sparkConf)
+      .getOrCreate()
+    try f(spark) finally spark.stop()
+  }
+
   Seq(Some(5), None).foreach { minNumPostShufflePartitions =>
     val testNameNote = minNumPostShufflePartitions match {
       case Some(numPartitions) => "(minNumPostShufflePartitions: " + numPartitions + ")"
@@ -478,6 +497,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       }
 
       withSparkSession(test, 6144, minNumPostShufflePartitions)
+    }
+  }
+
+  test("SPARK-24705 adaptive query execution works when plan having duplicate exchanges") {
+    withSparkSession(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") { spark =>
+      val df = spark.range(1).selectExpr("id AS key", "id AS value")
+      checkAnswer(df.join(df, "key"), Row(0, 0, 0) :: Nil)
     }
   }
 }
