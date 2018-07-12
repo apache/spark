@@ -145,6 +145,39 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
+  private def testTimestampPushdown(data: Seq[Timestamp]): Unit = {
+    assert(data.size === 4)
+    val ts1 = data.head
+    val ts2 = data(1)
+    val ts3 = data(2)
+    val ts4 = data(3)
+
+    withParquetDataFrame(data.map(i => Tuple1(i))) { implicit df =>
+      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], data.map(i => Row.apply(i)))
+
+      checkFilterPredicate('_1 === ts1, classOf[Eq[_]], ts1)
+      checkFilterPredicate('_1 <=> ts1, classOf[Eq[_]], ts1)
+      checkFilterPredicate('_1 =!= ts1, classOf[NotEq[_]],
+        Seq(ts2, ts3, ts4).map(i => Row.apply(i)))
+
+      checkFilterPredicate('_1 < ts2, classOf[Lt[_]], ts1)
+      checkFilterPredicate('_1 > ts1, classOf[Gt[_]], Seq(ts2, ts3, ts4).map(i => Row.apply(i)))
+      checkFilterPredicate('_1 <= ts1, classOf[LtEq[_]], ts1)
+      checkFilterPredicate('_1 >= ts4, classOf[GtEq[_]], ts4)
+
+      checkFilterPredicate(Literal(ts1) === '_1, classOf[Eq[_]], ts1)
+      checkFilterPredicate(Literal(ts1) <=> '_1, classOf[Eq[_]], ts1)
+      checkFilterPredicate(Literal(ts2) > '_1, classOf[Lt[_]], ts1)
+      checkFilterPredicate(Literal(ts3) < '_1, classOf[Gt[_]], ts4)
+      checkFilterPredicate(Literal(ts1) >= '_1, classOf[LtEq[_]], ts1)
+      checkFilterPredicate(Literal(ts4) <= '_1, classOf[GtEq[_]], ts4)
+
+      checkFilterPredicate(!('_1 < ts4), classOf[GtEq[_]], ts4)
+      checkFilterPredicate('_1 < ts2 || '_1 > ts3, classOf[Operators.Or], Seq(Row(ts1), Row(ts4)))
+    }
+  }
+
   // This function tests that exactly go through the `canDrop` and `inverseCanDrop`.
   private def testStringStartsWith(dataFrame: DataFrame, filter: String): Unit = {
     withTempPath { dir =>
@@ -445,78 +478,35 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - timestamp(TIMESTAMP_MILLIS)") {
-    val ts1 = Timestamp.valueOf("2018-06-14 08:28:53.123")
-    val ts2 = Timestamp.valueOf("2018-06-15 08:28:53.123")
-    val ts3 = Timestamp.valueOf("2018-06-16 08:28:53.123")
-    val ts4 = Timestamp.valueOf("2018-06-17 08:28:53.123")
-
-    val data = Seq(ts1, ts2, ts3, ts4)
-
+  test("filter pushdown - timestamp") {
+    // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
+    val millisData = Seq(Timestamp.valueOf("2018-06-14 08:28:53.123"),
+      Timestamp.valueOf("2018-06-15 08:28:53.123"),
+      Timestamp.valueOf("2018-06-16 08:28:53.123"),
+      Timestamp.valueOf("2018-06-17 08:28:53.123"))
     withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
       ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
-      withParquetDataFrame(data.map(i => Tuple1(i))) { implicit df =>
-        checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-        checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], data.map(i => Row.apply(i)))
-
-        checkFilterPredicate('_1 === ts1, classOf[Eq[_]], ts1)
-        checkFilterPredicate('_1 <=> ts1, classOf[Eq[_]], ts1)
-        checkFilterPredicate('_1 =!= ts1, classOf[NotEq[_]],
-          Seq(ts2, ts3, ts4).map(i => Row.apply(i)))
-
-        checkFilterPredicate('_1 < ts2, classOf[Lt[_]], ts1)
-        checkFilterPredicate('_1 > ts1, classOf[Gt[_]], Seq(ts2, ts3, ts4).map(i => Row.apply(i)))
-        checkFilterPredicate('_1 <= ts1, classOf[LtEq[_]], ts1)
-        checkFilterPredicate('_1 >= ts4, classOf[GtEq[_]], ts4)
-
-        checkFilterPredicate(Literal(ts1) === '_1, classOf[Eq[_]], ts1)
-        checkFilterPredicate(Literal(ts1) <=> '_1, classOf[Eq[_]], ts1)
-        checkFilterPredicate(Literal(ts2) > '_1, classOf[Lt[_]], ts1)
-        checkFilterPredicate(Literal(ts3) < '_1, classOf[Gt[_]], ts4)
-        checkFilterPredicate(Literal(ts1) >= '_1, classOf[LtEq[_]], ts1)
-        checkFilterPredicate(Literal(ts4) <= '_1, classOf[GtEq[_]], ts4)
-
-        checkFilterPredicate(!('_1 < ts4), classOf[GtEq[_]], ts4)
-        checkFilterPredicate('_1 < ts2 || '_1 > ts3, classOf[Operators.Or],
-          Seq(Row(ts1), Row(ts4)))
-      }
+      testTimestampPushdown(millisData)
     }
-  }
 
-  test("filter pushdown - timestamp(TIMESTAMP_MICROS)") {
-    val ts1 = Timestamp.valueOf("2018-06-14 08:28:53.123456")
-    val ts2 = Timestamp.valueOf("2018-06-15 08:28:53.123456")
-    val ts3 = Timestamp.valueOf("2018-06-16 08:28:53.123456")
-    val ts4 = Timestamp.valueOf("2018-06-17 08:28:53.123456")
-
-    val data = Seq(ts1, ts2, ts3, ts4)
-
+    // spark.sql.parquet.outputTimestampType = TIMESTAMP_MICROS
+    val microsData = Seq(Timestamp.valueOf("2018-06-14 08:28:53.123456"),
+      Timestamp.valueOf("2018-06-15 08:28:53.123456"),
+      Timestamp.valueOf("2018-06-16 08:28:53.123456"),
+      Timestamp.valueOf("2018-06-17 08:28:53.123456"))
     withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
       ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
-      withParquetDataFrame(data.map(i => Tuple1(i))) { implicit df =>
-        checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-        checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], data.map(i => Row.apply(i)))
+      testTimestampPushdown(microsData)
+    }
 
-        checkFilterPredicate('_1 === ts1, classOf[Eq[_]], ts1)
-        checkFilterPredicate('_1 <=> ts1, classOf[Eq[_]], ts1)
-        checkFilterPredicate('_1 =!= ts1, classOf[NotEq[_]],
-          Seq(ts2, ts3, ts4).map(i => Row.apply(i)))
-
-        checkFilterPredicate('_1 < ts2, classOf[Lt[_]], ts1)
-        checkFilterPredicate('_1 > ts1, classOf[Gt[_]], Seq(ts2, ts3, ts4).map(i => Row.apply(i)))
-        checkFilterPredicate('_1 <= ts1, classOf[LtEq[_]], ts1)
-        checkFilterPredicate('_1 >= ts4, classOf[GtEq[_]], ts4)
-
-        checkFilterPredicate(Literal(ts1) === '_1, classOf[Eq[_]], ts1)
-        checkFilterPredicate(Literal(ts1) <=> '_1, classOf[Eq[_]], ts1)
-        checkFilterPredicate(Literal(ts2) > '_1, classOf[Lt[_]], ts1)
-        checkFilterPredicate(Literal(ts3) < '_1, classOf[Gt[_]], ts4)
-        checkFilterPredicate(Literal(ts1) >= '_1, classOf[LtEq[_]], ts1)
-        checkFilterPredicate(Literal(ts4) <= '_1, classOf[GtEq[_]], ts4)
-
-        checkFilterPredicate(!('_1 < ts4), classOf[GtEq[_]], ts4)
-        checkFilterPredicate('_1 < ts2 || '_1 > ts3, classOf[Operators.Or],
-          Seq(Row(ts1), Row(ts4)))
+    // spark.sql.parquet.outputTimestampType = INT96 doesn't support pushdown
+    withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+      ParquetOutputTimestampType.INT96.toString) {
+      withParquetDataFrame(millisData.map(i => Tuple1(i))) { implicit df =>
+        assertResult(None) {
+          parquetFilters.createFilter(
+            new SparkToParquetSchemaConverter(conf).convert(df.schema), sources.IsNull("_1"))
+        }
       }
     }
   }
@@ -594,7 +584,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       }
     }
   }
-
 
   test("Filter applied on merged Parquet schema with new column should work") {
     import testImplicits._
