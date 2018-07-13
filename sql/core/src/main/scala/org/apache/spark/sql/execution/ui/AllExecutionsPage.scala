@@ -214,11 +214,11 @@ private[ui] abstract class ExecutionTable(
   }
 
   private def jobURL(request: HttpServletRequest, jobId: Long): String =
-    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 
   private def executionURL(request: HttpServletRequest, executionID: Long): String =
     s"${UIUtils.prependBaseUri(
-      request, parent.basePath)}/${parent.prefix}/execution?id=$executionID"
+      request, parent.basePath)}/${parent.prefix}/execution/?id=$executionID"
 }
 
 private[ui] class RunningExecutionTable(

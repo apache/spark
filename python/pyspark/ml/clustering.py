@@ -349,8 +349,8 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 
 @inherit_doc
-class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
-             JavaMLWritable, JavaMLReadable):
+class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol, HasMaxIter,
+             HasTol, HasSeed, JavaMLWritable, JavaMLReadable):
     """
     K-means clustering with a k-means++ like initialization mode
     (the k-means|| algorithm by Bahmani et al).
@@ -406,9 +406,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
                      typeConverter=TypeConverters.toString)
     initSteps = Param(Params._dummy(), "initSteps", "The number of steps for k-means|| " +
                       "initialization mode. Must be > 0.", typeConverter=TypeConverters.toInt)
-    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "The distance measure. " +
-                            "Supported options: 'euclidean' and 'cosine'.",
-                            typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -544,8 +541,8 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 
 @inherit_doc
-class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed,
-                      JavaMLWritable, JavaMLReadable):
+class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol,
+                      HasMaxIter, HasSeed, JavaMLWritable, JavaMLReadable):
     """
     A bisecting k-means algorithm based on the paper "A comparison of document clustering
     techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
@@ -585,6 +582,8 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> bkm2 = BisectingKMeans.load(bkm_path)
     >>> bkm2.getK()
     2
+    >>> bkm2.getDistanceMeasure()
+    'euclidean'
     >>> model_path = temp_path + "/bkm_model"
     >>> model.save(model_path)
     >>> model2 = BisectingKMeansModel.load(model_path)
@@ -607,10 +606,10 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,
-                 seed=None, k=4, minDivisibleClusterSize=1.0):
+                 seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean"):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
-                 seed=None, k=4, minDivisibleClusterSize=1.0)
+                 seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean")
         """
         super(BisectingKMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.BisectingKMeans",
@@ -622,10 +621,10 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     @keyword_only
     @since("2.0.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20,
-                  seed=None, k=4, minDivisibleClusterSize=1.0):
+                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean"):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
-                  seed=None, k=4, minDivisibleClusterSize=1.0)
+                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean")
         Sets params for BisectingKMeans.
         """
         kwargs = self._input_kwargs
@@ -658,6 +657,20 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         Gets the value of `minDivisibleClusterSize` or its default value.
         """
         return self.getOrDefault(self.minDivisibleClusterSize)
+
+    @since("2.4.0")
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    @since("2.4.0")
+    def getDistanceMeasure(self):
+        """
+        Gets the value of `distanceMeasure` or its default value.
+        """
+        return self.getOrDefault(self.distanceMeasure)
 
     def _create_model(self, java_model):
         return BisectingKMeansModel(java_model)
@@ -1332,8 +1345,14 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
 
 if __name__ == "__main__":
     import doctest
+    import numpy
     import pyspark.ml.clustering
     from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.ml.clustering.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:

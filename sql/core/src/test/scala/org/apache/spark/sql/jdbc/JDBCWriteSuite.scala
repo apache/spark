@@ -293,13 +293,23 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   test("save errors if dbtable is not specified") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    val e = intercept[RuntimeException] {
+    val e1 = intercept[RuntimeException] {
       df.write.format("jdbc")
         .option("url", url1)
         .options(properties.asScala)
         .save()
     }.getMessage
-    assert(e.contains("Option 'dbtable' is required"))
+    assert(e1.contains("Option 'dbtable' or 'query' is required"))
+
+    val e2 = intercept[RuntimeException] {
+      df.write.format("jdbc")
+        .option("url", url1)
+        .options(properties.asScala)
+        .option("query", "select * from TEST.SAVETEST")
+        .save()
+    }.getMessage
+    val msg = "Option 'dbtable' is required. Option 'query' is not applicable while writing."
+    assert(e2.contains(msg))
   }
 
   test("save errors if wrong user/password combination") {

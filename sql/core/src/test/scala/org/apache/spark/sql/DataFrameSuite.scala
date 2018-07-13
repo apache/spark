@@ -1044,6 +1044,65 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     testData.select($"*").show(1000)
   }
 
+  test("getRows: truncate = [0, 20]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = Seq(
+      Seq("value"),
+      Seq("1"),
+      Seq("111111111111111111111"))
+    assert(df.getRows(10, 0) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = Seq(
+      Seq("value"),
+      Seq("1"),
+      Seq("11111111111111111..."))
+    assert(df.getRows(10, 20) === expectedAnswerForTrue)
+  }
+
+  test("getRows: truncate = [3, 17]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = Seq(
+      Seq("value"),
+      Seq("1"),
+      Seq("111"))
+    assert(df.getRows(10, 3) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = Seq(
+      Seq("value"),
+      Seq("1"),
+      Seq("11111111111111..."))
+    assert(df.getRows(10, 17) === expectedAnswerForTrue)
+  }
+
+  test("getRows: numRows = 0") {
+    val expectedAnswer = Seq(Seq("key", "value"), Seq("1", "1"))
+    assert(testData.select($"*").getRows(0, 20) === expectedAnswer)
+  }
+
+  test("getRows: array") {
+    val df = Seq(
+      (Array(1, 2, 3), Array(1, 2, 3)),
+      (Array(2, 3, 4), Array(2, 3, 4))
+    ).toDF()
+    val expectedAnswer = Seq(
+      Seq("_1", "_2"),
+      Seq("[1, 2, 3]", "[1, 2, 3]"),
+      Seq("[2, 3, 4]", "[2, 3, 4]"))
+    assert(df.getRows(10, 20) === expectedAnswer)
+  }
+
+  test("getRows: binary") {
+    val df = Seq(
+      ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
+      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
+    ).toDF()
+    val expectedAnswer = Seq(
+      Seq("_1", "_2"),
+      Seq("[31 32]", "[41 42 43 2E]"),
+      Seq("[33 34]", "[31 32 33 34 36]"))
+    assert(df.getRows(10, 20) === expectedAnswer)
+  }
+
   test("showString: truncate = [0, 20]") {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
@@ -2259,6 +2318,64 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.range(1).select(expr1, expr2.otherwise(0))
     checkAnswer(df, Row(0, 10) :: Nil)
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+  }
+
+  test("SPARK-24165: CaseWhen/If - nullability of nested types") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(true, ("x", 1), Seq("x", "y"), Map(0 -> "x")))
+    rows.add(Row(false, (null, 2), Seq(null, "z"), Map(0 -> null)))
+    val schema = StructType(Seq(
+      StructField("cond", BooleanType, true),
+      StructField("s", StructType(Seq(
+        StructField("val1", StringType, true),
+        StructField("val2", IntegerType, false)
+      )), false),
+      StructField("a", ArrayType(StringType, true)),
+      StructField("m", MapType(IntegerType, StringType, true))
+    ))
+
+    val sourceDF = spark.createDataFrame(rows, schema)
+
+    val structWhenDF = sourceDF
+      .select(when('cond, struct(lit("a").as("val1"), lit(10).as("val2"))).otherwise('s) as "res")
+      .select('res.getField("val1"))
+    val arrayWhenDF = sourceDF
+      .select(when('cond, array(lit("a"), lit("b"))).otherwise('a) as "res")
+      .select('res.getItem(0))
+    val mapWhenDF = sourceDF
+      .select(when('cond, map(lit(0), lit("a"))).otherwise('m) as "res")
+      .select('res.getItem(0))
+
+    val structIfDF = sourceDF
+      .select(expr("if(cond, struct('a' as val1, 10 as val2), s)") as "res")
+      .select('res.getField("val1"))
+    val arrayIfDF = sourceDF
+      .select(expr("if(cond, array('a', 'b'), a)") as "res")
+      .select('res.getItem(0))
+    val mapIfDF = sourceDF
+      .select(expr("if(cond, map(0, 'a'), m)") as "res")
+      .select('res.getItem(0))
+
+    def checkResult(df: DataFrame, codegenExpected: Boolean): Unit = {
+      assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] == codegenExpected)
+      checkAnswer(df, Seq(Row("a"), Row(null)))
+    }
+
+    // without codegen
+    checkResult(structWhenDF, false)
+    checkResult(arrayWhenDF, false)
+    checkResult(mapWhenDF, false)
+    checkResult(structIfDF, false)
+    checkResult(arrayIfDF, false)
+    checkResult(mapIfDF, false)
+
+    // with codegen
+    checkResult(structWhenDF.filter('cond.isNotNull), true)
+    checkResult(arrayWhenDF.filter('cond.isNotNull), true)
+    checkResult(mapWhenDF.filter('cond.isNotNull), true)
+    checkResult(structIfDF.filter('cond.isNotNull), true)
+    checkResult(arrayIfDF.filter('cond.isNotNull), true)
+    checkResult(mapIfDF.filter('cond.isNotNull), true)
   }
 
   test("Uuid expressions should produce same results at retries in the same DataFrame") {

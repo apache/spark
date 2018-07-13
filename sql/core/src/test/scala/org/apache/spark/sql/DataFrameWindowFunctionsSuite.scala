@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
-
-import scala.collection.mutable
+import org.scalatest.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
@@ -27,7 +25,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Window function testing for DataFrame API.
@@ -623,5 +620,42 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         spark.read.schema(sampleSchema).json(input.toDS()).select(c0, c1).foreach { _ => () }
       }
     }
+  }
+
+  test("SPARK-24575: Window functions inside WHERE and HAVING clauses") {
+    def checkAnalysisError(df: => DataFrame): Unit = {
+      val thrownException = the [AnalysisException] thrownBy {
+        df.queryExecution.analyzed
+      }
+      assert(thrownException.message.contains("window functions inside WHERE and HAVING clauses"))
+    }
+
+    checkAnalysisError(testData2.select('a).where(rank().over(Window.orderBy('b)) === 1))
+    checkAnalysisError(testData2.where('b === 2 && rank().over(Window.orderBy('b)) === 1))
+    checkAnalysisError(
+      testData2.groupBy('a)
+        .agg(avg('b).as("avgb"))
+        .where('a > 'avgb && rank().over(Window.orderBy('a)) === 1))
+    checkAnalysisError(
+      testData2.groupBy('a)
+        .agg(max('b).as("maxb"), sum('b).as("sumb"))
+        .where(rank().over(Window.orderBy('a)) === 1))
+    checkAnalysisError(
+      testData2.groupBy('a)
+        .agg(max('b).as("maxb"), sum('b).as("sumb"))
+        .where('sumb === 5 && rank().over(Window.orderBy('a)) === 1))
+
+    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"))
+    checkAnalysisError(sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"))
+    checkAnalysisError(
+      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"))
+    checkAnalysisError(
+      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"))
+    checkAnalysisError(
+      sql(
+        s"""SELECT a, MAX(b)
+           |FROM testData2
+           |GROUP BY a
+           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin))
   }
 }
