@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -36,7 +37,7 @@ import org.apache.spark.util.Utils
  * Optimizers can override this.
  */
 abstract class Optimizer(sessionCatalog: SessionCatalog)
-  extends RuleExecutor[LogicalPlan] {
+  extends RuleExecutor[LogicalPlan] with Logging {
 
   // Check for structural integrity of the plan in test mode. Currently we only check if a plan is
   // still resolved after the execution of each rule.
@@ -46,7 +47,23 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
-  def batches: Seq[Batch] = {
+  protected def postAnalysisBatches: Seq[Batch] = {
+    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
+    // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
+    // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
+    // However, because we also use the analyzer to canonicalized queries (for view definition),
+    // we do not eliminate subqueries or compute current time in the analyzer.
+    Batch("Finish Analysis", Once,
+      EliminateSubqueryAliases,
+      EliminateView,
+      ReplaceExpressions,
+      ComputeCurrentTime,
+      GetCurrentDatabase(sessionCatalog),
+      RewriteDistinctAggregates,
+      ReplaceDeduplicateWithAggregate) :: Nil
+  }
+
+  protected def optimizationBatches: Seq[Batch] = {
     val operatorOptimizationRuleSet =
       Seq(
         // Operator push down
@@ -100,19 +117,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         rulesWithoutInferFiltersFromConstraints: _*) :: Nil
     }
 
-    (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
-    // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
-    // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
-    // However, because we also use the analyzer to canonicalized queries (for view definition),
-    // we do not eliminate subqueries or compute current time in the analyzer.
-    Batch("Finish Analysis", Once,
-      EliminateSubqueryAliases,
-      EliminateView,
-      ReplaceExpressions,
-      ComputeCurrentTime,
-      GetCurrentDatabase(sessionCatalog),
-      RewriteDistinctAggregates,
-      ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -121,7 +125,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
-    Batch("Union", Once,
+    (Batch("Union", Once,
       CombineUnions) ::
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
@@ -175,6 +179,35 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
    * Override to provide additional rules for the operator optimization batch.
    */
   def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
+
+  override def batches: Seq[Batch] = {
+    val excludedRules =
+      SQLConf.get.optimizerExcludedRules.toSeq.flatMap(_.split(",").map(_.trim).filter(!_.isEmpty))
+    val filteredOptimizationBatches = if (excludedRules.isEmpty) {
+      optimizationBatches
+    } else {
+      optimizationBatches.flatMap { batch =>
+        val filteredRules =
+          batch.rules.filter { rule =>
+            val exclude = excludedRules.contains(rule.ruleName)
+            if (exclude) {
+              logInfo(s"Optimization rule '${rule.ruleName}' is excluded from the optimizer.")
+            }
+            !exclude
+          }
+        if (batch.rules == filteredRules) {
+          Some(batch)
+        } else if (filteredRules.nonEmpty) {
+          Some(Batch(batch.name, batch.strategy, filteredRules: _*))
+        } else {
+          logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
+            s"as all enclosed rules have been excluded.")
+          None
+        }
+      }
+    }
+    postAnalysisBatches ++ filteredOptimizationBatches
+  }
 }
 
 /**
