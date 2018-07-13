@@ -202,6 +202,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
             .withCommand("/opt/spark/bin/run-example")
             .addToArgs("--master", s"k8s://https://kubernetes.default.svc")
             .addToArgs("--deploy-mode", "client")
+            .addToArgs("--conf", s"spark.kubernetes.container.image=$image")
             .addToArgs(
               "--conf",
               s"spark.kubernetes.namespace=${kubernetesTestComponents.namespace}")
