@@ -24,8 +24,7 @@ import org.apache.spark.sql.types.StructType
 
 private[avro] class AvroOutputWriterFactory(
     schema: StructType,
-    recordName: String,
-    recordNamespace: String) extends OutputWriterFactory {
+    avroSchema: SerializableSchema) extends OutputWriterFactory {
 
   override def getFileExtension(context: TaskAttemptContext): String = ".avro"
 
@@ -33,6 +32,6 @@ private[avro] class AvroOutputWriterFactory(
       path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    new AvroOutputWriter(path, context, schema, recordName, recordNamespace)
+    new AvroOutputWriter(path, context, schema, avroSchema.value)
   }
 }
