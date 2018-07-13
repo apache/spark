@@ -91,7 +91,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.submitInDriver")
     .internal()
     .booleanConf
-    .createOptional
+    .createWithDefault(false)
 
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
