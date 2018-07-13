@@ -409,16 +409,24 @@ class SparkContext(object):
     @property
     def numCores(self):
         """
+        .. note:: Experimental
+
         Total number of CPU cores of all executors registered in the cluster at the moment.
         The number reflects current status of the cluster and can change in the future.
+
+        .. versionadded:: 2.4.0
         """
         return self._jsc.sc().numCores()
 
     @property
     def numExecutors(self):
         """
+        .. note:: Experimental
+
         Total number of executors registered in the cluster at the moment.
         The number reflects current status of the cluster and can change in the future.
+
+        .. versionadded:: 2.4.0
         """
         return self._jsc.sc().numExecutors()
 

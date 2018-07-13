@@ -131,12 +131,18 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Total number of CPU cores of all executors registered in the cluster at the moment.
    * The number reflects current status of the cluster and can change in the future.
+   *
+   * @note This method is experimental, and its behavior can be changed in the next releases.
+   * @since 2.4.0
    */
   def numCores: java.lang.Integer = sc.numCores
 
   /**
    * Total number of executors registered in the cluster at the moment.
    * The number reflects current status of the cluster and can change in the future.
+   *
+   * @note This method is experimental, and its behavior can be changed in the next releases.
+   * @since 2.4.0
    */
   def numExecutors: java.lang.Integer = sc.numExecutors
 

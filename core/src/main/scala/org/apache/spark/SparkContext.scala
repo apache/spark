@@ -2340,12 +2340,18 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Total number of CPU cores of all executors registered in the cluster at the moment.
    * The number reflects current status of the cluster and can change in the future.
+   *
+   * @note This method is experimental, and its behavior can be changed in the next releases.
+   * @since 2.4.0
    */
   def numCores: Int = taskScheduler.numCores
 
   /**
    * Total number of executors registered in the cluster at the moment.
    * The number reflects current status of the cluster and can change in the future.
+   *
+   * @note This method is experimental, and its behavior can be changed in the next releases.
+   * @since 2.4.0
    */
   def numExecutors: Int = taskScheduler.numExecutors
 

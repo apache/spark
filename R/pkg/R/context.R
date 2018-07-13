@@ -447,7 +447,7 @@ setCheckpointDir <- function(directory) {
 #' @note spark.numCores since 2.4.0
 spark.numCores <- function() {
   sc <- getSparkContext()
-  invisible(callJMethod(sc, "numCores"))
+  callJMethod(sc, "numCores")
 }
 
 #' Total number of executors registered in the cluster at the moment.
@@ -461,5 +461,5 @@ spark.numCores <- function() {
 #' @note spark.numExecutors since 2.4.0
 spark.numExecutors <- function() {
   sc <- getSparkContext()
-  invisible(callJMethod(sc, "numExecutors"))
+  callJMethod(sc, "numExecutors")
 }
