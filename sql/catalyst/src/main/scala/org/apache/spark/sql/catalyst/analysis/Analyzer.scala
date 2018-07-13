@@ -1155,7 +1155,7 @@ class Analyzer(
     /**
      * This method tries to resolve expressions and find missing attributes recursively. Specially,
      * when the expressions used in `Sort` or `Filter` contain unresolved attributes or resolved
-     * attributes which are missed from SELECT clause. This method tries to find the missing
+     * attributes which are missed from child output. This method tries to find the missing
      * attributes out and add into the projection.
      */
     private def resolveExprsAndAddMissingAttrs(
