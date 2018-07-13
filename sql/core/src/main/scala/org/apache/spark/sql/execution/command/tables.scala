@@ -313,35 +313,30 @@ case class LoadDataCommand(
         // If no schema or authority is provided with non-local inpath,
         // we will use hadoop configuration "fs.defaultFS".
         val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
-        val defaultFS = if (defaultFSConf == null) {
-          new URI("")
-        } else {
-          new URI(defaultFSConf)
-        }
-
+        val defaultFS = if (defaultFSConf == null) new URI("") else new URI(defaultFSConf)
         // Follow Hive's behavior:
         // If LOCAL is not specified, and the path is relative,
         // then the path is interpreted relative to "/user/<username>"
         val uriPath = new Path(s"/user/${System.getProperty("user.name")}/")
-        // makeQualified() will ignore the query parameter part while creating a Path, so the
-        // entire path string will be considered while making a Path instance,this is mainly done
+        // makeQualified() will ignore the query parameter part while creating a path, so the
+        // entire  string will be considered while making a Path instance,this is mainly done
         // by considering the wild card scenario in mind.as per old logic query param  is
-        // been considered while creating uri instance and if path contains wild card char '?'
-        // the remaining charecters after '?' will be removedwhile forming URI instance
+        // been considered while creating URI instance and if path contains wild card char '?'
+        // the remaining charecters after '?' will be removed while forming URI instance
         loadPath.makeQualified(defaultFS, uriPath)
       }
     }
     val fs = loadPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    // This handling is because while resolving the invalid urls starting with file:///
-    // system throws IllegalArgumentException from globStatus api,so inorder to handle
+    // This handling is because while resolving the invalid URLs starting with file:///
+    // system throws IllegalArgumentException from globStatus API,so in order to handle
     // such scenarios this code is added in try catch block and after catching the
-    // run time exception a generic error will be displayed to the user.
+    // runtime exception a generic error will be displayed to the user.
     try {
-      if (null == fs.globStatus(loadPath) || fs.globStatus(loadPath).isEmpty) {
+      val fileStatus = fs.globStatus(loadPath)
+      if (fileStatus == null || fileStatus.isEmpty) {
         throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
       }
-    }
-    catch {
+    } catch {
       case e: IllegalArgumentException =>
         log.warn(s"Exception while validating the load path $path ", e)
         throw new AnalysisException(s"LOAD DATA input path does not exist: $path")

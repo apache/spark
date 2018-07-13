@@ -1915,6 +1915,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
   test("Support wildcard character in folderlevel for LOAD DATA LOCAL INPATH") {
     withTempDir { dir =>
       val path = dir.toURI.toString.stripSuffix("/")
@@ -1938,6 +1939,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
   test("SPARK-17796 Support wildcard '?'char in middle as part of local file path") {
     withTempDir { dir =>
       val path = dir.toURI.toString.stripSuffix("/")
