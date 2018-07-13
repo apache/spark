@@ -657,6 +657,84 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
   }
 
+  test("map_concat function") {
+    val df1 = Seq(
+      (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 4 -> 400)),
+      (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 1 -> 400)),
+      (null, Map[Int, Int](3 -> 300, 4 -> 400))
+    ).toDF("map1", "map2")
+
+    val expected1a = Seq(
+      Row(Map(1 -> 100, 2 -> 200, 3 -> 300, 4 -> 400)),
+      Row(Map(1 -> 400, 2 -> 200, 3 -> 300)),
+      Row(null)
+    )
+
+    checkAnswer(df1.selectExpr("map_concat(map1, map2)"), expected1a)
+    checkAnswer(df1.select(map_concat('map1, 'map2)), expected1a)
+
+    val expected1b = Seq(
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(null)
+    )
+
+    checkAnswer(df1.selectExpr("map_concat(map1)"), expected1b)
+    checkAnswer(df1.select(map_concat('map1)), expected1b)
+
+    val df2 = Seq(
+      (
+        Map[Array[Int], Int](Array(1) -> 100, Array(2) -> 200),
+        Map[String, Int]("3" -> 300, "4" -> 400)
+      )
+    ).toDF("map1", "map2")
+
+    val expected2 = Seq(Row(Map()))
+
+    checkAnswer(df2.selectExpr("map_concat()"), expected2)
+    checkAnswer(df2.select(map_concat()), expected2)
+
+    val df3 = {
+      val schema = StructType(
+        StructField("map1", MapType(StringType, IntegerType, true), false)  ::
+        StructField("map2", MapType(StringType, IntegerType, false), false) :: Nil
+      )
+      val data = Seq(
+        Row(Map[String, Any]("a" -> 1, "b" -> null), Map[String, Any]("c" -> 3, "d" -> 4)),
+        Row(Map[String, Any]("a" -> 1, "b" -> 2), Map[String, Any]("c" -> 3, "d" -> 4))
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val expected3 = Seq(
+      Row(Map[String, Any]("a" -> 1, "b" -> null, "c" -> 3, "d" -> 4)),
+      Row(Map[String, Any]("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4))
+    )
+
+    checkAnswer(df3.selectExpr("map_concat(map1, map2)"), expected3)
+    checkAnswer(df3.select(map_concat('map1, 'map2)), expected3)
+
+    val expectedMessage1 = "input to function map_concat should all be the same type"
+
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("map_concat(map1, map2)").collect()
+    }.getMessage().contains(expectedMessage1))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, 'map2)).collect()
+    }.getMessage().contains(expectedMessage1))
+
+    val expectedMessage2 = "input to function map_concat should all be of type map"
+
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("map_concat(map1, 12)").collect()
+    }.getMessage().contains(expectedMessage2))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, lit(12))).collect()
+    }.getMessage().contains(expectedMessage2))
+  }
+
   test("map_from_entries function") {
     def dummyFilter(c: Column): Column = c.isNull || c.isNotNull
     val oneRowDF = Seq(3215).toDF("i")
@@ -1118,6 +1196,58 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(e.message.contains(
       "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
+  }
+
+  test("array_union functions") {
+    val df1 = Seq((Array(1, 2, 3), Array(4, 2))).toDF("a", "b")
+    val ans1 = Row(Seq(1, 2, 3, 4))
+    checkAnswer(df1.select(array_union($"a", $"b")), ans1)
+    checkAnswer(df1.selectExpr("array_union(a, b)"), ans1)
+
+    val df2 = Seq((Array[Integer](1, 2, null, 4, 5), Array(-5, 4, -3, 2, -1))).toDF("a", "b")
+    val ans2 = Row(Seq(1, 2, null, 4, 5, -5, -3, -1))
+    checkAnswer(df2.select(array_union($"a", $"b")), ans2)
+    checkAnswer(df2.selectExpr("array_union(a, b)"), ans2)
+
+    val df3 = Seq((Array(1L, 2L, 3L), Array(4L, 2L))).toDF("a", "b")
+    val ans3 = Row(Seq(1L, 2L, 3L, 4L))
+    checkAnswer(df3.select(array_union($"a", $"b")), ans3)
+    checkAnswer(df3.selectExpr("array_union(a, b)"), ans3)
+
+    val df4 = Seq((Array[java.lang.Long](1L, 2L, null, 4L, 5L), Array(-5L, 4L, -3L, 2L, -1L)))
+      .toDF("a", "b")
+    val ans4 = Row(Seq(1L, 2L, null, 4L, 5L, -5L, -3L, -1L))
+    checkAnswer(df4.select(array_union($"a", $"b")), ans4)
+    checkAnswer(df4.selectExpr("array_union(a, b)"), ans4)
+
+    val df5 = Seq((Array("b", "a", "c"), Array("b", null, "a", "g"))).toDF("a", "b")
+    val ans5 = Row(Seq("b", "a", "c", null, "g"))
+    checkAnswer(df5.select(array_union($"a", $"b")), ans5)
+    checkAnswer(df5.selectExpr("array_union(a, b)"), ans5)
+
+    val df6 = Seq((null, Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df6.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df6.selectExpr("array_union(a, b)")
+    }
+
+    val df7 = Seq((null, null)).toDF("a", "b")
+    intercept[AnalysisException] {
+      df7.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df7.selectExpr("array_union(a, b)")
+    }
+
+    val df8 = Seq((Array(Array(1)), Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df8.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df8.selectExpr("array_union(a, b)")
+    }
   }
 
   test("concat function - arrays") {

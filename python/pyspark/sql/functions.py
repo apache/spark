@@ -2033,6 +2033,25 @@ def array_distinct(col):
     return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
 
 
+@ignore_unicode_prefix
+@since(2.4)
+def array_union(col1, col2):
+    """
+    Collection function: returns an array of the elements in the union of col1 and col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_union(df.c1, df.c2)).collect()
+    [Row(array_union(c1, c2)=[u'b', u'a', u'c', u'd', u'f'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
@@ -2513,6 +2532,28 @@ def arrays_zip(*cols):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
+
+
+@since(2.4)
+def map_concat(*cols):
+    """Returns the union of all the given maps.
+
+    :param cols: list of column names (string) or list of :class:`Column` expressions
+
+    >>> from pyspark.sql.functions import map_concat
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c', 1, 'd') as map2")
+    >>> df.select(map_concat("map1", "map2").alias("map3")).show(truncate=False)
+    +--------------------------------+
+    |map3                            |
+    +--------------------------------+
+    |[1 -> a, 2 -> b, 3 -> c, 1 -> d]|
+    +--------------------------------+
+    """
+    sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
 
 
 # ---------------------------- User Defined Function ----------------------------------

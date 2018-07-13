@@ -146,38 +146,31 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       }.getMessage
       assert(msg.contains("Cannot save interval data type into external storage."))
 
-      msg = intercept[UnsupportedOperationException] {
+      msg = intercept[AnalysisException] {
         sql("select null").write.mode("overwrite").orc(orcDir)
       }.getMessage
       assert(msg.contains("ORC data source does not support null data type."))
 
-      msg = intercept[UnsupportedOperationException] {
+      msg = intercept[AnalysisException] {
         spark.udf.register("testType", () => new IntervalData())
         sql("select testType()").write.mode("overwrite").orc(orcDir)
       }.getMessage
-      assert(msg.contains("ORC data source does not support calendarinterval data type."))
+      assert(msg.contains("ORC data source does not support interval data type."))
 
       // read path
-      msg = intercept[UnsupportedOperationException] {
+      msg = intercept[AnalysisException] {
         val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
         spark.range(1).write.mode("overwrite").orc(orcDir)
         spark.read.schema(schema).orc(orcDir).collect()
       }.getMessage
       assert(msg.contains("ORC data source does not support calendarinterval data type."))
 
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", NullType, true) :: Nil)
-        spark.range(1).write.mode("overwrite").orc(orcDir)
-        spark.read.schema(schema).orc(orcDir).collect()
-      }.getMessage
-      assert(msg.contains("ORC data source does not support null data type."))
-
-      msg = intercept[UnsupportedOperationException] {
+      msg = intercept[AnalysisException] {
         val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
         spark.range(1).write.mode("overwrite").orc(orcDir)
         spark.read.schema(schema).orc(orcDir).collect()
       }.getMessage
-      assert(msg.contains("ORC data source does not support calendarinterval data type."))
+      assert(msg.contains("ORC data source does not support interval data type."))
     }
   }
 }
