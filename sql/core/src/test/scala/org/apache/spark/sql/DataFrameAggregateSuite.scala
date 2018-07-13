@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
-import org.scalatest.Matchers
+import org.scalatest.Matchers.the
 
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DecimalType
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
-class DataFrameAggregateSuite extends QueryTest with SharedSQLContext with Matchers {
+class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   val absTol = 1e-8
@@ -718,6 +718,8 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext with Match
   }
 
   test("SPARK-24788: toString with unresolved expressions should not throw") {
-    noException should be thrownBy testData.groupBy('key).toString
+    // these should not raise exceptions
+    testData.groupBy('key).toString
+    testData.groupBy(col("key")).toString
   }
 }
