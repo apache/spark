@@ -717,9 +717,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext with Match
       Row(1, 2, 1) :: Row(2, 2, 2) :: Row(3, 2, 3) :: Nil)
   }
 
-  test("SPARK-24788: RelationalGroupedDataset.toString " +
-    "with unresolved grouping expressions should not throw an exception") {
+  test("SPARK-24788: toString with unresolved expressions should not throw") {
     noException should be thrownBy testData.groupBy('key).toString
   }
-
 }
