@@ -135,17 +135,59 @@ object ScalaReflection extends ScalaReflection {
    * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
    * calling resolve/bind with a new schema.
    */
-  def deserializerFor[T : TypeTag]: Expression = {
+  def deserializerFor[T : TypeTag](topLevel: Boolean): Expression = cleanUpReflectionObjects {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
-    val expr = deserializerFor(tpe, None, walkedTypePath)
-    val Schema(_, nullable) = schemaFor(tpe)
+    val Schema(dataType, tpeNullable) = schemaFor(tpe)
+    val isOptionOfProduct = tpe.dealias <:< localTypeOf[Option[_]] &&
+      definedByConstructorParams(tpe)
+    val (optTypePath, nullable) = if (isOptionOfProduct && topLevel) {
+      // Top-level Option of Product is encoded as single struct column at top-level row.
+      (Some(addToPathOrdinal(None, 0, dataType, walkedTypePath)), true)
+    } else {
+      (None, tpeNullable)
+    }
+    val expr = deserializerFor(tpe, optTypePath, walkedTypePath)
     if (nullable) {
       expr
     } else {
       AssertNotNull(expr, walkedTypePath)
     }
+  }
+
+  /**
+   * When we build the `deserializer` for an encoder, we set up a lot of "unresolved" stuff
+   * and lost the required data type, which may lead to runtime error if the real type doesn't
+   * match the encoder's schema.
+   * For example, we build an encoder for `case class Data(a: Int, b: String)` and the real type
+   * is [a: int, b: long], then we will hit runtime error and say that we can't construct class
+   * `Data` with int and long, because we lost the information that `b` should be a string.
+   *
+   * This method help us "remember" the required data type by adding a `UpCast`. Note that we
+   * only need to do this for leaf nodes.
+   */
+  def upCastToExpectedType(
+      expr: Expression,
+      expected: DataType,
+      walkedTypePath: Seq[String]): Expression = expected match {
+    case _: StructType => expr
+    case _: ArrayType => expr
+    // TODO: ideally we should also skip MapType, but nested StructType inside MapType is rare and
+    // it's not trivial to support by-name resolution for StructType inside MapType.
+    case _ => UpCast(expr, expected, walkedTypePath)
+  }
+
+  /** Returns the current path with a field at ordinal extracted. */
+  def addToPathOrdinal(
+      path: Option[Expression],
+      ordinal: Int,
+      dataType: DataType,
+      walkedTypePath: Seq[String]): Expression = {
+    val newPath = path
+      .map(p => GetStructField(p, ordinal))
+      .getOrElse(GetColumnByOrdinal(ordinal, dataType))
+    upCastToExpectedType(newPath, dataType, walkedTypePath)
   }
 
   private def deserializerFor(
@@ -161,17 +203,6 @@ object ScalaReflection extends ScalaReflection {
       upCastToExpectedType(newPath, dataType, walkedTypePath)
     }
 
-    /** Returns the current path with a field at ordinal extracted. */
-    def addToPathOrdinal(
-        ordinal: Int,
-        dataType: DataType,
-        walkedTypePath: Seq[String]): Expression = {
-      val newPath = path
-        .map(p => GetStructField(p, ordinal))
-        .getOrElse(GetColumnByOrdinal(ordinal, dataType))
-      upCastToExpectedType(newPath, dataType, walkedTypePath)
-    }
-
     /** Returns the current path or `GetColumnByOrdinal`. */
     def getPath: Expression = {
       val dataType = schemaFor(tpe).dataType
@@ -180,28 +211,6 @@ object ScalaReflection extends ScalaReflection {
       } else {
         upCastToExpectedType(GetColumnByOrdinal(0, dataType), dataType, walkedTypePath)
       }
-    }
-
-    /**
-     * When we build the `deserializer` for an encoder, we set up a lot of "unresolved" stuff
-     * and lost the required data type, which may lead to runtime error if the real type doesn't
-     * match the encoder's schema.
-     * For example, we build an encoder for `case class Data(a: Int, b: String)` and the real type
-     * is [a: int, b: long], then we will hit runtime error and say that we can't construct class
-     * `Data` with int and long, because we lost the information that `b` should be a string.
-     *
-     * This method help us "remember" the required data type by adding a `UpCast`. Note that we
-     * only need to do this for leaf nodes.
-     */
-    def upCastToExpectedType(
-        expr: Expression,
-        expected: DataType,
-        walkedTypePath: Seq[String]): Expression = expected match {
-      case _: StructType => expr
-      case _: ArrayType => expr
-      // TODO: ideally we should also skip MapType, but nested StructType inside MapType is rare and
-      // it's not trivial to support by-name resolution for StructType inside MapType.
-      case _ => UpCast(expr, expected, walkedTypePath)
     }
 
     tpe.dealias match {
@@ -389,7 +398,7 @@ object ScalaReflection extends ScalaReflection {
           val constructor = if (cls.getName startsWith "scala.Tuple") {
             deserializerFor(
               fieldType,
-              Some(addToPathOrdinal(i, dataType, newTypePath)),
+              Some(addToPathOrdinal(path, i, dataType, newTypePath)),
               newTypePath)
           } else {
             deserializerFor(
@@ -431,11 +440,18 @@ object ScalaReflection extends ScalaReflection {
    *  * the element type of [[Array]] or [[Seq]]: `array element class: "abc.xyz.MyClass"`
    *  * the field of [[Product]]: `field (class: "abc.xyz.MyClass", name: "myField")`
    */
-  def serializerFor[T : TypeTag](inputObject: Expression): CreateNamedStruct = {
+  def serializerFor[T : TypeTag](
+      inputObject: Expression,
+      topLevel: Boolean): CreateNamedStruct = cleanUpReflectionObjects {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
     serializerFor(inputObject, tpe, walkedTypePath) match {
+      case i @ expressions.If(_, _, _: CreateNamedStruct)
+          if tpe.dealias <:< localTypeOf[Option[_]] &&
+            definedByConstructorParams(tpe) && topLevel =>
+        // We encode top-level Option of Product as a single struct column.
+        CreateNamedStruct(expressions.Literal("value") :: i :: Nil)
       case expressions.If(_, _, s: CreateNamedStruct) if definedByConstructorParams(tpe) => s
       case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
     }

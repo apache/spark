@@ -54,16 +54,6 @@ object ExpressionEncoder {
     val mirror = ScalaReflection.mirror
     val tpe = typeTag[T].in(mirror).tpe
 
-    // For non top-level encodes, we allow using Option of Product type.
-    if (topLevel && ScalaReflection.optionOfProductType(tpe)) {
-      throw new UnsupportedOperationException(
-        "Cannot create encoder for Option of Product type, because Product type is represented " +
-          "as a row, and the entire row can not be null in Spark SQL like normal databases. " +
-          "You can wrap your type with Tuple1 if you do want top level null Product objects, " +
-          "e.g. instead of creating `Dataset[Option[MyClass]]`, you can do something like " +
-          "`val ds: Dataset[Tuple1[MyClass]] = Seq(Tuple1(MyClass(...)), Tuple1(null)).toDS`")
-    }
-
     val cls = mirror.runtimeClass(tpe)
     val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
@@ -75,8 +65,8 @@ object ExpressionEncoder {
       // doesn't allow top-level row to be null, only its columns can be null.
       AssertNotNull(inputObject, Seq("top level Product input object"))
     }
-    val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
-    val deserializer = ScalaReflection.deserializerFor[T]
+    val serializer = ScalaReflection.serializerFor[T](nullSafeInput, topLevel)
+    val deserializer = ScalaReflection.deserializerFor[T](topLevel)
 
     val schema = serializer.dataType
 
