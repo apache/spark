@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
@@ -1208,16 +1211,46 @@ class Analyzer(
    * only performs simple existence check according to the function identifier to quickly identify
    * undefined functions without triggering relation resolution, which may incur potentially
    * expensive partition/schema discovery process in some cases.
-   *
+   * In order to avoid duplicate external functions lookup, the external function identifier will
+   * store in the local hash set externalFunctionNameSet.
    * @see [[ResolveFunctions]]
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
   object LookupFunctions extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
-      case f: UnresolvedFunction if !catalog.functionExists(f.name) =>
-        withPosition(f) {
-          throw new NoSuchFunctionException(f.name.database.getOrElse("default"), f.name.funcName)
-        }
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
+      plan.transformAllExpressions {
+        case f: UnresolvedFunction
+          if externalFunctionNameSet.contains(normalizeFuncName(f.name)) => f
+        case f: UnresolvedFunction if catalog.isRegisteredFunction(f.name) => f
+        case f: UnresolvedFunction if catalog.isPersistentFunction(f.name) =>
+          externalFunctionNameSet.add(normalizeFuncName(f.name))
+          f
+        case f: UnresolvedFunction =>
+          withPosition(f) {
+            throw new NoSuchFunctionException(f.name.database.getOrElse(catalog.getCurrentDatabase),
+              f.name.funcName)
+          }
+      }
+    }
+
+    def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
+      val funcName = if (conf.caseSensitiveAnalysis) {
+        name.funcName
+      } else {
+        name.funcName.toLowerCase(Locale.ROOT)
+      }
+
+      val databaseName = name.database match {
+        case Some(a) => formatDatabaseName(a)
+        case None => catalog.getCurrentDatabase
+      }
+
+      FunctionIdentifier(funcName, Some(databaseName))
+    }
+
+    protected def formatDatabaseName(name: String): String = {
+      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
     }
   }
 
