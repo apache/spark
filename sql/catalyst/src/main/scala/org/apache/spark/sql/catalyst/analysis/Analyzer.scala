@@ -1114,7 +1114,8 @@ class Analyzer(
       case sa @ Sort(_, _, AnalysisBarrier(child: Aggregate)) => sa
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
+      case s @ Sort(order, _, child)
+          if (!s.resolved || s.missingInput.nonEmpty) && child.resolved =>
         val (newOrder, newChild) = resolveExprsAndAddMissingAttrs(order, child)
         val ordering = newOrder.map(_.asInstanceOf[SortOrder])
         if (child.output == newChild.output) {
@@ -1125,7 +1126,7 @@ class Analyzer(
           Project(child.output, newSort)
         }
 
-      case f @ Filter(cond, child) if !f.resolved && child.resolved =>
+      case f @ Filter(cond, child) if (!f.resolved || f.missingInput.nonEmpty) && child.resolved =>
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
         if (child.output == newChild.output) {
           f.copy(condition = newCond.head)
@@ -1136,10 +1137,17 @@ class Analyzer(
         }
     }
 
+    /**
+     * This method tries to resolve expressions and find missing attributes recursively. Specially,
+     * when the expressions used in `Sort` or `Filter` contain unresolved attributes or resolved
+     * attributes which are missed from child output. This method tries to find the missing
+     * attributes out and add into the projection.
+     */
     private def resolveExprsAndAddMissingAttrs(
         exprs: Seq[Expression], plan: LogicalPlan): (Seq[Expression], LogicalPlan) = {
-      if (exprs.forall(_.resolved)) {
-        // All given expressions are resolved, no need to continue anymore.
+      // Missing attributes can be unresolved attributes or resolved attributes which are not in
+      // the output attributes of the plan.
+      if (exprs.forall(e => e.resolved && e.references.subsetOf(plan.outputSet))) {
         (exprs, plan)
       } else {
         plan match {
@@ -1150,15 +1158,19 @@ class Analyzer(
             (newExprs, AnalysisBarrier(newChild))
 
           case p: Project =>
+            // Resolving expressions against current plan.
             val maybeResolvedExprs = exprs.map(resolveExpression(_, p))
+            // Recursively resolving expressions on the child of current plan.
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, p.child)
-            val missingAttrs = AttributeSet(newExprs) -- AttributeSet(maybeResolvedExprs)
+            // If some attributes used by expressions are resolvable only on the rewritten child
+            // plan, we need to add them into original projection.
+            val missingAttrs = (AttributeSet(newExprs) -- p.outputSet).intersect(newChild.outputSet)
             (newExprs, Project(p.projectList ++ missingAttrs, newChild))
 
           case a @ Aggregate(groupExprs, aggExprs, child) =>
             val maybeResolvedExprs = exprs.map(resolveExpression(_, a))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, child)
-            val missingAttrs = AttributeSet(newExprs) -- AttributeSet(maybeResolvedExprs)
+            val missingAttrs = (AttributeSet(newExprs) -- a.outputSet).intersect(newChild.outputSet)
             if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
               // All the missing attributes are grouping expressions, valid case.
               (newExprs, a.copy(aggregateExpressions = aggExprs ++ missingAttrs, child = newChild))
@@ -1478,7 +1490,11 @@ class Analyzer(
 
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
-          val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
+          // If a sort order is unresolved, containing references not in aggregate, or containing
+          // `AggregateExpression`, we need to push down it to the underlying aggregate operator.
+          val unresolvedSortOrders = sortOrder.filter { s =>
+            !s.resolved || !s.references.subsetOf(aggregate.outputSet) || containsAggregate(s)
+          }
           val aliasedOrdering =
             unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
