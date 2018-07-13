@@ -2388,7 +2388,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
   }
 
-  test("SPARK-24781: Using a reference from Dataset in Filter/Sort might not work") {
+  test("SPARK-24781: Using a reference from Dataset in Filter/Sort") {
     val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
     val filter1 = df.select(df("name")).filter(df("id") === 0)
     val filter2 = df.select(col("name")).filter(col("id") === 0)
@@ -2397,8 +2397,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val sort1 = df.select(df("name")).orderBy(df("id"))
     val sort2 = df.select(col("name")).orderBy(col("id"))
     checkAnswer(sort1, sort2.collect())
+  }
 
-    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+  test("SPARK-24781: Using a reference not in aggregation in Filter/Sort") {
+     withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+      val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
+
       val aggPlusSort1 = df.groupBy(df("name")).agg(count(df("name"))).orderBy(df("name"))
       val aggPlusSort2 = df.groupBy(col("name")).agg(count(col("name"))).orderBy(col("name"))
       checkAnswer(aggPlusSort1, aggPlusSort2.collect())
