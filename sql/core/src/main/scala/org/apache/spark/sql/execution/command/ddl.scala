@@ -820,6 +820,20 @@ object DDLUtils {
     table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
   }
 
+  def convertSchema(table: CatalogTable, sparkSession: SparkSession): Boolean = {
+    val validProvider = table.provider.isDefined
+    if (validProvider &&
+      table.provider.get.toLowerCase(Locale.ROOT).contains("parquet")) {
+      sparkSession.sqlContext.conf.getConfString("spark.sql.hive.convertMetastoreParquet").
+        toBoolean
+    } else if (validProvider && table.provider.get.toLowerCase(Locale.ROOT).contains("orc")) {
+        sparkSession.sqlContext.conf.getConfString("spark.sql.hive.convertMetastoreOrc").
+          toBoolean
+    } else {
+      true
+    }
+  }
+
   /**
    * Throws a standard error for actions that require partitionProvider = hive.
    */
