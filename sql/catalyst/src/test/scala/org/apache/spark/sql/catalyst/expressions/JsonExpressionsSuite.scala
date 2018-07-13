@@ -424,7 +424,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
     val output = InternalRow(1) :: Nil
     checkEvaluation(
-      JsonToStructs(schema, Map("unpackArray" -> "true"), Literal(input), gmtId, true),
+      JsonToStructs(schema, Map("unpackArray" -> "true"), Literal(input), gmtId),
       output)
   }
 
@@ -433,7 +433,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
     val output = null
     checkEvaluation(
-      JsonToStructs(schema, Map("unpackArray" -> "false"), Literal(input), gmtId, true),
+      JsonToStructs(schema, Map("unpackArray" -> "false"), Literal(input), gmtId),
       output)
   }
 
