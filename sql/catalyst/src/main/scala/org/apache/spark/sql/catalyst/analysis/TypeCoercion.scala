@@ -188,7 +188,7 @@ object TypeCoercion {
     if (types.isEmpty) {
       None
     } else {
-      types.tail.foldLeft(Option(types.head)) {
+      types.tail.foldLeft[Option[DataType]](Some(types.head)) {
         case (Some(t1), t2) => findCommonTypeDifferentOnlyInNullFlags(t1, t2)
         case _ => None
       }
@@ -270,12 +270,15 @@ object TypeCoercion {
     }
   }
 
-  private def haveSameType(exprs: Seq[Expression]): Boolean = {
-    if (exprs.size <= 1) {
+  /**
+   * Check whether the given types are equal ignoring nullable, containsNull and valueContainsNull.
+   */
+  def haveSameType(types: Seq[DataType]): Boolean = {
+    if (types.size <= 1) {
       true
     } else {
-      val head = exprs.head.dataType
-      exprs.tail.forall(_.dataType.sameType(head))
+      val head = types.head
+      types.tail.forall(_.sameType(head))
     }
   }
 
@@ -556,7 +559,7 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ CreateArray(children) if !haveSameType(children) =>
+      case a @ CreateArray(children) if !haveSameType(children.map(_.dataType)) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => CreateArray(children.map(castIfNotSameType(_, finalDataType)))
@@ -564,7 +567,7 @@ object TypeCoercion {
         }
 
       case c @ Concat(children) if children.forall(c => ArrayType.acceptsType(c.dataType)) &&
-        !c.areInputTypesForMergingEqual =>
+        !haveSameType(c.inputTypesForMerging) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => Concat(children.map(castIfNotSameType(_, finalDataType)))
@@ -579,7 +582,8 @@ object TypeCoercion {
           case None => aj
         }
 
-      case s @ Sequence(_, _, _, timeZoneId) if !haveSameType(s.coercibleChildren) =>
+      case s @ Sequence(_, _, _, timeZoneId)
+          if !haveSameType(s.coercibleChildren.map(_.dataType)) =>
         val types = s.coercibleChildren.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(widerDataType) => s.castChildrenTo(widerDataType)
@@ -587,7 +591,7 @@ object TypeCoercion {
         }
 
       case m @ MapConcat(children) if children.forall(c => MapType.acceptsType(c.dataType)) &&
-        !m.areInputTypesForMergingEqual =>
+          !haveSameType(m.inputTypesForMerging) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => MapConcat(children.map(castIfNotSameType(_, finalDataType)))
@@ -595,25 +599,17 @@ object TypeCoercion {
         }
 
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
-        (!haveSameType(m.keys) || !haveSameType(m.values)) =>
-        val newKeys = if (haveSameType(m.keys)) {
-          m.keys
-        } else {
-          val types = m.keys.map(_.dataType)
-          findWiderCommonType(types) match {
-            case Some(finalDataType) => m.keys.map(castIfNotSameType(_, finalDataType))
-            case None => m.keys
-          }
+          (!haveSameType(m.keys.map(_.dataType)) || !haveSameType(m.values.map(_.dataType))) =>
+        val keyTypes = m.keys.map(_.dataType)
+        val newKeys = findWiderCommonType(keyTypes) match {
+          case Some(finalDataType) => m.keys.map(castIfNotSameType(_, finalDataType))
+          case None => m.keys
         }
 
-        val newValues = if (haveSameType(m.values)) {
-          m.values
-        } else {
-          val types = m.values.map(_.dataType)
-          findWiderCommonType(types) match {
-            case Some(finalDataType) => m.values.map(castIfNotSameType(_, finalDataType))
-            case None => m.values
-          }
+        val valueTypes = m.values.map(_.dataType)
+        val newValues = findWiderCommonType(valueTypes) match {
+          case Some(finalDataType) => m.values.map(castIfNotSameType(_, finalDataType))
+          case None => m.values
         }
 
         CreateMap(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
@@ -636,7 +632,7 @@ object TypeCoercion {
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
       // compatible with every child column.
-      case c @ Coalesce(es) if !c.areInputTypesForMergingEqual =>
+      case c @ Coalesce(es) if !haveSameType(c.inputTypesForMerging) =>
         val types = es.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => Coalesce(es.map(castIfNotSameType(_, finalDataType)))
@@ -646,14 +642,14 @@ object TypeCoercion {
       // When finding wider type for `Greatest` and `Least`, we should handle decimal types even if
       // we need to truncate, but we should not promote one side to string if the other side is
       // string.g
-      case g @ Greatest(children) if !g.areInputTypesForMergingEqual =>
+      case g @ Greatest(children) if !haveSameType(g.inputTypesForMerging) =>
         val types = children.map(_.dataType)
         findWiderTypeWithoutStringPromotion(types) match {
           case Some(finalDataType) => Greatest(children.map(castIfNotSameType(_, finalDataType)))
           case None => g
         }
 
-      case l @ Least(children) if !l.areInputTypesForMergingEqual =>
+      case l @ Least(children) if !haveSameType(l.inputTypesForMerging) =>
         val types = children.map(_.dataType)
         findWiderTypeWithoutStringPromotion(types) match {
           case Some(finalDataType) => Least(children.map(castIfNotSameType(_, finalDataType)))
@@ -698,27 +694,14 @@ object TypeCoercion {
   object CaseWhenCoercion extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case c: CaseWhen if c.childrenResolved && !c.areInputTypesForMergingEqual =>
+      case c: CaseWhen if c.childrenResolved && !haveSameType(c.inputTypesForMerging) =>
         val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
         maybeCommonType.map { commonType =>
-          var changed = false
           val newBranches = c.branches.map { case (condition, value) =>
-            if (value.dataType.sameType(commonType)) {
-              (condition, value)
-            } else {
-              changed = true
-              (condition, Cast(value, commonType))
-            }
+            (condition, castIfNotSameType(value, commonType))
           }
-          val newElseValue = c.elseValue.map { value =>
-            if (value.dataType.sameType(commonType)) {
-              value
-            } else {
-              changed = true
-              Cast(value, commonType)
-            }
-          }
-          if (changed) CaseWhen(newBranches, newElseValue) else c
+          val newElseValue = c.elseValue.map(castIfNotSameType(_, commonType))
+          CaseWhen(newBranches, newElseValue)
         }.getOrElse(c)
     }
   }
@@ -731,7 +714,7 @@ object TypeCoercion {
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
-      case i @ If(pred, left, right) if !i.areInputTypesForMergingEqual =>
+      case i @ If(pred, left, right) if !haveSameType(i.inputTypesForMerging) =>
         findWiderTypeForTwo(left.dataType, right.dataType).map { widestType =>
           val newLeft = castIfNotSameType(left, widestType)
           val newRight = castIfNotSameType(right, widestType)

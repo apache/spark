@@ -180,13 +180,11 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure(
         s"$prettyName expects a positive even number of arguments.")
-    } else if (keys.length > 1 &&
-      keys.map(_.dataType).sliding(2, 1).exists { case Seq(t1, t2) => !t1.sameType(t2) }) {
+    } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
       TypeCheckResult.TypeCheckFailure(
         "The given keys of function map should all be the same type, but they are " +
           keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else if (values.length > 1 &&
-      values.map(_.dataType).sliding(2, 1).exists { case Seq(t1, t2) => !t1.sameType(t2) }) {
+    } else if (!TypeCoercion.haveSameType(values.map(_.dataType))) {
       TypeCheckResult.TypeCheckFailure(
         "The given values of function map should all be the same type, but they are " +
           values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
