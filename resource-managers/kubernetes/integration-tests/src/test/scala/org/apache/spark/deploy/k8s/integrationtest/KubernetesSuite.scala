@@ -196,6 +196,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
         .withNewSpec()
           .withServiceAccountName("default")
           .addNewContainer()
+            .withName("spark-example")
             .withImage(image)
             .withImagePullPolicy("IfNotPresent")
             .withCommand("/opt/spark/bin/run-example")
