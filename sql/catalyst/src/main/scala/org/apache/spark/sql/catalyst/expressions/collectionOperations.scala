@@ -4530,33 +4530,33 @@ object ArrayIntersect {
     val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
     var alreadySeenNull = false
     var i = 0
-    while (i < array1.numElements()) {
+    while (i < array2.numElements()) {
       var found = false
-      val elem1 = array1.get(i, elementType)
-      if (array1.isNullAt(i)) {
+      val elem2 = array2.get(i, elementType)
+      if (array2.isNullAt(i)) {
         if (!alreadySeenNull) {
           var j = 0
-          while (!found && j < array2.numElements()) {
-            if (array2.isNullAt(j)) {
+          while (!found && j < array1.numElements()) {
+            if (array1.isNullAt(j)) {
               found = true
             }
             j += 1
           }
-          // array2 is scaned only once for null element
+          // array1 is scaned only once for null element
           alreadySeenNull = true
         }
       } else {
         var j = 0
-        while (!found && j < array2.numElements()) {
-          if (!array2.isNullAt(j)) {
-            val elem2 = array2.get(j, elementType)
+        while (!found && j < array1.numElements()) {
+          if (!array1.isNullAt(j)) {
+            val elem1 = array1.get(j, elementType)
             if (ordering.equiv(elem1, elem2)) {
-              // check whether elem2 is already stored in arrayBuffer
+              // check whether elem1 is already stored in arrayBuffer
               var foundArrayBuffer = false
               var k = 0
               while (!foundArrayBuffer && k < arrayBuffer.size) {
                 val va = arrayBuffer(k)
-                if (va != null && ordering.equiv(va, elem2)) {
+                if (va != null && ordering.equiv(va, elem1)) {
                   foundArrayBuffer = true
                 }
                 k += 1
@@ -4570,7 +4570,7 @@ object ArrayIntersect {
         }
       }
       if (found) {
-        arrayBuffer += elem1
+        arrayBuffer += elem2
       }
       i += 1
     }
