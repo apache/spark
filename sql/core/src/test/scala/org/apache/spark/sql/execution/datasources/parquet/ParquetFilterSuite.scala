@@ -825,13 +825,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       parquetFilters.createFilter(parquetSchema, sources.In("a", Array(10, 10)))
     }
 
-    assertResult(Some(or(
-      FilterApi.eq(intColumn("a"), 10: Integer),
-      FilterApi.eq(intColumn("a"), 20: Integer)))
-    ) {
-      parquetFilters.createFilter(parquetSchema, sources.In("a", Array(10, 20)))
-    }
-
     assertResult(Some(or(or(
       FilterApi.eq(intColumn("a"), 10: Integer),
       FilterApi.eq(intColumn("a"), 20: Integer)),
@@ -847,15 +840,23 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     import testImplicits._
     withTempPath { path =>
-      (0 to 1024).toDF("a").selectExpr("if (a = 1024, null, a) AS a") // convert 1024 to null
+      val data = 0 to 1024
+      data.toDF("a").selectExpr("if (a = 1024, null, a) AS a") // convert 1024 to null
         .coalesce(1).write.option("parquet.block.size", 512)
         .parquet(path.getAbsolutePath)
       val df = spark.read.parquet(path.getAbsolutePath)
       Seq(true, false).foreach { pushEnabled =>
         withSQLConf(
           SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushEnabled.toString) {
-          Seq(1, 5, 10, 11, 1000).foreach { count =>
-            assert(df.where(s"a in(${Range(0, count).mkString(",")})").count() === count)
+          Seq(1, 5, 10, 11).foreach { count =>
+            val filter = s"a in(${Range(0, count).mkString(",")})"
+            assert(df.where(filter).count() === count)
+            val actual = stripSparkFilter(df.where(filter)).collect().length
+            if (pushEnabled && count <= conf.parquetFilterPushDownInFilterThreshold) {
+              assert(actual > 1 && actual < data.length)
+            } else {
+              assert(actual === data.length)
+            }
           }
           assert(df.where("a in(null)").count() === 0)
           assert(df.where("a = null").count() === 0)

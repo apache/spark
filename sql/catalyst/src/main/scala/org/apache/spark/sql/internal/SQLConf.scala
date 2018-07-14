@@ -391,10 +391,11 @@ object SQLConf {
       .doc("The maximum number of values to filter push-down optimization for IN predicate. " +
         "Large threshold won't necessarily provide much better performance. " +
         "The experiment argued that 300 is the limit threshold. " +
+        "By setting this value to 0 this feature can be disabled. " +
         "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
       .internal()
       .intConf
-      .checkValue(threshold => threshold > 0, "The threshold must be greater than 0.")
+      .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
       .createWithDefault(10)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")

@@ -366,13 +366,13 @@ class ParquetFileFormat
       val pushed = if (enableParquetFilterPushDown) {
         val parquetSchema = ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS)
           .getFileMetaData.getSchema
+        val parquetFilters = new ParquetFilters(pushDownDate,
+          pushDownStringStartWith, pushDownInFilterThreshold)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.
-          .flatMap(new ParquetFilters(pushDownDate, pushDownStringStartWith,
-              pushDownInFilterThreshold)
-          .createFilter(parquetSchema, _))
+          .flatMap(parquetFilters.createFilter(parquetSchema, _))
           .reduceOption(FilterApi.and)
       } else {
         None
