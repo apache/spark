@@ -39,6 +39,7 @@ import org.apache.spark.sql.types._
 class AvroSuite extends SparkFunSuite {
   val episodesFile = "src/test/resources/episodes.avro"
   val testFile = "src/test/resources/test.avro"
+  val episodesWithoutExtension = "src/test/resources/episodesAvro"
 
   private var spark: SparkSession = _
 
@@ -808,5 +809,10 @@ class AvroSuite extends SparkFunSuite {
       // Check if the written DataFrame is equals than read DataFrame
       assert(readDf.collect().sameElements(writeDf.collect()))
     }
+  }
+
+  test("reading files without .avro extension") {
+    val df = spark.read.avro(episodesWithoutExtension)
+    assert(df.count == 16)
   }
 }
