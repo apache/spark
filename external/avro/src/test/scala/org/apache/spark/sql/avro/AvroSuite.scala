@@ -629,11 +629,13 @@ class AvroSuite extends SparkFunSuite {
         FileUtils.touch(new File(dir, "test"))
         try {
           spark.sqlContext.sparkContext
-            .hadoopConfiguration.set("avro.mapred.ignore.inputs.without.extension", "true")
+            .hadoopConfiguration
+            .set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
           spark.read.avro(dir.toString)
         } finally {
           spark.sqlContext.sparkContext
-            .hadoopConfiguration.unset("avro.mapred.ignore.inputs.without.extension")        }
+            .hadoopConfiguration
+            .unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)        }
       }
     }
 
@@ -695,12 +697,22 @@ class AvroSuite extends SparkFunSuite {
 
       Files.createFile(new File(tempSaveDir, "non-avro").toPath)
 
-      val newDf = spark
-        .read
-        .option(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
-        .avro(tempSaveDir)
+      val count = try {
+        spark.sqlContext.sparkContext
+          .hadoopConfiguration
+          .set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+        val newDf = spark
+          .read
+          .avro(tempSaveDir)
+        newDf.count()
+      } finally {
+        spark.sqlContext.sparkContext
+          .hadoopConfiguration
+          .unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+        -1
+      }
 
-      assert(newDf.count == 8)
+      assert(count == 8)
     }
   }
 
@@ -817,7 +829,7 @@ class AvroSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-24805: reading files without .avro extension") {
+  test("SPARK-24805: do not ignore files without .avro extension by default") {
     val df1 = spark.read.avro(episodesWithoutExtension)
     assert(df1.count == 8)
 
