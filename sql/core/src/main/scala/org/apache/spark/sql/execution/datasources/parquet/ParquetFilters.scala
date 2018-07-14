@@ -316,16 +316,16 @@ private[parquet] class ParquetFilters(
   def createFilter(schema: MessageType, predicate: sources.Filter): Option[FilterPredicate] = {
     val nameToType = getFieldMap(schema)
 
+    // Decimal type must make sure that filter value's scale matched the file.
+    // If doesn't matched, which would cause data corruption.
     def isDecimalMatched(value: Any, decimalMeta: DecimalMetadata): Boolean = value match {
       case decimal: JBigDecimal =>
         decimal.scale == decimalMeta.getScale
       case _ => false
     }
 
-    // Decimal type must make sure that filter value's scale matched the file.
-    // If doesn't matched, which would cause data corruption.
-    // Other types must make sure that filter value's type matched the file.
-    // Otherwise may cause a cast exception.
+    // Parquet's type in the given file should be matched to the value's type
+    // in the pushed filter in order to push down the filter to Parquet.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
       value == null || (nameToType(name) match {
         case ParquetBooleanType => value.isInstanceOf[JBoolean]
