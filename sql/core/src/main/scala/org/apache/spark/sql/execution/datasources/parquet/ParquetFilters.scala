@@ -37,7 +37,10 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: Boolean) {
+private[parquet] class ParquetFilters(
+    pushDownDate: Boolean,
+    pushDownStartWith: Boolean,
+    pushDownInFilterThreshold: Int) {
 
   private case class ParquetSchemaType(
       originalType: OriginalType,
@@ -232,6 +235,15 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
     // See SPARK-20364.
     def canMakeFilterOn(name: String): Boolean = nameToType.contains(name) && !name.contains(".")
 
+    // All DataTypes that support `makeEq` can provide better performance.
+    def shouldConvertInPredicate(name: String): Boolean = nameToType(name) match {
+      case ParquetBooleanType | ParquetByteType | ParquetShortType | ParquetIntegerType
+           | ParquetLongType | ParquetFloatType | ParquetDoubleType | ParquetStringType
+           | ParquetBinaryType => true
+      case ParquetDateType if pushDownDate => true
+      case _ => false
+    }
+
     // NOTE:
     //
     // For any comparison operator `cmp`, both `a cmp NULL` and `NULL cmp a` evaluate to `NULL`,
@@ -294,6 +306,12 @@ private[parquet] class ParquetFilters(pushDownDate: Boolean, pushDownStartWith: 
 
       case sources.Not(pred) =>
         createFilter(schema, pred).map(FilterApi.not)
+
+      case sources.In(name, values) if canMakeFilterOn(name) && shouldConvertInPredicate(name)
+        && values.distinct.length <= pushDownInFilterThreshold =>
+        values.distinct.flatMap { v =>
+          makeEq.lift(nameToType(name)).map(_(name, v))
+        }.reduceLeftOption(FilterApi.or)
 
       case sources.StringStartsWith(name, prefix) if pushDownStartWith && canMakeFilterOn(name) =>
         Option(prefix).map { v =>
