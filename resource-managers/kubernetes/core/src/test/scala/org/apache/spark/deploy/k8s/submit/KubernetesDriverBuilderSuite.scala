@@ -17,7 +17,8 @@
 package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
+import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 
@@ -32,6 +33,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val PYSPARK_STEP_TYPE = "pyspark-bindings"
   private val R_STEP_TYPE = "r-bindings"
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
+  private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicDriverFeatureStep])
@@ -60,6 +62,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
 
+  private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
+
   private val builderUnderTest: KubernetesDriverBuilder =
     new KubernetesDriverBuilder(
       _ => basicFeatureStep,
@@ -68,6 +73,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => secretsStep,
       _ => envSecretsStep,
       _ => localDirsStep,
+      _ => mountVolumesStep,
       _ => javaStep,
       _ => pythonStep,
       _ => rStep)
@@ -87,6 +93,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -112,6 +119,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map("secret" -> "secretMountPath"),
       Map("EnvName" -> "SecretName:secretKey"),
       Map.empty,
+      Nil,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -139,6 +147,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -164,6 +173,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -172,6 +182,38 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
       PYSPARK_STEP_TYPE)
+  }
+
+  test("Apply volumes step if mounts are present.") {
+    val volumeSpec = KubernetesVolumeSpec(
+      "volume",
+      "/tmp",
+      false,
+      KubernetesHostPathVolumeConf("/path"))
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        None,
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      volumeSpec :: Nil,
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      MOUNT_VOLUMES_STEP_TYPE,
+      JAVA_STEP_TYPE)
   }
 
   test("Apply R step if main resource is R.") {
@@ -189,6 +231,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
