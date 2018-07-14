@@ -624,7 +624,7 @@ class AvroSuite extends SparkFunSuite {
       spark.read.avro("*/*/*/*/*/*/*/something.avro")
     }
 
-    intercept[FileNotFoundException] {
+    intercept[java.io.IOException] {
       TestUtils.withTempDir { dir =>
         FileUtils.touch(new File(dir, "test"))
         spark.read.avro(dir.toString)
@@ -812,7 +812,14 @@ class AvroSuite extends SparkFunSuite {
   }
 
   test("reading files without .avro extension") {
-    val df = spark.read.avro(episodesWithoutExtension)
-    assert(df.count == 16)
+    val df1 = spark.read.avro(episodesWithoutExtension)
+    assert(df1.count == 8)
+
+    val schema = new StructType()
+      .add("title", StringType)
+      .add("air_date", StringType)
+      .add("doctor", IntegerType)
+    val df2 = spark.read.schema(schema).avro(episodesWithoutExtension)
+    assert(df2.count == 8)
   }
 }
