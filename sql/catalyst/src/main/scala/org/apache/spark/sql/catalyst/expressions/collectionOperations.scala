@@ -4537,9 +4537,7 @@ object ArrayIntersect {
         if (!alreadySeenNull) {
           var j = 0
           while (!found && j < array1.numElements()) {
-            if (array1.isNullAt(j)) {
-              found = true
-            }
+            found = array1.isNullAt(j)
             j += 1
           }
           // array1 is scaned only once for null element
@@ -4556,14 +4554,10 @@ object ArrayIntersect {
               var k = 0
               while (!foundArrayBuffer && k < arrayBuffer.size) {
                 val va = arrayBuffer(k)
-                if (va != null && ordering.equiv(va, elem1)) {
-                  foundArrayBuffer = true
-                }
+                foundArrayBuffer = (va != null) && ordering.equiv(va, elem1)
                 k += 1
               }
-              if (!foundArrayBuffer) {
-                found = true
-              }
+              found = !foundArrayBuffer
             }
           }
           j += 1
