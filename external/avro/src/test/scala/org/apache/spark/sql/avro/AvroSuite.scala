@@ -624,10 +624,16 @@ class AvroSuite extends SparkFunSuite {
       spark.read.avro("*/*/*/*/*/*/*/something.avro")
     }
 
-    intercept[java.io.IOException] {
+    intercept[FileNotFoundException] {
       TestUtils.withTempDir { dir =>
         FileUtils.touch(new File(dir, "test"))
-        spark.read.avro(dir.toString)
+        try {
+          spark.sqlContext.sparkContext
+            .hadoopConfiguration.set("avro.mapred.ignore.inputs.without.extension", "true")
+          spark.read.avro(dir.toString)
+        } finally {
+          spark.sqlContext.sparkContext
+            .hadoopConfiguration.unset("avro.mapred.ignore.inputs.without.extension")        }
       }
     }
 
