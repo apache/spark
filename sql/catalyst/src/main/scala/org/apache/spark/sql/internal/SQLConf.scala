@@ -395,6 +395,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
+    buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
+      .doc("The maximum number of values to filter push-down optimization for IN predicate. " +
+        "Large threshold won't necessarily provide much better performance. " +
+        "The experiment argued that 300 is the limit threshold. " +
+        "By setting this value to 0 this feature can be disabled. " +
+        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+      .internal()
+      .intConf
+      .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
+      .createWithDefault(10)
+
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
       "versions, when converting Parquet schema to Spark SQL schema and vice versa.")
@@ -1495,6 +1507,9 @@ class SQLConf extends Serializable with Logging {
 
   def parquetFilterPushDownStringStartWith: Boolean =
     getConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+
+  def parquetFilterPushDownInFilterThreshold: Int =
+    getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
