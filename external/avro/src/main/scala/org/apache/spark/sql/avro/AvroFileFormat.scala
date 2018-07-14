@@ -92,7 +92,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         }
       }
 
-    SchemaConverters.toCatalystType(avroSchema).dataType match {
+    SchemaConverters.toSqlType(avroSchema).dataType match {
       case t: StructType => Some(t)
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:

@@ -65,7 +65,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
   def deserialize(data: Any): Any = converter(data)
 
   /**
-   * Creates a writer to writer avro values to Catalyst values at the given ordinal with the given
+   * Creates a writer to write avro values to Catalyst values at the given ordinal with the given
    * updater.
    */
   private def newWriter(

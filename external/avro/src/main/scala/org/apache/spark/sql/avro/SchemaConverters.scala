@@ -33,14 +33,8 @@ object SchemaConverters {
 
   /**
    * This function takes an avro schema and returns a sql schema.
-   * An alias name of toCatalystType.
    */
-  def toSqlType(avroSchema: Schema): SchemaType = toCatalystType(avroSchema)
-
-  /**
-   * This function takes an avro schema and returns a sql schema.
-   */
-  def toCatalystType(avroSchema: Schema): SchemaType = {
+  def toSqlType(avroSchema: Schema): SchemaType = {
     avroSchema.getType match {
       case INT => SchemaType(IntegerType, nullable = false)
       case STRING => SchemaType(StringType, nullable = false)
@@ -54,20 +48,20 @@ object SchemaConverters {
 
       case RECORD =>
         val fields = avroSchema.getFields.asScala.map { f =>
-          val schemaType = toCatalystType(f.schema())
+          val schemaType = toSqlType(f.schema())
           StructField(f.name, schemaType.dataType, schemaType.nullable)
         }
 
         SchemaType(StructType(fields), nullable = false)
 
       case ARRAY =>
-        val schemaType = toCatalystType(avroSchema.getElementType)
+        val schemaType = toSqlType(avroSchema.getElementType)
         SchemaType(
           ArrayType(schemaType.dataType, containsNull = schemaType.nullable),
           nullable = false)
 
       case MAP =>
-        val schemaType = toCatalystType(avroSchema.getValueType)
+        val schemaType = toSqlType(avroSchema.getValueType)
         SchemaType(
           MapType(StringType, schemaType.dataType, valueContainsNull = schemaType.nullable),
           nullable = false)
@@ -77,13 +71,13 @@ object SchemaConverters {
           // In case of a union with null, eliminate it and make a recursive call
           val remainingUnionTypes = avroSchema.getTypes.asScala.filterNot(_.getType == NULL)
           if (remainingUnionTypes.size == 1) {
-            toCatalystType(remainingUnionTypes.head).copy(nullable = true)
+            toSqlType(remainingUnionTypes.head).copy(nullable = true)
           } else {
-            toCatalystType(Schema.createUnion(remainingUnionTypes.asJava)).copy(nullable = true)
+            toSqlType(Schema.createUnion(remainingUnionTypes.asJava)).copy(nullable = true)
           }
         } else avroSchema.getTypes.asScala.map(_.getType) match {
           case Seq(t1) =>
-            toCatalystType(avroSchema.getTypes.get(0))
+            toSqlType(avroSchema.getTypes.get(0))
           case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>
             SchemaType(LongType, nullable = false)
           case Seq(t1, t2) if Set(t1, t2) == Set(FLOAT, DOUBLE) =>
@@ -93,7 +87,7 @@ object SchemaConverters {
             // This is consistent with the behavior when converting between Avro and Parquet.
             val fields = avroSchema.getTypes.asScala.zipWithIndex.map {
               case (s, i) =>
-                val schemaType = toCatalystType(s)
+                val schemaType = toSqlType(s)
                 // All fields are nullable because only one of them is set at a time
                 StructField(s"member$i", schemaType.dataType, nullable = true)
             }
