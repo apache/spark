@@ -847,7 +847,7 @@ class SparkContext(object):
         A directory can be given if the recursive option is set to True.
         Currently directories are only supported for Hadoop-supported filesystems.
 
-        .. note:: A path can be added only once. Second addition of the same path is ignored.
+        .. note:: A path can be added only once. Subsequent additions of the same path are ignored.
 
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")
@@ -870,7 +870,7 @@ class SparkContext(object):
         file, a file in HDFS (or other Hadoop-supported filesystems), or an
         HTTP, HTTPS or FTP URI.
 
-        .. note:: A path can be added only once. Second addition of the same path is ignored.
+        .. note:: A path can be added only once. Subsequent additions of the same path are ignored.
         """
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix

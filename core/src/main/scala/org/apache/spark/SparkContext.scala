@@ -1497,7 +1497,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
    * use `SparkFiles.get(fileName)` to find its download location.
    *
-   * @note A path can be added only once. Second addition of the same path is ignored.
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String): Unit = {
     addFile(path, false)
@@ -1519,7 +1519,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param recursive if true, a directory can be given in `path`. Currently directories are
    * only supported for Hadoop-supported filesystems.
    *
-   * @note A path can be added only once. Second addition of the same path is ignored.
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
     val uri = new Path(path).toUri
@@ -1811,7 +1811,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
    * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    *
-   * @note A path can be added only once. Second addition of the same path is ignored.
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addJar(path: String) {
     def addJarFile(file: File): String = {

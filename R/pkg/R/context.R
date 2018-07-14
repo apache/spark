@@ -305,7 +305,7 @@ setCheckpointDirSC <- function(sc, dirName) {
 #' Currently directories are only supported for Hadoop-supported filesystems.
 #' Refer Hadoop-supported filesystems at \url{https://wiki.apache.org/hadoop/HCFS}.
 #'
-#' Note: A path can be added only once. Second addition of the same path is ignored.
+#' Note: A path can be added only once. Subsequent additions of the same path are ignored.
 #'
 #' @rdname spark.addFile
 #' @param path The path of the file to be added

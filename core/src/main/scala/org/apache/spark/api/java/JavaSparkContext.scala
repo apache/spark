@@ -669,7 +669,7 @@ class JavaSparkContext(val sc: SparkContext)
    * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
    * use `SparkFiles.get(fileName)` to find its download location.
    *
-   * @note A path can be added only once. Second addition of the same path is ignored.
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String) {
     sc.addFile(path)
@@ -684,7 +684,7 @@ class JavaSparkContext(val sc: SparkContext)
    * A directory can be given if the recursive option is set to true. Currently directories are only
    * supported for Hadoop-supported filesystems.
    *
-   * @note A path can be added only once. Second addition of the same path is ignored.
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
     sc.addFile(path, recursive)
@@ -695,7 +695,7 @@ class JavaSparkContext(val sc: SparkContext)
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI.
    *
-   * @note A path can be added only once. Second addition of the same path is ignored.
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addJar(path: String) {
     sc.addJar(path)
