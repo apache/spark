@@ -542,39 +542,39 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 1 tinyint row (value = CAST(63 AS tinyint)): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            3726 / 3775          4.2         236.9       1.0X
-Parquet Vectorized (Pushdown)                 3741 / 3789          4.2         237.9       1.0X
-Native ORC Vectorized                         2793 / 2909          5.6         177.6       1.3X
-Native ORC Vectorized (Pushdown)               530 /  561         29.7          33.7       7.0X
+Parquet Vectorized                            3461 / 3997          4.5         220.1       1.0X
+Parquet Vectorized (Pushdown)                  270 /  315         58.4          17.1      12.8X
+Native ORC Vectorized                         4107 / 5372          3.8         261.1       0.8X
+Native ORC Vectorized (Pushdown)               778 / 1553         20.2          49.5       4.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 10% tinyint rows (value < CAST(12 AS tinyint)): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            4385 / 4406          3.6         278.8       1.0X
-Parquet Vectorized (Pushdown)                 4398 / 4454          3.6         279.6       1.0X
-Native ORC Vectorized                         3420 / 3501          4.6         217.4       1.3X
-Native ORC Vectorized (Pushdown)              1395 / 1432         11.3          88.7       3.1X
+Parquet Vectorized                            4771 / 6655          3.3         303.3       1.0X
+Parquet Vectorized (Pushdown)                 1322 / 1606         11.9          84.0       3.6X
+Native ORC Vectorized                         4437 / 4572          3.5         282.1       1.1X
+Native ORC Vectorized (Pushdown)              1781 / 1976          8.8         113.2       2.7X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 50% tinyint rows (value < CAST(63 AS tinyint)): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            7307 / 7394          2.2         464.6       1.0X
-Parquet Vectorized (Pushdown)                 7411 / 7461          2.1         471.2       1.0X
-Native ORC Vectorized                         6501 / 7814          2.4         413.4       1.1X
-Native ORC Vectorized (Pushdown)              7341 / 8637          2.1         466.7       1.0X
+Parquet Vectorized                            7433 / 7752          2.1         472.6       1.0X
+Parquet Vectorized (Pushdown)                 5863 / 5913          2.7         372.8       1.3X
+Native ORC Vectorized                         7986 / 8084          2.0         507.7       0.9X
+Native ORC Vectorized (Pushdown)              6522 / 6608          2.4         414.6       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Select 90% tinyint rows (value < CAST(114 AS tinyint)): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                          11886 / 13122          1.3         755.7       1.0X
-Parquet Vectorized (Pushdown)               12557 / 14173          1.3         798.4       0.9X
-Native ORC Vectorized                       10758 / 11971          1.5         684.0       1.1X
-Native ORC Vectorized (Pushdown)            10564 / 10713          1.5         671.6       1.1X
+Parquet Vectorized                          11190 / 11519          1.4         711.4       1.0X
+Parquet Vectorized (Pushdown)               10861 / 11206          1.4         690.5       1.0X
+Native ORC Vectorized                       11622 / 12196          1.4         738.9       1.0X
+Native ORC Vectorized (Pushdown)            11377 / 11654          1.4         723.3       1.0X
 
 
