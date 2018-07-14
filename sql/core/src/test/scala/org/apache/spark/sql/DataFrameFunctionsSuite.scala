@@ -1204,42 +1204,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       )
     }
 
-<<<<<<< HEAD
     // Test with local relation, the Project will be evaluated without codegen
     simpleTest()
     // Test with cached relation, the Project will be evaluated with codegen
     df.cache()
     simpleTest()
-=======
-    checkAnswer(
-      df.select(concat($"i1", $"s1")),
-      Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
-    )
-    checkAnswer(
-      df.select(concat($"i1", $"i2", $"i3")),
-      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
-    )
-    checkAnswer(
-      df.filter(dummyFilter($"i1")).select(concat($"i1", $"i2", $"i3")),
-      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
-    )
-    checkAnswer(
-      df.selectExpr("concat(array(1, null), i2, i3)"),
-      Seq(Row(Seq(1, null, 2, 3, 5, 6)), Row(Seq(1, null, 2)))
-    )
-    checkAnswer(
-      df.select(concat($"s1", $"s2", $"s3")),
-      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
-    )
-    checkAnswer(
-      df.selectExpr("concat(s1, s2, s3)"),
-      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
-    )
-    checkAnswer(
-      df.filter(dummyFilter($"s1")) select (concat($"s1", $"s2", $"s3")),
-      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
-    )
->>>>>>> initial commit
 
     // Null test cases
     def nullTest(): Unit = {
@@ -1640,10 +1609,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df5.selectExpr("array_except(a, b)"), ans5)
 
     val df6 = Seq((null, null)).toDF("a", "b")
-    val ans6 = Row(null)
-    checkAnswer(df6.select(array_except($"a", $"b")), ans6)
-    checkAnswer(df6.selectExpr("array_except(a, b)"), ans6)
-
+    intercept[AnalysisException] {
+      df6.select(array_except($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df6.selectExpr("array_except(a, b)")
+    }
     val df7 = Seq((Array(1), Array("a"))).toDF("a", "b")
     intercept[AnalysisException] {
       df7.select(array_except($"a", $"b"))
