@@ -811,7 +811,7 @@ class AvroSuite extends SparkFunSuite {
     }
   }
 
-  test("reading files without .avro extension") {
+  test("SPARK-24805: reading files without .avro extension") {
     val df1 = spark.read.avro(episodesWithoutExtension)
     assert(df1.count == 8)
 
