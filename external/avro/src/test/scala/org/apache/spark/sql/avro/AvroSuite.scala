@@ -18,7 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.nio.file.Files
+import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.util.{TimeZone, UUID}
 
@@ -695,7 +695,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         newDf.count()
       } finally {
         hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
-        -1
       }
 
       assert(count == 8)
@@ -816,14 +815,19 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("SPARK-24805: do not ignore files without .avro extension by default") {
-    val df1 = spark.read.avro(episodesWithoutExtension)
-    assert(df1.count == 8)
+    withTempDir { dir =>
+      val fileWithoutExtension = s"${dir.getCanonicalPath}/episodes"
+      Files.copy(Paths.get(episodesFile), Paths.get(fileWithoutExtension))
 
-    val schema = new StructType()
-      .add("title", StringType)
-      .add("air_date", StringType)
-      .add("doctor", IntegerType)
-    val df2 = spark.read.schema(schema).avro(episodesWithoutExtension)
-    assert(df2.count == 8)
+      val df1 = spark.read.avro(fileWithoutExtension)
+      assert(df1.count == 8)
+
+      val schema = new StructType()
+        .add("title", StringType)
+        .add("air_date", StringType)
+        .add("doctor", IntegerType)
+      val df2 = spark.read.schema(schema).avro(fileWithoutExtension)
+      assert(df2.count == 8)
+    }
   }
 }
