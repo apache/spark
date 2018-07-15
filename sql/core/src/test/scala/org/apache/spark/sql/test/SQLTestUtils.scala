@@ -391,6 +391,10 @@ private[sql] trait SQLTestUtilsBase
     val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
     fs.makeQualified(hadoopPath).toUri
   }
+
+  protected def testFile(fileName: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
+  }
 }
 
 private[sql] object SQLTestUtils {

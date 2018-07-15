@@ -60,10 +60,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
 
-  private def testFile(fileName: String): String = {
-    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
-  }
-
   /** Verifies data and schema. */
   private def verifyCars(
       df: DataFrame,
