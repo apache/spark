@@ -576,7 +576,11 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         |  }]
         |}
       """.stripMargin
-    val result = spark.read.option(AvroFileFormat.AvroSchema, avroSchema).avro(testFile(testAvro)).collect()
+    val result = spark
+      .read
+      .option(AvroFileFormat.AvroSchema, avroSchema)
+      .avro(testFile(testAvro))
+      .collect()
     val expected = spark.read.avro(testFile(testAvro)).select("string").collect()
     assert(result.sameElements(expected))
   }
