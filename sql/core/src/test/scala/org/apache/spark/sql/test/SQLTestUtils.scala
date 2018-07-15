@@ -392,6 +392,9 @@ private[sql] trait SQLTestUtilsBase
     fs.makeQualified(hadoopPath).toUri
   }
 
+  /**
+   * Returns full path to the given file in the resouce folder
+   */
   protected def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
   }
