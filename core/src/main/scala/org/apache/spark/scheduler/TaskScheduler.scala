@@ -67,8 +67,10 @@ private[spark] trait TaskScheduler {
   // Get the default level of parallelism to use in the cluster, as a hint for sizing jobs.
   def defaultParallelism(): Int
 
+  // Get the number of CPU cores potentially available for submitted tasks at the moment.
   def numCores(): Int
 
+  // Get the number of executors potentially available in the cluster at the moment.
   def numExecutors(): Int
 
   /**
