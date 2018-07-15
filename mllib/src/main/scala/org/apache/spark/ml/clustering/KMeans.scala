@@ -360,7 +360,12 @@ class KMeans @Since("1.5.0") (
     val parentModel = algo.run(instances, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k), parentModel.trainingCost)
+      model.transform(dataset),
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      parentModel.numIter,
+      parentModel.trainingCost)
 
     model.setSummary(Some(summary))
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
@@ -392,6 +397,7 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param numIter  Number of iterations.
  * @param trainingCost K-means cost (sum of squared distances to the nearest centroid for all
  *                     points in the training dataset). This is equivalent to sklearn's inertia.
  */
@@ -402,5 +408,6 @@ class KMeansSummary private[clustering] (
     predictionCol: String,
     featuresCol: String,
     k: Int,
+    numIter: Int,
     @Since("2.4.0") val trainingCost: Double)
-  extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)
