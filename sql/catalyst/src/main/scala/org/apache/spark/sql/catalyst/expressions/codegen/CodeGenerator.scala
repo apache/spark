@@ -133,7 +133,7 @@ class CodegenContext {
   def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getCanonicalName)
+    val clsName = Option(className).getOrElse(getClassName(obj.getClass))
     s"(($clsName) references[$idx] /* $objName */)"
   }
 
@@ -1604,6 +1604,15 @@ object CodeGenerator extends Logging {
 
   def primitiveTypeName(dt: DataType): String = primitiveTypeName(javaType(dt))
 
+  def getClassName(cls: Class[_]): String = {
+    try {
+      return Option(cls.getCanonicalName).getOrElse(cls.getName)
+    } catch {
+      case err: InternalError =>
+        return cls.getName
+    }
+  }
+
   /**
    * Returns the Java type for a DataType.
    */
@@ -1624,7 +1633,7 @@ object CodeGenerator extends Logging {
     case _: MapType => "MapData"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
-    case ObjectType(cls) => Option(cls.getCanonicalName).getOrElse(cls.getName)
+    case ObjectType(cls) => getClassName(cls)
     case _ => "Object"
   }
 
