@@ -1586,12 +1586,24 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         val dir = path.getAbsolutePath
         spark.range(10).selectExpr("id % 2 AS p", "id AS c0", "id AS c1").write.partitionBy("p")
           .option("header", "true").csv(dir)
-        var df = spark.read.option("header", true).csv(dir).selectExpr("sum(p)", "count(c0)")
-        checkAnswer(df, Row(5, 10))
+        val df1 = spark.read.option("header", true).csv(dir).selectExpr("sum(p)", "count(c0)")
+        checkAnswer(df1, Row(5, 10))
 
         // empty required column case
-        df = spark.read.option("header", true).csv(dir).selectExpr("sum(p)")
-        checkAnswer(df, Row(5))
+        val df2 = spark.read.option("header", true).csv(dir).selectExpr("sum(p)")
+        checkAnswer(df2, Row(5))
+      }
+
+      // the case where tokens length != parsedSchema length
+      withTempPath { path =>
+        val dir = path.getAbsolutePath
+        Seq("1,2").toDF().write.text(dir)
+        // more tokens
+        val df1 = spark.read.schema("c0 int").format("csv").load(dir)
+        checkAnswer(df1, Row())
+        // less tokens
+        val df2 = spark.read.schema("c0 int, c1 int, c2 int").format("csv").load(dir)
+        checkAnswer(df2, Row())
       }
     }
   }

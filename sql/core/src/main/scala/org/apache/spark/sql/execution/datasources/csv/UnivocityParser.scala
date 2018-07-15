@@ -33,6 +33,14 @@ import org.apache.spark.sql.execution.datasources.FailureSafeParser
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+
+/**
+ * XXX.
+ *
+ * @param dataSchema
+ * @param requiredSchema
+ * @param options
+ */
 class UnivocityParser(
     dataSchema: StructType,
     requiredSchema: StructType,
@@ -52,12 +60,17 @@ class UnivocityParser(
 
   val tokenizer = {
     val parserSetting = options.asParserSettings
+    // When to-be-parsed schema is shorter than the to-be-read data schema, we let Univocity CSV
+    // parser select a sequence of fields for reading by their positions.
     if (options.columnPruning && requiredSchema.length < dataSchema.length) {
+    // if (parsedSchema.length < dataSchema.length) {
       parserSetting.selectIndexes(tokenIndexArr: _*)
     }
     new CsvParser(parserSetting)
   }
 
+  // When column pruning is enabled, the parser only parses the required columns based on
+  // their positions in the data schema.
   private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
 
   private val row = new GenericInternalRow(requiredSchema.length)
@@ -233,6 +246,8 @@ class UnivocityParser(
         new RuntimeException("Malformed CSV record"))
     } else {
       try {
+        // When the length of the returned tokens is identical to the length of the parsed schema,
+        // we just need to convert the tokens that correspond to the required columns.
         var i = 0
         while (i < requiredSchema.length) {
           row(i) = valueConverters(i).apply(getToken(tokens, i))
