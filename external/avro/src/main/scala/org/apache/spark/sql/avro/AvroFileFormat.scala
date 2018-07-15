@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
-import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.Schema
 import org.apache.avro.file.{DataFileConstants, DataFileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
@@ -38,8 +38,6 @@ import org.slf4j.LoggerFactory
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
@@ -118,8 +116,8 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       dataSchema: StructType): OutputWriterFactory = {
     val recordName = options.getOrElse("recordName", "topLevelRecord")
     val recordNamespace = options.getOrElse("recordNamespace", "")
-    val build = SchemaBuilder.record(recordName).namespace(recordNamespace)
-    val outputAvroSchema = SchemaConverters.convertStructToAvro(dataSchema, build, recordNamespace)
+    val outputAvroSchema = SchemaConverters.toAvroType(
+      dataSchema, nullable = false, recordName, recordNamespace)
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
     val AVRO_COMPRESSION_CODEC = "spark.sql.avro.compression.codec"
@@ -148,7 +146,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         log.error(s"unsupported compression codec $unknown")
     }
 
-    new AvroOutputWriterFactory(dataSchema, recordName, recordNamespace)
+    new AvroOutputWriterFactory(dataSchema, new SerializableSchema(outputAvroSchema))
   }
 
   override def buildReader(
@@ -205,13 +203,10 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         reader.sync(file.start)
         val stop = file.start + file.length
 
-        val rowConverter = SchemaConverters.createConverterToSQL(
-          userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
+        val deserializer =
+          new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
 
         new Iterator[InternalRow] {
-          // Used to convert `Row`s containing data columns into `InternalRow`s.
-          private val encoderForDataColumns = RowEncoder(requiredSchema)
-
           private[this] var completed = false
 
           override def hasNext: Boolean = {
@@ -228,14 +223,11 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
           }
 
           override def next(): InternalRow = {
-            if (reader.pastSync(stop)) {
+            if (!hasNext) {
               throw new NoSuchElementException("next on empty iterator")
             }
             val record = reader.next()
-            val safeDataRow = rowConverter(record).asInstanceOf[GenericRow]
-
-            // The safeDataRow is reused, we must do a copy
-            encoderForDataColumns.toRow(safeDataRow)
+            deserializer.deserialize(record).asInstanceOf[InternalRow]
           }
         }
       }
