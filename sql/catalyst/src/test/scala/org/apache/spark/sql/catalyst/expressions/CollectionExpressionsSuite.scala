@@ -24,43 +24,48 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  def testSize(legacySizeOfNull: Boolean, sizeOfNull: Any): Unit = {
+  def testSize(sizeOfNull: Any): Unit = {
     val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
     val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
     val a2 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
 
-    checkEvaluation(Size(a0, legacySizeOfNull), 3)
-    checkEvaluation(Size(a1, legacySizeOfNull), 0)
-    checkEvaluation(Size(a2, legacySizeOfNull), 2)
+    checkEvaluation(Size(a0), 3)
+    checkEvaluation(Size(a1), 0)
+    checkEvaluation(Size(a2), 2)
 
     val m0 = Literal.create(Map("a" -> "a", "b" -> "b"), MapType(StringType, StringType))
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
     val m2 = Literal.create(Map("a" -> "a"), MapType(StringType, StringType))
 
-    checkEvaluation(Size(m0, legacySizeOfNull), 2)
-    checkEvaluation(Size(m1, legacySizeOfNull), 0)
-    checkEvaluation(Size(m2, legacySizeOfNull), 1)
+    checkEvaluation(Size(m0), 2)
+    checkEvaluation(Size(m1), 0)
+    checkEvaluation(Size(m2), 1)
 
     checkEvaluation(
-      Size(Literal.create(null, MapType(StringType, StringType)), legacySizeOfNull),
+      Size(Literal.create(null, MapType(StringType, StringType))),
       expected = sizeOfNull)
     checkEvaluation(
-      Size(Literal.create(null, ArrayType(StringType)), legacySizeOfNull),
+      Size(Literal.create(null, ArrayType(StringType))),
       expected = sizeOfNull)
   }
 
   test("Array and Map Size - legacy") {
-    testSize(legacySizeOfNull = true, sizeOfNull = -1)
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSize(sizeOfNull = -1)
+    }
   }
 
   test("Array and Map Size") {
-    testSize(legacySizeOfNull = false, sizeOfNull = null)
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSize(sizeOfNull = null)
+    }
   }
 
   test("MapKeys/MapValues") {
@@ -1298,5 +1303,86 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayDistinct(c0), Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)))
     checkEvaluation(ArrayDistinct(c1), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
     checkEvaluation(ArrayDistinct(c2), Seq[Seq[Int]](null, Seq[Int](2, 1)))
+  }
+
+  test("Array Union") {
+    val a00 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, containsNull = false))
+    val a02 = Literal.create(Seq(1, 2, null, 4, 5), ArrayType(IntegerType, containsNull = true))
+    val a03 = Literal.create(Seq(-5, 4, -3, 2, 4), ArrayType(IntegerType, containsNull = false))
+    val a04 = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
+    val a05 = Literal.create(Seq[Byte](1, 2, 3), ArrayType(ByteType, containsNull = false))
+    val a06 = Literal.create(Seq[Byte](4, 2), ArrayType(ByteType, containsNull = false))
+    val a07 = Literal.create(Seq[Short](1, 2, 3), ArrayType(ShortType, containsNull = false))
+    val a08 = Literal.create(Seq[Short](4, 2), ArrayType(ShortType, containsNull = false))
+
+    val a10 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
+    val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType, containsNull = false))
+    val a12 = Literal.create(Seq(1L, 2L, null, 4L, 5L), ArrayType(LongType, containsNull = true))
+    val a13 = Literal.create(Seq(-5L, 4L, -3L, 2L, -1L), ArrayType(LongType, containsNull = false))
+    val a14 = Literal.create(Seq.empty[Long], ArrayType(LongType, containsNull = false))
+
+    val a20 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, containsNull = false))
+    val a21 = Literal.create(Seq("c", "d", "a", "f"), ArrayType(StringType, containsNull = false))
+    val a22 = Literal.create(Seq("b", null, "a", "g"), ArrayType(StringType, containsNull = true))
+
+    val a30 = Literal.create(Seq(null, null), ArrayType(IntegerType))
+    val a31 = Literal.create(null, ArrayType(StringType))
+
+    checkEvaluation(ArrayUnion(a00, a01), Seq(1, 2, 3, 4))
+    checkEvaluation(ArrayUnion(a02, a03), Seq(1, 2, null, 4, 5, -5, -3))
+    checkEvaluation(ArrayUnion(a03, a02), Seq(-5, 4, -3, 2, 1, null, 5))
+    checkEvaluation(ArrayUnion(a02, a04), Seq(1, 2, null, 4, 5))
+    checkEvaluation(ArrayUnion(a05, a06), Seq[Byte](1, 2, 3, 4))
+    checkEvaluation(ArrayUnion(a07, a08), Seq[Short](1, 2, 3, 4))
+
+    checkEvaluation(ArrayUnion(a10, a11), Seq(1L, 2L, 3L, 4L))
+    checkEvaluation(ArrayUnion(a12, a13), Seq(1L, 2L, null, 4L, 5L, -5L, -3L, -1L))
+    checkEvaluation(ArrayUnion(a13, a12), Seq(-5L, 4L, -3L, 2L, -1L, 1L, null, 5L))
+    checkEvaluation(ArrayUnion(a12, a14), Seq(1L, 2L, null, 4L, 5L))
+
+    checkEvaluation(ArrayUnion(a20, a21), Seq("b", "a", "c", "d", "f"))
+    checkEvaluation(ArrayUnion(a20, a22), Seq("b", "a", "c", null, "g"))
+
+    checkEvaluation(ArrayUnion(a30, a30), Seq(null))
+    checkEvaluation(ArrayUnion(a20, a31), null)
+    checkEvaluation(ArrayUnion(a31, a20), null)
+
+    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
+      ArrayType(BinaryType))
+    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
+      ArrayType(BinaryType))
+    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](4, 3)),
+      ArrayType(BinaryType))
+    val b3 = Literal.create(Seq[Array[Byte]](
+      Array[Byte](1, 2), Array[Byte](4, 3), Array[Byte](1, 2)), ArrayType(BinaryType))
+    val b4 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), null), ArrayType(BinaryType))
+    val b5 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)), ArrayType(BinaryType))
+    val b6 = Literal.create(Seq.empty, ArrayType(BinaryType))
+    val arrayWithBinaryNull = Literal.create(Seq(null), ArrayType(BinaryType))
+
+    checkEvaluation(ArrayUnion(b0, b1),
+      Seq(Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](2, 1), Array[Byte](4, 3)))
+    checkEvaluation(ArrayUnion(b0, b2),
+      Seq(Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](4, 3)))
+    checkEvaluation(ArrayUnion(b2, b4), Seq(Array[Byte](1, 2), Array[Byte](4, 3), null))
+    checkEvaluation(ArrayUnion(b3, b0),
+      Seq(Array[Byte](1, 2), Array[Byte](4, 3), Array[Byte](5, 6)))
+    checkEvaluation(ArrayUnion(b4, b0), Seq(Array[Byte](1, 2), null, Array[Byte](5, 6)))
+    checkEvaluation(ArrayUnion(b4, b5), Seq(Array[Byte](1, 2), null))
+    checkEvaluation(ArrayUnion(b6, b4), Seq(Array[Byte](1, 2), null))
+    checkEvaluation(ArrayUnion(b4, arrayWithBinaryNull), Seq(Array[Byte](1, 2), null))
+
+    val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
+      ArrayType(ArrayType(IntegerType)))
+    val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
+      ArrayType(ArrayType(IntegerType)))
+    checkEvaluation(ArrayUnion(aa0, aa1),
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](5, 6), Seq[Int](2, 1)))
+
+    assert(ArrayUnion(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(ArrayUnion(a00, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayUnion(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(ArrayUnion(a20, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
 }

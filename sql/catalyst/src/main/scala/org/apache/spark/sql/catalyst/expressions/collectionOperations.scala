@@ -89,15 +89,9 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
       > SELECT _FUNC_(NULL);
        -1
   """)
-case class Size(
-    child: Expression,
-    legacySizeOfNull: Boolean)
-  extends UnaryExpression with ExpectsInputTypes {
+case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  def this(child: Expression) =
-    this(
-      child,
-      legacySizeOfNull = SQLConf.get.getConf(SQLConf.LEGACY_SIZE_OF_NULL))
+  val legacySizeOfNull = SQLConf.get.legacySizeOfNull
 
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
@@ -999,7 +993,7 @@ trait ArraySortLike extends ExpectsInputTypes {
         } else if (o2 == null) {
           nullOrder
         } else {
-          -ordering.compare(o1, o2)
+          ordering.compare(o2, o1)
         }
       }
     }
@@ -3491,4 +3485,323 @@ case class ArrayDistinct(child: Expression)
   }
 
   override def prettyName: String = "array_distinct"
+}
+
+/**
+ * Will become common base class for [[ArrayUnion]], ArrayIntersect, and ArrayExcept.
+ */
+abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
+  override def dataType: DataType = {
+    val dataTypes = children.map(_.dataType.asInstanceOf[ArrayType])
+    ArrayType(elementType, dataTypes.exists(_.containsNull))
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val typeCheckResult = super.checkInputDataTypes()
+    if (typeCheckResult.isSuccess) {
+      TypeUtils.checkForOrderingExpr(dataType.asInstanceOf[ArrayType].elementType,
+        s"function $prettyName")
+    } else {
+      typeCheckResult
+    }
+  }
+
+  @transient protected lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(elementType)
+
+  @transient protected lazy val elementTypeSupportEquals = elementType match {
+    case BinaryType => false
+    case _: AtomicType => true
+    case _ => false
+  }
+}
+
+object ArraySetLike {
+  def throwUnionLengthOverflowException(length: Int): Unit = {
+    throw new RuntimeException(s"Unsuccessful try to union arrays with $length " +
+      s"elements due to exceeding the array size limit " +
+      s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+  }
+}
+
+
+/**
+ * Returns an array of the elements in the union of x and y, without duplicates
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array1, array2) - Returns an array of the elements in the union of array1 and array2,
+      without duplicates.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
+       array(1, 2, 3, 5)
+  """,
+  since = "2.4.0")
+case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike {
+  var hsInt: OpenHashSet[Int] = _
+  var hsLong: OpenHashSet[Long] = _
+
+  def assignInt(array: ArrayData, idx: Int, resultArray: ArrayData, pos: Int): Boolean = {
+    val elem = array.getInt(idx)
+    if (!hsInt.contains(elem)) {
+      if (resultArray != null) {
+        resultArray.setInt(pos, elem)
+      }
+      hsInt.add(elem)
+      true
+    } else {
+      false
+    }
+  }
+
+  def assignLong(array: ArrayData, idx: Int, resultArray: ArrayData, pos: Int): Boolean = {
+    val elem = array.getLong(idx)
+    if (!hsLong.contains(elem)) {
+      if (resultArray != null) {
+        resultArray.setLong(pos, elem)
+      }
+      hsLong.add(elem)
+      true
+    } else {
+      false
+    }
+  }
+
+  def evalIntLongPrimitiveType(
+      array1: ArrayData,
+      array2: ArrayData,
+      resultArray: ArrayData,
+      isLongType: Boolean): Int = {
+    // store elements into resultArray
+    var nullElementSize = 0
+    var pos = 0
+    Seq(array1, array2).foreach { array =>
+      var i = 0
+      while (i < array.numElements()) {
+        val size = if (!isLongType) hsInt.size else hsLong.size
+        if (size + nullElementSize > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+          ArraySetLike.throwUnionLengthOverflowException(size)
+        }
+        if (array.isNullAt(i)) {
+          if (nullElementSize == 0) {
+            if (resultArray != null) {
+              resultArray.setNullAt(pos)
+            }
+            pos += 1
+            nullElementSize = 1
+          }
+        } else {
+          val assigned = if (!isLongType) {
+            assignInt(array, i, resultArray, pos)
+          } else {
+            assignLong(array, i, resultArray, pos)
+          }
+          if (assigned) {
+            pos += 1
+          }
+        }
+        i += 1
+      }
+    }
+    pos
+  }
+
+  override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val array1 = input1.asInstanceOf[ArrayData]
+    val array2 = input2.asInstanceOf[ArrayData]
+
+    if (elementTypeSupportEquals) {
+      elementType match {
+        case IntegerType =>
+          // avoid boxing of primitive int array elements
+          // calculate result array size
+          hsInt = new OpenHashSet[Int]
+          val elements = evalIntLongPrimitiveType(array1, array2, null, false)
+          hsInt = new OpenHashSet[Int]
+          val resultArray = if (UnsafeArrayData.shouldUseGenericArrayData(
+            IntegerType.defaultSize, elements)) {
+            new GenericArrayData(new Array[Any](elements))
+          } else {
+            UnsafeArrayData.forPrimitiveArray(
+              Platform.INT_ARRAY_OFFSET, elements, IntegerType.defaultSize)
+          }
+          evalIntLongPrimitiveType(array1, array2, resultArray, false)
+          resultArray
+        case LongType =>
+          // avoid boxing of primitive long array elements
+          // calculate result array size
+          hsLong = new OpenHashSet[Long]
+          val elements = evalIntLongPrimitiveType(array1, array2, null, true)
+          hsLong = new OpenHashSet[Long]
+          val resultArray = if (UnsafeArrayData.shouldUseGenericArrayData(
+            LongType.defaultSize, elements)) {
+            new GenericArrayData(new Array[Any](elements))
+          } else {
+            UnsafeArrayData.forPrimitiveArray(
+              Platform.LONG_ARRAY_OFFSET, elements, LongType.defaultSize)
+          }
+          evalIntLongPrimitiveType(array1, array2, resultArray, true)
+          resultArray
+        case _ =>
+          val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+          val hs = new OpenHashSet[Any]
+          var foundNullElement = false
+          Seq(array1, array2).foreach { array =>
+            var i = 0
+            while (i < array.numElements()) {
+              if (array.isNullAt(i)) {
+                if (!foundNullElement) {
+                  arrayBuffer += null
+                  foundNullElement = true
+                }
+              } else {
+                val elem = array.get(i, elementType)
+                if (!hs.contains(elem)) {
+                  if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+                    ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.size)
+                  }
+                  arrayBuffer += elem
+                  hs.add(elem)
+                }
+              }
+              i += 1
+            }
+          }
+          new GenericArrayData(arrayBuffer)
+      }
+    } else {
+      ArrayUnion.unionOrdering(array1, array2, elementType, ordering)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val i = ctx.freshName("i")
+    val pos = ctx.freshName("pos")
+    val value = ctx.freshName("value")
+    val size = ctx.freshName("size")
+    val (postFix, openHashElementType, getter, setter, javaTypeName, castOp, arrayBuilder) =
+      if (elementTypeSupportEquals) {
+        elementType match {
+          case ByteType | ShortType | IntegerType | LongType =>
+            val ptName = CodeGenerator.primitiveTypeName(elementType)
+            val unsafeArray = ctx.freshName("unsafeArray")
+            (if (elementType == LongType) s"$$mcJ$$sp" else s"$$mcI$$sp",
+              if (elementType == LongType) "Long" else "Int",
+              s"get$ptName($i)", s"set$ptName($pos, $value)", CodeGenerator.javaType(elementType),
+              if (elementType == LongType) "(long)" else "(int)",
+              s"""
+                 |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
+                 |${ev.value} = $unsafeArray;
+               """.stripMargin)
+          case _ =>
+            val genericArrayData = classOf[GenericArrayData].getName
+            val et = ctx.addReferenceObj("elementType", elementType)
+            ("", "Object",
+              s"get($i, $et)", s"update($pos, $value)", "Object", "",
+              s"${ev.value} = new $genericArrayData(new Object[$size]);")
+        }
+      } else {
+        ("", "", "", "", "", "", "")
+      }
+
+    nullSafeCodeGen(ctx, ev, (array1, array2) => {
+      if (openHashElementType != "") {
+        // Here, we ensure elementTypeSupportEquals is true
+        val foundNullElement = ctx.freshName("foundNullElement")
+        val openHashSet = classOf[OpenHashSet[_]].getName
+        val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$openHashElementType()"
+        val hs = ctx.freshName("hs")
+        val arrayData = classOf[ArrayData].getName
+        val arrays = ctx.freshName("arrays")
+        val array = ctx.freshName("array")
+        val arrayDataIdx = ctx.freshName("arrayDataIdx")
+        s"""
+           |$openHashSet $hs = new $openHashSet$postFix($classTag);
+           |boolean $foundNullElement = false;
+           |$arrayData[] $arrays = new $arrayData[]{$array1, $array2};
+           |for (int $arrayDataIdx = 0; $arrayDataIdx < 2; $arrayDataIdx++) {
+           |  $arrayData $array = $arrays[$arrayDataIdx];
+           |  for (int $i = 0; $i < $array.numElements(); $i++) {
+           |    if ($array.isNullAt($i)) {
+           |      $foundNullElement = true;
+           |    } else {
+           |      $hs.add$postFix($array.$getter);
+           |    }
+           |  }
+           |}
+           |int $size = $hs.size() + ($foundNullElement ? 1 : 0);
+           |$arrayBuilder
+           |$hs = new $openHashSet$postFix($classTag);
+           |$foundNullElement = false;
+           |int $pos = 0;
+           |for (int $arrayDataIdx = 0; $arrayDataIdx < 2; $arrayDataIdx++) {
+           |  $arrayData $array = $arrays[$arrayDataIdx];
+           |  for (int $i = 0; $i < $array.numElements(); $i++) {
+           |    if ($array.isNullAt($i)) {
+           |      if (!$foundNullElement) {
+           |        ${ev.value}.setNullAt($pos++);
+           |        $foundNullElement = true;
+           |      }
+           |    } else {
+           |      $javaTypeName $value = $array.$getter;
+           |      if (!$hs.contains($castOp $value)) {
+           |        $hs.add$postFix($value);
+           |        ${ev.value}.$setter;
+           |        $pos++;
+           |      }
+           |    }
+           |  }
+           |}
+         """.stripMargin
+      } else {
+        val arrayUnion = classOf[ArrayUnion].getName
+        val et = ctx.addReferenceObj("elementTypeUnion", elementType)
+        val order = ctx.addReferenceObj("orderingUnion", ordering)
+        val method = "unionOrdering"
+        s"${ev.value} = $arrayUnion$$.MODULE$$.$method($array1, $array2, $et, $order);"
+      }
+    })
+  }
+
+  override def prettyName: String = "array_union"
+}
+
+object ArrayUnion {
+  def unionOrdering(
+      array1: ArrayData,
+      array2: ArrayData,
+      elementType: DataType,
+      ordering: Ordering[Any]): ArrayData = {
+    val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+    var alreadyIncludeNull = false
+    Seq(array1, array2).foreach(_.foreach(elementType, (_, elem) => {
+      var found = false
+      if (elem == null) {
+        if (alreadyIncludeNull) {
+          found = true
+        } else {
+          alreadyIncludeNull = true
+        }
+      } else {
+        // check elem is already stored in arrayBuffer or not?
+        var j = 0
+        while (!found && j < arrayBuffer.size) {
+          val va = arrayBuffer(j)
+          if (va != null && ordering.equiv(va, elem)) {
+            found = true
+          }
+          j = j + 1
+        }
+      }
+      if (!found) {
+        if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+          ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.length)
+        }
+        arrayBuffer += elem
+      }
+    }))
+    new GenericArrayData(arrayBuffer)
+  }
 }

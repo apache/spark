@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.OrcOptions
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -72,7 +72,6 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    DataSourceUtils.verifyWriteSchema(this, dataSchema)
 
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
 
@@ -123,7 +122,6 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    DataSourceUtils.verifyReadSchema(this, dataSchema)
 
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
@@ -177,6 +175,23 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           recordsIterator)
       }
     }
+  }
+
+  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
+    case _: AtomicType => true
+
+    case st: StructType => st.forall { f => supportDataType(f.dataType, isReadPath) }
+
+    case ArrayType(elementType, _) => supportDataType(elementType, isReadPath)
+
+    case MapType(keyType, valueType, _) =>
+      supportDataType(keyType, isReadPath) && supportDataType(valueType, isReadPath)
+
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
+
+    case _: NullType => isReadPath
+
+    case _ => false
   }
 }
 
