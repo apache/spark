@@ -1599,11 +1599,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         val dir = path.getAbsolutePath
         Seq("1,2").toDF().write.text(dir)
         // more tokens
-        val df1 = spark.read.schema("c0 int").format("csv").load(dir)
-        checkAnswer(df1, Row())
+        val df1 = spark.read.schema("c0 int").format("csv").option("mode", "permissive").load(dir)
+        checkAnswer(df1, Row(1))
         // less tokens
-        val df2 = spark.read.schema("c0 int, c1 int, c2 int").format("csv").load(dir)
-        checkAnswer(df2, Row())
+        val df2 = spark.read.schema("c0 int, c1 int, c2 int").format("csv")
+          .option("mode", "permissive").load(dir)
+        checkAnswer(df2, Row(1, 2, null))
       }
     }
   }

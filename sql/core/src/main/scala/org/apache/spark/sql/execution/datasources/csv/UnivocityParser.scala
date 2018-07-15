@@ -35,11 +35,13 @@ import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
- * XXX.
+ * Constructs a parser for a given schema that translates CSV data to an [[InternalRow]].
  *
- * @param dataSchema
- * @param requiredSchema
- * @param options
+ * @param dataSchema The CSV data schema that is specified by the user, or inferred from underlying
+ *                   data files.
+ * @param requiredSchema The schema of the data that should be output for each row. This should be a
+ *                       subset of the columns in dataSchema.
+ * @param options Configuration options for a CSV parser.
  */
 class UnivocityParser(
     dataSchema: StructType,
@@ -58,20 +60,20 @@ class UnivocityParser(
   private val tokenIndexArr =
     requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
 
+  // When column pruning is enabled, the parser only parses the required columns based on
+  // their positions in the data schema.
+  private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
+
   val tokenizer = {
     val parserSetting = options.asParserSettings
     // When to-be-parsed schema is shorter than the to-be-read data schema, we let Univocity CSV
     // parser select a sequence of fields for reading by their positions.
-    if (options.columnPruning && requiredSchema.length < dataSchema.length) {
-    // if (parsedSchema.length < dataSchema.length) {
+    // if (options.columnPruning && requiredSchema.length < dataSchema.length) {
+    if (parsedSchema.length < dataSchema.length) {
       parserSetting.selectIndexes(tokenIndexArr: _*)
     }
     new CsvParser(parserSetting)
   }
-
-  // When column pruning is enabled, the parser only parses the required columns based on
-  // their positions in the data schema.
-  private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
