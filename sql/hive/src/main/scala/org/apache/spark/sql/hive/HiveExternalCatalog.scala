@@ -139,8 +139,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   /**
    * Checks the validity of data column names. Hive metastore disallows the table to use some
-   * special characters (',', ':', and ';') in data column names. Partition columns do not have
-   * such a restriction. Views do not have such a restriction.
+   * special characters (',', ':', and ';') in data column names, including nested column names.
+   * Partition columns do not have such a restriction. Views do not have such a restriction.
    */
   private def verifyDataSchema(
       tableName: TableIdentifier, tableType: CatalogTableType, dataSchema: StructType): Unit = {
@@ -150,9 +150,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         f.dataType match {
           case st: StructType => verifyNestedColumnNames(st)
           case _ if invalidChars.exists(f.name.contains) =>
-            throw new AnalysisException("Cannot create a table having a nested column whose name " +
-              s"contains invalid characters (${invalidChars.map(c => s"'$c'").mkString(", ")}) " +
-              s"in Hive metastore. Table: $tableName; Column: ${f.name}")
+            val errMsg = "Cannot create a table having a nested column whose name contains " +
+              s"invalid characters (${invalidChars.map(c => s"'$c'").mkString(", ")}) " +
+              s"in Hive metastore. Table: $tableName; Column: ${f.name}"
+            throw new AnalysisException(errMsg)
           case _ =>
         }
       }
