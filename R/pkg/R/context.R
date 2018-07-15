@@ -438,7 +438,8 @@ setCheckpointDir <- function(directory) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(directory))))
 }
 
-#' Total number of CPU cores of all executors registered in the cluster at the moment.
+#' Total number of CPU cores of all executors registered in the cluster at the moment
+#' and potentially available to jobs submitted via the Spark context.
 #'
 #' @rdname spark.numCores
 #' @return current number of cores in the cluster.
@@ -452,7 +453,8 @@ spark.numCores <- function() {
   callJMethod(sc, "numCores")
 }
 
-#' Total number of executors registered in the cluster at the moment.
+#' Total number of executors registered in the cluster at the moment and potentially available
+#' to jobs submitted via the Spark context.
 #'
 #' @rdname spark.numExecutors
 #' @return current number of executors in the cluster.

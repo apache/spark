@@ -411,7 +411,8 @@ class SparkContext(object):
         """
         .. note:: Experimental
 
-        Total number of CPU cores of all executors registered in the cluster at the moment.
+        Total number of CPU cores of all executors registered in the cluster at the moment
+        and potentially available to jobs submitted via the Spark context.
         The number reflects current status of the cluster and can change in the future.
 
         .. versionadded:: 2.4.0
@@ -423,7 +424,8 @@ class SparkContext(object):
         """
         .. note:: Experimental
 
-        Total number of executors registered in the cluster at the moment.
+        Total number of executors registered in the cluster at the moment and
+        potentially available to jobs submitted via the Spark context.
         The number reflects current status of the cluster and can change in the future.
 
         .. versionadded:: 2.4.0

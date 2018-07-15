@@ -2350,7 +2350,8 @@ class SparkContext(config: SparkConf) extends Logging {
   def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 
   /**
-   * Total number of CPU cores of all executors registered in the cluster at the moment.
+   * Total number of CPU cores of all executors registered in the cluster at the moment
+   * and potentially available to jobs submitted via the Spark context.
    * The number reflects current status of the cluster and can change in the future.
    *
    * @note This method is experimental, and its behavior can be changed in the next releases.
@@ -2359,7 +2360,8 @@ class SparkContext(config: SparkConf) extends Logging {
   def numCores: Int = taskScheduler.numCores
 
   /**
-   * Total number of executors registered in the cluster at the moment.
+   * Total number of executors registered in the cluster at the moment and potentially available
+   * to jobs submitted via the Spark context.
    * The number reflects current status of the cluster and can change in the future.
    *
    * @note This method is experimental, and its behavior can be changed in the next releases.
