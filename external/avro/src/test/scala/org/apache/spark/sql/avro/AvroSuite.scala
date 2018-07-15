@@ -37,8 +37,8 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
-  val episodesAvro = "episodes.avro"
-  val testAvro = "test.avro"
+  val episodesAvro = testFile("episodes.avro")
+  val testAvro = testFile("test.avro")
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -46,18 +46,18 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   def checkReloadMatchesSaved(originalFile: String, newFile: String): Unit = {
-    val originalEntries = spark.read.avro(testFile(testAvro)).collect()
+    val originalEntries = spark.read.avro(testAvro).collect()
     val newEntries = spark.read.avro(newFile)
     checkAnswer(newEntries, originalEntries)
   }
 
   test("reading from multiple paths") {
-    val df = spark.read.avro(testFile(episodesAvro), testFile(episodesAvro))
+    val df = spark.read.avro(episodesAvro, episodesAvro)
     assert(df.count == 16)
   }
 
   test("reading and writing partitioned data") {
-    val df = spark.read.avro(testFile(episodesAvro))
+    val df = spark.read.avro(episodesAvro)
     val fields = List("title", "air_date", "doctor")
     for (field <- fields) {
       withTempPath { dir =>
@@ -73,14 +73,14 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("request no fields") {
-    val df = spark.read.avro(testFile(episodesAvro))
+    val df = spark.read.avro(episodesAvro)
     df.createOrReplaceTempView("avro_table")
     assert(spark.sql("select count(*) from avro_table").collect().head === Row(8))
   }
 
   test("convert formats") {
     withTempPath { dir =>
-      val df = spark.read.avro(testFile(episodesAvro))
+      val df = spark.read.avro(episodesAvro)
       df.write.parquet(dir.getCanonicalPath)
       assert(spark.read.parquet(dir.getCanonicalPath).count() === df.count)
     }
@@ -88,7 +88,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("rearrange internal schema") {
     withTempPath { dir =>
-      val df = spark.read.avro(testFile(episodesAvro))
+      val df = spark.read.avro(episodesAvro)
       df.select("doctor", "title").write.avro(dir.getCanonicalPath)
     }
   }
@@ -363,7 +363,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val deflateDir = s"$dir/deflate"
       val snappyDir = s"$dir/snappy"
 
-      val df = spark.read.avro(testFile(testAvro))
+      val df = spark.read.avro(testAvro)
       spark.conf.set(AVRO_COMPRESSION_CODEC, "uncompressed")
       df.write.avro(uncompressDir)
       spark.conf.set(AVRO_COMPRESSION_CODEC, "deflate")
@@ -382,49 +382,49 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("dsl test") {
-    val results = spark.read.avro(testFile(episodesAvro)).select("title").collect()
+    val results = spark.read.avro(episodesAvro).select("title").collect()
     assert(results.length === 8)
   }
 
   test("support of various data types") {
     // This test uses data from test.avro. You can see the data and the schema of this file in
     // test.json and test.avsc
-    val all = spark.read.avro(testFile(testAvro)).collect()
+    val all = spark.read.avro(testAvro).collect()
     assert(all.length == 3)
 
-    val str = spark.read.avro(testFile(testAvro)).select("string").collect()
+    val str = spark.read.avro(testAvro).select("string").collect()
     assert(str.map(_(0)).toSet.contains("Terran is IMBA!"))
 
-    val simple_map = spark.read.avro(testFile(testAvro)).select("simple_map").collect()
+    val simple_map = spark.read.avro(testAvro).select("simple_map").collect()
     assert(simple_map(0)(0).getClass.toString.contains("Map"))
     assert(simple_map.map(_(0).asInstanceOf[Map[String, Some[Int]]].size).toSet == Set(2, 0))
 
-    val union0 = spark.read.avro(testFile(testAvro)).select("union_string_null").collect()
+    val union0 = spark.read.avro(testAvro).select("union_string_null").collect()
     assert(union0.map(_(0)).toSet == Set("abc", "123", null))
 
-    val union1 = spark.read.avro(testFile(testAvro)).select("union_int_long_null").collect()
+    val union1 = spark.read.avro(testAvro).select("union_int_long_null").collect()
     assert(union1.map(_(0)).toSet == Set(66, 1, null))
 
-    val union2 = spark.read.avro(testFile(testAvro)).select("union_float_double").collect()
+    val union2 = spark.read.avro(testAvro).select("union_float_double").collect()
     assert(
       union2
         .map(x => new java.lang.Double(x(0).toString))
         .exists(p => Math.abs(p - Math.PI) < 0.001))
 
-    val fixed = spark.read.avro(testFile(testAvro)).select("fixed3").collect()
+    val fixed = spark.read.avro(testAvro).select("fixed3").collect()
     assert(fixed.map(_(0).asInstanceOf[Array[Byte]]).exists(p => p(1) == 3))
 
-    val enum = spark.read.avro(testFile(testAvro)).select("enum").collect()
+    val enum = spark.read.avro(testAvro).select("enum").collect()
     assert(enum.map(_(0)).toSet == Set("SPADES", "CLUBS", "DIAMONDS"))
 
-    val record = spark.read.avro(testFile(testAvro)).select("record").collect()
+    val record = spark.read.avro(testAvro).select("record").collect()
     assert(record(0)(0).getClass.toString.contains("Row"))
     assert(record.map(_(0).asInstanceOf[Row](0)).contains("TEST_STR123"))
 
-    val array_of_boolean = spark.read.avro(testFile(testAvro)).select("array_of_boolean").collect()
+    val array_of_boolean = spark.read.avro(testAvro).select("array_of_boolean").collect()
     assert(array_of_boolean.map(_(0).asInstanceOf[Seq[Boolean]].size).toSet == Set(3, 1, 0))
 
-    val bytes = spark.read.avro(testFile(testAvro)).select("bytes").collect()
+    val bytes = spark.read.avro(testAvro).select("bytes").collect()
     assert(bytes.map(_(0).asInstanceOf[Array[Byte]].length).toSet == Set(3, 1, 0))
   }
 
@@ -433,7 +433,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       s"""
          |CREATE TEMPORARY VIEW avroTable
          |USING avro
-         |OPTIONS (path "${testFile(episodesAvro)}")
+         |OPTIONS (path "${episodesAvro}")
       """.stripMargin.replaceAll("\n", " "))
 
     assert(spark.sql("SELECT * FROM avroTable").collect().length === 8)
@@ -444,8 +444,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     // get the same values back.
     withTempPath { dir =>
       val avroDir = s"$dir/avro"
-      spark.read.avro(testFile(testAvro)).write.avro(avroDir)
-      checkReloadMatchesSaved(testFile(testAvro), avroDir)
+      spark.read.avro(testAvro).write.avro(avroDir)
+      checkReloadMatchesSaved(testAvro, avroDir)
     }
   }
 
@@ -458,8 +458,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val parameters = Map("recordName" -> name, "recordNamespace" -> namespace)
 
       val avroDir = tempDir + "/namedAvro"
-      spark.read.avro(testFile(testAvro)).write.options(parameters).avro(avroDir)
-      checkReloadMatchesSaved(testFile(testAvro), avroDir)
+      spark.read.avro(testAvro).write.options(parameters).avro(avroDir)
+      checkReloadMatchesSaved(testAvro, avroDir)
 
       // Look at raw file and make sure has namespace info
       val rawSaved = spark.sparkContext.textFile(avroDir)
@@ -579,9 +579,9 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val result = spark
       .read
       .option(AvroFileFormat.AvroSchema, avroSchema)
-      .avro(testFile(testAvro))
+      .avro(testAvro)
       .collect()
-    val expected = spark.read.avro(testFile(testAvro)).select("string").collect()
+    val expected = spark.read.avro(testAvro).select("string").collect()
     assert(result.sameElements(expected))
   }
 
@@ -599,7 +599,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         |}
       """.stripMargin
     val result = spark.read.option(AvroFileFormat.AvroSchema, avroSchema)
-      .avro(testFile(testAvro)).select("missingField").first
+      .avro(testAvro).select("missingField").first
     assert(result === Row("foo"))
   }
 
@@ -638,7 +638,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         s"""
            |CREATE TEMPORARY VIEW episodes
            |USING avro
-           |OPTIONS (path "${testFile(episodesAvro)}")
+           |OPTIONS (path "${episodesAvro}")
          """.stripMargin.replaceAll("\n", " "))
       spark.sql(
         s"""
@@ -663,7 +663,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("test save and load") {
     // Test if load works as expected
     withTempPath { tempDir =>
-      val df = spark.read.avro(testFile(episodesAvro))
+      val df = spark.read.avro(episodesAvro)
       assert(df.count == 8)
 
       val tempSaveDir = s"$tempDir/save/"
@@ -677,7 +677,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("test load with non-Avro file") {
     // Test if load works as expected
     withTempPath { tempDir =>
-      val df = spark.read.avro(testFile(episodesAvro))
+      val df = spark.read.avro(episodesAvro)
       assert(df.count == 8)
 
       val tempSaveDir = s"$tempDir/save/"
@@ -707,10 +707,10 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       StructField("record", StructType(Seq(StructField("value_field", StringType, false))), false),
       StructField("array_of_boolean", ArrayType(BooleanType), false),
       StructField("bytes", BinaryType, true)))
-    val withSchema = spark.read.schema(partialColumns).avro(testFile(testAvro)).collect()
+    val withSchema = spark.read.schema(partialColumns).avro(testAvro).collect()
     val withOutSchema = spark
       .read
-      .avro(testFile(testAvro))
+      .avro(testAvro)
       .select("string", "simple_map", "complex_map", "union_string_null", "union_int_long_null",
         "fixed3", "fixed2", "enum", "record", "array_of_boolean", "bytes")
       .collect()
@@ -728,7 +728,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
               StructField("non_exist_field", StringType, false),
               StructField("non_exist_field2", StringType, false))),
             false)))
-    val withEmptyColumn = spark.read.schema(schema).avro(testFile(testAvro)).collect()
+    val withEmptyColumn = spark.read.schema(schema).avro(testAvro).collect()
 
     assert(withEmptyColumn.forall(_ == Row(null: String, Row(null: String, null: String))))
   }
