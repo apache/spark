@@ -748,7 +748,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val dataToStringCode = castToStringCode(dataType, ctx)
       val data = JavaCode.variable("data", dataType)
       val dataStr = JavaCode.variable("dataStr", StringType)
-      ctx.addNewFunction(funcName,
+      val functionCall = ctx.addNewFunction(funcName,
         s"""
            |private UTF8String $funcName(${CodeGenerator.javaType(dataType)} $data) {
            |  UTF8String $dataStr = null;
@@ -756,10 +756,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
            |  return dataStr;
            |}
          """.stripMargin)
+      inline"$functionCall"
     }
 
-    val keyToStringFunc = inline"${dataToStringFunc("keyToString", kt)}"
-    val valueToStringFunc = inline"${dataToStringFunc("valueToString", vt)}"
+    val keyToStringFunc = dataToStringFunc("keyToString", kt)
+    val valueToStringFunc = dataToStringFunc("valueToString", vt)
     val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
     val mapKeyArray = JavaCode.expression(s"$map.keyArray()", classOf[ArrayData])
     val mapValueArray = JavaCode.expression(s"$map.valueArray()", classOf[ArrayData])
