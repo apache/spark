@@ -709,22 +709,12 @@ trait ComplexTypeMergingExpression extends Expression {
   @transient
   lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
 
-  /**
-   * A method determining whether the input types are equal ignoring nullable, containsNull and
-   * valueContainsNull flags and thus convenient for resolution of the final data type.
-   */
-  def areInputTypesForMergingEqual: Boolean = {
-    inputTypesForMerging.length <= 1 || inputTypesForMerging.sliding(2, 1).forall {
-      case Seq(dt1, dt2) => dt1.sameType(dt2)
-    }
-  }
-
   override def dataType: DataType = {
     require(
       inputTypesForMerging.nonEmpty,
       "The collection of input data types must not be empty.")
     require(
-      areInputTypesForMergingEqual,
+      TypeCoercion.haveSameType(inputTypesForMerging),
       "All input types must be the same except nullable, containsNull, valueContainsNull flags.")
     inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
