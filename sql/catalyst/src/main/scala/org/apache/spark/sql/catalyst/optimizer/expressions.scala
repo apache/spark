@@ -224,14 +224,14 @@ object OptimizeIn extends Rule[LogicalPlan] {
         If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
-        if (newList.length == 1) {
+        if (newList.length == 1 && !list.isInstanceOf[ListQuery]) {
           EqualTo(v, newList.head)
-        } else if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
+        } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
-        } else if (newList.size < list.size) {
+        } else if (newList.length < list.length) {
           expr.copy(list = newList)
-        } else { // newList.length == list.length
+        } else { // newList.length == list.length && newList.length > 1
           expr
         }
     }
