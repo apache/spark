@@ -586,7 +586,7 @@ class CodegenContext {
     JavaCode.variable(freshName(name), dt)
 
   /**
-   * Creates an `ExprValue` representing a local java variable of required data type.
+   * Creates an `ExprValue` representing a local java variable of required Java class.
    */
   def freshVariable(name: String, javaClass: Class[_]): VariableValue =
     JavaCode.variable(freshName(name), javaClass)
