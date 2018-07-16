@@ -820,7 +820,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("SPARK-24805: do not ignore files without .avro extension by default") {
     withTempDir { dir =>
       val fileWithoutExtension = s"${dir.getCanonicalPath}/episodes"
-      Files.copy(Paths.get(episodesFile), Paths.get(fileWithoutExtension))
+      Files.copy(Paths.get(episodesAvro), Paths.get(fileWithoutExtension))
 
       val df1 = spark.read.avro(fileWithoutExtension)
       assert(df1.count == 8)
