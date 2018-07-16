@@ -227,6 +227,27 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(MapConcat(Seq(m6, m5)).dataType.valueContainsNull)
     assert(!MapConcat(Seq(m1, m2)).nullable)
     assert(MapConcat(Seq(m1, mNull)).nullable)
+
+    val mapConcat = MapConcat(Seq(
+      Literal.create(Map(Seq(1, 2) -> Seq("a", "b")),
+        MapType(
+          ArrayType(IntegerType, containsNull = false),
+          ArrayType(StringType, containsNull = false),
+          valueContainsNull = false)),
+      Literal.create(Map(Seq(3, 4, null) -> Seq("c", "d", null), Seq(6) -> null),
+        MapType(
+          ArrayType(IntegerType, containsNull = true),
+          ArrayType(StringType, containsNull = true),
+          valueContainsNull = true))))
+    assert(mapConcat.dataType ===
+      MapType(
+        ArrayType(IntegerType, containsNull = true),
+        ArrayType(StringType, containsNull = true),
+        valueContainsNull = true))
+    checkEvaluation(mapConcat, Map(
+      Seq(1, 2) -> Seq("a", "b"),
+      Seq(3, 4, null) -> Seq("c", "d", null),
+      Seq(6) -> null))
   }
 
   test("MapFromEntries") {
@@ -1050,11 +1071,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("Concat") {
     // Primitive-type elements
-    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
-    val ai1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
-    val ai2 = Literal.create(Seq(4, null, 5), ArrayType(IntegerType))
-    val ai3 = Literal.create(Seq(null, null), ArrayType(IntegerType))
-    val ai4 = Literal.create(null, ArrayType(IntegerType))
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType, containsNull = false))
+    val ai2 = Literal.create(Seq(4, null, 5), ArrayType(IntegerType, containsNull = true))
+    val ai3 = Literal.create(Seq(null, null), ArrayType(IntegerType, containsNull = true))
+    val ai4 = Literal.create(null, ArrayType(IntegerType, containsNull = false))
 
     checkEvaluation(Concat(Seq(ai0)), Seq(1, 2, 3))
     checkEvaluation(Concat(Seq(ai0, ai1)), Seq(1, 2, 3))
@@ -1067,14 +1088,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Concat(Seq(ai4, ai0)), null)
 
     // Non-primitive-type elements
-    val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType))
-    val as1 = Literal.create(Seq.empty[String], ArrayType(StringType))
-    val as2 = Literal.create(Seq("d", null, "e"), ArrayType(StringType))
-    val as3 = Literal.create(Seq(null, null), ArrayType(StringType))
-    val as4 = Literal.create(null, ArrayType(StringType))
+    val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq.empty[String], ArrayType(StringType, containsNull = false))
+    val as2 = Literal.create(Seq("d", null, "e"), ArrayType(StringType, containsNull = true))
+    val as3 = Literal.create(Seq(null, null), ArrayType(StringType, containsNull = true))
+    val as4 = Literal.create(null, ArrayType(StringType, containsNull = false))
 
-    val aa0 = Literal.create(Seq(Seq("a", "b"), Seq("c")), ArrayType(ArrayType(StringType)))
-    val aa1 = Literal.create(Seq(Seq("d"), Seq("e", "f")), ArrayType(ArrayType(StringType)))
+    val aa0 = Literal.create(Seq(Seq("a", "b"), Seq("c")),
+      ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
+    val aa1 = Literal.create(Seq(Seq("d"), Seq("e", "f")),
+      ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
+    val aa2 = Literal.create(Seq(Seq("g", null), null),
+      ArrayType(ArrayType(StringType, containsNull = true), containsNull = true))
 
     checkEvaluation(Concat(Seq(as0)), Seq("a", "b", "c"))
     checkEvaluation(Concat(Seq(as0, as1)), Seq("a", "b", "c"))
@@ -1087,6 +1112,15 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Concat(Seq(as4, as0)), null)
 
     checkEvaluation(Concat(Seq(aa0, aa1)), Seq(Seq("a", "b"), Seq("c"), Seq("d"), Seq("e", "f")))
+
+    assert(Concat(Seq(ai0, ai1)).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(Concat(Seq(ai0, ai2)).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(Concat(Seq(as0, as1)).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(Concat(Seq(as0, as2)).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(Concat(Seq(aa0, aa1)).dataType ===
+      ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
+    assert(Concat(Seq(aa0, aa2)).dataType ===
+      ArrayType(ArrayType(StringType, containsNull = true), containsNull = true))
   }
 
   test("Flatten") {
