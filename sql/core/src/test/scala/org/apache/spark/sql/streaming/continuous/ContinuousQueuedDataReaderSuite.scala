@@ -92,7 +92,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
       }
     }
     val reader = new ContinuousQueuedDataReader(
-      factory,
+      new ContinuousDataSourceRDDPartition(0, factory),
       mockContext,
       dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize,
       epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs)

@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -898,6 +898,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def getOrCreate(): SparkSession = synchronized {
+      assertOnDriver()
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
@@ -1020,16 +1021,34 @@ object SparkSession extends Logging {
   /**
    * Returns the active SparkSession for the current thread, returned by the builder.
    *
+   * @note Return None, when calling this function on executors
+   *
    * @since 2.2.0
    */
-  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
+  def getActiveSession: Option[SparkSession] = {
+    if (TaskContext.get != null) {
+      // Return None when running on executors.
+      None
+    } else {
+      Option(activeThreadSession.get)
+    }
+  }
 
   /**
    * Returns the default SparkSession that is returned by the builder.
    *
+   * @note Return None, when calling this function on executors
+   *
    * @since 2.2.0
    */
-  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
+  def getDefaultSession: Option[SparkSession] = {
+    if (TaskContext.get != null) {
+      // Return None when running on executors.
+      None
+    } else {
+      Option(defaultSession.get)
+    }
+  }
 
   /**
    * Returns the currently active SparkSession, otherwise the default one. If there is no default
@@ -1059,6 +1078,14 @@ object SparkSession extends Logging {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
+    }
+  }
+
+  private def assertOnDriver(): Unit = {
+    if (Utils.isTesting && TaskContext.get != null) {
+      // we're accessing it during task execution, fail.
+      throw new IllegalStateException(
+        "SparkSession should only be created and accessed on the driver.")
     }
   }
 

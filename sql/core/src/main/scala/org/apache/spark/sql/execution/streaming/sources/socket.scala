@@ -22,6 +22,7 @@ import java.net.Socket
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
 import java.util.{Calendar, List => JList, Locale, Optional}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -76,7 +77,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   @GuardedBy("this")
   private var lastOffsetCommitted: LongOffset = LongOffset(-1L)
 
-  initialize()
+  private val initialized: AtomicBoolean = new AtomicBoolean(false)
 
   /** This method is only used for unit test */
   private[sources] def getCurrentOffset(): LongOffset = synchronized {
@@ -149,6 +150,10 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
 
     // Internal buffer only holds the batches after lastOffsetCommitted
     val rawList = synchronized {
+      if (initialized.compareAndSet(false, true)) {
+        initialize()
+      }
+
       val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
       val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
       batches.slice(sliceStart, sliceEnd)

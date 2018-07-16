@@ -426,8 +426,7 @@ class GaussianMixture @Since("2.0.0") (
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
     model.setSummary(Some(summary))
     instr.logNamedValue("logLikelihood", logLikelihood)
-    // TODO: need to extend logNamedValue to support Array
-    instr.logNamedValue("clusterSizes", summary.clusterSizes.mkString("[", ",", "]"))
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
     instr.logSuccess(model)
     model
   }

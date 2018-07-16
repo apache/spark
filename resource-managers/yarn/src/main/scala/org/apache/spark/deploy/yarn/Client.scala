@@ -899,7 +899,8 @@ private[spark] class Client(
       val libraryPaths = Seq(sparkConf.get(DRIVER_LIBRARY_PATH),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
-        prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(libraryPaths)))
+        prefixEnv = Some(createLibraryPathPrefix(libraryPaths.mkString(File.pathSeparator),
+          sparkConf))
       }
       if (sparkConf.get(AM_JAVA_OPTIONS).isDefined) {
         logWarning(s"${AM_JAVA_OPTIONS.key} will not take effect in cluster mode")
@@ -921,7 +922,7 @@ private[spark] class Client(
           .map(YarnSparkHadoopUtil.escapeForShell)
       }
       sparkConf.get(AM_LIBRARY_PATH).foreach { paths =>
-        prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(paths))))
+        prefixEnv = Some(createLibraryPathPrefix(paths, sparkConf))
       }
     }
 
@@ -1485,6 +1486,23 @@ private object Client extends Logging {
     YarnAppReport(report.getYarnApplicationState(), report.getFinalApplicationStatus(), diagsOpt)
   }
 
+  /**
+   * Create a properly quoted and escaped library path string to be added as a prefix to the command
+   * executed by YARN. This is different from normal quoting / escaping due to YARN executing the
+   * command through "bash -c".
+   */
+  def createLibraryPathPrefix(libpath: String, conf: SparkConf): String = {
+    val cmdPrefix = if (Utils.isWindows) {
+      Utils.libraryPathEnvPrefix(Seq(libpath))
+    } else {
+      val envName = Utils.libraryPathEnvName
+      // For quotes, escape both the quote and the escape character when encoding in the command
+      // string.
+      val quoted = libpath.replace("\"", "\\\\\\\"")
+      envName + "=\\\"" + quoted + File.pathSeparator + "$" + envName + "\\\""
+    }
+    getClusterPath(conf, cmdPrefix)
+  }
 }
 
 private[spark] class YarnClusterApplication extends SparkApplication {
