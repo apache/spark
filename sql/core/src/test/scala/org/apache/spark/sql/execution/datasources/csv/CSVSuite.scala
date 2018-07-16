@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.UnsupportedCharsetException
+import java.nio.charset.{Charset, UnsupportedCharsetException}
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -513,24 +514,25 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("Save csv with custom charset") {
-    Seq("iso-8859-1", "utf-8", "windows-1250").foreach { encoding =>
+
+    // scalastyle:off nonascii
+    val content = "µß áâä ÁÂÄ"
+    // scalastyle:on nonascii
+
+    Seq("iso-8859-1", "utf-8", "utf-16", "utf-32", "windows-1250").foreach { encoding =>
       withTempDir { dir =>
-        val csvDir = new File(dir, "csv").getCanonicalPath
-        // scalastyle:off
-        val originalDF = Seq("µß áâä ÁÂÄ").toDF("_c0")
-        // scalastyle:on
+        val csvDir = new File(dir, "csv")
+
+        val originalDF = Seq(content).toDF("_c0").repartition(1)
         originalDF.write
-          .option("header", "false")
           .option("encoding", encoding)
-          .csv(csvDir)
+          .csv(csvDir.getCanonicalPath)
 
-        val df = spark
-          .read
-          .option("header", "false")
-          .option("encoding", encoding)
-          .csv(csvDir)
-
-        checkAnswer(df, originalDF)
+        csvDir.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
+          val readback = Files.readAllBytes(csvFile.toPath)
+          val expected = (content + "\n").getBytes(Charset.forName(encoding))
+          assert(readback === expected)
+        })
       }
     }
   }
