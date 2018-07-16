@@ -738,10 +738,10 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
   @transient private lazy val dataTypeDetails: Option[(MapType, Boolean, Boolean)] = {
     child.dataType match {
       case ArrayType(
-      StructType(Array(
-      StructField(_, keyType, keyNullable, _),
-      StructField(_, valueType, valueNullable, _))),
-      containsNull) => Some((MapType(keyType, valueType, valueNullable), keyNullable, containsNull))
+        StructType(Array(
+          StructField(_, kt, kn, _),
+          StructField(_, vt, vn, _))),
+        cn) => Some((MapType(kt, vt, vn), kn, cn))
       case _ => None
     }
   }
