@@ -290,8 +290,12 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
         s"decimal(${DecimalType.MAX_PRECISION}, 2)"
       ).foreach { dt =>
         val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
-        val df = spark.range(numRows).selectExpr(columns: _*)
-          .withColumn("value", monotonically_increasing_id().cast(dt))
+        val valueCol = if (dt.equalsIgnoreCase(s"decimal(${Decimal.MAX_INT_DIGITS}, 2)")) {
+          monotonically_increasing_id() % 9999999
+        } else {
+          monotonically_increasing_id()
+        }
+        val df = spark.range(numRows).selectExpr(columns: _*).withColumn("value", valueCol.cast(dt))
         withTempTable("orcTable", "patquetTable") {
           saveAsTable(df, dir)
 
