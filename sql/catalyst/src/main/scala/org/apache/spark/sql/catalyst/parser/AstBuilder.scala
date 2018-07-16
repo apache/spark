@@ -306,44 +306,61 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Add ORDER BY/SORT BY/CLUSTER BY/DISTRIBUTE BY/LIMIT/WINDOWS clauses to the logical plan. These
-   * clauses determine the shape (ordering/partitioning/rows) of the query result.
+   * Add ORDER BY/SORT BY/CLUSTER BY/DISTRIBUTE BY/RANGE PARTITION BY/LIMIT/WINDOWS
+   * clauses to the logical plan.
+   * These clauses determine the shape (ordering/partitioning/rows) of the query result.
    */
   private def withQueryResultClauses(
       ctx: QueryOrganizationContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     import ctx._
 
-    // Handle ORDER BY, SORT BY, DISTRIBUTE BY, and CLUSTER BY clause.
+    // Handle ORDER BY, SORT BY, DISTRIBUTE BY, RANGE PARTITION BY and CLUSTER BY clause.
+    val isOrder = !order.isEmpty
+    val isSort = !sort.isEmpty
+    val isDistributeBy = !distributeBy.isEmpty
+    val isClusterBy = !clusterBy.isEmpty
+    val isRangePartitionBy = !rangePartitionBy.isEmpty
     val withOrder = if (
-      !order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
+      isOrder && !isSort && !isDistributeBy && !isClusterBy && !isRangePartitionBy) {
       // ORDER BY ...
       Sort(order.asScala.map(visitSortItem), global = true, query)
-    } else if (order.isEmpty && !sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
+    } else if (!isOrder && isSort && !isDistributeBy && !isClusterBy && !isRangePartitionBy) {
       // SORT BY ...
       Sort(sort.asScala.map(visitSortItem), global = false, query)
-    } else if (order.isEmpty && sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
+    } else if (!isOrder && !isSort && isDistributeBy && !isClusterBy && !isRangePartitionBy) {
       // DISTRIBUTE BY ...
       withRepartitionByExpression(ctx, expressionList(distributeBy), query)
-    } else if (order.isEmpty && !sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
+    } else if (!isOrder && isSort && isDistributeBy && !isClusterBy && !isRangePartitionBy) {
       // SORT BY ... DISTRIBUTE BY ...
       Sort(
         sort.asScala.map(visitSortItem),
         global = false,
         withRepartitionByExpression(ctx, expressionList(distributeBy), query))
-    } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && !clusterBy.isEmpty) {
+    } else if (!isOrder && !isSort && !isDistributeBy && isClusterBy && !isRangePartitionBy) {
       // CLUSTER BY ...
       val expressions = expressionList(clusterBy)
       Sort(
         expressions.map(SortOrder(_, Ascending)),
         global = false,
         withRepartitionByExpression(ctx, expressions, query))
-    } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
+    } else if (!isOrder && !isSort && !isDistributeBy && !isClusterBy && isRangePartitionBy) {
+      // RANGE PARTITION BY ...
+      withRangeRepartitionByExpression(ctx, expressionList(rangePartitionBy), query)
+    } else if (!isOrder && isSort && !isDistributeBy && !isClusterBy && isRangePartitionBy) {
+      // RANGE PARTITION BY ... SORT BY ...
+      val expressions = expressionList(rangePartitionBy)
+      Sort(
+        expressions.map(SortOrder(_, Ascending)),
+        global = false,
+        withRangeRepartitionByExpression(ctx, expressions, query))
+    } else if (!isOrder && !isSort && !isDistributeBy && !isClusterBy && !isRangePartitionBy) {
       // [EMPTY]
       query
     } else {
       throw new ParseException(
-        "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported", ctx)
+        "Combination of " +
+          "ORDER BY/SORT BY/DISTRIBUTE BY/RANGE PARTITION BY/CLUSTER BY is not supported", ctx)
     }
 
     // WINDOWS
@@ -364,6 +381,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
     throw new ParseException("DISTRIBUTE BY is not supported", ctx)
+  }
+
+  /**
+   * Create a clause for RANGE PARTITION BY.
+   */
+  protected def withRangeRepartitionByExpression(
+      ctx: QueryOrganizationContext,
+      expressions: Seq[Expression],
+      query: LogicalPlan): LogicalPlan = {
+    throw new ParseException("RANGE PARTITION BY is not supported", ctx)
   }
 
   /**

@@ -702,3 +702,88 @@ Parquet Vectorized (Pushdown)               11766 / 11927          1.3         7
 Native ORC Vectorized                       12101 / 12301          1.3         769.3       1.0X
 Native ORC Vectorized (Pushdown)            11983 / 12651          1.3         761.9       1.0X
 
+
+================================================================================================
+Pushdown benchmark for RANGE PARTITION BY/DISTRIBUTE BY
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Select 1 Hash partition row (value = 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                            3556 / 3598          4.4         226.1       1.0X
+Parquet Vectorized (Pushdown)                 1166 / 1227         13.5          74.1       3.1X
+Native ORC Vectorized                         4106 / 4340          3.8         261.0       0.9X
+Native ORC Vectorized (Pushdown)              1458 / 1473         10.8          92.7       2.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Select 10% Hash partition rows (value < 1572864): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                            4520 / 4656          3.5         287.4       1.0X
+Parquet Vectorized (Pushdown)                 2126 / 2189          7.4         135.2       2.1X
+Native ORC Vectorized                         5092 / 5430          3.1         323.7       0.9X
+Native ORC Vectorized (Pushdown)              2608 / 3256          6.0         165.8       1.7X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Select 50% Hash partition rows (value < 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                           8228 / 12925          1.9         523.1       1.0X
+Parquet Vectorized (Pushdown)                 6752 / 7020          2.3         429.3       1.2X
+Native ORC Vectorized                        8786 / 11489          1.8         558.6       0.9X
+Native ORC Vectorized (Pushdown)              7889 / 9703          2.0         501.6       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Select 90% Hash partition rows (value < 14155776): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                          13279 / 13662          1.2         844.3       1.0X
+Parquet Vectorized (Pushdown)               14243 / 16789          1.1         905.6       0.9X
+Native ORC Vectorized                       19271 / 22538          0.8        1225.2       0.7X
+Native ORC Vectorized (Pushdown)            18925 / 20410          0.8        1203.2       0.7X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Select 1 Range partition row (value = 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                            3074 / 3200          5.1         195.5       1.0X
+Parquet Vectorized (Pushdown)                  375 /  388         41.9          23.9       8.2X
+Native ORC Vectorized                         3364 / 3449          4.7         213.9       0.9X
+Native ORC Vectorized (Pushdown)               775 /  841         20.3          49.3       4.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Select 10% Range partition rows (value < 1572864): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                            4083 / 4159          3.9         259.6       1.0X
+Parquet Vectorized (Pushdown)                 1650 / 1718          9.5         104.9       2.5X
+Native ORC Vectorized                         4168 / 4388          3.8         265.0       1.0X
+Native ORC Vectorized (Pushdown)              1990 / 2070          7.9         126.5       2.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Select 50% Range partition rows (value < 7864320): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                            7883 / 7975          2.0         501.2       1.0X
+Parquet Vectorized (Pushdown)                 6440 / 6665          2.4         409.4       1.2X
+Native ORC Vectorized                         8738 / 9354          1.8         555.5       0.9X
+Native ORC Vectorized (Pushdown)              6725 / 7136          2.3         427.6       1.2X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Select 90% Range partition rows (value < 14155776): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                          12675 / 14063          1.2         805.8       1.0X
+Parquet Vectorized (Pushdown)               11266 / 11650          1.4         716.3       1.1X
+Native ORC Vectorized                       14469 / 15080          1.1         919.9       0.9X
+Native ORC Vectorized (Pushdown)            15511 / 15708          1.0         986.1       0.8X
+

@@ -361,7 +361,7 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
     }
   }
 
-  ignore(s"Pushdown benchmark for Timestamp") {
+  ignore("Pushdown benchmark for Timestamp") {
     withTempPath { dir =>
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> true.toString) {
         ParquetOutputTimestampType.values.toSeq.map(_.toString).foreach { fileType =>
@@ -389,6 +389,41 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
                 )
               }
             }
+          }
+        }
+      }
+    }
+  }
+
+  ignore("Pushdown benchmark for RANGE PARTITION BY/DISTRIBUTE BY") {
+    withTempPath { dir =>
+      Seq("Hash", "Range").foreach { partitioning =>
+        withTempTable("tempTable", "orcTable", "patquetTable") {
+          val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
+          spark.range(numRows).selectExpr(columns: _*)
+            .withColumn("value", monotonically_increasing_id()).createTempView("tempTable")
+          if (partitioning.equals("Range")) {
+            saveAsTable(
+              spark.sql("select * from tempTable RANGE PARTITION BY value SORT BY value"), dir)
+          } else {
+            saveAsTable(
+              spark.sql("select * from tempTable DISTRIBUTE BY value SORT BY value"), dir)
+          }
+
+          Seq(s"value = $mid").foreach { whereExpr =>
+            val title = s"Select 1 $partitioning partition row ($whereExpr)"
+              .replace("value AND value", "value")
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+
+          val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
+          Seq(10, 50, 90).foreach { percent =>
+            filterPushDownBenchmark(
+              numRows,
+              s"Select $percent% $partitioning partition rows (value < ${numRows * percent / 100})",
+              s"value < ${numRows * percent / 100}",
+              selectExpr
+            )
           }
         }
       }

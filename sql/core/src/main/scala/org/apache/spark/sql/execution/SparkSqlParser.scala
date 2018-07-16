@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1548,6 +1548,21 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
     RepartitionByExpression(expressions, query, conf.numShufflePartitions)
+  }
+
+  /**
+   * Create a clause for RANGE PARTITION BY.
+   */
+  override protected def withRangeRepartitionByExpression(
+      ctx: QueryOrganizationContext,
+      expressions: Seq[Expression],
+      query: LogicalPlan): LogicalPlan = {
+    require(expressions.nonEmpty, "At least one range partition by expression must be specified.")
+    val sortOrder: Seq[SortOrder] = expressions.map {
+      case expr: SortOrder => expr
+      case expr: Expression => SortOrder(expr, Ascending)
+    }
+    RepartitionByExpression(sortOrder, query, conf.numShufflePartitions)
   }
 
   /**
