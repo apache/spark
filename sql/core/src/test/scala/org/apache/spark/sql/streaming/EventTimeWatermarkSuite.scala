@@ -18,18 +18,22 @@
 package org.apache.spark.sql.streaming
 
 import java.{util => ju}
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date}
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.util.Utils
 
 class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matchers with Logging {
 
@@ -482,6 +486,136 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testWithFlag(true)
     testWithFlag(false)
+  }
+
+  test("MultipleWatermarkPolicy: max") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        MultiAddData(input1, 20)(input2, 30),
+        CheckLastBatch(20, 30),
+        checkWatermark(input1, 15), // max(20 - 10, 30 - 15) = 15
+        StopStream,
+        StartStream(),
+        checkWatermark(input1, 15), // watermark recovered correctly
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input1, 115), // max(120 - 10, 130 - 15) = 115, policy recovered correctly
+        AddData(input1, 150),
+        CheckLastBatch(150),
+        checkWatermark(input1, 140)  // should advance even if one of the input has data
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: min") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "min") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        MultiAddData(input1, 20)(input2, 30),
+        CheckLastBatch(20, 30),
+        checkWatermark(input1, 10), // min(20 - 10, 30 - 15) = 10
+        StopStream,
+        StartStream(),
+        checkWatermark(input1, 10), // watermark recovered correctly
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input2, 110), // min(120 - 10, 130 - 15) = 110, policy recovered correctly
+        AddData(input2, 150),
+        CheckLastBatch(150),
+        checkWatermark(input2, 110)  // does not advance when only one of the input has data
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: recovery from checkpoints ignores session conf") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(input1, 20)(input2, 30),
+        CheckLastBatch(20, 30),
+        checkWatermark(input1, 15) // max(20 - 10, 30 - 15) = 15
+      )
+    }
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "min") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        checkWatermark(input1, 15), // watermark recovered correctly
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input1, 115), // max(120 - 10, 130 - 15) = 115, policy recovered correctly
+        AddData(input1, 150),
+        CheckLastBatch(150),
+        checkWatermark(input1, 140) // should advance even if one of the input has data
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: recovery from Spark ver 2.3.1 checkpoints ensures min policy") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.3.1-for-multi-watermark-policy/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    input1.addData(20)
+    input2.addData(30)
+    input1.addData(10)
+
+    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+      testStream(dfWithMultipleWatermarks(input1, input2))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        Execute { _.processAllAvailable() },
+        MultiAddData(input1, 120)(input2, 130),
+        CheckLastBatch(120, 130),
+        checkWatermark(input2, 110), // should calculate 'min' even if session conf has 'max' policy
+        AddData(input2, 150),
+        CheckLastBatch(150),
+        checkWatermark(input2, 110)
+      )
+    }
+  }
+
+  test("MultipleWatermarkPolicy: fail on incorrect conf values") {
+    val invalidValues = Seq("", "random")
+    invalidValues.foreach { value =>
+      val e = intercept[IllegalArgumentException] {
+        spark.conf.set(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key, value)
+      }
+      assert(e.getMessage.toLowerCase.contains("valid values are 'min' and 'max'"))
+    }
+  }
+
+  private def dfWithMultipleWatermarks(
+      input1: MemoryStream[Int],
+      input2: MemoryStream[Int]): Dataset[_] = {
+    val df1 = input1.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+    val df2 = input2.toDF
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "15 seconds")
+    df1.union(df2).select($"eventTime".cast("int"))
+  }
+
+  private def checkWatermark(input: MemoryStream[Int], watermark: Long) = Execute { q =>
+    input.addData(1)
+    q.processAllAvailable()
+    assert(q.lastProgress.eventTime.get("watermark") == formatTimestamp(watermark))
   }
 
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
