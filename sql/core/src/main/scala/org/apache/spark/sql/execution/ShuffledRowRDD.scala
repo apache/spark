@@ -22,6 +22,8 @@ import java.util.Arrays
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.exchange.DataSkewInfo
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * The [[Partition]] used by [[ShuffledRowRDD]]. A post-shuffle partition
@@ -31,8 +33,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 private final class ShuffledRowRDDPartition(
     val postShufflePartitionIndex: Int,
     val startPreShufflePartitionIndex: Int,
-    val endPreShufflePartitionIndex: Int) extends Partition {
+    val endPreShufflePartitionIndex: Int,
+    val isSkewPartition: Boolean = false,
+    val targetShufflePartitionIndex: Int = 0,
+    val totalSplitPartitionNum: Int = 1,
+    val skewPartitionIndex: Int = 0) extends Partition {
   override val index: Int = postShufflePartitionIndex
+
+  override def toString: String = s"globalIndex=$postShufflePartitionIndex " +
+    s"target=$targetShufflePartitionIndex, total=$totalSplitPartitionNum" +
+    s",skewIndex=$skewPartitionIndex, isSkew = $isSkewPartition"
 }
 
 /**
@@ -112,10 +122,15 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  */
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
-    specifiedPartitionStartIndices: Option[Array[Int]] = None)
+    specifiedPartitionStartIndices: Option[Array[Int]] = None,
+    dataSkewInfo: Option[DataSkewInfo] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
+
+  private[this] val hasDataSkew = dataSkewInfo.isDefined &&
+    dataSkewInfo.get.partitionSplitMappings.nonEmpty
+
 
   private[this] val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
     case Some(indices) => indices
@@ -132,9 +147,23 @@ class ShuffledRowRDD(
 
   override val partitioner: Option[Partitioner] = Some(part)
 
+  private[this] def queryRelateSkewPartition(index: Int) = {
+    if (!hasDataSkew) {
+      (false, 0)
+    } else {
+      val mappings = dataSkewInfo.get.partitionSplitMappings
+      val idx = mappings.map(_._1).indexOf(index)
+      if (-1 == idx) {
+        (false, 0)
+      } else {
+        (true, mappings(idx)._2)
+      }
+    }
+  }
+
   override def getPartitions: Array[Partition] = {
     assert(partitionStartIndices.length == part.numPartitions)
-    Array.tabulate[Partition](partitionStartIndices.length) { i =>
+    val parts = Array.tabulate[Partition](partitionStartIndices.length) { i =>
       val startIndex = partitionStartIndices(i)
       val endIndex =
         if (i < partitionStartIndices.length - 1) {
@@ -142,14 +171,41 @@ class ShuffledRowRDD(
         } else {
           numPreShufflePartitions
         }
-      new ShuffledRowRDDPartition(i, startIndex, endIndex)
+      val relateSkew = queryRelateSkewPartition(i)
+      new ShuffledRowRDDPartition(i, startIndex, endIndex, relateSkew._1, i, relateSkew._2)
+    }
+
+    if (hasDataSkew) {
+      val skewPartitions = ArrayBuffer[Partition]()
+      for (splitMapping <- dataSkewInfo.get.partitionSplitMappings) {
+        val targetPartition = parts(splitMapping._1).asInstanceOf[ShuffledRowRDDPartition]
+        for (i <- 1 until splitMapping._2) {
+          skewPartitions += new ShuffledRowRDDPartition(parts.length + skewPartitions.length,
+            targetPartition.startPreShufflePartitionIndex,
+            targetPartition.endPreShufflePartitionIndex,
+            true,
+            targetPartition.postShufflePartitionIndex,
+            splitMapping._2,
+            i)
+        }
+      }
+      parts ++ skewPartitions
+
+    } else {
+      parts
     }
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
-    tracker.getPreferredLocationsForShuffle(dep, partition.index)
+    val shuffledRowRDDPartition = partition.asInstanceOf[ShuffledRowRDDPartition]
+    if (hasDataSkew && shuffledRowRDDPartition.isSkewPartition) {
+      tracker.getPreferredLocationsForShuffle(dep,
+        shuffledRowRDDPartition.targetShufflePartitionIndex)
+    } else {
+      tracker.getPreferredLocationsForShuffle(dep, partition.index)
+    }
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
@@ -157,12 +213,19 @@ class ShuffledRowRDD(
     // The range of pre-shuffle partitions that we are fetching at here is
     // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].
     val reader =
-      SparkEnv.get.shuffleManager.getReader(
-        dependency.shuffleHandle,
-        shuffledRowPartition.startPreShufflePartitionIndex,
-        shuffledRowPartition.endPreShufflePartitionIndex,
-        context)
-    reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
+    SparkEnv.get.shuffleManager.getReader(
+      dependency.shuffleHandle,
+      shuffledRowPartition.startPreShufflePartitionIndex,
+      shuffledRowPartition.endPreShufflePartitionIndex,
+      context)
+
+    val isSplit = hasDataSkew &&
+      shuffledRowPartition.isSkewPartition && dataSkewInfo.get.isSplitSide
+
+    reader.read(shuffledRowPartition.skewPartitionIndex,
+      shuffledRowPartition.totalSplitPartitionNum, isSplit).
+      asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
+
   }
 
   override def clearDependencies() {

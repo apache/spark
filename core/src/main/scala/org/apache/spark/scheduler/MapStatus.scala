@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -44,16 +44,28 @@ private[spark] sealed trait MapStatus {
    * necessary for correctness, since block fetchers are allowed to skip zero-size blocks.
    */
   def getSizeForBlock(reduceId: Int): Long
+
+  def getRecordLengthForBlock(reduceId: Int): Long
 }
 
 
 private[spark] object MapStatus {
 
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
+    apply(loc, uncompressedSizes, Array.empty[Long])
+  }
+
+  def apply(loc: BlockManagerId, uncompressedSizes: Array[Byte]): MapStatus = {
+    new CompressedMapStatus(loc, uncompressedSizes, Array.empty[Byte])
+  }
+
+
+
+  def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
     if (uncompressedSizes.length > 2000) {
       HighlyCompressedMapStatus(loc, uncompressedSizes)
     } else {
-      new CompressedMapStatus(loc, uncompressedSizes)
+      new CompressedMapStatus(loc, uncompressedSizes, recordsByPartitionId)
     }
   }
 
@@ -96,13 +108,20 @@ private[spark] object MapStatus {
  */
 private[spark] class CompressedMapStatus(
     private[this] var loc: BlockManagerId,
-    private[this] var compressedSizes: Array[Byte])
-  extends MapStatus with Externalizable {
+    private[this] var compressedSizes: Array[Byte],
+    private[this] var recordsByPartitionId: Array[Byte])
+  extends MapStatus with Externalizable with Logging {
 
-  protected def this() = this(null, null.asInstanceOf[Array[Byte]])  // For deserialization only
+  protected def this() = this(null, null.asInstanceOf[Array[Byte]],
+    null.asInstanceOf[Array[Byte]])  // For deserialization only
 
   def this(loc: BlockManagerId, uncompressedSizes: Array[Long]) {
-    this(loc, uncompressedSizes.map(MapStatus.compressSize))
+    this(loc, uncompressedSizes.map(MapStatus.compressSize), Array.empty[Byte])
+  }
+
+  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], recordsByPartitionId: Array[Long]) {
+    this(loc, uncompressedSizes.map(MapStatus.compressSize),
+      recordsByPartitionId.map(MapStatus.compressSize))
   }
 
   override def location: BlockManagerId = loc
@@ -110,6 +129,11 @@ private[spark] class CompressedMapStatus(
   override def getSizeForBlock(reduceId: Int): Long = {
     MapStatus.decompressSize(compressedSizes(reduceId))
   }
+
+  override def getRecordLengthForBlock(reduceId: Int): Long = {
+    MapStatus.decompressSize(recordsByPartitionId(reduceId))
+  }
+
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
@@ -121,7 +145,9 @@ private[spark] class CompressedMapStatus(
     loc = BlockManagerId(in)
     val len = in.readInt()
     compressedSizes = new Array[Byte](len)
-    in.readFully(compressedSizes)
+    recordsByPartitionId = new Array[Byte](len)
+    in.readFully(compressedSizes, 0, len)
+    in.readFully(recordsByPartitionId, 0, len)
   }
 }
 

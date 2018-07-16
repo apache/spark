@@ -41,12 +41,50 @@ private[spark] class BlockStoreShuffleReader[K, C](
   private val dep = handle.dependency
 
   /** Read the combined key-values for this reduce task */
-  override def read(): Iterator[Product2[K, C]] = {
+  override def read(index: Int, total: Int, isSplit: Boolean): Iterator[Product2[K, C]] = {
+    val blockInfo = mapOutputTracker.
+                    getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition)
+
+    //    logWarning(s"index : ${index}, totalPageNum: ${total}, isSplit:${isSplit}")
+    val finalBlockInfo = if (isSplit) {
+      def page(size: Int): (Int, Int) = {
+        val prePageSize = if (size % total == 0) {
+          size / total
+        } else {
+          size / total + 1
+        }
+        var startIndex: Int = 0
+        var endIndex: Int = 0
+        startIndex = index * prePageSize
+        if (startIndex + prePageSize >= size) {
+          endIndex = size
+        } else {
+          endIndex = startIndex + prePageSize
+        }
+        if(startIndex > size) {
+          startIndex = 0
+          endIndex = 0
+        }
+        logWarning(s"size = $size, index= $index, total=$total, pageStartIndex: ${startIndex}, pageEndIndex:${endIndex}")
+        (startIndex, endIndex)
+      }
+
+      blockInfo.map(f => {
+        val p = page(f._2.length)
+        val scile = (f._1, f._2.slice(p._1, p._2))
+        logWarning("scile = " + scile)
+        scile
+      })
+    } else {
+      blockInfo
+    }
+
+
     val wrappedStreams = new ShuffleBlockFetcherIterator(
       context,
       blockManager.shuffleClient,
       blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
+      finalBlockInfo,
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,

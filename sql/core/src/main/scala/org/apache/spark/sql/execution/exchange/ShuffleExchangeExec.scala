@@ -42,7 +42,8 @@ import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordCo
 case class ShuffleExchangeExec(
     var newPartitioning: Partitioning,
     child: SparkPlan,
-    @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
+    @transient coordinator: Option[ExchangeCoordinator],
+    dataSkewInfo: Option[DataSkewInfo] = None) extends Exchange {
 
   // NOTE: coordinator can be null after serialization/deserialization,
   //       e.g. it can be null on the Executor side
@@ -100,7 +101,8 @@ case class ShuffleExchangeExec(
    */
   private[exchange] def preparePostShuffleRDD(
       shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
-      specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
+      specifiedPartitionStartIndices: Option[Array[Int]] = None,
+      dataSkewInfo: Option[DataSkewInfo] = None): ShuffledRowRDD = {
     // If an array of partition start indices is provided, we need to use this array
     // to create the ShuffledRowRDD. Also, we need to update newPartitioning to
     // update the number of post-shuffle partitions.
@@ -108,7 +110,7 @@ case class ShuffleExchangeExec(
       assert(newPartitioning.isInstanceOf[HashPartitioning])
       newPartitioning = UnknownPartitioning(indices.length)
     }
-    new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
+    new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices, dataSkewInfo)
   }
 
   /**
@@ -122,7 +124,7 @@ case class ShuffleExchangeExec(
       cachedShuffleRDD = coordinator match {
         case Some(exchangeCoordinator) =>
           val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
-          assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
+          //assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
           shuffleRDD
         case _ =>
           val shuffleDependency = prepareShuffleDependency()

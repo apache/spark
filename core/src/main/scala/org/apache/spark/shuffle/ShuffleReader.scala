@@ -22,7 +22,9 @@ package org.apache.spark.shuffle
  */
 private[spark] trait ShuffleReader[K, C] {
   /** Read the combined key-values for this reduce task */
-  def read(): Iterator[Product2[K, C]]
+  // def read(): Iterator[Product2[K, C]]
+
+  def read(index: Int = 0, total: Int = 0, isSplit: Boolean = false): Iterator[Product2[K, C]]
 
   /**
    * Close this reader.

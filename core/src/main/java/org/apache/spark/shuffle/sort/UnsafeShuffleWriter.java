@@ -87,6 +87,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Nullable private ShuffleExternalSorter sorter;
   private long peakMemoryUsedBytes = 0;
 
+  private long[] recordsByPartitionId = null;
+
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
   private static final class MyByteArrayOutputStream extends ByteArrayOutputStream {
     MyByteArrayOutputStream(int size) { super(size); }
@@ -148,6 +150,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.outputBufferSizeInBytes =
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
+    this.recordsByPartitionId =  new long[numPartitions];
     open();
   }
 
@@ -248,7 +251,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths, recordsByPartitionId);
   }
 
   @VisibleForTesting
@@ -256,6 +259,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     assert(sorter != null);
     final K key = record._1();
     final int partitionId = partitioner.getPartition(key);
+    recordsByPartitionId[partitionId] = recordsByPartitionId[partitionId] + 1;
     serBuffer.reset();
     serOutputStream.writeKey(key, OBJECT_CLASS_TAG);
     serOutputStream.writeValue(record._2(), OBJECT_CLASS_TAG);

@@ -19,13 +19,12 @@ package org.apache.spark.sql.execution.exchange
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{RightOuter, _}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec,
-  SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -41,6 +40,28 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def targetPostShuffleInputSize: Long = conf.targetPostShuffleInputSize
 
   private def adaptiveExecutionEnabled: Boolean = conf.adaptiveExecutionEnabled
+
+  private def dataSkewOptimizeEnabled: Boolean = conf.dataSkewOptimizeEnabled
+
+  private def executorInstance: Int = conf.getConfString("spark.executor.instances", "1").toInt
+
+  private def dynamicExecutorInstance: Int =
+    conf.getConfString("spark.dynamicAllocation.maxExecutors", "200").toInt
+
+  private def executorCores: Int = conf.getConfString("spark.executor.cores", "1").toInt
+
+  private def dataSkewSplitMaxPartitionNum: Int =
+    if (conf.getConfString("spark.dynamicAllocation.enabled", "false").toBoolean) {
+      dynamicExecutorInstance * executorCores
+    } else {
+      executorInstance * executorCores
+    }
+
+  private def dataSkewPostShufflerThreshold: Long = conf.dataSkewPostShufflerThreshold
+
+  private def dataSkewPrePartitionRecordsNum: Long = conf.dataSkewPrePartitionRecordsNum
+
+  private def dataSkewPartitionCountThreshold: Double = conf.dataSkewPartitionCountThreshold
 
   private def minNumPostShufflePartitions: Option[Int] = {
     val minNumPostShufflePartitions = conf.minNumPostShufflePartitions
@@ -58,7 +79,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       if (children.exists(_.isInstanceOf[ShuffleExchangeExec])) {
         // Right now, ExchangeCoordinator only support HashPartitionings.
         children.forall {
-          case e @ ShuffleExchangeExec(hash: HashPartitioning, _, _) => true
+          case e @ ShuffleExchangeExec(hash: HashPartitioning, _, _, _) => true
           case child =>
             child.outputPartitioning match {
               case hash: HashPartitioning => true
@@ -84,12 +105,35 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
           new ExchangeCoordinator(
             children.length,
             targetPostShuffleInputSize,
-            minNumPostShufflePartitions)
-        children.zip(requiredChildDistributions).map {
-          case (e: ShuffleExchangeExec, _) =>
+            minNumPostShufflePartitions,
+            dataSkewOptimizeEnabled,
+            dataSkewSplitMaxPartitionNum,
+            dataSkewPostShufflerThreshold,
+            dataSkewPrePartitionRecordsNum,
+            dataSkewPartitionCountThreshold,
+            joinType: JoinType)
+
+        def addDataSkewInfo(joinType: JoinType, index: Int) = {
+          val isSplitSide = (joinType, index) match {
+            case (FullOuter|ExistenceJoin(_)|NaturalJoin(_)|UsingJoin(_, _), _) => false
+            //            case (FullOuter, _) => false
+            case (RightOuter, 0) => false
+            case (t, i) if !t.equals(RightOuter) && i > 0 => false
+            case _ => true
+          }
+          if (joinType == FullOuter) {
+            None
+          } else {
+            Some(DataSkewInfo(isSplitSide))
+          }
+        }
+
+        children.zip(requiredChildDistributions).zipWithIndex.map {
+          case ((e: ShuffleExchangeExec, _), index) =>
             // This child is an Exchange, we need to add the coordinator.
-            e.copy(coordinator = Some(coordinator))
-          case (child, distribution) =>
+            e.copy(coordinator = Some(coordinator),
+              dataSkewInfo = addDataSkewInfo(joinType, index))
+          case ((child, distribution), index) =>
             // If this child is not an Exchange, we need to add an Exchange for now.
             // Ideally, we can try to avoid this Exchange. However, when we reach here,
             // there are at least two children operators (because if there is a single child
@@ -129,9 +173,10 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
             // partitions when one post-shuffle partition includes multiple pre-shuffle partitions.
             val targetPartitioning = distribution.createPartitioning(defaultNumPreShufflePartitions)
             assert(targetPartitioning.isInstanceOf[HashPartitioning])
-            ShuffleExchangeExec(targetPartitioning, child, Some(coordinator))
+            ShuffleExchangeExec(targetPartitioning, child, Some(coordinator),
+              dataSkewInfo = addDataSkewInfo(joinType, index))
         }
-      } else {
+      }  else {
         // If we do not need ExchangeCoordinator, the original children are returned.
         children
       }
@@ -145,6 +190,11 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     var children: Seq[SparkPlan] = operator.children
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)
+
+    val joinType = operator match {
+      case joinPlan: SortMergeJoinExec => joinPlan.joinType
+      case _ => LeftOuter
+    }
 
     // Ensure that the operator's children satisfy their output distribution requirements.
     children = children.zip(requiredChildDistributions).map {
@@ -190,7 +240,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
             val defaultPartitioning = distribution.createPartitioning(targetNumPartitions)
             child match {
               // If child is an exchange, we replace it with a new one having defaultPartitioning.
-              case ShuffleExchangeExec(_, c, _) => ShuffleExchangeExec(defaultPartitioning, c)
+              case ShuffleExchangeExec(_, c, _, _) => ShuffleExchangeExec(defaultPartitioning, c)
               case _ => ShuffleExchangeExec(defaultPartitioning, child)
             }
           }
@@ -206,7 +256,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     // at here for now.
     // Once we finish https://issues.apache.org/jira/browse/SPARK-10665,
     // we can first add Exchanges and then add coordinator once we have a DAG of query fragments.
-    children = withExchangeCoordinator(children, requiredChildDistributions)
+    children = withExchangeCoordinator(children, requiredChildDistributions, joinType)
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
@@ -303,7 +353,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     // TODO: remove this after we create a physical operator for `RepartitionByExpression`.
-    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, _) =>
+    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, _, _) =>
       child.outputPartitioning match {
         case lower: HashPartitioning if upper.semanticEquals(lower) => child
         case _ => operator

@@ -225,6 +225,54 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val DATA_SKEW_OPTIMIZE_ENABLED = buildConf("spark.sql.dataskew.optimize.enabled")
+    .doc("When true, enable data skew optimize execution.")
+    .booleanConf
+    .createWithDefault(true)
+  val DATA_SKEW_PRE_PARTITION_RECORDS_NUM = buildConf("spark.sql.data.skew.pre.partition.records.num")
+    .createWithDefault(false)
+
+  val DATA_SKEW_PRE_PARTITION_RECORDS_NUM =
+    buildConf("spark.sql.dataskew.pre.partition.records.num")
+      .internal()
+      .doc("spark.sql.data.skew.pre.partition.records.num")
+      .doc("every reduce task process record num")
+      .longConf
+      .createWithDefault(100 * 1000)
+  val DATA_SKEW_PRE_PARTITION_DATA_SIZE = buildConf("spark.sql.data.skew.pre.partition.data.size")
+    .internal()
+    .doc("spark.sql.data.skew.pre.partition.data.size")
+    .longConf
+    .createWithDefault(64 * 1024 * 1024)
+
+  val DATA_SKEW_POST_SHUFFLER_RECORDS_NUM = buildConf("spark.sql.data.skew.shuffler.records.num")
+  val DATA_SKEW_PARTITION_COUNT_THRESHOLD =
+    buildConf("spark.sql.dataskew.partition.count.threshold")
+      .internal()
+      .doc("if data skew partition total count large than this, ignore data skew optimizer")
+      .doubleConf
+      .createWithDefault(0.5)
+
+
+
+  val DATA_SKEW_POST_SHUFFLER_THRESHOLD = buildConf("spark.sql.dataskew.shuffler.threshold")
+    .internal()
+    .doc("spark.sql.data.skew.shuffler.records.num")
+    .doc("spark.sql.dataskew.shuffler.threshold")
+    .longConf
+    .createWithDefault(100 * 1000)
+    .createWithDefault(1000 * 1000)
+
+  val DATA_SKEW_NUM_SPLIT_PARTITION =
+    buildConf("spark.sql.data.skew.split.num")
+  val DATA_SKEW_NUM_SPLIT_MAX_PARTITION =
+    buildConf("spark.sql.dataskew.max.split.num")
+      .internal()
+      .doc("data skew split partition")
+      .doc("data skew split max partition, cannot split unlimit partitions")
+      .intConf
+      .createWithDefault(200)
+
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.minNumPostShufflePartitions")
       .internal()

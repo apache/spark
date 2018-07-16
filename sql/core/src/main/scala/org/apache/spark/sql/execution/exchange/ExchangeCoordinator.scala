@@ -26,6 +26,8 @@ import org.apache.spark.{MapOutputStatistics, ShuffleDependency, SimpleFutureAct
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, RightOuter}
+import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.JoinSide
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
 
 /**
@@ -85,7 +87,13 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
 class ExchangeCoordinator(
     numExchanges: Int,
     advisoryTargetPostShuffleInputSize: Long,
-    minNumPostShufflePartitions: Option[Int] = None)
+    minNumPostShufflePartitions: Option[Int] = None,
+    dataSkewOptimizeEnabled: Boolean = false,
+    dataSkewSplitMaxPartitionNum: Int = 200,
+    dataSkewPostShufflerThreshold: Long = 5000000L,
+    dataSkewPrePartitionRecordsNum: Long = 2000000L,
+    dataSkewPartitionCountThreshold: Double = 0.5,
+    joinType: JoinType = Inner)
   extends Logging {
 
   // The registered Exchange operators.
@@ -116,7 +124,7 @@ class ExchangeCoordinator(
    * mapOutputStatistics provided by all pre-shuffle stages.
    */
   def estimatePartitionStartIndices(
-      mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
+      mapOutputStatistics: Array[MapOutputStatistics]): (Array[Int], Array[(Int, Int)]) = {
     // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
     // a stage when the number of partitions of this dependency is 0.
     assert(mapOutputStatistics.length <= numExchanges)
@@ -158,34 +166,82 @@ class ExchangeCoordinator(
     val numPreShufflePartitions = distinctNumPreShufflePartitions.head
 
     val partitionStartIndices = ArrayBuffer[Int]()
+    // The data skew partitions, will be splited in ShuffleRowRDD
+    val partitionSplitMappings = ArrayBuffer[(Int, Int)]()
     // The first element of partitionStartIndices is always 0.
     partitionStartIndices += 0
 
     var postShuffleInputSize = 0L
-
+    var postShuffleInputRecords = 0L
     var i = 0
     while (i < numPreShufflePartitions) {
       // We calculate the total size of ith pre-shuffle partitions from all pre-shuffle stages.
       // Then, we add the total size to postShuffleInputSize.
       var nextShuffleInputSize = 0L
+      var nextShuffleInputRecords = 0L
+
       var j = 0
       while (j < mapOutputStatistics.length) {
         nextShuffleInputSize += mapOutputStatistics(j).bytesByPartitionId(i)
+        if ((joinType == RightOuter && j > 0) || (joinType != RightOuter && j == 0)) {
+          nextShuffleInputRecords += mapOutputStatistics(j).recordsByPartitionId(i)
+        }
         j += 1
       }
 
       // If including the nextShuffleInputSize would exceed the target partition size, then start a
       // new partition.
-      if (i > 0 && postShuffleInputSize + nextShuffleInputSize > targetPostShuffleInputSize) {
+      val isDataSkew = dataSkewOptimizeEnabled && nextShuffleInputRecords > dataSkewPostShufflerThreshold
+      if (i > 0 && (isDataSkew
+        || postShuffleInputSize + nextShuffleInputSize > targetPostShuffleInputSize)) {
+
         partitionStartIndices += i
         // reset postShuffleInputSize.
         postShuffleInputSize = nextShuffleInputSize
-      } else postShuffleInputSize += nextShuffleInputSize
+        postShuffleInputRecords = nextShuffleInputRecords
+
+        if(isDataSkew) {
+          val partsNum = Math.min(dataSkewSplitMaxPartitionNum,
+            computeSkewPartitionNum(nextShuffleInputRecords)).toInt
+          if (partsNum > 1) {
+            val splitMapping = (partitionStartIndices.size - 1, partsNum)
+            partitionSplitMappings += splitMapping
+            logWarning("Data skew partition # " + splitMapping +
+              ", reach records # " + nextShuffleInputRecords)
+          }
+
+        }
+
+      } else {
+        postShuffleInputSize += nextShuffleInputSize
+        postShuffleInputRecords += nextShuffleInputRecords
+      }
 
       i += 1
     }
+    logWarning("partition indeces # " + partitionStartIndices)
+    logWarning("data skew split mapping # " + partitionSplitMappings)
+    val isOverflow = (partitionStartIndices.length, partitionSplitMappings.length) match {
+      case (x) if (0 != x._1 && 0 != x._2) &&
+        x._2.toDouble/x._1.toDouble > dataSkewPartitionCountThreshold => true
+      case _ => false
+    }
+    if (isOverflow) {
+      logWarning(s"Data skew partition overflow the threshold [$dataSkewPartitionCountThreshold]")
+      (partitionStartIndices.toArray, Array.empty[(Int, Int)])
+    } else {
+      (partitionStartIndices.toArray, partitionSplitMappings.toArray)
+    }
 
-    partitionStartIndices.toArray
+  }
+
+
+  private[this] def computeSkewPartitionNum(nextShuffleInputRecords: Long) = {
+    if (0 == nextShuffleInputRecords % dataSkewPostShufflerThreshold) {
+      nextShuffleInputRecords / dataSkewPostShufflerThreshold
+    } else {
+      nextShuffleInputRecords / dataSkewPostShufflerThreshold + 1
+    }
   }
 
   @GuardedBy("this")
@@ -230,18 +286,35 @@ class ExchangeCoordinator(
 
       // Now, we estimate partitionStartIndices. partitionStartIndices.length will be the
       // number of post-shuffle partitions.
-      val partitionStartIndices =
-        if (mapOutputStatistics.length == 0) {
-          None
-        } else {
-          Some(estimatePartitionStartIndices(mapOutputStatistics))
-        }
+      val partitionEstimateResult: (Array[Int], Array[(Int, Int)]) =
+      if (mapOutputStatistics.length == 0) {
+        (Array.empty[Int], Array.empty[(Int, Int)])
+      } else {
+        estimatePartitionStartIndices(mapOutputStatistics)
+      }
+
+      val partitionStartIndices = partitionEstimateResult._1 match {
+        case x: Array[Int] if (x.nonEmpty) => Some(x)
+        case _ => None
+      }
 
       var k = 0
       while (k < numExchanges) {
         val exchange = exchanges(k)
+        // if data skew add info to shuffle rdd
+        val dataSkewInfo = if (!dataSkewOptimizeEnabled) {
+          None
+        } else {
+          exchange.dataSkewInfo match {
+            case Some(skewInfo) => Some(skewInfo.copy(
+              partitionSplitMappings = partitionEstimateResult._2))
+            case _ => None
+          }
+        }
         val rdd =
-          exchange.preparePostShuffleRDD(shuffleDependencies(k), partitionStartIndices)
+          exchange.preparePostShuffleRDD(shuffleDependencies(k),
+            partitionStartIndices,
+            dataSkewInfo)
         newPostShuffleRDDs.put(exchange, rdd)
 
         k += 1
