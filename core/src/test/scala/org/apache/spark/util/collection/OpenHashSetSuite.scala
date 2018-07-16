@@ -82,15 +82,15 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     assert(set.contains(1132))
     assert(!set.contains(10000))
 
-    set.remove(1132)
+    set.remove(999)
     assert(set.size === 3)
     assert(set.contains(10))
     assert(set.contains(50))
-    assert(set.contains(999))
-    assert(!set.contains(1132))
+    assert(!set.contains(999))
+    assert(set.contains(1132))
     assert(!set.contains(10000))
 
-    set.remove(999)
+    set.remove(1132)
     assert(set.size === 2)
     assert(set.contains(10))
     assert(set.contains(50))
@@ -99,6 +99,22 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     assert(!set.contains(10000))
 
     set.add(1132)
+    assert(set.size === 3)
+    assert(set.contains(10))
+    assert(set.contains(50))
+    assert(!set.contains(999))
+    assert(set.contains(1132))
+    assert(!set.contains(10000))
+
+    set.add(999)
+    assert(set.size === 4)
+    assert(set.contains(10))
+    assert(set.contains(50))
+    assert(set.contains(999))
+    assert(set.contains(1132))
+    assert(!set.contains(10000))
+
+    set.remove(999)
     assert(set.size === 3)
     assert(set.contains(10))
     assert(set.contains(50))
@@ -159,15 +175,15 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     assert(set.contains(1132L))
     assert(!set.contains(10000L))
 
-    set.remove(1132)
+    set.remove(999L)
     assert(set.size === 3)
     assert(set.contains(10L))
     assert(set.contains(50L))
-    assert(set.contains(999L))
-    assert(!set.contains(1132L))
+    assert(!set.contains(999L))
+    assert(set.contains(1132L))
     assert(!set.contains(10000L))
 
-    set.remove(999L)
+    set.remove(1132L)
     assert(set.size === 2)
     assert(set.contains(10L))
     assert(set.contains(50L))
@@ -176,6 +192,22 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     assert(!set.contains(10000L))
 
     set.add(1132L)
+    assert(set.size === 3)
+    assert(set.contains(10L))
+    assert(set.contains(50L))
+    assert(!set.contains(999L))
+    assert(set.contains(1132L))
+    assert(!set.contains(10000L))
+
+    set.add(999L)
+    assert(set.size === 4)
+    assert(set.contains(10L))
+    assert(set.contains(50L))
+    assert(set.contains(999L))
+    assert(set.contains(1132L))
+    assert(!set.contains(10000L))
+
+    set.remove(999L)
     assert(set.size === 3)
     assert(set.contains(10L))
     assert(set.contains(50L))
@@ -350,6 +382,27 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     }
     assert(set.size === 1000)
     assert(set.capacity > 1000)
+  }
+
+  test("growth with remove") {
+    val loadFactor = 0.7
+    val set = new OpenHashSet[Int](8, loadFactor)
+    for (i <- 1 to 5) {
+      set.add(i)
+      assert(set.contains(i))
+      set.remove(i)
+      assert(!set.contains(i))
+    }
+    assert(set.size == 0)
+    assert(set.capacity == 8)
+
+    // resize should occur
+    set.add(6)
+    assert(set.contains(6))
+    set.remove(6)
+    assert(!set.contains(6))
+    assert(set.size == 0)
+    assert(set.capacity > 8)
   }
 
   test("SPARK-18200 Support zero as an initial set size") {
