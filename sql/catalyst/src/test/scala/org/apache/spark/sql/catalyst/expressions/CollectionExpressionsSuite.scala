@@ -1654,6 +1654,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayIntersect(a01, a00), Seq(2, 4))
     checkEvaluation(ArrayIntersect(a02, a03), Seq(4, 2))
     checkEvaluation(ArrayIntersect(a03, a02), Seq(2, 4))
+    checkEvaluation(ArrayIntersect(a00, a04), Seq(1, 2, 4))
     checkEvaluation(ArrayIntersect(a04, a05), Seq(4, null, 2))
     checkEvaluation(ArrayIntersect(a02, a06), Seq.empty)
     checkEvaluation(ArrayIntersect(a06, a04), Seq.empty)
@@ -1715,8 +1716,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayIntersect(aa1, aa0), Seq[Seq[Int]](Seq[Int](3, 4)))
 
     assert(ArrayIntersect(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayIntersect(a00, a04).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayIntersect(a00, a04).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(ArrayIntersect(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
     assert(ArrayIntersect(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayIntersect(a20, a23).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayIntersect(a23, a24).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
 }

@@ -122,8 +122,8 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
    * Remove an element from the set. If an element does not exists in the set, nothing is done.
    */
   def remove(k: T): Unit = {
-    val pos = hashcode(hasher.hash(k)) & _mask
-    if (_bitset.get(pos)) {
+    val pos = getPos(k)
+    if (pos != INVALID_POS && _bitset.get(pos)) {
       _bitset.unset(pos)
       _size -= 1
     }
