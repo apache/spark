@@ -37,8 +37,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()
     val content =
-      <script src={UIUtils.prependBaseUri("/static/historypage-common.js")}></script> ++
-      <script src={UIUtils.prependBaseUri("/static/utils.js")}></script>
+      <script src={UIUtils.prependBaseUri(request, "/static/historypage-common.js")}></script> ++
+      <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
       <div>
           <div class="container-fluid">
             <ul class="unstyled">
@@ -64,9 +64,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
             {
             if (allAppsSize > 0) {
-              <script src={UIUtils.prependBaseUri("/static/dataTables.rowsGroup.js")}></script> ++
+              <script src={UIUtils.prependBaseUri(
+                  request, "/static/dataTables.rowsGroup.js")}></script> ++
                 <div id="history-summary" class="row-fluid"></div> ++
-                <script src={UIUtils.prependBaseUri("/static/historypage.js")}></script> ++
+                <script src={UIUtils.prependBaseUri(request, "/static/historypage.js")}></script> ++
                 <script>setAppLimit({parent.maxApplications})</script>
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
@@ -77,7 +78,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             }
             }
 
-            <a href={makePageLink(!requestedIncomplete)}>
+            <a href={makePageLink(request, !requestedIncomplete)}>
               {
               if (requestedIncomplete) {
                 "Back to completed applications"
@@ -88,11 +89,11 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             </a>
           </div>
       </div>
-    UIUtils.basicSparkPage(content, "History Server", true)
+    UIUtils.basicSparkPage(request, content, "History Server", true)
   }
 
-  private def makePageLink(showIncomplete: Boolean): String = {
-    UIUtils.prependBaseUri("/?" + "showIncomplete=" + showIncomplete)
+  private def makePageLink(request: HttpServletRequest, showIncomplete: Boolean): String = {
+    UIUtils.prependBaseUri(request, "/?" + "showIncomplete=" + showIncomplete)
   }
 
   private def isApplicationCompleted(appInfo: ApplicationInfo): Boolean = {

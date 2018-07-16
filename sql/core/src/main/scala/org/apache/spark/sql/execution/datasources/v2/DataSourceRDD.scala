@@ -29,12 +29,12 @@ class DataSourceRDDPartition[T : ClassTag](val index: Int, val inputPartition: I
 
 class DataSourceRDD[T: ClassTag](
     sc: SparkContext,
-    @transient private val readerFactories: Seq[InputPartition[T]])
+    @transient private val inputPartitions: Seq[InputPartition[T]])
   extends RDD[T](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
-    readerFactories.zipWithIndex.map {
-      case (readerFactory, index) => new DataSourceRDDPartition(index, readerFactory)
+    inputPartitions.zipWithIndex.map {
+      case (inputPartition, index) => new DataSourceRDDPartition(index, inputPartition)
     }.toArray
   }
 

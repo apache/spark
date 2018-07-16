@@ -297,3 +297,49 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
   }
 }
+
+class ContinuousMetaSuite extends ContinuousSuiteBase {
+  import testImplicits._
+
+  // We need to specify spark.sql.streaming.minBatchesToRetain to do the following test.
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[10]",
+      "continuous-stream-test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")
+        .set("spark.sql.streaming.minBatchesToRetain", "2")))
+
+  test("SPARK-24351: check offsetLog/commitLog retained in the checkpoint directory") {
+    withTempDir { checkpointDir =>
+      val input = ContinuousMemoryStream[Int]
+      val df = input.toDF().mapPartitions(iter => {
+        // Sleep the task thread for 300 ms to make sure epoch processing time 3 times
+        // longer than epoch creating interval. So the gap between last committed
+        // epoch and currentBatchId grows over time.
+        Thread.sleep(300)
+        iter.map(row => row.getInt(0) * 2)
+      })
+
+      testStream(df)(
+        StartStream(trigger = Trigger.Continuous(100),
+          checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(input, 1),
+        CheckAnswer(2),
+        // Make sure epoch 2 has been committed before the following validation.
+        AwaitEpoch(2),
+        StopStream,
+        AssertOnQuery(q => {
+          q.commitLog.getLatest() match {
+            case Some((latestEpochId, _)) =>
+              val commitLogValidateResult = q.commitLog.get(latestEpochId - 1).isDefined &&
+                q.commitLog.get(latestEpochId - 2).isEmpty
+              val offsetLogValidateResult = q.offsetLog.get(latestEpochId - 1).isDefined &&
+                q.offsetLog.get(latestEpochId - 2).isEmpty
+              commitLogValidateResult && offsetLogValidateResult
+            case None => false
+          }
+        })
+      )
+    }
+  }
+}

@@ -68,10 +68,7 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
       mediaType: MediaType,
       multivaluedMap: MultivaluedMap[String, AnyRef],
       outputStream: OutputStream): Unit = {
-    t match {
-      case ErrorWrapper(err) => outputStream.write(err.getBytes(StandardCharsets.UTF_8))
-      case _ => mapper.writeValue(outputStream, t)
-    }
+    mapper.writeValue(outputStream, t)
   }
 
   override def getSize(

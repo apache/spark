@@ -102,25 +102,7 @@ object TypeCoercion {
     case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
       Some(TimestampType)
 
-    case (t1 @ StructType(fields1), t2 @ StructType(fields2)) if t1.sameType(t2) =>
-      Some(StructType(fields1.zip(fields2).map { case (f1, f2) =>
-        // Since `t1.sameType(t2)` is true, two StructTypes have the same DataType
-        // except `name` (in case of `spark.sql.caseSensitive=false`) and `nullable`.
-        // - Different names: use f1.name
-        // - Different nullabilities: `nullable` is true iff one of them is nullable.
-        val dataType = findTightestCommonType(f1.dataType, f2.dataType).get
-        StructField(f1.name, dataType, nullable = f1.nullable || f2.nullable)
-      }))
-
-    case (a1 @ ArrayType(et1, hasNull1), a2 @ ArrayType(et2, hasNull2)) if a1.sameType(a2) =>
-      findTightestCommonType(et1, et2).map(ArrayType(_, hasNull1 || hasNull2))
-
-    case (m1 @ MapType(kt1, vt1, hasNull1), m2 @ MapType(kt2, vt2, hasNull2)) if m1.sameType(m2) =>
-      val keyType = findTightestCommonType(kt1, kt2)
-      val valueType = findTightestCommonType(vt1, vt2)
-      Some(MapType(keyType.get, valueType.get, hasNull1 || hasNull2))
-
-    case _ => None
+    case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
   /** Promotes all the way to StringType. */
@@ -166,6 +148,42 @@ object TypeCoercion {
     case (l, r) => None
   }
 
+  private def findTypeForComplex(
+      t1: DataType,
+      t2: DataType,
+      findTypeFunc: (DataType, DataType) => Option[DataType]): Option[DataType] = (t1, t2) match {
+    case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
+      findTypeFunc(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+    case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
+      findTypeFunc(kt1, kt2).flatMap { kt =>
+        findTypeFunc(vt1, vt2).map { vt =>
+          MapType(kt, vt, valueContainsNull1 || valueContainsNull2)
+        }
+      }
+    case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
+      val resolver = SQLConf.get.resolver
+      fields1.zip(fields2).foldLeft(Option(new StructType())) {
+        case (Some(struct), (field1, field2)) if resolver(field1.name, field2.name) =>
+          findTypeFunc(field1.dataType, field2.dataType).map {
+            dt => struct.add(field1.name, dt, field1.nullable || field2.nullable)
+          }
+        case _ => None
+      }
+    case _ => None
+  }
+
+  /**
+   * The method finds a common type for data types that differ only in nullable, containsNull
+   * and valueContainsNull flags. If the input types are too different, None is returned.
+   */
+  def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
+    if (t1 == t2) {
+      Some(t1)
+    } else {
+      findTypeForComplex(t1, t2, findCommonTypeDifferentOnlyInNullFlags)
+    }
+  }
+
   /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
@@ -176,11 +194,7 @@ object TypeCoercion {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
       .orElse(stringPromotion(t1, t2))
-      .orElse((t1, t2) match {
-        case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
-          findWiderTypeForTwo(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
-        case _ => None
-      })
+      .orElse(findTypeForComplex(t1, t2, findWiderTypeForTwo))
   }
 
   /**
@@ -216,12 +230,7 @@ object TypeCoercion {
       t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
-      .orElse((t1, t2) match {
-        case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
-          findWiderTypeWithoutStringPromotionForTwo(et1, et2)
-            .map(ArrayType(_, containsNull1 || containsNull2))
-        case _ => None
-      })
+      .orElse(findTypeForComplex(t1, t2, findWiderTypeWithoutStringPromotionForTwo))
   }
 
   def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
@@ -536,6 +545,29 @@ object TypeCoercion {
           case None => c
         }
 
+      case aj @ ArrayJoin(arr, d, nr) if !ArrayType(StringType).acceptsType(arr.dataType) &&
+        ArrayType.acceptsType(arr.dataType) =>
+        val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
+        ImplicitTypeCasts.implicitCast(arr, ArrayType(StringType, containsNull)) match {
+          case Some(castedArr) => ArrayJoin(castedArr, d, nr)
+          case None => aj
+        }
+
+      case s @ Sequence(_, _, _, timeZoneId) if !haveSameType(s.coercibleChildren) =>
+        val types = s.coercibleChildren.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(widerDataType) => s.castChildrenTo(widerDataType)
+          case None => s
+        }
+
+      case m @ MapConcat(children) if children.forall(c => MapType.acceptsType(c.dataType)) &&
+        !haveSameType(children) =>
+        val types = children.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(finalDataType) => MapConcat(children.map(Cast(_, finalDataType)))
+          case None => m
+        }
+
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
         (!haveSameType(m.keys) || !haveSameType(m.values)) =>
         val newKeys = if (haveSameType(m.keys)) {
@@ -640,8 +672,8 @@ object TypeCoercion {
   object CaseWhenCoercion extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case c: CaseWhen if c.childrenResolved && !c.valueTypesEqual =>
-        val maybeCommonType = findWiderCommonType(c.valueTypes)
+      case c: CaseWhen if c.childrenResolved && !c.areInputTypesForMergingEqual =>
+        val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
         maybeCommonType.map { commonType =>
           var changed = false
           val newBranches = c.branches.map { case (condition, value) =>
@@ -673,10 +705,10 @@ object TypeCoercion {
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
-      case i @ If(pred, left, right) if left.dataType != right.dataType =>
+      case i @ If(pred, left, right) if !i.areInputTypesForMergingEqual =>
         findWiderTypeForTwo(left.dataType, right.dataType).map { widestType =>
-          val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
-          val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
+          val newLeft = if (left.dataType.sameType(widestType)) left else Cast(left, widestType)
+          val newRight = if (right.dataType.sameType(widestType)) right else Cast(right, widestType)
           If(pred, newLeft, newRight)
         }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
       case If(Literal(null, NullType), left, right) =>

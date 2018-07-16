@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -269,7 +270,7 @@ case class StaticInvoke(
       s"${ev.value} = $callFunc;"
     }
 
-    val code = s"""
+    val code = code"""
       $argCode
       $prepareIsNull
       $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -385,8 +386,7 @@ case class Invoke(
       """
     }
 
-    val code = s"""
-      ${obj.code}
+    val code = obj.code + code"""
       boolean ${ev.isNull} = true;
       $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${obj.isNull}) {
@@ -492,7 +492,7 @@ case class NewInstance(
       s"new $className($argString)"
     }
 
-    val code = s"""
+    val code = code"""
       $argCode
       ${outer.map(_.code).getOrElse("")}
       final $javaType ${ev.value} = ${ev.isNull} ?
@@ -532,9 +532,7 @@ case class UnwrapOption(
     val javaType = CodeGenerator.javaType(dataType)
     val inputObject = child.genCode(ctx)
 
-    val code = s"""
-      ${inputObject.code}
-
+    val code = inputObject.code + code"""
       final boolean ${ev.isNull} = ${inputObject.isNull} || ${inputObject.value}.isEmpty();
       $javaType ${ev.value} = ${ev.isNull} ? ${CodeGenerator.defaultValue(dataType)} :
         (${CodeGenerator.boxedType(javaType)}) ${inputObject.value}.get();
@@ -564,9 +562,7 @@ case class WrapOption(child: Expression, optType: DataType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputObject = child.genCode(ctx)
 
-    val code = s"""
-      ${inputObject.code}
-
+    val code = inputObject.code + code"""
       scala.Option ${ev.value} =
         ${inputObject.isNull} ?
         scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
@@ -935,8 +931,7 @@ case class MapObjects private(
           )
       }
 
-    val code = s"""
-      ${genInputData.code}
+    val code = genInputData.code + code"""
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
 
       if (!${genInputData.isNull}) {
@@ -1147,8 +1142,7 @@ case class CatalystToExternalMap private(
      """
     val getBuilderResult = s"${ev.value} = (${collClass.getName}) $builderValue.result();"
 
-    val code = s"""
-      ${genInputData.code}
+    val code = genInputData.code + code"""
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
 
       if (!${genInputData.isNull}) {
@@ -1391,9 +1385,8 @@ case class ExternalMapToCatalyst private(
     val mapCls = classOf[ArrayBasedMapData].getName
     val convertedKeyType = CodeGenerator.boxedType(keyConverter.dataType)
     val convertedValueType = CodeGenerator.boxedType(valueConverter.dataType)
-    val code =
-      s"""
-        ${inputMap.code}
+    val code = inputMap.code +
+      code"""
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         if (!${inputMap.isNull}) {
           final int $length = ${inputMap.value}.size();
@@ -1471,7 +1464,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
     val schemaField = ctx.addReferenceObj("schema", schema)
 
     val code =
-      s"""
+      code"""
          |Object[] $values = new Object[${children.size}];
          |$childrenCode
          |final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
@@ -1499,8 +1492,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
     val javaType = CodeGenerator.javaType(dataType)
     val serialize = s"$serializer.serialize(${input.value}, null).array()"
 
-    val code = s"""
-      ${input.code}
+    val code = input.code + code"""
       final $javaType ${ev.value} =
         ${input.isNull} ? ${CodeGenerator.defaultValue(dataType)} : $serialize;
      """
@@ -1532,8 +1524,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
     val deserialize =
       s"($javaType) $serializer.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null)"
 
-    val code = s"""
-      ${input.code}
+    val code = input.code + code"""
       final $javaType ${ev.value} =
          ${input.isNull} ? ${CodeGenerator.defaultValue(dataType)} : $deserialize;
      """
@@ -1614,9 +1605,8 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
       funcName = "initializeJavaBean",
       extraArguments = beanInstanceJavaType -> javaBeanInstance :: Nil)
 
-    val code =
-      s"""
-         |${instanceGen.code}
+    val code = instanceGen.code +
+      code"""
          |$beanInstanceJavaType $javaBeanInstance = ${instanceGen.value};
          |if (!${instanceGen.isNull}) {
          |  $initializeCode
@@ -1664,9 +1654,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
     // because errMsgField is used only when the value is null.
     val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
 
-    val code = s"""
-      ${childGen.code}
-
+    val code = childGen.code + code"""
       if (${childGen.isNull}) {
         throw new NullPointerException($errMsgField);
       }
@@ -1709,7 +1697,7 @@ case class GetExternalRowField(
     // because errMsgField is used only when the field is null.
     val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val row = child.genCode(ctx)
-    val code = s"""
+    val code = code"""
       ${row.code}
 
       if (${row.isNull}) {
@@ -1784,7 +1772,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }
 
-    val code = s"""
+    val code = code"""
       ${input.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${input.isNull}) {

@@ -679,7 +679,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 100L)))
         )
         val factories = reader.planUnsafeInputPartitions().asScala
-          .map(_.asInstanceOf[KafkaMicroBatchDataReaderFactory])
+          .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $factories\n\t") {
           assert(factories.size == numPartitionsGenerated)
           factories.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }

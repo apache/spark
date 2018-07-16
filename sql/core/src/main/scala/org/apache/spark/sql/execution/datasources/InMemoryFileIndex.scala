@@ -294,9 +294,12 @@ object InMemoryFileIndex extends Logging {
       if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
     }
 
-    allLeafStatuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
+    val missingFiles = mutable.ArrayBuffer.empty[String]
+    val filteredLeafStatuses = allLeafStatuses.filterNot(
+      status => shouldFilterOut(status.getPath.getName))
+    val resolvedLeafStatuses = filteredLeafStatuses.flatMap {
       case f: LocatedFileStatus =>
-        f
+        Some(f)
 
       // NOTE:
       //
@@ -311,14 +314,27 @@ object InMemoryFileIndex extends Logging {
         // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
         // which is very slow on some file system (RawLocalFileSystem, which is launch a
         // subprocess and parse the stdout).
-        val locations = fs.getFileBlockLocations(f, 0, f.getLen)
-        val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
-          f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
-        if (f.isSymlink) {
-          lfs.setSymlink(f.getSymlink)
+        try {
+          val locations = fs.getFileBlockLocations(f, 0, f.getLen)
+          val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
+            f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
+          if (f.isSymlink) {
+            lfs.setSymlink(f.getSymlink)
+          }
+          Some(lfs)
+        } catch {
+          case _: FileNotFoundException =>
+            missingFiles += f.getPath.toString
+            None
         }
-        lfs
     }
+
+    if (missingFiles.nonEmpty) {
+      logWarning(
+        s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
+    }
+
+    resolvedLeafStatuses
   }
 
   /** Checks if we should filter out this path name. */

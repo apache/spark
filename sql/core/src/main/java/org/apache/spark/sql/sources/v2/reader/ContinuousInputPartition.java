@@ -27,9 +27,9 @@ import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
 @InterfaceStability.Evolving
 public interface ContinuousInputPartition<T> extends InputPartition<T> {
   /**
-   * Create a DataReader with particular offset as its startOffset.
+   * Create an input partition reader with particular offset as its startOffset.
    *
-   * @param offset offset want to set as the DataReader's startOffset.
+   * @param offset offset want to set as the input partition reader's startOffset.
    */
   InputPartitionReader<T> createContinuousReader(PartitionOffset offset);
 }

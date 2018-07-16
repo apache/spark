@@ -356,11 +356,10 @@ class KMeans @Since("1.5.0") (
     val parentModel = algo.run(instances, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k), parentModel.numIter)
 
     model.setSummary(Some(summary))
-    // TODO: need to extend logNamedValue to support Array
-    instr.logNamedValue("clusterSizes", summary.clusterSizes.mkString("[", ",", "]"))
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
     instr.logSuccess(model)
     if (handlePersistence) {
       instances.unpersist()
@@ -389,6 +388,7 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param numIter  Number of iterations.
  */
 @Since("2.0.0")
 @Experimental
@@ -396,4 +396,5 @@ class KMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
+    k: Int,
+    numIter: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)
