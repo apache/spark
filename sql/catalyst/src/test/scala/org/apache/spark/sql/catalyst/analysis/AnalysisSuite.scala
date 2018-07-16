@@ -21,6 +21,7 @@ import java.util.TimeZone
 
 import org.scalatest.Matchers
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -556,5 +557,22 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val barrier = AnalysisBarrier(Project(Seq(UnresolvedAttribute("tbl.b")),
       SubqueryAlias("tbl", testRelation)))
     assertAnalysisError(barrier, Seq("cannot resolve '`tbl.b`'"))
+  }
+
+  test("SPARK-24208: analysis fails on self-join with FlatMapGroupsInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val flatMapGroupsInPandas = FlatMapGroupsInPandas(
+      Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
+    val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
+    val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
+    val join = Join(left, right, Inner, None)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 }

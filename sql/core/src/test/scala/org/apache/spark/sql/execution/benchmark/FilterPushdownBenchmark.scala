@@ -28,7 +28,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
+import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
 import org.apache.spark.util.{Benchmark, Utils}
 
 /**
@@ -355,6 +356,40 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
             s"value < CAST(${Byte.MaxValue * percent / 100} AS ${ByteType.simpleString})",
             selectExpr
           )
+        }
+      }
+    }
+  }
+
+  ignore(s"Pushdown benchmark for Timestamp") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> true.toString) {
+        ParquetOutputTimestampType.values.toSeq.map(_.toString).foreach { fileType =>
+          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fileType) {
+            val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
+            val df = spark.range(numRows).selectExpr(columns: _*)
+              .withColumn("value", monotonically_increasing_id().cast(TimestampType))
+            withTempTable("orcTable", "patquetTable") {
+              saveAsTable(df, dir)
+
+              Seq(s"value = CAST($mid AS timestamp)").foreach { whereExpr =>
+                val title = s"Select 1 timestamp stored as $fileType row ($whereExpr)"
+                  .replace("value AND value", "value")
+                filterPushDownBenchmark(numRows, title, whereExpr)
+              }
+
+              val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
+              Seq(10, 50, 90).foreach { percent =>
+                filterPushDownBenchmark(
+                  numRows,
+                  s"Select $percent% timestamp stored as $fileType rows " +
+                    s"(value < CAST(${numRows * percent / 100} AS timestamp))",
+                  s"value < CAST(${numRows * percent / 100} as timestamp)",
+                  selectExpr
+                )
+              }
+            }
+          }
         }
       }
     }

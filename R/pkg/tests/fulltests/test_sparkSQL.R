@@ -1503,6 +1503,27 @@ test_that("column functions", {
   result <- collect(select(df2, reverse(df2[[1]])))[[1]]
   expect_equal(result, "cba")
 
+  # Test array_distinct() and array_remove()
+  df <- createDataFrame(list(list(list(1L, 2L, 3L, 1L, 2L)), list(list(6L, 5L, 5L, 4L, 6L))))
+  result <- collect(select(df, array_distinct(df[[1]])))[[1]]
+  expect_equal(result, list(list(1L, 2L, 3L), list(6L, 5L, 4L)))
+
+  result <- collect(select(df, array_remove(df[[1]], 2L)))[[1]]
+  expect_equal(result, list(list(1L, 3L, 1L), list(6L, 5L, 5L, 4L, 6L)))
+
+  # Test arrays_zip()
+  df <- createDataFrame(list(list(list(1L, 2L), list(3L, 4L))), schema = c("c1", "c2"))
+  result <- collect(select(df, arrays_zip(df[[1]], df[[2]])))[[1]]
+  expected_entries <-  list(listToStruct(list(c1 = 1L, c2 = 3L)),
+                            listToStruct(list(c1 = 2L, c2 = 4L)))
+  expect_equal(result, list(expected_entries))
+
+  # Test map_from_arrays()
+  df <- createDataFrame(list(list(list("x", "y"), list(1, 2))), schema = c("k", "v"))
+  result <- collect(select(df, map_from_arrays(df$k, df$v)))[[1]]
+  expected_entries <- list(as.environment(list(x = 1, y = 2)))
+  expect_equal(result, expected_entries)
+
   # Test array_repeat()
   df <- createDataFrame(list(list("a", 3L), list("b", 2L)))
   result <- collect(select(df, array_repeat(df[[1]], df[[2]])))[[1]]

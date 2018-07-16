@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -692,6 +692,41 @@ abstract class TernaryExpression extends Expression {
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
+  }
+}
+
+/**
+ * A trait resolving nullable, containsNull, valueContainsNull flags of the output date type.
+ * This logic is usually utilized by expressions combining data from multiple child expressions
+ * of non-primitive types (e.g. [[CaseWhen]]).
+ */
+trait ComplexTypeMergingExpression extends Expression {
+
+  /**
+   * A collection of data types used for resolution the output type of the expression. By default,
+   * data types of all child expressions. The collection must not be empty.
+   */
+  @transient
+  lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
+
+  /**
+   * A method determining whether the input types are equal ignoring nullable, containsNull and
+   * valueContainsNull flags and thus convenient for resolution of the final data type.
+   */
+  def areInputTypesForMergingEqual: Boolean = {
+    inputTypesForMerging.length <= 1 || inputTypesForMerging.sliding(2, 1).forall {
+      case Seq(dt1, dt2) => dt1.sameType(dt2)
+    }
+  }
+
+  override def dataType: DataType = {
+    require(
+      inputTypesForMerging.nonEmpty,
+      "The collection of input data types must not be empty.")
+    require(
+      areInputTypesForMergingEqual,
+      "All input types must be the same except nullable, containsNull, valueContainsNull flags.")
+    inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
 }
 
