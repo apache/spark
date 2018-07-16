@@ -120,8 +120,8 @@ This URI is the location of the example jar that is already in the Docker image.
 ## Client Mode
 
 Starting with Spark 2.4.0, it is possible to run Spark applications on Kubernetes in client mode. When running a Spark
-application in client mode, a separate pod is not deployed to run the driver. When running an application in
-client mode, it is recommended to account for the following factors:
+application in client mode, a separate pod is not deployed to run the driver. Your Spark driver does not need to run in
+a Kubernetes pod. When running an application in client mode, it is recommended to account for the following factors:
 
 ### Client Mode Networking
 
@@ -132,7 +132,7 @@ setup. If you run your driver inside a Kubernetes pod, you can use a
 driver pod to be routable from the executors by a stable hostname. Specify the driver's hostname via `spark.driver.host`
 and your spark driver's port to `spark.driver.port`.
 
-### Client Mode Garbage Collection
+### Client Mode Executor Pod Garbage Collection
 
 If you run your Spark driver in a pod, it is highly recommended to set `spark.driver.pod.name` to the name of that pod.
 When this property is set, the Spark scheduler will deploy the executor pods with an
@@ -557,7 +557,7 @@ specific to Spark on Kubernetes.
   <td>(none)</td>
   <td>
     In client mode, path to the file containing the OAuth token to use when authenticating against the Kubernetes API
-    server from the driver pod when requesting executors.
+    server when requesting executors.
   </td>
 </tr>
 <tr>
@@ -603,8 +603,8 @@ specific to Spark on Kubernetes.
     Name of the driver pod. In cluster mode, if this is not set, the driver pod name is set to "spark.app.name"
     suffixed by the current timestamp to avoid name conflicts. In client mode, if your application is running
     inside a pod, it is highly recommended to set this to the name of the pod your driver is running in. Setting this
-    value in client mode allows the driver to inform the cluster that your application's executor pods should be
-    deleted when the driver pod is deleted.
+    value in client mode allows the driver to become the owner of its executor pods, which in turn allows the executor
+    pods to be garbage collecfted by the cluster.
   </td>
 </tr>
 <tr>

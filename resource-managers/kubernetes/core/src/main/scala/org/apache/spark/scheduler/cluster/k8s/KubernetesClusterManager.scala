@@ -48,8 +48,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       defaultServiceAccountToken,
       defaultServiceAccountCaCrt) = if (wasSparkSubmittedInClusterMode) {
       require(sc.conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
-        "If the application is deployed using spark-submit in cluster mode, the driver pod name" +
-          " must be provided.")
+        "If the application is deployed using spark-submit in cluster mode, the driver pod name " +
+          "must be provided.")
       (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
         KUBERNETES_MASTER_INTERNAL_URL,
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
