@@ -1378,9 +1378,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       ("exec2", "host2"), ("exec3", "host3"))
     sched.initialize(new FakeSchedulerBackend() {
       override def killTask(taskId: Long,
-                            executorId: String,
-                            interruptThread: Boolean,
-                            reason: String): Unit = {
+          executorId: String,
+          interruptThread: Boolean,
+          reason: String): Unit = {
         // Check the only one killTask event in this case, which triggered by
         // task 2.1 completed.
         assert(taskId === 2)
@@ -1396,10 +1396,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     var resubmittedTasks = new mutable.HashSet[Int]
     val dagScheduler = new FakeDAGScheduler(sc, sched) {
       override def taskEnded(task: Task[_],
-                             reason: TaskEndReason,
-                             result: Any,
-                             accumUpdates: Seq[AccumulatorV2[_, _]],
-                             taskInfo: TaskInfo): Unit = {
+          reason: TaskEndReason,
+          result: Any,
+          accumUpdates: Seq[AccumulatorV2[_, _]],
+          taskInfo: TaskInfo): Unit = {
         super.taskEnded(task, reason, result, accumUpdates, taskInfo)
         reason match {
           case Resubmitted => resubmittedTasks += taskInfo.index
@@ -1423,10 +1423,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     // Offer resources for 4 tasks to start
     for ((exec, host) <- Seq(
-      "exec1" -> "host1",
-      "exec1" -> "host1",
-      "exec3" -> "host3",
-      "exec2" -> "host2")) {
+        "exec1" -> "host1",
+        "exec1" -> "host1",
+        "exec3" -> "host3",
+        "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(exec, host, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get

@@ -84,8 +84,9 @@ private[spark] class TaskSetManager(
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
 
-  // Set the coresponding index of Boolean var when the task killed by other attempt tasks,
-  // this happened while we set the `spark.speculation` to true. The task killed by others
+
+  // Add the tid of task into this HashSet when the task is killed by other attempt tasks.
+  // This happened while we set the `spark.speculation` to true. The task killed by others
   // should not resubmit while executor lost.
   private val killedByOtherAttempt = new HashSet[Long]
 
