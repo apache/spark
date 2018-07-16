@@ -150,9 +150,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         f.dataType match {
           case st: StructType => verifyNestedColumnNames(st)
           case _ if invalidChars.exists(f.name.contains) =>
+            val invalidCharsString = invalidChars.map(c => s"'$c'").mkString(", ")
             val errMsg = "Cannot create a table having a nested column whose name contains " +
-              s"invalid characters (${invalidChars.map(c => s"'$c'").mkString(", ")}) " +
-              s"in Hive metastore. Table: $tableName; Column: ${f.name}"
+              s"invalid characters ($invalidCharsString) in Hive metastore. Table: $tableName; " +
+              s"Column: ${f.name}"
             throw new AnalysisException(errMsg)
           case _ =>
         }
