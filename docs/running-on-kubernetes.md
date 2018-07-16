@@ -119,9 +119,9 @@ This URI is the location of the example jar that is already in the Docker image.
 
 ## Client Mode
 
-Starting with Spark 2.4.0, it is possible to run Spark applications on Kubernetes in client mode. When running a Spark
-application in client mode, a separate pod is not deployed to run the driver. Your Spark driver does not need to run in
-a Kubernetes pod. When running an application in client mode, it is recommended to account for the following factors:
+Starting with Spark 2.4.0, it is possible to run Spark applications on Kubernetes in client mode. When your application
+runs in client mode, the driver can run inside a pod or on a physical host. When running an application in client mode,
+it is recommended to account for the following factors:
 
 ### Client Mode Networking
 
