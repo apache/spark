@@ -269,10 +269,12 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
         child = p.child.where('f < 10).select(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
         output = Seq('key.string, 'value.string)))
     comparePlans(plan2,
-      p.copy(child = p.child.select(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+      p.copy(
+        child = p.child.select(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
         output = Seq('c.string, 'd.string)))
     comparePlans(plan3,
-      p.copy(child = p.child.select(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+      p.copy(
+        child = p.child.select(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
         output = Seq('c.int, 'd.decimal(10, 0))))
   }
 
