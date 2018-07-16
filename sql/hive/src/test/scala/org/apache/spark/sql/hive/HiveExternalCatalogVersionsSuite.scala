@@ -53,12 +53,22 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   }
 
   private def tryDownloadSpark(version: String, path: String): Unit = {
-    // Try mirrors a few times until one succeeds
-    for (i <- 0 until 3) {
-      val preferredMirror =
-        Seq("wget", "https://www.apache.org/dyn/closer.lua?preferred=true", "-q", "-O", "-").!!.trim
+    // Try a few mirrors first; fall back to Apache archive
+    val mirrors =
+      (0 until 2).flatMap { _ =>
+        try {
+          Some(Seq("wget",
+            "https://www.apache.org/dyn/closer.lua?preferred=true", "-q", "-O", "-").!!.trim)
+        } catch {
+          // If we can't get a mirror URL, skip it. No retry.
+          case _: Exception => None
+        }
+      }
+    val sites = mirrors.distinct :+ "https://archive.apache.org/dist"
+    logInfo(s"Trying to download Spark $version from $sites")
+    for (site <- sites) {
       val filename = s"spark-$version-bin-hadoop2.7.tgz"
-      val url = s"$preferredMirror/spark/spark-$version/$filename"
+      val url = s"$site/spark/spark-$version/$filename"
       logInfo(s"Downloading Spark $version from $url")
       if (Seq("wget", url, "-q", "-P", path).! == 0) {
         val downloaded = new File(sparkTestingDir, filename).getCanonicalPath
