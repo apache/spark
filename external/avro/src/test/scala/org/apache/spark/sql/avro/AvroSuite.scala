@@ -18,6 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.io._
+import java.net.URL
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.util.{TimeZone, UUID}
@@ -819,9 +820,11 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("SPARK-24805: do not ignore files without .avro extension by default") {
     withTempDir { dir =>
-      val fileWithoutExtension = s"${dir.getCanonicalPath}/episodes"
-      Files.copy(Paths.get(episodesAvro), Paths.get(fileWithoutExtension))
+      Files.copy(
+        Paths.get(new URL(episodesAvro).toURI),
+        Paths.get(dir.getCanonicalPath, "episodes"))
 
+      val fileWithoutExtension = s"${dir.getCanonicalPath}/episodes"
       val df1 = spark.read.avro(fileWithoutExtension)
       assert(df1.count == 8)
 
