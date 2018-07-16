@@ -910,6 +910,20 @@ abstract class RDD[T: ClassTag](
     zipPartitions(rdd2, rdd3, rdd4, preservesPartitioning = false)(f)
   }
 
+  /**
+   * Zip this RDD's partitions with one (or more) RDD(s) and return a new RDD by
+   * concatenating the zipped partitions. Assumes that all the RDDs have the
+   * *same number of partitions*, but does *not* require them to have the same number
+   * of elements in each partition.
+   */
+  private[spark] def zipRDDs(others: Seq[RDD[T]]): RDD[T] = withScope {
+    zipRDDs(others, preservesPartitioning = false)
+  }
+
+  private[spark] def zipRDDs(others: Seq[RDD[T]], preservesPartitioning: Boolean): RDD[T] =
+    withScope {
+      new ZippedPartitionsRDD(sc, Seq(this) ++ others, preservesPartitioning)
+    }
 
   // Actions (launch a job to return a value to the user program)
 
