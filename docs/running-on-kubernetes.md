@@ -604,7 +604,7 @@ specific to Spark on Kubernetes.
     suffixed by the current timestamp to avoid name conflicts. In client mode, if your application is running
     inside a pod, it is highly recommended to set this to the name of the pod your driver is running in. Setting this
     value in client mode allows the driver to become the owner of its executor pods, which in turn allows the executor
-    pods to be garbage collecfted by the cluster.
+    pods to be garbage collected by the cluster.
   </td>
 </tr>
 <tr>
