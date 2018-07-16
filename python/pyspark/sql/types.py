@@ -35,7 +35,6 @@ from py4j.java_gateway import JavaClass
 
 from pyspark import SparkContext
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.util import _exception_message
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -290,7 +289,8 @@ class ArrayType(DataType):
         >>> ArrayType(StringType(), False) == ArrayType(StringType())
         False
         """
-        assert isinstance(elementType, DataType), "elementType should be DataType"
+        assert isinstance(elementType, DataType),\
+            "elementType %s should be an instance of %s" % (elementType, DataType)
         self.elementType = elementType
         self.containsNull = containsNull
 
@@ -344,8 +344,10 @@ class MapType(DataType):
         ...        == MapType(StringType(), FloatType()))
         False
         """
-        assert isinstance(keyType, DataType), "keyType should be DataType"
-        assert isinstance(valueType, DataType), "valueType should be DataType"
+        assert isinstance(keyType, DataType),\
+            "keyType %s should be an instance of %s" % (keyType, DataType)
+        assert isinstance(valueType, DataType),\
+            "valueType %s should be an instance of %s" % (valueType, DataType)
         self.keyType = keyType
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
@@ -403,8 +405,9 @@ class StructField(DataType):
         ...      == StructField("f2", StringType(), True))
         False
         """
-        assert isinstance(dataType, DataType), "dataType should be DataType"
-        assert isinstance(name, basestring), "field name should be string"
+        assert isinstance(dataType, DataType),\
+            "dataType %s should be an instance of %s" % (dataType, DataType)
+        assert isinstance(name, basestring), "field name %s should be string" % (name)
         if not isinstance(name, str):
             name = name.encode('utf-8')
         self.name = name
@@ -750,41 +753,6 @@ _all_complex_types = dict((v.typeName(), v)
 
 
 _FIXED_DECIMAL = re.compile("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)")
-
-
-_BRACKETS = {'(': ')', '[': ']', '{': '}'}
-
-
-def _ignore_brackets_split(s, separator):
-    """
-    Splits the given string by given separator, but ignore separators inside brackets pairs, e.g.
-    given "a,b" and separator ",", it will return ["a", "b"], but given "a<b,c>, d", it will return
-    ["a<b,c>", "d"].
-    """
-    parts = []
-    buf = ""
-    level = 0
-    for c in s:
-        if c in _BRACKETS.keys():
-            level += 1
-            buf += c
-        elif c in _BRACKETS.values():
-            if level == 0:
-                raise ValueError("Brackets are not correctly paired: %s" % s)
-            level -= 1
-            buf += c
-        elif c == separator and level > 0:
-            buf += c
-        elif c == separator:
-            parts.append(buf)
-            buf = ""
-        else:
-            buf += c
-
-    if len(buf) == 0:
-        raise ValueError("The %s cannot be the last char: %s" % (separator, s))
-    parts.append(buf)
-    return parts
 
 
 def _parse_datatype_string(s):
@@ -1695,6 +1663,19 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
+def _check_series_convert_date(series, data_type):
+    """
+    Cast the series to datetime.date if it's a date type, otherwise returns the original series.
+
+    :param series: pandas.Series
+    :param data_type: a Spark data type for the series
+    """
+    if type(data_type) == DateType:
+        return series.dt.date
+    else:
+        return series
+
+
 def _check_dataframe_convert_date(pdf, schema):
     """ Correct date type value to use datetime.date.
 
@@ -1705,8 +1686,7 @@ def _check_dataframe_convert_date(pdf, schema):
     :param schema: a Spark schema of the pandas.DataFrame
     """
     for field in schema:
-        if type(field.dataType) == DateType:
-            pdf[field.name] = pdf[field.name].dt.date
+        pdf[field.name] = _check_series_convert_date(pdf[field.name], field.dataType)
     return pdf
 
 
@@ -1725,6 +1705,29 @@ def _get_local_timezone():
     return os.environ.get('TZ', 'dateutil/:')
 
 
+def _check_series_localize_timestamps(s, timezone):
+    """
+    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone.
+
+    If the input series is not a timestamp series, then the same series is returned. If the input
+    series is a timestamp series, then a converted series is returned.
+
+    :param s: pandas.Series
+    :param timezone: the timezone to convert. if None then use local timezone
+    :return pandas.Series that have been converted to tz-naive
+    """
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
+    from pandas.api.types import is_datetime64tz_dtype
+    tz = timezone or _get_local_timezone()
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert(tz).dt.tz_localize(None)
+    else:
+        return s
+
+
 def _check_dataframe_localize_timestamps(pdf, timezone):
     """
     Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
@@ -1736,12 +1739,8 @@ def _check_dataframe_localize_timestamps(pdf, timezone):
     from pyspark.sql.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
 
-    from pandas.api.types import is_datetime64tz_dtype
-    tz = timezone or _get_local_timezone()
     for column, series in pdf.iteritems():
-        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-        if is_datetime64tz_dtype(series.dtype):
-            pdf[column] = series.dt.tz_convert(tz).dt.tz_localize(None)
+        pdf[column] = _check_series_localize_timestamps(series, timezone)
     return pdf
 
 
@@ -1859,7 +1858,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -327,6 +328,13 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq((t1, d1, s1), (t2, d2, s2)).toDF("t", "d", "s")
     checkAnswer(df.select(months_between(col("t"), col("d"))), Seq(Row(-10.0), Row(7.0)))
     checkAnswer(df.selectExpr("months_between(t, s)"), Seq(Row(0.5), Row(-0.5)))
+    checkAnswer(df.selectExpr("months_between(t, s, true)"), Seq(Row(0.5), Row(-0.5)))
+    Seq(true, false).foreach { roundOff =>
+      checkAnswer(df.select(months_between(col("t"), col("d"), roundOff)),
+        Seq(Row(-10.0), Row(7.0)))
+      checkAnswer(df.withColumn("r", lit(false)).selectExpr("months_between(t, s, r)"),
+        Seq(Row(0.5), Row(-0.5)))
+    }
   }
 
   test("function last_day") {
@@ -655,7 +663,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
   }
 
-  test("from_utc_timestamp") {
+  test("from_utc_timestamp with literal zone") {
     val df = Seq(
       (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
@@ -672,7 +680,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
   }
 
-  test("to_utc_timestamp") {
+  test("from_utc_timestamp with column zone") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "CET"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "PST")
+    ).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(from_utc_timestamp(col("a"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    checkAnswer(
+      df.select(from_utc_timestamp(col("b"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+  }
+
+  test("to_utc_timestamp with literal zone") {
     val df = Seq(
       (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
@@ -689,4 +714,28 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
   }
 
+  test("to_utc_timestamp with column zone") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "PST"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "CET")
+    ).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(to_utc_timestamp(col("a"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+    checkAnswer(
+      df.select(to_utc_timestamp(col("b"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+  }
+
+  test("SPARK-23715: to/from_utc_timestamp can retain the previous behavior") {
+    withSQLConf(SQLConf.REJECT_TIMEZONE_IN_STRING.key -> "false") {
+      checkAnswer(
+        sql("SELECT from_utc_timestamp('2000-10-10 00:00:00+00:00', 'GMT+1')"),
+        Row(Timestamp.valueOf("2000-10-09 18:00:00")))
+    }
+  }
 }

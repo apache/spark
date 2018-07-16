@@ -57,19 +57,31 @@ function build {
   else
     # Not passed as an argument to docker, but used to validate the Spark directory.
     IMG_PATH="kubernetes/dockerfiles"
+    BUILD_ARGS=()
   fi
 
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
+  local BINDING_BUILD_ARGS=(
+    --build-arg
+    base_img=$(image_ref spark)
+  )
+  local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
+  local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
 
-  docker build "${BUILD_ARGS[@]}" \
+  docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
-    -f "$IMG_PATH/spark/Dockerfile" .
+    -f "$BASEDOCKERFILE" .
+
+  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    -t $(image_ref spark-py) \
+    -f "$PYDOCKERFILE" .
 }
 
 function push {
   docker push "$(image_ref spark)"
+  docker push "$(image_ref spark-py)"
 }
 
 function usage {
@@ -83,9 +95,12 @@ Commands:
   push        Push a pre-built image to a registry. Requires a repository address to be provided.
 
 Options:
+  -f file     Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
+  -p file     Dockerfile with Python baked in. By default builds the Dockerfile shipped with Spark.
   -r repo     Repository address.
   -t tag      Tag to apply to the built image, or to identify the image to be pushed.
   -m          Use minikube's Docker daemon.
+  -n          Build docker image with --no-cache
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
 There is no need to push the images into minikube in that case, they'll be automatically
@@ -112,12 +127,18 @@ fi
 
 REPO=
 TAG=
-while getopts mr:t: option
+BASEDOCKERFILE=
+PYDOCKERFILE=
+NOCACHEARG=
+while getopts f:mr:t:n option
 do
  case "${option}"
  in
+ f) BASEDOCKERFILE=${OPTARG};;
+ p) PYDOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
+ n) NOCACHEARG="--no-cache";;
  m)
    if ! which minikube 1>/dev/null; then
      error "Cannot find minikube."

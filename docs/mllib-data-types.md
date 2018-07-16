@@ -350,7 +350,7 @@ which is a tuple of `(Int, Int, Matrix)`.
 ***Note***
 
 The underlying RDDs of a distributed matrix must be deterministic, because we cache the matrix size.
-In general the use of non-deterministic RDDs can lead to errors.
+In general, the use of non-deterministic RDDs can lead to errors.
 
 ### RowMatrix
 

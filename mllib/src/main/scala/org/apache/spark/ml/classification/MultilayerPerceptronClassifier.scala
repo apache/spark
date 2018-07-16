@@ -322,7 +322,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
    * Predict label for the given features.
    * This internal method is used to implement `transform()` and output [[predictionCol]].
    */
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     LabelConverter.decodeLabel(mlpModel.predict(features))
   }
 
@@ -388,7 +388,7 @@ object MultilayerPerceptronClassificationModel
       val weights = data.getAs[Vector](1)
       val model = new MultilayerPerceptronClassificationModel(metadata.uid, layers, weights)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

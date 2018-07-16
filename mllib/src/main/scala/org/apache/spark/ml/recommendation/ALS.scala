@@ -529,7 +529,7 @@ object ALSModel extends MLReadable[ALSModel] {
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

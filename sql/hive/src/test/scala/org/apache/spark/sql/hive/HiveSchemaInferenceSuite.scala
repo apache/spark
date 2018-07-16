@@ -50,7 +50,8 @@ class HiveSchemaInferenceSuite
     FileStatusCache.resetForTesting()
   }
 
-  private val externalCatalog = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
+  private val externalCatalog =
+    spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
   private val client = externalCatalog.client
 
   // Return a copy of the given schema with all field names converted to lower case.

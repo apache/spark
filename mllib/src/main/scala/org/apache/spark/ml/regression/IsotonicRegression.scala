@@ -308,7 +308,7 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
       val model = new IsotonicRegressionModel(
         metadata.uid, new MLlibIsotonicRegressionModel(boundaries, predictions, isotonic))
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

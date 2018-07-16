@@ -17,18 +17,18 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{AttributeGroup, BinaryAttribute, NominalAttribute}
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.sql.{DataFrame, Encoder, Row}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 
 class OneHotEncoderSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+  extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -54,16 +54,19 @@ class OneHotEncoderSuite
     assert(encoder.getDropLast === true)
     encoder.setDropLast(false)
     assert(encoder.getDropLast === false)
-    val encoded = encoder.transform(transformed)
+    val expected = Seq(
+      (0, Vectors.sparse(3, Seq((0, 1.0)))),
+      (1, Vectors.sparse(3, Seq((2, 1.0)))),
+      (2, Vectors.sparse(3, Seq((1, 1.0)))),
+      (3, Vectors.sparse(3, Seq((0, 1.0)))),
+      (4, Vectors.sparse(3, Seq((0, 1.0)))),
+      (5, Vectors.sparse(3, Seq((1, 1.0))))).toDF("id", "expected")
 
-    val output = encoded.select("id", "labelVec").rdd.map { r =>
-      val vec = r.getAs[Vector](1)
-      (r.getInt(0), vec(0), vec(1), vec(2))
-    }.collect().toSet
-    // a -> 0, b -> 2, c -> 1
-    val expected = Set((0, 1.0, 0.0, 0.0), (1, 0.0, 0.0, 1.0), (2, 0.0, 1.0, 0.0),
-      (3, 1.0, 0.0, 0.0), (4, 1.0, 0.0, 0.0), (5, 0.0, 1.0, 0.0))
-    assert(output === expected)
+    val withExpected = transformed.join(expected, "id")
+    testTransformer[(Int, String, Double, Vector)](withExpected, encoder, "labelVec", "expected") {
+      case Row(output: Vector, expected: Vector) =>
+        assert(output === expected)
+    }
   }
 
   test("OneHotEncoder dropLast = true") {
@@ -71,16 +74,19 @@ class OneHotEncoderSuite
     val encoder = new OneHotEncoder()
       .setInputCol("labelIndex")
       .setOutputCol("labelVec")
-    val encoded = encoder.transform(transformed)
+    val expected = Seq(
+      (0, Vectors.sparse(2, Seq((0, 1.0)))),
+      (1, Vectors.sparse(2, Seq())),
+      (2, Vectors.sparse(2, Seq((1, 1.0)))),
+      (3, Vectors.sparse(2, Seq((0, 1.0)))),
+      (4, Vectors.sparse(2, Seq((0, 1.0)))),
+      (5, Vectors.sparse(2, Seq((1, 1.0))))).toDF("id", "expected")
 
-    val output = encoded.select("id", "labelVec").rdd.map { r =>
-      val vec = r.getAs[Vector](1)
-      (r.getInt(0), vec(0), vec(1))
-    }.collect().toSet
-    // a -> 0, b -> 2, c -> 1
-    val expected = Set((0, 1.0, 0.0), (1, 0.0, 0.0), (2, 0.0, 1.0),
-      (3, 1.0, 0.0), (4, 1.0, 0.0), (5, 0.0, 1.0))
-    assert(output === expected)
+    val withExpected = transformed.join(expected, "id")
+    testTransformer[(Int, String, Double, Vector)](withExpected, encoder, "labelVec", "expected") {
+      case Row(output: Vector, expected: Vector) =>
+        assert(output === expected)
+    }
   }
 
   test("input column with ML attribute") {
@@ -90,20 +96,22 @@ class OneHotEncoderSuite
     val encoder = new OneHotEncoder()
       .setInputCol("size")
       .setOutputCol("encoded")
-    val output = encoder.transform(df)
-    val group = AttributeGroup.fromStructField(output.schema("encoded"))
-    assert(group.size === 2)
-    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("small").withIndex(0))
-    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("medium").withIndex(1))
+    testTransformerByGlobalCheckFunc[(Double)](df, encoder, "encoded") { rows =>
+      val group = AttributeGroup.fromStructField(rows.head.schema("encoded"))
+      assert(group.size === 2)
+      assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("small").withIndex(0))
+      assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("medium").withIndex(1))
+    }
   }
+
 
   test("input column without ML attribute") {
     val df = Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply).toDF("index")
     val encoder = new OneHotEncoder()
       .setInputCol("index")
       .setOutputCol("encoded")
-    val output = encoder.transform(df)
-    val group = AttributeGroup.fromStructField(output.schema("encoded"))
+    val rows = encoder.transform(df).select("encoded").collect()
+    val group = AttributeGroup.fromStructField(rows.head.schema("encoded"))
     assert(group.size === 2)
     assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("0").withIndex(0))
     assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("1").withIndex(1))
@@ -119,29 +127,41 @@ class OneHotEncoderSuite
 
   test("OneHotEncoder with varying types") {
     val df = stringIndexed()
-    val dfWithTypes = df
-      .withColumn("shortLabel", df("labelIndex").cast(ShortType))
-      .withColumn("longLabel", df("labelIndex").cast(LongType))
-      .withColumn("intLabel", df("labelIndex").cast(IntegerType))
-      .withColumn("floatLabel", df("labelIndex").cast(FloatType))
-      .withColumn("decimalLabel", df("labelIndex").cast(DecimalType(10, 0)))
-    val cols = Array("labelIndex", "shortLabel", "longLabel", "intLabel",
-      "floatLabel", "decimalLabel")
-    for (col <- cols) {
+    val attr = NominalAttribute.defaultAttr.withValues("small", "medium", "large")
+    val expected = Seq(
+      (0, Vectors.sparse(3, Seq((0, 1.0)))),
+      (1, Vectors.sparse(3, Seq((2, 1.0)))),
+      (2, Vectors.sparse(3, Seq((1, 1.0)))),
+      (3, Vectors.sparse(3, Seq((0, 1.0)))),
+      (4, Vectors.sparse(3, Seq((0, 1.0)))),
+      (5, Vectors.sparse(3, Seq((1, 1.0))))).toDF("id", "expected")
+
+    val withExpected = df.join(expected, "id")
+
+    class NumericTypeWithEncoder[A](val numericType: NumericType)
+       (implicit val encoder: Encoder[(A, Vector)])
+
+    val types = Seq(
+      new NumericTypeWithEncoder[Short](ShortType),
+      new NumericTypeWithEncoder[Long](LongType),
+      new NumericTypeWithEncoder[Int](IntegerType),
+      new NumericTypeWithEncoder[Float](FloatType),
+      new NumericTypeWithEncoder[Byte](ByteType),
+      new NumericTypeWithEncoder[Double](DoubleType),
+      new NumericTypeWithEncoder[Decimal](DecimalType(10, 0))(ExpressionEncoder()))
+
+    for (t <- types) {
+      val dfWithTypes = withExpected.select(col("labelIndex")
+        .cast(t.numericType).as("labelIndex", attr.toMetadata()), col("expected"))
       val encoder = new OneHotEncoder()
-        .setInputCol(col)
+        .setInputCol("labelIndex")
         .setOutputCol("labelVec")
         .setDropLast(false)
-      val encoded = encoder.transform(dfWithTypes)
 
-      val output = encoded.select("id", "labelVec").rdd.map { r =>
-        val vec = r.getAs[Vector](1)
-        (r.getInt(0), vec(0), vec(1), vec(2))
-      }.collect().toSet
-      // a -> 0, b -> 2, c -> 1
-      val expected = Set((0, 1.0, 0.0, 0.0), (1, 0.0, 0.0, 1.0), (2, 0.0, 1.0, 0.0),
-        (3, 1.0, 0.0, 0.0), (4, 1.0, 0.0, 0.0), (5, 0.0, 1.0, 0.0))
-      assert(output === expected)
+      testTransformer(dfWithTypes, encoder, "labelVec", "expected") {
+        case Row(output: Vector, expected: Vector) =>
+          assert(output === expected)
+      }(t.encoder)
     }
   }
 }

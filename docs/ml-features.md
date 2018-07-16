@@ -1174,7 +1174,7 @@ for more details on the API.
 ## SQLTransformer
 
 `SQLTransformer` implements the transformations which are defined by SQL statement.
-Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
+Currently, we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
 where `"__THIS__"` represents the underlying table of the input dataset.
 The select clause specifies the fields, constants, and expressions to display in
 the output, and can be any select clause that Spark SQL supports. Users can also
@@ -1429,7 +1429,7 @@ for more details on the API.
 
 ## Imputer
 
-The `Imputer` transformer completes missing values in a dataset, either using the mean or the 
+The `Imputer` estimator completes missing values in a dataset, either using the mean or the 
 median of the columns in which the missing values are located. The input columns should be of
 `DoubleType` or `FloatType`. Currently `Imputer` does not support categorical features and possibly
 creates incorrect values for columns containing categorical features. Imputer can impute custom values 
