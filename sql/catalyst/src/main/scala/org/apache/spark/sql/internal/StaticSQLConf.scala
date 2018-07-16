@@ -74,6 +74,13 @@ object StaticSQLConf {
       .checkValue(maxEntries => maxEntries >= 0, "The maximum must not be negative")
       .createWithDefault(100)
 
+  val CODEGEN_COMMENTS = buildStaticConf("spark.sql.codegen.comments")
+    .internal()
+    .doc("When true, put comment in the generated code. Since computing huge comments " +
+      "can be extremely expensive in certain cases, default is false.")
+    .booleanConf
+    .createWithDefault(false)
+
   // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
   // some related DDL commands (e.g., ANALYZE TABLE and CREATE TABLE LIKE) might not work properly.
   val DEBUG_MODE = buildStaticConf("spark.sql.debug")

@@ -48,20 +48,4 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
     assert(res.forall{ case (subtree, code) =>
       subtree.contains("Range") && code.contains("Object[]")})
   }
-
-  test("check to generate comment") {
-    withSQLConf("spark.sql.codegen.comments" -> "false") {
-      val res = codegenStringSeq(spark.range(10).groupBy("id").count().queryExecution.executedPlan)
-      assert(res.length == 2)
-      assert(res.forall{ case (_, code) =>
-        !code.contains("* Codegend pipeline") && !code.contains("// input[")})
-    }
-
-    withSQLConf("spark.sql.codegen.comments" -> "true") {
-      val res = codegenStringSeq(spark.range(10).groupBy("id").count().queryExecution.executedPlan)
-      assert(res.length == 2)
-      assert(res.forall{ case (_, code) =>
-        code.contains("* Codegend pipeline") && code.contains("// input[")})
-    }
-  }
 }
