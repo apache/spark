@@ -207,6 +207,23 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("OptimizedIn test: In empty list gets transformed to " +
+    "If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType)) when value is nullable") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Nil))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      testRelation
+        .where(If(IsNotNull(UnresolvedAttribute("a")),
+          Literal(false), Literal.create(null, BooleanType)))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("OptimizedIn test: In empty list gets transformed to `If` expression " +
     "when value is nullable") {
     val originalQuery =
