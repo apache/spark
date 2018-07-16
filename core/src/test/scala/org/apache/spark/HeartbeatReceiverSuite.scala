@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.util.concurrent.{ExecutorService, TimeUnit}
 
-import scala.collection.Map
 import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -73,6 +72,7 @@ class HeartbeatReceiverSuite
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
+    when(scheduler.nodeBlacklist).thenReturn(Predef.Set[String]())
     when(scheduler.sc).thenReturn(sc)
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
@@ -241,7 +241,7 @@ class HeartbeatReceiverSuite
       } === Some(true))
   }
 
-  private def getTrackedExecutors: Map[String, Long] = {
+  private def getTrackedExecutors: collection.Map[String, Long] = {
     // We may receive undesired SparkListenerExecutorAdded from LocalSchedulerBackend,
     // so exclude it from the map. See SPARK-10800.
     heartbeatReceiver.invokePrivate(_executorLastSeen()).
@@ -272,7 +272,7 @@ private class FakeSchedulerBackend(
 
   protected override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
     clusterManagerEndpoint.ask[Boolean](
-      RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount, Set.empty[String]))
+      RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount, Set.empty))
   }
 
   protected override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {

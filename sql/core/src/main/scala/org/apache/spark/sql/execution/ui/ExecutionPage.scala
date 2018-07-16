@@ -122,7 +122,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   }
 
   private def jobURL(request: HttpServletRequest, jobId: Long): String =
-    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>

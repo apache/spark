@@ -539,16 +539,9 @@ expression
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
     | EXISTS '(' query ')'                                         #exists
-    | predicated                                                   #booleanDefault
+    | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
-    ;
-
-// workaround for:
-//  https://github.com/antlr/antlr4/issues/780
-//  https://github.com/antlr/antlr4/issues/781
-predicated
-    : valueExpression predicate?
     ;
 
 predicate
