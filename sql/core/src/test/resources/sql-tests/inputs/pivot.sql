@@ -111,3 +111,21 @@ PIVOT (
   sum(earnings)
   FOR year IN (2012, 2013)
 );
+
+-- pivot with complex aggregate expressions
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  ceil(sum(earnings)), avg(earnings) + 1 as a1
+  FOR course IN ('dotNET', 'Java')
+);
+
+-- pivot with invalid arguments in aggregate expressions
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(avg(earnings))
+  FOR course IN ('dotNET', 'Java')
+);

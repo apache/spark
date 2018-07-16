@@ -270,6 +270,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * per file</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
+   * <li>`dropFieldIfAllNull` (default `false`): whether to ignore column of all null values or
+   * empty array/struct during schema inference.</li>
    * </ul>
    *
    * @since 2.0.0

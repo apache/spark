@@ -79,22 +79,8 @@ class StreamingContext(object):
         java_import(gw.jvm, "org.apache.spark.streaming.api.java.*")
         java_import(gw.jvm, "org.apache.spark.streaming.api.python.*")
 
-        # start callback server
-        # getattr will fallback to JVM, so we cannot test by hasattr()
-        if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
-            gw.callback_server_parameters.eager_load = True
-            gw.callback_server_parameters.daemonize = True
-            gw.callback_server_parameters.daemonize_connections = True
-            gw.callback_server_parameters.port = 0
-            gw.start_callback_server(gw.callback_server_parameters)
-            cbport = gw._callback_server.server_socket.getsockname()[1]
-            gw._callback_server.port = cbport
-            # gateway with real port
-            gw._python_proxy_port = gw._callback_server.port
-            # get the GatewayServer object in JVM by ID
-            jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
-            # update the port of CallbackClient with real port
-            jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)
+        from pyspark.java_gateway import ensure_callback_server_started
+        ensure_callback_server_started(gw)
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing

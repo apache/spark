@@ -11,6 +11,10 @@ cache
 .rat-excludes
 .*md
 derby.log
+licenses/*
+licenses-binary/*
+LICENSE
+NOTICE
 TAGS
 RELEASE
 control
@@ -106,3 +110,4 @@ spark-warehouse
 structured-streaming/*
 kafka-source-initial-offset-version-2.1.0.bin
 kafka-source-initial-offset-future-version.bin
+vote.tmpl
