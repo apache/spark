@@ -1606,10 +1606,9 @@ object CodeGenerator extends Logging {
 
   def getClassName(cls: Class[_]): String = {
     try {
-      return Option(cls.getCanonicalName).getOrElse(cls.getName)
+      Option(cls.getCanonicalName).getOrElse(cls.getName)
     } catch {
-      case err: InternalError =>
-        return cls.getName
+      case err: InternalError => cls.getName
     }
   }
 
