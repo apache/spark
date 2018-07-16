@@ -1237,8 +1237,9 @@ object CodeGenerator extends Logging {
   // bytecode instruction
   final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
-  private lazy val compilerImpl: CompilerBase = {
-    val compiler = SparkEnv.get.conf.get("spark.sql.javaCompiler", "jdk").toLowerCase(Locale.ROOT)
+  // Make this non-private and non-lazy method for testing
+  def _compilerImpl(): CompilerBase = {
+    val compiler = SQLConf.get.javaCompiler
     val compilerInstance = compiler match {
       case "janino" => JaninoCompiler
       case "jdk" => if (JdkCompiler.javaCompiler != null) JdkCompiler else JaninoCompiler
@@ -1249,12 +1250,14 @@ object CodeGenerator extends Logging {
     compilerInstance
   }
 
+  private lazy val compilerImpl = _compilerImpl
+
   lazy val janinoCompilerEnabled: Boolean = {
     compilerImpl == JaninoCompiler
   }
 
   /**
-   * Compile the Java source code into a Java class, using Janino.
+   * Compile the Java source code into a Java class, using Janino or javac
    *
    * @return a pair of a generated class and the max bytecode size of generated functions.
    */
@@ -1269,7 +1272,7 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Compile the Java source code into a Java class, using Janino.
+   * Compile the Java source code into a Java class, using Janino or javac
    */
   private[this] def doCompile(code: CodeAndComment): (GeneratedClass, Int) = {
     compilerImpl.compile(code)

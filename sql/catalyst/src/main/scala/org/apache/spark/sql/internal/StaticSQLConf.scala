@@ -82,6 +82,22 @@ object StaticSQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val CODEGEN_JAVA_COMPILER = buildStaticConf("spark.sql.codegen.javaCompiler")
+      .internal()
+      .doc("Sets the Java bytecode compiler for compiling Java methods for DataFrame or Dataset " +
+        "program. Acceptable values include: jdk or janino")
+      .stringConf
+      .checkValues(Set("jdk", "janino"))
+      .createWithDefault("jdk")
+
+  val CODEGEN_JDK_JAVA_COMPILER_OPTION =
+    buildStaticConf("spark.sql.codegen.javaCompiler.jdkOption")
+      .internal()
+      .doc("Sets compiler options for JDK Java bytecode compiler. This is ignored when janino is" +
+        "is selected")
+      .stringConf
+      .createWithDefault("")
+
   // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
   // some related DDL commands (e.g., ANALYZE TABLE and CREATE TABLE LIKE) might not work properly.
   val DEBUG_MODE = buildStaticConf("spark.sql.debug")

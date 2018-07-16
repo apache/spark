@@ -25,14 +25,16 @@ import javax.tools._
 import javax.tools.JavaFileManager.Location
 import javax.tools.JavaFileObject.Kind
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.language.existentials
 
 import org.codehaus.commons.compiler.{CompileException, Location => CompilerLocation}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, GeneratedClass}
-import org.apache.spark.util.{ParentClassLoader, Utils}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ParentClassLoader
 
 
 class JavaCodeManager(fileManager: JavaFileManager)
@@ -123,13 +125,11 @@ class JDKDiagnosticListener extends DiagnosticListener[JavaFileObject] {
       // Wrap the exception in a RuntimeException, because "report()"
       // does not declare checked exceptions.
       throw new RuntimeException(new CompileException(message, loc))
-    // } else if (logger.isTraceEnabled()) {
-    //   logger.trace(diagnostic.toString() + " (" + diagnostic.getCode() + ")")
     }
   }
 }
 
-object JdkCompiler extends CompilerBase with Logging {
+object JdkCompiler extends CompilerBase {
   val javaCompiler = {
     ToolProvider.getSystemJavaCompiler
   }
@@ -142,7 +142,12 @@ object JdkCompiler extends CompilerBase with Logging {
     if ("-g".equals(debugOption)) {
       debugOption.append("none,")
     }
-    Arrays.asList("-classpath", System.getProperty("java.class.path"), debugOption.init.toString())
+    val compilerOption = SQLConf.get.jdkCompilerOptions
+    if (compilerOption != null) {
+      debugOption.append(compilerOption).append(",")
+    }
+
+    Arrays.asList("-classpath", System.getProperty("java.class.path"), debugOption.toString())
   }
 
   private val listener = new JDKDiagnosticListener()
@@ -194,39 +199,10 @@ object JdkCompiler extends CompilerBase with Logging {
       case _: Throwable => throw new CompileException("Compilation failed", null)
     }
 
-    // TODO: Needs to get the max bytecode size of generated methods
-    val maxMethodBytecodeSize = updateAndGetCompilationStats(fileManager.objects.toMap)
+    val byteCodes = fileManager.objects.toMap.values.map(_.getBytecode)
+    val maxMethodBytecodeSize = updateAndGetBytecodeSize(byteCodes)
 
     val clazz = fileManager.getClassLoader(null).loadClass(clazzName)
     (clazz.newInstance().asInstanceOf[GeneratedClass], maxMethodBytecodeSize)
-  }
-
-  private def updateAndGetCompilationStats(objects: Map[String, JavaCode]): Int = {
-    val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
-    val codeAttrField = codeAttr.getDeclaredField("code")
-    codeAttrField.setAccessible(true)
-    /*
-    val codeSizes = objects.foreach { case (_, javaCode) =>
-      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(javaCode.getBytecode.size)
-      try {
-        val cf = new ClassFile(new ByteArrayInputStream(javaCode.getBytecode))
-        val stats = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes().filter(_.getClass.getName == codeAttr.getName).map { a =>
-            val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
-            byteCodeSize
-          }
-        }
-        Some(stats)
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Error calculating stats of compiled class.", e)
-          None
-      }
-    }.flatten
-
-    codeSizes.max
-    */
-    0
   }
 }

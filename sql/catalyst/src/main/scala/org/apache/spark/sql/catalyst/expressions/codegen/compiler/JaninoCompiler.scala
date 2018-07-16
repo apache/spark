@@ -17,30 +17,20 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen.compiler
 
-import java.io.ByteArrayInputStream
 import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConverters._
-import scala.language.existentials
-import scala.util.control.NonFatal
 
 import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
-import org.codehaus.janino.util.ClassFile
+import org.codehaus.janino._
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, GeneratedClass}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
 
-object JaninoCompiler extends CompilerBase with Logging {
+object JaninoCompiler extends CompilerBase {
 
-  /**
-   * Returns the max bytecode size of the generated functions by inspecting janino private fields.
-   * Also, this method updates the metrics information.
-   */
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): Int = {
     // First retrieve the generated classes.
     val classes = {
@@ -51,31 +41,7 @@ object JaninoCompiler extends CompilerBase with Logging {
       classesField.setAccessible(true)
       classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
     }
-
-    // Then walk the classes to get at the method bytecode.
-    val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
-    val codeAttrField = codeAttr.getDeclaredField("code")
-    codeAttrField.setAccessible(true)
-    val codeSizes = classes.flatMap { case (_, classBytes) =>
-      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
-      try {
-        val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-        val stats = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes().filter(_.getClass.getName == codeAttr.getName).map { a =>
-            val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
-            byteCodeSize
-          }
-        }
-        Some(stats)
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Error calculating stats of compiled class.", e)
-          None
-      }
-    }.flatten
-
-    codeSizes.max
+    updateAndGetBytecodeSize(classes.values)
   }
 
   override def compile(code: CodeAndComment): (GeneratedClass, Int) = {

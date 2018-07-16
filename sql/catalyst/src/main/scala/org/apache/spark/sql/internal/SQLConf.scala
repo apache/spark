@@ -1740,6 +1740,10 @@ class SQLConf extends Serializable with Logging {
 
   def codegenCacheMaxEntries: Int = getConf(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES)
 
+  def javaCompiler: String = getConf(StaticSQLConf.CODEGEN_JAVA_COMPILER)
+
+  def jdkCompilerOptions: String = getConf(StaticSQLConf.CODEGEN_JDK_JAVA_COMPILER_OPTION)
+
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
