@@ -1377,7 +1377,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
       ("exec2", "host2"), ("exec3", "host3"))
     sched.initialize(new FakeSchedulerBackend() {
-      override def killTask(taskId: Long,
+      override def killTask(
+          taskId: Long,
           executorId: String,
           interruptThread: Boolean,
           reason: String): Unit = {
@@ -1395,7 +1396,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // so that the test can check that task is resubmitted correctly
     var resubmittedTasks = new mutable.HashSet[Int]
     val dagScheduler = new FakeDAGScheduler(sc, sched) {
-      override def taskEnded(task: Task[_],
+      override def taskEnded(
+          task: Task[_],
           reason: TaskEndReason,
           result: Any,
           accumUpdates: Seq[AccumulatorV2[_, _]],
