@@ -282,6 +282,40 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
+  test("SPARK-24621 https urls when ssl enabled") {
+    implicit val formats = org.json4s.DefaultFormats
+    val conf = new SparkConf()
+    conf.set("spark.ssl.enabled", "true")
+    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    localCluster.start()
+    try {
+      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+        val json = Source.fromURL(s"https://localhost:${localCluster.masterWebUIPort}/json")
+          .getLines().mkString("\n")
+        assert(json.contains('<a href="https://'))
+      }
+    } finally {
+      localCluster.stop()
+    }
+  }
+
+  test("SPARK-24621 http urls when ssl disabled") {
+    implicit val formats = org.json4s.DefaultFormats
+    val conf = new SparkConf()
+    conf.set("spark.ssl.enabled", "false")
+    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    localCluster.start()
+    try {
+      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+        val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
+          .getLines().mkString("\n")
+        assert(!json.contains('<a href="https://'))
+      }
+    } finally {
+      localCluster.stop()
+    }
+  }
+
   test("master/worker web ui available with reverseProxy") {
     implicit val formats = org.json4s.DefaultFormats
     val reverseProxyUrl = "http://localhost:8080"
