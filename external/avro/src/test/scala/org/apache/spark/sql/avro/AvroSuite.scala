@@ -18,7 +18,8 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.nio.file.Files
+import java.net.URL
+import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.util.{TimeZone, UUID}
 
@@ -622,7 +623,12 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     intercept[FileNotFoundException] {
       withTempPath { dir =>
         FileUtils.touch(new File(dir, "test"))
-        spark.read.avro(dir.toString)
+        val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
+        try {
+          hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+          spark.read.avro(dir.toString)
+        } finally {
+          hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)        }
       }
     }
 
@@ -684,12 +690,18 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       Files.createFile(new File(tempSaveDir, "non-avro").toPath)
 
-      val newDf = spark
-        .read
-        .option(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
-        .avro(tempSaveDir)
+      val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
+      val count = try {
+        hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+        val newDf = spark
+          .read
+          .avro(tempSaveDir)
+        newDf.count()
+      } finally {
+        hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+      }
 
-      assert(newDf.count == 8)
+      assert(count == 8)
     }
   }
 
@@ -803,6 +815,25 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val readDf = spark.read.avro(outputFolder)
       // Check if the written DataFrame is equals than read DataFrame
       assert(readDf.collect().sameElements(writeDf.collect()))
+    }
+  }
+
+  test("SPARK-24805: do not ignore files without .avro extension by default") {
+    withTempDir { dir =>
+      Files.copy(
+        Paths.get(new URL(episodesAvro).toURI),
+        Paths.get(dir.getCanonicalPath, "episodes"))
+
+      val fileWithoutExtension = s"${dir.getCanonicalPath}/episodes"
+      val df1 = spark.read.avro(fileWithoutExtension)
+      assert(df1.count == 8)
+
+      val schema = new StructType()
+        .add("title", StringType)
+        .add("air_date", StringType)
+        .add("doctor", IntegerType)
+      val df2 = spark.read.schema(schema).avro(fileWithoutExtension)
+      assert(df2.count == 8)
     }
   }
 }
