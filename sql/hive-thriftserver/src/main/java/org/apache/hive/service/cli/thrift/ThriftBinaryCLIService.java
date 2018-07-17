@@ -18,13 +18,6 @@
 
 package org.apache.hive.service.cli.thrift;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
@@ -37,11 +30,19 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportFactory;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.TimeUnit;
+
 
 public class ThriftBinaryCLIService extends ThriftCLIService {
+  private final Runnable oomHook;
 
-  public ThriftBinaryCLIService(CLIService cliService) {
+  public ThriftBinaryCLIService(CLIService cliService, Runnable oomHook) {
     super(cliService, ThriftBinaryCLIService.class.getSimpleName());
+    this.oomHook = oomHook;
   }
 
   @Override
@@ -49,9 +50,9 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
     try {
       // Server thread pool
       String threadPoolName = "HiveServer2-Handler-Pool";
-      ExecutorService executorService = new ThreadPoolExecutor(minWorkerThreads, maxWorkerThreads,
+      ExecutorService executorService = new ThreadPoolExecutorWithOomHook(minWorkerThreads, maxWorkerThreads,
           workerKeepAliveTime, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(),
-          new ThreadFactoryWithGarbageCleanup(threadPoolName));
+          new ThreadFactoryWithGarbageCleanup(threadPoolName), oomHook);
 
       // Thrift configs
       hiveAuthFactory = new HiveAuthFactory(hiveConf);

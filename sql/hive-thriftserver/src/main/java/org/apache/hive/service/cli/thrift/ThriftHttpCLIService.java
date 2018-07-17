@@ -49,9 +49,11 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 
 
 public class ThriftHttpCLIService extends ThriftCLIService {
+  private final Runnable oomHook;
 
-  public ThriftHttpCLIService(CLIService cliService) {
+  public ThriftHttpCLIService(CLIService cliService, Runnable oomHook) {
     super(cliService, ThriftHttpCLIService.class.getSimpleName());
+    this.oomHook = oomHook;
   }
 
   /**
@@ -65,9 +67,9 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       // Server thread pool
       // Start with minWorkerThreads, expand till maxWorkerThreads and reject subsequent requests
       String threadPoolName = "HiveServer2-HttpHandler-Pool";
-      ExecutorService executorService = new ThreadPoolExecutor(minWorkerThreads, maxWorkerThreads,
+      ExecutorService executorService = new ThreadPoolExecutorWithOomHook(minWorkerThreads, maxWorkerThreads,
           workerKeepAliveTime, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(),
-          new ThreadFactoryWithGarbageCleanup(threadPoolName));
+          new ThreadFactoryWithGarbageCleanup(threadPoolName), oomHook);
       ExecutorThreadPool threadPool = new ExecutorThreadPool(executorService);
 
       // HTTP Server
