@@ -225,6 +225,8 @@ object OptimizeIn extends Rule[LogicalPlan] {
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
         if (newList.length == 1
+          // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
+          // TODO: we exclude them in this rule.
           && !v.isInstanceOf[CreateNamedStructLike]
           && !newList.head.isInstanceOf[CreateNamedStructLike]) {
           EqualTo(v, newList.head)
