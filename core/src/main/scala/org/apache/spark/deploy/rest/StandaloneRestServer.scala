@@ -138,6 +138,10 @@ private[rest] class StandaloneSubmitRequestServlet(
     val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
     val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
     val superviseDriver = sparkProperties.get("spark.driver.supervise")
+    val masters = sparkProperties.get("spark.master")
+    val masterPort = Utils.extractHostPortFromSparkUrl(masterUrl)._2.toString
+    val masterRestPort = this.conf.getInt("spark.master.rest.port", 6066).toString
+    val updatedMasters = masters.map(_.replace(masterRestPort, masterPort)).getOrElse(masterUrl)
     val appArgs = request.appArgs
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
     val environmentVariables =
@@ -146,7 +150,7 @@ private[rest] class StandaloneSubmitRequestServlet(
     // Construct driver description
     val conf = new SparkConf(false)
       .setAll(sparkProperties)
-      .set("spark.master", masterUrl)
+      .set("spark.master", updatedMasters)
     val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
