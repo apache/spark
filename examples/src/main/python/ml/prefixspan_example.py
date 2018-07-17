@@ -34,12 +34,12 @@ if __name__ == "__main__":
 
     # $example on$
     df = sc.parallelize([Row(sequence=[[1, 2], [3]]),
-                             Row(sequence=[[1], [3, 2], [1, 2]]),
-                             Row(sequence=[[1, 2], [5]]),
-                             Row(sequence=[[6]])]).toDF()
+                         Row(sequence=[[1], [3, 2], [1, 2]]),
+                         Row(sequence=[[1, 2], [5]]),
+                         Row(sequence=[[6]])]).toDF()
 
-    prefixSpan = PrefixSpan(minSupport = 0.5, maxPatternLength = 5L,
-                            maxLocalProjDBSize = 32000000L)
+    prefixSpan = PrefixSpan(minSupport=0.5, maxPatternLength=5,
+                            maxLocalProjDBSize=32000000)
 
     # Find frequent sequential patterns.
     prefixSpan.findFrequentSequentialPatterns(df).show()

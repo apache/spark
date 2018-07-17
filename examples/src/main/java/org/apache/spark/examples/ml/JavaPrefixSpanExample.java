@@ -52,7 +52,7 @@ public class JavaPrefixSpanExample {
     );
     StructType schema = new StructType(new StructField[]{ new StructField(
       "sequence", new ArrayType(new ArrayType(DataTypes.IntegerType, true), true),
-            false, Metadata.empty())
+      false, Metadata.empty())
     });
     Dataset<Row> sequenceDF = spark.createDataFrame(data, schema);
 
