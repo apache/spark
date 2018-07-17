@@ -1207,6 +1207,7 @@ class SessionCatalog(
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     databaseExists(db) && externalCatalog.functionExists(db, name.funcName)
   }
+
   protected def failFunctionLookup(
       name: FunctionIdentifier, rootCause: Option[String] = None): Nothing = {
     throw new NoSuchFunctionException(
