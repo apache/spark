@@ -224,7 +224,9 @@ object OptimizeIn extends Rule[LogicalPlan] {
         If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
-        if (newList.length == 1 && !v.isInstanceOf[CreateNamedStructLike]) {
+        if (newList.length == 1
+          && !v.isInstanceOf[CreateNamedStructLike]
+          && !newList.head.isInstanceOf[CreateNamedStructLike]) {
           EqualTo(v, newList.head)
         } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
