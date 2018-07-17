@@ -381,6 +381,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * that should be used for parsing.</li>
    * <li>`samplingRatio` (default is 1.0): defines fraction of input JSON objects used
    * for schema inferring.</li>
+   * <li>`dropFieldIfAllNull` (default `false`): whether to ignore column of all null values or
+   * empty array/struct during schema inference.</li>
    * </ul>
    *
    * @since 2.0.0

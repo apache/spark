@@ -29,10 +29,8 @@ import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.{MicroBatchExecution, StreamExecution}
-import org.apache.spark.sql.execution.streaming.continuous.{CommitPartitionEpoch, ContinuousExecution, EpochCoordinatorRef, SetWriterPartitions}
+import org.apache.spark.sql.execution.streaming.MicroBatchExecution
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -109,10 +107,12 @@ object DataWritingSparkTask extends Logging {
       iter: Iterator[InternalRow],
       useCommitCoordinator: Boolean): WriterCommitMessage = {
     val stageId = context.stageId()
+    val stageAttempt = context.stageAttemptNumber()
     val partId = context.partitionId()
+    val taskId = context.taskAttemptId()
     val attemptId = context.attemptNumber()
     val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
-    val dataWriter = writeTask.createDataWriter(partId, attemptId, epochId.toLong)
+    val dataWriter = writeTask.createDataWriter(partId, taskId, epochId.toLong)
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
@@ -122,12 +122,14 @@ object DataWritingSparkTask extends Logging {
 
       val msg = if (useCommitCoordinator) {
         val coordinator = SparkEnv.get.outputCommitCoordinator
-        val commitAuthorized = coordinator.canCommit(context.stageId(), partId, attemptId)
+        val commitAuthorized = coordinator.canCommit(stageId, stageAttempt, partId, attemptId)
         if (commitAuthorized) {
-          logInfo(s"Writer for stage $stageId, task $partId.$attemptId is authorized to commit.")
+          logInfo(s"Commit authorized for partition $partId (task $taskId, attempt $attemptId" +
+            s"stage $stageId.$stageAttempt)")
           dataWriter.commit()
         } else {
-          val message = s"Stage $stageId, task $partId.$attemptId: driver did not authorize commit"
+          val message = s"Commit denied for partition $partId (task $taskId, attempt $attemptId" +
+            s"stage $stageId.$stageAttempt)"
           logInfo(message)
           // throwing CommitDeniedException will trigger the catch block for abort
           throw new CommitDeniedException(message, stageId, partId, attemptId)
@@ -138,15 +140,18 @@ object DataWritingSparkTask extends Logging {
         dataWriter.commit()
       }
 
-      logInfo(s"Writer for stage $stageId, task $partId.$attemptId committed.")
+      logInfo(s"Committed partition $partId (task $taskId, attempt $attemptId" +
+        s"stage $stageId.$stageAttempt)")
 
       msg
 
     })(catchBlock = {
       // If there is an error, abort this writer
-      logError(s"Writer for stage $stageId, task $partId.$attemptId is aborting.")
+      logError(s"Aborting commit for partition $partId (task $taskId, attempt $attemptId" +
+            s"stage $stageId.$stageAttempt)")
       dataWriter.abort()
-      logError(s"Writer for stage $stageId, task $partId.$attemptId aborted.")
+      logError(s"Aborted commit for partition $partId (task $taskId, attempt $attemptId" +
+            s"stage $stageId.$stageAttempt)")
     })
   }
 }
@@ -157,10 +162,10 @@ class InternalRowDataWriterFactory(
 
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
     new InternalRowDataWriter(
-      rowWriterFactory.createDataWriter(partitionId, attemptNumber, epochId),
+      rowWriterFactory.createDataWriter(partitionId, taskId, epochId),
       RowEncoder.apply(schema).resolveAndBind())
   }
 }

@@ -25,20 +25,21 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite
+class JDBCSuite extends QueryTest
   with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
   import testImplicits._
 
@@ -237,6 +238,11 @@ class JDBCSuite extends SparkFunSuite
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST."mixedCaseCols"', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement("CREATE TABLE test.partition (THEID INTEGER, `THE ID` INTEGER) " +
+      "AS SELECT 1, 1")
+      .executeUpdate()
+    conn.commit()
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
@@ -1093,7 +1099,7 @@ class JDBCSuite extends SparkFunSuite
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
     def testJdbcOptions(options: JDBCOptions): Unit = {
       // Spark JDBC data source options are case-insensitive
-      assert(options.table == "t1")
+      assert(options.tableOrQuery == "t1")
       // When we convert it to properties, it should be case-sensitive.
       assert(options.asProperties.size == 3)
       assert(options.asProperties.get("customkey") == null)
@@ -1205,5 +1211,136 @@ class JDBCSuite extends SparkFunSuite
       df.collect()
     }.getMessage
     assert(errMsg.contains("Statement was canceled or the session timed out"))
+  }
+
+  test("SPARK-24327 verify and normalize a partition column based on a JDBC resolved schema") {
+    def testJdbcParitionColumn(partColName: String, expectedColumnName: String): Unit = {
+      val df = spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", "TEST.PARTITION")
+        .option("partitionColumn", partColName)
+        .option("lowerBound", 1)
+        .option("upperBound", 4)
+        .option("numPartitions", 3)
+        .load()
+
+      val quotedPrtColName = testH2Dialect.quoteIdentifier(expectedColumnName)
+      df.logicalPlan match {
+        case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+          val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+          assert(whereClauses === Set(
+            s"$quotedPrtColName < 2 or $quotedPrtColName is null",
+            s"$quotedPrtColName >= 2 AND $quotedPrtColName < 3",
+            s"$quotedPrtColName >= 3"))
+      }
+    }
+
+    testJdbcParitionColumn("THEID", "THEID")
+    testJdbcParitionColumn("\"THEID\"", "THEID")
+    withSQLConf("spark.sql.caseSensitive" -> "false") {
+      testJdbcParitionColumn("ThEiD", "THEID")
+    }
+    testJdbcParitionColumn("THE ID", "THE ID")
+
+    def testIncorrectJdbcPartitionColumn(partColName: String): Unit = {
+      val errMsg = intercept[AnalysisException] {
+        testJdbcParitionColumn(partColName, "THEID")
+      }.getMessage
+      assert(errMsg.contains(s"User-defined partition column $partColName not found " +
+        "in the JDBC relation:"))
+    }
+
+    testIncorrectJdbcPartitionColumn("NoExistingColumn")
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      testIncorrectJdbcPartitionColumn(testH2Dialect.quoteIdentifier("ThEiD"))
+    }
+  }
+
+  test("query JDBC option - negative tests") {
+    val query = "SELECT * FROM  test.people WHERE theid = 1"
+    // load path
+    val e1 = intercept[RuntimeException] {
+      val df = spark.read.format("jdbc")
+        .option("Url", urlWithUserAndPass)
+        .option("query", query)
+        .option("dbtable", "test.people")
+        .load()
+    }.getMessage
+    assert(e1.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    // jdbc api path
+    val properties = new Properties()
+    properties.setProperty(JDBCOptions.JDBC_QUERY_STRING, query)
+    val e2 = intercept[RuntimeException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
+    }.getMessage
+    assert(e2.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    val e3 = intercept[RuntimeException] {
+      sql(
+        s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', query '$query', dbtable 'TEST.PEOPLE',
+         |         user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+      }.getMessage
+    assert(e3.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    val e4 = intercept[RuntimeException] {
+      val df = spark.read.format("jdbc")
+        .option("Url", urlWithUserAndPass)
+        .option("query", "")
+        .load()
+    }.getMessage
+    assert(e4.contains("Option `query` can not be empty."))
+
+    // Option query and partitioncolumn are not allowed together.
+    val expectedErrorMsg =
+      s"""
+         |Options 'query' and 'partitionColumn' can not be specified together.
+         |Please define the query using `dbtable` option instead and make sure to qualify
+         |the partition columns using the supplied subquery alias to resolve any ambiguity.
+         |Example :
+         |spark.read.format("jdbc")
+         |        .option("dbtable", "(select c1, c2 from t1) as subq")
+         |        .option("partitionColumn", "subq.c1"
+         |        .load()
+     """.stripMargin
+    val e5 = intercept[RuntimeException] {
+      sql(
+        s"""
+           |CREATE OR REPLACE TEMPORARY VIEW queryOption
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (url '$url', query '$query', user 'testUser', password 'testPass',
+           |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
+       """.stripMargin.replaceAll("\n", " "))
+    }.getMessage
+    assert(e5.contains(expectedErrorMsg))
+  }
+
+  test("query JDBC option") {
+    val query = "SELECT name, theid FROM  test.people WHERE theid = 1"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("query", query)
+      .load()
+    checkAnswer(
+      df,
+      Row("fred", 1) :: Nil)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', query '$query', user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+
+    checkAnswer(
+      sql("select name, theid from queryOption"),
+      Row("fred", 1) :: Nil)
+
   }
 }

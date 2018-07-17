@@ -129,7 +129,6 @@ public class UnsafeInMemorySorterSuite {
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
     int iterLength = 0;
     long prevPrefix = -1;
-    Arrays.sort(dataToSort);
     while (iter.hasNext()) {
       iter.loadNext();
       final String str =

@@ -36,7 +36,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def this() = this(None, new JPrintWriter(Console.out, true))
 
   override def createInterpreter(): Unit = {
-    intp = new SparkILoopInterpreter(settings, out)
+    intp = new SparkILoopInterpreter(settings, out, initializeSpark)
   }
 
   val initializationCommands: Seq[String] = Seq(
@@ -73,11 +73,15 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     "import org.apache.spark.sql.functions._"
   )
 
-  def initializeSpark() {
-    intp.beQuietDuring {
-      savingReplayStack { // remove the commands from session history.
-        initializationCommands.foreach(processLine)
+  def initializeSpark(): Unit = {
+    if (!intp.reporter.hasErrors) {
+      // `savingReplayStack` removes the commands from session history.
+      savingReplayStack {
+        initializationCommands.foreach(intp quietRun _)
       }
+    } else {
+      throw new RuntimeException(s"Scala $versionString interpreter encountered " +
+        "errors during initialization")
     }
   }
 
@@ -100,16 +104,6 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
 
   /** Available commands */
   override def commands: List[LoopCommand] = standardCommands
-
-  /**
-   * We override `loadFiles` because we need to initialize Spark *before* the REPL
-   * sees any files, so that the Spark context is visible in those files. This is a bit of a
-   * hack, but there isn't another hook available to us at this point.
-   */
-  override def loadFiles(settings: Settings): Unit = {
-    initializeSpark()
-    super.loadFiles(settings)
-  }
 
   override def resetCommand(line: String): Unit = {
     super.resetCommand(line)

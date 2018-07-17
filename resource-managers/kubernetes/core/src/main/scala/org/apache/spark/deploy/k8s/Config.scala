@@ -176,6 +176,24 @@ private[spark] object Config extends Logging {
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
 
+  val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
+      .doc("Interval between polls against the Kubernetes API server to inspect the " +
+        "state of executors.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, s"API server polling interval must be a" +
+        " positive time value.")
+      .createWithDefaultString("30s")
+
+  val KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.eventProcessingInterval")
+      .doc("Interval between successive inspection of executor events sent from the" +
+        " Kubernetes API.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, s"Event processing interval must be a positive" +
+        " time value.")
+      .createWithDefaultString("1s")
+
   val MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.kubernetes.memoryOverheadFactor")
       .doc("This sets the Memory Overhead Factor that will allocate memory to non-JVM jobs " +
@@ -193,7 +211,6 @@ private[spark] object Config extends Logging {
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
 
-
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
@@ -203,11 +220,23 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
   val KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX = "spark.kubernetes.driver.secretKeyRef."
+  val KUBERNETES_DRIVER_VOLUMES_PREFIX = "spark.kubernetes.driver.volumes."
 
   val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
   val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
   val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
   val KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX = "spark.kubernetes.executor.secretKeyRef."
+  val KUBERNETES_EXECUTOR_VOLUMES_PREFIX = "spark.kubernetes.executor.volumes."
+
+  val KUBERNETES_VOLUMES_HOSTPATH_TYPE = "hostPath"
+  val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"
+  val KUBERNETES_VOLUMES_EMPTYDIR_TYPE = "emptyDir"
+  val KUBERNETES_VOLUMES_MOUNT_PATH_KEY = "mount.path"
+  val KUBERNETES_VOLUMES_MOUNT_READONLY_KEY = "mount.readOnly"
+  val KUBERNETES_VOLUMES_OPTIONS_PATH_KEY = "options.path"
+  val KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY = "options.claimName"
+  val KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY = "options.medium"
+  val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 }
