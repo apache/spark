@@ -18,7 +18,6 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.time.{Duration => JDuration}
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.collection.JavaConverters._
@@ -116,7 +115,7 @@ private[kafka010] class KafkaOffsetReader(
   def fetchTopicPartitions(): Set[TopicPartition] = runUninterruptibly {
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
     // Poll to get the latest assigned partitions
-    consumer.poll(JDuration.ofMillis(0))
+    consumer.poll(0)
     val partitions = consumer.assignment()
     consumer.pause(partitions)
     partitions.asScala.toSet
@@ -136,7 +135,7 @@ private[kafka010] class KafkaOffsetReader(
     val fetched = runUninterruptibly {
       withRetriesWithoutInterrupt {
         // Poll to get the latest assigned partitions
-        consumer.poll(JDuration.ofMillis(0))
+        consumer.poll(0)
         val partitions = consumer.assignment()
         consumer.pause(partitions)
         assert(partitions.asScala == partitionOffsets.keySet,
@@ -178,7 +177,7 @@ private[kafka010] class KafkaOffsetReader(
   def fetchEarliestOffsets(): Map[TopicPartition, Long] = runUninterruptibly {
     withRetriesWithoutInterrupt {
       // Poll to get the latest assigned partitions
-      consumer.poll(JDuration.ofMillis(0))
+      consumer.poll(0)
       val partitions = consumer.assignment()
       consumer.pause(partitions)
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the beginning")
@@ -197,7 +196,7 @@ private[kafka010] class KafkaOffsetReader(
   def fetchLatestOffsets(): Map[TopicPartition, Long] = runUninterruptibly {
     withRetriesWithoutInterrupt {
       // Poll to get the latest assigned partitions
-      consumer.poll(JDuration.ofMillis(0))
+      consumer.poll(0)
       val partitions = consumer.assignment()
       consumer.pause(partitions)
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the end.")
@@ -221,7 +220,7 @@ private[kafka010] class KafkaOffsetReader(
       runUninterruptibly {
         withRetriesWithoutInterrupt {
           // Poll to get the latest assigned partitions
-          consumer.poll(JDuration.ofMillis(0))
+          consumer.poll(0)
           val partitions = consumer.assignment()
           consumer.pause(partitions)
           logDebug(s"\tPartitions assigned to consumer: $partitions")
