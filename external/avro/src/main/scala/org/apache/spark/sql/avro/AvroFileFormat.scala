@@ -62,16 +62,14 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
     // Schema evolution is not supported yet. Here we only pick a single random sample file to
     // figure out the schema of the whole dataset.
     val sampleFile =
-      if (AvroFileFormat.ignoreFilesWithoutExtensions(conf, options)) {
-        files.find(_.getPath.getName.endsWith(".avro")).getOrElse {
-          throw new FileNotFoundException(
-            "No Avro files found. Hadoop option \"avro.mapred.ignore.inputs.without.extension\" " +
-              " is set to true. Do all input files have \".avro\" extension?"
-          )
+      if (AvroFileFormat.ignoreExtension(conf, options)) {
+        files.headOption.getOrElse {
+          throw new FileNotFoundException("Files for schema inferring have been not found.")
         }
       } else {
-        files.headOption.getOrElse {
-          throw new FileNotFoundException("No Avro files found.")
+        files.find(_.getPath.getName.endsWith(".avro")).getOrElse {
+          throw new FileNotFoundException(
+            "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
         }
       }
 
@@ -170,10 +168,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       // Doing input file filtering is improper because we may generate empty tasks that process no
       // input files but stress the scheduler. We should probably add a more general input file
       // filtering mechanism for `FileFormat` data sources. See SPARK-16317.
-      if (AvroFileFormat.ignoreFilesWithoutExtensions(conf, options) &&
-          !file.filePath.endsWith(".avro")) {
-        Iterator.empty
-      } else {
+      if (AvroFileFormat.ignoreExtension(conf, options) || file.filePath.endsWith(".avro")) {
         val reader = {
           val in = new FsInput(new Path(new URI(file.filePath)), conf)
           try {
@@ -228,6 +223,8 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
             deserializer.deserialize(record).asInstanceOf[InternalRow]
           }
         }
+      } else {
+        Iterator.empty
       }
     }
   }
@@ -277,13 +274,15 @@ private[avro] object AvroFileFormat {
     }
   }
 
-  def ignoreFilesWithoutExtensions(conf: Configuration, options: Map[String, String]): Boolean = {
-    val ignoreExtensionByDefault = true
-    val ignoreExtension = options
+  def ignoreExtension(conf: Configuration, options: Map[String, String]): Boolean = {
+    val ignoreFilesWithoutExtensionByDefault = false
+    val ignoreFilesWithoutExtension = conf.getBoolean(
+      AvroFileFormat.IgnoreFilesWithoutExtensionProperty,
+      ignoreFilesWithoutExtensionByDefault)
+
+    options
       .get("ignoreExtension")
       .map(_.toBoolean)
-      .getOrElse(ignoreExtensionByDefault)
-
-    conf.getBoolean(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, !ignoreExtension)
+      .getOrElse(!ignoreFilesWithoutExtension)
   }
 }
