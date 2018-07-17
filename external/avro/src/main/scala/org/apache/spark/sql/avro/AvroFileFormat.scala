@@ -62,7 +62,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
     // Schema evolution is not supported yet. Here we only pick a single random sample file to
     // figure out the schema of the whole dataset.
     val sampleFile =
-      if (conf.getBoolean(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, true)) {
+      if (AvroFileFormat.ignoreFilesWithoutExtensions(conf)) {
         files.find(_.getPath.getName.endsWith(".avro")).getOrElse {
           throw new FileNotFoundException(
             "No Avro files found. Hadoop option \"avro.mapred.ignore.inputs.without.extension\" " +
@@ -170,10 +170,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       // Doing input file filtering is improper because we may generate empty tasks that process no
       // input files but stress the scheduler. We should probably add a more general input file
       // filtering mechanism for `FileFormat` data sources. See SPARK-16317.
-      if (
-        conf.getBoolean(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, true) &&
-        !file.filePath.endsWith(".avro")
-      ) {
+      if (AvroFileFormat.ignoreFilesWithoutExtensions(conf) && !file.filePath.endsWith(".avro")) {
         Iterator.empty
       } else {
         val reader = {
@@ -277,5 +274,12 @@ private[avro] object AvroFileFormat {
       value = new Configuration(false)
       value.readFields(new DataInputStream(in))
     }
+  }
+
+  def ignoreFilesWithoutExtensions(conf: Configuration): Boolean = {
+    // Files without .avro extensions are not ignored by default
+    val defaultValue = false
+
+    conf.getBoolean(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, defaultValue)
   }
 }

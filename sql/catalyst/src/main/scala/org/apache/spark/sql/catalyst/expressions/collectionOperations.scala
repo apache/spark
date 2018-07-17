@@ -503,7 +503,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
        [[1 -> "a"], [2 -> "b"], [2 -> "c"], [3 -> "d"]]
   """, since = "2.4.0")
-case class MapConcat(children: Seq[Expression]) extends Expression {
+case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     var funcName = s"function $prettyName"
@@ -517,14 +517,10 @@ case class MapConcat(children: Seq[Expression]) extends Expression {
   }
 
   override def dataType: MapType = {
-    val dt = children.map(_.dataType.asInstanceOf[MapType]).headOption
-      .getOrElse(MapType(StringType, StringType))
-    val valueContainsNull = children.map(_.dataType.asInstanceOf[MapType])
-      .exists(_.valueContainsNull)
-    if (dt.valueContainsNull != valueContainsNull) {
-      dt.copy(valueContainsNull = valueContainsNull)
+    if (children.isEmpty) {
+      MapType(StringType, StringType)
     } else {
-      dt
+      super.dataType.asInstanceOf[MapType]
     }
   }
 
@@ -2209,7 +2205,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
  |     [1,2,3,4,5,6]
   """)
-case class Concat(children: Seq[Expression]) extends Expression {
+case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
 
@@ -2228,7 +2224,13 @@ case class Concat(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
+  override def dataType: DataType = {
+    if (children.isEmpty) {
+      StringType
+    } else {
+      super.dataType
+    }
+  }
 
   private def javaType: String = CodeGenerator.javaType(dataType)
 

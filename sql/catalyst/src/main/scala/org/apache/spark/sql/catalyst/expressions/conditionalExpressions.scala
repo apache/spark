@@ -48,7 +48,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       TypeCheckResult.TypeCheckFailure(
         "type of predicate expression in If should be boolean, " +
           s"not ${predicate.dataType.simpleString}")
-    } else if (!areInputTypesForMergingEqual) {
+    } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
     } else {
@@ -137,7 +137,7 @@ case class CaseWhen(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (areInputTypesForMergingEqual) {
+    if (TypeCoercion.haveSameType(inputTypesForMerging)) {
       // Make sure all branch conditions are boolean types.
       if (branches.forall(_._1.dataType == BooleanType)) {
         TypeCheckResult.TypeCheckSuccess
