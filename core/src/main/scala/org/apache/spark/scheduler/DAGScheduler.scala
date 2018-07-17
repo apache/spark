@@ -1358,7 +1358,7 @@ class DAGScheduler(
               case resultStage: ResultStage =>
                 // Mark all the partitions of the result stage to be not finished, to ensure retry
                 // all the tasks on resubmitted stage attempt.
-                resultStage.activeJob.map(_.clearResult())
+                resultStage.activeJob.map(_.markAllPartitionsAsUnfinished())
             }
           }
 
@@ -1441,9 +1441,8 @@ class DAGScheduler(
         val failedStage = stageIdToStage(task.stageId)
         logInfo(s"Marking $failedStage (${failedStage.name}) as failed due to a barrier task " +
           "failed.")
-        val taskAttemptId = task.asInstanceOf[BarrierTaskContextImpl].taskAttemptId
-        val message = s"Stage failed because barrier task ${taskAttemptId} finished " +
-          s"unsuccessfully. ${failure.toErrorString}"
+        val message = s"Stage failed because barrier task $task finished unsuccessfully. " +
+          s"${failure.toErrorString}"
         try {
           // cancelTasks will fail if a SchedulerBackend does not implement killTask
           taskScheduler.cancelTasks(stageId, interruptThread = false)
@@ -1482,7 +1481,7 @@ class DAGScheduler(
             case resultStage: ResultStage =>
               // Mark all the partitions of the result stage to be not finished, to ensure retry
               // all the tasks on resubmitted stage attempt.
-              resultStage.activeJob.map(_.clearResult())
+              resultStage.activeJob.map(_.markAllPartitionsAsUnfinished())
           }
 
           // update failedStages and make sure a ResubmitFailedStages event is enqueued

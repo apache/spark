@@ -24,7 +24,7 @@ import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 
 /** A [[BarrierTaskContext]] implementation. */
-class BarrierTaskContextImpl(
+private[spark] class BarrierTaskContextImpl(
     override val stageId: Int,
     override val stageAttemptNumber: Int,
     override val partitionId: Int,
@@ -39,11 +39,11 @@ class BarrierTaskContextImpl(
       taskMemoryManager, localProperties, metricsSystem, taskMetrics)
     with BarrierTaskContext {
 
-  // TODO implement global barrier.
+  // TODO SPARK-24817 implement global barrier.
   override def barrier(): Unit = {}
 
   override def getTaskInfos(): Array[BarrierTaskInfo] = {
-    val hostsStr = localProperties.getProperty("hosts", "")
-    hostsStr.trim().split(",").map(_.trim()).map(new BarrierTaskInfo(_))
+    val addressesStr = localProperties.getProperty("addresses", "")
+    addressesStr.split(",").map(_.trim()).map(new BarrierTaskInfo(_))
   }
 }

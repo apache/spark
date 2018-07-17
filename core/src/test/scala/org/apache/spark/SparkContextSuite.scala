@@ -641,7 +641,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       context.barrier()
       it
     }
-    rdd2.collect
+    rdd2.collect()
 
     eventually(timeout(10.seconds)) {
       assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
@@ -663,7 +663,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       context.barrier()
       it
     }
-    rdd2.collect
+    rdd2.collect()
 
     eventually(timeout(10.seconds)) {
       assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)

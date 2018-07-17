@@ -441,7 +441,8 @@ private[spark] class MapOutputTrackerMaster(
         shuffleStatus.removeOutputsByFilter(x => true)
         incrementEpoch()
       case None =>
-        throw new SparkException("unregisterAllMapOutput called for nonexistent shuffle ID")
+        throw new SparkException(
+          s"unregisterAllMapOutput called for nonexistent shuffle ID ${shuffleId}.")
     }
   }
 

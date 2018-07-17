@@ -20,4 +20,4 @@ package org.apache.spark
 /**
  * Carries all task infos of a barrier task.
  */
-private[spark] class BarrierTaskInfo(val host: String)
+class BarrierTaskInfo(val address: String)

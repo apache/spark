@@ -20,9 +20,15 @@ package org.apache.spark
 /** A [[TaskContext]] with extra info and tooling for a barrier stage. */
 trait BarrierTaskContext extends TaskContext {
 
-  /** Sets a global barrier and waits until all tasks in this stage hit this barrier. */
+  /**
+   * Sets a global barrier and waits until all tasks in this stage hit this barrier. Similar to
+   * MPI_Barrier function in MPI, the barrier() function call blocks until all tasks in the same
+   * stage have reached this routine.
+   */
   def barrier(): Unit
 
-  /** Returns the all task infos in this barrier stage. */
+  /**
+   * Returns the all task infos in this barrier stage, the task infos are ordered by partitionId.
+   */
   def getTaskInfos(): Array[BarrierTaskInfo]
 }

@@ -275,7 +275,7 @@ private[spark] class TaskSchedulerImpl(
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
-      hosts: ArrayBuffer[String],
+      addresses: ArrayBuffer[String],
       taskDescs: ArrayBuffer[TaskDescription]) : Boolean = {
     var launchedTask = false
     // nodes and executors that are blacklisted for the entire application have already been
@@ -296,7 +296,7 @@ private[spark] class TaskSchedulerImpl(
             // Only update hosts for a barrier task.
             if (taskSet.isBarrier) {
               // The executor address is expected to be non empty.
-              hosts += shuffledOffers(i).host
+              addresses += shuffledOffers(i).address.get
               taskDescs += task
             }
             launchedTask = true
@@ -371,6 +371,8 @@ private[spark] class TaskSchedulerImpl(
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
       if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {
         // Skip the launch process.
+        // TODO SPARK-24819 If the job requires more slots than available (both busy and free
+        // slots), fail the job on submit.
         logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
           s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
           s"number of available slots is ${availableSlots}.")
@@ -378,12 +380,12 @@ private[spark] class TaskSchedulerImpl(
         var launchedAnyTask = false
         var launchedTaskAtCurrentMaxLocality = false
         // Record all the executor IDs assigned barrier tasks on.
-        val hosts = ArrayBuffer[String]()
+        val addresses = ArrayBuffer[String]()
         val taskDescs = ArrayBuffer[TaskDescription]()
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           do {
             launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
-              currentMaxLocality, shuffledOffers, availableCpus, tasks, hosts, taskDescs)
+              currentMaxLocality, shuffledOffers, availableCpus, tasks, addresses, taskDescs)
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
           } while (launchedTaskAtCurrentMaxLocality)
         }
@@ -392,8 +394,8 @@ private[spark] class TaskSchedulerImpl(
         }
         if (launchedAnyTask && taskSet.isBarrier) {
           // Check whether the barrier tasks are partially launched.
-          // TODO handle the assert failure case (that can happen when some locality requirements
-          // are not fulfilled, and we should revert the launched tasks)
+          // TODO SPARK-24818 handle the assert failure case (that can happen when some locality
+          // requirements are not fulfilled, and we should revert the launched tasks).
           require(taskDescs.size == taskSet.numTasks,
             s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
               s"because only ${taskDescs.size} out of a total number of ${taskSet.numTasks} " +
@@ -401,12 +403,12 @@ private[spark] class TaskSchedulerImpl(
               "cannot fulfill task locality requirements.")
 
           // Update the taskInfos into all the barrier task properties.
-          val hostsStr = hosts.zip(taskDescs)
+          val addressesStr = addresses.zip(taskDescs)
             // Addresses ordered by partitionId
             .sortBy(_._2.partitionId)
             .map(_._1)
             .mkString(",")
-          taskDescs.foreach(_.properties.setProperty("hosts", hostsStr))
+          taskDescs.foreach(_.properties.setProperty("addresses", addressesStr))
 
           logInfo(s"Successfully scheduled all the ${taskDescs.size} tasks for barrier stage " +
             s"${taskSet.stageId}.")
@@ -414,6 +416,8 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
+    // TODO SPARK-24823 Cancel a job that contains barrier stage(s) if the barrier tasks don't get
+    // launched within a configured time.
     if (tasks.size > 0) {
       hasLaunchedTask = true
     }

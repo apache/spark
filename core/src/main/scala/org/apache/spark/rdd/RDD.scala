@@ -1853,7 +1853,9 @@ abstract class RDD[T: ClassTag](
    * a RDDBarrier. This function always returns false for a [[ShuffledRDD]], since a
    * [[ShuffledRDD]] indicates start of a new stage.
    */
-  def isBarrier(): Boolean = dependencies.exists(_.rdd.isBarrier())
+  def isBarrier(): Boolean = isBarrier_
+
+  @transient private lazy val isBarrier_ : Boolean = dependencies.exists(_.rdd.isBarrier())
 }
 
 
