@@ -25,14 +25,15 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
+import java.util
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark._
+
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
@@ -47,6 +48,7 @@ import org.apache.spark.util.Utils
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter with PrivateMethodTester {
   type MapType = mutable.HashMap[UnsafeRow, UnsafeRow]
+  type ProviderMapType = java.util.concurrent.ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
   import StateStoreCoordinatorSuite._
   import StateStoreTestsHelper._
@@ -64,53 +66,76 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     require(!StateStore.isMaintenanceRunning)
   }
 
-  def updateVersionTo(provider: StateStoreProvider, currentVersion: => Int,
-                      targetVersion: Int): Int = {
+  def updateVersionTo(
+      provider: StateStoreProvider,
+      currentVersion: Int,
+      targetVersion: Int): Int = {
     var newCurrentVersion = currentVersion
-    for (i <- newCurrentVersion + 1 to targetVersion) {
-      val store = provider.getStore(newCurrentVersion)
-      put(store, "a", i)
-      store.commit()
-      newCurrentVersion += 1
+    for (i <- newCurrentVersion until targetVersion) {
+      newCurrentVersion = incrementVersion(provider, i)
     }
     require(newCurrentVersion === targetVersion)
     newCurrentVersion
+  }
+
+  def incrementVersion(provider: StateStoreProvider, currentVersion: Int): Int = {
+    val store = provider.getStore(currentVersion)
+    put(store, "a", currentVersion + 1)
+    store.commit()
+    currentVersion + 1
+  }
+
+  def checkLoadedVersions(
+      loadedMaps: util.SortedMap[Long, ProviderMapType],
+      count: Int,
+      earliestKey: Long,
+      latestKey: Long): Unit = {
+    assert(loadedMaps.size() === count)
+    assert(loadedMaps.firstKey() === earliestKey)
+    assert(loadedMaps.lastKey() === latestKey)
+  }
+
+  def checkVersion(
+      loadedMaps: util.SortedMap[Long, ProviderMapType],
+      version: Long,
+      expectedData: Map[String, Int]): Unit = {
+
+    val originValueMap = loadedMaps.get(version).asScala.map { entry =>
+      rowToString(entry._1) -> rowToInt(entry._2)
+    }.toMap
+
+    assert(originValueMap === expectedData)
   }
 
   test("retaining only two latest versions when MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 2") {
     val provider = newStoreProvider(opId = Random.nextInt, partition = 0,
       numOfVersToRetainInMemory = 2)
 
-    def restoreOriginValues(map: provider.MapType): Map[String, Int] = {
-      map.asScala.map(entry => rowToString(entry._1) -> rowToInt(entry._2)).toMap
-    }
-
     var currentVersion = 0
-    currentVersion = updateVersionTo(provider, currentVersion, 1)
+
+    // commit the ver 1 : cache will have one element
+    currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 1))
     var loadedMaps = provider.getClonedLoadedMaps()
-    assert(loadedMaps.size() === 1)
-    assert(loadedMaps.firstKey() === 1L)
-    assert(restoreOriginValues(loadedMaps.get(1L)) === Map("a" -> 1))
+    checkLoadedVersions(loadedMaps, 1, 1L, 1L)
+    checkVersion(loadedMaps, 1L, Map("a" -> 1))
 
-    currentVersion = updateVersionTo(provider, currentVersion, 2)
+    // commit the ver 2 : cache will have two elements
+    currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 2))
     loadedMaps = provider.getClonedLoadedMaps()
-    assert(loadedMaps.size() === 2)
-    assert(loadedMaps.firstKey() === 2L)
-    assert(loadedMaps.lastKey() === 1L)
-    assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> 2))
-    assert(restoreOriginValues(loadedMaps.get(1L)) === Map("a" -> 1))
+    checkLoadedVersions(loadedMaps, 2, 2L, 1L)
+    checkVersion(loadedMaps, 2L, Map("a" -> 2))
+    checkVersion(loadedMaps, 1L, Map("a" -> 1))
 
-    // this trigger exceeding cache and 1 will be evicted
-    currentVersion = updateVersionTo(provider, currentVersion, 3)
+    // commit the ver 3 : cache has already two elements and adding ver 3 incurs exceeding cache,
+    // and ver 3 will be added but ver 1 will be evicted
+    currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 3))
     loadedMaps = provider.getClonedLoadedMaps()
-    assert(loadedMaps.size() === 2)
-    assert(loadedMaps.firstKey() === 3L)
-    assert(loadedMaps.lastKey() === 2L)
-    assert(restoreOriginValues(loadedMaps.get(3L)) === Map("a" -> 3))
-    assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> 2))
+    checkLoadedVersions(loadedMaps, 2, 3L, 2L)
+    checkVersion(loadedMaps, 3L, Map("a" -> 3))
+    checkVersion(loadedMaps, 2L, Map("a" -> 2))
   }
 
   test("failure after committing with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 1") {
@@ -119,30 +144,27 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     var currentVersion = 0
 
-    def restoreOriginValues(map: provider.MapType): Map[String, Int] = {
-      map.asScala.map(entry => rowToString(entry._1) -> rowToInt(entry._2)).toMap
-    }
-
-    currentVersion = updateVersionTo(provider, currentVersion, 1)
+    // commit the ver 1 : cache will have one element
+    currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 1))
     var loadedMaps = provider.getClonedLoadedMaps()
-    assert(loadedMaps.size() === 1)
-    assert(loadedMaps.firstKey() === 1L)
-    assert(restoreOriginValues(loadedMaps.get(1L)) === Map("a" -> 1))
+    checkLoadedVersions(loadedMaps, 1, 1L, 1L)
+    checkVersion(loadedMaps, 1L, Map("a" -> 1))
 
-    currentVersion = updateVersionTo(provider, currentVersion, 2)
-    assert(getData(provider) === Set("a" -> 2))
-    loadedMaps = provider.getClonedLoadedMaps()
-    // now version 1 is evicted and not stored in cache
+    // commit the ver 2 : cache has already one elements and adding ver 2 incurs exceeding cache,
+    // and ver 2 will be added but ver 1 will be evicted
     // this fact ensures cache miss will occur when this partition succeeds commit
     // but there's a failure afterwards so have to reprocess previous batch
-    assert(loadedMaps.size() === 1)
-    assert(loadedMaps.firstKey() === 2L)
-    assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> 2))
+    currentVersion = incrementVersion(provider, currentVersion)
+    assert(getData(provider) === Set("a" -> 2))
+    loadedMaps = provider.getClonedLoadedMaps()
+    checkLoadedVersions(loadedMaps, 1, 2L, 2L)
+    checkVersion(loadedMaps, 2L, Map("a" -> 2))
 
     // suppose there has been failure after committing, and it decided to reprocess previous batch
     currentVersion = 1
 
+    // committing to existing version which is committed partially but abandoned globally
     val store = provider.getStore(currentVersion)
     // negative value to represent reprocessing
     put(store, "a", -2)
@@ -152,9 +174,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     // make sure newly committed version is reflected to the cache (overwritten)
     assert(getData(provider) === Set("a" -> -2))
     loadedMaps = provider.getClonedLoadedMaps()
-    assert(loadedMaps.size() === 1)
-    assert(loadedMaps.firstKey() === 2L)
-    assert(restoreOriginValues(loadedMaps.get(2L)) === Map("a" -> -2))
+    checkLoadedVersions(loadedMaps, 1, 2L, 2L)
+    checkVersion(loadedMaps, 2L, Map("a" -> -2))
   }
 
   test("no cache data with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 0") {
@@ -163,12 +184,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     var currentVersion = 0
 
-    currentVersion = updateVersionTo(provider, currentVersion, 1)
+    // commit the ver 1 : never cached
+    currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 1))
     var loadedMaps = provider.getClonedLoadedMaps()
     assert(loadedMaps.size() === 0)
 
-    currentVersion = updateVersionTo(provider, currentVersion, 2)
+    // commit the ver 2 : never cached
+    currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 2))
     loadedMaps = provider.getClonedLoadedMaps()
     assert(loadedMaps.size() === 0)

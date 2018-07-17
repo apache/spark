@@ -253,7 +253,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   private def commitUpdates(newVersion: Long, map: MapType, output: DataOutputStream): Unit = {
     synchronized {
       finalizeDeltaFile(output)
-      putStateIntoStateCache(newVersion, map)
+      putStateIntoStateCacheMap(newVersion, map)
     }
   }
 
@@ -279,7 +279,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     loadedMaps.clone().asInstanceOf[util.SortedMap[Long, MapType]]
   }
 
-  private def putStateIntoStateCache(newVersion: Long, map: MapType): Unit = synchronized {
+  private def putStateIntoStateCacheMap(newVersion: Long, map: MapType): Unit = synchronized {
     if (numberOfVersionsToRetainInMemory <= 0) {
       if (loadedMaps.size() > 0) loadedMaps.clear()
       return
@@ -293,7 +293,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     if (size == numberOfVersionsToRetainInMemory) {
       val versionIdForLastKey = loadedMaps.lastKey()
       if (versionIdForLastKey > newVersion) {
-        // this is the only case which put doesn't need
+        // this is the only case which we can avoid putting, because new version will be placed to
+        // the last key and it should be evicted right away
         return
       } else if (versionIdForLastKey < newVersion) {
         // this case needs removal of the last key before putting new one
@@ -320,7 +321,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     val (result, elapsedMs) = Utils.timeTakenMs {
       val snapshotCurrentVersionMap = readSnapshotFile(version)
       if (snapshotCurrentVersionMap.isDefined) {
-        synchronized { putStateIntoStateCache(version, snapshotCurrentVersionMap.get) }
+        synchronized { putStateIntoStateCacheMap(version, snapshotCurrentVersionMap.get) }
         return snapshotCurrentVersionMap.get
       }
 
@@ -348,7 +349,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         updateFromDeltaFile(deltaVersion, resultMap)
       }
 
-      synchronized { putStateIntoStateCache(version, resultMap) }
+      synchronized { putStateIntoStateCacheMap(version, resultMap) }
       resultMap
     }
 
