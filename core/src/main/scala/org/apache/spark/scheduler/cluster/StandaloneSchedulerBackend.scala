@@ -99,10 +99,10 @@ private[spark] class StandaloneSchedulerBackend(
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
-    val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-      args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries
-      , javaOpts.filterNot { opt =>
-    opt.startsWith("-Dspark.ssl.keyStorePassword") || opt.startsWith("-Dspark.ssl.keyPassword")})
+    val javaOptsFiltered = javaOpts.filterNot { opt =>
+    opt.startsWith("-Dspark.ssl.keyStorePassword") || opt.startsWith("-Dspark.ssl.keyPassword")}
+    val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend", args,
+    sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOptsFiltered)
     val webUrl = sc.ui.map(_.webUrl).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
     // If we're using dynamic allocation, set our initial executor limit to 0 for now.

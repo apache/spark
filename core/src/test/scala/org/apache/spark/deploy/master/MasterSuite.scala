@@ -282,7 +282,7 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
-  test("SPARK-24621 https urls when ssl enabled") {
+  test("SPARK-24621: https urls when ssl enabled") {
     implicit val formats = org.json4s.DefaultFormats
     val conf = new SparkConf()
     conf.set("spark.ssl.enabled", "true")
@@ -299,7 +299,7 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
-  test("SPARK-24621 http urls when ssl disabled") {
+  test("SPARK-24621: http urls when ssl disabled") {
     implicit val formats = org.json4s.DefaultFormats
     val conf = new SparkConf()
     conf.set("spark.ssl.enabled", "false")
