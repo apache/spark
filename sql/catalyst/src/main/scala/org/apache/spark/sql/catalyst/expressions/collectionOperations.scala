@@ -516,7 +516,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     }
   }
 
-  override def dataType: MapType = {
+  @transient override lazy val dataType: MapType = {
     if (children.isEmpty) {
       MapType(StringType, StringType)
     } else {
@@ -2224,7 +2224,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     }
   }
 
-  override def dataType: DataType = {
+  @transient override lazy val dataType: DataType = {
     if (children.isEmpty) {
       StringType
     } else {
