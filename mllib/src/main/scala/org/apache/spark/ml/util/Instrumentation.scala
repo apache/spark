@@ -43,8 +43,9 @@ private[spark] class Instrumentation extends Logging {
   private val shortId = id.toString.take(8)
   private val prefix = s"[$shortId] "
 
-  // TODO: update spark.ml to use new Instrumentation APIs and remove this constructor
+  // TODO: remove stage
   var stage: Params = _
+  // TODO: update spark.ml to use new Instrumentation APIs and remove this constructor
   private def this(estimator: Estimator[_], dataset: RDD[_]) = {
     this()
     logPipelineStage(estimator)

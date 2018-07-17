@@ -35,6 +35,7 @@ import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
@@ -488,7 +489,6 @@ class LogisticRegression @Since("1.2.0") (
     train(dataset, handlePersistence)
   }
 
-  import Instrumentation.instrumented
   protected[spark] def train(
       dataset: Dataset[_],
       handlePersistence: Boolean): LogisticRegressionModel = instrumented { instr =>
