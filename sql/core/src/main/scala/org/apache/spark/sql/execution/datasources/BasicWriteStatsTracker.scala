@@ -31,7 +31,7 @@ import org.apache.spark.util.SerializableConfiguration
 
 
 /**
- * Simple metrics collected during an instance of [[FileFormatWriter.ExecuteWriteTask]].
+ * Simple metrics collected during an instance of [[FileFormatDataWriter]].
  * These were first introduced in https://github.com/apache/spark/pull/18159 (SPARK-20703).
  */
 case class BasicWriteTaskStats(

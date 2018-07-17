@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import org.apache.spark._
+import org.apache.spark.serializer.JavaSerializer
 
 class AccumulatorV2Suite extends SparkFunSuite {
 
@@ -161,5 +162,23 @@ class AccumulatorV2Suite extends SparkFunSuite {
     acc3.reset()
     assert(acc3.isZero)
     assert(acc3.value === "")
+  }
+
+  test("LegacyAccumulatorWrapper with AccumulatorParam that has no equals/hashCode") {
+    class MyData(val i: Int) extends Serializable
+    val param = new AccumulatorParam[MyData] {
+      override def zero(initialValue: MyData): MyData = new MyData(0)
+      override def addInPlace(r1: MyData, r2: MyData): MyData = new MyData(r1.i + r2.i)
+    }
+
+    val acc = new LegacyAccumulatorWrapper(new MyData(0), param)
+    acc.metadata = AccumulatorMetadata(
+      AccumulatorContext.newId(),
+      Some("test"),
+      countFailedValues = false)
+    AccumulatorContext.register(acc)
+
+    val ser = new JavaSerializer(new SparkConf).newInstance()
+    ser.serialize(acc)
   }
 }

@@ -23,6 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -79,16 +80,13 @@ case class TimeWindow(
       if (slideDuration <= 0) {
         return TypeCheckFailure(s"The slide duration ($slideDuration) must be greater than 0.")
       }
-      if (startTime < 0) {
-        return TypeCheckFailure(s"The start time ($startTime) must be greater than or equal to 0.")
-      }
       if (slideDuration > windowDuration) {
         return TypeCheckFailure(s"The slide duration ($slideDuration) must be less than or equal" +
           s" to the windowDuration ($windowDuration).")
       }
-      if (startTime >= slideDuration) {
-        return TypeCheckFailure(s"The start time ($startTime) must be less than the " +
-          s"slideDuration ($slideDuration).")
+      if (startTime.abs >= slideDuration) {
+        return TypeCheckFailure(s"The absolute value of start time ($startTime) must be less " +
+          s"than the slideDuration ($slideDuration).")
       }
     }
     dataTypeCheck
@@ -164,7 +162,7 @@ case class PreciseTimestampConversion(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     ev.copy(code = eval.code +
-      s"""boolean ${ev.isNull} = ${eval.isNull};
+      code"""boolean ${ev.isNull} = ${eval.isNull};
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${eval.value};
        """.stripMargin)
   }

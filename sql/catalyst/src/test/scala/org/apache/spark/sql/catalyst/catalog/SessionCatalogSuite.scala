@@ -1114,11 +1114,13 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     // And for hive serde table, hive metastore will set some values(e.g.transient_lastDdlTime)
     // in table's parameters and storage's properties, here we also ignore them.
     val actualPartsNormalize = actualParts.map(p =>
-      p.copy(parameters = Map.empty, storage = p.storage.copy(
+      p.copy(parameters = Map.empty, createTime = -1, lastAccessTime = -1,
+        storage = p.storage.copy(
         properties = Map.empty, locationUri = None, serde = None))).toSet
 
     val expectedPartsNormalize = expectedParts.map(p =>
-        p.copy(parameters = Map.empty, storage = p.storage.copy(
+        p.copy(parameters = Map.empty, createTime = -1, lastAccessTime = -1,
+          storage = p.storage.copy(
           properties = Map.empty, locationUri = None, serde = None))).toSet
 
     actualPartsNormalize == expectedPartsNormalize
@@ -1212,6 +1214,42 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(FunctionRegistry.builtin.functionExists(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("histogram_numeric")))
+    }
+  }
+
+  test("isRegisteredFunction") {
+    withBasicCatalog { catalog =>
+      // Returns false when the function does not register
+      assert(!catalog.isRegisteredFunction(FunctionIdentifier("temp1")))
+
+      // Returns true when the function does register
+      val tempFunc1 = (e: Seq[Expression]) => e.head
+      catalog.registerFunction(newFunc("iff", None), overrideIfExists = false,
+        functionBuilder = Some(tempFunc1) )
+      assert(catalog.isRegisteredFunction(FunctionIdentifier("iff")))
+
+      // Returns false when using the createFunction
+      catalog.createFunction(newFunc("sum", Some("db2")), ignoreIfExists = false)
+      assert(!catalog.isRegisteredFunction(FunctionIdentifier("sum")))
+      assert(!catalog.isRegisteredFunction(FunctionIdentifier("sum", Some("db2"))))
+    }
+  }
+
+  test("isPersistentFunction") {
+    withBasicCatalog { catalog =>
+      // Returns false when the function does not register
+      assert(!catalog.isPersistentFunction(FunctionIdentifier("temp2")))
+
+      // Returns false when the function does register
+      val tempFunc2 = (e: Seq[Expression]) => e.head
+      catalog.registerFunction(newFunc("iff", None), overrideIfExists = false,
+        functionBuilder = Some(tempFunc2))
+      assert(!catalog.isPersistentFunction(FunctionIdentifier("iff")))
+
+      // Return true when using the createFunction
+      catalog.createFunction(newFunc("sum", Some("db2")), ignoreIfExists = false)
+      assert(catalog.isPersistentFunction(FunctionIdentifier("sum", Some("db2"))))
+      assert(!catalog.isPersistentFunction(FunctionIdentifier("db2.sum")))
     }
   }
 

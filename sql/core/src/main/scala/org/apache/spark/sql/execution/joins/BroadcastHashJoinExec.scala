@@ -23,6 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
@@ -183,7 +184,7 @@ case class BroadcastHashJoinExec(
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
         val javaType = CodeGenerator.javaType(a.dataType)
-        val code = s"""
+        val code = code"""
           |boolean $isNull = true;
           |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
           |if ($matched != null) {

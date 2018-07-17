@@ -236,6 +236,8 @@ class GroupedData(object):
             into memory, so the user should be aware of the potential OOM risk if data is skewed
             and certain groups are too large to fit in memory.
 
+        .. note:: Experimental
+
         :param udf: a grouped map user-defined function returned by
             :func:`pyspark.sql.functions.pandas_udf`.
 

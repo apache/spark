@@ -23,23 +23,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.")
-case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
-
-  override def prettyName: String = "avg"
-
-  override def children: Seq[Expression] = child :: Nil
+abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
 
   override def nullable: Boolean = true
-
   // Return data type.
   override def dataType: DataType = resultType
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function average")
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
@@ -62,14 +50,6 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     /* count = */ Literal(0L)
   )
 
-  override lazy val updateExpressions = Seq(
-    /* sum = */
-    Add(
-      sum,
-      Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)),
-    /* count = */ If(IsNull(child), count, count + 1L)
-  )
-
   override lazy val mergeExpressions = Seq(
     /* sum = */ sum.left + sum.right,
     /* count = */ count.left + count.right
@@ -85,4 +65,29 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     case _ =>
       Cast(sum, resultType) / Cast(count, resultType)
   }
+
+  protected def updateExpressionsDef: Seq[Expression] = Seq(
+    /* sum = */
+    Add(
+      sum,
+      Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)),
+    /* count = */ If(IsNull(child), count, count + 1L)
+  )
+
+  override lazy val updateExpressions = updateExpressionsDef
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.")
+case class Average(child: Expression)
+  extends AverageLike(child) with ImplicitCastInputTypes {
+
+  override def prettyName: String = "avg"
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function average")
 }

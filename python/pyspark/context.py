@@ -211,9 +211,21 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
-                    self._python_includes.append(filename)
-                    sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+                try:
+                    filepath = os.path.join(SparkFiles.getRootDirectory(), filename)
+                    if not os.path.exists(filepath):
+                        # In case of YARN with shell mode, 'spark.submit.pyFiles' files are
+                        # not added via SparkContext.addFile. Here we check if the file exists,
+                        # try to copy and then add it to the path. See SPARK-21945.
+                        shutil.copyfile(path, filepath)
+                    if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
+                        self._python_includes.append(filename)
+                        sys.path.insert(1, filepath)
+                except Exception:
+                    warnings.warn(
+                        "Failed to add file [%s] speficied in 'spark.submit.pyFiles' to "
+                        "Python path:\n  %s" % (path, "\n  ".join(sys.path)),
+                        RuntimeWarning)
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
@@ -835,6 +847,8 @@ class SparkContext(object):
         A directory can be given if the recursive option is set to True.
         Currently directories are only supported for Hadoop-supported filesystems.
 
+        .. note:: A path can be added only once. Subsequent additions of the same path are ignored.
+
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")
         >>> with open(path, "w") as testFile:
@@ -855,6 +869,8 @@ class SparkContext(object):
         SparkContext in the future.  The C{path} passed can be either a local
         file, a file in HDFS (or other Hadoop-supported filesystems), or an
         HTTP, HTTPS or FTP URI.
+
+        .. note:: A path can be added only once. Subsequent additions of the same path are ignored.
         """
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
@@ -998,8 +1014,8 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
-        return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
+        sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
+        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):
         """ Print the profile stats to stdout """

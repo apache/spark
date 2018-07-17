@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Coalesce, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
@@ -100,5 +100,23 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(TestBinaryRelation(incrementalRelation, relation).isStreaming === true)
     assert(TestBinaryRelation(relation, incrementalRelation).isStreaming === true)
     assert(TestBinaryRelation(incrementalRelation, incrementalRelation).isStreaming)
+  }
+
+  test("transformExpressions works with a Stream") {
+    val id1 = NamedExpression.newExprId
+    val id2 = NamedExpression.newExprId
+    val plan = Project(Stream(
+      Alias(Literal(1), "a")(exprId = id1),
+      Alias(Literal(2), "b")(exprId = id2)),
+      OneRowRelation())
+    val result = plan.transformExpressions {
+      case Literal(v: Int, IntegerType) if v != 1 =>
+        Literal(v + 1, IntegerType)
+    }
+    val expected = Project(Stream(
+      Alias(Literal(1), "a")(exprId = id1),
+      Alias(Literal(3), "b")(exprId = id2)),
+      OneRowRelation())
+    assert(result.sameResult(expected))
   }
 }
