@@ -96,6 +96,9 @@ class JsonProtocolSuite extends SparkFunSuite {
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)))
     }
+    val blockUpdated =
+      SparkListenerBlockUpdated(BlockUpdatedInfo(BlockManagerId("Stars",
+        "In your multitude...", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -120,6 +123,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(nodeBlacklisted, nodeBlacklistedJsonString)
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
+    testEvent(blockUpdated, blockUpdatedJsonString)
   }
 
   test("Dependent Classes") {
@@ -313,7 +317,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("SparkListenerJobStart backward compatibility") {
     // Prior to Spark 1.2.0, SparkListenerJobStart did not have a "Stage Infos" property.
     val stageIds = Seq[Int](1, 2, 3, 4)
-    val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400, x * 500))
+    val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
     val dummyStageInfos =
       stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown"))
     val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
@@ -327,7 +331,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     // Prior to Spark 1.3.0, SparkListenerJobStart did not have a "Submission Time" property.
     // Also, SparkListenerJobEnd did not have a "Completion Time" property.
     val stageIds = Seq[Int](1, 2, 3, 4)
-    val stageInfos = stageIds.map(x => makeStageInfo(x * 10, x * 20, x * 30, x * 40, x * 50))
+    val stageInfos = stageIds.map(x => makeStageInfo(x * 10, x * 20, x * 30, x * 40L, x * 50L))
     val jobStart = SparkListenerJobStart(11, jobSubmissionTime, stageInfos, properties)
     val oldStartEvent = JsonProtocol.jobStartToJson(jobStart)
       .removeField({ _._1 == "Submission Time"})
@@ -2004,6 +2008,29 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ]
       |    }
       |  ]
+      |}
+    """.stripMargin
+
+  private val blockUpdatedJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerBlockUpdated",
+      |  "Block Updated Info": {
+      |    "Block Manager ID": {
+      |      "Executor ID": "Stars",
+      |      "Host": "In your multitude...",
+      |      "Port": 300
+      |    },
+      |    "Block ID": "rdd_0_0",
+      |    "Storage Level": {
+      |      "Use Disk": false,
+      |      "Use Memory": true,
+      |      "Deserialized": true,
+      |      "Replication": 1
+      |    },
+      |    "Memory Size": 100,
+      |    "Disk Size": 0
+      |  }
       |}
     """.stripMargin
 

@@ -15,18 +15,17 @@
 # limitations under the License.
 #
 
+"""
+A simple example demonstrating Spark SQL data sources.
+Run with:
+  ./bin/spark-submit examples/src/main/python/sql/datasource.py
+"""
 from __future__ import print_function
 
 from pyspark.sql import SparkSession
 # $example on:schema_merging$
 from pyspark.sql import Row
 # $example off:schema_merging$
-
-"""
-A simple example demonstrating Spark SQL data sources.
-Run with:
-  ./bin/spark-submit examples/src/main/python/sql/datasource.py
-"""
 
 
 def basic_datasource_example(spark):
@@ -52,6 +51,11 @@ def basic_datasource_example(spark):
     df = spark.read.load("examples/src/main/resources/people.json", format="json")
     df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
     # $example off:manual_load_options$
+
+    # $example on:manual_load_options_csv$
+    df = spark.read.load("examples/src/main/resources/people.csv",
+                         format="csv", sep=":", inferSchema="true", header="true")
+    # $example off:manual_load_options_csv$
 
     # $example on:write_sorting_and_bucketing$
     df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")

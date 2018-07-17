@@ -39,6 +39,7 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -89,6 +90,14 @@ private[spark] object JettyUtils extends Logging {
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
+            response.setHeader("X-XSS-Protection", conf.get(UI_X_XSS_PROTECTION))
+            if (conf.get(UI_X_CONTENT_TYPE_OPTIONS)) {
+              response.setHeader("X-Content-Type-Options", "nosniff")
+            }
+            if (request.getScheme == "https") {
+              conf.get(UI_STRICT_TRANSPORT_SECURITY).foreach(
+                response.setHeader("Strict-Transport-Security", _))
+            }
             response.getWriter.print(servletParams.extractFn(result))
           } else {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN)
@@ -254,7 +263,7 @@ private[spark] object JettyUtils extends Logging {
     filters.foreach {
       case filter : String =>
         if (!filter.isEmpty) {
-          logInfo("Adding filter: " + filter)
+          logInfo(s"Adding filter $filter to ${handlers.map(_.getContextPath).mkString(", ")}.")
           val holder : FilterHolder = new FilterHolder()
           holder.setClassName(filter)
           // Get any parameters for each filter
@@ -334,12 +343,14 @@ private[spark] object JettyUtils extends Logging {
           -1,
           connectionFactories: _*)
         connector.setPort(port)
-        connector.start()
+        connector.setHost(hostName)
+        connector.setReuseAddress(!Utils.isWindows)
 
         // Currently we only use "SelectChannelConnector"
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads
         connector.setAcceptQueueSize(math.min(connector.getAcceptors, 8))
-        connector.setHost(hostName)
+
+        connector.start()
         // The number of selectors always equals to the number of acceptors
         minThreads += connector.getAcceptors * 2
 
@@ -396,7 +407,7 @@ private[spark] object JettyUtils extends Logging {
       }
 
       pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
-      ServerInfo(server, httpPort, securePort, collection)
+      ServerInfo(server, httpPort, securePort, conf, collection)
     } catch {
       case e: Exception =>
         server.stop()
@@ -496,10 +507,12 @@ private[spark] case class ServerInfo(
     server: Server,
     boundPort: Int,
     securePort: Option[Int],
+    conf: SparkConf,
     private val rootHandler: ContextHandlerCollection) {
 
-  def addHandler(handler: ContextHandler): Unit = {
+  def addHandler(handler: ServletContextHandler): Unit = {
     handler.setVirtualHosts(JettyUtils.toVirtualHosts(JettyUtils.SPARK_CONNECTOR_NAME))
+    JettyUtils.addFilters(Seq(handler), conf)
     rootHandler.addHandler(handler)
     if (!handler.isStarted()) {
       handler.start()

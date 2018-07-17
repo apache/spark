@@ -56,6 +56,9 @@ private[spark] class DirectKafkaInputDStream[K, V](
     ppc: PerPartitionConfig
   ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging with CanCommitOffsets {
 
+  private val initialRate = context.sparkContext.getConf.getLong(
+    "spark.streaming.backpressure.initialRate", 0)
+
   val executorKafkaParams = {
     val ekp = new ju.HashMap[String, Object](consumerStrategy.executorKafkaParams)
     KafkaUtils.fixKafkaParams(ekp)
@@ -126,7 +129,10 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   protected[streaming] def maxMessagesPerPartition(
     offsets: Map[TopicPartition, Long]): Option[Map[TopicPartition, Long]] = {
-    val estimatedRateLimit = rateController.map(_.getLatestRate())
+    val estimatedRateLimit = rateController.map { x => {
+      val lr = x.getLatestRate()
+      if (lr > 0) lr else initialRate
+    }}
 
     // calculate a per-partition rate limit based on current lag
     val effectiveRateLimitPerPartition = estimatedRateLimit.filter(_ > 0) match {
@@ -138,17 +144,17 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
         lagPerPartition.map { case (tp, lag) =>
           val maxRateLimitPerPartition = ppc.maxRatePerPartition(tp)
-          val backpressureRate = Math.round(lag / totalLag.toFloat * rate)
+          val backpressureRate = lag / totalLag.toDouble * rate
           tp -> (if (maxRateLimitPerPartition > 0) {
             Math.min(backpressureRate, maxRateLimitPerPartition)} else backpressureRate)
         }
-      case None => offsets.map { case (tp, offset) => tp -> ppc.maxRatePerPartition(tp) }
+      case None => offsets.map { case (tp, offset) => tp -> ppc.maxRatePerPartition(tp).toDouble }
     }
 
     if (effectiveRateLimitPerPartition.values.sum > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
       Some(effectiveRateLimitPerPartition.map {
-        case (tp, limit) => tp -> (secsPerBatch * limit).toLong
+        case (tp, limit) => tp -> Math.max((secsPerBatch * limit).toLong, 1L)
       })
     } else {
       None
@@ -184,8 +190,20 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
     // make sure new partitions are reflected in currentOffsets
     val newPartitions = parts.diff(currentOffsets.keySet)
+
+    // Check if there's any partition been revoked because of consumer rebalance.
+    val revokedPartitions = currentOffsets.keySet.diff(parts)
+    if (revokedPartitions.nonEmpty) {
+      throw new IllegalStateException(s"Previously tracked partitions " +
+        s"${revokedPartitions.mkString("[", ",", "]")} been revoked by Kafka because of consumer " +
+        s"rebalance. This is mostly due to another stream with same group id joined, " +
+        s"please check if there're different streaming application misconfigure to use same " +
+        s"group id. Fundamentally different stream should use different group id")
+    }
+
     // position for new partitions determined by auto.offset.reset if no commit
     currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
+
     // don't want to consume messages, so pause
     c.pause(newPartitions.asJava)
     // find latest available offsets

@@ -32,7 +32,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
@@ -55,7 +55,7 @@ private[ml] trait ClassifierTypeTrait {
 /**
  * Params for [[OneVsRest]].
  */
-private[ml] trait OneVsRestParams extends PredictorParams
+private[ml] trait OneVsRestParams extends ClassifierParams
   with ClassifierTypeTrait with HasWeightCol {
 
   /**
@@ -138,6 +138,14 @@ final class OneVsRestModel private[ml] (
     @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams with MLWritable {
 
+  require(models.nonEmpty, "OneVsRestModel requires at least one model for one class")
+
+  @Since("2.4.0")
+  val numClasses: Int = models.length
+
+  @Since("2.4.0")
+  val numFeatures: Int = models.head.numFeatures
+
   /** @group setParam */
   @Since("2.1.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -145,6 +153,10 @@ final class OneVsRestModel private[ml] (
   /** @group setParam */
   @Since("2.1.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
@@ -165,7 +177,7 @@ final class OneVsRestModel private[ml] (
     val newDataset = dataset.withColumn(accColName, initUDF())
 
     // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    val handlePersistence = !dataset.isStreaming && dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) {
       newDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
@@ -181,6 +193,7 @@ final class OneVsRestModel private[ml] (
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
           predictions + ((index, prediction(1)))
         }
+
         model.setFeaturesCol($(featuresCol))
         val transformedDataset = model.transform(df).select(columns: _*)
         val updatedDataset = transformedDataset
@@ -195,15 +208,34 @@ final class OneVsRestModel private[ml] (
       newDataset.unpersist()
     }
 
-    // output the index of the classifier with highest confidence as prediction
-    val labelUDF = udf { (predictions: Map[Int, Double]) =>
-      predictions.maxBy(_._2)._1.toDouble
-    }
+    if (getRawPredictionCol != "") {
+      val numClass = models.length
 
-    // output label and label metadata as prediction
-    aggregatedDataset
-      .withColumn($(predictionCol), labelUDF(col(accColName)), labelMetadata)
-      .drop(accColName)
+      // output the RawPrediction as vector
+      val rawPredictionUDF = udf { (predictions: Map[Int, Double]) =>
+        val predArray = Array.fill[Double](numClass)(0.0)
+        predictions.foreach { case (idx, value) => predArray(idx) = value }
+        Vectors.dense(predArray)
+      }
+
+      // output the index of the classifier with highest confidence as prediction
+      val labelUDF = udf { (rawPredictions: Vector) => rawPredictions.argmax.toDouble }
+
+      // output confidence as raw prediction, label and label metadata as prediction
+      aggregatedDataset
+        .withColumn(getRawPredictionCol, rawPredictionUDF(col(accColName)))
+        .withColumn(getPredictionCol, labelUDF(col(getRawPredictionCol)), labelMetadata)
+        .drop(accColName)
+    } else {
+      // output the index of the classifier with highest confidence as prediction
+      val labelUDF = udf { (predictions: Map[Int, Double]) =>
+        predictions.maxBy(_._2)._1.toDouble
+      }
+      // output label and label metadata as prediction
+      aggregatedDataset
+        .withColumn(getPredictionCol, labelUDF(col(accColName)), labelMetadata)
+        .drop(accColName)
+    }
   }
 
   @Since("1.4.1")
@@ -235,7 +267,7 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
       val extraJson = ("labelMetadata" -> instance.labelMetadata.json) ~
         ("numClasses" -> instance.models.length)
       OneVsRestParams.saveImpl(path, instance, sc, Some(extraJson))
-      instance.models.zipWithIndex.foreach { case (model: MLWritable, idx) =>
+      instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
         val modelPath = new Path(path, s"model_$idx").toString
         model.save(modelPath)
       }
@@ -257,7 +289,7 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
         DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sc)
       }
       val ovrModel = new OneVsRestModel(metadata.uid, labelMetadata, models)
-      DefaultParamsReader.getAndSetParams(ovrModel, metadata)
+      metadata.getAndSetParams(ovrModel)
       ovrModel.set("classifier", classifier)
       ovrModel
     }
@@ -297,6 +329,10 @@ final class OneVsRest @Since("1.4.0") (
   @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
+  /** @group setParam */
+  @Since("2.4.0")
+  def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
+
   /**
    * The implementation of parallel one vs. rest runs the classification for
    * each class in a separate threads.
@@ -330,7 +366,7 @@ final class OneVsRest @Since("1.4.0") (
     transformSchema(dataset.schema)
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, predictionCol, parallelism)
+    instr.logParams(labelCol, featuresCol, predictionCol, parallelism, rawPredictionCol)
     instr.logNamedValue("classifier", $(classifier).getClass.getCanonicalName)
 
     // determine number of classes either from metadata if provided, or via computation.
@@ -347,7 +383,7 @@ final class OneVsRest @Since("1.4.0") (
       getClassifier match {
         case _: HasWeightCol => true
         case c =>
-          logWarning(s"weightCol is ignored, as it is not supported by $c now.")
+          instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
           false
       }
     }
@@ -448,7 +484,7 @@ object OneVsRest extends MLReadable[OneVsRest] {
     override def load(path: String): OneVsRest = {
       val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
       val ovr = new OneVsRest(metadata.uid)
-      DefaultParamsReader.getAndSetParams(ovr, metadata)
+      metadata.getAndSetParams(ovr)
       ovr.setClassifier(classifier)
     }
   }

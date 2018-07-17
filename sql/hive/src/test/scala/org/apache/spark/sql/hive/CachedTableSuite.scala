@@ -38,7 +38,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val plan = table(tableName).queryExecution.sparkPlan
     plan.collect {
       case InMemoryTableScanExec(_, _, relation) =>
-        relation.cachedColumnBuffers.id
+        relation.cacheBuilder.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
     }.head
@@ -102,14 +102,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("uncache of nonexistant tables") {
+    val expectedErrorMsg = "Table or view not found: nonexistantTable"
     // make sure table doesn't exist
-    intercept[NoSuchTableException](spark.table("nonexistantTable"))
-    intercept[NoSuchTableException] {
+    var e = intercept[AnalysisException](spark.table("nonexistantTable")).getMessage
+    assert(e.contains(expectedErrorMsg))
+    e = intercept[AnalysisException] {
       spark.catalog.uncacheTable("nonexistantTable")
-    }
-    intercept[NoSuchTableException] {
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+    e = intercept[AnalysisException] {
       sql("UNCACHE TABLE nonexistantTable")
-    }
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
     sql("UNCACHE TABLE IF EXISTS nonexistantTable")
   }
 

@@ -347,6 +347,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
           return 0L;
         }
 
+        updatePeakMemoryUsed();
+
         // TODO: use existing ShuffleWriteMetrics
         ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
 
@@ -424,6 +426,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
   public MapIterator destructiveIterator() {
+    updatePeakMemoryUsed();
     return new MapIterator(numValues, loc, true);
   }
 
@@ -700,7 +703,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // must be stored in the same memory page.
       // (8 byte key length) (key) (value) (8 byte pointer to next value)
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
-      final long recordLength = (2 * uaoSize) + klen + vlen + 8;
+      final long recordLength = (2L * uaoSize) + klen + vlen + 8;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
         if (!acquireNewPage(recordLength + uaoSize)) {
           return false;
@@ -879,6 +882,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Reset this map to initialized state.
    */
   public void reset() {
+    updatePeakMemoryUsed();
     numKeys = 0;
     numValues = 0;
     freeArray(longArray);

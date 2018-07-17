@@ -51,21 +51,32 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       hadoopConf: Configuration,
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
+      allColumns: Seq[Attribute],
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
       partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
 
-    val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
+    val isCompressed =
+      fileSinkConf.getTableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
+        case formatName if formatName.endsWith("orcoutputformat") =>
+          // For ORC,"mapreduce.output.fileoutputformat.compress",
+          // "mapreduce.output.fileoutputformat.compress.codec", and
+          // "mapreduce.output.fileoutputformat.compress.type"
+          // have no impact because it uses table properties to store compression information.
+          false
+        case _ => hadoopConf.get("hive.exec.compress.output", "false").toBoolean
+    }
+
     if (isCompressed) {
-      // Please note that isCompressed, "mapreduce.output.fileoutputformat.compress",
-      // "mapreduce.output.fileoutputformat.compress.codec", and
-      // "mapreduce.output.fileoutputformat.compress.type"
-      // have no impact on ORC because it uses table properties to store compression information.
       hadoopConf.set("mapreduce.output.fileoutputformat.compress", "true")
       fileSinkConf.setCompressed(true)
       fileSinkConf.setCompressCodec(hadoopConf
         .get("mapreduce.output.fileoutputformat.compress.codec"))
       fileSinkConf.setCompressType(hadoopConf
         .get("mapreduce.output.fileoutputformat.compress.type"))
+    } else {
+      // Set compression by priority
+      HiveOptions.getHiveWriteCompression(fileSinkConf.getTableInfo, sparkSession.sessionState.conf)
+        .foreach { case (compression, codec) => hadoopConf.set(compression, codec) }
     }
 
     val committer = FileCommitProtocol.instantiate(
@@ -78,7 +89,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       plan = plan,
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
-      outputSpec = FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations),
+      outputSpec =
+        FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, allColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
@@ -102,14 +114,15 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // staging directory under the table director for Hive prior to 1.1, the staging directory will
     // be removed by Hive when Hive is trying to empty the table directory.
     val hiveVersionsUsingOldExternalTempPath: Set[HiveVersion] = Set(v12, v13, v14, v1_0)
-    val hiveVersionsUsingNewExternalTempPath: Set[HiveVersion] = Set(v1_1, v1_2, v2_0, v2_1)
+    val hiveVersionsUsingNewExternalTempPath: Set[HiveVersion] =
+      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3)
 
     // Ensure all the supported versions are considered here.
     assert(hiveVersionsUsingNewExternalTempPath ++ hiveVersionsUsingOldExternalTempPath ==
       allSupportedHiveVersions)
 
     val externalCatalog = sparkSession.sharedState.externalCatalog
-    val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
+    val hiveVersion = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.version
     val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 

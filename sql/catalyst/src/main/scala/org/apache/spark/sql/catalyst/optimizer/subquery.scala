@@ -116,15 +116,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           //   (a1,a2,...) = (b1,b2,...)
           // to
           //   (a1=b1 OR isnull(a1=b1)) AND (a2=b2 OR isnull(a2=b2)) AND ...
-          val joinConds = splitConjunctivePredicates(joinCond.get)
+          val baseJoinConds = splitConjunctivePredicates(joinCond.get)
+          val nullAwareJoinConds = baseJoinConds.map(c => Or(c, IsNull(c)))
           // After that, add back the correlated join predicate(s) in the subquery
           // Example:
           // SELECT ... FROM A WHERE A.A1 NOT IN (SELECT B.B1 FROM B WHERE B.B2 = A.A2 AND B.B3 > 1)
           // will have the final conditions in the LEFT ANTI as
-          // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2)
-          val pairs = (joinConds.map(c => Or(c, IsNull(c))) ++ conditions).reduceLeft(And)
+          // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
+          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
           // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftAnti, Option(pairs)))
+          dedupJoin(Join(outerPlan, sub, LeftAnti, Option(finalJoinCond)))
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
@@ -270,7 +271,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   /**
    * Pull up the correlated predicates and rewrite all subqueries in an operator tree..
    */
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case f @ Filter(_, a: Aggregate) =>
       rewriteSubQueries(f, Seq(a, a.child))
     // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
@@ -369,13 +370,14 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           case ne => (ne.exprId, evalAggOnZeroTups(ne))
         }.toMap
 
-      case _ => sys.error(s"Unexpected operator in scalar subquery: $lp")
+      case _ =>
+        sys.error(s"Unexpected operator in scalar subquery: $lp")
     }
 
     val resultMap = evalPlan(plan)
 
     // By convention, the scalar subquery result is the leftmost field.
-    resultMap(plan.output.head.exprId)
+    resultMap.getOrElse(plan.output.head.exprId, None)
   }
 
   /**

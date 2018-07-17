@@ -17,19 +17,27 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.Dataset
 
 
 class ClusteringEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
+
+  @transient var irisDataset: Dataset[_] = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    irisDataset = spark.read.format("libsvm").load("../data/mllib/iris_libsvm.txt")
+  }
 
   test("params") {
     ParamsSuite.checkParams(new ClusteringEvaluator)
@@ -53,37 +61,64 @@ class ClusteringEvaluatorSuite
     0.6564679231
   */
   test("squared euclidean Silhouette") {
-    val iris = ClusteringEvaluatorSuite.irisDataset(spark)
     val evaluator = new ClusteringEvaluator()
         .setFeaturesCol("features")
         .setPredictionCol("label")
 
-    assert(evaluator.evaluate(iris) ~== 0.6564679231 relTol 1e-5)
+    assert(evaluator.evaluate(irisDataset) ~== 0.6564679231 relTol 1e-5)
+  }
+
+  /*
+    Use the following python code to load the data and evaluate it using scikit-learn package.
+
+    from sklearn import datasets
+    from sklearn.metrics import silhouette_score
+    iris = datasets.load_iris()
+    round(silhouette_score(iris.data, iris.target, metric='cosine'), 10)
+
+    0.7222369298
+  */
+  test("cosine Silhouette") {
+    val evaluator = new ClusteringEvaluator()
+      .setFeaturesCol("features")
+      .setPredictionCol("label")
+      .setDistanceMeasure("cosine")
+
+    assert(evaluator.evaluate(irisDataset) ~== 0.7222369298 relTol 1e-5)
   }
 
   test("number of clusters must be greater than one") {
-    val iris = ClusteringEvaluatorSuite.irisDataset(spark)
-      .where($"label" === 0.0)
+    val singleClusterDataset = irisDataset.where($"label" === 0.0)
+    Seq("squaredEuclidean", "cosine").foreach { distanceMeasure =>
+      val evaluator = new ClusteringEvaluator()
+        .setFeaturesCol("features")
+        .setPredictionCol("label")
+        .setDistanceMeasure(distanceMeasure)
+
+      val e = intercept[AssertionError] {
+        evaluator.evaluate(singleClusterDataset)
+      }
+      assert(e.getMessage.contains("Number of clusters must be greater than one"))
+    }
+  }
+
+  test("SPARK-23568: we should use metadata to determine features number") {
+    val attributesNum = irisDataset.select("features").rdd.first().getAs[Vector](0).size
+    val attrGroup = new AttributeGroup("features", attributesNum)
+    val df = irisDataset.select($"features".as("features", attrGroup.toMetadata()), $"label")
+    require(AttributeGroup.fromStructField(df.schema("features"))
+      .numAttributes.isDefined, "numAttributes metadata should be defined")
     val evaluator = new ClusteringEvaluator()
       .setFeaturesCol("features")
       .setPredictionCol("label")
 
-    val e = intercept[AssertionError]{
-      evaluator.evaluate(iris)
-    }
-    assert(e.getMessage.contains("Number of clusters must be greater than one"))
-  }
+    // with the proper metadata we compute correctly the result
+    assert(evaluator.evaluate(df) ~== 0.6564679231 relTol 1e-5)
 
-}
-
-object ClusteringEvaluatorSuite {
-  def irisDataset(spark: SparkSession): DataFrame = {
-
-    val irisPath = Thread.currentThread()
-      .getContextClassLoader
-      .getResource("test-data/iris.libsvm")
-      .toString
-
-    spark.read.format("libsvm").load(irisPath)
+    val wrongAttrGroup = new AttributeGroup("features", attributesNum + 1)
+    val dfWrong = irisDataset.select($"features".as("features", wrongAttrGroup.toMetadata()),
+      $"label")
+    // with wrong metadata the evaluator throws an Exception
+    intercept[SparkException](evaluator.evaluate(dfWrong))
   }
 }

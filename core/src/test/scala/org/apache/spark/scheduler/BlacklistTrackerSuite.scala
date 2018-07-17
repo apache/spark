@@ -92,7 +92,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   }
 
   def createTaskSetBlacklist(stageId: Int = 0): TaskSetBlacklist = {
-    new TaskSetBlacklist(conf, stageId, clock)
+    new TaskSetBlacklist(listenerBusMock, conf, stageId, stageAttemptId = 0, clock = clock)
   }
 
   test("executors can be blacklisted with only a few failures per stage") {
@@ -110,7 +110,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       val taskSetBlacklist = createTaskSetBlacklist(stageId)
       if (stageId % 2 == 0) {
         // fail one task in every other taskset
-        taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+        taskSetBlacklist.updateBlacklistForFailedTask(
+          "hostA", exec = "1", index = 0, failureReason = "testing")
         failuresSoFar += 1
       }
       blacklist.updateBlacklistForSuccessfulTaskSet(stageId, 0, taskSetBlacklist.execToFailures)
@@ -132,7 +133,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // for many different stages, executor 1 fails a task, and then the taskSet fails.
     (0 until failuresUntilBlacklisted * 10).foreach { stage =>
       val taskSetBlacklist = createTaskSetBlacklist(stage)
-      taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+      taskSetBlacklist.updateBlacklistForFailedTask(
+        "hostA", exec = "1", index = 0, failureReason = "testing")
     }
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
   }
@@ -147,7 +149,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       val numFailures = math.max(conf.get(config.MAX_FAILURES_PER_EXEC),
         conf.get(config.MAX_FAILURES_PER_EXEC_STAGE))
       (0 until numFailures).foreach { index =>
-        taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = index)
+        taskSetBlacklist.updateBlacklistForFailedTask(
+          "hostA", exec = "1", index = index, failureReason = "testing")
       }
       assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
       assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
@@ -170,7 +173,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // Fail 4 tasks in one task set on executor 1, so that executor gets blacklisted for the whole
     // application.
     (0 until 4).foreach { partition =>
-      taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
+      taskSetBlacklist0.updateBlacklistForFailedTask(
+        "hostA", exec = "1", index = partition, failureReason = "testing")
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist0.execToFailures)
     assert(blacklist.nodeBlacklist() === Set())
@@ -183,7 +187,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // application.  Since that's the second executor that is blacklisted on the same node, we also
     // blacklist that node.
     (0 until 4).foreach { partition =>
-      taskSetBlacklist1.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
+      taskSetBlacklist1.updateBlacklistForFailedTask(
+        "hostA", exec = "2", index = partition, failureReason = "testing")
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist1.execToFailures)
     assert(blacklist.nodeBlacklist() === Set("hostA"))
@@ -207,7 +212,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // Fail one more task, but executor isn't put back into blacklist since the count of failures
     // on that executor should have been reset to 0.
     val taskSetBlacklist2 = createTaskSetBlacklist(stageId = 2)
-    taskSetBlacklist2.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
+    taskSetBlacklist2.updateBlacklistForFailedTask(
+      "hostA", exec = "1", index = 0, failureReason = "testing")
     blacklist.updateBlacklistForSuccessfulTaskSet(2, 0, taskSetBlacklist2.execToFailures)
     assert(blacklist.nodeBlacklist() === Set())
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
@@ -221,7 +227,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // Lets say that executor 1 dies completely.  We get some task failures, but
     // the taskset then finishes successfully (elsewhere).
     (0 until 4).foreach { partition =>
-      taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
+      taskSetBlacklist0.updateBlacklistForFailedTask(
+        "hostA", exec = "1", index = partition, failureReason = "testing")
     }
     blacklist.handleRemovedExecutor("1")
     blacklist.updateBlacklistForSuccessfulTaskSet(
@@ -236,7 +243,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // Now another executor gets spun up on that host, but it also dies.
     val taskSetBlacklist1 = createTaskSetBlacklist(stageId = 1)
     (0 until 4).foreach { partition =>
-      taskSetBlacklist1.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
+      taskSetBlacklist1.updateBlacklistForFailedTask(
+        "hostA", exec = "2", index = partition, failureReason = "testing")
     }
     blacklist.handleRemovedExecutor("2")
     blacklist.updateBlacklistForSuccessfulTaskSet(
@@ -279,7 +287,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
     def failOneTaskInTaskSet(exec: String): Unit = {
       val taskSetBlacklist = createTaskSetBlacklist(stageId = stageId)
-      taskSetBlacklist.updateBlacklistForFailedTask("host-" + exec, exec, 0)
+      taskSetBlacklist.updateBlacklistForFailedTask("host-" + exec, exec, 0, "testing")
       blacklist.updateBlacklistForSuccessfulTaskSet(stageId, 0, taskSetBlacklist.execToFailures)
       stageId += 1
     }
@@ -354,12 +362,12 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     val taskSetBlacklist1 = createTaskSetBlacklist(stageId = 1)
     val taskSetBlacklist2 = createTaskSetBlacklist(stageId = 2)
     // Taskset1 has one failure immediately
-    taskSetBlacklist1.updateBlacklistForFailedTask("host-1", "1", 0)
+    taskSetBlacklist1.updateBlacklistForFailedTask("host-1", "1", 0, "testing")
     // Then we have a *long* delay, much longer than the timeout, before any other failures or
     // taskset completion
     clock.advance(blacklist.BLACKLIST_TIMEOUT_MILLIS * 5)
     // After the long delay, we have one failure on taskset 2, on the same executor
-    taskSetBlacklist2.updateBlacklistForFailedTask("host-1", "1", 0)
+    taskSetBlacklist2.updateBlacklistForFailedTask("host-1", "1", 0, "testing")
     // Finally, we complete both tasksets.  Its important here to complete taskset2 *first*.  We
     // want to make sure that when taskset 1 finishes, even though we've now got two task failures,
     // we realize that the task failure we just added was well before the timeout.
@@ -377,16 +385,20 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // we blacklist executors on two different hosts -- make sure that doesn't lead to any
     // node blacklisting
     val taskSetBlacklist0 = createTaskSetBlacklist(stageId = 0)
-    taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
-    taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)
+    taskSetBlacklist0.updateBlacklistForFailedTask(
+      "hostA", exec = "1", index = 0, failureReason = "testing")
+    taskSetBlacklist0.updateBlacklistForFailedTask(
+      "hostA", exec = "1", index = 1, failureReason = "testing")
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist0.execToFailures)
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1"))
     verify(listenerBusMock).post(SparkListenerExecutorBlacklisted(0, "1", 2))
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
 
     val taskSetBlacklist1 = createTaskSetBlacklist(stageId = 1)
-    taskSetBlacklist1.updateBlacklistForFailedTask("hostB", exec = "2", index = 0)
-    taskSetBlacklist1.updateBlacklistForFailedTask("hostB", exec = "2", index = 1)
+    taskSetBlacklist1.updateBlacklistForFailedTask(
+      "hostB", exec = "2", index = 0, failureReason = "testing")
+    taskSetBlacklist1.updateBlacklistForFailedTask(
+      "hostB", exec = "2", index = 1, failureReason = "testing")
     blacklist.updateBlacklistForSuccessfulTaskSet(1, 0, taskSetBlacklist1.execToFailures)
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1", "2"))
     verify(listenerBusMock).post(SparkListenerExecutorBlacklisted(0, "2", 2))
@@ -395,8 +407,10 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // Finally, blacklist another executor on the same node as the original blacklisted executor,
     // and make sure this time we *do* blacklist the node.
     val taskSetBlacklist2 = createTaskSetBlacklist(stageId = 0)
-    taskSetBlacklist2.updateBlacklistForFailedTask("hostA", exec = "3", index = 0)
-    taskSetBlacklist2.updateBlacklistForFailedTask("hostA", exec = "3", index = 1)
+    taskSetBlacklist2.updateBlacklistForFailedTask(
+      "hostA", exec = "3", index = 0, failureReason = "testing")
+    taskSetBlacklist2.updateBlacklistForFailedTask(
+      "hostA", exec = "3", index = 1, failureReason = "testing")
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist2.execToFailures)
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1", "2", "3"))
     verify(listenerBusMock).post(SparkListenerExecutorBlacklisted(0, "3", 2))
@@ -465,7 +479,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
   test("blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
-    when(allocationClientMock.killExecutors(any(), any(), any())).thenReturn(Seq("called"))
+    when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
     when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
       // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
       // is updated before we ask the executor allocation client to kill all the executors
@@ -486,7 +500,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // Fail 4 tasks in one task set on executor 1, so that executor gets blacklisted for the whole
     // application.
     (0 until 4).foreach { partition =>
-      taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
+      taskSetBlacklist0.updateBlacklistForFailedTask(
+        "hostA", exec = "1", index = partition, failureReason = "testing")
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist0.execToFailures)
 
@@ -497,11 +512,12 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // application.  Since that's the second executor that is blacklisted on the same node, we also
     // blacklist that node.
     (0 until 4).foreach { partition =>
-      taskSetBlacklist1.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
+      taskSetBlacklist1.updateBlacklistForFailedTask(
+        "hostA", exec = "2", index = partition, failureReason = "testing")
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist1.execToFailures)
 
-    verify(allocationClientMock, never).killExecutors(any(), any(), any())
+    verify(allocationClientMock, never).killExecutors(any(), any(), any(), any())
     verify(allocationClientMock, never).killExecutorsOnHost(any())
 
     // Enable auto-kill. Blacklist an executor and make sure killExecutors is called.
@@ -512,28 +528,30 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // Fail 4 tasks in one task set on executor 1, so that executor gets blacklisted for the whole
     // application.
     (0 until 4).foreach { partition =>
-      taskSetBlacklist2.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
+      taskSetBlacklist2.updateBlacklistForFailedTask(
+        "hostA", exec = "1", index = partition, failureReason = "testing")
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist2.execToFailures)
 
-    verify(allocationClientMock).killExecutors(Seq("1"), true, true)
+    verify(allocationClientMock).killExecutors(Seq("1"), false, false, true)
 
     val taskSetBlacklist3 = createTaskSetBlacklist(stageId = 1)
     // Fail 4 tasks in one task set on executor 2, so that executor gets blacklisted for the whole
     // application.  Since that's the second executor that is blacklisted on the same node, we also
     // blacklist that node.
     (0 until 4).foreach { partition =>
-      taskSetBlacklist3.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
+      taskSetBlacklist3.updateBlacklistForFailedTask(
+        "hostA", exec = "2", index = partition, failureReason = "testing")
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist3.execToFailures)
 
-    verify(allocationClientMock).killExecutors(Seq("2"), true, true)
+    verify(allocationClientMock).killExecutors(Seq("2"), false, false, true)
     verify(allocationClientMock).killExecutorsOnHost("hostA")
   }
 
   test("fetch failure blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
-    when(allocationClientMock.killExecutors(any(), any(), any())).thenReturn(Seq("called"))
+    when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
     when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
       // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
       // is updated before we ask the executor allocation client to kill all the executors
@@ -553,8 +571,11 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     conf.set(config.BLACKLIST_KILL_ENABLED, false)
     blacklist.updateBlacklistForFetchFailure("hostA", exec = "1")
 
-    verify(allocationClientMock, never).killExecutors(any(), any(), any())
+    verify(allocationClientMock, never).killExecutors(any(), any(), any(), any())
     verify(allocationClientMock, never).killExecutorsOnHost(any())
+
+    assert(blacklist.nodeToBlacklistedExecs.contains("hostA"))
+    assert(blacklist.nodeToBlacklistedExecs("hostA").contains("1"))
 
     // Enable auto-kill. Blacklist an executor and make sure killExecutors is called.
     conf.set(config.BLACKLIST_KILL_ENABLED, true)
@@ -562,7 +583,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     clock.advance(1000)
     blacklist.updateBlacklistForFetchFailure("hostA", exec = "1")
 
-    verify(allocationClientMock).killExecutors(Seq("1"), true, true)
+    verify(allocationClientMock).killExecutors(Seq("1"), false, false, true)
     verify(allocationClientMock, never).killExecutorsOnHost(any())
 
     assert(blacklist.executorIdToBlacklistStatus.contains("1"))
@@ -571,6 +592,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       1000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
     assert(blacklist.nextExpiryTime === 1000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
     assert(blacklist.nodeIdToBlacklistExpiryTime.isEmpty)
+    assert(blacklist.nodeToBlacklistedExecs.contains("hostA"))
+    assert(blacklist.nodeToBlacklistedExecs("hostA").contains("1"))
 
     // Enable external shuffle service to see if all the executors on this node will be killed.
     conf.set(config.SHUFFLE_SERVICE_ENABLED, true)

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -83,7 +84,7 @@ private[kafka010] class KafkaSource(
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
     "kafkaConsumer.pollTimeoutMs",
-    sc.conf.getTimeAsMs("spark.network.timeout", "120s").toString
+    (sc.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L).toString
   ).toLong
 
   private val maxOffsetsPerTrigger =
@@ -130,27 +131,12 @@ private[kafka010] class KafkaSource(
       val offsets = startingOffsets match {
         case EarliestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchLatestOffsets())
-        case SpecificOffsetRangeLimit(p) => fetchAndVerify(p)
+        case SpecificOffsetRangeLimit(p) => kafkaReader.fetchSpecificOffsets(p, reportDataLoss)
       }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")
       offsets
     }.partitionToOffsets
-  }
-
-  private def fetchAndVerify(specificOffsets: Map[TopicPartition, Long]) = {
-    val result = kafkaReader.fetchSpecificOffsets(specificOffsets)
-    specificOffsets.foreach {
-      case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
-          off != KafkaOffsetRangeLimit.EARLIEST =>
-        if (result(tp) != off) {
-          reportDataLoss(
-            s"startingOffsets for $tp was $off but consumer reset to ${result(tp)}")
-        }
-      case _ =>
-      // no real way to check that beginning or end is reasonable
-    }
-    KafkaSourceOffset(result)
   }
 
   private var currentPartitionOffsets: Option[Map[TopicPartition, Long]] = None
@@ -223,6 +209,14 @@ private[kafka010] class KafkaSource(
 
     logInfo(s"GetBatch called with start = $start, end = $end")
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
+    // On recovery, getBatch will get called before getOffset
+    if (currentPartitionOffsets.isEmpty) {
+      currentPartitionOffsets = Some(untilPartitionOffsets)
+    }
+    if (start.isDefined && start.get == end) {
+      return sqlContext.internalCreateDataFrame(
+        sqlContext.sparkContext.emptyRDD, schema, isStreaming = true)
+    }
     val fromPartitionOffsets = start match {
       case Some(prevBatchEndOffset) =>
         KafkaSourceOffset.getPartitionOffsets(prevBatchEndOffset)
@@ -305,11 +299,6 @@ private[kafka010] class KafkaSource(
     logInfo("GetBatch generating RDD of offset range: " +
       offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
 
-    // On recovery, getBatch will get called before getOffset
-    if (currentPartitionOffsets.isEmpty) {
-      currentPartitionOffsets = Some(untilPartitionOffsets)
-    }
-
     sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
   }
 
@@ -318,7 +307,7 @@ private[kafka010] class KafkaSource(
     kafkaReader.close()
   }
 
-  override def toString(): String = s"KafkaSource[$kafkaReader]"
+  override def toString(): String = s"KafkaSourceV1[$kafkaReader]"
 
   /**
    * If `failOnDataLoss` is true, this method will throw an `IllegalStateException`.
@@ -335,22 +324,6 @@ private[kafka010] class KafkaSource(
 
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
-  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
-    """
-      |Some data may have been lost because they are not available in Kafka any more; either the
-      | data was aged out by Kafka or the topic may have been deleted before all the data in the
-      | topic was processed. If you want your streaming query to fail on such cases, set the source
-      | option "failOnDataLoss" to "true".
-    """.stripMargin
-
-  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
-    """
-      |Some data may have been lost because they are not available in Kafka any more; either the
-      | data was aged out by Kafka or the topic may have been deleted before all the data in the
-      | topic was processed. If you don't want your streaming query to fail on such cases, set the
-      | source option "failOnDataLoss" to "false".
-    """.stripMargin
-
   private[kafka010] val VERSION = 1
 
   def getSortedExecutorList(sc: SparkContext): Array[String] = {

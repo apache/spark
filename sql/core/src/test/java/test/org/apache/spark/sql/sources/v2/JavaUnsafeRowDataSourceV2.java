@@ -21,15 +21,15 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.ReadSupport;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
 public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader, SupportsScanUnsafeRow {
+  class Reader implements DataSourceReader, SupportsScanUnsafeRow {
     private final StructType schema = new StructType().add("i", "int").add("j", "int");
 
     @Override
@@ -38,19 +38,20 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<ReadTask<UnsafeRow>> createUnsafeRowReadTasks() {
+    public List<InputPartition<UnsafeRow>> planUnsafeInputPartitions() {
       return java.util.Arrays.asList(
-        new JavaUnsafeRowReadTask(0, 5),
-        new JavaUnsafeRowReadTask(5, 10));
+        new JavaUnsafeRowInputPartition(0, 5),
+        new JavaUnsafeRowInputPartition(5, 10));
     }
   }
 
-  static class JavaUnsafeRowReadTask implements ReadTask<UnsafeRow>, DataReader<UnsafeRow> {
+  static class JavaUnsafeRowInputPartition
+      implements InputPartition<UnsafeRow>, InputPartitionReader<UnsafeRow> {
     private int start;
     private int end;
     private UnsafeRow row;
 
-    JavaUnsafeRowReadTask(int start, int end) {
+    JavaUnsafeRowInputPartition(int start, int end) {
       this.start = start;
       this.end = end;
       this.row = new UnsafeRow(2);
@@ -58,8 +59,8 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<UnsafeRow> createReader() {
-      return new JavaUnsafeRowReadTask(start - 1, end);
+    public InputPartitionReader<UnsafeRow> createPartitionReader() {
+      return new JavaUnsafeRowInputPartition(start - 1, end);
     }
 
     @Override
@@ -82,7 +83,7 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
   }
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
+  public DataSourceReader createReader(DataSourceOptions options) {
     return new Reader();
   }
 }

@@ -17,23 +17,25 @@
 
 package org.apache.spark.ml.tuning
 
+import java.io.File
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model, Pipeline}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, OneVsRest}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, MulticlassClassificationEvaluator, RegressionEvaluator}
 import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
 
 class CrossValidatorSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+  extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -64,6 +66,13 @@ class CrossValidatorSuite
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
     assert(cvModel.avgMetrics.length === lrParamMaps.length)
+
+    val result = cvModel.transform(dataset).select("prediction").as[Double].collect()
+    testTransformerByGlobalCheckFunc[(Double, Vector)](dataset.toDF(), cvModel, "prediction") {
+      rows =>
+        val result2 = rows.map(_.getDouble(0))
+        assert(result === result2)
+    }
   }
 
   test("cross validation with linear regression") {
@@ -137,8 +146,8 @@ class CrossValidatorSuite
     cv.setParallelism(2)
     val cvParallelModel = cv.fit(dataset)
 
-    val serialMetrics = cvSerialModel.avgMetrics.sorted
-    val parallelMetrics = cvParallelModel.avgMetrics.sorted
+    val serialMetrics = cvSerialModel.avgMetrics
+    val parallelMetrics = cvParallelModel.avgMetrics
     assert(serialMetrics === parallelMetrics)
 
     val parentSerial = cvSerialModel.bestModel.parent.asInstanceOf[LogisticRegression]
@@ -159,12 +168,17 @@ class CrossValidatorSuite
       .setEvaluator(evaluator)
       .setNumFolds(20)
       .setEstimatorParamMaps(paramMaps)
+      .setSeed(42L)
+      .setParallelism(2)
+      .setCollectSubModels(true)
 
     val cv2 = testDefaultReadWrite(cv, testParams = false)
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
     assert(cv.getSeed === cv2.getSeed)
+    assert(cv.getParallelism === cv2.getParallelism)
+    assert(cv.getCollectSubModels === cv2.getCollectSubModels)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]
@@ -182,6 +196,54 @@ class CrossValidatorSuite
 
     ValidatorParamsSuiteHelpers
       .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+  }
+
+  test("CrossValidator expose sub models") {
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 3))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val numFolds = 3
+    val subPath = new File(tempDir, "testCrossValidatorSubModels")
+
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(numFolds)
+      .setParallelism(1)
+      .setCollectSubModels(true)
+
+    val cvModel = cv.fit(dataset)
+
+    assert(cvModel.hasSubModels && cvModel.subModels.length == numFolds)
+    cvModel.subModels.foreach(array => assert(array.length == lrParamMaps.length))
+
+    // Test the default value for option "persistSubModel" to be "true"
+    val savingPathWithSubModels = new File(subPath, "cvModel3").getPath
+    cvModel.save(savingPathWithSubModels)
+    val cvModel3 = CrossValidatorModel.load(savingPathWithSubModels)
+    assert(cvModel3.hasSubModels && cvModel3.subModels.length == numFolds)
+    cvModel3.subModels.foreach(array => assert(array.length == lrParamMaps.length))
+
+    val savingPathWithoutSubModels = new File(subPath, "cvModel2").getPath
+    cvModel.write.option("persistSubModels", "false").save(savingPathWithoutSubModels)
+    val cvModel2 = CrossValidatorModel.load(savingPathWithoutSubModels)
+    assert(!cvModel2.hasSubModels)
+
+    for (i <- 0 until numFolds) {
+      for (j <- 0 until lrParamMaps.length) {
+        assert(cvModel.subModels(i)(j).asInstanceOf[LogisticRegressionModel].uid ===
+          cvModel3.subModels(i)(j).asInstanceOf[LogisticRegressionModel].uid)
+      }
+    }
+
+    val savingPathTestingIllegalParam = new File(subPath, "cvModel4").getPath
+    intercept[IllegalArgumentException] {
+      cvModel2.write.option("persistSubModels", "true").save(savingPathTestingIllegalParam)
+    }
   }
 
   test("read/write: CrossValidator with nested estimator") {

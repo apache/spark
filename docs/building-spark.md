@@ -49,7 +49,7 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phadoop-2.7 -Phive -Phive-thriftserver -Pmesos -Pyarn
+    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phadoop-2.7 -Phive -Phive-thriftserver -Pmesos -Pyarn -Pkubernetes
 
 This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
 
@@ -90,6 +90,10 @@ like ZooKeeper and Hadoop itself.
 ## Building with Mesos support
 
     ./build/mvn -Pmesos -DskipTests clean package
+
+## Building with Kubernetes support
+
+    ./build/mvn -Pkubernetes -DskipTests clean package
     
 ## Building with Kafka 0.8 support
 
@@ -100,9 +104,16 @@ Note: Kafka 0.8 support is deprecated as of Spark 2.3.0.
 
 Kafka 0.10 support is still automatically built.
 
+## Building with Flume support
+
+Apache Flume support must be explicitly enabled with the `flume` profile.
+Note: Flume support is deprecated as of Spark 2.3.0.
+
+    ./build/mvn -Pflume -DskipTests clean package
+
 ## Building submodules individually
 
-It's possible to build Spark sub-modules using the `mvn -pl` option.
+It's possible to build Spark submodules using the `mvn -pl` option.
 
 For instance, you can build the Spark Streaming module using:
 
@@ -204,18 +215,22 @@ If you are building Spark for use in a Python environment and you wish to pip in
 
 Alternatively, you can also run make-distribution with the --pip option.
 
-## PySpark Tests with Maven
+## PySpark Tests with Maven or SBT
 
 If you are building PySpark and wish to run the PySpark tests you will need to build Spark with Hive support.
 
     ./build/mvn -DskipTests clean package -Phive
     ./python/run-tests
 
+If you are building PySpark with SBT and wish to run the PySpark tests, you will need to build Spark with Hive support and also build the test components:
+
+    ./build/sbt -Phive clean package
+    ./build/sbt test:compile
+    ./python/run-tests
+
 The run-tests script also can be limited to a specific Python version or a specific module
 
     ./python/run-tests --python-executables=python --modules=pyspark-sql
-
-**Note:** You can also run Python tests with an sbt build, provided you build Spark with Hive support.
 
 ## Running R Tests
 

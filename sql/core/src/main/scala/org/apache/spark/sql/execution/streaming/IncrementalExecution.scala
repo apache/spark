@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -58,8 +59,13 @@ class IncrementalExecution(
       StatefulAggregationStrategy ::
       FlatMapGroupsWithStateStrategy ::
       StreamingRelationStrategy ::
-      StreamingDeduplicationStrategy :: Nil
+      StreamingDeduplicationStrategy ::
+      StreamingGlobalLimitStrategy(outputMode) :: Nil
   }
+
+  private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
+    .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
+    .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
   /**
    * See [SPARK-18339]
@@ -83,7 +89,11 @@ class IncrementalExecution(
   /** Get the state info of the next stateful operator */
   private def nextStatefulOperationStateInfo(): StatefulOperatorStateInfo = {
     StatefulOperatorStateInfo(
-      checkpointLocation, runId, statefulOperatorId.getAndIncrement(), currentBatchId)
+      checkpointLocation,
+      runId,
+      statefulOperatorId.getAndIncrement(),
+      currentBatchId,
+      numStateStores)
   }
 
   /** Locates save/restore pairs surrounding aggregation. */
@@ -124,40 +134,28 @@ class IncrementalExecution(
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
-              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition,
-              Some(offsetSeqMetadata.batchWatermarkMs))
-        )
+              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
+              Some(offsetSeqMetadata.batchWatermarkMs)))
+
+      case l: StreamingGlobalLimitExec =>
+        l.copy(
+          stateInfo = Some(nextStatefulOperationStateInfo),
+          outputMode = Some(outputMode))
     }
   }
 
-  override def preparations: Seq[Rule[SparkPlan]] =
-    Seq(state, EnsureStatefulOpPartitioning) ++ super.preparations
+  override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
-}
 
-object EnsureStatefulOpPartitioning extends Rule[SparkPlan] {
-  // Needs to be transformUp to avoid extra shuffles
-  override def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    case so: StatefulOperator =>
-      val numPartitions = plan.sqlContext.sessionState.conf.numShufflePartitions
-      val distributions = so.requiredChildDistribution
-      val children = so.children.zip(distributions).map { case (child, reqDistribution) =>
-        val expectedPartitioning = reqDistribution match {
-          case AllTuples => SinglePartition
-          case ClusteredDistribution(keys) => HashPartitioning(keys, numPartitions)
-          case _ => throw new AnalysisException("Unexpected distribution expected for " +
-            s"Stateful Operator: $so. Expect AllTuples or ClusteredDistribution but got " +
-            s"$reqDistribution.")
-        }
-        if (child.outputPartitioning.guarantees(expectedPartitioning) &&
-            child.execute().getNumPartitions == expectedPartitioning.numPartitions) {
-          child
-        } else {
-          ShuffleExchange(expectedPartitioning, child)
-        }
-      }
-      so.withNewChildren(children)
+  /**
+   * Should the MicroBatchExecution run another batch based on this execution and the current
+   * updated metadata.
+   */
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    executedPlan.collect {
+      case p: StateStoreWriter => p.shouldRunAnotherBatch(newMetadata)
+    }.exists(_ == true)
   }
 }

@@ -36,6 +36,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
@@ -62,18 +63,14 @@ abstract class BaseYarnClusterSuite
   protected var hadoopConfDir: File = _
   private var logConfDir: File = _
 
-  var oldSystemProperties: Properties = null
-
   def newYarnConfig(): YarnConfiguration
 
   override def beforeAll() {
     super.beforeAll()
-    oldSystemProperties = SerializationUtils.clone(System.getProperties)
 
     tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
-    System.setProperty("SPARK_YARN_MODE", "true")
 
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
@@ -124,7 +121,6 @@ abstract class BaseYarnClusterSuite
     try {
       yarnCluster.stop()
     } finally {
-      System.setProperties(oldSystemProperties)
       super.afterAll()
     }
   }
@@ -220,6 +216,14 @@ abstract class BaseYarnClusterSuite
     // SPARK-4267: make sure java options are propagated correctly.
     props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
     props.setProperty("spark.executor.extraJavaOptions", "-Dfoo=\"one two three\"")
+
+    // SPARK-24446: make sure special characters in the library path do not break containers.
+    if (!Utils.isWindows) {
+      val libPath = """/tmp/does not exist:$PWD/tmp:/tmp/quote":/tmp/ampersand&"""
+      props.setProperty(AM_LIBRARY_PATH.key, libPath)
+      props.setProperty(DRIVER_LIBRARY_PATH.key, libPath)
+      props.setProperty(EXECUTOR_LIBRARY_PATH.key, libPath)
+    }
 
     yarnCluster.getConfig().asScala.foreach { e =>
       props.setProperty("spark.hadoop." + e.getKey(), e.getValue())

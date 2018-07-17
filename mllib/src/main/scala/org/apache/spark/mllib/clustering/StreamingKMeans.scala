@@ -43,7 +43,7 @@ import org.apache.spark.util.random.XORShiftRandom
  *    $$
  *    \begin{align}
  *     c_t+1 &= [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t] \\
- *     n_t+t &= n_t * a + m_t
+ *     n_t+1 &= n_t * a + m_t
  *    \end{align}
  *    $$
  * </blockquote>

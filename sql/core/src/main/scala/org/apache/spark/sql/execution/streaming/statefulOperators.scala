@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CompletionIterator, NextIterator}
+import org.apache.spark.util.{CompletionIterator, NextIterator, Utils}
 
 
 /** Used to identify the state store for a given operator. */
@@ -43,10 +43,11 @@ case class StatefulOperatorStateInfo(
     checkpointLocation: String,
     queryRunId: UUID,
     operatorId: Long,
-    storeVersion: Long) {
+    storeVersion: Long,
+    numPartitions: Int) {
   override def toString(): String = {
     s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
-      s"opId = $operatorId, ver = $storeVersion]"
+      s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions]"
   }
 }
 
@@ -96,12 +97,7 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
   }
 
   /** Records the duration of running `body` for the next query progress update. */
-  protected def timeTakenMs(body: => Unit): Long = {
-    val startTime = System.nanoTime()
-    val result = body
-    val endTime = System.nanoTime()
-    math.max(NANOSECONDS.toMillis(endTime - startTime), 0)
-  }
+  protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
 
   /**
    * Set the SQL metrics related to the state store.
@@ -125,6 +121,12 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
         name -> SQLMetrics.createTimingMetric(sparkContext, desc)
     }.toMap
   }
+
+  /**
+   * Should the MicroBatchExecution run another batch based on this stateful operator and the
+   * current updated metadata.
+   */
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = false
 }
 
 /** An operator that supports watermark. */
@@ -225,7 +227,7 @@ case class StateStoreRestoreExec(
             val key = getKey(row)
             val savedState = store.get(key)
             numOutputRows += 1
-            row +: Option(savedState).toSeq
+            Option(savedState).toSeq :+ row
           }
         }
     }
@@ -239,7 +241,7 @@ case class StateStoreRestoreExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions) :: Nil
+      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 }
@@ -339,37 +341,35 @@ case class StateStoreSaveExec(
           // Update and output modified rows from the StateStore.
           case Some(Update) =>
 
-            val updatesStartTimeNs = System.nanoTime
-
-            new Iterator[InternalRow] {
-
+            new NextIterator[InternalRow] {
               // Filter late date using watermark if specified
               private[this] val baseIterator = watermarkPredicateForData match {
                 case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
                 case None => iter
               }
+              private val updatesStartTimeNs = System.nanoTime
 
-              override def hasNext: Boolean = {
-                if (!baseIterator.hasNext) {
-                  allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-
-                  // Remove old aggregates if watermark specified
-                  allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
-                  commitTimeMs += timeTakenMs { store.commit() }
-                  setStoreMetrics(store)
-                  false
+              override protected def getNext(): InternalRow = {
+                if (baseIterator.hasNext) {
+                  val row = baseIterator.next().asInstanceOf[UnsafeRow]
+                  val key = getKey(row)
+                  store.put(key, row)
+                  numOutputRows += 1
+                  numUpdatedStateRows += 1
+                  row
                 } else {
-                  true
+                  finished = true
+                  null
                 }
               }
 
-              override def next(): InternalRow = {
-                val row = baseIterator.next().asInstanceOf[UnsafeRow]
-                val key = getKey(row)
-                store.put(key, row)
-                numOutputRows += 1
-                numUpdatedStateRows += 1
-                row
+              override protected def close(): Unit = {
+                allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+
+                // Remove old aggregates if watermark specified
+                allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
+                commitTimeMs += timeTakenMs { store.commit() }
+                setStoreMetrics(store)
               }
             }
 
@@ -386,8 +386,14 @@ case class StateStoreSaveExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions) :: Nil
+      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
+  }
+
+  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    (outputMode.contains(Append) || outputMode.contains(Update)) &&
+      eventTimeWatermark.isDefined &&
+      newMetadata.batchWatermarkMs > eventTimeWatermark.get
   }
 }
 
@@ -401,7 +407,7 @@ case class StreamingDeduplicateExec(
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(keyExpressions) :: Nil
+    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -455,6 +461,10 @@ case class StreamingDeduplicateExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+  }
 }
 
 object StreamingDeduplicateExec {

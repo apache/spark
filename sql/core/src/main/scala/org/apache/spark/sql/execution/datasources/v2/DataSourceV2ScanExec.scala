@@ -24,62 +24,129 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.catalyst.plans.physical
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
+/**
+ * Physical plan node for scanning data from a data source.
+ */
 case class DataSourceV2ScanExec(
-    fullOutput: Array[AttributeReference],
-    @transient reader: DataSourceV2Reader,
-    // TODO: these 3 parameters are only used to determine the equality of the scan node, however,
-    // the reader also have this information, and ideally we can just rely on the equality of the
-    // reader. The only concern is, the reader implementation is outside of Spark and we have no
-    // control.
-    readSchema: StructType,
-    @transient filters: ExpressionSet,
-    hashPartitionKeys: Seq[String]) extends LeafExecNode {
+    output: Seq[AttributeReference],
+    @transient source: DataSourceV2,
+    @transient options: Map[String, String],
+    @transient pushedFilters: Seq[Expression],
+    @transient reader: DataSourceReader)
+  extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 
-  def output: Seq[Attribute] = readSchema.map(_.name).map { name =>
-    fullOutput.find(_.name == name).get
+  override def simpleString: String = "ScanV2 " + metadataString
+
+  // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
+  override def equals(other: Any): Boolean = other match {
+    case other: DataSourceV2ScanExec =>
+      output == other.output && reader.getClass == other.reader.getClass && options == other.options
+    case _ => false
   }
 
-  override def references: AttributeSet = AttributeSet.empty
+  override def hashCode(): Int = {
+    Seq(output, source, options).hashCode()
+  }
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  override def outputPartitioning: physical.Partitioning = reader match {
+    case r: SupportsScanColumnarBatch if r.enableBatchRead() && batchPartitions.size == 1 =>
+      SinglePartition
+
+    case r: SupportsScanColumnarBatch if !r.enableBatchRead() && partitions.size == 1 =>
+      SinglePartition
+
+    case r if !r.isInstanceOf[SupportsScanColumnarBatch] && partitions.size == 1 =>
+      SinglePartition
+
+    case s: SupportsReportPartitioning =>
+      new DataSourcePartitioning(
+        s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
+
+    case _ => super.outputPartitioning
+  }
+
+  private lazy val partitions: Seq[InputPartition[UnsafeRow]] = reader match {
+    case r: SupportsScanUnsafeRow => r.planUnsafeInputPartitions().asScala
+    case _ =>
+      reader.planInputPartitions().asScala.map {
+        new RowToUnsafeRowInputPartition(_, reader.readSchema()): InputPartition[UnsafeRow]
+      }
+  }
+
+  private lazy val batchPartitions: Seq[InputPartition[ColumnarBatch]] = reader match {
+    case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
+      assert(!reader.isInstanceOf[ContinuousReader],
+        "continuous stream reader does not support columnar read yet.")
+      r.planBatchInputPartitions().asScala
+  }
+
+  private lazy val inputRDD: RDD[InternalRow] = reader match {
+    case _: ContinuousReader =>
+      EpochCoordinatorRef.get(
+          sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+          sparkContext.env)
+        .askSync[Unit](SetReaderPartitions(partitions.size))
+      new ContinuousDataSourceRDD(
+        sparkContext,
+        sqlContext.conf.continuousStreamingExecutorQueueSize,
+        sqlContext.conf.continuousStreamingExecutorPollIntervalMs,
+        partitions).asInstanceOf[RDD[InternalRow]]
+
+    case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
+      new DataSourceRDD(sparkContext, batchPartitions).asInstanceOf[RDD[InternalRow]]
+
+    case _ =>
+      new DataSourceRDD(sparkContext, partitions).asInstanceOf[RDD[InternalRow]]
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
+
+  override val supportsBatch: Boolean = reader match {
+    case r: SupportsScanColumnarBatch if r.enableBatchRead() => true
+    case _ => false
+  }
+
+  override protected def needsUnsafeRowConversion: Boolean = false
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val readTasks: java.util.List[ReadTask[UnsafeRow]] = reader match {
-      case r: SupportsScanUnsafeRow => r.createUnsafeRowReadTasks()
-      case _ =>
-        reader.createReadTasks().asScala.map {
-          new RowToUnsafeRowReadTask(_, reader.readSchema()): ReadTask[UnsafeRow]
-        }.asJava
-    }
-
-    val inputRDD = new DataSourceRDD(sparkContext, readTasks)
-      .asInstanceOf[RDD[InternalRow]]
-    val numOutputRows = longMetric("numOutputRows")
-    inputRDD.map { r =>
-      numOutputRows += 1
-      r
+    if (supportsBatch) {
+      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
+    } else {
+      val numOutputRows = longMetric("numOutputRows")
+      inputRDD.map { r =>
+        numOutputRows += 1
+        r
+      }
     }
   }
 }
 
-class RowToUnsafeRowReadTask(rowReadTask: ReadTask[Row], schema: StructType)
-  extends ReadTask[UnsafeRow] {
+class RowToUnsafeRowInputPartition(partition: InputPartition[Row], schema: StructType)
+  extends InputPartition[UnsafeRow] {
 
-  override def preferredLocations: Array[String] = rowReadTask.preferredLocations
+  override def preferredLocations: Array[String] = partition.preferredLocations
 
-  override def createReader: DataReader[UnsafeRow] = {
-    new RowToUnsafeDataReader(rowReadTask.createReader, RowEncoder.apply(schema))
+  override def createPartitionReader: InputPartitionReader[UnsafeRow] = {
+    new RowToUnsafeInputPartitionReader(
+      partition.createPartitionReader, RowEncoder.apply(schema).resolveAndBind())
   }
 }
 
-class RowToUnsafeDataReader(rowReader: DataReader[Row], encoder: ExpressionEncoder[Row])
-  extends DataReader[UnsafeRow] {
+class RowToUnsafeInputPartitionReader(
+    val rowReader: InputPartitionReader[Row],
+    encoder: ExpressionEncoder[Row])
+
+  extends InputPartitionReader[UnsafeRow] {
 
   override def next: Boolean = rowReader.next
 

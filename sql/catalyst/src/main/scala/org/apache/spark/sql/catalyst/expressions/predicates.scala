@@ -21,7 +21,8 @@ import scala.collection.immutable.TreeSet
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -36,6 +37,14 @@ object InterpretedPredicate {
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+
+  override def initialize(partitionIndex: Int): Unit = {
+    super.initialize(partitionIndex)
+    expression.foreach {
+      case n: Nondeterministic => n.initialize(partitionIndex)
+      case _ =>
+    }
+  }
 }
 
 /**
@@ -157,7 +166,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   require(list != null, "list should not be null")
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType))
+    val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
+      ignoreNullability = true))
     if (mismatchOpt.isDefined) {
       list match {
         case ListQuery(_, _, _, childOutputs) :: Nil =>
@@ -195,7 +205,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           }
         case _ =>
           TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-            s"${value.dataType} != ${mismatchOpt.get.dataType}")
+            s"${value.dataType.simpleString} != ${mismatchOpt.get.dataType.simpleString}")
       }
     } else {
       TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
@@ -234,28 +244,66 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaDataType = CodeGenerator.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
+    // inTmpResult has 3 possible values:
+    // -1 means no matches found and there is at least one value in the list evaluated to null
+    val HAS_NULL = -1
+    // 0 means no matches found and all values in the list are not null
+    val NOT_MATCHED = 0
+    // 1 means one value in the list is matched
+    val MATCHED = 1
+    val tmpResult = ctx.freshName("inTmpResult")
+    val valueArg = ctx.freshName("valueArg")
+    // All the blocks are meant to be inside a do { ... } while (false); loop.
+    // The evaluation of variables can be stopped when we find a matching value.
     val listCode = listGen.map(x =>
       s"""
-        if (!${ev.value}) {
-          ${x.code}
-          if (${x.isNull}) {
-            ${ev.isNull} = true;
-          } else if (${ctx.genEqual(value.dataType, valueGen.value, x.value)}) {
-            ${ev.isNull} = false;
-            ${ev.value} = true;
-          }
-        }
-       """).mkString("\n")
-    ev.copy(code = s"""
-      ${valueGen.code}
-      boolean ${ev.value} = false;
-      boolean ${ev.isNull} = ${valueGen.isNull};
-      if (!${ev.isNull}) {
-        $listCode
-      }
-    """)
+         |${x.code}
+         |if (${x.isNull}) {
+         |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
+         |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
+         |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
+         |  continue;
+         |}
+       """.stripMargin)
+
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = listCode,
+      funcName = "valueIn",
+      extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BYTE, tmpResult) :: Nil,
+      returnType = CodeGenerator.JAVA_BYTE,
+      makeSplitFunction = body =>
+        s"""
+           |do {
+           |  $body
+           |} while (false);
+           |return $tmpResult;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$tmpResult = $funcCall;
+           |if ($tmpResult == $MATCHED) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString("\n"))
+
+    ev.copy(code =
+      code"""
+         |${valueGen.code}
+         |byte $tmpResult = $HAS_NULL;
+         |if (!${valueGen.isNull}) {
+         |  $tmpResult = $NOT_MATCHED;
+         |  $javaDataType $valueArg = ${valueGen.value};
+         |  do {
+         |    $codes
+         |  } while (false);
+         |}
+         |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
+         |final boolean ${ev.value} = ($tmpResult == $MATCHED);
+       """.stripMargin)
   }
 
   override def sql: String = {
@@ -290,7 +338,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     }
   }
 
-  @transient private[this] lazy val set = child.dataType match {
+  @transient lazy val set: Set[Any] = child.dataType match {
     case _: AtomicType => hset
     case _: NullType => hset
     case _ =>
@@ -298,34 +346,24 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ hset
   }
 
-  def getSet(): Set[Any] = set
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val setName = classOf[Set[Any]].getName
-    val InSetName = classOf[InSet].getName
+    val setTerm = ctx.addReferenceObj("set", set)
     val childGen = child.genCode(ctx)
-    ctx.references += this
-    val setTerm = ctx.freshName("set")
-    val setNull = if (hasNull) {
-      s"""
-         |if (!${ev.value}) {
-         |  ${ev.isNull} = true;
-         |}
-       """.stripMargin
+    val setIsNull = if (hasNull) {
+      s"${ev.isNull} = !${ev.value};"
     } else {
       ""
     }
-    ctx.addMutableState(setName, setTerm,
-      s"$setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();")
-    ev.copy(code = s"""
-      ${childGen.code}
-      boolean ${ev.isNull} = ${childGen.isNull};
-      boolean ${ev.value} = false;
-      if (!${ev.isNull}) {
-        ${ev.value} = $setTerm.contains(${childGen.value});
-        $setNull
-      }
-     """)
+    ev.copy(code =
+      code"""
+         |${childGen.code}
+         |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
+         |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $setTerm.contains(${childGen.value});
+         |  $setIsNull
+         |}
+       """.stripMargin)
   }
 
   override def sql: String = {
@@ -369,16 +407,16 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
     // The result should be `false`, if any of them is `false` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.value} = false;
 
         if (${eval1.value}) {
           ${eval2.code}
           ${ev.value} = ${eval2.value};
-        }""", isNull = "false")
+        }""", isNull = FalseLiteral)
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.isNull} = false;
         boolean ${ev.value} = false;
@@ -432,17 +470,17 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {
-      ev.isNull = "false"
-      ev.copy(code = s"""
+      ev.isNull = FalseLiteral
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.value} = true;
 
         if (!${eval1.value}) {
           ${eval2.code}
           ${ev.value} = ${eval2.value};
-        }""", isNull = "false")
+        }""", isNull = FalseLiteral)
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.isNull} = false;
         boolean ${ev.value} = true;
@@ -476,7 +514,7 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (ctx.isPrimitiveType(left.dataType)
+    if (CodeGenerator.isPrimitiveType(left.dataType)
         && left.dataType != BooleanType // java boolean doesn't support > or < operator
         && left.dataType != FloatType
         && left.dataType != DoubleType) {
@@ -584,9 +622,9 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
     val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)
-    ev.copy(code = eval1.code + eval2.code + s"""
+    ev.copy(code = eval1.code + eval2.code + code"""
         boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
-           (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = "false")
+           (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = FalseLiteral)
   }
 }
 

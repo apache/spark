@@ -89,7 +89,11 @@ trait FutureAction[T] extends Future[T] {
    */
   override def value: Option[Try[T]]
 
-  // These two methods must be implemented in Scala 2.12, but won't be used by Spark
+  // These two methods must be implemented in Scala 2.12. They're implemented as a no-op here
+  // and then filled in with a real implementation in the two subclasses below. The no-op exists
+  // here so that those implementations can declare "override", necessary in 2.12, while working
+  // in 2.11, where the method doesn't exist in the superclass.
+  // After 2.11 support goes away, remove these two:
 
   def transform[S](f: (Try[T]) => Try[S])(implicit executor: ExecutionContext): Future[S] =
     throw new UnsupportedOperationException()
@@ -110,6 +114,42 @@ trait FutureAction[T] extends Future[T] {
    * jobs, so multiple calls to this method may return different lists.
    */
   def jobIds: Seq[Int]
+
+}
+
+/**
+ * Scala 2.12 defines the two new transform/transformWith methods mentioned above. Impementing
+ * these for 2.12 in the Spark class here requires delegating to these same methods in an
+ * underlying Future object. But that only exists in 2.12. But these methods are only called
+ * in 2.12. So define helper shims to access these methods on a Future by reflection.
+ */
+private[spark] object FutureAction {
+
+  private val transformTryMethod =
+    try {
+      classOf[Future[_]].getMethod("transform", classOf[(_) => _], classOf[ExecutionContext])
+    } catch {
+      case _: NoSuchMethodException => null // Would fail later in 2.11, but not called in 2.11
+    }
+
+  private val transformWithTryMethod =
+    try {
+      classOf[Future[_]].getMethod("transformWith", classOf[(_) => _], classOf[ExecutionContext])
+    } catch {
+      case _: NoSuchMethodException => null // Would fail later in 2.11, but not called in 2.11
+    }
+
+  private[spark] def transform[T, S](
+      future: Future[T],
+      f: (Try[T]) => Try[S],
+      executor: ExecutionContext): Future[S] =
+    transformTryMethod.invoke(future, f, executor).asInstanceOf[Future[S]]
+
+  private[spark] def transformWith[T, S](
+      future: Future[T],
+      f: (Try[T]) => Future[S],
+      executor: ExecutionContext): Future[S] =
+    transformWithTryMethod.invoke(future, f, executor).asInstanceOf[Future[S]]
 
 }
 
@@ -153,6 +193,18 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
     jobWaiter.completionFuture.value.map {res => res.map(_ => resultFunc)}
 
   def jobIds: Seq[Int] = Seq(jobWaiter.jobId)
+
+  override def transform[S](f: (Try[T]) => Try[S])(implicit e: ExecutionContext): Future[S] =
+    FutureAction.transform(
+      jobWaiter.completionFuture,
+      (u: Try[Unit]) => f(u.map(_ => resultFunc)),
+      e)
+
+  override def transformWith[S](f: (Try[T]) => Future[S])(implicit e: ExecutionContext): Future[S] =
+    FutureAction.transformWith(
+      jobWaiter.completionFuture,
+      (u: Try[Unit]) => f(u.map(_ => resultFunc)),
+      e)
 }
 
 
@@ -246,6 +298,11 @@ class ComplexFutureAction[T](run : JobSubmitter => Future[T])
 
   def jobIds: Seq[Int] = subActions.flatMap(_.jobIds)
 
+  override def transform[S](f: (Try[T]) => Try[S])(implicit e: ExecutionContext): Future[S] =
+    FutureAction.transform(p.future, f, e)
+
+  override def transformWith[S](f: (Try[T]) => Future[S])(implicit e: ExecutionContext): Future[S] =
+    FutureAction.transformWith(p.future, f, e)
 }
 
 

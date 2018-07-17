@@ -728,4 +728,26 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       assert(e.contains("mismatched input 'ROW'"))
     }
   }
+
+  test("SPARK-21165: FileFormatWriter should only rely on attributes from analyzed plan") {
+    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
+      withTable("tab1", "tab2") {
+        Seq(("a", "b", 3)).toDF("word", "first", "length").write.saveAsTable("tab1")
+
+        spark.sql(
+          """
+            |CREATE TABLE tab2 (word string, length int)
+            |PARTITIONED BY (first string)
+          """.stripMargin)
+
+        spark.sql(
+          """
+            |INSERT INTO TABLE tab2 PARTITION(first)
+            |SELECT word, length, cast(first as string) as first FROM tab1
+          """.stripMargin)
+
+        checkAnswer(spark.table("tab2"), Row("a", 3, "b"))
+      }
+    }
+  }
 }

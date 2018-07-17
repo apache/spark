@@ -363,10 +363,10 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     // if a split does not satisfy min instances per node requirements,
     // this split is invalid, even though the information gain of split is large.
     val arr = Array(
-      LabeledPoint(0.0, Vectors.dense(0.0, 1.0)),
-      LabeledPoint(1.0, Vectors.dense(1.0, 1.0)),
-      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
-      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)))
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 0.0)))
 
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini,
@@ -541,7 +541,7 @@ object DecisionTreeSuite extends SparkFunSuite {
     Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](3000)
     for (i <- 0 until 3000) {
-      if (i < 1000) {
+      if (i < 1001) {
         arr(i) = new LabeledPoint(2.0, Vectors.dense(2.0, 2.0))
       } else if (i < 2000) {
         arr(i) = new LabeledPoint(1.0, Vectors.dense(1.0, 2.0))

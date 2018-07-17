@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.mesos.config
 
 class MesosSchedulerBackendUtilSuite extends SparkFunSuite {
 
@@ -26,7 +27,8 @@ class MesosSchedulerBackendUtilSuite extends SparkFunSuite {
     conf.set("spark.mesos.executor.docker.parameters", "a,b")
     conf.set("spark.mesos.executor.docker.image", "test")
 
-    val containerInfo = MesosSchedulerBackendUtil.containerInfo(conf)
+    val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(
+      conf)
     val params = containerInfo.getDocker.getParametersList
 
     assert(params.size() == 0)
@@ -37,7 +39,8 @@ class MesosSchedulerBackendUtilSuite extends SparkFunSuite {
     conf.set("spark.mesos.executor.docker.parameters", "a=1,b=2,c=3")
     conf.set("spark.mesos.executor.docker.image", "test")
 
-    val containerInfo = MesosSchedulerBackendUtil.containerInfo(conf)
+    val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(
+      conf)
     val params = containerInfo.getDocker.getParametersList
     assert(params.size() == 3)
     assert(params.get(0).getKey == "a")

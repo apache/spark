@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.test
 
 import java.io.File
+import java.net.URI
 import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
@@ -34,6 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, ExternalCatalogWithListener}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
@@ -82,11 +84,11 @@ private[hive] class TestHiveSharedState(
     hiveClient: Option[HiveClient] = None)
   extends SharedState(sc) {
 
-  override lazy val externalCatalog: TestHiveExternalCatalog = {
-    new TestHiveExternalCatalog(
+  override lazy val externalCatalog: ExternalCatalogWithListener = {
+    new ExternalCatalogWithListener(new TestHiveExternalCatalog(
       sc.conf,
       sc.hadoopConfiguration,
-      hiveClient)
+      hiveClient))
   }
 }
 
@@ -174,12 +176,21 @@ private[hive] class TestHiveSparkSession(
       loadTestTables)
   }
 
+  SparkSession.setDefaultSession(this)
+  SparkSession.setActiveSession(this)
+
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       // scratch directory used by Hive's metastore client
       ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
-      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1") ++
+      // After session cloning, the JDBC connect string for a JDBC metastore should not be changed.
+      existingSharedState.map { state =>
+        val connKey =
+          state.sparkContext.hadoopConfiguration.get(ConfVars.METASTORECONNECTURLKEY.varname)
+        ConfVars.METASTORECONNECTURLKEY.varname -> connKey
+      }
 
     metastoreTempConf.foreach { case (k, v) =>
       sc.hadoopConfiguration.set(k, v)
@@ -198,7 +209,9 @@ private[hive] class TestHiveSparkSession(
     new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
-  lazy val metadataHive: HiveClient = sharedState.externalCatalog.client.newSession()
+  lazy val metadataHive: HiveClient = {
+    sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.newSession()
+  }
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
@@ -485,8 +498,7 @@ private[hive] class TestHiveSparkSession(
   protected val originalUDFs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
   /**
-   * Resets the test instance by deleting any tables that have been created.
-   * TODO: also clear out UDFs, views, etc.
+   * Resets the test instance by deleting any table, view, temp view, and UDF that have been created
    */
   def reset() {
     try {
@@ -498,6 +510,11 @@ private[hive] class TestHiveSparkSession(
         }
       }
 
+      // Clean out the Hive warehouse between each suite
+      val warehouseDir = new File(new URI(sparkContext.conf.get("spark.sql.warehouse.dir")).getPath)
+      Utils.deleteRecursively(warehouseDir)
+      warehouseDir.mkdir()
+
       sharedState.cacheManager.clearCache()
       loadedTables.clear()
       sessionState.catalog.reset()
@@ -507,8 +524,9 @@ private[hive] class TestHiveSparkSession(
       // an HDFS scratch dir: ${hive.exec.scratchdir}/<username> is created, with
       // ${hive.scratch.dir.permission}. To resolve the permission issue, the simplest way is to
       // delete it. Later, it will be re-created with the right permission.
-      val location = new Path(sc.hadoopConfiguration.get(ConfVars.SCRATCHDIR.varname))
-      val fs = location.getFileSystem(sc.hadoopConfiguration)
+      val hadoopConf = sessionState.newHadoopConf()
+      val location = new Path(hadoopConf.get(ConfVars.SCRATCHDIR.varname))
+      val fs = location.getFileSystem(hadoopConf)
       fs.delete(location, true)
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
@@ -519,8 +537,6 @@ private[hive] class TestHiveSparkSession(
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
       metadataHive.runSqlHive("set hive.table.parameters.default=")
-      metadataHive.runSqlHive("set datanucleus.cache.collections=true")
-      metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
       metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
@@ -564,7 +580,7 @@ private[hive] class TestHiveQueryExecution(
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.
-    sparkSession.sessionState.analyzer.execute(logical)
+    sparkSession.sessionState.analyzer.executeAndCheck(logical)
   }
 }
 

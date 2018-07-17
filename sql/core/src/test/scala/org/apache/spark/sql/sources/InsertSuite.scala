@@ -20,9 +20,35 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+class SimpleInsertSource extends SchemaRelationProvider {
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: StructType): BaseRelation = {
+    SimpleInsert(schema)(sqlContext.sparkSession)
+  }
+}
+
+case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSession: SparkSession)
+  extends BaseRelation with InsertableRelation {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
+
+  override def schema: StructType = userSpecifiedSchema
+
+  override def insert(input: DataFrame, overwrite: Boolean): Unit = {
+    input.collect
+  }
+}
 
 class InsertSuite extends DataSourceTest with SharedSQLContext {
   import testImplicits._
@@ -408,6 +434,22 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
+  test("Insert overwrite directory using Hive serde without turning on Hive support") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '$path'
+             |STORED AS orc
+             |SELECT 1, 2
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains(
+        "Hive support is required to INSERT OVERWRITE DIRECTORY with the Hive format"))
+    }
+  }
+
   test("insert overwrite directory to data source not providing FileFormat") {
     withTempDir { dir =>
       val path = dir.toURI.getPath
@@ -424,6 +466,107 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       }.getMessage
 
       assert(e.contains("Only Data Sources providing FileFormat are supported"))
+    }
+  }
+
+  test("SPARK-20236: dynamic partition overwrite without catalog table") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTempPath { path =>
+        Seq((1, 1, 1)).toDF("i", "part1", "part2")
+          .write.partitionBy("part1", "part2").parquet(path.getAbsolutePath)
+        checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1, 1))
+
+        Seq((2, 1, 1)).toDF("i", "part1", "part2")
+          .write.partitionBy("part1", "part2").mode("overwrite").parquet(path.getAbsolutePath)
+        checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1))
+
+        Seq((2, 2, 2)).toDF("i", "part1", "part2")
+          .write.partitionBy("part1", "part2").mode("overwrite").parquet(path.getAbsolutePath)
+        checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-20236: dynamic partition overwrite") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("t") {
+        sql(
+          """
+            |create table t(i int, part1 int, part2 int) using parquet
+            |partitioned by (part1, part2)
+          """.stripMargin)
+
+        sql("insert into t partition(part1=1, part2=1) select 1")
+        checkAnswer(spark.table("t"), Row(1, 1, 1))
+
+        sql("insert overwrite table t partition(part1=1, part2=1) select 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1))
+
+        sql("insert overwrite table t partition(part1=2, part2) select 2, 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2=2) select 3")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
+        checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-20236: dynamic partition overwrite with customer partition path") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("t") {
+        sql(
+          """
+            |create table t(i int, part1 int, part2 int) using parquet
+            |partitioned by (part1, part2)
+          """.stripMargin)
+
+        val path1 = Utils.createTempDir()
+        sql(s"alter table t add partition(part1=1, part2=1) location '$path1'")
+        sql(s"insert into t partition(part1=1, part2=1) select 1")
+        checkAnswer(spark.table("t"), Row(1, 1, 1))
+
+        sql("insert overwrite table t partition(part1=1, part2=1) select 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1))
+
+        sql("insert overwrite table t partition(part1=2, part2) select 2, 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+
+        val path2 = Utils.createTempDir()
+        sql(s"alter table t add partition(part1=1, part2=2) location '$path2'")
+        sql("insert overwrite table t partition(part1=1, part2=2) select 3")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
+        checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-24583 Wrong schema type in InsertIntoDataSourceCommand") {
+    withTable("test_table") {
+      val schema = new StructType()
+        .add("i", LongType, false)
+        .add("s", StringType, false)
+      val newTable = CatalogTable(
+        identifier = TableIdentifier("test_table", None),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serde = None,
+          compressed = false,
+          properties = Map.empty),
+        schema = schema,
+        provider = Some(classOf[SimpleInsertSource].getName))
+
+      spark.sessionState.catalog.createTable(newTable, false)
+
+      sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
+      sql("INSERT INTO TABLE test_table SELECT 2, null")
     }
   }
 }

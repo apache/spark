@@ -491,7 +491,7 @@ val joinedGraph = graph.joinVertices(uniqueCosts)(
 The more general [`outerJoinVertices`][Graph.outerJoinVertices] behaves similarly to `joinVertices`
 except that the user defined `map` function is applied to all vertices and can change the vertex
 property type.  Because not all vertices may have a matching value in the input RDD the `map`
-function takes an `Option` type.  For example, we can setup a graph for PageRank by initializing
+function takes an `Option` type.  For example, we can set up a graph for PageRank by initializing
 vertex properties with their `outDegree`.
 
 
@@ -708,7 +708,7 @@ messages remaining.
 > messaging function.  These constraints allow additional optimization within GraphX.
 
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
-of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodcally
+of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodically
 checkpoint graph and messages by setting "spark.graphx.pregel.checkpointInterval" to a positive number,
 say 10. And set checkpoint directory as well using SparkContext.setCheckpointDir(directory: String)):
 
@@ -928,7 +928,7 @@ switch to 2D-partitioning or other heuristics included in GraphX.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-Once the edges have be partitioned the key challenge to efficient graph-parallel computation is
+Once the edges have been partitioned the key challenge to efficient graph-parallel computation is
 efficiently joining vertex attributes with the edges.  Because real-world graphs typically have more
 edges than vertices, we move vertex attributes to the edges.  Because not all partitions will
 contain edges adjacent to all vertices we internally maintain a routing table which identifies where
@@ -969,7 +969,7 @@ A vertex is part of a triangle when it has two adjacent vertices with an edge be
 # Examples
 
 Suppose I want to build a graph from some text files, restrict the graph
-to important relationships and users, run page-rank on the sub-graph, and
+to important relationships and users, run page-rank on the subgraph, and
 then finally return attributes associated with the top users.  I can do
 all of this in just a few lines with GraphX:
 

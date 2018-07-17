@@ -57,6 +57,7 @@ from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
 from pyspark.mllib.linalg.distributed import RowMatrix
 from pyspark.mllib.classification import StreamingLogisticRegressionWithSGD
+from pyspark.mllib.fpm import FPGrowth
 from pyspark.mllib.recommendation import Rating
 from pyspark.mllib.regression import LabeledPoint, StreamingLinearRegressionWithSGD
 from pyspark.mllib.random import RandomRDDs
@@ -1762,14 +1763,25 @@ class DimensionalityReductionTests(MLlibTestCase):
                 self.assertEqualUpToSign(pcs.toArray()[:, k - 1], expected_pcs[:, k - 1])
 
 
+class FPGrowthTest(MLlibTestCase):
+
+    def test_fpgrowth(self):
+        data = [["a", "b", "c"], ["a", "b", "d", "e"], ["a", "c", "e"], ["a", "c", "f"]]
+        rdd = self.sc.parallelize(data, 2)
+        model1 = FPGrowth.train(rdd, 0.6, 2)
+        # use default data partition number when numPartitions is not specified
+        model2 = FPGrowth.train(rdd, 0.6)
+        self.assertEqual(sorted(model1.freqItemsets().collect()),
+                         sorted(model2.freqItemsets().collect()))
+
 if __name__ == "__main__":
     from pyspark.mllib.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
     else:
-        unittest.main()
+        unittest.main(verbosity=2)
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")
     sc.stop()

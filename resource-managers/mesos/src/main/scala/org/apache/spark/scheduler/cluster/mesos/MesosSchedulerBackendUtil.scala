@@ -17,11 +17,15 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Parameter, Volume}
+import org.apache.mesos.Protos.{ContainerInfo, Environment, Image, NetworkInfo, Parameter, Secret, Volume}
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
+import org.apache.mesos.Protos.Environment.Variable
+import org.apache.mesos.protobuf.ByteString
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.mesos.config.{NETWORK_LABELS, NETWORK_NAME}
+import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 import org.apache.spark.internal.Logging
 
 /**
@@ -122,7 +126,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
-  def containerInfo(conf: SparkConf): ContainerInfo.Builder = {
+  def buildContainerInfo(conf: SparkConf): ContainerInfo.Builder = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
       ContainerInfo.Type.DOCKER
@@ -171,6 +175,88 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     }
 
     containerInfo
+  }
+
+  private def getSecrets(conf: SparkConf, secretConfig: MesosSecretConfig): Seq[Secret] = {
+    def createValueSecret(data: String): Secret = {
+      Secret.newBuilder()
+        .setType(Secret.Type.VALUE)
+        .setValue(Secret.Value.newBuilder().setData(ByteString.copyFrom(data.getBytes)))
+        .build()
+    }
+
+    def createReferenceSecret(name: String): Secret = {
+      Secret.newBuilder()
+        .setReference(Secret.Reference.newBuilder().setName(name))
+        .setType(Secret.Type.REFERENCE)
+        .build()
+    }
+
+    val referenceSecrets: Seq[Secret] =
+      conf.get(secretConfig.SECRET_NAMES).getOrElse(Nil).map { s => createReferenceSecret(s) }
+
+    val valueSecrets: Seq[Secret] = {
+      conf.get(secretConfig.SECRET_VALUES).getOrElse(Nil).map { s => createValueSecret(s) }
+    }
+
+    if (valueSecrets.nonEmpty && referenceSecrets.nonEmpty) {
+      throw new SparkException("Cannot specify both value-type and reference-type secrets.")
+    }
+
+    if (referenceSecrets.nonEmpty) referenceSecrets else valueSecrets
+  }
+
+  private def illegalSecretInput(dest: Seq[String], secrets: Seq[Secret]): Boolean = {
+    if (dest.nonEmpty) {
+      // make sure there is a one-to-one correspondence between destinations and secrets
+      if (dest.length != secrets.length) {
+        return true
+      }
+    }
+    false
+  }
+
+  def getSecretVolume(conf: SparkConf, secretConfig: MesosSecretConfig): List[Volume] = {
+    val secrets = getSecrets(conf, secretConfig)
+    val secretPaths: Seq[String] =
+      conf.get(secretConfig.SECRET_FILENAMES).getOrElse(Nil)
+
+    if (illegalSecretInput(secretPaths, secrets)) {
+      throw new SparkException(
+        s"Need to give equal numbers of secrets and file paths for file-based " +
+          s"reference secrets got secrets $secrets, and paths $secretPaths")
+    }
+
+    secrets.zip(secretPaths).map { case (s, p) =>
+      val source = Volume.Source.newBuilder()
+        .setType(Volume.Source.Type.SECRET)
+        .setSecret(s)
+      Volume.newBuilder()
+        .setContainerPath(p)
+        .setSource(source)
+        .setMode(Volume.Mode.RO)
+        .build
+    }.toList
+  }
+
+  def getSecretEnvVar(conf: SparkConf, secretConfig: MesosSecretConfig):
+    List[Variable] = {
+    val secrets = getSecrets(conf, secretConfig)
+    val secretEnvKeys = conf.get(secretConfig.SECRET_ENVKEYS).getOrElse(Nil)
+    if (illegalSecretInput(secretEnvKeys, secrets)) {
+      throw new SparkException(
+        s"Need to give equal numbers of secrets and environment keys " +
+          s"for environment-based reference secrets got secrets $secrets, " +
+          s"and keys $secretEnvKeys")
+    }
+
+    secrets.zip(secretEnvKeys).map { case (s, k) =>
+      Variable.newBuilder()
+        .setName(k)
+        .setType(Variable.Type.SECRET)
+        .setSecret(s)
+        .build
+    }.toList
   }
 
   private def dockerInfo(

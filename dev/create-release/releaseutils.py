@@ -49,13 +49,16 @@ except ImportError:
     print("Install using 'sudo pip install unidecode'")
     sys.exit(-1)
 
+if sys.version < '3':
+    input = raw_input
+
 # Contributors list file name
 contributors_file_name = "contributors.txt"
 
 
 # Prompt the user to answer yes or no until they do so
 def yesOrNoPrompt(msg):
-    response = raw_input("%s [y/n]: " % msg)
+    response = input("%s [y/n]: " % msg)
     while response != "y" and response != "n":
         return yesOrNoPrompt(msg)
     return response == "y"
@@ -185,6 +188,8 @@ known_components = {
     "graphx": "GraphX",
     "input/output": CORE_COMPONENT,
     "java api": "Java API",
+    "k8s": "Kubernetes",
+    "kubernetes": "Kubernetes",
     "mesos": "Mesos",
     "ml": "MLlib",
     "mllib": "MLlib",

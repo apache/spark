@@ -169,10 +169,26 @@ class OptimizeInSuite extends PlanTest {
       val optimizedPlan = OptimizeIn(plan)
       optimizedPlan match {
         case Filter(cond, _)
-          if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].getSet().size == 3 =>
+          if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].set.size == 3 =>
         // pass
         case _ => fail("Unexpected result for OptimizedIn")
       }
     }
+  }
+
+  test("OptimizedIn test: In empty list gets transformed to FalseLiteral " +
+    "when value is not nullable") {
+    val originalQuery =
+      testRelation
+        .where(In(Literal("a"), Nil))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      testRelation
+        .where(Literal(false))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }

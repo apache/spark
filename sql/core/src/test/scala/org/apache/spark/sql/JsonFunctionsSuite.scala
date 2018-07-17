@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions.{from_json, lit, map, struct, to_json}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -311,7 +311,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val errMsg1 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 1)")
     }
-    assert(errMsg1.getMessage.startsWith("Expected a string literal instead of"))
+    assert(errMsg1.getMessage.startsWith("Schema should be specified in DDL format as a string"))
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
@@ -325,5 +325,84 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(errMsg4.getMessage.startsWith(
       "A type of keys and values in map() must be string, but got"))
+  }
+
+  test("SPARK-24027: from_json - map<string, int>") {
+    val in = Seq("""{"a": 1, "b": 2, "c": 3}""").toDS()
+    val schema =
+      """
+        |{
+        |  "type" : "map",
+        |  "keyType" : "string",
+        |  "valueType" : "integer",
+        |  "valueContainsNull" : true
+        |}
+      """.stripMargin
+    val out = in.select(from_json($"value", schema, Map[String, String]()))
+
+    assert(out.columns.head == "entries")
+    checkAnswer(out, Row(Map("a" -> 1, "b" -> 2, "c" -> 3)))
+  }
+
+  test("SPARK-24027: from_json - map<string, struct>") {
+    val in = Seq("""{"a": {"b": 1}}""").toDS()
+    val schema = MapType(StringType, new StructType().add("b", IntegerType), true)
+    val out = in.select(from_json($"value", schema))
+
+    checkAnswer(out, Row(Map("a" -> Row(1))))
+  }
+
+  test("SPARK-24027: from_json - map<string, map<string, int>>") {
+    val in = Seq("""{"a": {"b": 1}}""").toDS()
+    val schema = "map<string, map<string, int>>"
+    val out = in.select(from_json($"value", schema, Map.empty[String, String]))
+
+    checkAnswer(out, Row(Map("a" -> Map("b" -> 1))))
+  }
+
+  test("SPARK-24027: roundtrip - from_json -> to_json  - map<string, string>") {
+    val json = """{"a":1,"b":2,"c":3}"""
+    val schema = MapType(StringType, IntegerType, true)
+    val out = Seq(json).toDS().select(to_json(from_json($"value", schema)))
+
+    checkAnswer(out, Row(json))
+  }
+
+  test("SPARK-24027: roundtrip - to_json -> from_json  - map<string, string>") {
+    val in = Seq(Map("a" -> 1)).toDF()
+    val schema = MapType(StringType, IntegerType, true)
+    val out = in.select(from_json(to_json($"value"), schema))
+
+    checkAnswer(out, in)
+  }
+
+  test("SPARK-24027: from_json - wrong map<string, int>") {
+    val in = Seq("""{"a" 1}""").toDS()
+    val schema = MapType(StringType, IntegerType)
+    val out = in.select(from_json($"value", schema, Map[String, String]()))
+
+    checkAnswer(out, Row(null))
+  }
+
+  test("SPARK-24027: from_json of a map with unsupported key type") {
+    val schema = MapType(StructType(StructField("f", IntegerType) :: Nil), StringType)
+
+    checkAnswer(Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema)),
+      Row(null))
+    checkAnswer(Seq("""{"{"f": 1}": "a"}""").toDS().select(from_json($"value", schema)),
+      Row(null))
+  }
+
+  test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
+    val in = Seq("""{"a": [1, 2, 3]}""").toDS()
+    val out = in.select(from_json('value, schema_of_json(lit("""{"a": [1]}"""))) as "parsed")
+    val expected = StructType(StructField(
+      "parsed",
+      StructType(StructField(
+        "a",
+        ArrayType(LongType, true), true) :: Nil),
+      true) :: Nil)
+
+    assert(out.schema == expected)
   }
 }

@@ -23,6 +23,7 @@ import java.util.regex.PatternSyntaxException
 import scala.util.matching.Regex
 
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
+import org.apache.spark.util.Utils
 
 private object ConfigHelpers {
 
@@ -45,7 +46,7 @@ private object ConfigHelpers {
   }
 
   def stringToSeq[T](str: String, converter: String => T): Seq[T] = {
-    str.split(",").map(_.trim()).filter(_.nonEmpty).map(converter)
+    Utils.stringToSeq(str).map(converter)
   }
 
   def seqToString[T](v: Seq[T], stringConverter: T => String): String = {
@@ -235,7 +236,9 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
-    new FallbackConfigEntry(key, _alternatives, _doc, _public, fallback)
+    val entry = new FallbackConfigEntry(key, _alternatives, _doc, _public, fallback)
+    _onCreate.foreach(_(entry))
+    entry
   }
 
   def regexConf: TypedConfigBuilder[Regex] = {

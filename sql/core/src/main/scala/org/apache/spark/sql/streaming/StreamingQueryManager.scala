@@ -24,13 +24,17 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
+import org.apache.spark.sql.sources.v2.StreamWriteSupport
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -52,6 +56,19 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
+
+  try {
+    sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
+      Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
+        sparkSession.sparkContext.conf).foreach(listener => {
+        addListener(listener)
+        logInfo(s"Registered listener ${listener.getClass.getName}")
+      })
+    }
+  } catch {
+    case e: Exception =>
+      throw new SparkException("Exception when registering StreamingQueryListener", e)
+  }
 
   /**
    * Returns a list of active queries associated with this SQLContext
@@ -188,7 +205,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
-      sink: Sink,
+      extraOptions: Map[String, String],
+      sink: BaseStreamingSink,
       outputMode: OutputMode,
       useTempCheckpointLocation: Boolean,
       recoverFromCheckpointLocation: Boolean,
@@ -237,16 +255,35 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           "is not supported in streaming DataFrames/Datasets and will be disabled.")
     }
 
-    new StreamingQueryWrapper(new StreamExecution(
-      sparkSession,
-      userSpecifiedName.orNull,
-      checkpointLocation,
-      analyzedPlan,
-      sink,
-      trigger,
-      triggerClock,
-      outputMode,
-      deleteCheckpointOnStop))
+    (sink, trigger) match {
+      case (v2Sink: StreamWriteSupport, trigger: ContinuousTrigger) =>
+        if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
+          UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
+        }
+        new StreamingQueryWrapper(new ContinuousExecution(
+          sparkSession,
+          userSpecifiedName.orNull,
+          checkpointLocation,
+          analyzedPlan,
+          v2Sink,
+          trigger,
+          triggerClock,
+          outputMode,
+          extraOptions,
+          deleteCheckpointOnStop))
+      case _ =>
+        new StreamingQueryWrapper(new MicroBatchExecution(
+          sparkSession,
+          userSpecifiedName.orNull,
+          checkpointLocation,
+          analyzedPlan,
+          sink,
+          trigger,
+          triggerClock,
+          outputMode,
+          extraOptions,
+          deleteCheckpointOnStop))
+    }
   }
 
   /**
@@ -269,7 +306,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
-      sink: Sink,
+      extraOptions: Map[String, String],
+      sink: BaseStreamingSink,
       outputMode: OutputMode,
       useTempCheckpointLocation: Boolean = false,
       recoverFromCheckpointLocation: Boolean = true,
@@ -279,6 +317,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       userSpecifiedName,
       userSpecifiedCheckpointLocation,
       df,
+      extraOptions,
       sink,
       outputMode,
       useTempCheckpointLocation,

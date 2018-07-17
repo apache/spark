@@ -256,6 +256,29 @@ class HasOutputCol(Params):
         return self.getOrDefault(self.outputCol)
 
 
+class HasOutputCols(Params):
+    """
+    Mixin for param outputCols: output column names.
+    """
+
+    outputCols = Param(Params._dummy(), "outputCols", "output column names.", typeConverter=TypeConverters.toListString)
+
+    def __init__(self):
+        super(HasOutputCols, self).__init__()
+
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def getOutputCols(self):
+        """
+        Gets the value of outputCols or its default value.
+        """
+        return self.getOrDefault(self.outputCols)
+
+
 class HasNumFeatures(Params):
     """
     Mixin for param numFeatures: number of features.
@@ -281,10 +304,10 @@ class HasNumFeatures(Params):
 
 class HasCheckpointInterval(Params):
     """
-    Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
+    Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.
     """
 
-    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", typeConverter=TypeConverters.toInt)
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
@@ -632,6 +655,53 @@ class HasParallelism(Params):
         return self.getOrDefault(self.parallelism)
 
 
+class HasCollectSubModels(Params):
+    """
+    Mixin for param collectSubModels: Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
+    """
+
+    collectSubModels = Param(Params._dummy(), "collectSubModels", "Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.", typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self):
+        super(HasCollectSubModels, self).__init__()
+        self._setDefault(collectSubModels=False)
+
+    def setCollectSubModels(self, value):
+        """
+        Sets the value of :py:attr:`collectSubModels`.
+        """
+        return self._set(collectSubModels=value)
+
+    def getCollectSubModels(self):
+        """
+        Gets the value of collectSubModels or its default value.
+        """
+        return self.getOrDefault(self.collectSubModels)
+
+
+class HasLoss(Params):
+    """
+    Mixin for param loss: the loss function to be optimized.
+    """
+
+    loss = Param(Params._dummy(), "loss", "the loss function to be optimized.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasLoss, self).__init__()
+
+    def setLoss(self, value):
+        """
+        Sets the value of :py:attr:`loss`.
+        """
+        return self._set(loss=value)
+
+    def getLoss(self):
+        """
+        Gets the value of loss or its default value.
+        """
+        return self.getOrDefault(self.loss)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.
@@ -719,4 +789,28 @@ class DecisionTreeParams(Params):
         Gets the value of cacheNodeIds or its default value.
         """
         return self.getOrDefault(self.cacheNodeIds)
+
+
+class HasDistanceMeasure(Params):
+    """
+    Mixin for param distanceMeasure: the distance measure. Supported options: 'euclidean' and 'cosine'.
+    """
+
+    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasDistanceMeasure, self).__init__()
+        self._setDefault(distanceMeasure='euclidean')
+
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    def getDistanceMeasure(self):
+        """
+        Gets the value of distanceMeasure or its default value.
+        """
+        return self.getOrDefault(self.distanceMeasure)
 

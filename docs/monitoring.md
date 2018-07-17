@@ -80,7 +80,10 @@ The history server can be configured as follows:
   </tr>
 </table>
 
-### Spark configuration options
+### Spark History Server Configuration Options
+
+Security options for the Spark History Server are covered more detail in the
+[Security](security.html#web-ui) page.
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -118,7 +121,7 @@ The history server can be configured as follows:
     <td>
       The number of applications to retain UI data for in the cache. If this cap is exceeded, then
       the oldest applications will be removed from the cache. If an application is not in the cache,
-      it will have to be loaded from disk if its accessed from the UI.
+      it will have to be loaded from disk if it is accessed from the UI.
     </td>
   </tr>
   <tr>
@@ -161,41 +164,6 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
-    <td>spark.history.ui.acls.enable</td>
-    <td>false</td>
-    <td>
-      Specifies whether acls should be checked to authorize users viewing the applications.
-      If enabled, access control checks are made regardless of what the individual application had
-      set for <code>spark.ui.acls.enable</code> when the application was run. The application owner
-      will always have authorization to view their own application and any users specified via
-      <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups</code>
-      when the application was run will also have authorization to view that application.
-      If disabled, no access control checks are made.
-    </td>
-  </tr>
-  <tr>
-    <td>spark.history.ui.admin.acls</td>
-    <td>empty</td>
-    <td>
-      Comma separated list of users/administrators that have view access to all the Spark applications in
-      history server. By default only the users permitted to view the application at run-time could
-      access the related application history, with this, configured users/administrators could also
-      have the permission to access it.
-      Putting a "*" in the list means any user can have the privilege of admin.
-    </td>
-  </tr>
-  <tr>
-    <td>spark.history.ui.admin.acls.groups</td>
-    <td>empty</td>
-    <td>
-      Comma separated list of groups that have view access to all the Spark applications in
-      history server. By default only the groups permitted to view the application at run-time could
-      access the related application history, with this, configured groups could also
-      have the permission to access it.
-      Putting a "*" in the list means any group can have the privilege of admin.
-    </td>
-  </tr>
-  <tr>
     <td>spark.history.fs.cleaner.enabled</td>
     <td>false</td>
     <td>
@@ -224,6 +192,15 @@ The history server can be configured as follows:
       Number of threads that will be used by history server to process event logs.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.store.path</td>
+    <td>(none)</td>
+    <td>
+        Local directory where to cache application history data. If set, the history
+        server will store application data on disk instead of keeping it in memory. The data
+        written to disk will be re-used in the event of a history server restart.
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -237,7 +214,7 @@ incomplete attempt or the final successful attempt.
 
 2. Incomplete applications are only updated intermittently. The time between updates is defined
 by the interval between checks for changed files (`spark.history.fs.update.interval`).
-On larger clusters the update interval may be set to large values.
+On larger clusters, the update interval may be set to large values.
 The way to view a running application is actually to view its own web UI.
 
 3. Applications which exited without registering themselves as completed will be listed
@@ -302,8 +279,10 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages</code></td>
-    <td>A list of all stages for a given application.</td>
-    <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
+    <td>
+      A list of all stages for a given application.
+      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
@@ -335,6 +314,13 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/executors</code></td>
     <td>A list of all active executors for the given application.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/executors/[executor-id]/threads</code></td>
+    <td>
+      Stack traces of all the threads running within the given active executor.
+      Not available via the history server.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/allexecutors</code></td>
@@ -389,10 +375,14 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>
     <td>Environment details of the given application.</td>
-  </tr>       
+  </tr>
+  <tr>
+    <td><code>/version</code></td>
+    <td>Get the current spark version.</td>
+  </tr>
 </table>
 
-The number of jobs and stages which can retrieved is constrained by the same retention
+The number of jobs and stages which can be retrieved is constrained by the same retention
 mechanism of the standalone Spark UI; `"spark.ui.retainedJobs"` defines the threshold
 value triggering garbage collection on jobs, and `spark.ui.retainedStages` that for stages.
 Note that the garbage collection takes place on playback: it is possible to retrieve
@@ -407,10 +397,10 @@ These endpoints have been strongly versioned to make it easier to develop applic
 * Individual fields will never be removed for any given endpoint
 * New endpoints may be added
 * New fields may be added to existing endpoints
-* New versions of the api may be added in the future at a separate endpoint (eg., `api/v2`).  New versions are *not* required to be backwards compatible.
+* New versions of the api may be added in the future as a separate endpoint (eg., `api/v2`).  New versions are *not* required to be backwards compatible.
 * Api versions may be dropped, but only after at least one minor release of co-existing with a new api version.
 
-Note that even when examining the UI of a running applications, the `applications/[app-id]` portion is
+Note that even when examining the UI of running applications, the `applications/[app-id]` portion is
 still required, though there is only one application available.  Eg. to see the list of jobs for the
 running app, you would go to `http://localhost:4040/api/v1/applications/[app-id]/jobs`.  This is to
 keep the paths consistent in both modes.
@@ -432,7 +422,7 @@ configuration property.
 If, say, users wanted to set the metrics namespace to the name of the application, they
 can set the `spark.metrics.namespace` property to a value like `${spark.app.name}`. This value is
 then expanded appropriately by Spark and is used as the root namespace of the metrics system. 
-Non driver and executor metrics are never prefixed with `spark.app.id`, nor does the 
+Non-driver and executor metrics are never prefixed with `spark.app.id`, nor does the
 `spark.metrics.namespace` property have any such affect on such metrics.
 
 Spark's metrics are decoupled into different

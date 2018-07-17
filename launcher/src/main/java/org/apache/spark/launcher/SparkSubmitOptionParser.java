@@ -82,7 +82,7 @@ class SparkSubmitOptionParser {
    * name of the option, passed to {@link #handle(String, String)}.
    * <p>
    * Options not listed here nor in the "switch" list below will result in a call to
-   * {@link $#handleUnknown(String)}.
+   * {@link #handleUnknown(String)}.
    * <p>
    * These two arrays are visible for tests.
    */

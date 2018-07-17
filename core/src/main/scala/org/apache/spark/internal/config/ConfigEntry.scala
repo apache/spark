@@ -139,7 +139,7 @@ private[spark] class OptionalConfigEntry[T](
     s => Some(rawValueConverter(s)),
     v => v.map(rawStringConverter).orNull, doc, isPublic) {
 
-  override def defaultValueString: String = "<undefined>"
+  override def defaultValueString: String = ConfigEntry.UNDEFINED
 
   override def readFrom(reader: ConfigReader): Option[T] = {
     readString(reader).map(rawValueConverter)
@@ -149,12 +149,12 @@ private[spark] class OptionalConfigEntry[T](
 /**
  * A config entry whose default value is defined by another config entry.
  */
-private class FallbackConfigEntry[T] (
+private[spark] class FallbackConfigEntry[T] (
     key: String,
     alternatives: List[String],
     doc: String,
     isPublic: Boolean,
-    private[config] val fallback: ConfigEntry[T])
+    val fallback: ConfigEntry[T])
   extends ConfigEntry[T](key, alternatives,
     fallback.valueConverter, fallback.stringConverter, doc, isPublic) {
 
@@ -166,6 +166,8 @@ private class FallbackConfigEntry[T] (
 }
 
 private[spark] object ConfigEntry {
+
+  val UNDEFINED = "<undefined>"
 
   private val knownConfigs = new java.util.concurrent.ConcurrentHashMap[String, ConfigEntry[_]]()
 

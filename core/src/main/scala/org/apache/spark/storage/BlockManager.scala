@@ -18,8 +18,11 @@
 package org.apache.spark.storage
 
 import java.io._
+import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -39,9 +42,10 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.ExternalShuffleClient
+import org.apache.spark.network.shuffle.{ExternalShuffleClient, TempFileManager}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
@@ -203,6 +207,13 @@ private[spark] class BlockManager(
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
 
+  // A TempFileManager used to track all the files of remote blocks which above the
+  // specified memory threshold. Files will be deleted automatically based on weak reference.
+  // Exposed for test
+  private[storage] val remoteBlockTempFileManager =
+    new BlockManager.RemoteBlockTempFileManager(this)
+  private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
+
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
    * the appId may not be known at BlockManager instantiation time (in particular for the driver,
@@ -281,7 +292,7 @@ private[spark] class BlockManager(
         case e: Exception if i < MAX_ATTEMPTS =>
           logError(s"Failed to connect to external shuffle server, will retry ${MAX_ATTEMPTS - i}"
             + s" more times after waiting $SLEEP_TIME_SECS seconds...", e)
-          Thread.sleep(SLEEP_TIME_SECS * 1000)
+          Thread.sleep(SLEEP_TIME_SECS * 1000L)
         case NonFatal(e) =>
           throw new SparkException("Unable to register with external shuffle server due to : " +
             e.getMessage, e)
@@ -632,8 +643,8 @@ private[spark] class BlockManager(
    * Return a list of locations for the given block, prioritizing the local machine since
    * multiple block managers can share the same host, followed by hosts on the same rack.
    */
-  private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
-    val locs = Random.shuffle(master.getLocations(blockId))
+  private def sortLocations(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
+    val locs = Random.shuffle(locations)
     val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
     blockManagerId.topologyInfo match {
       case None => preferredLocs ++ otherLocs
@@ -653,7 +664,25 @@ private[spark] class BlockManager(
     require(blockId != null, "BlockId is null")
     var runningFailureCount = 0
     var totalFailureCount = 0
-    val locations = getLocations(blockId)
+
+    // Because all the remote blocks are registered in driver, it is not necessary to ask
+    // all the slave executors to get block status.
+    val locationsAndStatus = master.getLocationsAndStatus(blockId)
+    val blockSize = locationsAndStatus.map { b =>
+      b.status.diskSize.max(b.status.memSize)
+    }.getOrElse(0L)
+    val blockLocations = locationsAndStatus.map(_.locations).getOrElse(Seq.empty)
+
+    // If the block size is above the threshold, we should pass our FileManger to
+    // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
+    // null value means the block will be persisted in memory.
+    val tempFileManager = if (blockSize > maxRemoteBlockToMem) {
+      remoteBlockTempFileManager
+    } else {
+      null
+    }
+
+    val locations = sortLocations(blockLocations)
     val maxFetchFailures = locations.size
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
@@ -661,7 +690,7 @@ private[spark] class BlockManager(
       logDebug(s"Getting remote block $blockId from $loc")
       val data = try {
         blockTransferService.fetchBlockSync(
-          loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
+          loc.host, loc.port, loc.executorId, blockId.toString, tempFileManager).nioByteBuffer()
       } catch {
         case NonFatal(e) =>
           runningFailureCount += 1
@@ -684,7 +713,7 @@ private[spark] class BlockManager(
           // take a significant amount of time. To get rid of these stale entries
           // we refresh the block locations after a certain number of fetch failures
           if (runningFailureCount >= maxFailuresBeforeLocationRefresh) {
-            locationIterator = getLocations(blockId).iterator
+            locationIterator = sortLocations(master.getLocations(blockId)).iterator
             logDebug(s"Refreshed locations from the driver " +
               s"after ${runningFailureCount} fetch failures.")
             runningFailureCount = 0
@@ -1512,6 +1541,7 @@ private[spark] class BlockManager(
       // Closing should be idempotent, but maybe not for the NioBlockTransferService.
       shuffleClient.close()
     }
+    remoteBlockTempFileManager.stop()
     diskBlockManager.stop()
     rpcEnv.stop(slaveEndpoint)
     blockInfoManager.clear()
@@ -1525,7 +1555,7 @@ private[spark] class BlockManager(
 private[spark] object BlockManager {
   private val ID_GENERATOR = new IdGenerator
 
-  def blockIdsToHosts(
+  def blockIdsToLocations(
       blockIds: Array[BlockId],
       env: SparkEnv,
       blockManagerMaster: BlockManagerMaster = null): Map[BlockId, Seq[String]] = {
@@ -1540,7 +1570,9 @@ private[spark] object BlockManager {
 
     val blockManagers = new HashMap[BlockId, Seq[String]]
     for (i <- 0 until blockIds.length) {
-      blockManagers(blockIds(i)) = blockLocations(i).map(_.host)
+      blockManagers(blockIds(i)) = blockLocations(i).map { loc =>
+        ExecutorCacheTaskLocation(loc.host, loc.executorId).toString
+      }
     }
     blockManagers.toMap
   }
@@ -1551,5 +1583,66 @@ private[spark] object BlockManager {
 
     override val metricRegistry = new MetricRegistry
     metricRegistry.registerAll(metricSet)
+  }
+
+  class RemoteBlockTempFileManager(blockManager: BlockManager)
+      extends TempFileManager with Logging {
+
+    private class ReferenceWithCleanup(file: File, referenceQueue: JReferenceQueue[File])
+        extends WeakReference[File](file, referenceQueue) {
+      private val filePath = file.getAbsolutePath
+
+      def cleanUp(): Unit = {
+        logDebug(s"Clean up file $filePath")
+
+        if (!new File(filePath).delete()) {
+          logDebug(s"Fail to delete file $filePath")
+        }
+      }
+    }
+
+    private val referenceQueue = new JReferenceQueue[File]
+    private val referenceBuffer = Collections.newSetFromMap[ReferenceWithCleanup](
+      new ConcurrentHashMap)
+
+    private val POLL_TIMEOUT = 1000
+    @volatile private var stopped = false
+
+    private val cleaningThread = new Thread() { override def run() { keepCleaning() } }
+    cleaningThread.setDaemon(true)
+    cleaningThread.setName("RemoteBlock-temp-file-clean-thread")
+    cleaningThread.start()
+
+    override def createTempFile(): File = {
+      blockManager.diskBlockManager.createTempLocalBlock()._2
+    }
+
+    override def registerTempFileToClean(file: File): Boolean = {
+      referenceBuffer.add(new ReferenceWithCleanup(file, referenceQueue))
+    }
+
+    def stop(): Unit = {
+      stopped = true
+      cleaningThread.interrupt()
+      cleaningThread.join()
+    }
+
+    private def keepCleaning(): Unit = {
+      while (!stopped) {
+        try {
+          Option(referenceQueue.remove(POLL_TIMEOUT))
+            .map(_.asInstanceOf[ReferenceWithCleanup])
+            .foreach { ref =>
+              referenceBuffer.remove(ref)
+              ref.cleanUp()
+            }
+        } catch {
+          case _: InterruptedException =>
+            // no-op
+          case NonFatal(e) =>
+            logError("Error in cleaning thread", e)
+        }
+      }
+    }
   }
 }

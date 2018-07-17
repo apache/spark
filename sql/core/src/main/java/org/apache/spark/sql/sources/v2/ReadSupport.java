@@ -18,21 +18,23 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
+import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * provide data reading ability and scan the data from the data source.
  */
 @InterfaceStability.Evolving
-public interface ReadSupport {
+public interface ReadSupport extends DataSourceV2 {
 
   /**
-   * Creates a {@link DataSourceV2Reader} to scan the data from this data source.
+   * Creates a {@link DataSourceReader} to scan the data from this data source.
    *
-   * @param options the options for this data source reader, which is an immutable case-insensitive
-   *                string-to-string map.
-   * @return a reader that implements the actual read logic.
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * submitted.
+   *
+   * @param options the options for the returned data source reader, which is an immutable
+   *                case-insensitive string-to-string map.
    */
-  DataSourceV2Reader createReader(DataSourceV2Options options);
+  DataSourceReader createReader(DataSourceOptions options);
 }

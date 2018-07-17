@@ -97,9 +97,11 @@ class DecisionTreeClassifier @Since("1.4.0") (
   override def setSeed(value: Long): this.type = set(seed, value)
 
   override protected def train(dataset: Dataset[_]): DecisionTreeClassificationModel = {
+    val instr = Instrumentation.create(this, dataset)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses: Int = getNumClasses(dataset)
+    instr.logNumClasses(numClasses)
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -110,8 +112,8 @@ class DecisionTreeClassifier @Since("1.4.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
 
-    val instr = Instrumentation.create(this, oldDataset)
-    instr.logParams(params: _*)
+    instr.logParams(maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
+      cacheNodeIds, checkpointInterval, impurity, seed)
 
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
@@ -125,7 +127,8 @@ class DecisionTreeClassifier @Since("1.4.0") (
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
     val instr = Instrumentation.create(this, data)
-    instr.logParams(params: _*)
+    instr.logParams(maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
+      cacheNodeIds, checkpointInterval, impurity, seed)
 
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 0L, instr = Some(instr), parentUID = Some(uid))
@@ -165,7 +168,7 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
 @Since("1.4.0")
 class DecisionTreeClassificationModel private[ml] (
     @Since("1.4.0")override val uid: String,
-    @Since("1.4.0")override val rootNode: Node,
+    @Since("1.4.0")override val rootNode: ClassificationNode,
     @Since("1.6.0")override val numFeatures: Int,
     @Since("1.5.0")override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, DecisionTreeClassificationModel]
@@ -178,10 +181,10 @@ class DecisionTreeClassificationModel private[ml] (
    * Construct a decision tree classification model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  private[ml] def this(rootNode: Node, numFeatures: Int, numClasses: Int) =
+  private[ml] def this(rootNode: ClassificationNode, numFeatures: Int, numClasses: Int) =
     this(Identifiable.randomUID("dtc"), rootNode, numFeatures, numClasses)
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
   }
 
@@ -276,9 +279,10 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
-      val root = loadTreeNodes(path, metadata, sparkSession)
-      val model = new DecisionTreeClassificationModel(metadata.uid, root, numFeatures, numClasses)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      val root = loadTreeNodes(path, metadata, sparkSession, isClassification = true)
+      val model = new DecisionTreeClassificationModel(metadata.uid,
+        root.asInstanceOf[ClassificationNode], numFeatures, numClasses)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -292,9 +296,10 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
+    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures, isClassification = true)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
     // Can't infer number of features from old model, so default to -1
-    new DecisionTreeClassificationModel(uid, rootNode, numFeatures, -1)
+    new DecisionTreeClassificationModel(uid,
+      rootNode.asInstanceOf[ClassificationNode], numFeatures, -1)
   }
 }

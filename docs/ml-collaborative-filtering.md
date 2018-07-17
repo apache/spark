@@ -35,7 +35,7 @@ but the ids must be within the integer value range.
 
 ### Explicit vs. implicit feedback
 
-The standard approach to matrix factorization based collaborative filtering treats 
+The standard approach to matrix factorization-based collaborative filtering treats
 the entries in the user-item matrix as *explicit* preferences given by the user to the item,
 for example, users giving ratings to movies.
 

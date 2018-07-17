@@ -23,16 +23,16 @@ import java.util.List;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.ReadSupport;
-import org.apache.spark.sql.sources.v2.reader.DataReader;
-import org.apache.spark.sql.sources.v2.reader.ReadTask;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
+import org.apache.spark.sql.sources.v2.reader.InputPartitionReader;
+import org.apache.spark.sql.sources.v2.reader.InputPartition;
+import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 import org.apache.spark.sql.types.StructType;
 
 public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader {
+  class Reader implements DataSourceReader {
     private final StructType schema = new StructType().add("i", "int").add("j", "int");
 
     @Override
@@ -41,25 +41,25 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<ReadTask<Row>> createReadTasks() {
+    public List<InputPartition<Row>> planInputPartitions() {
       return java.util.Arrays.asList(
-        new JavaSimpleReadTask(0, 5),
-        new JavaSimpleReadTask(5, 10));
+        new JavaSimpleInputPartition(0, 5),
+        new JavaSimpleInputPartition(5, 10));
     }
   }
 
-  static class JavaSimpleReadTask implements ReadTask<Row>, DataReader<Row> {
+  static class JavaSimpleInputPartition implements InputPartition<Row>, InputPartitionReader<Row> {
     private int start;
     private int end;
 
-    JavaSimpleReadTask(int start, int end) {
+    JavaSimpleInputPartition(int start, int end) {
       this.start = start;
       this.end = end;
     }
 
     @Override
-    public DataReader<Row> createReader() {
-      return new JavaSimpleReadTask(start - 1, end);
+    public InputPartitionReader<Row> createPartitionReader() {
+      return new JavaSimpleInputPartition(start - 1, end);
     }
 
     @Override
@@ -80,7 +80,7 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
   }
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
+  public DataSourceReader createReader(DataSourceOptions options) {
     return new Reader();
   }
 }

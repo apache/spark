@@ -20,6 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.MLTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 
@@ -80,6 +81,24 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
       new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(Array(-0.1, 0.1))
     }
   }
+
+  test("normalizeToProbabilitiesInPlace") {
+    val vec1 = Vectors.dense(1.0, 2.0, 3.0).toDense
+    ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec1)
+    assert(vec1 ~== Vectors.dense(1.0 / 6, 2.0 / 6, 3.0 / 6) relTol 1e-3)
+
+    // all-0 input test
+    val vec2 = Vectors.dense(0.0, 0.0, 0.0).toDense
+    intercept[IllegalArgumentException] {
+      ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec2)
+    }
+
+    // negative input test
+    val vec3 = Vectors.dense(1.0, -1.0, 2.0).toDense
+    intercept[IllegalArgumentException] {
+      ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec3)
+    }
+  }
 }
 
 object ProbabilisticClassifierSuite {
@@ -104,13 +123,15 @@ object ProbabilisticClassifierSuite {
   def testPredictMethods[
       FeaturesType,
       M <: ProbabilisticClassificationModel[FeaturesType, M]](
-    model: M, testData: Dataset[_]): Unit = {
+    mlTest: MLTest, model: M, testData: Dataset[_]): Unit = {
 
     val allColModel = model.copy(ParamMap.empty)
       .setRawPredictionCol("rawPredictionAll")
       .setProbabilityCol("probabilityAll")
       .setPredictionCol("predictionAll")
-    val allColResult = allColModel.transform(testData)
+
+    val allColResult = allColModel.transform(testData.select(allColModel.getFeaturesCol))
+      .select(allColModel.getFeaturesCol, "rawPredictionAll", "probabilityAll", "predictionAll")
 
     for (rawPredictionCol <- Seq("", "rawPredictionSingle")) {
       for (probabilityCol <- Seq("", "probabilitySingle")) {
@@ -120,22 +141,14 @@ object ProbabilisticClassifierSuite {
             .setProbabilityCol(probabilityCol)
             .setPredictionCol(predictionCol)
 
-          val result = newModel.transform(allColResult)
+          import allColResult.sparkSession.implicits._
 
-          import org.apache.spark.sql.functions._
-
-          val resultRawPredictionCol =
-            if (rawPredictionCol.isEmpty) col("rawPredictionAll") else col(rawPredictionCol)
-          val resultProbabilityCol =
-            if (probabilityCol.isEmpty) col("probabilityAll") else col(probabilityCol)
-          val resultPredictionCol =
-            if (predictionCol.isEmpty) col("predictionAll") else col(predictionCol)
-
-          result.select(
-            resultRawPredictionCol, col("rawPredictionAll"),
-            resultProbabilityCol, col("probabilityAll"),
-            resultPredictionCol, col("predictionAll")
-          ).collect().foreach {
+          mlTest.testTransformer[(Vector, Vector, Vector, Double)](allColResult, newModel,
+            if (rawPredictionCol.isEmpty) "rawPredictionAll" else rawPredictionCol,
+            "rawPredictionAll",
+            if (probabilityCol.isEmpty) "probabilityAll" else probabilityCol, "probabilityAll",
+            if (predictionCol.isEmpty) "predictionAll" else predictionCol, "predictionAll"
+          ) {
             case Row(
               rawPredictionSingle: Vector, rawPredictionAll: Vector,
               probabilitySingle: Vector, probabilityAll: Vector,

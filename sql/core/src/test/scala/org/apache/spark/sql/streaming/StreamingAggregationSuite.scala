@@ -297,7 +297,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
-        q.batchCommitLog.purge(3)
+        q.commitLog.purge(3)
         // advance by a minute i.e., 90 seconds total
         clock.advance(60 * 1000L)
         true
@@ -349,7 +349,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
-        q.batchCommitLog.purge(3)
+        q.commitLog.purge(3)
         // advance by 60 days i.e., 90 days total
         clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
         true
@@ -455,8 +455,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
         },
         AddBlockData(inputSource), // create an empty trigger
         CheckLastBatch(1),
-        AssertOnQuery("Verify addition of exchange operator") { se =>
-          checkAggregationChain(se, expectShuffling = true, 1)
+        AssertOnQuery("Verify that no exchange is required") { se =>
+          checkAggregationChain(se, expectShuffling = false, 1)
         },
         AddBlockData(inputSource, Seq(2, 3)),
         CheckLastBatch(3),
@@ -517,6 +517,47 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
           StopStream
         )
       }
+    }
+  }
+
+  test("SPARK-22230: last should change with new batches") {
+    val input = MemoryStream[Int]
+
+    val aggregated = input.toDF().agg(last('value))
+    testStream(aggregated, OutputMode.Complete())(
+      AddData(input, 1, 2, 3),
+      CheckLastBatch(3),
+      AddData(input, 4, 5, 6),
+      CheckLastBatch(6),
+      AddData(input),
+      CheckLastBatch(6),
+      AddData(input, 0),
+      CheckLastBatch(0)
+    )
+  }
+
+  test("SPARK-23004: Ensure that TypedImperativeAggregate functions do not throw errors") {
+    // See the JIRA SPARK-23004 for more details. In short, this test reproduces the error
+    // by ensuring the following.
+    // - A streaming query with a streaming aggregation.
+    // - Aggregation function 'collect_list' that is a subclass of TypedImperativeAggregate.
+    // - Post shuffle partition has exactly 128 records (i.e. the threshold at which
+    //   ObjectHashAggregateExec falls back to sort-based aggregation). This is done by having a
+    //   micro-batch with 128 records that shuffle to a single partition.
+    // This test throws the exact error reported in SPARK-23004 without the corresponding fix.
+    withSQLConf("spark.sql.shuffle.partitions" -> "1") {
+      val input = MemoryStream[Int]
+      val df = input.toDF().toDF("value")
+        .selectExpr("value as group", "value")
+        .groupBy("group")
+        .agg(collect_list("value"))
+      testStream(df, outputMode = OutputMode.Update)(
+        AddData(input, (1 to spark.sqlContext.conf.objectAggSortBasedFallbackThreshold): _*),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        }
+      )
     }
   }
 

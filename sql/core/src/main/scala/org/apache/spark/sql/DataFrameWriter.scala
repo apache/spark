@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties}
+import java.text.SimpleDateFormat
+import java.util.{Date, Locale, Properties, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -25,11 +26,14 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisBarrier, InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -62,7 +66,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   - `overwrite`: overwrite the existing data.
    *   - `append`: append the data.
    *   - `ignore`: ignore the operation (i.e. no-op).
-   *   - `error`: default option, throw an exception at runtime.
+   *   - `error` or `errorifexists`: default option, throw an exception at runtime.
    *
    * @since 1.4.0
    */
@@ -170,7 +174,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * predicates on the partitioned columns. In order for partitioning to work well, the number
    * of distinct values in each column should typically be less than tens of thousands.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 1.4.0
    */
@@ -184,7 +189,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Buckets the output by the given columns. If specified, the output is laid out on the file
    * system similar to Hive's bucketing scheme.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 2.0
    */
@@ -198,7 +204,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Sorts the output in each bucket by the given columns.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 2.0
    */
@@ -231,12 +238,44 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
+    val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
+    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
+      val ds = cls.newInstance()
+      ds match {
+        case ws: WriteSupport =>
+          val options = new DataSourceOptions((extraOptions ++
+            DataSourceV2Utils.extractSessionConfigs(
+              ds = ds.asInstanceOf[DataSourceV2],
+              conf = df.sparkSession.sessionState.conf)).asJava)
+          // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
+          // enough as there won't be tons of writing jobs created at the same second.
+          val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+            .format(new Date()) + "-" + UUID.randomUUID()
+          val writer = ws.createWriter(jobId, df.logicalPlan.schema, mode, options)
+          if (writer.isPresent) {
+            runCommand(df.sparkSession, "save") {
+              WriteToDataSourceV2(writer.get(), df.logicalPlan)
+            }
+          }
+
+        // Streaming also uses the data source V2 API. So it may be that the data source implements
+        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
+        // as though it's a V1 source.
+        case _ => saveToV1Source()
+      }
+    } else {
+      saveToV1Source()
+    }
+  }
+
+  private def saveToV1Source(): Unit = {
+    // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
       DataSource(
         sparkSession = df.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
+        options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
     }
   }
 
@@ -275,7 +314,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     if (partitioningColumns.isDefined) {
       throw new AnalysisException(
         "insertInto() can't be used together with partitionBy(). " +
-          "Partition columns have already be defined for the table. " +
+          "Partition columns have already been defined for the table. " +
           "It is not necessary to use partitionBy()."
       )
     }
@@ -291,8 +330,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
-    if (sortColumnNames.isDefined) {
-      require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
+    if (sortColumnNames.isDefined && numBuckets.isEmpty) {
+      throw new AnalysisException("sortBy must be used together with bucketBy")
     }
 
     numBuckets.map { n =>
@@ -301,8 +340,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def assertNotBucketed(operation: String): Unit = {
-    if (numBuckets.isDefined || sortColumnNames.isDefined) {
-      throw new AnalysisException(s"'$operation' does not support bucketing right now")
+    if (getBucketSpec.isDefined) {
+      if (sortColumnNames.isEmpty) {
+        throw new AnalysisException(s"'$operation' does not support bucketBy right now")
+      } else {
+        throw new AnalysisException(s"'$operation' does not support bucketBy and sortBy right now")
+      }
     }
   }
 
@@ -479,6 +522,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
+   * files. If it is not set, the UTF-8 charset will be used. </li>
+   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -520,8 +566,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
    * shorten names(`none`, `snappy`, `zlib`, and `lzo`). This will override
-   * `orc.compress` and `spark.sql.parquet.compression.codec`. If `orc.compress` is given,
-   * it overrides `spark.sql.parquet.compression.codec`.</li>
+   * `orc.compress` and `spark.sql.orc.compression.codec`. If `orc.compress` is given,
+   * it overrides `spark.sql.orc.compression.codec`.</li>
    * </ul>
    *
    * @since 1.5.0
@@ -548,6 +594,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
    * </ul>
    *
    * @since 1.6.0
@@ -565,12 +612,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * You can set the following CSV-specific option(s) for writing CSV files:
    * <ul>
-   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * <li>`sep` (default `,`): sets a single character as a separator for each
    * field and value.</li>
-   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the separator can be part of the value.</li>
-   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
+   * the separator can be part of the value. If an empty string is set, it uses `u0000`
+   * (null character).</li>
+   * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
    * an already quoted value.</li>
+   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
+   * escaping the escape for the quote character. The default value is escape character when escape
+   * and quote characters are different, `\0` otherwise.</li>
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
