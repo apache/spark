@@ -1600,6 +1600,17 @@ Suppose `a` and `b` are double columns, we use the following simple examples to 
 Like when formulas are used in R for linear regression, numeric columns will be cast to doubles.
 As to string input columns, they will first be transformed with [StringIndexer](ml-features.html#stringindexer) using ordering determined by `stringOrderType`,
 and the last category after ordering is dropped, then the doubles will be one-hot encoded.
+
+Suppose a string feature column containing values `{'b', 'a', 'b', 'a', 'c', 'b'}`, we set `stringOrderType` to control the encoding:
+~~~
+stringOrderType | Category mapped to 0 by StringIndexer |  Category dropped by RFormula
+----------------|---------------------------------------|---------------------------------
+'frequencyDesc' | most frequent category ('b')          | least frequent category ('c')
+'frequencyAsc'  | least frequent category ('c')         | most frequent category ('b')
+'alphabetDesc'  | last alphabetical category ('c')      | first alphabetical category ('a')
+'alphabetAsc'   | first alphabetical category ('a')     | last alphabetical category ('c')
+~~~
+
 If the label column is of type string, it will be first transformed to double with `StringIndexer` using `frequencyDesc` ordering.
 If the label column does not exist in the DataFrame, the output label column will be created from the specified response variable in the formula.
 
