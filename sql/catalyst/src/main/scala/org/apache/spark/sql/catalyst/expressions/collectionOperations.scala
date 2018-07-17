@@ -180,9 +180,8 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
 
   override def nullable: Boolean = children.exists(_.nullable)
 
-  @transient private lazy val arrayElementTypes = {
+  @transient private lazy val arrayElementTypes =
     children.map(_.dataType.asInstanceOf[ArrayType].elementType)
-  }
 
   private def genericArrayData = classOf[GenericArrayData].getName
 
@@ -356,7 +355,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
 
-  private def childDataType: MapType = child.dataType.asInstanceOf[MapType]
+  @transient private lazy val childDataType: MapType = child.dataType.asInstanceOf[MapType]
 
   override def dataType: DataType = {
     ArrayType(
@@ -733,15 +732,14 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
   since = "2.4.0")
 case class MapFromEntries(child: Expression) extends UnaryExpression {
 
-  @transient private lazy val dataTypeDetails: Option[(MapType, Boolean, Boolean)] = {
-    child.dataType match {
-      case ArrayType(
-        StructType(Array(
-          StructField(_, kt, kn, _),
-          StructField(_, vt, vn, _))),
-        cn) => Some((MapType(kt, vt, vn), kn, cn))
-      case _ => None
-    }
+  @transient
+  private lazy val dataTypeDetails: Option[(MapType, Boolean, Boolean)] = child.dataType match {
+    case ArrayType(
+      StructType(Array(
+        StructField(_, keyType, keyNullable, _),
+        StructField(_, valueType, valueNullable, _))),
+      containsNull) => Some((MapType(keyType, valueType, valueNullable), keyNullable, containsNull))
+    case _ => None
   }
 
   @transient private lazy val nullEntries: Boolean = dataTypeDetails.get._3
@@ -990,9 +988,8 @@ trait ArraySortLike extends ExpectsInputTypes {
     }
   }
 
-  @transient lazy val elementType: DataType = {
+  @transient lazy val elementType: DataType =
     arrayExpression.dataType.asInstanceOf[ArrayType].elementType
-  }
 
   def containsNull: Boolean = arrayExpression.dataType.asInstanceOf[ArrayType].containsNull
 
