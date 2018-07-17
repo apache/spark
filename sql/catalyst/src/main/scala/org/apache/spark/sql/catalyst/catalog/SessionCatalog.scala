@@ -1209,9 +1209,10 @@ class SessionCatalog(
     databaseExists(db) && externalCatalog.functionExists(db, name.funcName)
   }
 
-  protected def failFunctionLookup(name: FunctionIdentifier): Nothing = {
+  protected def failFunctionLookup(
+      name: FunctionIdentifier, rootCause: Option[String] = None): Nothing = {
     throw new NoSuchFunctionException(
-      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
+      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName, rootCause)
   }
 
   /**
