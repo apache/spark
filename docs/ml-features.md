@@ -1611,7 +1611,7 @@ stringOrderType | Category mapped to 0 by StringIndexer |  Category dropped by R
 'alphabetAsc'   | first alphabetical category ('a')     | last alphabetical category ('c')
 ~~~
 
-If the label column is of type string, it will be first transformed to double with `StringIndexer` using `frequencyDesc` ordering.
+If the label column is of type string, it will be first transformed to double with [StringIndexer](ml-features.html#stringindexer) using `frequencyDesc` ordering.
 If the label column does not exist in the DataFrame, the output label column will be created from the specified response variable in the formula.
 
 **Note:** The ordering option `stringOrderType` is NOT used for the label column. When the label column is indexed, it uses the default descending frequency ordering in `StringIndexer`.
