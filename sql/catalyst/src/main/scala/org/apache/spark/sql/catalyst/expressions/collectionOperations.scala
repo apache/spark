@@ -180,7 +180,9 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
 
   override def nullable: Boolean = children.exists(_.nullable)
 
-  private def arrayElementTypes = children.map(_.dataType.asInstanceOf[ArrayType].elementType)
+  @transient private lazy val arrayElementTypes = {
+    children.map(_.dataType.asInstanceOf[ArrayType].elementType)
+  }
 
   private def genericArrayData = classOf[GenericArrayData].getName
 
@@ -746,11 +748,11 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     }
   }
 
-  private def nullEntries: Boolean = dataTypeDetails.get._3
+  @transient private lazy val nullEntries: Boolean = dataTypeDetails.get._3
 
   override def nullable: Boolean = child.nullable || nullEntries
 
-  override def dataType: MapType = dataTypeDetails.get._1
+  @transient override lazy val dataType: MapType = dataTypeDetails.get._1
 
   override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
     case Some(_) => TypeCheckResult.TypeCheckSuccess
@@ -992,7 +994,10 @@ trait ArraySortLike extends ExpectsInputTypes {
     }
   }
 
-  def elementType: DataType = arrayExpression.dataType.asInstanceOf[ArrayType].elementType
+  @transient lazy val elementType: DataType = {
+    arrayExpression.dataType.asInstanceOf[ArrayType].elementType
+  }
+
   def containsNull: Boolean = arrayExpression.dataType.asInstanceOf[ArrayType].containsNull
 
   def sortEval(array: Any, ascending: Boolean): Any = {
@@ -1208,7 +1213,7 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
 
   override def dataType: DataType = child.dataType
 
-  private def elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
   override def nullSafeEval(input: Any): Any = input match {
     case a: ArrayData => new GenericArrayData(a.toObjectArray(elementType).reverse)
@@ -1600,7 +1605,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 
   override def children: Seq[Expression] = Seq(x, start, length)
 
-  private def elementType: DataType = x.dataType.asInstanceOf[ArrayType].elementType
+  @transient private lazy val elementType: DataType = x.dataType.asInstanceOf[ArrayType].elementType
 
   override def nullSafeEval(xVal: Any, startVal: Any, lengthVal: Any): Any = {
     val startInt = startVal.asInstanceOf[Int]
@@ -1927,7 +1932,7 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
     min
   }
 
-  override def dataType: DataType = child.dataType match {
+  @transient override lazy val dataType: DataType = child.dataType match {
     case ArrayType(dt, _) => dt
     case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
   }
@@ -1992,7 +1997,7 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
     max
   }
 
-  override def dataType: DataType = child.dataType match {
+  @transient override lazy val dataType: DataType = child.dataType match {
     case ArrayType(dt, _) => dt
     case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
   }
@@ -2097,7 +2102,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(left.dataType.asInstanceOf[MapType].keyType)
 
-  override def dataType: DataType = left.dataType match {
+  @transient override lazy val dataType: DataType = left.dataType match {
     case ArrayType(elementType, _) => elementType
     case MapType(_, valueType, _) => valueType
   }
@@ -2408,9 +2413,9 @@ case class Flatten(child: Expression) extends UnaryExpression {
 
   override def nullable: Boolean = child.nullable || childDataType.containsNull
 
-  override def dataType: DataType = childDataType.elementType
+  @transient override lazy val dataType: DataType = childDataType.elementType
 
-  private def elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(_: ArrayType, _) =>
@@ -3218,7 +3223,7 @@ case class ArrayDistinct(child: Expression)
 
   override def dataType: DataType = child.dataType
 
-  private def elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(elementType)
