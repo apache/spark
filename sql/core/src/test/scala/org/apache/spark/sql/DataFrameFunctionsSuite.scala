@@ -309,113 +309,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("mask functions") {
-    val df = Seq("TestString-123", "", null).toDF("a")
-    checkAnswer(df.select(mask($"a")), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_first_n($"a", 4)), Seq(Row("XxxxString-123"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_last_n($"a", 4)), Seq(Row("TestString-nnn"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_show_first_n($"a", 4)),
-      Seq(Row("TestXxxxxx-nnn"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_show_last_n($"a", 4)),
-      Seq(Row("XxxxXxxxxx-123"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_hash($"a")),
-      Seq(Row("dd78d68ad1b23bde126812482dd70ac6"),
-        Row("d41d8cd98f00b204e9800998ecf8427e"),
-        Row(null)))
-
-    checkAnswer(df.select(mask($"a", "U", "l", "#")),
-      Seq(Row("UlllUlllll-###"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_first_n($"a", 4, "U", "l", "#")),
-      Seq(Row("UlllString-123"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_last_n($"a", 4, "U", "l", "#")),
-      Seq(Row("TestString-###"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_show_first_n($"a", 4, "U", "l", "#")),
-      Seq(Row("TestUlllll-###"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_show_last_n($"a", 4, "U", "l", "#")),
-      Seq(Row("UlllUlllll-123"), Row(""), Row(null)))
-
-    checkAnswer(
-      df.selectExpr("mask(a)", "mask(a, 'U')", "mask(a, 'U', 'l')", "mask(a, 'U', 'l', '#')"),
-      Seq(Row("XxxxXxxxxx-nnn", "UxxxUxxxxx-nnn", "UlllUlllll-nnn", "UlllUlllll-###"),
-        Row("", "", "", ""),
-        Row(null, null, null, null)))
-    checkAnswer(sql("select mask(null)"), Row(null))
-    checkAnswer(sql("select mask('AAaa11', null, null, null)"), Row("XXxxnn"))
-    intercept[AnalysisException] {
-      checkAnswer(df.selectExpr("mask(a, a)"), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
-    }
-
-    checkAnswer(
-      df.selectExpr(
-        "mask_first_n(a)",
-        "mask_first_n(a, 6)",
-        "mask_first_n(a, 6, 'U')",
-        "mask_first_n(a, 6, 'U', 'l')",
-        "mask_first_n(a, 6, 'U', 'l', '#')"),
-      Seq(Row("XxxxString-123", "XxxxXxring-123", "UxxxUxring-123", "UlllUlring-123",
-        "UlllUlring-123"),
-        Row("", "", "", "", ""),
-        Row(null, null, null, null, null)))
-    checkAnswer(sql("select mask_first_n(null)"), Row(null))
-    checkAnswer(sql("select mask_first_n('A1aA1a', null, null, null, null)"), Row("XnxX1a"))
-    intercept[AnalysisException] {
-      checkAnswer(spark.range(1).selectExpr("mask_first_n('A1aA1a', id)"), Row("XnxX1a"))
-    }
-
-    checkAnswer(
-      df.selectExpr(
-        "mask_last_n(a)",
-        "mask_last_n(a, 6)",
-        "mask_last_n(a, 6, 'U')",
-        "mask_last_n(a, 6, 'U', 'l')",
-        "mask_last_n(a, 6, 'U', 'l', '#')"),
-      Seq(Row("TestString-nnn", "TestStrixx-nnn", "TestStrixx-nnn", "TestStrill-nnn",
-        "TestStrill-###"),
-        Row("", "", "", "", ""),
-        Row(null, null, null, null, null)))
-    checkAnswer(sql("select mask_last_n(null)"), Row(null))
-    checkAnswer(sql("select mask_last_n('A1aA1a', null, null, null, null)"), Row("A1xXnx"))
-    intercept[AnalysisException] {
-      checkAnswer(spark.range(1).selectExpr("mask_last_n('A1aA1a', id)"), Row("A1xXnx"))
-    }
-
-    checkAnswer(
-      df.selectExpr(
-        "mask_show_first_n(a)",
-        "mask_show_first_n(a, 6)",
-        "mask_show_first_n(a, 6, 'U')",
-        "mask_show_first_n(a, 6, 'U', 'l')",
-        "mask_show_first_n(a, 6, 'U', 'l', '#')"),
-      Seq(Row("TestXxxxxx-nnn", "TestStxxxx-nnn", "TestStxxxx-nnn", "TestStllll-nnn",
-        "TestStllll-###"),
-        Row("", "", "", "", ""),
-        Row(null, null, null, null, null)))
-    checkAnswer(sql("select mask_show_first_n(null)"), Row(null))
-    checkAnswer(sql("select mask_show_first_n('A1aA1a', null, null, null, null)"), Row("A1aAnx"))
-    intercept[AnalysisException] {
-      checkAnswer(spark.range(1).selectExpr("mask_show_first_n('A1aA1a', id)"), Row("A1aAnx"))
-    }
-
-    checkAnswer(
-      df.selectExpr(
-        "mask_show_last_n(a)",
-        "mask_show_last_n(a, 6)",
-        "mask_show_last_n(a, 6, 'U')",
-        "mask_show_last_n(a, 6, 'U', 'l')",
-        "mask_show_last_n(a, 6, 'U', 'l', '#')"),
-      Seq(Row("XxxxXxxxxx-123", "XxxxXxxxng-123", "UxxxUxxxng-123", "UlllUlllng-123",
-        "UlllUlllng-123"),
-        Row("", "", "", "", ""),
-        Row(null, null, null, null, null)))
-    checkAnswer(sql("select mask_show_last_n(null)"), Row(null))
-    checkAnswer(sql("select mask_show_last_n('A1aA1a', null, null, null, null)"), Row("XnaA1a"))
-    intercept[AnalysisException] {
-      checkAnswer(spark.range(1).selectExpr("mask_show_last_n('A1aA1a', id)"), Row("XnaA1a"))
-    }
-
-    checkAnswer(sql("select mask_hash(null)"), Row(null))
-  }
-
   test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
@@ -655,6 +548,84 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sdf.select(map_entries('m)), sExpected)
     checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
     checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
+  }
+
+  test("map_concat function") {
+    val df1 = Seq(
+      (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 4 -> 400)),
+      (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 1 -> 400)),
+      (null, Map[Int, Int](3 -> 300, 4 -> 400))
+    ).toDF("map1", "map2")
+
+    val expected1a = Seq(
+      Row(Map(1 -> 100, 2 -> 200, 3 -> 300, 4 -> 400)),
+      Row(Map(1 -> 400, 2 -> 200, 3 -> 300)),
+      Row(null)
+    )
+
+    checkAnswer(df1.selectExpr("map_concat(map1, map2)"), expected1a)
+    checkAnswer(df1.select(map_concat('map1, 'map2)), expected1a)
+
+    val expected1b = Seq(
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(null)
+    )
+
+    checkAnswer(df1.selectExpr("map_concat(map1)"), expected1b)
+    checkAnswer(df1.select(map_concat('map1)), expected1b)
+
+    val df2 = Seq(
+      (
+        Map[Array[Int], Int](Array(1) -> 100, Array(2) -> 200),
+        Map[String, Int]("3" -> 300, "4" -> 400)
+      )
+    ).toDF("map1", "map2")
+
+    val expected2 = Seq(Row(Map()))
+
+    checkAnswer(df2.selectExpr("map_concat()"), expected2)
+    checkAnswer(df2.select(map_concat()), expected2)
+
+    val df3 = {
+      val schema = StructType(
+        StructField("map1", MapType(StringType, IntegerType, true), false)  ::
+        StructField("map2", MapType(StringType, IntegerType, false), false) :: Nil
+      )
+      val data = Seq(
+        Row(Map[String, Any]("a" -> 1, "b" -> null), Map[String, Any]("c" -> 3, "d" -> 4)),
+        Row(Map[String, Any]("a" -> 1, "b" -> 2), Map[String, Any]("c" -> 3, "d" -> 4))
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val expected3 = Seq(
+      Row(Map[String, Any]("a" -> 1, "b" -> null, "c" -> 3, "d" -> 4)),
+      Row(Map[String, Any]("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4))
+    )
+
+    checkAnswer(df3.selectExpr("map_concat(map1, map2)"), expected3)
+    checkAnswer(df3.select(map_concat('map1, 'map2)), expected3)
+
+    val expectedMessage1 = "input to function map_concat should all be the same type"
+
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("map_concat(map1, map2)").collect()
+    }.getMessage().contains(expectedMessage1))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, 'map2)).collect()
+    }.getMessage().contains(expectedMessage1))
+
+    val expectedMessage2 = "input to function map_concat should all be of type map"
+
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("map_concat(map1, 12)").collect()
+    }.getMessage().contains(expectedMessage2))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, lit(12))).collect()
+    }.getMessage().contains(expectedMessage2))
   }
 
   test("map_from_entries function") {
@@ -1120,6 +1091,58 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
   }
 
+  test("array_union functions") {
+    val df1 = Seq((Array(1, 2, 3), Array(4, 2))).toDF("a", "b")
+    val ans1 = Row(Seq(1, 2, 3, 4))
+    checkAnswer(df1.select(array_union($"a", $"b")), ans1)
+    checkAnswer(df1.selectExpr("array_union(a, b)"), ans1)
+
+    val df2 = Seq((Array[Integer](1, 2, null, 4, 5), Array(-5, 4, -3, 2, -1))).toDF("a", "b")
+    val ans2 = Row(Seq(1, 2, null, 4, 5, -5, -3, -1))
+    checkAnswer(df2.select(array_union($"a", $"b")), ans2)
+    checkAnswer(df2.selectExpr("array_union(a, b)"), ans2)
+
+    val df3 = Seq((Array(1L, 2L, 3L), Array(4L, 2L))).toDF("a", "b")
+    val ans3 = Row(Seq(1L, 2L, 3L, 4L))
+    checkAnswer(df3.select(array_union($"a", $"b")), ans3)
+    checkAnswer(df3.selectExpr("array_union(a, b)"), ans3)
+
+    val df4 = Seq((Array[java.lang.Long](1L, 2L, null, 4L, 5L), Array(-5L, 4L, -3L, 2L, -1L)))
+      .toDF("a", "b")
+    val ans4 = Row(Seq(1L, 2L, null, 4L, 5L, -5L, -3L, -1L))
+    checkAnswer(df4.select(array_union($"a", $"b")), ans4)
+    checkAnswer(df4.selectExpr("array_union(a, b)"), ans4)
+
+    val df5 = Seq((Array("b", "a", "c"), Array("b", null, "a", "g"))).toDF("a", "b")
+    val ans5 = Row(Seq("b", "a", "c", null, "g"))
+    checkAnswer(df5.select(array_union($"a", $"b")), ans5)
+    checkAnswer(df5.selectExpr("array_union(a, b)"), ans5)
+
+    val df6 = Seq((null, Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df6.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df6.selectExpr("array_union(a, b)")
+    }
+
+    val df7 = Seq((null, null)).toDF("a", "b")
+    intercept[AnalysisException] {
+      df7.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df7.selectExpr("array_union(a, b)")
+    }
+
+    val df8 = Seq((Array(Array(1)), Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df8.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df8.selectExpr("array_union(a, b)")
+    }
+  }
+
   test("concat function - arrays") {
     val nseqi : Seq[Int] = null
     val nseqs : Seq[String] = null
@@ -1491,6 +1514,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
       assert(errMsg.contains(s"input to function $name requires at least two arguments"))
     }
+  }
+
+  test("SPARK-24734: Fix containsNull of Concat for array type") {
+    val df = Seq((Seq(1), Seq[Integer](null), Seq("a", "b"))).toDF("k1", "k2", "v")
+    val ex = intercept[RuntimeException] {
+      df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
+    }
+    assert(ex.getMessage.contains("Cannot use null as map key"))
   }
 }
 

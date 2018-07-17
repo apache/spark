@@ -1507,7 +1507,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case "TIMESTAMP" =>
           Literal(Timestamp.valueOf(value))
         case "X" =>
-          val padding = if (value.length % 2 == 1) "0" else ""
+          val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
         case other =>
           throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
