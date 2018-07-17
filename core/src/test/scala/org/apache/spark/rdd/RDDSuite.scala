@@ -847,9 +847,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("cartesian on empty RDD") {
-    val a = sc.makeRDD(Array[Int]())
+    val a = sc.emptyRDD[Int]
     val b = sc.parallelize(1 to 3)
-    val cartesian_result = Array[(Int, Int)]()
+    val cartesian_result = Array.empty[(Int, Int)]
     assert(a.cartesian(a).collect().toList === cartesian_result)
     assert(a.cartesian(b).collect().toList === cartesian_result)
     assert(b.cartesian(a).collect().toList === cartesian_result)
