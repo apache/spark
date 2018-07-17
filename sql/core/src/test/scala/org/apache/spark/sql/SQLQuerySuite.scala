@@ -22,6 +22,8 @@ import java.net.{MalformedURLException, URL}
 import java.sql.Timestamp
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.util.Random
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -2811,6 +2813,89 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
       checkAnswer(df, Seq(Row(3, 99, 1)))
+    }
+  }
+
+  test("SQL interface support repartitionByRange") {
+    withTable("data1d") {
+      val data1d = Random.shuffle(0.to(9))
+      val data2d = data1d.map(i => (i, data1d.size - i))
+      data1d.toDF("val").createTempView("data1d")
+
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> data1d.size.toString) {
+        checkAnswer(
+          sql("SELECT * FROM data1d RANGE PARTITION BY val")
+            .select(spark_partition_id().as("id"), $"val"),
+          data1d.map(i => Row(i, i)))
+
+        checkAnswer(
+          sql("SELECT * FROM data1d RANGE PARTITION BY val ASC")
+            .select(spark_partition_id().as("id"), $"val"),
+          data1d.map(i => Row(i, i)))
+
+        checkAnswer(
+          sql("SELECT * FROM data1d RANGE PARTITION BY val DESC")
+            .select(spark_partition_id().as("id"), $"val"),
+          data1d.map(i => Row(i, data1d.size - 1 - i)))
+
+        checkAnswer(
+          sql("SELECT * FROM data1d RANGE PARTITION BY 42")
+            .select(spark_partition_id().as("id"), $"val"),
+          data1d.map(i => Row(0, i)))
+
+        checkAnswer(
+          sql("SELECT * FROM data1d RANGE PARTITION BY null, val ASC, rand()")
+            .select(spark_partition_id().as("id"), $"val"),
+          data1d.map(i => Row(i, i)))
+      }
+
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> data2d.size.toString) {
+        // .repartitionByRange() assumes .asc by default if no explicit sort order is specified
+        withTable("data2d") {
+          data2d.toDF("a", "b").createTempView("data2d")
+          checkAnswer(
+            sql("SELECT * FROM data2d RANGE PARTITION BY a DESC, b")
+              .select(spark_partition_id().as("id"), $"a", $"b"),
+            sql("SELECT * FROM data2d RANGE PARTITION BY a DESC, b ASC")
+              .select(spark_partition_id().as("id"), $"a", $"b"))
+        }
+      }
+
+      // at least one partition-by expression must be specified
+      intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
+        sql("SELECT * FROM data1d RANGE PARTITION BY")
+      }
+    }
+  }
+
+  test("repartitionByRange and localSort") {
+    withTable("testRange") {
+      val data = spark.sparkContext.parallelize(
+        (1 to 100).map(i => TestData2(i % 10, i))).toDF()
+      data.createTempView("testRange")
+
+      // Distribute and order by.
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+        val df = data.repartitionByRange($"a").sortWithinPartitions($"b".desc)
+        checkAnswer(df, sql("SELECT * FROM testRange RANGE PARTITION BY a SORT BY b DESC"))
+      }
+
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+        val df = data.repartitionByRange($"a".desc).sortWithinPartitions($"b".desc)
+        checkAnswer(df, sql("SELECT * FROM testRange RANGE PARTITION BY a DESC SORT BY b DESC"))
+      }
+
+      // Distribute and order by with multiple order bys
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        val df = data.repartitionByRange($"a").sortWithinPartitions($"b".asc, $"a".asc)
+        checkAnswer(df, sql("SELECT * FROM testRange RANGE PARTITION BY a SORT BY b ASC, a ASC"))
+      }
+
+      // Distribute into one partition and order by. This partition should contain all the values.
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        val df = data.repartitionByRange($"a").sortWithinPartitions("b")
+        checkAnswer(df, sql("SELECT * FROM testRange RANGE PARTITION BY a SORT BY b"))
+      }
     }
   }
 }

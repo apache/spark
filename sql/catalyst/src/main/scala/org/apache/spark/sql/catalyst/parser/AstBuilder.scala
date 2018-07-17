@@ -346,14 +346,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         withRepartitionByExpression(ctx, expressions, query))
     } else if (!isOrder && !isSort && !isDistributeBy && !isClusterBy && isRangePartitionBy) {
       // RANGE PARTITION BY ...
-      withRangeRepartitionByExpression(ctx, expressionList(rangePartitionBy), query)
+      withRepartitionByExpression(ctx, rangePartitionBy.asScala.map(visitSortItem), query)
     } else if (!isOrder && isSort && !isDistributeBy && !isClusterBy && isRangePartitionBy) {
       // RANGE PARTITION BY ... SORT BY ...
-      val expressions = expressionList(rangePartitionBy)
       Sort(
-        expressions.map(SortOrder(_, Ascending)),
+        sort.asScala.map(visitSortItem),
         global = false,
-        withRangeRepartitionByExpression(ctx, expressions, query))
+        withRepartitionByExpression(ctx, rangePartitionBy.asScala.map(visitSortItem), query))
     } else if (!isOrder && !isSort && !isDistributeBy && !isClusterBy && !isRangePartitionBy) {
       // [EMPTY]
       query
@@ -374,23 +373,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a clause for DISTRIBUTE BY.
+   * Create a clause for DISTRIBUTE BY/RANGE PARTITION BY.
    */
   protected def withRepartitionByExpression(
       ctx: QueryOrganizationContext,
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
-    throw new ParseException("DISTRIBUTE BY is not supported", ctx)
-  }
-
-  /**
-   * Create a clause for RANGE PARTITION BY.
-   */
-  protected def withRangeRepartitionByExpression(
-      ctx: QueryOrganizationContext,
-      expressions: Seq[Expression],
-      query: LogicalPlan): LogicalPlan = {
-    throw new ParseException("RANGE PARTITION BY is not supported", ctx)
+    throw new ParseException("DISTRIBUTE BY/RANGE PARTITION BY is not supported", ctx)
   }
 
   /**

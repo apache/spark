@@ -1541,28 +1541,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a clause for DISTRIBUTE BY.
+   * Create a clause for DISTRIBUTE BY/RANGE PARTITION BY.
    */
   override protected def withRepartitionByExpression(
       ctx: QueryOrganizationContext,
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
     RepartitionByExpression(expressions, query, conf.numShufflePartitions)
-  }
-
-  /**
-   * Create a clause for RANGE PARTITION BY.
-   */
-  override protected def withRangeRepartitionByExpression(
-      ctx: QueryOrganizationContext,
-      expressions: Seq[Expression],
-      query: LogicalPlan): LogicalPlan = {
-    require(expressions.nonEmpty, "At least one range partition by expression must be specified.")
-    val sortOrder: Seq[SortOrder] = expressions.map {
-      case expr: SortOrder => expr
-      case expr: Expression => SortOrder(expr, Ascending)
-    }
-    RepartitionByExpression(sortOrder, query, conf.numShufflePartitions)
   }
 
   /**
