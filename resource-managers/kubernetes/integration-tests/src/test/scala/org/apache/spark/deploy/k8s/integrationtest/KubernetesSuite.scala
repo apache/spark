@@ -44,6 +44,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   private var sparkAppConf: SparkAppConf = _
   private var image: String = _
   private var pyImage: String = _
+  private var rImage: String = _
   private var containerLocalSparkDistroExamplesJar: String = _
   private var appLocator: String = _
   private var driverPodName: String = _
@@ -67,6 +68,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     val imageRepo = getTestImageRepo
     image = s"$imageRepo/spark:$imageTag"
     pyImage = s"$imageRepo/spark-py:$imageTag"
+    rImage = s"$imageRepo/spark-r:$imageTag"
 
     val sparkDistroExamplesJarFile: File = sparkHomeDir.resolve(Paths.get("examples", "jars"))
       .toFile
@@ -221,6 +223,19 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       isJVM = false,
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
+  test("Run SparkR on simple dataframe.R example") {
+    sparkAppConf
+      .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-r:${getTestImageTag}")
+    runSparkApplicationAndVerifyCompletion(
+      appResource = SPARK_R_DATAFRAME_TEST,
+      mainClass = "",
+      expectedLogOnCompletion = Seq("name: string (nullable = true)", "1 Justin"),
+      appArgs = Array.empty[String],
+      driverPodChecker = doBasicDriverRPodCheck,
+      executorPodChecker = doBasicExecutorRPodCheck,
+      appLocator = appLocator,
+      isJVM = false)
+  }
 
   private def runSparkPiAndVerifyCompletion(
       appResource: String = containerLocalSparkDistroExamplesJar,
@@ -358,6 +373,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
   }
 
+  private def doBasicDriverRPodCheck(driverPod: Pod): Unit = {
+    assert(driverPod.getMetadata.getName === driverPodName)
+    assert(driverPod.getSpec.getContainers.get(0).getImage === rImage)
+    assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
+  }
+
   private def doBasicExecutorPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === image)
     assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
@@ -365,6 +386,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 
   private def doBasicExecutorPyPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === pyImage)
+    assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
+  }
+
+  private def doBasicExecutorRPodCheck(executorPod: Pod): Unit = {
+    assert(executorPod.getSpec.getContainers.get(0).getImage === rImage)
     assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
   }
 
@@ -406,9 +432,11 @@ private[spark] object KubernetesSuite {
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
   val SPARK_PAGE_RANK_MAIN_CLASS: String = "org.apache.spark.examples.SparkPageRank"
   val CONTAINER_LOCAL_PYSPARK: String = "local:///opt/spark/examples/src/main/python/"
+  val CONTAINER_LOCAL_SPARKR: String = "local:///opt/spark/examples/src/main/r/"
   val PYSPARK_PI: String = CONTAINER_LOCAL_PYSPARK + "pi.py"
   val PYSPARK_FILES: String = CONTAINER_LOCAL_PYSPARK + "pyfiles.py"
   val PYSPARK_CONTAINER_TESTS: String = CONTAINER_LOCAL_PYSPARK + "py_container_checks.py"
+  val SPARK_R_DATAFRAME_TEST: String = CONTAINER_LOCAL_SPARKR + "dataframe.R"
 
   val TEST_SECRET_NAME_PREFIX = "test-secret-"
   val TEST_SECRET_KEY = "test-key"
