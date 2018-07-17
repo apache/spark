@@ -513,7 +513,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
   }
 
-  test("Save csv with custom charset") {
+  test("SPARK-19018: Save csv with custom charset") {
 
     // scalastyle:off nonascii
     val content = "µß áâä ÁÂÄ"
@@ -537,12 +537,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
   }
 
-  test("bad encoding name on writer") {
+  test("SPARK-19018: error handling for unsupported charsets") {
     val exception = intercept[SparkException] {
       withTempDir { dir =>
         val csvDir = new File(dir, "csv").getCanonicalPath
         Seq("a,A,c,A,b,B").toDF().write
-          .option("header", "false")
           .option("encoding", "1-9588-osi")
           .csv(csvDir)
       }
