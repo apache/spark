@@ -43,20 +43,10 @@ private[spark] class Instrumentation extends Logging {
   private val shortId = id.toString.take(8)
   private val prefix = s"[$shortId] "
 
-  // TODO: remove stage
-  var stage: Params = _
-  // TODO: update spark.ml to use new Instrumentation APIs and remove this constructor
-  private def this(estimator: Estimator[_], dataset: RDD[_]) = {
-    this()
-    logPipelineStage(estimator)
-    logDataset(dataset)
-  }
-
   /**
    * Log some info about the pipeline stage being fit.
    */
   def logPipelineStage(stage: PipelineStage): Unit = {
-    this.stage = stage
     // estimator.getClass.getSimpleName can cause Malformed class name error,
     // call safer `Utils.getSimpleName` instead
     val className = Utils.getSimpleName(stage.getClass)
@@ -119,13 +109,6 @@ private[spark] class Instrumentation extends Logging {
     logInfo(compact(render(map2jvalue(pairs.toMap))))
   }
 
-  // TODO: remove this
-  def logParams(params: Param[_]*): Unit = {
-    require(stage != null, "`logStageParams` must be called before `logParams` (or an instance of" +
-      " Params must be provided explicitly).")
-    logParams(stage, params: _*)
-  }
-
   def logNumFeatures(num: Long): Unit = {
     logNamedValue(Instrumentation.loggerTags.numFeatures, num)
   }
@@ -166,14 +149,9 @@ private[spark] class Instrumentation extends Logging {
   }
 
 
-  // TODO: Remove this (possibly replace with logModel?)
   /**
    * Logs the successful completion of the training session.
    */
-  def logSuccess(model: Model[_]): Unit = {
-    logInfo(s"training finished")
-  }
-
   def logSuccess(): Unit = {
     logInfo("training finished")
   }
@@ -199,22 +177,6 @@ private[spark] object Instrumentation {
     val meanOfLabels = "meanOfLabels"
     val varianceOfLabels = "varianceOfLabels"
   }
-
-  // TODO: Remove these
-  /**
-   * Creates an instrumentation object for a training session.
-   */
-  def create(estimator: Estimator[_], dataset: Dataset[_]): Instrumentation = {
-    create(estimator, dataset.rdd)
-  }
-
-  /**
-   * Creates an instrumentation object for a training session.
-   */
-  def create(estimator: Estimator[_], dataset: RDD[_]): Instrumentation = {
-    new Instrumentation(estimator, dataset)
-  }
-  // end remove
 
   def instrumented[T](body: (Instrumentation => T)): T = {
     val instr = new Instrumentation()

@@ -28,6 +28,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -332,7 +333,7 @@ class KMeans @Since("1.5.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): KMeansModel = {
+  override def fit(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
@@ -342,8 +343,9 @@ class KMeans @Since("1.5.0") (
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
       maxIter, seed, tol)
     val algo = new MLlibKMeans()
       .setK($(k))
@@ -360,7 +362,6 @@ class KMeans @Since("1.5.0") (
 
     model.setSummary(Some(summary))
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    instr.logSuccess(model)
     if (handlePersistence) {
       instances.unpersist()
     }
