@@ -123,6 +123,7 @@ private[spark] class TaskSetManager(
   var parent: Pool = null
   private var totalResultSize = 0L
   private var calculatedTasks = 0
+  private var loggedMaxConTasks = false
 
   private[scheduler] val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
     blacklistTracker.map { _ =>
@@ -541,8 +542,18 @@ private[spark] class TaskSetManager(
           serializedTask)
       }
     } else {
-      if (runningTasks >= maxConcurrentTasks) {
-        logDebug("Already running max. no. of concurrent tasks.")
+      if (runningTasks >= maxConcurrentTasks && !loggedMaxConTasks) {
+        val jobGroupId = taskSet.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID)
+        val message = s"Already running max. no. of concurrent tasks $maxConcurrentTasks"
+        if (jobGroupId != null && !jobGroupId.isEmpty) {
+          logInfo(s"$message for jobGroup "
+            + s"${taskSet.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID)} specified by "
+            + s"spark.job.${jobGroupId}.maxConcurrentTasks"
+          )
+        } else {
+          logInfo(message)
+        }
+        loggedMaxConTasks = true
       }
       None
     }
