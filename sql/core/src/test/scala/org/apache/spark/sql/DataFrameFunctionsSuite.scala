@@ -1444,6 +1444,52 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("shuffle function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codegen on
+
+    // primitive-type elements
+    val idf = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    checkAnswer(
+      idf.select(sort_array(shuffle('i))),
+      Seq(Row(Seq.empty), Row(Seq(1, 7, 8, 9)), Row(Seq(2, 5, 7, 8, 9)), Row(null))
+    )
+    checkAnswer(
+      idf.filter(dummyFilter('i)).select(sort_array(shuffle('i))),
+      Seq(Row(Seq.empty), Row(Seq(1, 7, 8, 9)), Row(Seq(2, 5, 7, 8, 9)), Row(null))
+    )
+    checkAnswer(
+      idf.selectExpr("sort_array(shuffle(i))"),
+      Seq(Row(Seq.empty), Row(Seq(1, 7, 8, 9)), Row(Seq(2, 5, 7, 8, 9)), Row(null))
+    )
+
+    // Array test cases (non-primitive-type elements)
+    val sdf = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    checkAnswer(
+      sdf.select(sort_array(shuffle('s))),
+      Seq(Row(Seq.empty), Row(Seq("a", "b", "c")), Row(Seq(null, null, "b", "c")), Row(null))
+    )
+    checkAnswer(
+      sdf.filter(dummyFilter('s)).select(sort_array(shuffle('s))),
+      Seq(Row(Seq.empty), Row(Seq("a", "b", "c")), Row(Seq(null, null, "b", "c")), Row(null))
+    )
+    checkAnswer(
+      sdf.selectExpr("sort_array(shuffle(s))"),
+      Seq(Row(Seq.empty), Row(Seq("a", "b", "c")), Row(Seq(null, null, "b", "c")), Row(null))
+    )
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
