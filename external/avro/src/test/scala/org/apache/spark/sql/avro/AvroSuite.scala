@@ -847,7 +847,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("checking the ignoreExtension option") {
+  test("SPARK-24836: checking the ignoreExtension option") {
     withTempPath { tempDir =>
       val df = spark.read.avro(episodesAvro)
       assert(df.count == 8)
@@ -866,7 +866,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("ignoreExtension must override hadoop's config") {
+  test("SPARK-24836: ignoreExtension must override hadoop's config") {
     withTempDir { dir =>
       Files.copy(
         Paths.get(new URL(episodesAvro).toURI),
