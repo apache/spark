@@ -114,11 +114,13 @@ class FileScanRDD(
         // don't need to run this `if` for every record.
         if (nextElement.isInstanceOf[ColumnarBatch]) {
           inputMetrics.incRecordsRead(nextElement.asInstanceOf[ColumnarBatch].numRows())
+          updateBytesRead()
         } else {
           inputMetrics.incRecordsRead(1)
-        }
-        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
-          updateBytesRead()
+          if (inputMetrics.recordsRead %
+            SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+            updateBytesRead()
+          }
         }
         nextElement
       }
