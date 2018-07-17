@@ -100,7 +100,8 @@ private[spark] class StandaloneSchedulerBackend(
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val javaOptsFiltered = javaOpts.filterNot { opt =>
-    opt.startsWith("-Dspark.ssl.keyStorePassword") || opt.startsWith("-Dspark.ssl.keyPassword")}
+    opt.startsWith("-Dspark.ssl.keyStorePassword") || opt.startsWith("-Dspark.ssl.keyPassword")
+    }
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend", args,
     sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOptsFiltered)
     val webUrl = sc.ui.map(_.webUrl).getOrElse("")
