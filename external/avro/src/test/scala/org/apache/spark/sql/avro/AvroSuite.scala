@@ -623,12 +623,11 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     intercept[FileNotFoundException] {
       withTempPath { dir =>
         FileUtils.touch(new File(dir, "test"))
-        val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-        try {
-          hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
-          spark.read.avro(dir.toString)
-        } finally {
-          hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)        }
+
+        spark
+          .read
+          .option("ignoreExtension", false)
+          .avro(dir.toString)
       }
     }
 
@@ -690,18 +689,12 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       Files.createFile(new File(tempSaveDir, "non-avro").toPath)
 
-      val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-      val count = try {
-        hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
-        val newDf = spark
-          .read
-          .avro(tempSaveDir)
-        newDf.count()
-      } finally {
-        hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
-      }
+      val newDf = spark
+        .read
+        .option("ignoreExtension", false)
+        .avro(tempSaveDir)
 
-      assert(count == 8)
+      assert(newDf.count == 8)
     }
   }
 
