@@ -226,10 +226,18 @@ object DataType {
     }
   }
 
+  private val NoNameCheck = 0
+  private val CaseSensitiveNameCheck = 1
+  private val CaseInsensitiveNameCheck = 2
+  private val NoNullabilityCheck = 0
+  private val NullabilityCheck = 1
+  private val CompatibleNullabilityCheck = 2
+
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
   private[types] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+    /*
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
@@ -243,6 +251,8 @@ object DataType {
           }
       case (l, r) => l == r
     }
+    */
+    equalsDataTypes(left, right, CaseSensitiveNameCheck, NoNullabilityCheck)
   }
 
   /**
@@ -260,6 +270,7 @@ object DataType {
    *   of `fromField.nullable` and `toField.nullable` are false.
    */
   private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
+    /*
     (from, to) match {
       case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
         (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
@@ -279,6 +290,8 @@ object DataType {
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
+    */
+    equalsDataTypes(from, to, CaseSensitiveNameCheck, CompatibleNullabilityCheck)
   }
 
   /**
@@ -286,6 +299,7 @@ object DataType {
    * sensitivity of field names in StructType.
    */
   private[sql] def equalsIgnoreCaseAndNullability(from: DataType, to: DataType): Boolean = {
+    /*
     (from, to) match {
       case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
         equalsIgnoreCaseAndNullability(fromElement, toElement)
@@ -303,6 +317,8 @@ object DataType {
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
+    */
+    equalsDataTypes(from, to, CaseInsensitiveNameCheck, NoNullabilityCheck)
   }
 
   /**
@@ -315,6 +331,7 @@ object DataType {
       from: DataType,
       to: DataType,
       ignoreNullability: Boolean = false): Boolean = {
+    /*
     (from, to) match {
       case (left: ArrayType, right: ArrayType) =>
         equalsStructurally(left.elementType, right.elementType) &&
@@ -335,5 +352,71 @@ object DataType {
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
+    */
+    if (ignoreNullability) {
+      equalsDataTypes(from, to, NoNameCheck, NoNullabilityCheck)
+    } else {
+      equalsDataTypes(from, to, NoNameCheck, NullabilityCheck)
+    }
   }
+
+  private def isSameFieldName(left: String, right: String, nameCheckType: Int): Boolean = {
+    nameCheckType match {
+      case NoNameCheck => true
+      case CaseSensitiveNameCheck => left == right
+      case CaseInsensitiveNameCheck => left.toLowerCase == right.toLowerCase
+    }
+  }
+
+  private def isSameNullability(
+      leftNullability: Boolean,
+      rightNullability: Boolean,
+      nullabilityCheckType: Int): Boolean = {
+    nullabilityCheckType match {
+      case NoNullabilityCheck => true
+      case NullabilityCheck => leftNullability == rightNullability
+      case CompatibleNullabilityCheck => rightNullability || !leftNullability
+    }
+  }
+
+  private def equalsDataTypes(
+      left: DataType,
+      right: DataType,
+      nameCheckType: Int, // 0: noCheck, 1: withCaseCheck, 2: ignoreCaseCheck
+      nullabilityCheckType: Int // 0: noCheck, 1: exactCheck, 2: compatibleCheck
+      ): Boolean = {
+    (left, right) match {
+      case (left: ArrayType, right: ArrayType) =>
+        val sameNullability = isSameNullability(left.containsNull, right.containsNull,
+          nullabilityCheckType)
+        val sameType = equalsDataTypes(left.elementType, right.elementType,
+          nameCheckType, nullabilityCheckType)
+        sameNullability && sameType
+
+      case (left: MapType, right: MapType) =>
+        val sameNullability = isSameNullability(left.valueContainsNull, right.valueContainsNull,
+          nullabilityCheckType)
+        val sameKeyType = equalsDataTypes(left.keyType, right.keyType,
+          nameCheckType, nullabilityCheckType)
+        val sameValueType = equalsDataTypes(left.valueType, right.valueType,
+          nameCheckType, nullabilityCheckType)
+        sameNullability && sameKeyType && sameValueType
+
+      case (StructType(leftFields), StructType(rightFields)) =>
+        leftFields.length == rightFields.length &&
+          leftFields.zip(rightFields).forall { case (lf, rf) =>
+            val sameFieldName = isSameFieldName(lf.name, rf.name, nameCheckType)
+            val sameNullability = isSameNullability(lf.nullable, rf.nullable, nullabilityCheckType)
+            val sameType = equalsDataTypes(lf.dataType, rf.dataType,
+              nameCheckType, nullabilityCheckType)
+
+            sameFieldName && sameNullability && sameType
+          }
+
+      case (leftDataType, rightDataType) => leftDataType == rightDataType
+    }
+  }
+
+
+
 }
