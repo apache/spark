@@ -90,6 +90,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Nil,
+        Map.empty,
         Seq.empty[String]))
     val executor = step.configurePod(SparkPod.initialPod())
 
@@ -130,6 +131,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Nil,
+        Map.empty,
         Seq.empty[String]))
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
   }
@@ -151,6 +153,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map("qux" -> "quux"),
         Nil,
+        Map.empty,
         Seq.empty[String]))
     val executor = step.configurePod(SparkPod.initialPod())
 

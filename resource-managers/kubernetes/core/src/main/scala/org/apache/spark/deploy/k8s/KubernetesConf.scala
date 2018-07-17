@@ -60,6 +60,7 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleSecretEnvNamesToKeyRefs: Map[String, String],
     roleEnvs: Map[String, String],
     roleVolumes: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]],
+    roleHostAliases: Map[String, Seq[String]],
     sparkFiles: Seq[String]) {
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
@@ -162,6 +163,9 @@ private[spark] object KubernetesConf {
     // before the driver pod is created
     KubernetesVolumeUtils.parseVolumesWithPrefix(
       sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX).map(_.get)
+    val driverHostAliases = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_DRIVER_HOST_ALIASES_PREFIX)
+      .map({ case (key, value) => (key, value.split(",").toSeq) })
 
     val sparkFiles = sparkConf
       .getOption("spark.files")
@@ -179,6 +183,7 @@ private[spark] object KubernetesConf {
       driverSecretEnvNamesToKeyRefs,
       driverEnvs,
       driverVolumes,
+      driverHostAliases,
       sparkFiles)
   }
 
@@ -213,6 +218,9 @@ private[spark] object KubernetesConf {
     val executorEnv = sparkConf.getExecutorEnv.toMap
     val executorVolumes = KubernetesVolumeUtils.parseVolumesWithPrefix(
       sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX).map(_.get)
+    val executorHostAliases = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_EXECUTOR_HOST_ALIASES_PREFIX)
+      .map({ case (key: String, value: String)  => (key, value.split(",").toSeq) })
 
     KubernetesConf(
       sparkConf.clone(),
@@ -225,6 +233,7 @@ private[spark] object KubernetesConf {
       executorEnvSecrets,
       executorEnv,
       executorVolumes,
+      executorHostAliases,
       Seq.empty[String])
   }
 }
