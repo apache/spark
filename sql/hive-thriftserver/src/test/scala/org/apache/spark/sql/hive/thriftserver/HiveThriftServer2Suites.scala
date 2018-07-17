@@ -179,6 +179,14 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
+  test("Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
+
   test("SPARK-3004 regression: result set containing NULL") {
     withJdbcStatement("test_null") { statement =>
       val queries = Seq(
@@ -764,6 +772,14 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
       assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
+    }
+  }
+
+  test("Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
     }
   }
 }
