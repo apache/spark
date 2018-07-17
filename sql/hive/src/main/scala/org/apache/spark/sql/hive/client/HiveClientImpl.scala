@@ -838,7 +838,6 @@ private[hive] class HiveClientImpl(
       uri.toURL
     }
     clientLoader.addJar(jarURL)
-    runSqlHive(s"ADD JAR $path")
   }
 
   def newSession(): HiveClientImpl = {
