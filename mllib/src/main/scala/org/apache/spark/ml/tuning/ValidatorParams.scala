@@ -80,7 +80,7 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
   /**
    * Instrumentation logging for tuning params including the inner estimator and evaluator info.
    */
-  protected def logTuningParams(instrumentation: Instrumentation[_]): Unit = {
+  protected def logTuningParams(instrumentation: Instrumentation): Unit = {
     instrumentation.logNamedValue("estimator", $(estimator).getClass.getCanonicalName)
     instrumentation.logNamedValue("evaluator", $(evaluator).getClass.getCanonicalName)
     instrumentation.logNamedValue("estimatorParamMapsLength", $(estimatorParamMaps).length)
