@@ -518,20 +518,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       getCustomMetric(metrics, "providerLoadedMapSizeBytes")
     }
 
-    def getCacheHitCountMetric(metrics: StateStoreMetrics): Long = {
-      getCustomMetric(metrics, "loadedMapCacheHitCount")
-    }
-
-    def getCacheMissCountMetric(metrics: StateStoreMetrics): Long = {
-      getCustomMetric(metrics, "loadedMapCacheMissCount")
-    }
-
     def assertCacheHitAndMissMetrics(
         metrics: StateStoreMetrics,
         expectedCacheHitCount: Long,
         expectedCacheMissCount: Long): Unit = {
-      assert(getCacheHitCountMetric(metrics) === expectedCacheHitCount)
-      assert(getCacheMissCountMetric(metrics) === expectedCacheMissCount)
+      val cacheHitCount = getCustomMetric(metrics, "loadedMapCacheHitCount")
+      val cacheMissCount = getCustomMetric(metrics, "loadedMapCacheMissCount")
+      assert(cacheHitCount === expectedCacheHitCount)
+      assert(cacheMissCount === expectedCacheMissCount)
     }
 
     val provider = newStoreProvider()
