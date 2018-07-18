@@ -21,10 +21,28 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
- * Options for Avro Writer and Reader stored in case insensitive manner.
+ * Options for Avro Reader and Writer stored in case insensitive manner.
  */
 class AvroOptions(@transient val parameters: CaseInsensitiveMap[String])
   extends Logging with Serializable {
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
+
+  /**
+   * Optional schema provided by an user in JSON format.
+   */
+  val schema: Option[String] = parameters.get("avroSchema")
+
+  /**
+   * Top level record name in write result, which is required in Avro spec.
+   * See https://avro.apache.org/docs/1.8.2/spec.html#schema_record .
+   * Default value is "topLevelRecord"
+   */
+  val recordName: String = parameters.getOrElse("recordName", "topLevelRecord")
+
+  /**
+   * Record namespace in write result. Default value is "".
+   * See Avro spec for details: https://avro.apache.org/docs/1.8.2/spec.html#schema_record .
+   */
+  val recordNamespace: String = parameters.getOrElse("recordNamespace", "")
 }
