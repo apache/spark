@@ -67,6 +67,23 @@ class OptimizerRuleExclusionSuite extends PlanTest {
         "DummyRuleName"))
   }
 
+  test("Exclude rules from a non-excluable batch") {
+    val excludedRules = Seq(
+      ReplaceIntersectWithSemiJoin.ruleName,
+      PullupCorrelatedPredicates.ruleName)
+
+    val optimizer = new SimpleTestOptimizer()
+
+    withSQLConf(
+      OPTIMIZER_EXCLUDED_RULES.key -> excludedRules.foldLeft("")((l, r) => l + "," + r)) {
+      excludedRules.foreach { excludedRule =>
+        assert(
+          optimizer.batches
+            .exists(batch => batch.rules.exists(rule => rule.ruleName == excludedRule)))
+      }
+    }
+  }
+
   test("Verify optimized plan after excluding CombineUnions rule") {
     val excludedRules = Seq(
       ConvertToLocalRelation.ruleName,
