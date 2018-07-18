@@ -23,7 +23,7 @@ import java.util.regex.Pattern
 
 import com.google.common.io.PatternFilenameFilter
 import io.fabric8.kubernetes.api.model.Pod
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
 import scala.collection.JavaConverters._
@@ -47,6 +47,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   private var containerLocalSparkDistroExamplesJar: String = _
   private var appLocator: String = _
   private var driverPodName: String = _
+  private val k8sTestTag = Tag("k8s")
 
   override def beforeAll(): Unit = {
     // The scalatest-maven-plugin gives system properties that are referenced but not set null
@@ -102,22 +103,22 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     deleteDriverPod()
   }
 
-  test("Run SparkPi with no resources") {
+  test("Run SparkPi with no resources", k8sTestTag) {
     runSparkPiAndVerifyCompletion()
   }
 
-  test("Run SparkPi with a very long application name.") {
+  test("Run SparkPi with a very long application name.", k8sTestTag) {
     sparkAppConf.set("spark.app.name", "long" * 40)
     runSparkPiAndVerifyCompletion()
   }
 
-  test("Use SparkLauncher.NO_RESOURCE") {
+  test("Use SparkLauncher.NO_RESOURCE", k8sTestTag) {
     sparkAppConf.setJars(Seq(containerLocalSparkDistroExamplesJar))
     runSparkPiAndVerifyCompletion(
       appResource = SparkLauncher.NO_RESOURCE)
   }
 
-  test("Run SparkPi with a master URL without a scheme.") {
+  test("Run SparkPi with a master URL without a scheme.", k8sTestTag) {
     val url = kubernetesTestComponents.kubernetesClient.getMasterUrl
     val k8sMasterUrl = if (url.getPort < 0) {
       s"k8s://${url.getHost}"
@@ -128,11 +129,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     runSparkPiAndVerifyCompletion()
   }
 
-  test("Run SparkPi with an argument.") {
+  test("Run SparkPi with an argument.", k8sTestTag) {
     runSparkPiAndVerifyCompletion(appArgs = Array("5"))
   }
 
-  test("Run SparkPi with custom labels, annotations, and environment variables.") {
+  test("Run SparkPi with custom labels, annotations, and environment variables.", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.driver.label.label1", "label1-value")
       .set("spark.kubernetes.driver.label.label2", "label2-value")
@@ -158,21 +159,21 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       })
   }
 
-  test("Run extraJVMOptions check on driver") {
+  test("Run extraJVMOptions check on driver", k8sTestTag) {
     sparkAppConf
       .set("spark.driver.extraJavaOptions", "-Dspark.test.foo=spark.test.bar")
     runSparkJVMCheckAndVerifyCompletion(
       expectedJVMValue = Seq("(spark.test.foo,spark.test.bar)"))
   }
 
-  test("Run SparkRemoteFileTest using a remote data file") {
+  test("Run SparkRemoteFileTest using a remote data file", k8sTestTag) {
     sparkAppConf
       .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
     runSparkRemoteCheckAndVerifyCompletion(
       appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
   }
 
-  test("Run PySpark on simple pi.py example") {
+  test("Run PySpark on simple pi.py example", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
     runSparkApplicationAndVerifyCompletion(
@@ -186,7 +187,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       isJVM = false)
   }
 
-  test("Run PySpark with Python2 to test a pyfiles example") {
+  test("Run PySpark with Python2 to test a pyfiles example", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
       .set("spark.kubernetes.pyspark.pythonversion", "2")
@@ -204,7 +205,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
 
-  test("Run PySpark with Python3 to test a pyfiles example") {
+  test("Run PySpark with Python3 to test a pyfiles example", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
       .set("spark.kubernetes.pyspark.pythonversion", "3")
