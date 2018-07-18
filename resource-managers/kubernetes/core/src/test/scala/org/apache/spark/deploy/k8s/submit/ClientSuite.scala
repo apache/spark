@@ -18,24 +18,23 @@ package org.apache.spark.deploy.k8s.submit
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
-import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
+import io.fabric8.kubernetes.client.dsl.{ExtensionsAPIGroupDSL, MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, ScalableResource}
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{doReturn, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mockito.MockitoSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, SparkJob}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
-  private val DRIVER_POD_UID = "pod-id"
-  private val DRIVER_POD_API_VERSION = "v1"
-  private val DRIVER_POD_KIND = "pod"
+  private val DRIVER_JOB_UID = "job-id"
+  private val DRIVER_JOB_API_VERSION = "v1"
+  private val DRIVER_JOB_KIND = "job"
   private val KUBERNETES_RESOURCE_PREFIX = "resource-example"
-  private val POD_NAME = "driver"
+  private val JOB_NAME = "driver"
   private val CONTAINER_NAME = "container"
   private val APP_ID = "app-id"
   private val APP_NAME = "app"
@@ -44,21 +43,25 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private val RESOLVED_JAVA_OPTIONS = Map(
     "conf1key" -> "conf1value",
     "conf2key" -> "conf2value")
-  private val BUILT_DRIVER_POD =
-    new PodBuilder()
+  private val BUILT_DRIVER_JOB =
+    new JobBuilder()
       .withNewMetadata()
-        .withName(POD_NAME)
-        .endMetadata()
+      .withName(JOB_NAME)
+      .endMetadata()
       .withNewSpec()
-        .withHostname("localhost")
-        .endSpec()
+      .withNewTemplate()
+      .withNewSpec()
+      .withHostname("localhost")
+      .endSpec()
+      .endTemplate()
+      .endSpec()
       .build()
   private val BUILT_DRIVER_CONTAINER = new ContainerBuilder().withName(CONTAINER_NAME).build()
   private val ADDITIONAL_RESOURCES = Seq(
     new SecretBuilder().withNewMetadata().withName("secret").endMetadata().build())
 
   private val BUILT_KUBERNETES_SPEC = KubernetesDriverSpec(
-    SparkPod(BUILT_DRIVER_POD, BUILT_DRIVER_CONTAINER),
+    SparkJob(BUILT_DRIVER_JOB, BUILT_DRIVER_CONTAINER),
     ADDITIONAL_RESOURCES,
     RESOLVED_JAVA_OPTIONS)
 
@@ -66,66 +69,87 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     .addNewEnv()
       .withName(ENV_SPARK_CONF_DIR)
       .withValue(SPARK_CONF_DIR_INTERNAL)
-      .endEnv()
+    .endEnv()
     .addNewVolumeMount()
       .withName(SPARK_CONF_VOLUME)
       .withMountPath(SPARK_CONF_DIR_INTERNAL)
-      .endVolumeMount()
+    .endVolumeMount()
     .build()
-  private val FULL_EXPECTED_POD = new PodBuilder(BUILT_DRIVER_POD)
+  private val FULL_EXPECTED_JOB = new JobBuilder(BUILT_DRIVER_JOB)
     .editSpec()
-      .addToContainers(FULL_EXPECTED_CONTAINER)
-      .addNewVolume()
-        .withName(SPARK_CONF_VOLUME)
-        .withNewConfigMap().withName(s"$KUBERNETES_RESOURCE_PREFIX-driver-conf-map").endConfigMap()
-        .endVolume()
-      .endSpec()
+      .editTemplate()
+        .editSpec()
+          .addToContainers(FULL_EXPECTED_CONTAINER)
+          .addNewVolume()
+            .withName(SPARK_CONF_VOLUME)
+            .withNewConfigMap()
+              .withName(s"$KUBERNETES_RESOURCE_PREFIX-driver-conf-map")
+            .endConfigMap()
+          .endVolume()
+          .withRestartPolicy("OnFailure")
+        .endSpec()
+      .endTemplate()
+    .endSpec()
     .build()
 
-  private val POD_WITH_OWNER_REFERENCE = new PodBuilder(FULL_EXPECTED_POD)
+  // BackoffLimit needs to be set after creation
+  FULL_EXPECTED_JOB.getSpec.setAdditionalProperty("backoffLimit", 6)
+
+  private val JOB_WITH_OWNER_REFERENCE = new JobBuilder(FULL_EXPECTED_JOB)
     .editMetadata()
-      .withUid(DRIVER_POD_UID)
-      .endMetadata()
-    .withApiVersion(DRIVER_POD_API_VERSION)
-    .withKind(DRIVER_POD_KIND)
+      .withUid(DRIVER_JOB_UID)
+      .withName(JOB_NAME)
+    .endMetadata()
+    .withApiVersion(DRIVER_JOB_API_VERSION)
+    .withKind(DRIVER_JOB_KIND)
     .build()
 
   private val ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES = ADDITIONAL_RESOURCES.map { secret =>
     new SecretBuilder(secret)
       .editMetadata()
         .addNewOwnerReference()
-          .withName(POD_NAME)
-          .withApiVersion(DRIVER_POD_API_VERSION)
-          .withKind(DRIVER_POD_KIND)
+          .withName(JOB_NAME)
+          .withApiVersion(DRIVER_JOB_API_VERSION)
+          .withKind(DRIVER_JOB_KIND)
           .withController(true)
-          .withUid(DRIVER_POD_UID)
-          .endOwnerReference()
-        .endMetadata()
+          .withUid(DRIVER_JOB_UID)
+        .endOwnerReference()
+      .endMetadata()
       .build()
   }
+
+  private type ResourceList = NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[
+    HasMetadata, Boolean]
+  private type Jobs = MixedOperation[Job, JobList, DoneableJob, ScalableResource[Job, DoneableJob]]
 
   @Mock
   private var kubernetesClient: KubernetesClient = _
 
   @Mock
-  private var podOperations: PODS = _
+  private var extension: ExtensionsAPIGroupDSL = _
 
   @Mock
-  private var namedPods: PodResource[Pod, DoneablePod] = _
+  private var jobOperations: Jobs = _
 
   @Mock
-  private var loggingPodStatusWatcher: LoggingPodStatusWatcher = _
+  private var namedJobs: ScalableResource[Job, DoneableJob] = _
+
+  @Mock
+  private var loggingJobStatusWatcher: LoggingJobStatusWatcher = _
 
   @Mock
   private var driverBuilder: KubernetesDriverBuilder = _
 
   @Mock
-  private var resourceList: RESOURCE_LIST = _
+  private var resourceList: ResourceList = _
+
+  @Mock
+  private var jobMetadata: ObjectMeta = _
 
   private var kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf] = _
 
   private var sparkConf: SparkConf = _
-  private var createdPodArgumentCaptor: ArgumentCaptor[Pod] = _
+  private var createdJobArgumentCaptor: ArgumentCaptor[Job] = _
   private var createdResourcesArgumentCaptor: ArgumentCaptor[HasMetadata] = _
 
   before {
@@ -144,29 +168,30 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       Nil,
       Seq.empty[String])
     when(driverBuilder.buildFromFeatures(kubernetesConf)).thenReturn(BUILT_KUBERNETES_SPEC)
-    when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.withName(POD_NAME)).thenReturn(namedPods)
+    when(kubernetesClient.extensions()).thenReturn(extension)
+    when(kubernetesClient.extensions().jobs()).thenReturn(jobOperations)
+    when(jobOperations.withName(JOB_NAME)).thenReturn(namedJobs)
 
-    createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
+    createdJobArgumentCaptor = ArgumentCaptor.forClass(classOf[Job])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
-    when(podOperations.create(FULL_EXPECTED_POD)).thenReturn(POD_WITH_OWNER_REFERENCE)
-    when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
+    when(jobOperations.create(FULL_EXPECTED_JOB)).thenReturn(JOB_WITH_OWNER_REFERENCE)
+    when(namedJobs.watch(loggingJobStatusWatcher)).thenReturn(mock[Watch])
     doReturn(resourceList)
       .when(kubernetesClient)
       .resourceList(createdResourcesArgumentCaptor.capture())
   }
 
-  test("The client should configure the pod using the builder.") {
+  test("The client should configure the job using the builder.") {
     val submissionClient = new Client(
       driverBuilder,
       kubernetesConf,
       kubernetesClient,
       false,
       "spark",
-      loggingPodStatusWatcher,
+      loggingJobStatusWatcher,
       KUBERNETES_RESOURCE_PREFIX)
     submissionClient.run()
-    verify(podOperations).create(FULL_EXPECTED_POD)
+    verify(jobOperations).create(FULL_EXPECTED_JOB)
   }
 
   test("The client should create Kubernetes resources") {
@@ -176,7 +201,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       false,
       "spark",
-      loggingPodStatusWatcher,
+      loggingJobStatusWatcher,
       KUBERNETES_RESOURCE_PREFIX)
     submissionClient.run()
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
@@ -202,9 +227,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       true,
       "spark",
-      loggingPodStatusWatcher,
+      loggingJobStatusWatcher,
       KUBERNETES_RESOURCE_PREFIX)
     submissionClient.run()
-    verify(loggingPodStatusWatcher).awaitCompletion()
+    verify(loggingJobStatusWatcher).awaitCompletion()
   }
 }

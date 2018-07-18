@@ -42,7 +42,7 @@ private[spark] class BasicExecutorFeatureStep(
     .sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
-  private val executorPodNamePrefix = kubernetesConf.appResourceNamePrefix
+  private val executorPodNamePrefix = kubernetesConf.appId
 
   private val driverUrl = RpcEndpointAddress(
     kubernetesConf.get("spark.driver.host"),
@@ -176,8 +176,4 @@ private[spark] class BasicExecutorFeatureStep(
 
     SparkPod(executorPod, containerWithLimitCores)
   }
-
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

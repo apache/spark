@@ -217,7 +217,7 @@ private[spark] object KubernetesConf {
     KubernetesConf(
       sparkConf.clone(),
       KubernetesExecutorSpecificConf(executorId, driverPod),
-      sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX),
+      appId,
       appId,
       executorLabels,
       executorAnnotations,

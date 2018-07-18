@@ -16,55 +16,43 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, Time}
-import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Job, Pod, Time}
+import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.ThreadUtils
 
-private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
+private[k8s] trait LoggingJobStatusWatcher extends Watcher[Job] {
   def awaitCompletion(): Unit
 }
 
-/**
- * A monitor for the running Kubernetes pod of a Spark application. Status logging occurs on
- * every state change and also at an interval for liveness.
- *
- * @param appId application ID.
- * @param maybeLoggingInterval ms between each state request. If provided, must be a positive
- *                             number.
- */
-private[k8s] class LoggingPodStatusWatcherImpl(
-    appId: String,
-    maybeLoggingInterval: Option[Long])
-  extends LoggingPodStatusWatcher with Logging {
+ /**
+  * A monitor for the running Kubernetes pod of a Spark application. Status logging occurs on
+  * every state change and also at an interval for liveness.
+  *
+  * @param appId application ID.
+  * @param kubernetesClient kubernetes client.
+  */
+private[k8s] class LoggingJobStatusWatcherImpl(appId: String, kubernetesClient: KubernetesClient)
+  extends LoggingJobStatusWatcher with Logging {
 
-  private val podCompletedFuture = new CountDownLatch(1)
-  // start timer for periodic logging
-  private val scheduler =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("logging-pod-status-watcher")
-  private val logRunnable: Runnable = new Runnable {
-    override def run() = logShortStatus()
+  private val jobCompletedFuture = new CountDownLatch(1)
+
+  private var job : Option[Job] = None
+
+  private def phase: String = job match {
+    case Some(j) if j.getStatus.getConditions.isEmpty => "Running"
+    case Some(j) => j.getStatus.getConditions.get(0).getType
+    case _ => "unknown"
   }
 
-  private var pod = Option.empty[Pod]
-
-  private def phase: String = pod.map(_.getStatus.getPhase).getOrElse("unknown")
-
-  def start(): Unit = {
-    maybeLoggingInterval.foreach { interval =>
-      scheduler.scheduleAtFixedRate(logRunnable, 0, interval, TimeUnit.MILLISECONDS)
-    }
-  }
-
-  override def eventReceived(action: Action, pod: Pod): Unit = {
-    this.pod = Option(pod)
+  override def eventReceived(action: Action, job: Job): Unit = {
+    this.job = Option(job)
     action match {
       case Action.DELETED | Action.ERROR =>
         closeWatch()
@@ -82,24 +70,21 @@ private[k8s] class LoggingPodStatusWatcherImpl(
     closeWatch()
   }
 
-  private def logShortStatus() = {
-    logInfo(s"Application status for $appId (phase: $phase)")
-  }
-
   private def logLongStatus() = {
-    logInfo("State changed, new state: " + pod.map(formatPodState).getOrElse("unknown"))
+    logInfo("State changed, new state: " + job.map(formatPodState).getOrElse("unknown"))
   }
 
   private def hasCompleted(): Boolean = {
-    phase == "Succeeded" || phase == "Failed"
+    phase == "Complete" || phase == "Failed"
   }
 
   private def closeWatch(): Unit = {
-    podCompletedFuture.countDown()
-    scheduler.shutdown()
+    jobCompletedFuture.countDown()
   }
 
-  private def formatPodState(pod: Pod): String = {
+  private def formatPodState(job: Job): String = {
+    // Get driver pod from job
+    val pod: Pod = findDriverPod(job)
     val details = Seq[(String, String)](
       // pod metadata
       ("pod name", pod.getMetadata.getName),
@@ -134,11 +119,19 @@ private[k8s] class LoggingPodStatusWatcherImpl(
     }.mkString("")
   }
 
+  private def findDriverPod(job: Job): Pod = {
+    val pods = kubernetesClient.pods()
+      .withLabel("job-name", job.getMetadata.getName).list()
+    pods.getItems.asScala.find(p =>
+      p.getMetadata.getName.startsWith(job.getMetadata.getName)).get
+  }
+
   override def awaitCompletion(): Unit = {
-    podCompletedFuture.await()
-    logInfo(pod.map { p =>
-      s"Container final statuses:\n\n${containersDescription(p)}"
-    }.getOrElse("No containers were found in the driver pod."))
+    jobCompletedFuture.await()
+    job.foreach{ j =>
+      val pod: Pod = findDriverPod(j)
+      logInfo(s"Container final statuses:\n\n${containersDescription(pod)}"
+      )}
   }
 
   private def containersDescription(p: Pod): String = {

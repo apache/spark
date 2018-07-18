@@ -82,11 +82,11 @@ private[spark] object ClientArguments {
 }
 
 /**
- * Submits a Spark application to run on Kubernetes by creating the driver pod and starting a
+ * Submits a Spark application to run on Kubernetes by creating the driver job and starting a
  * watcher that monitors and logs the application status. Waits for the application to terminate if
  * spark.kubernetes.submission.waitAppCompletion is true.
  *
- * @param builder Responsible for building the base driver pod based on a composition of
+ * @param builder Responsible for building the base driver job based on a composition of
  *                implemented features.
  * @param kubernetesConf application configuration
  * @param kubernetesClient the client to talk to the Kubernetes API server
@@ -96,13 +96,13 @@ private[spark] object ClientArguments {
  * @param watcher a watcher that monitors and logs the application status
  */
 private[spark] class Client(
-    builder: KubernetesDriverBuilder,
-    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
-    kubernetesClient: KubernetesClient,
-    waitForAppCompletion: Boolean,
-    appName: String,
-    watcher: LoggingPodStatusWatcher,
-    kubernetesResourceNamePrefix: String) extends Logging {
+                             builder: KubernetesDriverBuilder,
+                             kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
+                             kubernetesClient: KubernetesClient,
+                             waitForAppCompletion: Boolean,
+                             appName: String,
+                             watcher: LoggingJobStatusWatcher,
+                             kubernetesResourceNamePrefix: String) extends Logging {
 
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(kubernetesConf)
@@ -110,7 +110,7 @@ private[spark] class Client(
     val configMap = buildConfigMap(configMapName, resolvedDriverSpec.systemProperties)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
-    val resolvedDriverContainer = new ContainerBuilder(resolvedDriverSpec.pod.container)
+    val resolvedDriverContainer = new ContainerBuilder(resolvedDriverSpec.job.container)
       .addNewEnv()
         .withName(ENV_SPARK_CONF_DIR)
         .withValue(SPARK_CONF_DIR_INTERNAL)
@@ -120,31 +120,41 @@ private[spark] class Client(
         .withMountPath(SPARK_CONF_DIR_INTERNAL)
         .endVolumeMount()
       .build()
-    val resolvedDriverPod = new PodBuilder(resolvedDriverSpec.pod.pod)
-      .editSpec()
-        .addToContainers(resolvedDriverContainer)
-        .addNewVolume()
-          .withName(SPARK_CONF_VOLUME)
-          .withNewConfigMap()
-            .withName(configMapName)
-            .endConfigMap()
-          .endVolume()
-        .endSpec()
+    val resolvedDriverJob = new JobBuilder(resolvedDriverSpec.job.job)
+      .editOrNewSpec()
+        .editOrNewTemplate()
+          .editOrNewSpec()
+            .addToContainers(resolvedDriverContainer)
+            .addNewVolume()
+              .withName(SPARK_CONF_VOLUME)
+              .withNewConfigMap()
+                .withName(configMapName)
+                .endConfigMap()
+              .endVolume()
+            .withRestartPolicy("OnFailure")
+          .endSpec()
+        .endTemplate()
+      .endSpec()
       .build()
+    // If the fabric8 kubernetes client will support kubernetes 1.8 this
+    // should be removed and fixed with a more proper way
+    // (https://github.com/fabric8io/kubernetes-client/issues/1020)
+    resolvedDriverJob.getSpec.setAdditionalProperty("backoffLimit",
+      kubernetesConf.get(KUBERNETES_DRIVER_JOB_BACKOFFLIMIT))
     Utils.tryWithResource(
-      kubernetesClient
-        .pods()
-        .withName(resolvedDriverPod.getMetadata.getName)
+      kubernetesClient.extensions()
+        .jobs()
+        .withName(resolvedDriverJob.getMetadata.getName)
         .watch(watcher)) { _ =>
-      val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+      val createdDriverJob = kubernetesClient.extensions().jobs().create(resolvedDriverJob)
       try {
         val otherKubernetesResources =
           resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
-        addDriverOwnerReference(createdDriverPod, otherKubernetesResources)
+        addDriverOwnerReference(createdDriverJob, otherKubernetesResources)
         kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
       } catch {
         case NonFatal(e) =>
-          kubernetesClient.pods().delete(createdDriverPod)
+          kubernetesClient.extensions().jobs().delete(createdDriverJob)
           throw e
       }
 
@@ -158,19 +168,19 @@ private[spark] class Client(
     }
   }
 
-  // Add a OwnerReference to the given resources making the driver pod an owner of them so when
-  // the driver pod is deleted, the resources are garbage collected.
-  private def addDriverOwnerReference(driverPod: Pod, resources: Seq[HasMetadata]): Unit = {
-    val driverPodOwnerReference = new OwnerReferenceBuilder()
-      .withName(driverPod.getMetadata.getName)
-      .withApiVersion(driverPod.getApiVersion)
-      .withUid(driverPod.getMetadata.getUid)
-      .withKind(driverPod.getKind)
+  // Add a OwnerReference to the given resources making the driver job an owner of them so when
+  // the driver job is deleted, the resources are garbage collected.
+  private def addDriverOwnerReference(driverJob: Job, resources: Seq[HasMetadata]): Unit = {
+    val driverJobOwnerReference = new OwnerReferenceBuilder()
+      .withName(driverJob.getMetadata.getName)
+      .withApiVersion(driverJob.getApiVersion)
+      .withUid(driverJob.getMetadata.getUid)
+      .withKind(driverJob.getKind)
       .withController(true)
       .build()
     resources.foreach { resource =>
       val originalMetadata = resource.getMetadata
-      originalMetadata.setOwnerReferences(Collections.singletonList(driverPodOwnerReference))
+      originalMetadata.setOwnerReferences(Collections.singletonList(driverJobOwnerReference))
     }
   }
 
@@ -229,9 +239,6 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
     val master = sparkConf.get("spark.master").substring("k8s://".length)
-    val loggingInterval = if (waitForAppCompletion) Some(sparkConf.get(REPORT_INTERVAL)) else None
-
-    val watcher = new LoggingPodStatusWatcherImpl(kubernetesAppId, loggingInterval)
 
     Utils.tryWithResource(SparkKubernetesClientFactory.createKubernetesClient(
       master,
@@ -246,7 +253,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
           kubernetesClient,
           waitForAppCompletion,
           appName,
-          watcher,
+          new LoggingJobStatusWatcherImpl(kubernetesAppId, kubernetesClient),
           kubernetesResourceNamePrefix)
         client.run()
     }

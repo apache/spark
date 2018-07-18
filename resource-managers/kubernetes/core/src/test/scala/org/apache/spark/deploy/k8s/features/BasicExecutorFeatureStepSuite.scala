@@ -42,7 +42,6 @@ class BasicExecutorFeatureStepSuite
   private val DRIVER_POD_NAME = "driver-pod"
 
   private val DRIVER_POD_UID = "driver-uid"
-  private val RESOURCE_NAME_PREFIX = "base"
   private val EXECUTOR_IMAGE = "executor-image"
   private val LABELS = Map("label1key" -> "label1value")
   private val ANNOTATIONS = Map("annotation1key" -> "annotation1value")
@@ -68,8 +67,7 @@ class BasicExecutorFeatureStepSuite
   before {
     MockitoAnnotations.initMocks(this)
     baseConf = new SparkConf()
-      .set(KUBERNETES_DRIVER_POD_NAME, DRIVER_POD_NAME)
-      .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, RESOURCE_NAME_PREFIX)
+      .set(KUBERNETES_DRIVER_POD_NAME_PREFIX, DRIVER_POD_NAME)
       .set(CONTAINER_IMAGE, EXECUTOR_IMAGE)
       .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
       .set("spark.driver.host", DRIVER_HOSTNAME)
@@ -82,7 +80,7 @@ class BasicExecutorFeatureStepSuite
       KubernetesConf(
         baseConf,
         KubernetesExecutorSpecificConf("1", DRIVER_POD),
-        RESOURCE_NAME_PREFIX,
+        APP_ID,
         APP_ID,
         LABELS,
         ANNOTATIONS,
@@ -94,7 +92,7 @@ class BasicExecutorFeatureStepSuite
     val executor = step.configurePod(SparkPod.initialPod())
 
     // The executor pod name and default labels.
-    assert(executor.pod.getMetadata.getName === s"$RESOURCE_NAME_PREFIX-exec-1")
+    assert(executor.pod.getMetadata.getName === s"$APP_ID-exec-1")
     assert(executor.pod.getMetadata.getLabels.asScala === LABELS)
     assert(executor.pod.getSpec.getImagePullSecrets.asScala === TEST_IMAGE_PULL_SECRET_OBJECTS)
 
@@ -114,26 +112,6 @@ class BasicExecutorFeatureStepSuite
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
-  test("executor pod hostnames get truncated to 63 characters") {
-    val conf = baseConf.clone()
-    val longPodNamePrefix = "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple"
-
-    val step = new BasicExecutorFeatureStep(
-      KubernetesConf(
-        conf,
-        KubernetesExecutorSpecificConf("1", DRIVER_POD),
-        longPodNamePrefix,
-        APP_ID,
-        LABELS,
-        ANNOTATIONS,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Nil,
-        Seq.empty[String]))
-    assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
-  }
-
   test("classpath and extra java options get translated into environment variables") {
     val conf = baseConf.clone()
     conf.set(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
@@ -143,7 +121,7 @@ class BasicExecutorFeatureStepSuite
       KubernetesConf(
         conf,
         KubernetesExecutorSpecificConf("1", DRIVER_POD),
-        RESOURCE_NAME_PREFIX,
+        APP_ID,
         APP_ID,
         LABELS,
         ANNOTATIONS,

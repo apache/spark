@@ -46,7 +46,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   private var pyImage: String = _
   private var containerLocalSparkDistroExamplesJar: String = _
   private var appLocator: String = _
-  private var driverPodName: String = _
+  private var driverPodNamePrefix: String = _
 
   override def beforeAll(): Unit = {
     // The scalatest-maven-plugin gives system properties that are referenced but not set null
@@ -84,10 +84,10 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 
   before {
     appLocator = UUID.randomUUID().toString.replaceAll("-", "")
-    driverPodName = "spark-test-app-" + UUID.randomUUID().toString.replaceAll("-", "")
+    driverPodNamePrefix = "spark-test-app-" + UUID.randomUUID().toString.replaceAll("-", "")
     sparkAppConf = kubernetesTestComponents.newSparkAppConf()
       .set("spark.kubernetes.container.image", image)
-      .set("spark.kubernetes.driver.pod.name", driverPodName)
+      .set("spark.kubernetes.driver.pod.namePrefix", driverPodNamePrefix)
       .set("spark.kubernetes.driver.label.spark-app-locator", appLocator)
       .set("spark.kubernetes.executor.label.spark-app-locator", appLocator)
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
@@ -347,13 +347,13 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   }
 
   private def doBasicDriverPodCheck(driverPod: Pod): Unit = {
-    assert(driverPod.getMetadata.getName === driverPodName)
+    assert(driverPod.getMetadata.getName === driverPodNamePrefix)
     assert(driverPod.getSpec.getContainers.get(0).getImage === image)
     assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
   }
 
   private def doBasicDriverPyPodCheck(driverPod: Pod): Unit = {
-    assert(driverPod.getMetadata.getName === driverPodName)
+    assert(driverPod.getMetadata.getName === driverPodNamePrefix)
     assert(driverPod.getSpec.getContainers.get(0).getImage === pyImage)
     assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
   }
@@ -387,11 +387,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   }
 
   private def deleteDriverPod(): Unit = {
-    kubernetesTestComponents.kubernetesClient.pods().withName(driverPodName).delete()
+    kubernetesTestComponents.kubernetesClient.pods().withName(driverPodNamePrefix).delete()
     Eventually.eventually(TIMEOUT, INTERVAL) {
       assert(kubernetesTestComponents.kubernetesClient
         .pods()
-        .withName(driverPodName)
+        .withName(driverPodNamePrefix)
         .get() == null)
     }
   }

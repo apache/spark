@@ -50,8 +50,4 @@ private[spark] class EnvSecretsFeatureStep(
       .build()
     SparkPod(pod.pod, containerWithEnvVars)
   }
-
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }
