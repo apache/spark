@@ -42,7 +42,7 @@ class StructTypeSuite extends SparkFunSuite {
   test("SPARK-24849: toDDL - simple struct") {
     val struct = StructType(Seq(StructField("a", IntegerType)))
 
-    assert(StructType.toDDL(struct) == "a int")
+    assert(toDDL(struct) == "a int")
   }
 
   test("SPARK-24849: round trip toDDL - fromDDL") {
