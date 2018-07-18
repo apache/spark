@@ -2252,7 +2252,7 @@ class Analyzer(
                   }
                   expr
                 case other =>
-                  throw new AnalysisException("need an array field but got " + other.simpleString)
+                  throw new AnalysisException("need an array field but got " + other.catalogString)
               }
           }
           validateNestedTupleFields(result)
@@ -2261,7 +2261,7 @@ class Analyzer(
     }
 
     private def fail(schema: StructType, maxOrdinal: Int): Unit = {
-      throw new AnalysisException(s"Try to map ${schema.simpleString} to Tuple${maxOrdinal + 1}, " +
+      throw new AnalysisException(s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}, " +
         "but failed as the number of fields does not line up.")
     }
 
@@ -2341,7 +2341,7 @@ class Analyzer(
         case e => e.sql
       }
       throw new AnalysisException(s"Cannot up cast $fromStr from " +
-        s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
+        s"${from.dataType.catalogString} to ${to.catalogString} as it may truncate\n" +
         "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")

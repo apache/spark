@@ -785,9 +785,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // schema we read back is different(ignore case and nullability) from the one in table
         // properties which was written when creating table, we should respect the table schema
         // from hive.
-        logWarning(s"The table schema given by Hive metastore(${table.schema.simpleString}) is " +
+        logWarning(s"The table schema given by Hive metastore(${table.schema.catalogString}) is " +
           "different from the schema when this table was created by Spark SQL" +
-          s"(${schemaFromTableProps.simpleString}). We have to fall back to the table schema " +
+          s"(${schemaFromTableProps.catalogString}). We have to fall back to the table schema " +
           "from Hive metastore which is not case preserving.")
         hiveTable.copy(schemaPreservesCase = false)
       }
