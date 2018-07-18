@@ -33,7 +33,7 @@ import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriter, Dat
 case object PackedRowWriterFactory extends DataWriterFactory[Row] {
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): DataWriter[Row] = {
     new PackedRowDataWriter()
   }

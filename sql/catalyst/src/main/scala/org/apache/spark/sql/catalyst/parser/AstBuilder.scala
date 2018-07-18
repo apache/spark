@@ -504,6 +504,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
+      if (!ctx.lateralView.isEmpty) {
+        throw new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
+      }
       withPivot(ctx.pivotClause, from)
     } else {
       ctx.lateralView.asScala.foldLeft(from)(withGenerate)
@@ -1204,6 +1207,34 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a Extract expression.
+   */
+  override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
+    ctx.field.getText.toUpperCase(Locale.ROOT) match {
+      case "YEAR" =>
+        Year(expression(ctx.source))
+      case "QUARTER" =>
+        Quarter(expression(ctx.source))
+      case "MONTH" =>
+        Month(expression(ctx.source))
+      case "WEEK" =>
+        WeekOfYear(expression(ctx.source))
+      case "DAY" =>
+        DayOfMonth(expression(ctx.source))
+      case "DAYOFWEEK" =>
+        DayOfWeek(expression(ctx.source))
+      case "HOUR" =>
+        Hour(expression(ctx.source))
+      case "MINUTE" =>
+        Minute(expression(ctx.source))
+      case "SECOND" =>
+        Second(expression(ctx.source))
+      case other =>
+        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+    }
+  }
+
+  /**
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
@@ -1476,7 +1507,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case "TIMESTAMP" =>
           Literal(Timestamp.valueOf(value))
         case "X" =>
-          val padding = if (value.length % 2 == 1) "0" else ""
+          val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
         case other =>
           throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)

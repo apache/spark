@@ -70,7 +70,7 @@ be safely used as the direct destination of work with the normal rename-based co
 ### Installation
 
 With the relevant libraries on the classpath and Spark configured with valid credentials,
-objects can be can be read or written by using their URLs as the path to data.
+objects can be read or written by using their URLs as the path to data.
 For example `sparkContext.textFile("s3a://landsat-pds/scene_list.gz")` will create
 an RDD of the file `scene_list.gz` stored in S3, using the s3a connector.
 
@@ -184,7 +184,8 @@ is no need for a workflow of write-then-rename to ensure that files aren't picke
 while they are still being written. Applications can write straight to the monitored directory.
 
 1. Streams should only be checkpointed to a store implementing a fast and
-atomic `rename()` operation Otherwise the checkpointing may be slow and potentially unreliable.
+atomic `rename()` operation.
+Otherwise the checkpointing may be slow and potentially unreliable.
 
 ## Further Reading
 

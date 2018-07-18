@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
@@ -1355,7 +1356,8 @@ class HiveDDLSuite
     val indexName = tabName + "_index"
     withTable(tabName) {
       // Spark SQL does not support creating index. Thus, we have to use Hive client.
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
       sql(s"CREATE TABLE $tabName(a int)")
 
       try {
@@ -1393,7 +1395,8 @@ class HiveDDLSuite
     val tabName = "tab1"
     withTable(tabName) {
       // Spark SQL does not support creating skewed table. Thus, we have to use Hive client.
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
       client.runSqlHive(
         s"""
            |CREATE Table $tabName(col1 int, col2 int)
@@ -2244,6 +2247,24 @@ class HiveDDLSuite
       spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.format("hive").saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
+    }
+  }
+
+  test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
+    val expectedMsg = "Cannot create a table having a nested column whose name contains invalid " +
+      "characters (',', ':', ';') in Hive metastore."
+
+    Seq("nested,column", "nested:column", "nested;column").foreach { nestedColumnName =>
+      withTable("t") {
+        val e = intercept[AnalysisException] {
+          spark.range(1)
+            .select(struct(lit(0).as(nestedColumnName)).as("toplevel"))
+            .write
+            .format("hive")
+            .saveAsTable("t")
+        }.getMessage
+        assert(e.contains(expectedMsg))
+      }
     }
   }
 }

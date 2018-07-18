@@ -56,8 +56,6 @@ trait ProgressReporter extends Logging {
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
   protected def newData: Map[BaseStreamingSource, LogicalPlan]
-  protected def availableOffsets: StreamProgress
-  protected def committedOffsets: StreamProgress
   protected def sources: Seq[BaseStreamingSource]
   protected def sink: BaseStreamingSink
   protected def offsetSeqMetadata: OffsetSeqMetadata
@@ -68,8 +66,11 @@ trait ProgressReporter extends Logging {
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
   private var currentTriggerEndTimestamp = -1L
+  private var currentTriggerStartOffsets: Map[BaseStreamingSource, String] = _
+  private var currentTriggerEndOffsets: Map[BaseStreamingSource, String] = _
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
+
   private val currentDurationsMs = new mutable.HashMap[String, Long]()
 
   /** Flag that signals whether any error with input metrics have already been logged */
@@ -114,7 +115,18 @@ trait ProgressReporter extends Logging {
     lastTriggerStartTimestamp = currentTriggerStartTimestamp
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
     currentStatus = currentStatus.copy(isTriggerActive = true)
+    currentTriggerStartOffsets = null
+    currentTriggerEndOffsets = null
     currentDurationsMs.clear()
+  }
+
+  /**
+   * Record the offsets range this trigger will process. Call this before updating
+   * `committedOffsets` in `StreamExecution` to make sure that the correct range is recorded.
+   */
+  protected def recordTriggerOffsets(from: StreamProgress, to: StreamProgress): Unit = {
+    currentTriggerStartOffsets = from.mapValues(_.json)
+    currentTriggerEndOffsets = to.mapValues(_.json)
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -130,6 +142,7 @@ trait ProgressReporter extends Logging {
 
   /** Finalizes the query progress and adds it to list of recent status updates. */
   protected def finishTrigger(hasNewData: Boolean): Unit = {
+    assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null)
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
     val executionStats = extractExecutionStats(hasNewData)
@@ -147,8 +160,8 @@ trait ProgressReporter extends Logging {
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
       new SourceProgress(
         description = source.toString,
-        startOffset = committedOffsets.get(source).map(_.json).orNull,
-        endOffset = availableOffsets.get(source).map(_.json).orNull,
+        startOffset = currentTriggerStartOffsets.get(source).orNull,
+        endOffset = currentTriggerEndOffsets.get(source).orNull,
         numInputRows = numRecords,
         inputRowsPerSecond = numRecords / inputTimeSec,
         processedRowsPerSecond = numRecords / processingTimeSec

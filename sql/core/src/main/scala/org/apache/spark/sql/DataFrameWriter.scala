@@ -330,8 +330,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
-    if (sortColumnNames.isDefined) {
-      require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
+    if (sortColumnNames.isDefined && numBuckets.isEmpty) {
+      throw new AnalysisException("sortBy must be used together with bucketBy")
     }
 
     numBuckets.map { n =>
@@ -340,8 +340,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def assertNotBucketed(operation: String): Unit = {
-    if (numBuckets.isDefined || sortColumnNames.isDefined) {
-      throw new AnalysisException(s"'$operation' does not support bucketing right now")
+    if (getBucketSpec.isDefined) {
+      if (sortColumnNames.isEmpty) {
+        throw new AnalysisException(s"'$operation' does not support bucketBy right now")
+      } else {
+        throw new AnalysisException(s"'$operation' does not support bucketBy and sortBy right now")
+      }
     }
   }
 

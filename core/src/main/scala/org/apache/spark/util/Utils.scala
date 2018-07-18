@@ -18,6 +18,8 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.{Byte => JByte}
+import java.lang.InternalError
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
@@ -26,11 +28,12 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
+import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.GZIPInputStream
-import javax.net.ssl.HttpsURLConnection
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -44,6 +47,7 @@ import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.google.common.hash.HashCodes
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
@@ -96,7 +100,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_MAX_TO_STRING_FIELDS = 25
 
-  private def maxNumToStringFields = {
+  private[spark] def maxNumToStringFields = {
     if (SparkEnv.get != null) {
       SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
     } else {
@@ -431,7 +435,7 @@ private[spark] object Utils extends Logging {
     new URI("file:///" + rawFileName).getPath.substring(1)
   }
 
-    /**
+  /**
    * Download a file or directory to target directory. Supports fetching the file in a variety of
    * ways, including HTTP, Hadoop-compatible filesystems, and files on a standard filesystem, based
    * on the URL parameter. Fetching directories is only supported from Hadoop-compatible
@@ -502,6 +506,14 @@ private[spark] object Utils extends Logging {
     }
 
     targetFile
+  }
+
+  /** Records the duration of running `body`. */
+  def timeTakenMs[T](body: => T): (T, Long) = {
+    val startTime = System.nanoTime()
+    val result = body
+    val endTime = System.nanoTime()
+    (result, math.max(NANOSECONDS.toMillis(endTime - startTime), 0))
   }
 
   /**
@@ -808,15 +820,15 @@ private[spark] object Utils extends Logging {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
       conf.getenv("SPARK_LOCAL_DIRS").split(",")
-    } else if (conf.getenv("MESOS_DIRECTORY") != null && !shuffleServiceEnabled) {
+    } else if (conf.getenv("MESOS_SANDBOX") != null && !shuffleServiceEnabled) {
       // Mesos already creates a directory per Mesos task. Spark should use that directory
       // instead so all temporary files are automatically cleaned up when the Mesos task ends.
       // Note that we don't want this if the shuffle service is enabled because we want to
       // continue to serve shuffle files after the executors that wrote them have already exited.
-      Array(conf.getenv("MESOS_DIRECTORY"))
+      Array(conf.getenv("MESOS_SANDBOX"))
     } else {
-      if (conf.getenv("MESOS_DIRECTORY") != null && shuffleServiceEnabled) {
-        logInfo("MESOS_DIRECTORY available but not using provided Mesos sandbox because " +
+      if (conf.getenv("MESOS_SANDBOX") != null && shuffleServiceEnabled) {
+        logInfo("MESOS_SANDBOX available but not using provided Mesos sandbox because " +
           "spark.shuffle.service.enabled is enabled.")
       }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
@@ -1818,7 +1830,7 @@ private[spark] object Utils extends Logging {
 
   /** Return the class name of the given object, removing all dollar signs */
   def getFormattedClassName(obj: AnyRef): String = {
-    obj.getClass.getSimpleName.replace("$", "")
+    getSimpleName(obj.getClass).replace("$", "")
   }
 
   /**
@@ -2703,6 +2715,71 @@ private[spark] object Utils extends Logging {
    */
   def substituteAppId(opt: String, appId: String): String = {
     opt.replace("{{APP_ID}}", appId)
+  }
+
+  def createSecret(conf: SparkConf): String = {
+    val bits = conf.get(AUTH_SECRET_BIT_LENGTH)
+    val rnd = new SecureRandom()
+    val secretBytes = new Array[Byte](bits / JByte.SIZE)
+    rnd.nextBytes(secretBytes)
+    HashCodes.fromBytes(secretBytes).toString()
+  }
+
+  /**
+   * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
+   * This method mimicks scalatest's getSimpleNameOfAnObjectsClass.
+   */
+  def getSimpleName(cls: Class[_]): String = {
+    try {
+      return cls.getSimpleName
+    } catch {
+      case err: InternalError => return stripDollars(stripPackages(cls.getName))
+    }
+  }
+
+  /**
+   * Remove the packages from full qualified class name
+   */
+  private def stripPackages(fullyQualifiedName: String): String = {
+    fullyQualifiedName.split("\\.").takeRight(1)(0)
+  }
+
+  /**
+   * Remove trailing dollar signs from qualified class name,
+   * and return the trailing part after the last dollar sign in the middle
+   */
+  private def stripDollars(s: String): String = {
+    val lastDollarIndex = s.lastIndexOf('$')
+    if (lastDollarIndex < s.length - 1) {
+      // The last char is not a dollar sign
+      if (lastDollarIndex == -1 || !s.contains("$iw")) {
+        // The name does not have dollar sign or is not an intepreter
+        // generated class, so we should return the full string
+        s
+      } else {
+        // The class name is intepreter generated,
+        // return the part after the last dollar sign
+        // This is the same behavior as getClass.getSimpleName
+        s.substring(lastDollarIndex + 1)
+      }
+    }
+    else {
+      // The last char is a dollar sign
+      // Find last non-dollar char
+      val lastNonDollarChar = s.reverse.find(_ != '$')
+      lastNonDollarChar match {
+        case None => s
+        case Some(c) =>
+          val lastNonDollarIndex = s.lastIndexOf(c)
+          if (lastNonDollarIndex == -1) {
+            s
+          } else {
+            // Strip the trailing dollar signs
+            // Invoke stripDollars again to get the simple name
+            stripDollars(s.substring(0, lastNonDollarIndex + 1))
+          }
+      }
+    }
   }
 }
 

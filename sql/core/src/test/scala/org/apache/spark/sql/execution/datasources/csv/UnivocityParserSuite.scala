@@ -26,8 +26,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class UnivocityParserSuite extends SparkFunSuite {
-  private val parser =
-    new UnivocityParser(StructType(Seq.empty), new CSVOptions(Map.empty[String, String], "GMT"))
+  private val parser = new UnivocityParser(
+    StructType(Seq.empty),
+    new CSVOptions(Map.empty[String, String], false, "GMT"))
 
   private def assertNull(v: Any) = assert(v == null)
 
@@ -38,7 +39,7 @@ class UnivocityParserSuite extends SparkFunSuite {
 
     stringValues.zip(decimalValues).foreach { case (strVal, decimalVal) =>
       val decimalValue = new BigDecimal(decimalVal.toString)
-      val options = new CSVOptions(Map.empty[String, String], "GMT")
+      val options = new CSVOptions(Map.empty[String, String], false, "GMT")
       assert(parser.makeConverter("_1", decimalType, options = options).apply(strVal) ===
         Decimal(decimalValue, decimalType.precision, decimalType.scale))
     }
@@ -51,21 +52,21 @@ class UnivocityParserSuite extends SparkFunSuite {
     // Nullable field with nullValue option.
     types.foreach { t =>
       // Tests that a custom nullValue.
-      val nullValueOptions = new CSVOptions(Map("nullValue" -> "-"), "GMT")
+      val nullValueOptions = new CSVOptions(Map("nullValue" -> "-"), false, "GMT")
       val converter =
         parser.makeConverter("_1", t, nullable = true, options = nullValueOptions)
       assertNull(converter.apply("-"))
       assertNull(converter.apply(null))
 
       // Tests that the default nullValue is empty string.
-      val options = new CSVOptions(Map.empty[String, String], "GMT")
+      val options = new CSVOptions(Map.empty[String, String], false, "GMT")
       assertNull(parser.makeConverter("_1", t, nullable = true, options = options).apply(""))
     }
 
     // Not nullable field with nullValue option.
     types.foreach { t =>
       // Casts a null to not nullable field should throw an exception.
-      val options = new CSVOptions(Map("nullValue" -> "-"), "GMT")
+      val options = new CSVOptions(Map("nullValue" -> "-"), false, "GMT")
       val converter =
         parser.makeConverter("_1", t, nullable = false, options = options)
       var message = intercept[RuntimeException] {
@@ -81,7 +82,7 @@ class UnivocityParserSuite extends SparkFunSuite {
     // If nullValue is different with empty string, then, empty string should not be casted into
     // null.
     Seq(true, false).foreach { b =>
-      val options = new CSVOptions(Map("nullValue" -> "null"), "GMT")
+      val options = new CSVOptions(Map("nullValue" -> "null"), false, "GMT")
       val converter =
         parser.makeConverter("_1", StringType, nullable = b, options = options)
       assert(converter.apply("") == UTF8String.fromString(""))
@@ -89,7 +90,7 @@ class UnivocityParserSuite extends SparkFunSuite {
   }
 
   test("Throws exception for empty string with non null type") {
-      val options = new CSVOptions(Map.empty[String, String], "GMT")
+      val options = new CSVOptions(Map.empty[String, String], false, "GMT")
     val exception = intercept[RuntimeException]{
       parser.makeConverter("_1", IntegerType, nullable = false, options = options).apply("")
     }
@@ -97,7 +98,7 @@ class UnivocityParserSuite extends SparkFunSuite {
   }
 
   test("Types are cast correctly") {
-    val options = new CSVOptions(Map.empty[String, String], "GMT")
+    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
     assert(parser.makeConverter("_1", ByteType, options = options).apply("10") == 10)
     assert(parser.makeConverter("_1", ShortType, options = options).apply("10") == 10)
     assert(parser.makeConverter("_1", IntegerType, options = options).apply("10") == 10)
@@ -107,7 +108,7 @@ class UnivocityParserSuite extends SparkFunSuite {
     assert(parser.makeConverter("_1", BooleanType, options = options).apply("true") == true)
 
     val timestampsOptions =
-      new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy hh:mm"), "GMT")
+      new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy hh:mm"), false, "GMT")
     val customTimestamp = "31/01/2015 00:00"
     val expectedTime = timestampsOptions.timestampFormat.parse(customTimestamp).getTime
     val castedTimestamp =
@@ -116,7 +117,7 @@ class UnivocityParserSuite extends SparkFunSuite {
     assert(castedTimestamp == expectedTime * 1000L)
 
     val customDate = "31/01/2015"
-    val dateOptions = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy"), "GMT")
+    val dateOptions = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy"), false, "GMT")
     val expectedDate = dateOptions.dateFormat.parse(customDate).getTime
     val castedDate =
       parser.makeConverter("_1", DateType, nullable = true, options = dateOptions)
@@ -131,7 +132,7 @@ class UnivocityParserSuite extends SparkFunSuite {
   }
 
   test("Throws exception for casting an invalid string to Float and Double Types") {
-    val options = new CSVOptions(Map.empty[String, String], "GMT")
+    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
     val types = Seq(DoubleType, FloatType)
     val input = Seq("10u000", "abc", "1 2/3")
     types.foreach { dt =>
@@ -145,7 +146,7 @@ class UnivocityParserSuite extends SparkFunSuite {
   }
 
   test("Float NaN values are parsed correctly") {
-    val options = new CSVOptions(Map("nanValue" -> "nn"), "GMT")
+    val options = new CSVOptions(Map("nanValue" -> "nn"), false, "GMT")
     val floatVal: Float = parser.makeConverter(
       "_1", FloatType, nullable = true, options = options
     ).apply("nn").asInstanceOf[Float]
@@ -156,7 +157,7 @@ class UnivocityParserSuite extends SparkFunSuite {
   }
 
   test("Double NaN values are parsed correctly") {
-    val options = new CSVOptions(Map("nanValue" -> "-"), "GMT")
+    val options = new CSVOptions(Map("nanValue" -> "-"), false, "GMT")
     val doubleVal: Double = parser.makeConverter(
       "_1", DoubleType, nullable = true, options = options
     ).apply("-").asInstanceOf[Double]
@@ -165,14 +166,14 @@ class UnivocityParserSuite extends SparkFunSuite {
   }
 
   test("Float infinite values can be parsed") {
-    val negativeInfOptions = new CSVOptions(Map("negativeInf" -> "max"), "GMT")
+    val negativeInfOptions = new CSVOptions(Map("negativeInf" -> "max"), false, "GMT")
     val floatVal1 = parser.makeConverter(
       "_1", FloatType, nullable = true, options = negativeInfOptions
     ).apply("max").asInstanceOf[Float]
 
     assert(floatVal1 == Float.NegativeInfinity)
 
-    val positiveInfOptions = new CSVOptions(Map("positiveInf" -> "max"), "GMT")
+    val positiveInfOptions = new CSVOptions(Map("positiveInf" -> "max"), false, "GMT")
     val floatVal2 = parser.makeConverter(
       "_1", FloatType, nullable = true, options = positiveInfOptions
     ).apply("max").asInstanceOf[Float]
@@ -181,14 +182,14 @@ class UnivocityParserSuite extends SparkFunSuite {
   }
 
   test("Double infinite values can be parsed") {
-    val negativeInfOptions = new CSVOptions(Map("negativeInf" -> "max"), "GMT")
+    val negativeInfOptions = new CSVOptions(Map("negativeInf" -> "max"), false, "GMT")
     val doubleVal1 = parser.makeConverter(
       "_1", DoubleType, nullable = true, options = negativeInfOptions
     ).apply("max").asInstanceOf[Double]
 
     assert(doubleVal1 == Double.NegativeInfinity)
 
-    val positiveInfOptions = new CSVOptions(Map("positiveInf" -> "max"), "GMT")
+    val positiveInfOptions = new CSVOptions(Map("positiveInf" -> "max"), false, "GMT")
     val doubleVal2 = parser.makeConverter(
       "_1", DoubleType, nullable = true, options = positiveInfOptions
     ).apply("max").asInstanceOf[Double]
