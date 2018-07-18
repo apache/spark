@@ -134,6 +134,34 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       JAVA_STEP_TYPE)
   }
 
+  test("Apply host aliases step if aliases are present.") {
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        None,
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Map("192.168.0.1" -> Seq("foo", "bar")),
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      HOST_ALIASES_STEP_TYPE,
+      JAVA_STEP_TYPE)
+  }
+
   test("Apply Java step if main resource is none.") {
     val conf = KubernetesConf(
       new SparkConf(false),
