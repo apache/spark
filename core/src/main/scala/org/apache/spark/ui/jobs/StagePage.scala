@@ -115,6 +115,8 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         return UIUtils.headerSparkPage(request, stageHeader, content, parent)
       }
 
+    val stageJobIds = parent.store.getJobIdsAssociatedWithStage(stageId)
+
     val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
 
     val totalTasks = taskCount(stageData)
@@ -180,6 +182,12 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
             <li>
               <strong>Shuffle Spill (Disk): </strong>
               {Utils.bytesToString(stageData.diskBytesSpilled)}
+            </li>
+          }}
+          {if (!stageJobIds.isEmpty) {
+            <li>
+              <strong>Associated Job Ids: </strong>
+              {stageJobIds}
             </li>
           }}
         </ul>
