@@ -1619,7 +1619,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val getFromSmaller = CodeGenerator.getValue(smaller, elementType, i)
     val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
     val javaElementClass = CodeGenerator.boxedType(elementType)
-    val javaSet = classOf[java.util.HashSet[_]].getCanonicalName
+    val javaSet = classOf[java.util.HashSet[_]].getName
     val set = ctx.freshName("set")
     val addToSetFromSmallerCode = nullSafeElementCodegen(
       smaller, i, s"$set.add($getFromSmaller);", s"${ev.isNull} = true;")

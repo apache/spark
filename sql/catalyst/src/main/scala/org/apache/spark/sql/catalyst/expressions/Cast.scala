@@ -990,13 +990,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
-<<<<<<< HEAD
         code"""
-          scala.Option<Long> $longOpt =
-=======
-        s"""
           scala.Option<Object> $longOpt =
->>>>>>> Fix
             org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $tz);
           if ($longOpt.isDefined()) {
             $evPrim = ((Long) $longOpt.get()).longValue();

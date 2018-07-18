@@ -1605,10 +1605,28 @@ object CodeGenerator extends Logging {
   def primitiveTypeName(dt: DataType): String = primitiveTypeName(javaType(dt))
 
   def getClassName(cls: Class[_]): String = {
-    try {
-      Option(cls.getCanonicalName).getOrElse(cls.getName)
-    } catch {
-      case err: InternalError => cls.getName
+    val getNameValue = cls.getName
+    // `getName` and `getCanonicalName` return different names for inner classes, e.g.,
+    //
+    // scala> classOf[PrefixComparators.BinaryPrefixComparator].getName
+    //  o.a.s.util.collection.unsafe.sort.PrefixComparators$BinaryPrefixComparator
+    // scala> classOf[PrefixComparators.BinaryPrefixComparator].getCanonicalName
+    //  o.a.s.util.collection.unsafe.sort.PrefixComparators.BinaryPrefixComparator
+    //
+    // Janino can handle both forms for casts and imports though, JDK Java compilers cannot handle
+    // the former one. So, this method basically uses `getCanonicalName`. If `getCanonicalName`
+    // returns null or throws an exception (See SPARK-24216), it uses `getName`.
+    //
+    // Note that there is only one exception; Janino cannot handle the `getCanonicalName` form
+    // for package objects, so we need to use `getName` for the case.
+    if (getNameValue.matches(""".*\.package\$.*""")) {
+      getNameValue
+    } else {
+      try {
+        Option(cls.getCanonicalName).getOrElse(getNameValue)
+      } catch {
+        case err: InternalError => cls.getName
+      }
     }
   }
 
