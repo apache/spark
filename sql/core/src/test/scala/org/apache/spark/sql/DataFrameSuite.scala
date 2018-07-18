@@ -2367,8 +2367,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     // Test with local relation, the Project will be evaluated without codegen
     checkResult()
-    sourceDF.cache()
     // Test with cached relation, the Project will be evaluated with codegen
+    sourceDF.cache()
     checkResult()
   }
 
