@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.StructType.{fromDDL, toDDL}
 
 class StructTypeSuite extends SparkFunSuite {
 
@@ -36,5 +37,23 @@ class StructTypeSuite extends SparkFunSuite {
   test("lookup fieldIndex for missing field should output existing fields") {
     val e = intercept[IllegalArgumentException](s.fieldIndex("c")).getMessage
     assert(e.contains("Available fields: a, b"))
+  }
+
+  test("SPARK-24849: toDDL - simple struct") {
+    val struct = StructType(Seq(StructField("a", IntegerType)))
+
+    assert(StructType.toDDL(struct) == "a int")
+  }
+
+  test("SPARK-24849: round trip toDDL - fromDDL") {
+    val struct = new StructType().add("a", IntegerType).add("b", StringType)
+
+    assert(fromDDL(toDDL(struct)) === struct)
+  }
+
+  test("SPARK-24849: round trip fromDDL - toDDL") {
+    val struct = "a map<int,string>,b int"
+
+    assert(toDDL(fromDDL(struct)) === struct)
   }
 }

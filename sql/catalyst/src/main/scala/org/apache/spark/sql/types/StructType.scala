@@ -436,6 +436,14 @@ object StructType extends AbstractDataType {
    */
   def fromDDL(ddl: String): StructType = CatalystSqlParser.parseTableSchema(ddl)
 
+  /**
+   * Converts a value of StructType to a string in DDL format. For example:
+   * `StructType(Seq(StructField("a", IntegerType)))` should be converted to `a int`
+   */
+  def toDDL(struct: StructType): String = {
+    struct.map(field => s"${field.name} ${field.dataType.catalogString}").mkString(",")
+  }
+
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
   def apply(fields: java.util.List[StructField]): StructType = {
