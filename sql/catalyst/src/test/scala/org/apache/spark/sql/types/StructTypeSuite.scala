@@ -42,7 +42,7 @@ class StructTypeSuite extends SparkFunSuite {
   test("SPARK-24849: toDDL - simple struct") {
     val struct = StructType(Seq(StructField("a", IntegerType)))
 
-    assert(toDDL(struct) == "a int")
+    assert(toDDL(struct) == "`a` INT")
   }
 
   test("SPARK-24849: round trip toDDL - fromDDL") {
@@ -52,7 +52,7 @@ class StructTypeSuite extends SparkFunSuite {
   }
 
   test("SPARK-24849: round trip fromDDL - toDDL") {
-    val struct = "a map<int,string>,b int"
+    val struct = "`a` MAP<INT, STRING>,`b` INT"
 
     assert(toDDL(fromDDL(struct)) === struct)
   }
@@ -61,6 +61,6 @@ class StructTypeSuite extends SparkFunSuite {
     val struct = new StructType()
       .add("metaData", new StructType().add("eventId", StringType))
 
-    assert(toDDL(struct) == "metaData struct<eventId:string>")
+    assert(toDDL(struct) == "`metaData` STRUCT<`eventId`: STRING>")
   }
 }

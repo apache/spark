@@ -441,7 +441,7 @@ object StructType extends AbstractDataType {
    * `StructType(Seq(StructField("a", IntegerType)))` should be converted to `a int`
    */
   def toDDL(struct: StructType): String = {
-    struct.map(field => s"${field.name} ${field.dataType.catalogString}").mkString(",")
+    struct.map(field => s"${quoteIdentifier(field.name)} ${field.dataType.sql}").mkString(",")
   }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
