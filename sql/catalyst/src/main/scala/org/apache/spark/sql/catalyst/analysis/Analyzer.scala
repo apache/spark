@@ -2261,8 +2261,8 @@ class Analyzer(
     }
 
     private def fail(schema: StructType, maxOrdinal: Int): Unit = {
-      throw new AnalysisException(s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}, " +
-        "but failed as the number of fields does not line up.")
+      throw new AnalysisException(s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}" +
+        ", but failed as the number of fields does not line up.")
     }
 
     /**
