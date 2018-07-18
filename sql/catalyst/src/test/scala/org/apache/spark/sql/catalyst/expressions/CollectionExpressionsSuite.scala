@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1422,45 +1424,68 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("Shuffle") {
     // Primitive-type elements
-    val ai0 = Literal.create(Seq(2, 1, 4, 5, 3), ArrayType(IntegerType))
-    val ai1 = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType))
-    val ai2 = Literal.create(Seq(null, 1, null, 3), ArrayType(IntegerType))
-    val ai3 = Literal.create(Seq(2, null, 4, null), ArrayType(IntegerType))
-    val ai4 = Literal.create(Seq(null, null, null), ArrayType(IntegerType))
-    val ai5 = Literal.create(Seq(1), ArrayType(IntegerType))
-    val ai6 = Literal.create(Seq.empty, ArrayType(IntegerType))
-    val ai7 = Literal.create(null, ArrayType(IntegerType))
+    val ai0 = Literal.create(Seq(1, 2, 3, 4, 5), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai2 = Literal.create(Seq(null, 1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ai3 = Literal.create(Seq(2, null, 4, null), ArrayType(IntegerType, containsNull = true))
+    val ai4 = Literal.create(Seq(null, null, null), ArrayType(IntegerType, containsNull = true))
+    val ai5 = Literal.create(Seq(1), ArrayType(IntegerType, containsNull = false))
+    val ai6 = Literal.create(Seq.empty, ArrayType(IntegerType, containsNull = false))
+    val ai7 = Literal.create(null, ArrayType(IntegerType, containsNull = true))
 
-    checkEvaluation(ArraySort(Shuffle(ai0)), Seq(1, 2, 3, 4, 5))
-    checkEvaluation(ArraySort(Shuffle(ai1)), Seq(1, 2, 3))
-    checkEvaluation(ArraySort(Shuffle(ai2)), Seq(1, 3, null, null))
-    checkEvaluation(ArraySort(Shuffle(ai3)), Seq(2, 4, null, null))
-    checkEvaluation(Shuffle(ai4), Seq(null, null, null))
-    checkEvaluation(Shuffle(ai5), Seq(1))
-    checkEvaluation(Shuffle(ai6), Seq.empty)
-    checkEvaluation(Shuffle(ai7), null)
+    checkEvaluation(Shuffle(ai0, Some(0)), Seq(4, 3, 1, 5, 2))
+    checkEvaluation(Shuffle(ai1, Some(0)), Seq(2, 3, 1))
+    checkEvaluation(Shuffle(ai2, Some(0)), Seq(1, 3, null, null))
+    checkEvaluation(Shuffle(ai3, Some(0)), Seq(null, null, 4, 2))
+    checkEvaluation(Shuffle(ai4, Some(0)), Seq(null, null, null))
+    checkEvaluation(Shuffle(ai5, Some(0)), Seq(1))
+    checkEvaluation(Shuffle(ai6, Some(0)), Seq.empty)
+    checkEvaluation(Shuffle(ai7, Some(0)), null)
 
     // Non-primitive-type elements
-    val as0 = Literal.create(Seq("b", "a", "d", "c"), ArrayType(StringType))
-    val as1 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType))
-    val as2 = Literal.create(Seq(null, "a", null, "c"), ArrayType(StringType))
-    val as3 = Literal.create(Seq("b", null, "d", null), ArrayType(StringType))
-    val as4 = Literal.create(Seq(null, null, null), ArrayType(StringType))
-    val as5 = Literal.create(Seq("a"), ArrayType(StringType))
-    val as6 = Literal.create(Seq.empty, ArrayType(StringType))
-    val as7 = Literal.create(null, ArrayType(StringType))
+    val as0 = Literal.create(Seq("a", "b", "c", "d"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
+    val as2 = Literal.create(Seq(null, "a", null, "c"), ArrayType(StringType, containsNull = true))
+    val as3 = Literal.create(Seq("b", null, "d", null), ArrayType(StringType, containsNull = true))
+    val as4 = Literal.create(Seq(null, null, null), ArrayType(StringType, containsNull = true))
+    val as5 = Literal.create(Seq("a"), ArrayType(StringType, containsNull = false))
+    val as6 = Literal.create(Seq.empty, ArrayType(StringType, containsNull = false))
+    val as7 = Literal.create(null, ArrayType(StringType, containsNull = true))
     val aa = Literal.create(
       Seq(Seq("a", "b"), Seq("c", "d"), Seq("e")),
       ArrayType(ArrayType(StringType)))
 
-    checkEvaluation(ArraySort(Shuffle(as0)), Seq("a", "b", "c", "d"))
-    checkEvaluation(ArraySort(Shuffle(as1)), Seq("a", "b", "c"))
-    checkEvaluation(ArraySort(Shuffle(as2)), Seq("a", "c", null, null))
-    checkEvaluation(ArraySort(Shuffle(as3)), Seq("b", "d", null, null))
-    checkEvaluation(Shuffle(as4), Seq(null, null, null))
-    checkEvaluation(Shuffle(as5), Seq("a"))
-    checkEvaluation(Shuffle(as6), Seq.empty)
-    checkEvaluation(Shuffle(as7), null)
-    checkEvaluation(ArraySort(Shuffle(aa)), Seq(Seq("a", "b"), Seq("c", "d"), Seq("e")))
+    checkEvaluation(Shuffle(as0, Some(0)), Seq("b", "d", "c", "a"))
+    checkEvaluation(Shuffle(as1, Some(0)), Seq("b", "c", "a"))
+    checkEvaluation(Shuffle(as2, Some(0)), Seq("a", "c", null, null))
+    checkEvaluation(Shuffle(as3, Some(0)), Seq(null, null, "d", "b"))
+    checkEvaluation(Shuffle(as4, Some(0)), Seq(null, null, null))
+    checkEvaluation(Shuffle(as5, Some(0)), Seq("a"))
+    checkEvaluation(Shuffle(as6, Some(0)), Seq.empty)
+    checkEvaluation(Shuffle(as7, Some(0)), null)
+    checkEvaluation(Shuffle(aa, Some(0)), Seq(Seq("c", "d"), Seq("e"), Seq("a", "b")))
+
+    val r = new Random()
+    val seed1 = Some(r.nextLong())
+    assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) ===
+      evaluateWithoutCodegen(Shuffle(ai0, seed1)))
+    assert(evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed1)) ===
+      evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed1)))
+    assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) ===
+      evaluateWithUnsafeProjection(Shuffle(ai0, seed1)))
+
+    val seed2 = Some(r.nextLong())
+    assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) !==
+      evaluateWithoutCodegen(Shuffle(ai0, seed2)))
+    assert(evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed1)) !==
+      evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed2)))
+    assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) !==
+      evaluateWithUnsafeProjection(Shuffle(ai0, seed2)))
+
+    val shuffle = Shuffle(ai0, seed1)
+    assert(shuffle.fastEquals(shuffle))
+    assert(!shuffle.fastEquals(Shuffle(ai0, seed1)))
+    assert(!shuffle.fastEquals(shuffle.freshCopy()))
+    assert(!shuffle.fastEquals(Shuffle(ai0, seed2)))
   }
 }

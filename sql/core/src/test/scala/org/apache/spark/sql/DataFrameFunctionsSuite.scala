@@ -1445,7 +1445,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("shuffle function") {
-    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codegen on
+    // Shuffle expressions should produce same results at retries in the same DataFrame.
+    def checkResult(df: DataFrame): Unit = {
+      checkAnswer(df, df.collect())
+    }
 
     // primitive-type elements
     val idf = Seq(
@@ -1455,18 +1458,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
-    checkAnswer(
-      idf.select(sort_array(shuffle('i))),
-      Seq(Row(Seq.empty), Row(Seq(1, 7, 8, 9)), Row(Seq(2, 5, 7, 8, 9)), Row(null))
-    )
-    checkAnswer(
-      idf.filter(dummyFilter('i)).select(sort_array(shuffle('i))),
-      Seq(Row(Seq.empty), Row(Seq(1, 7, 8, 9)), Row(Seq(2, 5, 7, 8, 9)), Row(null))
-    )
-    checkAnswer(
-      idf.selectExpr("sort_array(shuffle(i))"),
-      Seq(Row(Seq.empty), Row(Seq(1, 7, 8, 9)), Row(Seq(2, 5, 7, 8, 9)), Row(null))
-    )
+    def checkResult1(): Unit = {
+      checkResult(idf.select(shuffle('i)))
+      checkResult(idf.selectExpr("shuffle(i)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    checkResult1()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idf.cache()
+    checkResult1()
 
     // Array test cases (non-primitive-type elements)
     val sdf = Seq(
@@ -1476,18 +1477,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("s")
 
-    checkAnswer(
-      sdf.select(sort_array(shuffle('s))),
-      Seq(Row(Seq.empty), Row(Seq("a", "b", "c")), Row(Seq(null, null, "b", "c")), Row(null))
-    )
-    checkAnswer(
-      sdf.filter(dummyFilter('s)).select(sort_array(shuffle('s))),
-      Seq(Row(Seq.empty), Row(Seq("a", "b", "c")), Row(Seq(null, null, "b", "c")), Row(null))
-    )
-    checkAnswer(
-      sdf.selectExpr("sort_array(shuffle(s))"),
-      Seq(Row(Seq.empty), Row(Seq("a", "b", "c")), Row(Seq(null, null, "b", "c")), Row(null))
-    )
+    def checkResult2(): Unit = {
+      checkResult(sdf.select(shuffle('s)))
+      checkResult(sdf.selectExpr("shuffle(s)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    checkResult2()
+    // Test with cached relation, the Project will be evaluated with codegen
+    sdf.cache()
+    checkResult2()
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

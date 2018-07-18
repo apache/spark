@@ -20,7 +20,9 @@ import java.util.{Comparator, TimeZone}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
-import scala.util.Random
+
+import org.apache.commons.math3.random.MersenneTwister
+import org.apache.commons.math3.util.MathArrays
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
@@ -37,7 +39,6 @@ import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.collection.OpenHashSet
-
 
 /**
  * Base trait for [[BinaryExpression]]s with two arrays of the same element type and implicit
@@ -1186,7 +1187,6 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
   override def prettyName: String = "array_sort"
 }
 
-
 /**
  * Returns a random permutation of the given array.
  */
@@ -1199,87 +1199,100 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
       > SELECT _FUNC_(array(1, 20, null, 3));
        [20, null, 3, 1]
   """, since = "2.4.0")
-case class Shuffle(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
+  extends UnaryExpression with ExpectsInputTypes with Stateful {
+
+  def this(child: Expression) = this(child, None)
+
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && randomSeed.isDefined
+
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
   override def dataType: DataType = child.dataType
 
-  lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  @transient lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+
+  @transient private[this] var random: MersenneTwister = _
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
+    random = new MersenneTwister(randomSeed.get + partitionIndex)
+  }
+
+  override protected def evalInternal(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      val arr = value.asInstanceOf[ArrayData]
+      val indices = MathArrays.natural(arr.numElements())
+      MathArrays.shuffle(indices, random)
+      new GenericArrayData(indices.map(arr.get(_, elementType)))
+    }
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => shuffleArrayCodeGen(ctx, ev, c))
   }
 
-
-  /*
-   * This implementation uses the modern version of Fisher-Yates algorithm.
-   *
-   * Reference: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#Modern_method
-   */
   private def shuffleArrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
-    val length = ctx.freshName("length")
-    val javaElementType = CodeGenerator.javaType(elementType)
+    val randomClass = classOf[MersenneTwister].getName
+
+    val rand = ctx.addMutableState(randomClass, "rand", forceInline = true)
+    ctx.addPartitionInitializationStatement(
+      s"$rand = new $randomClass(${randomSeed.get}L + partitionIndex);")
+
     val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
 
+    val numElements = ctx.freshName("numElements")
+    val arrayData = ctx.freshName("arrayData")
+
     val initialization = if (isPrimitiveType) {
-      s"${ev.value} = $childName.copy()"
+      ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
     } else {
-      s"""
-          |${ev.value} = new ${classOf[GenericArrayData].getName()}(new Object[$length]);
-          |for (int j = 0; j < $childName.numElements(); j++) {
-          |  ${ev.value}.update(j, ${CodeGenerator.getValue(childName, elementType, "j")});
-          |}
-       """.stripMargin
+      val arrayDataClass = classOf[GenericArrayData].getName()
+      s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
     }
 
-    val swapAssigments = if (isPrimitiveType) {
-      val setFunc = "set" + CodeGenerator.primitiveTypeName(elementType)
-      val getCall = (index: String) => CodeGenerator.getValue(ev.value, elementType, index)
-      s"""
-          |boolean isNullAtK = ${ev.value}.isNullAt(k);
-          |boolean isNullAtL = ${ev.value}.isNullAt(l);
-          |if (!isNullAtK) {
-          |  $javaElementType el = ${getCall("k")};
-          |  if(!isNullAtL) {
-          |    ${ev.value}.$setFunc(k, ${getCall("l")});
-          |  } else {
-          |    ${ev.value}.setNullAt(k);
-          |  }
-          |  ${ev.value}.$setFunc(l, el);
-          |} else if (!isNullAtL) {
-          |  ${ev.value}.$setFunc(k, ${getCall("l")});
-          |  ${ev.value}.setNullAt(l);
-          |}
-       """.stripMargin
+    val indices = ctx.freshName("indices")
+    val i = ctx.freshName("i")
+
+    val getValue = CodeGenerator.getValue(childName, elementType, s"$indices[$i]");
+    val copyData = if (isPrimitiveType) {
+      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+      s"$arrayData.set$primitiveValueTypeName($i, $getValue);"
     } else {
-      s"""
-          |$javaElementType el = ${CodeGenerator.getValue(ev.value, elementType, "l")};
-          |${ev.value}.update(l, ${CodeGenerator.getValue(ev.value, elementType, "k")});
-          |${ev.value}.update(k, el);
-       """.stripMargin
+      s"$arrayData.update($i, $getValue);"
     }
 
-    val randomClass = classOf[Random].getName
-    val rand = ctx.freshName("rand")
+    val nullSafeCopyData = if (dataType.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |if ($childName.isNullAt($indices[$i])) {
+         |  $arrayData.setNullAt($i);
+         |} else {
+         |  $copyData
+         |}
+       """.stripMargin
+    } else {
+      copyData
+    }
+
+    val mathArraysClass = classOf[MathArrays].getName()
 
     s"""
-       |final int $length = $childName.numElements();
-       |$randomClass $rand = new $randomClass();
-       |$initialization;
-       |for (int k = $length - 1; k >= 1; k--) {
-       |  int l = $rand.nextInt(k + 1);
-       |  $swapAssigments
+       |final int $numElements = $childName.numElements();
+       |int[] $indices = $mathArraysClass.natural($numElements);
+       |$mathArraysClass.shuffle($indices, $rand);
+       |$initialization
+       |for (int $i = 0; $i < $numElements; $i++) {
+       |  $nullSafeCopyData
        |}
+       |${ev.value} = $arrayData;
      """.stripMargin
   }
 
-  override protected def nullSafeEval(input: Any): Any = input match {
-    case a: ArrayData =>
-      new GenericArrayData(scala.util.Random.shuffle(a.toSeq[AnyRef](elementType)))
-  }
-
-  override def prettyName: String = "shuffle"
+  override def freshCopy(): Shuffle = Shuffle(child, randomSeed)
 }
-
 
 /**
  * Returns a reversed string or an array with reverse order of elements.
