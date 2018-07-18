@@ -895,8 +895,8 @@ class DataFrameWriter(OptionUtils):
                                           the quote character. If None is set, the default value is
                                           escape character when escape and quote characters are
                                           different, ``\0`` otherwise..
-        :param encoding: sets the encoding (charset) to be used on the csv file. If None is set, it
-                                          uses the default value, ``UTF-8``.
+        :param encoding: sets the encoding (charset) of saved csv files. If None is set,
+                         the default UTF-8 charset will be used.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """

@@ -24,6 +24,8 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+import scala.util.Properties
+
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -520,17 +522,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     // scalastyle:on nonascii
 
     Seq("iso-8859-1", "utf-8", "utf-16", "utf-32", "windows-1250").foreach { encoding =>
-      withTempDir { dir =>
-        val csvDir = new File(dir, "csv")
-
-        val originalDF = Seq(content).toDF("_c0").repartition(1)
-        originalDF.write
+      withTempPath { path =>
+        val csvDir = new File(path, "csv")
+        Seq(content).toDF().write
           .option("encoding", encoding)
           .csv(csvDir.getCanonicalPath)
 
         csvDir.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
           val readback = Files.readAllBytes(csvFile.toPath)
-          val expected = (content + "\n").getBytes(Charset.forName(encoding))
+          val expected = (content + Properties.lineSeparator).getBytes(Charset.forName(encoding))
           assert(readback === expected)
         })
       }
@@ -539,8 +539,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   test("SPARK-19018: error handling for unsupported charsets") {
     val exception = intercept[SparkException] {
-      withTempDir { dir =>
-        val csvDir = new File(dir, "csv").getCanonicalPath
+      withTempPath { path =>
+        val csvDir = new File(path, "csv").getCanonicalPath
         Seq("a,A,c,A,b,B").toDF().write
           .option("encoding", "1-9588-osi")
           .csv(csvDir)

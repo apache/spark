@@ -150,10 +150,7 @@ private[csv] class CsvOutputWriter(
 
   private val charset = Charset.forName(params.charset)
 
-  private val writer = CodecStreams.createOutputStreamWriter(
-    context,
-    new Path(path),
-    charset)
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
 
   private val gen = new UnivocityGenerator(dataSchema, writer, params)
 
