@@ -440,6 +440,9 @@ setCheckpointDir <- function(directory) {
 
 #' Total number of CPU cores of all executors registered in the cluster at the moment
 #' and potentially available to jobs submitted via the Spark context.
+#' The number reflects current status of the cluster and can change in the future.
+#'
+#' Note: This method is experimental, and its behavior can be changed in the next releases.
 #'
 #' @rdname spark.numCores
 #' @return current number of cores in the cluster.
@@ -455,6 +458,9 @@ spark.numCores <- function() {
 
 #' Total number of executors registered in the cluster at the moment and potentially available
 #' to jobs submitted via the Spark context.
+#' The number reflects current status of the cluster and can change in the future.
+#'
+#' Note: This method is experimental, and its behavior can be changed in the next releases.
 #'
 #' @rdname spark.numExecutors
 #' @return current number of executors in the cluster.
