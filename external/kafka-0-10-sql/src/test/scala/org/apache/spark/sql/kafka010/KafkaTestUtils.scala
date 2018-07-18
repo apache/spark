@@ -131,6 +131,9 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   def setup(): Unit = {
     setupEmbeddedZookeeper()
     setupEmbeddedKafkaServer()
+    eventually(timeout(60.seconds)) {
+      assert(zkUtils.getAllBrokersInCluster().nonEmpty, "Broker was not up in 60 seconds")
+    }
   }
 
   /** Teardown the whole servers, including Kafka broker and Zookeeper */
@@ -306,6 +309,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     props.put("delete.topic.enable", "true")
     props.put("offsets.topic.num.partitions", "1")
     props.put("offsets.topic.replication.factor", "1")
+    props.put("group.initial.rebalance.delay.ms", "10")
     // Can not use properties.putAll(propsMap.asJava) in scala-2.12
     // See https://github.com/scala/bug/issues/10418
     withBrokerProps.foreach { case (k, v) => props.put(k, v) }
