@@ -1089,7 +1089,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
     start + Random.nextInt(start + end - 1)
   }
 
-  test("stress test with multiple topics and partitions")  {
+  ignore("stress test with multiple topics and partitions")  {
     topics.foreach { topic =>
       testUtils.createTopic(topic, partitions = nextInt(1, 6))
       testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)

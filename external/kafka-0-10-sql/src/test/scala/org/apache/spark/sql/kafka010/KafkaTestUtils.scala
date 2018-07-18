@@ -32,7 +32,6 @@ import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils.ZkUtils
-import kafka.zk.KafkaZkClient
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, NewPartitions}
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -40,7 +39,6 @@ import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
-import org.apache.kafka.common.utils.Time
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -66,7 +64,6 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   private var zookeeper: EmbeddedZookeeper = _
 
   private var zkUtils: ZkUtils = _
-  private var zkClient: KafkaZkClient = null
   private var adminClient: AdminClient = null
 
   // Kafka broker related configurations
@@ -106,9 +103,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
-    val zkSvr = s"$zkHost:$zkPort";
-    zkUtils = ZkUtils(zkSvr, zkSessionTimeout, zkConnectionTimeout, false)
-    zkClient = KafkaZkClient(zkSvr, false, 6000, 10000, Int.MaxValue, Time.SYSTEM)
+    zkUtils = ZkUtils(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout, false)
     zkReady = true
   }
 
@@ -215,13 +210,9 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
 
   /** Add new partitions to a Kafka topic */
   def addPartitions(topic: String, partitions: Int): Unit = {
-    val existingAssignment = zkClient.getReplicaAssignmentForTopics(
-      collection.immutable.Set(topic)).map {
-        case (topicPartition, replicas) => topicPartition.partition -> replicas
-    }
-    val actuallyDoIt = new CreatePartitionsOptions().validateOnly(false)
-    adminClient.createPartitions(Map(topic ->
-      NewPartitions.increaseTo(partitions)).asJava, actuallyDoIt)
+    adminClient.createPartitions(
+      Map(topic -> NewPartitions.increaseTo(partitions)).asJava,
+      new CreatePartitionsOptions)
     // wait until metadata is propagated
     (0 until partitions).foreach { p =>
       waitUntilMetadataIsPropagated(topic, p)
@@ -314,6 +305,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     props.put("replica.socket.timeout.ms", "1500")
     props.put("delete.topic.enable", "true")
     props.put("offsets.topic.num.partitions", "1")
+    props.put("offsets.topic.replication.factor", "1")
     // Can not use properties.putAll(propsMap.asJava) in scala-2.12
     // See https://github.com/scala/bug/issues/10418
     withBrokerProps.foreach { case (k, v) => props.put(k, v) }
@@ -397,13 +389,9 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
     def isPropagated = server.apis.metadataCache.getPartitionInfo(topic, partition) match {
       case Some(partitionState) =>
-        val tp = new TopicPartition(topic, partition)
-        val leaderIsrAndControllerEpochMap = zkClient.getTopicPartitionStates(Seq(tp))
-        val leaderAndInSyncReplicas = leaderIsrAndControllerEpochMap(tp).leaderAndIsr
-
         zkUtils.getLeaderForPartition(topic, partition).isDefined &&
-          Request.isValidBrokerId(leaderAndInSyncReplicas.leader) &&
-          leaderAndInSyncReplicas.isr.nonEmpty
+          Request.isValidBrokerId(partitionState.basePartitionState.leader) &&
+          !partitionState.basePartitionState.replicas.isEmpty
 
       case _ =>
         false
