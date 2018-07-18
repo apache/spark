@@ -129,6 +129,8 @@ private[spark] class BlockManager(
 
   private[spark] val externalShuffleServiceEnabled =
     conf.getBoolean("spark.shuffle.service.enabled", false)
+  private val chunkSize =
+    conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests", Int.MaxValue.toString).toInt
 
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
@@ -728,8 +730,6 @@ private[spark] class BlockManager(
       }
 
       if (data != null) {
-        val chunkSize =
-          conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests", Int.MaxValue.toString).toInt
         return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
       }
       logDebug(s"The value of block $blockId is null")
