@@ -56,4 +56,11 @@ class StructTypeSuite extends SparkFunSuite {
 
     assert(toDDL(fromDDL(struct)) === struct)
   }
+
+  test("SPARK-24849: toDDL must take into account case") {
+    val struct = new StructType()
+      .add("metaData", new StructType().add("eventId", StringType))
+
+    assert(toDDL(struct) == "metaData struct<eventId:string>")
+  }
 }
