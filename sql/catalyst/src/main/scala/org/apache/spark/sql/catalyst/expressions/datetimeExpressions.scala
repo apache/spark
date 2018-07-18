@@ -27,6 +27,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -717,7 +718,7 @@ abstract class UnixTime
         } else {
           val formatterName = ctx.addReferenceObj("formatter", formatter, df)
           val eval1 = left.genCode(ctx)
-          ev.copy(code = s"""
+          ev.copy(code = code"""
             ${eval1.code}
             boolean ${ev.isNull} = ${eval1.isNull};
             $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -746,7 +747,7 @@ abstract class UnixTime
         })
       case TimestampType =>
         val eval1 = left.genCode(ctx)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -757,7 +758,7 @@ abstract class UnixTime
         val tz = ctx.addReferenceObj("timeZone", timeZone)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -852,7 +853,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -1017,6 +1018,48 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
+ * A special expression used to convert the string input of `to/from_utc_timestamp` to timestamp,
+ * which requires the timestamp string to not have timezone information, otherwise null is returned.
+ */
+case class StringToTimestampWithoutTimezone(child: Expression, timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def dataType: DataType = TimestampType
+  override def nullable: Boolean = true
+  override def toString: String = child.toString
+  override def sql: String = child.sql
+
+  override def nullSafeEval(input: Any): Any = {
+    DateTimeUtils.stringToTimestamp(
+      input.asInstanceOf[UTF8String], timeZone, rejectTzInString = true).orNull
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val longOpt = ctx.freshName("longOpt")
+    val eval = child.genCode(ctx)
+    val code = code"""
+       |${eval.code}
+       |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = true;
+       |${CodeGenerator.JAVA_LONG} ${ev.value} = ${CodeGenerator.defaultValue(TimestampType)};
+       |if (!${eval.isNull}) {
+       |  scala.Option<Long> $longOpt = $dtu.stringToTimestamp(${eval.value}, $tz, true);
+       |  if ($longOpt.isDefined()) {
+       |    ${ev.value} = ((Long) $longOpt.get()).longValue();
+       |    ${ev.isNull} = false;
+       |  }
+       |}
+     """.stripMargin
+    ev.copy(code = code)
+  }
+}
+
+/**
  * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
  * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
  * '2017-07-14 03:40:00.0'.
@@ -1048,7 +1091,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
     if (right.foldable) {
       val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
-        ev.copy(code = s"""
+        ev.copy(code = code"""
            |boolean ${ev.isNull} = true;
            |long ${ev.value} = 0;
          """.stripMargin)
@@ -1062,7 +1105,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
         ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
           v => s"""$v = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
            |long ${ev.value} = 0;
@@ -1152,42 +1195,61 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
 }
 
 /**
- * Returns number of months between dates date1 and date2.
+ * Returns number of months between times `timestamp1` and `timestamp2`.
+ * If `timestamp1` is later than `timestamp2`, then the result is positive.
+ * If `timestamp1` and `timestamp2` are on the same day of month, or both
+ * are the last day of month, time of day will be ignored. Otherwise, the
+ * difference is calculated based on 31 days per month, and rounded to
+ * 8 digits unless roundOff=false.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between `timestamp1` and `timestamp2`.",
+  usage = """
+    _FUNC_(timestamp1, timestamp2[, roundOff]) - If `timestamp1` is later than `timestamp2`, then the result
+      is positive. If `timestamp1` and `timestamp2` are on the same day of month, or both
+      are the last day of month, time of day will be ignored. Otherwise, the difference is
+      calculated based on 31 days per month, and rounded to 8 digits unless roundOff=false.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
        3.94959677
+      > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30', false);
+       3.9495967741935485
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+case class MonthsBetween(
+    date1: Expression,
+    date2: Expression,
+    roundOff: Expression,
+    timeZoneId: Option[String] = None)
+  extends TernaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
-  def this(date1: Expression, date2: Expression) = this(date1, date2, None)
+  def this(date1: Expression, date2: Expression) = this(date1, date2, Literal.TrueLiteral, None)
 
-  override def left: Expression = date1
-  override def right: Expression = date2
+  def this(date1: Expression, date2: Expression, roundOff: Expression) =
+    this(date1, date2, roundOff, None)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
+  override def children: Seq[Expression] = Seq(date1, date2, roundOff)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType, BooleanType)
 
   override def dataType: DataType = DoubleType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(t1: Any, t2: Any): Any = {
-    DateTimeUtils.monthsBetween(t1.asInstanceOf[Long], t2.asInstanceOf[Long], timeZone)
+  override def nullSafeEval(t1: Any, t2: Any, roundOff: Any): Any = {
+    DateTimeUtils.monthsBetween(
+      t1.asInstanceOf[Long], t2.asInstanceOf[Long], roundOff.asInstanceOf[Boolean], timeZone)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (l, r) => {
-      s"""$dtu.monthsBetween($l, $r, $tz)"""
+    defineCodeGen(ctx, ev, (d1, d2, roundOff) => {
+      s"""$dtu.monthsBetween($d1, $d2, $roundOff, $tz)"""
     })
   }
 
@@ -1226,7 +1288,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
     if (right.foldable) {
       val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
-        ev.copy(code = s"""
+        ev.copy(code = code"""
            |boolean ${ev.isNull} = true;
            |long ${ev.value} = 0;
          """.stripMargin)
@@ -1240,7 +1302,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
         ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
           v => s"""$v = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
            |long ${ev.value} = 0;
@@ -1383,13 +1445,13 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
     val javaType = CodeGenerator.javaType(dataType)
     if (format.foldable) {
       if (truncLevel == DateTimeUtils.TRUNC_INVALID || truncLevel > maxLevel) {
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           boolean ${ev.isNull} = true;
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};""")
       } else {
         val t = instant.genCode(ctx)
         val truncFuncStr = truncFunc(t.value, truncLevel.toString)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -1471,14 +1533,14 @@ case class TruncDate(date: Expression, format: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'YEAR');
-       2015-01-01T00:00:00
-      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'MM');
-       2015-03-01T00:00:00
-      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'DD');
-       2015-03-05T00:00:00
-      > SELECT _FUNC_('2015-03-05T09:32:05.359', 'HOUR');
-       2015-03-05T09:00:00
+      > SELECT _FUNC_('YEAR', '2015-03-05T09:32:05.359');
+       2015-01-01 00:00:00
+      > SELECT _FUNC_('MM', '2015-03-05T09:32:05.359');
+       2015-03-01 00:00:00
+      > SELECT _FUNC_('DD', '2015-03-05T09:32:05.359');
+       2015-03-05 00:00:00
+      > SELECT _FUNC_('HOUR', '2015-03-05T09:32:05.359');
+       2015-03-05 09:00:00
   """,
   since = "2.3.0")
 // scalastyle:on line.size.limit

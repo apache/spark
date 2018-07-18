@@ -328,4 +328,10 @@ package object config {
     CACHED_FILES_TYPES,
     CACHED_CONF_ARCHIVE)
 
+  /* YARN allocator-level blacklisting related config entries. */
+  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
+    ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
 }

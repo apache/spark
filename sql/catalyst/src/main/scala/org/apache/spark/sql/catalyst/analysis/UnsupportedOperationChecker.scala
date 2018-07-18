@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -314,8 +315,10 @@ object UnsupportedOperationChecker {
         case GroupingSets(_, _, child, _) if child.isStreaming =>
           throwError("GroupingSets is not supported on streaming DataFrames/Datasets")
 
-        case GlobalLimit(_, _) | LocalLimit(_, _) if subPlan.children.forall(_.isStreaming) =>
-          throwError("Limits are not supported on streaming DataFrames/Datasets")
+        case GlobalLimit(_, _) | LocalLimit(_, _)
+            if subPlan.children.forall(_.isStreaming) && outputMode == InternalOutputModes.Update =>
+          throwError("Limits are not supported on streaming DataFrames/Datasets in Update " +
+            "output mode")
 
         case Sort(_, _, _) if !containsCompleteData(subPlan) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on " +
@@ -345,8 +348,20 @@ object UnsupportedOperationChecker {
     plan.foreachUp { implicit subPlan =>
       subPlan match {
         case (_: Project | _: Filter | _: MapElements | _: MapPartitions |
-              _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias) =>
+              _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
+              _: TypedFilter) =>
         case node if node.nodeName == "StreamingRelationV2" =>
+        case Repartition(1, false, _) =>
+        case node: Aggregate =>
+          val aboveSinglePartitionCoalesce = node.find {
+            case Repartition(1, false, _) => true
+            case _ => false
+          }.isDefined
+
+          if (!aboveSinglePartitionCoalesce) {
+            throwError(s"In continuous processing mode, coalesce(1) must be called before " +
+              s"aggregate operation ${node.nodeName}.")
+          }
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")
       }

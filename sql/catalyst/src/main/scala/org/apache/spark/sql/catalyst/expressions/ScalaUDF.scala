@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -1030,7 +1031,7 @@ case class ScalaUDF(
        """.stripMargin
 
     ev.copy(code =
-      s"""
+      code"""
          |$evalCode
          |${initArgs.mkString("\n")}
          |$callFunc
