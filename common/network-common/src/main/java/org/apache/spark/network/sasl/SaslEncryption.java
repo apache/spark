@@ -135,13 +135,14 @@ class SaslEncryption {
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
+    private final int maxOutboundBlockSize;
 
     /**
      * A channel used to buffer input data for encryption. The channel has an upper size bound
      * so that if the input is larger than the allowed buffer, it will be broken into multiple
-     * chunks.
+     * chunks. Made non-final to enable lazy initialization, which saves memory.
      */
-    private final ByteArrayWritableChannel byteChannel;
+    private ByteArrayWritableChannel byteChannel;
 
     private ByteBuf currentHeader;
     private ByteBuffer currentChunk;
@@ -157,7 +158,7 @@ class SaslEncryption {
       this.isByteBuf = msg instanceof ByteBuf;
       this.buf = isByteBuf ? (ByteBuf) msg : null;
       this.region = isByteBuf ? null : (FileRegion) msg;
-      this.byteChannel = new ByteArrayWritableChannel(maxOutboundBlockSize);
+      this.maxOutboundBlockSize = maxOutboundBlockSize;
     }
 
     /**
@@ -292,6 +293,9 @@ class SaslEncryption {
     }
 
     private void nextChunk() throws IOException {
+      if (byteChannel == null) {
+        byteChannel = new ByteArrayWritableChannel(maxOutboundBlockSize);
+      }
       byteChannel.reset();
       if (isByteBuf) {
         int copied = byteChannel.write(buf.nioBuffer());
