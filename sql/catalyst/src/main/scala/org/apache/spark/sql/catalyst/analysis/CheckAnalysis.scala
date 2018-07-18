@@ -62,6 +62,9 @@ trait CheckAnalysis extends PredicateHelper {
 
   private def checkLimitClause(limitExpr: Expression): Unit = {
     limitExpr match {
+      case e if e.nullable => failAnalysis(
+        "The limit expression must not be nullable, but got " +
+          limitExpr.sql)
       case e if !e.foldable => failAnalysis(
         "The limit expression must evaluate to a constant value, but got " +
           limitExpr.sql)
