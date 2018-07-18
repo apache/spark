@@ -1365,11 +1365,62 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(taskOption4.get.addedJars === addedJarsMidTaskSet)
   }
 
+  test("[SPARK-24677] Avoid NoSuchElementException from MedianHeap") {
+    val conf = new SparkConf().set("spark.speculation", "true")
+    sc = new SparkContext("local", "test", conf)
+    // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
+    sc.conf.set("spark.speculation.multiplier", "0.0")
+    sc.conf.set("spark.speculation.quantile", "0.1")
+    sc.conf.set("spark.speculation", "true")
+
+    sched = new FakeTaskScheduler(sc)
+    sched.initialize(new FakeSchedulerBackend())
+
+    val dagScheduler = new FakeDAGScheduler(sc, sched)
+    sched.setDAGScheduler(dagScheduler)
+
+    val taskSet1 = FakeTask.createTaskSet(10)
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet1.tasks.map { task =>
+      task.metrics.internalAccums
+    }
+
+    sched.submitTasks(taskSet1)
+    sched.resourceOffers(
+      (0 until 10).map { idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) })
+
+    val taskSetManager1 = sched.taskSetManagerForAttempt(0, 0).get
+
+    // fail fetch
+    taskSetManager1.handleFailedTask(
+      taskSetManager1.taskAttempts.head.head.taskId, TaskState.FAILED,
+      FetchFailed(null, 0, 0, 0, "fetch failed"))
+
+    assert(taskSetManager1.isZombie)
+    assert(taskSetManager1.runningTasks === 9)
+
+    val taskSet2 = FakeTask.createTaskSet(10, stageAttemptId = 1)
+    sched.submitTasks(taskSet2)
+    sched.resourceOffers(
+      (11 until 20).map { idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) })
+
+    // Complete the 2 tasks and leave 8 task in running
+    for (id <- Set(0, 1)) {
+      taskSetManager1.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
+      assert(sched.endedTasks(id) === Success)
+    }
+
+    val taskSetManager2 = sched.taskSetManagerForAttempt(0, 1).get
+    assert(!taskSetManager2.successfulTaskDurations.isEmpty())
+    taskSetManager2.checkSpeculatableTasks(0)
+  }
+
+
   test("SPARK-24755 Executor loss can cause task to not be resubmitted") {
     val conf = new SparkConf().set("spark.speculation", "true")
     sc = new SparkContext("local", "test", conf)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
     sc.conf.set("spark.speculation.multiplier", "0.0")
+
     sc.conf.set("spark.speculation.quantile", "0.5")
     sc.conf.set("spark.speculation", "true")
 
@@ -1425,10 +1476,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     // Offer resources for 4 tasks to start
     for ((exec, host) <- Seq(
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec3" -> "host3",
-        "exec2" -> "host2")) {
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec3" -> "host3",
+      "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(exec, host, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -1472,6 +1523,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.executorLost("exec2", "host2", SlaveLost())
     // Make sure that task with index 2 is re-submitted
     assert(resubmittedTasks.contains(2))
+
   }
 
   private def createTaskResult(

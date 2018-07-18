@@ -124,7 +124,7 @@ class HistoryServer(
 
     attachHandler(ApiRootResource.getServletHandler(this))
 
-    attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
+    addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
 
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
@@ -152,7 +152,6 @@ class HistoryServer(
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     handlers.synchronized {
       ui.getHandlers.foreach(attachHandler)
-      addFilters(ui.getHandlers, conf)
     }
   }
 

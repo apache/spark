@@ -404,6 +404,20 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(input3, 5, 10),
       CheckNewAnswer((5, 10, 5, 15, 5, 25)))
   }
+
+  test("streaming join should require HashClusteredDistribution from children") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF.select('value as 'a, 'value * 2 as 'b)
+    val df2 = input2.toDF.select('value as 'a, 'value * 2 as 'b).repartition('b)
+    val joined = df1.join(df2, Seq("a", "b")).select('a)
+
+    testStream(joined)(
+      AddData(input1, 1.to(1000): _*),
+      AddData(input2, 1.to(1000): _*),
+      CheckAnswer(1.to(1000): _*))
+  }
 }
 
 

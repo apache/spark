@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 object TypedAggregateExpression {
   def apply[BUF : Encoder, OUT : Encoder](
@@ -109,7 +110,9 @@ trait TypedAggregateExpression extends AggregateFunction {
     s"$nodeName($input)"
   }
 
-  override def nodeName: String = aggregator.getClass.getSimpleName.stripSuffix("$")
+  // aggregator.getClass.getSimpleName can cause Malformed class name error,
+  // call safer `Utils.getSimpleName` instead
+  override def nodeName: String = Utils.getSimpleName(aggregator.getClass).stripSuffix("$");
 }
 
 // TODO: merge these 2 implementations once we refactor the `AggregateFunction` interface.

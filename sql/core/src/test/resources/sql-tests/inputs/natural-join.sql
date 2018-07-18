@@ -1,3 +1,8 @@
+-- List of configuration the test suite is run against:
+--SET spark.sql.autoBroadcastJoinThreshold=10485760
+--SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
+--SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
+
 create temporary view nt1 as select * from values
   ("one", 1),
   ("two", 2),

@@ -41,6 +41,7 @@ class SparkPlanner(
       DataSourceStrategy(conf) ::
       SpecialLimits ::
       Aggregation ::
+      Window ::
       JoinSelection ::
       InMemoryScans ::
       BasicOperators :: Nil)

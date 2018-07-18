@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming.sources
 import org.apache.spark.sql.{Encoder, ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.python.PythonForeachWriter
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, SupportsWriteInternalRow, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
@@ -31,9 +33,14 @@ import org.apache.spark.sql.types.StructType
  * [[ForeachWriter]].
  *
  * @param writer The [[ForeachWriter]] to process all data.
+ * @param converter An object to convert internal rows to target type T. Either it can be
+ *                  a [[ExpressionEncoder]] or a direct converter function.
  * @tparam T The expected type of the sink.
  */
-case class ForeachWriterProvider[T: Encoder](writer: ForeachWriter[T]) extends StreamWriteSupport {
+case class ForeachWriterProvider[T](
+    writer: ForeachWriter[T],
+    converter: Either[ExpressionEncoder[T], InternalRow => T]) extends StreamWriteSupport {
+
   override def createStreamWriter(
       queryId: String,
       schema: StructType,
@@ -44,10 +51,16 @@ case class ForeachWriterProvider[T: Encoder](writer: ForeachWriter[T]) extends S
       override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
       override def createInternalRowWriterFactory(): DataWriterFactory[InternalRow] = {
-        val encoder = encoderFor[T].resolveAndBind(
-          schema.toAttributes,
-          SparkSession.getActiveSession.get.sessionState.analyzer)
-        ForeachWriterFactory(writer, encoder)
+        val rowConverter: InternalRow => T = converter match {
+          case Left(enc) =>
+            val boundEnc = enc.resolveAndBind(
+              schema.toAttributes,
+              SparkSession.getActiveSession.get.sessionState.analyzer)
+            boundEnc.fromRow
+          case Right(func) =>
+            func
+        }
+        ForeachWriterFactory(writer, rowConverter)
       }
 
       override def toString: String = "ForeachSink"
@@ -55,29 +68,44 @@ case class ForeachWriterProvider[T: Encoder](writer: ForeachWriter[T]) extends S
   }
 }
 
-case class ForeachWriterFactory[T: Encoder](
+object ForeachWriterProvider {
+  def apply[T](
+      writer: ForeachWriter[T],
+      encoder: ExpressionEncoder[T]): ForeachWriterProvider[_] = {
+    writer match {
+      case pythonWriter: PythonForeachWriter =>
+        new ForeachWriterProvider[UnsafeRow](
+          pythonWriter, Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
+      case _ =>
+        new ForeachWriterProvider[T](writer, Left(encoder))
+    }
+  }
+}
+
+case class ForeachWriterFactory[T](
     writer: ForeachWriter[T],
-    encoder: ExpressionEncoder[T])
+    rowConverter: InternalRow => T)
   extends DataWriterFactory[InternalRow] {
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): ForeachDataWriter[T] = {
-    new ForeachDataWriter(writer, encoder, partitionId, epochId)
+    new ForeachDataWriter(writer, rowConverter, partitionId, epochId)
   }
 }
 
 /**
  * A [[DataWriter]] which writes data in this partition to a [[ForeachWriter]].
+ *
  * @param writer The [[ForeachWriter]] to process all data.
- * @param encoder An encoder which can convert [[InternalRow]] to the required type [[T]]
+ * @param rowConverter A function which can convert [[InternalRow]] to the required type [[T]]
  * @param partitionId
  * @param epochId
  * @tparam T The type expected by the writer.
  */
-class ForeachDataWriter[T : Encoder](
+class ForeachDataWriter[T](
     writer: ForeachWriter[T],
-    encoder: ExpressionEncoder[T],
+    rowConverter: InternalRow => T,
     partitionId: Int,
     epochId: Long)
   extends DataWriter[InternalRow] {
@@ -89,7 +117,7 @@ class ForeachDataWriter[T : Encoder](
     if (!opened) return
 
     try {
-      writer.process(encoder.fromRow(record))
+      writer.process(rowConverter(record))
     } catch {
       case t: Throwable =>
         writer.close(t)

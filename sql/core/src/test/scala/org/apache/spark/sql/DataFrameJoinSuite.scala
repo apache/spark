@@ -287,4 +287,12 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       dfOne.join(dfTwo, $"a" === $"b", "left").queryExecution.optimizedPlan
     }
   }
+
+  test("SPARK-24385: Resolve ambiguity in self-joins with EqualNullSafe") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val df = spark.range(2)
+      // this throws an exception before the fix
+      df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
+    }
+  }
 }
