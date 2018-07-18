@@ -215,7 +215,7 @@ setMethod("spark.prefixSpan", signature(),
 
 # Find frequent sequential patterns.
 
-#' @param object a prefixSpan object.
+#' @param object a PrefixSpan object.
 #' @param data A SparkDataFrame.
 #' @return A complete set of frequent sequential patterns in the input sequences of itemsets.
 #'         The returned \code{SparkDataFrame} contains columns of sequence and corresponding

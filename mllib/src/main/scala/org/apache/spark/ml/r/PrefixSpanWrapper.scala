@@ -18,25 +18,17 @@
 package org.apache.spark.ml.r
 
 import org.apache.spark.ml.fpm.PrefixSpan
-import org.apache.spark.sql.{DataFrame, Dataset}
-
-private[r] class PrefixSpanWrapper private (val prefixSpan: PrefixSpan) {
-  def findFrequentSequentialPatterns(dataset: Dataset[_]): DataFrame = {
-    prefixSpan.findFrequentSequentialPatterns(dataset)
-  }
-}
 
 private[r] object PrefixSpanWrapper {
   def getPrefixSpan(
       minSupport: Double,
       maxPatternLength: Int,
       maxLocalProjDBSize: Double,
-      sequenceCol: String): PrefixSpanWrapper = {
-    val prefixSpan = new PrefixSpan()
+      sequenceCol: String): PrefixSpan = {
+    new PrefixSpan()
       .setMinSupport(minSupport)
       .setMaxPatternLength(maxPatternLength)
       .setMaxLocalProjDBSize(maxLocalProjDBSize.toLong)
       .setSequenceCol(sequenceCol)
-    new PrefixSpanWrapper(prefixSpan)
   }
 }
