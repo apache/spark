@@ -519,7 +519,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null)
     )
 
-    def checkResult(): Unit = {
+    def testPrimitiveType(): Unit = {
       checkAnswer(idf.select(map_entries('m)), iExpected)
       checkAnswer(idf.selectExpr("map_entries(m)"), iExpected)
       checkAnswer(idf.selectExpr("map_entries(map(1, null, 2, null))"),
@@ -527,10 +527,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult()
+    testPrimitiveType()
     // Test with cached relation, the Project will be evaluated with codegen
     idf.cache()
-    checkResult()
+    testPrimitiveType()
 
     // Non-primitive-type elements
     val sdf = Seq(
@@ -546,16 +546,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null)
     )
 
-    def checkResult2(): Unit = {
+    def testNonPrimitiveType(): Unit = {
       checkAnswer(sdf.select(map_entries('m)), sExpected)
       checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult2()
+    testNonPrimitiveType()
     // Test with cached relation, the Project will be evaluated with codegen
     sdf.cache()
-    checkResult2()
+    testNonPrimitiveType()
   }
 
   test("map_concat function") {
@@ -650,7 +650,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Map.empty),
       Row(null))
 
-    def checkResult(): Unit = {
+    def testPrimitiveType(): Unit = {
       checkAnswer(idf.select(map_from_entries('a)), iExpected)
       checkAnswer(idf.selectExpr("map_from_entries(a)"), iExpected)
       checkAnswer(idf.selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
@@ -658,10 +658,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult()
+    testPrimitiveType()
     // Test with cached relation, the Project will be evaluated with codegen
     idf.cache()
-    checkResult()
+    testPrimitiveType()
 
     // Test cases with non-primitive-type keys and values
     val sdf = Seq(
@@ -678,16 +678,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Map.empty),
       Row(null))
 
-    def checkResult2(): Unit = {
+    def testNonPrimitiveType(): Unit = {
       checkAnswer(sdf.select(map_from_entries('a)), sExpected)
       checkAnswer(sdf.selectExpr("map_from_entries(a)"), sExpected)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult2()
+    testNonPrimitiveType()
     // Test with cached relation, the Project will be evaluated with codegen
     sdf.cache()
-    checkResult2()
+    testNonPrimitiveType()
   }
 
   test("array contains function") {
@@ -904,7 +904,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("reverse function") {
     // String test cases
     val oneRowDF = Seq(("Spark", 3215)).toDF("s", "i")
-    def checkResult(): Unit = {
+    def testString(): Unit = {
       checkAnswer(oneRowDF.select(reverse('s)), Seq(Row("krapS")))
       checkAnswer(oneRowDF.selectExpr("reverse(s)"), Seq(Row("krapS")))
       checkAnswer(oneRowDF.select(reverse('i)), Seq(Row("5123")))
@@ -913,10 +913,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult()
+    testString()
     // Test with cached relation, the Project will be evaluated with codegen
     oneRowDF.cache()
-    checkResult()
+    testString()
 
     // Array test cases (primitive-type elements)
     val idf = Seq(
@@ -926,7 +926,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
-    def checkResult2(): Unit = {
+    def testArray(): Unit = {
       checkAnswer(
         idf.select(reverse('i)),
         Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
@@ -942,10 +942,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult2()
+    testArray()
     // Test with cached relation, the Project will be evaluated with codegen
     idf.cache()
-    checkResult2()
+    testArray()
 
     // Array test cases (non-primitive-type elements)
     val sdf = Seq(
@@ -955,7 +955,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("s")
 
-    def checkResult3(): Unit = {
+    def testArrayOfNonPrimitiveType(): Unit = {
       checkAnswer(
         sdf.select(reverse('s)),
         Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
@@ -971,10 +971,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult3()
+    testArrayOfNonPrimitiveType()
     // Test with cached relation, the Project will be evaluated with codegen
     sdf.cache()
-    checkResult3()
+    testArrayOfNonPrimitiveType()
 
     // Error test cases
     intercept[AnalysisException] {
@@ -1154,7 +1154,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("i1", "i2", "i3", "in", "s1", "s2", "s3", "sn")
 
     // Simple test cases
-    def checkResult(): Unit = {
+    def simpleTest(): Unit = {
       checkAnswer (
         df.select(concat($"i1", $"s1")),
         Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
@@ -1178,13 +1178,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult()
+    simpleTest()
     // Test with cached relation, the Project will be evaluated with codegen
     df.cache()
-    checkResult()
+    simpleTest()
 
     // Null test cases
-    def checkResult2(): Unit = {
+    def nullTest(): Unit = {
       checkAnswer(
         df.select(concat($"i1", $"in")),
         Seq(Row(null), Row(null))
@@ -1205,10 +1205,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     // Test with local relation, the Project will be evaluated without codegen
     df.unpersist()
-    checkResult2()
+    nullTest()
     // Test with cached relation, the Project will be evaluated with codegen
     df.cache()
-    checkResult2()
+    nullTest()
 
     // Type error test cases
     intercept[AnalysisException] {
@@ -1248,16 +1248,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null),
       Row(null))
 
-    def checkResult(): Unit = {
+    def testInt(): Unit = {
       checkAnswer(intDF.select(flatten($"i")), intDFResult)
       checkAnswer(intDF.selectExpr("flatten(i)"), intDFResult)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult()
+    testInt()
     // Test with cached relation, the Project will be evaluated with codegen
     intDF.cache()
-    checkResult()
+    testInt()
 
     // Test cases with non-primitive types
     val strDF = Seq(
@@ -1283,20 +1283,20 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null),
       Row(null))
 
-    def checkResult2(): Unit = {
+    def testString(): Unit = {
       checkAnswer(strDF.select(flatten($"s")), strDFResult)
       checkAnswer(strDF.selectExpr("flatten(s)"), strDFResult)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult2()
+    testString()
     // Test with cached relation, the Project will be evaluated with codegen
     strDF.cache()
-    checkResult2()
+    testString()
 
     val arrDF = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
 
-    def checkResult3(): Unit = {
+    def testArray(): Unit = {
       checkAnswer(
         arrDF.selectExpr("flatten(array(arr, array(null, 5), array(6, null)))"),
         Seq(Row(Seq(1, 2, 3, null, 5, 6, null))))
@@ -1306,10 +1306,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult3()
+    testArray()
     // Test with cached relation, the Project will be evaluated with codegen
     arrDF.cache()
-    checkResult3()
+    testArray()
 
     // Error test cases
     val oneRowDF = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
@@ -1338,7 +1338,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq(null, null))
     )
 
-    def checkResult(): Unit = {
+    def testString(): Unit = {
       checkAnswer(strDF.select(array_repeat($"a", 2)), strDFTwiceResult)
       checkAnswer(strDF.select(array_repeat($"a", $"b")), strDFTwiceResult)
       checkAnswer(strDF.selectExpr("array_repeat(a, 2)"), strDFTwiceResult)
@@ -1346,10 +1346,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult()
+    testString()
     // Test with cached relation, the Project will be evaluated with codegen
     strDF.cache()
-    checkResult()
+    testString()
 
     val intDF = {
       val schema = StructType(Seq(
@@ -1367,7 +1367,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq(null, null))
     )
 
-    def checkResult2(): Unit = {
+    def testInt(): Unit = {
       checkAnswer(intDF.select(array_repeat($"a", 2)), intDFTwiceResult)
       checkAnswer(intDF.select(array_repeat($"a", $"b")), intDFTwiceResult)
       checkAnswer(intDF.selectExpr("array_repeat(a, 2)"), intDFTwiceResult)
@@ -1375,10 +1375,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult2()
+    testInt()
     // Test with cached relation, the Project will be evaluated with codegen
     intDF.cache()
-    checkResult2()
+    testInt()
 
     val nullCountDF = {
       val schema = StructType(Seq(
@@ -1391,7 +1391,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     }
 
-    def checkResult3(): Unit = {
+    def testNull(): Unit = {
       checkAnswer(
         nullCountDF.select(array_repeat($"a", $"b")),
         Seq(Row(null), Row(null))
@@ -1399,10 +1399,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult3()
+    testNull()
     // Test with cached relation, the Project will be evaluated with codegen
     nullCountDF.cache()
-    checkResult3()
+    testNull()
 
     // Error test cases
     val invalidTypeDF = Seq(("hi", "1")).toDF("a", "b")
