@@ -24,8 +24,8 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-import scala.util.Properties
 import scala.collection.JavaConverters._
+import scala.util.Properties
 
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
