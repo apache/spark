@@ -117,8 +117,8 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     val storeMetrics = store.metrics
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
-    storeMetrics.customMetrics.foreach {
-      case (metric, value) => longMetric(metric.name) += value
+    storeMetrics.customMetrics.foreach { case (metric, value) =>
+      longMetric(metric.name) += value
     }
   }
 
