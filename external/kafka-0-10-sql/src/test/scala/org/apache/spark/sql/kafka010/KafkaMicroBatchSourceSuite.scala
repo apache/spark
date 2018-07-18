@@ -277,7 +277,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
-  test("subscribing topic by pattern with topic deletions") {
+  ignore("subscribing topic by pattern with topic deletions") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-seems"
     val topic2 = topicPrefix + "-bad"
@@ -455,7 +455,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     query.stop()
   }
 
-  test("delete a topic when a Spark job is running") {
+  ignore("delete a topic when a Spark job is running") {
     KafkaSourceSuite.collectedData.clear()
 
     val topic = newTopic()
@@ -1209,7 +1209,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
     }).start()
   }
 
-  test("stress test for failOnDataLoss=false") {
+  ignore("stress test for failOnDataLoss=false") {
     val reader = spark
       .readStream
       .format("kafka")
