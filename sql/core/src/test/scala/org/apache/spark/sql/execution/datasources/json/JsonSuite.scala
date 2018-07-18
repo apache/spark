@@ -2169,7 +2169,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-23723: json in UTF-16 with BOM") {
-    val fileName = "test-data/utf16WithBOM.json"
+    val fileName = "test-data/utf16LEWithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
@@ -2335,12 +2335,20 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   def checkReadJson(lineSep: String, encoding: String, inferSchema: Boolean, id: Int): Unit = {
     test(s"SPARK-23724: checks reading json in ${encoding} #${id}") {
+      def lineSepInBytes: Array[Byte] = {
+        if (lineSep.startsWith("x")) {
+          lineSep.replaceAll("[^0-9A-Fa-f]", "")
+            .sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
+        } else {
+          lineSep.getBytes(encoding)
+        }
+      }
       val schema = new StructType().add("f1", StringType).add("f2", IntegerType)
       withTempPath { path =>
         val records = List(("a", 1), ("b", 2))
         val data = records
           .map(rec => s"""{"f1":"${rec._1}", "f2":${rec._2}}""".getBytes(encoding))
-          .reduce((a1, a2) => a1 ++ lineSep.getBytes(encoding) ++ a2)
+          .reduce((a1, a2) => a1 ++ lineSepInBytes ++ a2)
         val os = new FileOutputStream(path)
         os.write(data)
         os.close()
@@ -2373,9 +2381,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     (10, "\u000d\u000a", "UTF-32BE", false),
     (11, "\u000a\u000d", "UTF-8", true),
     (12, "===", "US-ASCII", false),
-    (13, "$^+", "utf-32le", true)
-  ).foreach {
-    case (testNum, sep, encoding, inferSchema) => checkReadJson(sep, encoding, inferSchema, testNum)
+    (13, "$^+", "utf-32le", true),
+    (14, "x00 0a 00 0d", "UTF-16BE", false),
+    (15, "x0a.00.00.00 0d.00.00.00", "UTF-32LE", true)
+  ).foreach { case (testNum, sep, encoding, inferSchema) =>
+    checkReadJson(sep, encoding, inferSchema, testNum)
   }
   // scalastyle:on nonascii
 
@@ -2489,5 +2499,27 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       }
       assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
     }
+  }
+
+  test("SPARK-24118: Read json in UTF-16 with BOM") {
+    val fileName = "test-data/utf16WithBOM.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiLine", false)
+      .option("lineSep", "x0d.00 0a.00")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird"), Row("Doug", "Rood")))
+  }
+
+  test("SPARK-24118: Read json in UTF-32 with BOM") {
+    val fileName = "test-data/utf32WithBOM.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiLine", false)
+      .option("lineSep", "x00 00 00 0a")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird"), Row("Doug", "Rood")))
   }
 }
