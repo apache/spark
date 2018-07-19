@@ -601,17 +601,21 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val finKeysName = ctx.freshName("finalKeys")
     val finValsName = ctx.freshName("finalValues")
 
-    val keyConcatenator = if (CodeGenerator.isPrimitiveType(keyType)) {
+    val keyConcat = if (CodeGenerator.isPrimitiveType(keyType)) {
       genCodeForPrimitiveArrays(ctx, keyType, false)
     } else {
       genCodeForNonPrimitiveArrays(ctx, keyType)
     }
 
-    val valueConcatenator = if (CodeGenerator.isPrimitiveType(valueType)) {
-      genCodeForPrimitiveArrays(ctx, valueType, dataType.valueContainsNull)
-    } else {
-      genCodeForNonPrimitiveArrays(ctx, valueType)
-    }
+    val valueConcat =
+      if (valueType.sameType(keyType) &&
+          !(CodeGenerator.isPrimitiveType(valueType) && dataType.valueContainsNull)) {
+        keyConcat
+      } else if (CodeGenerator.isPrimitiveType(valueType)) {
+        genCodeForPrimitiveArrays(ctx, valueType, dataType.valueContainsNull)
+      } else {
+        genCodeForNonPrimitiveArrays(ctx, valueType)
+      }
 
     val keyArgsName = ctx.freshName("keyArgs")
     val valArgsName = ctx.freshName("valArgs")
@@ -633,9 +637,9 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
         |       $numElementsName + " elements due to exceeding the map size limit " +
         |       "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
         |  }
-        |  $arrayDataClass $finKeysName = $keyConcatenator.concat($keyArgsName,
+        |  $arrayDataClass $finKeysName = $keyConcat($keyArgsName,
         |    (int) $numElementsName);
-        |  $arrayDataClass $finValsName = $valueConcatenator.concat($valArgsName,
+        |  $arrayDataClass $finValsName = $valueConcat($valArgsName,
         |    (int) $numElementsName);
         |  ${ev.value} = new $arrayBasedMapDataClass($finKeysName, $finValsName);
         |}
@@ -677,20 +681,23 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
       setterCode1
     }
 
-    s"""
-       |new Object() {
-       |  public ArrayData concat(${classOf[ArrayData].getName}[] $argsName, int $numElemName) {
-       |    ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
-       |    int $counter = 0;
-       |    for (int y = 0; y < ${children.length}; y++) {
-       |      for (int z = 0; z < $argsName[y].numElements(); z++) {
-       |        $setterCode
-       |        $counter++;
-       |      }
-       |    }
-       |    return $arrayData;
-       |  }
-       |}""".stripMargin.stripPrefix("\n")
+    val concat = ctx.freshName("concat")
+    val concatDef =
+      s"""
+         |private ArrayData $concat(ArrayData[] $argsName, int $numElemName) {
+         |  ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
+         |  int $counter = 0;
+         |  for (int y = 0; y < ${children.length}; y++) {
+         |    for (int z = 0; z < $argsName[y].numElements(); z++) {
+         |      $setterCode
+         |      $counter++;
+         |    }
+         |  }
+         |  return $arrayData;
+         |}
+       """.stripMargin
+
+    ctx.addNewFunction(concat, concatDef)
   }
 
   private def genCodeForNonPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
@@ -700,20 +707,23 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val argsName = ctx.freshName("args")
     val numElemName = ctx.freshName("numElements")
 
-    s"""
-       |new Object() {
-       |  public ArrayData concat(${classOf[ArrayData].getName}[] $argsName, int $numElemName) {;
-       |    Object[] $arrayData = new Object[$numElemName];
-       |    int $counter = 0;
-       |    for (int y = 0; y < ${children.length}; y++) {
-       |      for (int z = 0; z < $argsName[y].numElements(); z++) {
-       |        $arrayData[$counter] = ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")};
-       |        $counter++;
-       |      }
-       |    }
-       |    return new $genericArrayClass($arrayData);
-       |  }
-       |}""".stripMargin.stripPrefix("\n")
+    val concat = ctx.freshName("concat")
+    val concatDef =
+      s"""
+         |private ArrayData $concat(ArrayData[] $argsName, int $numElemName) {
+         |  Object[] $arrayData = new Object[$numElemName];
+         |  int $counter = 0;
+         |  for (int y = 0; y < ${children.length}; y++) {
+         |    for (int z = 0; z < $argsName[y].numElements(); z++) {
+         |      $arrayData[$counter] = ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")};
+         |      $counter++;
+         |    }
+         |  }
+         |  return new $genericArrayClass($arrayData);
+         |}
+       """.stripMargin
+
+    ctx.addNewFunction(concat, concatDef)
   }
 
   override def prettyName: String = "map_concat"
@@ -2280,18 +2290,18 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       """
     }
 
-    val (concatenator, initCode) = dataType match {
+    val (concat, initCode) = dataType match {
       case BinaryType =>
-        (classOf[ByteArray].getName, s"byte[][] $args = new byte[${evals.length}][];")
+        (s"${classOf[ByteArray].getName}.concat", s"byte[][] $args = new byte[${evals.length}][];")
       case StringType =>
-        ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
-      case ArrayType(elementType, _) =>
-        val arrayConcatClass = if (CodeGenerator.isPrimitiveType(elementType)) {
-          genCodeForPrimitiveArrays(ctx, elementType)
+        ("UTF8String.concat", s"UTF8String[] $args = new UTF8String[${evals.length}];")
+      case ArrayType(elementType, containsNull) =>
+        val concat = if (CodeGenerator.isPrimitiveType(elementType)) {
+          genCodeForPrimitiveArrays(ctx, elementType, containsNull)
         } else {
           genCodeForNonPrimitiveArrays(ctx, elementType)
         }
-        (arrayConcatClass, s"ArrayData[] $args = new ArrayData[${evals.length}];")
+        (concat, s"ArrayData[] $args = new ArrayData[${evals.length}];")
     }
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = inputs,
@@ -2300,7 +2310,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     ev.copy(code"""
       $initCode
       $codes
-      $javaType ${ev.value} = $concatenator.concat($args);
+      $javaType ${ev.value} = $concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
@@ -2334,7 +2344,10 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     }
   }
 
-  private def genCodeForPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
+  private def genCodeForPrimitiveArrays(
+      ctx: CodegenContext,
+      elementType: DataType,
+      checkForNull: Boolean): String = {
     val counter = ctx.freshName("counter")
     val arrayData = ctx.freshName("arrayData")
 
@@ -2342,29 +2355,43 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
-    s"""
-       |new Object() {
-       |  public ArrayData concat($javaType[] args) {
-       |    ${nullArgumentProtection()}
-       |    $numElemCode
-       |    ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
-       |    int $counter = 0;
-       |    for (int y = 0; y < ${children.length}; y++) {
-       |      for (int z = 0; z < args[y].numElements(); z++) {
-       |        if (args[y].isNullAt(z)) {
-       |          $arrayData.setNullAt($counter);
-       |        } else {
-       |          $arrayData.set$primitiveValueTypeName(
-       |            $counter,
-       |            ${CodeGenerator.getValue(s"args[y]", elementType, "z")}
-       |          );
-       |        }
-       |        $counter++;
-       |      }
-       |    }
-       |    return $arrayData;
-       |  }
-       |}""".stripMargin.stripPrefix("\n")
+    val setterCode1 =
+      s"""
+         |$arrayData.set$primitiveValueTypeName(
+         |  $counter,
+         |  ${CodeGenerator.getValue(s"args[y]", elementType, "z")}
+         |);""".stripMargin
+
+    val setterCode = if (checkForNull) {
+      s"""
+         |if (args[y].isNullAt(z)) {
+         |  $arrayData.setNullAt($counter);
+         |} else {
+         |  $setterCode1
+         |}""".stripMargin
+    } else {
+      setterCode1
+    }
+
+    val concat = ctx.freshName("concat")
+    val concatDef =
+      s"""
+         |private ArrayData $concat(ArrayData[] args) {
+         |  ${nullArgumentProtection()}
+         |  $numElemCode
+         |  ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
+         |  int $counter = 0;
+         |  for (int y = 0; y < ${children.length}; y++) {
+         |    for (int z = 0; z < args[y].numElements(); z++) {
+         |      $setterCode
+         |      $counter++;
+         |    }
+         |  }
+         |  return $arrayData;
+         |}
+       """.stripMargin
+
+    ctx.addNewFunction(concat, concatDef)
   }
 
   private def genCodeForNonPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
@@ -2374,22 +2401,25 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    s"""
-       |new Object() {
-       |  public ArrayData concat($javaType[] args) {
-       |    ${nullArgumentProtection()}
-       |    $numElemCode
-       |    Object[] $arrayData = new Object[(int)$numElemName];
-       |    int $counter = 0;
-       |    for (int y = 0; y < ${children.length}; y++) {
-       |      for (int z = 0; z < args[y].numElements(); z++) {
-       |        $arrayData[$counter] = ${CodeGenerator.getValue(s"args[y]", elementType, "z")};
-       |        $counter++;
-       |      }
-       |    }
-       |    return new $genericArrayClass($arrayData);
-       |  }
-       |}""".stripMargin.stripPrefix("\n")
+    val concat = ctx.freshName("concat")
+    val concatDef =
+      s"""
+         |private ArrayData $concat(ArrayData[] args) {
+         |  ${nullArgumentProtection()}
+         |  $numElemCode
+         |  Object[] $arrayData = new Object[(int)$numElemName];
+         |  int $counter = 0;
+         |  for (int y = 0; y < ${children.length}; y++) {
+         |    for (int z = 0; z < args[y].numElements(); z++) {
+         |      $arrayData[$counter] = ${CodeGenerator.getValue(s"args[y]", elementType, "z")};
+         |      $counter++;
+         |    }
+         |  }
+         |  return new $genericArrayClass($arrayData);
+         |}
+       """.stripMargin
+
+    ctx.addNewFunction(concat, concatDef)
   }
 
   override def toString: String = s"concat(${children.mkString(", ")})"

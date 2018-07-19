@@ -125,6 +125,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       valueContainsNull = false))
     val m12 = Literal.create(Map(3 -> "3", 4 -> "4"), MapType(IntegerType, StringType,
       valueContainsNull = false))
+    val m13 = Literal.create(Map(1 -> 2, 3 -> 4),
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val m14 = Literal.create(Map(5 -> 6),
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val m15 = Literal.create(Map(7 -> null),
+      MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
     // overlapping maps
@@ -187,6 +193,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Array(1, 2, 3, 4) // values
       )
     )
+
+    // both keys and value are primitive and valueContainsNull = false
+    checkEvaluation(MapConcat(Seq(m13, m14)), Map(1 -> 2, 3 -> 4, 5 -> 6))
+
+    // both keys and value are primitive and valueContainsNull = true
+    checkEvaluation(MapConcat(Seq(m13, m15)), Map(1 -> 2, 3 -> 4, 7 -> null))
 
     // null map
     checkEvaluation(MapConcat(Seq(m0, mNull)), null)
