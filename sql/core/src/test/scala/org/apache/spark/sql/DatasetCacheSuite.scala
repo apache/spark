@@ -206,4 +206,19 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     // first time use, load cache
     checkDataset(df5, Row(10))
   }
+
+  test("SPARK-24850 InMemoryRelation string representation does not include cached plan") {
+    val dummyQueryExecution = spark.range(0, 1).toDF().queryExecution
+    val inMemoryRelation = InMemoryRelation(
+      true,
+      1000,
+      StorageLevel.MEMORY_ONLY,
+      dummyQueryExecution.sparkPlan,
+      Some("test-relation"),
+      dummyQueryExecution.logical)
+
+    assert(!inMemoryRelation.simpleString.contains(dummyQueryExecution.sparkPlan.toString))
+    assert(inMemoryRelation.simpleString.contains(
+      "CachedRDDBuilder(true, 1000, StorageLevel(memory, deserialized, 1 replicas))"))
+  }
 }
