@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType}
 
 // TODO: Refactor this to `HivePartitionFilteringSuite`
 class HiveClientSuite(version: String)
@@ -122,6 +122,22 @@ class HiveClientSuite(version: String)
       "aa" :: Nil)
   }
 
+  test("getPartitionsByFilter: cast(chunk as int)=1 (not a valid partition predicate)") {
+    testMetastorePartitionFiltering(
+      attr("chunk").cast(IntegerType) === 1,
+      20170101 to 20170103,
+      0 to 23,
+      "aa" :: "ab" :: "ba" :: "bb" :: Nil)
+  }
+
+  test("getPartitionsByFilter: cast(chunk as boolean)=true (not a valid partition predicate)") {
+    testMetastorePartitionFiltering(
+      attr("chunk").cast(BooleanType) === true,
+      20170101 to 20170103,
+      0 to 23,
+      "aa" :: "ab" :: "ba" :: "bb" :: Nil)
+  }
+
   test("getPartitionsByFilter: 20170101=ds") {
     testMetastorePartitionFiltering(
       Literal(20170101) === attr("ds"),
@@ -138,7 +154,7 @@ class HiveClientSuite(version: String)
       "aa" :: "ab" :: "ba" :: "bb" :: Nil)
   }
 
-  test("getPartitionsByFilter: chunk in cast(ds as long)=20170101L") {
+  test("getPartitionsByFilter: cast(ds as long)=20170101L and h=10") {
     testMetastorePartitionFiltering(
       attr("ds").cast(LongType) === 20170101L && attr("h") === 10,
       20170101 to 20170101,

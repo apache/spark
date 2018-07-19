@@ -805,6 +805,114 @@ class StreamSuite extends StreamTest {
     }
   }
 
+  test("streaming limit without state") {
+    val inputData1 = MemoryStream[Int]
+    testStream(inputData1.toDF().limit(0))(
+      AddData(inputData1, 1 to 8: _*),
+      CheckAnswer())
+
+    val inputData2 = MemoryStream[Int]
+    testStream(inputData2.toDF().limit(4))(
+      AddData(inputData2, 1 to 8: _*),
+      CheckAnswer(1 to 4: _*))
+  }
+
+  test("streaming limit with state") {
+    val inputData = MemoryStream[Int]
+    testStream(inputData.toDF().limit(4))(
+      AddData(inputData, 1 to 2: _*),
+      CheckAnswer(1 to 2: _*),
+      AddData(inputData, 3 to 6: _*),
+      CheckAnswer(1 to 4: _*),
+      AddData(inputData, 7 to 9: _*),
+      CheckAnswer(1 to 4: _*))
+  }
+
+  test("streaming limit with other operators") {
+    val inputData = MemoryStream[Int]
+    testStream(inputData.toDF().where("value % 2 = 1").limit(4))(
+      AddData(inputData, 1 to 5: _*),
+      CheckAnswer(1, 3, 5),
+      AddData(inputData, 6 to 9: _*),
+      CheckAnswer(1, 3, 5, 7),
+      AddData(inputData, 10 to 12: _*),
+      CheckAnswer(1, 3, 5, 7))
+  }
+
+  test("streaming limit with multiple limits") {
+    val inputData1 = MemoryStream[Int]
+    testStream(inputData1.toDF().limit(4).limit(2))(
+      AddData(inputData1, 1),
+      CheckAnswer(1),
+      AddData(inputData1, 2 to 8: _*),
+      CheckAnswer(1, 2))
+
+    val inputData2 = MemoryStream[Int]
+    testStream(inputData2.toDF().limit(4).limit(100).limit(3))(
+      AddData(inputData2, 1, 2),
+      CheckAnswer(1, 2),
+      AddData(inputData2, 3 to 8: _*),
+      CheckAnswer(1 to 3: _*))
+  }
+
+  test("streaming limit in complete mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(5).groupBy("value").count()
+    testStream(limited, OutputMode.Complete())(
+      AddData(inputData, 1 to 3: _*),
+      CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
+      AddData(inputData, 1 to 9: _*),
+      CheckAnswer(Row(1, 2), Row(2, 2), Row(3, 2), Row(4, 1), Row(5, 1)))
+  }
+
+  test("streaming limits in complete mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(4).groupBy("value").count().orderBy("value").limit(3)
+    testStream(limited, OutputMode.Complete())(
+      AddData(inputData, 1 to 9: _*),
+      CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
+      AddData(inputData, 2 to 6: _*),
+      CheckAnswer(Row(1, 1), Row(2, 2), Row(3, 2)))
+  }
+
+  test("streaming limit in update mode") {
+    val inputData = MemoryStream[Int]
+    val e = intercept[AnalysisException] {
+      testStream(inputData.toDF().limit(5), OutputMode.Update())(
+        AddData(inputData, 1 to 3: _*)
+      )
+    }
+    assert(e.getMessage.contains(
+      "Limits are not supported on streaming DataFrames/Datasets in Update output mode"))
+  }
+
+  test("streaming limit in multiple partitions") {
+    val inputData = MemoryStream[Int]
+    testStream(inputData.toDF().repartition(2).limit(7))(
+      AddData(inputData, 1 to 10: _*),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 10)),
+        false),
+      AddData(inputData, 11 to 20: _*),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 10)),
+        false))
+  }
+
+  test("streaming limit in multiple partitions by column") {
+    val inputData = MemoryStream[(Int, Int)]
+    val df = inputData.toDF().repartition(2, $"_2").limit(7)
+    testStream(df)(
+      AddData(inputData, (1, 0), (2, 0), (3, 1), (4, 1)),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 4 && rows.forall(r => r.getInt(0) <= 4)),
+        false),
+      AddData(inputData, (5, 0), (6, 0), (7, 1), (8, 1)),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 8)),
+        false))
+  }
+
   for (e <- Seq(
     new InterruptedException,
     new InterruptedIOException,

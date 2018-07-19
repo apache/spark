@@ -1294,14 +1294,14 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     >>> mh = MinHashLSH(inputCol="features", outputCol="hashes", seed=12345)
     >>> model = mh.fit(df)
     >>> model.transform(df).head()
-    Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([-1638925...
+    Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([6179668...
     >>> data2 = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (4, Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (5, Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df2 = spark.createDataFrame(data2, ["id", "features"])
     >>> key = Vectors.sparse(6, [1, 2], [1.0, 1.0])
     >>> model.approxNearestNeighbors(df2, key, 1).collect()
-    [Row(id=5, features=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), hashes=[DenseVector([-163892...
+    [Row(id=5, features=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), hashes=[DenseVector([6179668...
     >>> model.approxSimilarityJoin(df, df2, 0.6, distCol="JaccardDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
@@ -1309,8 +1309,8 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     +---+---+---------------+
     |idA|idB|JaccardDistance|
     +---+---+---------------+
-    |  1|  4|            0.5|
     |  0|  5|            0.5|
+    |  1|  4|            0.5|
     +---+---+---------------+
     ...
     >>> mhPath = temp_path + "/mh"
@@ -2582,25 +2582,31 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
                       typeConverter=TypeConverters.toListString)
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
                           "comparison over the stop words", typeConverter=TypeConverters.toBoolean)
+    locale = Param(Params._dummy(), "locale", "locale of the input. ignored when case sensitive " +
+                   "is true", typeConverter=TypeConverters.toString)
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False):
+    def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
+                 locale=None):
         """
-        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false)
+        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
+        locale=None)
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
         self._setDefault(stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-                         caseSensitive=False)
+                         caseSensitive=False, locale=self._java_obj.getLocale())
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
-    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False):
+    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
+                  locale=None):
         """
-        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false)
+        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
+        locale=None)
         Sets params for this StopWordRemover.
         """
         kwargs = self._input_kwargs
@@ -2633,6 +2639,20 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         Gets the value of :py:attr:`caseSensitive` or its default value.
         """
         return self.getOrDefault(self.caseSensitive)
+
+    @since("2.4.0")
+    def setLocale(self, value):
+        """
+        Sets the value of :py:attr:`locale`.
+        """
+        return self._set(locale=value)
+
+    @since("2.4.0")
+    def getLocale(self):
+        """
+        Gets the value of :py:attr:`locale`.
+        """
+        return self.getOrDefault(self.locale)
 
     @staticmethod
     @since("2.0.0")

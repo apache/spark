@@ -39,9 +39,11 @@ import org.apache.spark.util.{Benchmark, Utils}
 object DataSourceReadBenchmark {
   val conf = new SparkConf()
     .setAppName("DataSourceReadBenchmark")
-    .setIfMissing("spark.master", "local[1]")
+    // Since `spark.master` always exists, overrides this value
+    .set("spark.master", "local[1]")
     .setIfMissing("spark.driver.memory", "3g")
     .setIfMissing("spark.executor.memory", "3g")
+    .setIfMissing("spark.ui.enabled", "false")
 
   val spark = SparkSession.builder.config(conf).getOrCreate()
 
@@ -154,73 +156,73 @@ object DataSourceReadBenchmark {
           }
         }
 
-
         /*
-        Intel(R) Xeon(R) CPU E5-2686 v4 @ 2.30GHz
+        OpenJDK 64-Bit Server VM 1.8.0_171-b10 on Linux 4.14.33-51.37.amzn1.x86_64
+        Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
         SQL Single TINYINT Column Scan:      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 15231 / 15267          1.0         968.3       1.0X
-        SQL Json                                  8476 / 8498          1.9         538.9       1.8X
-        SQL Parquet Vectorized                     121 /  127        130.0           7.7     125.9X
-        SQL Parquet MR                            1515 / 1543         10.4          96.3      10.1X
-        SQL ORC Vectorized                         164 /  171         95.9          10.4      92.9X
-        SQL ORC Vectorized with copy               228 /  234         69.0          14.5      66.8X
-        SQL ORC MR                                1297 / 1309         12.1          82.5      11.7X
+        SQL CSV                                 22964 / 23096          0.7        1460.0       1.0X
+        SQL Json                                  8469 / 8593          1.9         538.4       2.7X
+        SQL Parquet Vectorized                     164 /  177         95.8          10.4     139.9X
+        SQL Parquet MR                            1687 / 1706          9.3         107.2      13.6X
+        SQL ORC Vectorized                         191 /  197         82.3          12.2     120.2X
+        SQL ORC Vectorized with copy               215 /  219         73.2          13.7     106.9X
+        SQL ORC MR                                1392 / 1412         11.3          88.5      16.5X
 
 
         SQL Single SMALLINT Column Scan:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 16344 / 16374          1.0        1039.1       1.0X
-        SQL Json                                  8634 / 8648          1.8         548.9       1.9X
-        SQL Parquet Vectorized                     172 /  177         91.5          10.9      95.1X
-        SQL Parquet MR                            1744 / 1746          9.0         110.9       9.4X
-        SQL ORC Vectorized                         189 /  194         83.1          12.0      86.4X
-        SQL ORC Vectorized with copy               244 /  250         64.5          15.5      67.0X
-        SQL ORC MR                                1341 / 1386         11.7          85.3      12.2X
+        SQL CSV                                 24090 / 24097          0.7        1531.6       1.0X
+        SQL Json                                  8791 / 8813          1.8         558.9       2.7X
+        SQL Parquet Vectorized                     204 /  212         77.0          13.0     117.9X
+        SQL Parquet MR                            1813 / 1850          8.7         115.3      13.3X
+        SQL ORC Vectorized                         226 /  230         69.7          14.4     106.7X
+        SQL ORC Vectorized with copy               295 /  298         53.3          18.8      81.6X
+        SQL ORC MR                                1526 / 1549         10.3          97.1      15.8X
 
 
         SQL Single INT Column Scan:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 17874 / 17875          0.9        1136.4       1.0X
-        SQL Json                                  9190 / 9204          1.7         584.3       1.9X
-        SQL Parquet Vectorized                     141 /  160        111.2           9.0     126.4X
-        SQL Parquet MR                            1930 / 2049          8.2         122.7       9.3X
-        SQL ORC Vectorized                         259 /  264         60.7          16.5      69.0X
-        SQL ORC Vectorized with copy               265 /  272         59.4          16.8      67.5X
-        SQL ORC MR                                1528 / 1569         10.3          97.2      11.7X
+        SQL CSV                                 25637 / 25791          0.6        1629.9       1.0X
+        SQL Json                                  9532 / 9570          1.7         606.0       2.7X
+        SQL Parquet Vectorized                     181 /  191         86.8          11.5     141.5X
+        SQL Parquet MR                            2210 / 2227          7.1         140.5      11.6X
+        SQL ORC Vectorized                         309 /  317         50.9          19.6      83.0X
+        SQL ORC Vectorized with copy               316 /  322         49.8          20.1      81.2X
+        SQL ORC MR                                1650 / 1680          9.5         104.9      15.5X
 
 
         SQL Single BIGINT Column Scan:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 22812 / 22839          0.7        1450.4       1.0X
-        SQL Json                                12026 / 12054          1.3         764.6       1.9X
-        SQL Parquet Vectorized                     222 /  227         70.8          14.1     102.6X
-        SQL Parquet MR                            2199 / 2204          7.2         139.8      10.4X
-        SQL ORC Vectorized                         331 /  335         47.6          21.0      69.0X
-        SQL ORC Vectorized with copy               338 /  343         46.6          21.5      67.6X
-        SQL ORC MR                                1618 / 1622          9.7         102.9      14.1X
+        SQL CSV                                 31617 / 31764          0.5        2010.1       1.0X
+        SQL Json                                12440 / 12451          1.3         790.9       2.5X
+        SQL Parquet Vectorized                     284 /  315         55.4          18.0     111.4X
+        SQL Parquet MR                            2382 / 2390          6.6         151.5      13.3X
+        SQL ORC Vectorized                         398 /  403         39.5          25.3      79.5X
+        SQL ORC Vectorized with copy               410 /  413         38.3          26.1      77.1X
+        SQL ORC MR                                1783 / 1813          8.8         113.4      17.7X
 
 
         SQL Single FLOAT Column Scan:        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 18703 / 18740          0.8        1189.1       1.0X
-        SQL Json                                11779 / 11869          1.3         748.9       1.6X
-        SQL Parquet Vectorized                     143 /  145        110.1           9.1     130.9X
-        SQL Parquet MR                            1954 / 1963          8.0         124.2       9.6X
-        SQL ORC Vectorized                         347 /  355         45.3          22.1      53.8X
-        SQL ORC Vectorized with copy               356 /  359         44.1          22.7      52.5X
-        SQL ORC MR                                1570 / 1598         10.0          99.8      11.9X
+        SQL CSV                                 26679 / 26742          0.6        1696.2       1.0X
+        SQL Json                                12490 / 12541          1.3         794.1       2.1X
+        SQL Parquet Vectorized                     174 /  183         90.4          11.1     153.3X
+        SQL Parquet MR                            2201 / 2223          7.1         140.0      12.1X
+        SQL ORC Vectorized                         415 /  429         37.9          26.4      64.3X
+        SQL ORC Vectorized with copy               422 /  428         37.2          26.9      63.2X
+        SQL ORC MR                                1767 / 1773          8.9         112.3      15.1X
 
 
         SQL Single DOUBLE Column Scan:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 23832 / 23838          0.7        1515.2       1.0X
-        SQL Json                                16204 / 16226          1.0        1030.2       1.5X
-        SQL Parquet Vectorized                     242 /  306         65.1          15.4      98.6X
-        SQL Parquet MR                            2462 / 2482          6.4         156.5       9.7X
-        SQL ORC Vectorized                         419 /  451         37.6          26.6      56.9X
-        SQL ORC Vectorized with copy               426 /  447         36.9          27.1      55.9X
-        SQL ORC MR                                1885 / 1931          8.3         119.8      12.6X
+        SQL CSV                                 34223 / 34324          0.5        2175.8       1.0X
+        SQL Json                                17784 / 17785          0.9        1130.7       1.9X
+        SQL Parquet Vectorized                     277 /  283         56.7          17.6     123.4X
+        SQL Parquet MR                            2356 / 2386          6.7         149.8      14.5X
+        SQL ORC Vectorized                         533 /  536         29.5          33.9      64.2X
+        SQL ORC Vectorized with copy               541 /  546         29.1          34.4      63.3X
+        SQL ORC MR                                2166 / 2177          7.3         137.7      15.8X
         */
         sqlBenchmark.run()
 
@@ -294,41 +296,42 @@ object DataSourceReadBenchmark {
         }
 
         /*
-        Intel(R) Xeon(R) CPU E5-2686 v4 @ 2.30GHz
+        OpenJDK 64-Bit Server VM 1.8.0_171-b10 on Linux 4.14.33-51.37.amzn1.x86_64
+        Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
         Single TINYINT Column Scan:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        ParquetReader Vectorized                   187 /  201         84.2          11.9       1.0X
-        ParquetReader Vectorized -> Row            101 /  103        156.4           6.4       1.9X
+        ParquetReader Vectorized                   198 /  202         79.4          12.6       1.0X
+        ParquetReader Vectorized -> Row            119 /  121        132.3           7.6       1.7X
 
 
         Single SMALLINT Column Scan:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        ParquetReader Vectorized                   272 /  288         57.8          17.3       1.0X
-        ParquetReader Vectorized -> Row            213 /  219         73.7          13.6       1.3X
+        ParquetReader Vectorized                   282 /  287         55.8          17.9       1.0X
+        ParquetReader Vectorized -> Row            246 /  247         64.0          15.6       1.1X
 
 
         Single INT Column Scan:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        ParquetReader Vectorized                   252 /  288         62.5          16.0       1.0X
-        ParquetReader Vectorized -> Row            232 /  246         67.7          14.8       1.1X
+        ParquetReader Vectorized                   258 /  262         60.9          16.4       1.0X
+        ParquetReader Vectorized -> Row            259 /  260         60.8          16.5       1.0X
 
 
         Single BIGINT Column Scan:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        ParquetReader Vectorized                   415 /  454         37.9          26.4       1.0X
-        ParquetReader Vectorized -> Row            407 /  432         38.6          25.9       1.0X
+        ParquetReader Vectorized                   361 /  369         43.6          23.0       1.0X
+        ParquetReader Vectorized -> Row            361 /  371         43.6          22.9       1.0X
 
 
         Single FLOAT Column Scan:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        ParquetReader Vectorized                   251 /  302         62.7          16.0       1.0X
-        ParquetReader Vectorized -> Row            220 /  234         71.5          14.0       1.1X
+        ParquetReader Vectorized                   253 /  261         62.2          16.1       1.0X
+        ParquetReader Vectorized -> Row            254 /  256         61.9          16.2       1.0X
 
 
         Single DOUBLE Column Scan:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        ParquetReader Vectorized                   432 /  436         36.4          27.5       1.0X
-        ParquetReader Vectorized -> Row            414 /  422         38.0          26.4       1.0X
+        ParquetReader Vectorized                   357 /  364         44.0          22.7       1.0X
+        ParquetReader Vectorized -> Row            358 /  366         44.0          22.7       1.0X
         */
         parquetReaderBenchmark.run()
       }
@@ -382,16 +385,17 @@ object DataSourceReadBenchmark {
         }
 
         /*
-        Intel(R) Xeon(R) CPU E5-2686 v4 @ 2.30GHz
+        OpenJDK 64-Bit Server VM 1.8.0_171-b10 on Linux 4.14.33-51.37.amzn1.x86_64
+        Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
         Int and String Scan:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 19172 / 19173          0.5        1828.4       1.0X
-        SQL Json                                12799 / 12873          0.8        1220.6       1.5X
-        SQL Parquet Vectorized                    2558 / 2564          4.1         244.0       7.5X
-        SQL Parquet MR                            4514 / 4583          2.3         430.4       4.2X
-        SQL ORC Vectorized                        2561 / 2697          4.1         244.3       7.5X
-        SQL ORC Vectorized with copy              3076 / 3110          3.4         293.4       6.2X
-        SQL ORC MR                                4197 / 4283          2.5         400.2       4.6X
+        SQL CSV                                 27145 / 27158          0.4        2588.7       1.0X
+        SQL Json                                12969 / 13337          0.8        1236.8       2.1X
+        SQL Parquet Vectorized                    2419 / 2448          4.3         230.7      11.2X
+        SQL Parquet MR                            4631 / 4633          2.3         441.7       5.9X
+        SQL ORC Vectorized                        2412 / 2465          4.3         230.0      11.3X
+        SQL ORC Vectorized with copy              2633 / 2675          4.0         251.1      10.3X
+        SQL ORC MR                                4280 / 4350          2.4         408.2       6.3X
         */
         benchmark.run()
       }
@@ -445,16 +449,17 @@ object DataSourceReadBenchmark {
         }
 
         /*
-        Intel(R) Xeon(R) CPU E5-2686 v4 @ 2.30GHz
+        OpenJDK 64-Bit Server VM 1.8.0_171-b10 on Linux 4.14.33-51.37.amzn1.x86_64
+        Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
         Repeated String:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 10889 / 10924          1.0        1038.5       1.0X
-        SQL Json                                  7903 / 7931          1.3         753.7       1.4X
-        SQL Parquet Vectorized                     777 /  799         13.5          74.1      14.0X
-        SQL Parquet MR                            1682 / 1708          6.2         160.4       6.5X
-        SQL ORC Vectorized                         532 /  534         19.7          50.7      20.5X
-        SQL ORC Vectorized with copy               742 /  743         14.1          70.7      14.7X
-        SQL ORC MR                                1996 / 2002          5.3         190.4       5.5X
+        SQL CSV                                 17345 / 17424          0.6        1654.1       1.0X
+        SQL Json                                  8639 / 8664          1.2         823.9       2.0X
+        SQL Parquet Vectorized                     839 /  854         12.5          80.0      20.7X
+        SQL Parquet MR                            1771 / 1775          5.9         168.9       9.8X
+        SQL ORC Vectorized                         550 /  569         19.1          52.4      31.6X
+        SQL ORC Vectorized with copy               785 /  849         13.4          74.9      22.1X
+        SQL ORC MR                                2168 / 2202          4.8         206.7       8.0X
         */
         benchmark.run()
       }
@@ -574,30 +579,31 @@ object DataSourceReadBenchmark {
         }
 
         /*
-        Intel(R) Xeon(R) CPU E5-2686 v4 @ 2.30GHz
+        OpenJDK 64-Bit Server VM 1.8.0_171-b10 on Linux 4.14.33-51.37.amzn1.x86_64
+        Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
         Partitioned Table:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        Data column - CSV                       25428 / 25454          0.6        1616.7       1.0X
-        Data column - Json                      12689 / 12774          1.2         806.7       2.0X
-        Data column - Parquet Vectorized           222 /  231         70.7          14.1     114.3X
-        Data column - Parquet MR                  3355 / 3397          4.7         213.3       7.6X
-        Data column - ORC Vectorized               332 /  338         47.4          21.1      76.6X
-        Data column - ORC Vectorized with copy     338 /  341         46.5          21.5      75.2X
-        Data column - ORC MR                      2329 / 2356          6.8         148.0      10.9X
-        Partition column - CSV                  17465 / 17502          0.9        1110.4       1.5X
-        Partition column - Json                 10865 / 10876          1.4         690.8       2.3X
-        Partition column - Parquet Vectorized       48 /   52        325.4           3.1     526.1X
-        Partition column - Parquet MR             1695 / 1696          9.3         107.8      15.0X
-        Partition column - ORC Vectorized           49 /   54        319.9           3.1     517.2X
-        Partition column - ORC Vectorized with copy 49 /   52        324.1           3.1     524.0X
-        Partition column - ORC MR                 1548 / 1549         10.2          98.4      16.4X
-        Both columns - CSV                      25568 / 25595          0.6        1625.6       1.0X
-        Both columns - Json                     13658 / 13673          1.2         868.4       1.9X
-        Both columns - Parquet Vectorized          270 /  296         58.3          17.1      94.3X
-        Both columns - Parquet MR                 3501 / 3521          4.5         222.6       7.3X
-        Both columns - ORC Vectorized              377 /  380         41.7          24.0      67.4X
-        Both column - ORC Vectorized with copy     447 /  448         35.2          28.4      56.9X
-        Both columns - ORC MR                     2440 / 2446          6.4         155.2      10.4X
+        Data column - CSV                       32613 / 32841          0.5        2073.4       1.0X
+        Data column - Json                      13343 / 13469          1.2         848.3       2.4X
+        Data column - Parquet Vectorized           302 /  318         52.1          19.2     108.0X
+        Data column - Parquet MR                  2908 / 2924          5.4         184.9      11.2X
+        Data column - ORC Vectorized               412 /  425         38.1          26.2      79.1X
+        Data column - ORC Vectorized with copy     442 /  446         35.6          28.1      73.8X
+        Data column - ORC MR                      2390 / 2396          6.6         152.0      13.6X
+        Partition column - CSV                    9626 / 9683          1.6         612.0       3.4X
+        Partition column - Json                 10909 / 10923          1.4         693.6       3.0X
+        Partition column - Parquet Vectorized       69 /   76        228.4           4.4     473.6X
+        Partition column - Parquet MR             1898 / 1933          8.3         120.7      17.2X
+        Partition column - ORC Vectorized           67 /   74        236.0           4.2     489.4X
+        Partition column - ORC Vectorized with copy 65 /   72        241.9           4.1     501.6X
+        Partition column - ORC MR                 1743 / 1749          9.0         110.8      18.7X
+        Both columns - CSV                      35523 / 35552          0.4        2258.5       0.9X
+        Both columns - Json                     13676 / 13681          1.2         869.5       2.4X
+        Both columns - Parquet Vectorized          317 /  326         49.5          20.2     102.7X
+        Both columns - Parquet MR                 3333 / 3336          4.7         211.9       9.8X
+        Both columns - ORC Vectorized              441 /  446         35.6          28.1      73.9X
+        Both column - ORC Vectorized with copy     517 /  524         30.4          32.9      63.1X
+        Both columns - ORC MR                     2574 / 2577          6.1         163.6      12.7X
         */
         benchmark.run()
       }
@@ -684,41 +690,42 @@ object DataSourceReadBenchmark {
         }
 
         /*
-        Intel(R) Xeon(R) CPU E5-2686 v4 @ 2.30GHz
+        OpenJDK 64-Bit Server VM 1.8.0_171-b10 on Linux 4.14.33-51.37.amzn1.x86_64
+        Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
         String with Nulls Scan:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 13518 / 13529          0.8        1289.2       1.0X
-        SQL Json                                10895 / 10926          1.0        1039.0       1.2X
-        SQL Parquet Vectorized                    1539 / 1581          6.8         146.8       8.8X
-        SQL Parquet MR                            3746 / 3811          2.8         357.3       3.6X
-        ParquetReader Vectorized                  1070 / 1112          9.8         102.0      12.6X
-        SQL ORC Vectorized                        1389 / 1408          7.6         132.4       9.7X
-        SQL ORC Vectorized with copy              1736 / 1750          6.0         165.6       7.8X
-        SQL ORC MR                                3799 / 3892          2.8         362.3       3.6X
-
-
-        String with Nulls Scan:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-        --------------------------------------------------------------------------------------------
-        SQL CSV                                 10854 / 10892          1.0        1035.2       1.0X
-        SQL Json                                  8129 / 8138          1.3         775.3       1.3X
-        SQL Parquet Vectorized                    1053 / 1104         10.0         100.4      10.3X
-        SQL Parquet MR                            2840 / 2854          3.7         270.8       3.8X
-        ParquetReader Vectorized                   978 / 1008         10.7          93.2      11.1X
-        SQL ORC Vectorized                        1312 / 1387          8.0         125.1       8.3X
-        SQL ORC Vectorized with copy              1764 / 1772          5.9         168.2       6.2X
-        SQL ORC MR                                3435 / 3445          3.1         327.6       3.2X
+        SQL CSV                                 14875 / 14920          0.7        1418.6       1.0X
+        SQL Json                                10974 / 10992          1.0        1046.5       1.4X
+        SQL Parquet Vectorized                    1711 / 1750          6.1         163.2       8.7X
+        SQL Parquet MR                            3838 / 3884          2.7         366.0       3.9X
+        ParquetReader Vectorized                  1155 / 1168          9.1         110.2      12.9X
+        SQL ORC Vectorized                        1341 / 1380          7.8         127.9      11.1X
+        SQL ORC Vectorized with copy              1659 / 1716          6.3         158.2       9.0X
+        SQL ORC MR                                3594 / 3634          2.9         342.7       4.1X
 
 
         String with Nulls Scan:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                   8043 / 8048          1.3         767.1       1.0X
-        SQL Json                                  4911 / 4923          2.1         468.4       1.6X
-        SQL Parquet Vectorized                     206 /  209         51.0          19.6      39.1X
-        SQL Parquet MR                            1528 / 1537          6.9         145.8       5.3X
-        ParquetReader Vectorized                   216 /  219         48.6          20.6      37.2X
-        SQL ORC Vectorized                         462 /  466         22.7          44.1      17.4X
-        SQL ORC Vectorized with copy               568 /  572         18.5          54.2      14.2X
-        SQL ORC MR                                1647 / 1649          6.4         157.1       4.9X
+        SQL CSV                                 17219 / 17264          0.6        1642.1       1.0X
+        SQL Json                                  8843 / 8864          1.2         843.3       1.9X
+        SQL Parquet Vectorized                    1169 / 1178          9.0         111.4      14.7X
+        SQL Parquet MR                            2676 / 2697          3.9         255.2       6.4X
+        ParquetReader Vectorized                  1068 / 1071          9.8         101.8      16.1X
+        SQL ORC Vectorized                        1319 / 1319          7.9         125.8      13.1X
+        SQL ORC Vectorized with copy              1638 / 1639          6.4         156.2      10.5X
+        SQL ORC MR                                3230 / 3257          3.2         308.1       5.3X
+
+
+        String with Nulls Scan:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        --------------------------------------------------------------------------------------------
+        SQL CSV                                 13976 / 14053          0.8        1332.8       1.0X
+        SQL Json                                  5166 / 5176          2.0         492.6       2.7X
+        SQL Parquet Vectorized                     274 /  282         38.2          26.2      50.9X
+        SQL Parquet MR                            1553 / 1555          6.8         148.1       9.0X
+        ParquetReader Vectorized                   241 /  246         43.5          23.0      57.9X
+        SQL ORC Vectorized                         476 /  479         22.0          45.4      29.3X
+        SQL ORC Vectorized with copy               584 /  588         17.9          55.7      23.9X
+        SQL ORC MR                                1720 / 1734          6.1         164.1       8.1X
         */
         benchmark.run()
       }
@@ -773,38 +780,39 @@ object DataSourceReadBenchmark {
         }
 
         /*
-        Intel(R) Xeon(R) CPU E5-2686 v4 @ 2.30GHz
+        OpenJDK 64-Bit Server VM 1.8.0_171-b10 on Linux 4.14.33-51.37.amzn1.x86_64
+        Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
         Single Column Scan from 10 columns:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                   3663 / 3665          0.3        3493.2       1.0X
-        SQL Json                                  3122 / 3160          0.3        2977.5       1.2X
-        SQL Parquet Vectorized                      40 /   42         26.2          38.2      91.5X
-        SQL Parquet MR                             189 /  192          5.5         180.2      19.4X
-        SQL ORC Vectorized                          48 /   51         21.6          46.2      75.6X
-        SQL ORC Vectorized with copy                49 /   52         21.4          46.7      74.9X
-        SQL ORC MR                                 280 /  289          3.7         267.1      13.1X
+        SQL CSV                                   3478 / 3481          0.3        3316.4       1.0X
+        SQL Json                                  2646 / 2654          0.4        2523.6       1.3X
+        SQL Parquet Vectorized                      67 /   72         15.8          63.5      52.2X
+        SQL Parquet MR                             207 /  214          5.1         197.6      16.8X
+        SQL ORC Vectorized                          69 /   76         15.2          66.0      50.3X
+        SQL ORC Vectorized with copy                70 /   76         15.0          66.5      49.9X
+        SQL ORC MR                                 299 /  303          3.5         285.1      11.6X
 
 
         Single Column Scan from 50 columns:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 11420 / 11505          0.1       10891.1       1.0X
-        SQL Json                                11905 / 12120          0.1       11353.6       1.0X
-        SQL Parquet Vectorized                      50 /   54         20.9          47.8     227.7X
-        SQL Parquet MR                             195 /  199          5.4         185.8      58.6X
-        SQL ORC Vectorized                          61 /   65         17.3          57.8     188.3X
-        SQL ORC Vectorized with copy                62 /   65         17.0          58.8     185.2X
-        SQL ORC MR                                 847 /  865          1.2         807.4      13.5X
+        SQL CSV                                   9214 / 9236          0.1        8786.7       1.0X
+        SQL Json                                  9943 / 9978          0.1        9482.7       0.9X
+        SQL Parquet Vectorized                      77 /   86         13.6          73.3     119.8X
+        SQL Parquet MR                             229 /  235          4.6         218.6      40.2X
+        SQL ORC Vectorized                          84 /   96         12.5          80.0     109.9X
+        SQL ORC Vectorized with copy                83 /   91         12.6          79.4     110.7X
+        SQL ORC MR                                 843 /  854          1.2         804.0      10.9X
 
 
-        Single Column Scan from 100 columns: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        Single Column Scan from 100 columns  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         --------------------------------------------------------------------------------------------
-        SQL CSV                                 21278 / 21404          0.0       20292.4       1.0X
-        SQL Json                                22455 / 22625          0.0       21414.7       0.9X
-        SQL Parquet Vectorized                      73 /   75         14.4          69.3     292.8X
-        SQL Parquet MR                             220 /  226          4.8         209.7      96.8X
-        SQL ORC Vectorized                          82 /   86         12.8          78.2     259.4X
-        SQL ORC Vectorized with copy                82 /   90         12.7          78.7     258.0X
-        SQL ORC MR                                1568 / 1582          0.7        1495.4      13.6X
+        SQL CSV                                 16503 / 16622          0.1       15738.9       1.0X
+        SQL Json                                19109 / 19184          0.1       18224.2       0.9X
+        SQL Parquet Vectorized                      99 /  108         10.6          94.3     166.8X
+        SQL Parquet MR                             253 /  264          4.1         241.6      65.1X
+        SQL ORC Vectorized                         107 /  114          9.8         101.6     154.8X
+        SQL ORC Vectorized with copy               107 /  118          9.8         102.1     154.1X
+        SQL ORC MR                                1526 / 1529          0.7        1455.3      10.8X
         */
         benchmark.run()
       }

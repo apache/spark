@@ -1429,7 +1429,7 @@ for more details on the API.
 
 ## Imputer
 
-The `Imputer` transformer completes missing values in a dataset, either using the mean or the 
+The `Imputer` estimator completes missing values in a dataset, either using the mean or the 
 median of the columns in which the missing values are located. The input columns should be of
 `DoubleType` or `FloatType`. Currently `Imputer` does not support categorical features and possibly
 creates incorrect values for columns containing categorical features. Imputer can impute custom values 

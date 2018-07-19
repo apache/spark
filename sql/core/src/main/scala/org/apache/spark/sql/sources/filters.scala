@@ -199,7 +199,7 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
 
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to
- * a string that starts with `value`.
+ * a string that ends with `value`.
  *
  * @since 1.3.1
  */

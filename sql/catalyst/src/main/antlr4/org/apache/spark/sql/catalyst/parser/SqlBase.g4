@@ -414,7 +414,16 @@ groupingSet
     ;
 
 pivotClause
-    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn=identifier IN '(' pivotValues+=constant (',' pivotValues+=constant)* ')' ')'
+    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn IN '(' pivotValues+=pivotValue (',' pivotValues+=pivotValue)* ')' ')'
+    ;
+
+pivotColumn
+    : identifiers+=identifier
+    | '(' identifiers+=identifier (',' identifiers+=identifier)* ')'
+    ;
+
+pivotValue
+    : expression (AS? identifier)?
     ;
 
 lateralView
@@ -539,16 +548,9 @@ expression
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
     | EXISTS '(' query ')'                                         #exists
-    | predicated                                                   #booleanDefault
+    | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
-    ;
-
-// workaround for:
-//  https://github.com/antlr/antlr4/issues/780
-//  https://github.com/antlr/antlr4/issues/781
-predicated
-    : valueExpression predicate?
     ;
 
 predicate
