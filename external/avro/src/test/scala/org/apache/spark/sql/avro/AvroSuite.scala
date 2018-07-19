@@ -578,7 +578,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       """.stripMargin
     val result = spark
       .read
-      .option(AvroFileFormat.AvroSchema, avroSchema)
+      .option("avroSchema", avroSchema)
       .avro(testAvro)
       .collect()
     val expected = spark.read.avro(testAvro).select("string").collect()
@@ -598,7 +598,9 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         |  }]
         |}
       """.stripMargin
-    val result = spark.read.option(AvroFileFormat.AvroSchema, avroSchema)
+    val result = spark
+      .read
+      .option("avroSchema", avroSchema)
       .avro(testAvro).select("missingField").first
     assert(result === Row("foo"))
   }
