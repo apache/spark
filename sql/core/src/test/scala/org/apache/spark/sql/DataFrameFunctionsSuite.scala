@@ -1458,16 +1458,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
-    def checkResult1(): Unit = {
+    def testPrimitiveType(): Unit = {
       checkResult(idf.select(shuffle('i)))
       checkResult(idf.selectExpr("shuffle(i)"))
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult1()
+    testPrimitiveType()
     // Test with cached relation, the Project will be evaluated with codegen
     idf.cache()
-    checkResult1()
+    testPrimitiveType()
 
     // Array test cases (non-primitive-type elements)
     val sdf = Seq(
@@ -1477,16 +1477,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("s")
 
-    def checkResult2(): Unit = {
+    def testNonPrimitiveType(): Unit = {
       checkResult(sdf.select(shuffle('s)))
       checkResult(sdf.selectExpr("shuffle(s)"))
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    checkResult2()
+    testNonPrimitiveType()
     // Test with cached relation, the Project will be evaluated with codegen
     sdf.cache()
-    checkResult2()
+    testNonPrimitiveType()
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
