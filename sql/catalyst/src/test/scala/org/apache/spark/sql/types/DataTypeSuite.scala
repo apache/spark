@@ -310,6 +310,88 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 12)
   checkDefaultSize(structType, 20)
 
+  def checkEqualsIgnoreNullability(
+      from: DataType,
+      to: DataType,
+      expected: Boolean): Unit = {
+    val testName =
+      s"equalsIgnoreNullability: (from: $from, to: $to)"
+    test(testName) {
+      assert(DataType.equalsIgnoreNullability(from, to) === expected)
+    }
+  }
+
+  checkEqualsIgnoreNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(DoubleType, containsNull = true),
+    expected = true)
+  checkEqualsIgnoreNullability(
+    from = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("b", ArrayType(DoubleType, containsNull = false), nullable = true):: Nil
+    ),
+    to = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("b", ArrayType(DoubleType, containsNull = false), nullable = false):: Nil
+    ),
+    expected = true)
+  checkEqualsIgnoreNullability(
+    from = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("b", ArrayType(DoubleType, containsNull = false), nullable = true):: Nil
+    ),
+    to = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("c", ArrayType(DoubleType, containsNull = false), nullable = false):: Nil
+    ),
+    expected = false)
+  checkEqualsIgnoreNullability(
+    from = StructType(
+      StructField("a", DoubleType, nullable = false)::
+        StructField("b", ArrayType(DoubleType, containsNull = false), nullable = true):: Nil
+    ),
+    to = StructType(
+      StructField("a", DoubleType, nullable = false)::
+        StructField("B", ArrayType(DoubleType, containsNull = false), nullable = true):: Nil
+    ),
+    expected = false)
+  checkEqualsIgnoreNullability(
+    from = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("b", ArrayType(MapType(StringType, StringType, valueContainsNull = false),
+        containsNull = false), nullable = true):: Nil
+    ),
+    to = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("b", ArrayType(MapType(StringType, StringType, valueContainsNull = false),
+       containsNull = false), nullable = true):: Nil
+    ),
+    expected = true)
+
+  def checkEqualsIgnoreCaseAndNullability(
+                                    from: DataType,
+                                    to: DataType,
+                                    expected: Boolean): Unit = {
+    val testName =
+      s"equalsIgnoreCaseAndNullability: (from: $from, to: $to)"
+    test(testName) {
+      assert(DataType.equalsIgnoreCaseAndNullability(from, to) === expected)
+    }
+  }
+
+  checkEqualsIgnoreCaseAndNullability(
+    from = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("b", ArrayType(MapType(IntegerType, StringType, valueContainsNull = false),
+        containsNull = false), nullable = true):: Nil
+    ),
+    to = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("B", ArrayType(MapType(IntegerType, StringType, valueContainsNull = false),
+        containsNull = false), nullable = true):: Nil
+    ),
+    expected = true)
+
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
       to: DataType,
@@ -392,6 +474,30 @@ class DataTypeSuite extends SparkFunSuite {
       StructField("a", StringType, nullable = false) ::
       StructField("b", StringType, nullable = false) :: Nil),
     expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("b", ArrayType(MapType(IntegerType, StringType, valueContainsNull = false),
+        containsNull = false), nullable = true):: Nil
+    ),
+    to = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("B", ArrayType(MapType(IntegerType, StringType, valueContainsNull = true),
+        containsNull = false), nullable = false):: Nil
+    ),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("b", ArrayType(MapType(IntegerType, StringType, valueContainsNull = false),
+        containsNull = false), nullable = false):: Nil
+    ),
+    to = StructType(
+      StructField("a", DoubleType, nullable = false)::
+      StructField("b", ArrayType(MapType(IntegerType, StringType, valueContainsNull = true),
+        containsNull = false), nullable = true):: Nil
+    ),
+    expected = true)
 
   def checkCatalogString(dt: DataType): Unit = {
     test(s"catalogString: $dt") {
