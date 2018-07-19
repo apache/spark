@@ -274,7 +274,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   /** This method is intended to be only used for unit test(s). DO NOT TOUCH ELEMENTS IN MAP! */
-  private[state] def getClonedLoadedMaps(): util.SortedMap[Long, MapType] = synchronized {
+  private[state] def getLoadedMaps(): util.SortedMap[Long, MapType] = synchronized {
     // shallow copy as a minimal guard
     loadedMaps.clone().asInstanceOf[util.SortedMap[Long, MapType]]
   }

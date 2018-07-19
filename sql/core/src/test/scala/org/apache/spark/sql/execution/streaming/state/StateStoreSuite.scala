@@ -116,26 +116,26 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     // commit the ver 1 : cache will have one element
     currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 1))
-    var loadedMaps = provider.getClonedLoadedMaps()
-    checkLoadedVersions(loadedMaps, 1, 1L, 1L)
-    checkVersion(loadedMaps, 1L, Map("a" -> 1))
+    var loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
+    checkVersion(loadedMaps, 1, Map("a" -> 1))
 
     // commit the ver 2 : cache will have two elements
     currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 2))
-    loadedMaps = provider.getClonedLoadedMaps()
-    checkLoadedVersions(loadedMaps, 2, 2L, 1L)
-    checkVersion(loadedMaps, 2L, Map("a" -> 2))
-    checkVersion(loadedMaps, 1L, Map("a" -> 1))
+    loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 2, earliestKey = 2, latestKey = 1)
+    checkVersion(loadedMaps, 2, Map("a" -> 2))
+    checkVersion(loadedMaps, 1, Map("a" -> 1))
 
     // commit the ver 3 : cache has already two elements and adding ver 3 incurs exceeding cache,
     // and ver 3 will be added but ver 1 will be evicted
     currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 3))
-    loadedMaps = provider.getClonedLoadedMaps()
-    checkLoadedVersions(loadedMaps, 2, 3L, 2L)
-    checkVersion(loadedMaps, 3L, Map("a" -> 3))
-    checkVersion(loadedMaps, 2L, Map("a" -> 2))
+    loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 2, earliestKey = 3, latestKey = 2)
+    checkVersion(loadedMaps, 3, Map("a" -> 3))
+    checkVersion(loadedMaps, 2, Map("a" -> 2))
   }
 
   test("failure after committing with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 1") {
@@ -147,9 +147,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     // commit the ver 1 : cache will have one element
     currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 1))
-    var loadedMaps = provider.getClonedLoadedMaps()
-    checkLoadedVersions(loadedMaps, 1, 1L, 1L)
-    checkVersion(loadedMaps, 1L, Map("a" -> 1))
+    var loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
+    checkVersion(loadedMaps, 1, Map("a" -> 1))
 
     // commit the ver 2 : cache has already one elements and adding ver 2 incurs exceeding cache,
     // and ver 2 will be added but ver 1 will be evicted
@@ -157,9 +157,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     // but there's a failure afterwards so have to reprocess previous batch
     currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 2))
-    loadedMaps = provider.getClonedLoadedMaps()
-    checkLoadedVersions(loadedMaps, 1, 2L, 2L)
-    checkVersion(loadedMaps, 2L, Map("a" -> 2))
+    loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
+    checkVersion(loadedMaps, 2, Map("a" -> 2))
 
     // suppose there has been failure after committing, and it decided to reprocess previous batch
     currentVersion = 1
@@ -173,9 +173,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     // make sure newly committed version is reflected to the cache (overwritten)
     assert(getData(provider) === Set("a" -> -2))
-    loadedMaps = provider.getClonedLoadedMaps()
-    checkLoadedVersions(loadedMaps, 1, 2L, 2L)
-    checkVersion(loadedMaps, 2L, Map("a" -> -2))
+    loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
+    checkVersion(loadedMaps, 2, Map("a" -> -2))
   }
 
   test("no cache data with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 0") {
@@ -187,13 +187,13 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     // commit the ver 1 : never cached
     currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 1))
-    var loadedMaps = provider.getClonedLoadedMaps()
+    var loadedMaps = provider.getLoadedMaps()
     assert(loadedMaps.size() === 0)
 
     // commit the ver 2 : never cached
     currentVersion = incrementVersion(provider, currentVersion)
     assert(getData(provider) === Set("a" -> 2))
-    loadedMaps = provider.getClonedLoadedMaps()
+    loadedMaps = provider.getLoadedMaps()
     assert(loadedMaps.size() === 0)
   }
 
