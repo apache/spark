@@ -59,6 +59,7 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
   test("BucketedRandomProjectionLSH: default params") {
     val brp = new BucketedRandomProjectionLSH
     assert(brp.getNumHashTables === 1.0)
+    assert(brp.getNumHashFunctions === 1.0)
   }
 
   test("read/write") {
@@ -92,6 +93,7 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
   test("BucketedRandomProjectionLSH: randUnitVectors") {
     val brp = new BucketedRandomProjectionLSH()
       .setNumHashTables(20)
+      .setNumHashFunctions(10)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
@@ -144,6 +146,7 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
     // Project from 100 dimensional Euclidean Space to 10 dimensions
     val brp = new BucketedRandomProjectionLSH()
       .setNumHashTables(10)
+      .setNumHashFunctions(5)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(2.5)
@@ -158,7 +161,8 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
     val key = Vectors.dense(1.2, 3.4)
 
     val brp = new BucketedRandomProjectionLSH()
-      .setNumHashTables(2)
+      .setNumHashTables(8)
+      .setNumHashFunctions(2)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
@@ -175,6 +179,7 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
 
     val brp = new BucketedRandomProjectionLSH()
       .setNumHashTables(20)
+      .setNumHashFunctions(10)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
@@ -207,6 +212,7 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
     val dataset2 = spark.createDataFrame(data2.map(Tuple1.apply)).toDF("keys")
 
     val brp = new BucketedRandomProjectionLSH()
+      .setNumHashFunctions(4)
       .setNumHashTables(2)
       .setInputCol("keys")
       .setOutputCol("values")
@@ -225,13 +231,14 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
     val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
 
     val brp = new BucketedRandomProjectionLSH()
+      .setNumHashFunctions(4)
       .setNumHashTables(2)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
       .setSeed(12345)
 
-    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(brp, df, df, 3.0)
+    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(brp, df, df, 2.0)
     assert(precision == 1.0)
     assert(recall >= 0.7)
   }

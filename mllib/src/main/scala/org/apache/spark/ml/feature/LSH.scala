@@ -43,10 +43,24 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
     "tables, where increasing number of hash tables lowers the false negative rate, and " +
     "decreasing it improves the running performance", ParamValidators.gt(0))
 
+  /**
+   * Param for the number of hash functions used in LSH AND-amplification.
+   *
+   * LSH AND-amplification can be used to reduce the false positive rate. Higher values for this
+   * param lead to a reduced false positive rate and lower computational complexity.
+   * @group param
+   */
+  final val numHashFunctions: IntParam = new IntParam(this, "numHashFunctions", "number of hash " +
+    "functions, where increasing number of hash functions lowers the false positive rate, and " +
+    "decreasing it improves the false negative rate", ParamValidators.gt(0))
+
   /** @group getParam */
   final def getNumHashTables: Int = $(numHashTables)
 
-  setDefault(numHashTables -> 1)
+  /** @group getParam */
+  final def getNumHashFunctions: Int = $(numHashFunctions)
+
+  setDefault(numHashTables -> 1, numHashFunctions -> 1)
 
   /**
    * Transform the Schema for LSH
@@ -313,6 +327,9 @@ private[ml] abstract class LSH[T <: LSHModel[T]]
 
   /** @group setParam */
   def setNumHashTables(value: Int): this.type = set(numHashTables, value)
+
+  /** @group setParam */
+  def setNumHashFunctions(value: Int): this.type = set(numHashFunctions, value)
 
   /**
    * Validate and create a new instance of concrete LSHModel. Because different LSHModel may have

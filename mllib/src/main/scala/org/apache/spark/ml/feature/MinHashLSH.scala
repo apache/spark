@@ -69,8 +69,7 @@ class MinHashLSHModel private[ml](
           ((1L + elem) * a + b) % MinHashLSH.HASH_PRIME
         }.min.toDouble
       }
-      // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-      hashValues.map(Vectors.dense(_))
+      hashValues.grouped($(numHashFunctions)).map(Vectors.dense).toArray
     }
   }
 
@@ -130,6 +129,9 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
   @Since("2.1.0")
   override def setNumHashTables(value: Int): this.type = super.setNumHashTables(value)
 
+  @Since("2.2.0")
+  override def setNumHashFunctions(value: Int): this.type = super.setNumHashFunctions(value)
+
   @Since("2.1.0")
   def this() = {
     this(Identifiable.randomUID("mh-lsh"))
@@ -144,7 +146,7 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
     require(inputDim <= MinHashLSH.HASH_PRIME,
       s"The input vector dimension $inputDim exceeds the threshold ${MinHashLSH.HASH_PRIME}.")
     val rand = new Random($(seed))
-    val randCoefs: Array[(Int, Int)] = Array.fill($(numHashTables)) {
+    val randCoefs: Array[(Int, Int)] = Array.fill($(numHashTables) * $(numHashFunctions)) {
         (1 + rand.nextInt(MinHashLSH.HASH_PRIME - 1), rand.nextInt(MinHashLSH.HASH_PRIME - 1))
       }
     new MinHashLSHModel(uid, randCoefs)

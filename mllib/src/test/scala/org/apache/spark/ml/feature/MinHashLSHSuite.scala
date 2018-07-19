@@ -51,8 +51,9 @@ class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("MinHashLSH: default params") {
-    val rp = new MinHashLSH
-    assert(rp.getNumHashTables === 1.0)
+    val mh = new MinHashLSH
+    assert(mh.getNumHashTables === 1.0)
+    assert(mh.getNumHashFunctions === 1.0)
   }
 
   test("read/write") {
@@ -125,7 +126,8 @@ class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
 
   test("approxNearestNeighbors for min hash") {
     val mh = new MinHashLSH()
-      .setNumHashTables(20)
+      .setNumHashTables(64)
+      .setNumHashFunctions(2)
       .setInputCol("keys")
       .setOutputCol("values")
       .setSeed(12345)
@@ -135,8 +137,8 @@ class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
 
     val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(mh, dataset, key, 20,
       singleProbe = true)
-    assert(precision >= 0.7)
-    assert(recall >= 0.7)
+    assert(precision >= 0.6)
+    assert(recall >= 0.6)
   }
 
   test("approxNearestNeighbors for numNeighbors <= 0") {
@@ -165,7 +167,8 @@ class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
     val df2 = spark.createDataFrame(data2.map(Tuple1.apply)).toDF("keys")
 
     val mh = new MinHashLSH()
-      .setNumHashTables(20)
+      .setNumHashTables(64)
+      .setNumHashFunctions(2)
       .setInputCol("keys")
       .setOutputCol("values")
       .setSeed(12345)
