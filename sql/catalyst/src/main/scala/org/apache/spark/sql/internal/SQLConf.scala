@@ -1335,7 +1335,9 @@ object SQLConf {
         "overwriting. In dynamic mode, Spark doesn't delete partitions ahead, and only overwrite " +
         "those partitions that have data written into it at runtime. By default we use static " +
         "mode to keep the same behavior of Spark prior to 2.3. Note that this config doesn't " +
-        "affect Hive serde tables, as they are always overwritten with dynamic mode.")
+        "affect Hive serde tables, as they are always overwritten with dynamic mode. This can " +
+        "also be set as an output option for a data source using key partitionOverwriteMode, " +
+        "e.g. dataframe.write.option(\"partitionOverwriteMode\", \"dynamic\").save(path)")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(PartitionOverwriteMode.values.map(_.toString))

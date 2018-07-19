@@ -486,6 +486,25 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       }
     }
   }
+  test("SPARK-20236: dynamic partition overwrite specified per source without catalog table") {
+    withTempPath { path =>
+      Seq((1, 1, 1)).toDF("i", "part1", "part2")
+        .write.partitionBy("part1", "part2")
+        .option("partitionOverwriteMode", "dynamic")
+        .parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1, 1))
+
+      Seq((2, 1, 1)).toDF("i", "part1", "part2")
+        .write.partitionBy("part1", "part2").mode("overwrite")
+        .option("partitionOverwriteMode", "dynamic").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1))
+
+      Seq((2, 2, 2)).toDF("i", "part1", "part2")
+        .write.partitionBy("part1", "part2").mode("overwrite")
+        .option("partitionOverwriteMode", "dynamic").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+    }
+  }
 
   test("SPARK-20236: dynamic partition overwrite") {
     withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
