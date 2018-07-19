@@ -22,7 +22,6 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.commons.math3.random.MersenneTwister
-import org.apache.commons.math3.util.MathArrays
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
@@ -1189,6 +1188,9 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
 
 /**
  * Returns a random permutation of the given array.
+ *
+ * This implementation uses the modern version of Fisher-Yates algorithm.
+ * Reference: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#Modern_method
  */
 @ExpressionDescription(
   usage = "_FUNC_(array) - Returns a random permutation of the given array.",
@@ -1224,10 +1226,16 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     if (value == null) {
       null
     } else {
-      val arr = value.asInstanceOf[ArrayData]
-      val indices = MathArrays.natural(arr.numElements())
-      MathArrays.shuffle(indices, random)
-      new GenericArrayData(indices.map(arr.get(_, elementType)))
+      val arrayData = value.asInstanceOf[ArrayData].toObjectArray(elementType)
+      var k = arrayData.length - 1
+      while (k >= 1) {
+        val l = random.nextInt(k + 1)
+        val element = arrayData(k)
+        arrayData(k) = arrayData(l)
+        arrayData(l) = element
+        k -= 1
+      }
+      new GenericArrayData(arrayData)
     }
   }
 
@@ -1243,49 +1251,64 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       s"$rand = new $randomClass(${randomSeed.get}L + partitionIndex);")
 
     val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+    val arrayDataClass = classOf[GenericArrayData].getName()
 
-    val numElements = ctx.freshName("numElements")
     val arrayData = ctx.freshName("arrayData")
 
     val initialization = if (isPrimitiveType) {
-      ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
+      s"ArrayData $arrayData = $childName.copy();"
     } else {
-      val arrayDataClass = classOf[GenericArrayData].getName()
-      s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
-    }
-
-    val indices = ctx.freshName("indices")
-    val i = ctx.freshName("i")
-
-    val getValue = CodeGenerator.getValue(childName, elementType, s"$indices[$i]");
-    val copyData = if (isPrimitiveType) {
-      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-      s"$arrayData.set$primitiveValueTypeName($i, $getValue);"
-    } else {
-      s"$arrayData.update($i, $getValue);"
-    }
-
-    val nullSafeCopyData = if (dataType.asInstanceOf[ArrayType].containsNull) {
+      val elementTypeTerm = ctx.addReferenceObj("elementType", elementType)
       s"""
-         |if ($childName.isNullAt($indices[$i])) {
-         |  $arrayData.setNullAt($i);
+         |$arrayDataClass $arrayData = new $arrayDataClass(
+         |  $childName.toObjectArray($elementTypeTerm));
+       """.stripMargin
+    }
+
+    val javaElementType = CodeGenerator.javaType(elementType)
+
+    val k = ctx.freshName("k")
+    val l = ctx.freshName("l")
+    val valueK = ctx.freshName("valueK")
+    val getValueK = CodeGenerator.getValue(arrayData, elementType, k)
+    val getValueL = CodeGenerator.getValue(arrayData, elementType, l)
+
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
+    } else {
+      "update"
+    }
+
+    val swap = if (isPrimitiveType && dataType.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |if ($arrayData.isNullAt($k)) {
+         |  if (!$arrayData.isNullAt($l)) {
+         |    $arrayData.$setFunc($k, $getValueL);
+         |    $arrayData.setNullAt($l);
+         |  }
          |} else {
-         |  $copyData
+         |  $javaElementType $valueK = $getValueK;
+         |  if ($arrayData.isNullAt($l)) {
+         |    $arrayData.setNullAt($k);
+         |  } else {
+         |    $arrayData.$setFunc($k, $getValueL);
+         |  }
+         |  $arrayData.$setFunc($l, $valueK);
          |}
        """.stripMargin
     } else {
-      copyData
+      s"""
+         |$javaElementType $valueK = $getValueK;
+         |$arrayData.$setFunc($k, $getValueL);
+         |$arrayData.$setFunc($l, $valueK);
+       """.stripMargin
     }
 
-    val mathArraysClass = classOf[MathArrays].getName()
-
     s"""
-       |final int $numElements = $childName.numElements();
-       |int[] $indices = $mathArraysClass.natural($numElements);
-       |$mathArraysClass.shuffle($indices, $rand);
        |$initialization
-       |for (int $i = 0; $i < $numElements; $i++) {
-       |  $nullSafeCopyData
+       |for (int $k = $arrayData.numElements() - 1; $k >= 1; $k--) {
+       |  int $l = $rand.nextInt($k + 1);
+       |  $swap
        |}
        |${ev.value} = $arrayData;
      """.stripMargin
