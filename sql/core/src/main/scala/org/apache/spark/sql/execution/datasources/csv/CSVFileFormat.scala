@@ -84,7 +84,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
-        ".csv" + CodecStreams.getCompressionExtension(context)
+        csvOptions.fileExtension + CodecStreams.getCompressionExtension(context)
       }
     }
   }
