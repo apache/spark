@@ -726,10 +726,10 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
 
     writeLong(array.length)
     writeLongArray(writeBuffer, array, array.length)
-    val cursorFlag = cursor - Platform.LONG_ARRAY_OFFSET
-    writeLong(cursorFlag)
-    val used = (cursorFlag / 8).toInt
-    writeLongArray(writeBuffer, page, used)
+
+    val usedWordsNumber = ((cursor - Platform.LONG_ARRAY_OFFSET) / 8).toInt
+    writeLong(usedWordsNumber)
+    writeLongArray(writeBuffer, page, usedWordsNumber)
   }
 
   override def writeExternal(output: ObjectOutput): Unit = {
@@ -771,10 +771,10 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     val length = readLong().toInt
     mask = length - 2
     array = readLongArray(readBuffer, length)
-    val cursorFlag = readLong()
-    cursor = cursorFlag + Platform.LONG_ARRAY_OFFSET
-    val pageLength = (cursorFlag / 8).toInt
-    page = readLongArray(readBuffer, pageLength)
+    val usedWordsNumber = readLong().toInt
+    // Set cursor because cursor is used in write function.
+    cursor = usedWordsNumber * 8 + Platform.LONG_ARRAY_OFFSET
+    page = readLongArray(readBuffer, usedWordsNumber)
   }
 
   override def readExternal(in: ObjectInput): Unit = {

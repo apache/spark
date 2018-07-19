@@ -278,6 +278,39 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     map.free()
   }
 
+  test("SPARK-24809: Serializing LongHashedRelation in executor may result in data error") {
+    val unsafeProj = UnsafeProjection.create(Array[DataType](LongType))
+    val originalMap = new LongToUnsafeRowMap(mm, 1)
+
+    val key1 = 1L
+    val value1 = new Random().nextLong()
+
+    val key2 = 2L
+    val value2 = new Random().nextLong()
+
+    originalMap.append(key1, unsafeProj(InternalRow(value1)))
+    originalMap.append(key2, unsafeProj(InternalRow(value2)))
+    originalMap.optimize()
+
+    val resultRow = new UnsafeRow(1)
+    assert(originalMap.getValue(key1, resultRow).getLong(0) === value1)
+    assert(originalMap.getValue(key2, resultRow).getLong(0) === value2)
+
+    val ser = new KryoSerializer(
+            (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
+
+    val mapSerializedInDriver = ser.deserialize[LongToUnsafeRowMap](ser.serialize(originalMap))
+    val mapSerializedInExecutor =
+      ser.deserialize[LongToUnsafeRowMap](ser.serialize(mapSerializedInDriver))
+
+    assert(mapSerializedInExecutor.getValue(key1, resultRow).getLong(0) === value1)
+    assert(mapSerializedInExecutor.getValue(key2, resultRow).getLong(0) === value2)
+
+    originalMap.free()
+    mapSerializedInDriver.free()
+    mapSerializedInExecutor.free()
+  }
+
   test("Spark-14521") {
     val ser = new KryoSerializer(
       (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
