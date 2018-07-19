@@ -41,7 +41,7 @@ case object KafkaWriterCommitMessage extends WriterCommitMessage
  * @param schema The schema of the input data.
  */
 class KafkaStreamWriter(
-    topic: Option[String], producerParams: Map[String, String], schema: StructType)
+    val topic: Option[String], producerParams: Map[String, String], schema: StructType)
   extends StreamWriter with SupportsWriteInternalRow {
 
   validateQuery(schema.toAttributes, producerParams.toMap[String, Object].asJava, topic)
