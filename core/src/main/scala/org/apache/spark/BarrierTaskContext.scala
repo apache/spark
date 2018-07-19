@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.apache.spark.annotation.{Experimental, Since}
+
 /** A [[TaskContext]] with extra info and tooling for a barrier stage. */
 trait BarrierTaskContext extends TaskContext {
 
@@ -25,10 +27,14 @@ trait BarrierTaskContext extends TaskContext {
    * MPI_Barrier function in MPI, the barrier() function call blocks until all tasks in the same
    * stage have reached this routine.
    */
+  @Experimental
+  @Since("2.4.0")
   def barrier(): Unit
 
   /**
    * Returns the all task infos in this barrier stage, the task infos are ordered by partitionId.
    */
+  @Experimental
+  @Since("2.4.0")
   def getTaskInfos(): Array[BarrierTaskInfo]
 }

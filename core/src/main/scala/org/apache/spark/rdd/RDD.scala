@@ -33,7 +33,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
@@ -1650,6 +1650,8 @@ abstract class RDD[T: ClassTag](
   /**
    * Indicates that Spark must launch the tasks together for the current stage.
    */
+  @Experimental
+  @Since("2.4.0")
   def barrier(): RDDBarrier[T] = withScope(new RDDBarrier[T](this))
 
   // =======================================================================

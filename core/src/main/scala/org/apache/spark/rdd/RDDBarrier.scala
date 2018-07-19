@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.BarrierTaskContext
 import org.apache.spark.TaskContext
+import org.apache.spark.annotation.{Experimental, Since}
 
 /** Represents an RDD barrier, which forces Spark to launch tasks of this stage together. */
 class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
@@ -30,7 +31,9 @@ class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless `rdd` is a pair RDD and the input function doesn't modify the keys.
-   * */
+   */
+  @Experimental
+  @Since("2.4.0")
   def mapPartitions[S: ClassTag](
       f: (Iterator[T], BarrierTaskContext) => Iterator[S],
       preservesPartitioning: Boolean = false): RDD[S] = rdd.withScope {
