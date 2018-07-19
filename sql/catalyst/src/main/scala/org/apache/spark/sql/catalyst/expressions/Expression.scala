@@ -715,7 +715,8 @@ trait ComplexTypeMergingExpression extends Expression {
       "The collection of input data types must not be empty.")
     require(
       TypeCoercion.haveSameType(inputTypesForMerging),
-      "All input types must be the same except nullable, containsNull, valueContainsNull flags.")
+      "All input types must be the same except nullable, containsNull, valueContainsNull flags." +
+        s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
     inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
 }

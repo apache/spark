@@ -843,6 +843,14 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
+  val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
+      .internal()
+      .doc("State format version used by flatMapGroupsWithState operation in a streaming query")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(2)
+
   val CHECKPOINT_LOCATION = buildConf("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for streaming queries.")
     .stringConf
