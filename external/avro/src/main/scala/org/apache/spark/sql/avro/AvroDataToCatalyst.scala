@@ -22,11 +22,11 @@ import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 
 import org.apache.spark.sql.avro.{AvroDeserializer, SchemaConverters, SerializableSchema}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, UnaryExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
 
 case class AvroDataToCatalyst(child: Expression, avroType: SerializableSchema)
-  extends UnaryExpression with CodegenFallback with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
@@ -55,4 +55,10 @@ case class AvroDataToCatalyst(child: Expression, avroType: SerializableSchema)
   }
 
   override def sql: String = simpleString
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, input =>
+      s"(${CodeGenerator.boxedType(dataType)})$expr.nullSafeEval($input)")
+  }
 }

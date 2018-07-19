@@ -24,10 +24,10 @@ import org.apache.avro.io.{BinaryEncoder, EncoderFactory}
 
 import org.apache.spark.sql.avro.{AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-case class CatalystDataToAvro(child: Expression) extends UnaryExpression with CodegenFallback {
+case class CatalystDataToAvro(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = BinaryType
 
@@ -53,10 +53,15 @@ case class CatalystDataToAvro(child: Expression) extends UnaryExpression with Co
     out.toByteArray
   }
 
-
   override def simpleString: String = {
     s"to_avro(${child.sql}, ${child.dataType.simpleString})"
   }
 
   override def sql: String = simpleString
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, input =>
+      s"(${CodeGenerator.boxedType(dataType)})$expr.nullSafeEval($input)")
+  }
 }
