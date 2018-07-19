@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  * A small wrapper that defines a training session for an estimator, and some methods to log
  * useful information during this session.
  */
-private[spark] class Instrumentation extends Logging {
+private[spark] class Instrumentation private () extends Logging {
 
   private val id = UUID.randomUUID()
   private val shortId = id.toString.take(8)
