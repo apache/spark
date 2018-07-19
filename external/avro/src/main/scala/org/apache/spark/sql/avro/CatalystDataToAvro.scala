@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
 
 case class CatalystDataToAvro(child: Expression) extends UnaryExpression with CodegenFallback {
 
-  override lazy val dataType: DataType = BinaryType
+  override def dataType: DataType = BinaryType
 
   @transient private lazy val avroType =
     SchemaConverters.toAvroType(child.dataType, child.nullable)
