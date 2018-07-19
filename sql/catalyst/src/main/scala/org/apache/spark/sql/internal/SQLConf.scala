@@ -854,6 +854,15 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val MAX_BATCHES_TO_RETAIN_IN_MEMORY = buildConf("spark.sql.streaming.maxBatchesToRetainInMemory")
+    .internal()
+    .doc("The maximum number of batches which will be retained in memory to avoid " +
+      "loading from files. The value adjusts a trade-off between memory usage vs cache miss: " +
+      "'2' covers both success and direct failure cases, '1' covers only success case, " +
+      "and '0' covers extreme case - disable cache to maximize memory size of executors.")
+    .intConf
+    .createWithDefault(2)
+
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
       .internal()
@@ -1506,6 +1515,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
+
+  def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
