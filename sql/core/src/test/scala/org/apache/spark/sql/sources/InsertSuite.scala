@@ -486,7 +486,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       }
     }
   }
-  test("SPARK-20236: dynamic partition overwrite specified per source without catalog table") {
+  test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
     withTempPath { path =>
       Seq((1, 1, 1)).toDF("i", "part1", "part2")
         .write.partitionBy("part1", "part2")
