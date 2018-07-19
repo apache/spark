@@ -53,13 +53,13 @@ object FlatMapGroupsWithStateExecHelper {
     }
   }
 
+  /** Interface for interacting with state data of FlatMapGroupsWithState */
   sealed trait StateManager extends Serializable {
     def stateSchema: StructType
     def getState(store: StateStore, keyRow: UnsafeRow): StateData
     def putState(store: StateStore, keyRow: UnsafeRow, state: Any, timeoutTimestamp: Long): Unit
     def removeState(store: StateStore, keyRow: UnsafeRow): Unit
     def getAllState(store: StateStore): Iterator[StateData]
-    def version: Int
   }
 
   def createStateManager(
@@ -77,7 +77,8 @@ object FlatMapGroupsWithStateExecHelper {
   // =========================== Private implementations of StateManager ===========================
   // ===============================================================================================
 
-  private abstract class StateManagerImplBase(val version: Int, shouldStoreTimestamp: Boolean)
+  /** Commmon methods for StateManager implementations */
+  private abstract class StateManagerImplBase(shouldStoreTimestamp: Boolean)
     extends StateManager {
 
     protected def stateSerializerExprs: Seq[Expression]
@@ -135,10 +136,20 @@ object FlatMapGroupsWithStateExecHelper {
     }
   }
 
-
+  /**
+   * Version 1 of the StateManager which stores the user-defined state as flattened columns in
+   * the UnsafeRow. Say the user-defined state has 3 fields - col1, col2, col3. The
+   * unsafe rows will look like this.
+   *
+   *    UnsafeRow[ col1 | col2 | col3 | timestamp ]
+   *
+   * The limitation of this format is that timestamp cannot be set when the user-defined
+   * state has been removed. This is because the columns cannot be collectively marked to be
+   * empty/null.
+   */
   private class StateManagerImplV1(
       stateEncoder: ExpressionEncoder[Any],
-      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(1, shouldStoreTimestamp) {
+      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(shouldStoreTimestamp) {
 
     private val timestampTimeoutAttribute =
       AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
@@ -175,10 +186,21 @@ object FlatMapGroupsWithStateExecHelper {
     }
   }
 
-
+  /**
+   * Version 2 of the StateManager which stores the user-defined state as a nested struct
+   * in the UnsafeRow. Say the user-defined state has 3 fields - col1, col2, col3. The
+   * unsafe rows will look like this.
+   *                    ___________________________
+   *                   |                           |
+   *                   |                           V
+   *    UnsafeRow[ nested-struct | timestamp |  UnsafeRow[ col1 | col2 | col3 ] ]
+   *
+   * This allows the entire user-defined state to be collectively marked as empty/null,
+   * thus allowing timestamp to be set without requiring the state to be present.
+   */
   private class StateManagerImplV2(
       stateEncoder: ExpressionEncoder[Any],
-      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(2, shouldStoreTimestamp) {
+      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(shouldStoreTimestamp) {
 
     /** Schema of the state rows saved in the state store */
     override val stateSchema: StructType = {

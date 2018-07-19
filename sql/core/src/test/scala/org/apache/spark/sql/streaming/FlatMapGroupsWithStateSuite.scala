@@ -805,7 +805,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  testWithAllStateVersions("flatMapGroupsWithState - streaming w\ event time timeout + watermark") {
+  testWithAllStateVersions("flatMapGroupsWithState - streaming w/ event time timeout + watermark") {
     // Function to maintain the max event time as state and set the timeout timestamp based on the
     // current max event time seen. It returns the max event time in the state, or -1 if the state
     // was removed by timeout.
@@ -856,6 +856,29 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     )
   }
 
+  test("flatMapGroupsWithState - uses state format version 2 by default") {
+    val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      state.update(RunningCount(count))
+      Iterator((key, count.toString))
+    }
+
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      CheckNewAnswer(("a", "1")),
+      Execute { query =>
+        // Verify state format = 2
+        val f = query.lastExecution.executedPlan.collect { case f: FlatMapGroupsWithStateExec => f }
+        assert(f.size == 1)
+        assert(f.head.stateFormatVersion == 2)
+      }
+    )
+  }
 
   test("flatMapGroupsWithState - recovery from checkpoint uses state format version 1") {
     // Function to maintain the max event time as state and set the timeout timestamp based on the
@@ -899,7 +922,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
     inputData.addData(("a", 4))
 
     testStream(result, Update)(
-      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      StartStream(
+        checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> "2")),
       /*
       Note: The checkpoint was generated using the following input in Spark version 2.3.1
 
@@ -915,6 +940,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       CheckNewAnswer(("a", 15)),          // Max event time is still the same
       // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
       // Watermark is still 5 as max event time for all data is still 15.
+
+      Execute { query =>
+        // Verify state format = 1
+        val f = query.lastExecution.executedPlan.collect { case f: FlatMapGroupsWithStateExec => f }
+        assert(f.size == 1)
+        assert(f.head.stateFormatVersion == 1)
+      },
 
       AddData(inputData, ("b", 31)),      // Add data newer than watermark for "b", not "a"
       // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
