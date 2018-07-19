@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
-import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.Schema
 import org.apache.avro.file.{DataFileConstants, DataFileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
@@ -38,8 +38,6 @@ import org.slf4j.LoggerFactory
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
@@ -60,11 +58,12 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val conf = spark.sparkContext.hadoopConfiguration
+    val parsedOptions = new AvroOptions(options)
 
     // Schema evolution is not supported yet. Here we only pick a single random sample file to
     // figure out the schema of the whole dataset.
     val sampleFile =
-      if (conf.getBoolean(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, true)) {
+      if (AvroFileFormat.ignoreFilesWithoutExtensions(conf)) {
         files.find(_.getPath.getName.endsWith(".avro")).getOrElse {
           throw new FileNotFoundException(
             "No Avro files found. Hadoop option \"avro.mapred.ignore.inputs.without.extension\" " +
@@ -78,7 +77,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       }
 
     // User can specify an optional avro json schema.
-    val avroSchema = options.get(AvroFileFormat.AvroSchema)
+    val avroSchema = parsedOptions.schema
       .map(new Schema.Parser().parse)
       .getOrElse {
         val in = new FsInput(sampleFile.getPath, conf)
@@ -116,10 +115,9 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val recordName = options.getOrElse("recordName", "topLevelRecord")
-    val recordNamespace = options.getOrElse("recordNamespace", "")
-    val build = SchemaBuilder.record(recordName).namespace(recordNamespace)
-    val outputAvroSchema = SchemaConverters.convertStructToAvro(dataSchema, build, recordNamespace)
+    val parsedOptions = new AvroOptions(options)
+    val outputAvroSchema = SchemaConverters.toAvroType(
+      dataSchema, nullable = false, parsedOptions.recordName, parsedOptions.recordNamespace)
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
     val AVRO_COMPRESSION_CODEC = "spark.sql.avro.compression.codec"
@@ -148,7 +146,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         log.error(s"unsupported compression codec $unknown")
     }
 
-    new AvroOutputWriterFactory(dataSchema, recordName, recordNamespace)
+    new AvroOutputWriterFactory(dataSchema, new SerializableSchema(outputAvroSchema))
   }
 
   override def buildReader(
@@ -162,20 +160,18 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
 
     val broadcastedConf =
       spark.sparkContext.broadcast(new AvroFileFormat.SerializableConfiguration(hadoopConf))
+    val parsedOptions = new AvroOptions(options)
 
     (file: PartitionedFile) => {
       val log = LoggerFactory.getLogger(classOf[AvroFileFormat])
       val conf = broadcastedConf.value.value
-      val userProvidedSchema = options.get(AvroFileFormat.AvroSchema).map(new Schema.Parser().parse)
+      val userProvidedSchema = parsedOptions.schema.map(new Schema.Parser().parse)
 
       // TODO Removes this check once `FileFormat` gets a general file filtering interface method.
       // Doing input file filtering is improper because we may generate empty tasks that process no
       // input files but stress the scheduler. We should probably add a more general input file
       // filtering mechanism for `FileFormat` data sources. See SPARK-16317.
-      if (
-        conf.getBoolean(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, true) &&
-        !file.filePath.endsWith(".avro")
-      ) {
+      if (AvroFileFormat.ignoreFilesWithoutExtensions(conf) && !file.filePath.endsWith(".avro")) {
         Iterator.empty
       } else {
         val reader = {
@@ -205,13 +201,10 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         reader.sync(file.start)
         val stop = file.start + file.length
 
-        val rowConverter = SchemaConverters.createConverterToSQL(
-          userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
+        val deserializer =
+          new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
 
         new Iterator[InternalRow] {
-          // Used to convert `Row`s containing data columns into `InternalRow`s.
-          private val encoderForDataColumns = RowEncoder(requiredSchema)
-
           private[this] var completed = false
 
           override def hasNext: Boolean = {
@@ -228,14 +221,11 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
           }
 
           override def next(): InternalRow = {
-            if (reader.pastSync(stop)) {
+            if (!hasNext) {
               throw new NoSuchElementException("next on empty iterator")
             }
             val record = reader.next()
-            val safeDataRow = rowConverter(record).asInstanceOf[GenericRow]
-
-            // The safeDataRow is reused, we must do a copy
-            encoderForDataColumns.toRow(safeDataRow)
+            deserializer.deserialize(record).asInstanceOf[InternalRow]
           }
         }
       }
@@ -245,8 +235,6 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
 
 private[avro] object AvroFileFormat {
   val IgnoreFilesWithoutExtensionProperty = "avro.mapred.ignore.inputs.without.extension"
-
-  val AvroSchema = "avroSchema"
 
   class SerializableConfiguration(@transient var value: Configuration)
       extends Serializable with KryoSerializable {
@@ -285,5 +273,12 @@ private[avro] object AvroFileFormat {
       value = new Configuration(false)
       value.readFields(new DataInputStream(in))
     }
+  }
+
+  def ignoreFilesWithoutExtensions(conf: Configuration): Boolean = {
+    // Files without .avro extensions are not ignored by default
+    val defaultValue = false
+
+    conf.getBoolean(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, defaultValue)
   }
 }

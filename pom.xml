@@ -131,7 +131,7 @@
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.0</parquet.version>
-    <orc.version>1.4.4</orc.version>
+    <orc.version>1.5.2</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.3.20.v20170531</jetty.version>
@@ -194,6 +194,7 @@
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
+    <test.include.tags></test.include.tags>
 
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.spark_project</spark.shade.packageName>
@@ -2162,6 +2163,7 @@
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
+            <groups>${test.include.tags}</groups>
           </configuration>
           <executions>
             <execution>
@@ -2209,6 +2211,7 @@
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
             <tagsToExclude>${test.exclude.tags}</tagsToExclude>
+            <tagsToInclude>${test.include.tags}</tagsToInclude>
           </configuration>
           <executions>
             <execution>
@@ -2618,7 +2621,7 @@
           <threshold>Low</threshold>
           <xmlOutput>true</xmlOutput>
           <visitors>FindPuzzlers</visitors>
-          <fork>false</fork>
+          <fork>true</fork>
         </configuration>
         <executions>
           <execution>

@@ -53,6 +53,7 @@ function build {
     # Set image build arguments accordingly if this is a source repo and not a distribution archive.
     IMG_PATH=resource-managers/kubernetes/docker/src/main/dockerfiles
     BUILD_ARGS=(
+      ${BUILD_PARAMS}
       --build-arg
       img_path=$IMG_PATH
       --build-arg
@@ -61,13 +62,14 @@ function build {
   else
     # Not passed as an argument to docker, but used to validate the Spark directory.
     IMG_PATH="kubernetes/dockerfiles"
-    BUILD_ARGS=()
+    BUILD_ARGS=(${BUILD_PARAMS})
   fi
 
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
   local BINDING_BUILD_ARGS=(
+    ${BUILD_PARAMS}
     --build-arg
     base_img=$(image_ref spark)
   )
@@ -112,6 +114,8 @@ Options:
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
   -n                    Build docker image with --no-cache
+  -b arg      Build arg to build or push the image. For multiple build args, this option needs to
+              be used separately for each build arg.
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
 There is no need to push the images into minikube in that case, they'll be automatically
@@ -142,7 +146,8 @@ BASEDOCKERFILE=
 PYDOCKERFILE=
 RDOCKERFILE=
 NOCACHEARG=
-while getopts f:mr:t:n:p:R:v option
+BUILD_PARAMS=
+while getopts f:mr:t:n:p:R:b: option
 do
  case "${option}"
  in
@@ -152,6 +157,7 @@ do
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  n) NOCACHEARG="--no-cache";;
+ b) BUILD_PARAMS=${BUILD_PARAMS}" --build-arg "${OPTARG};;
  m)
    if ! which minikube 1>/dev/null; then
      error "Cannot find minikube."
