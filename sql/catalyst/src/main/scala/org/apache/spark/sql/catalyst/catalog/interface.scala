@@ -334,7 +334,12 @@ case class CatalogTable(
     stats.foreach(s => map.put("Statistics", s.simpleString))
     map ++= storage.toLinkedHashMap
     if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")
-    if (partitionColumnNames.nonEmpty) map.put("Partition Columns", partitionColumns)
+    if (partitionColumnNames.nonEmpty) {
+      map.put("Partitioned", "true")
+    } else {
+      map.put("Partitioned", "false")
+    }
+    map.put("Partition Columns", partitionColumns)
     if (schema.nonEmpty) map.put("Schema", schema.treeString)
 
     map
