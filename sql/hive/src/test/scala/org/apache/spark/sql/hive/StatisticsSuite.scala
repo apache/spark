@@ -25,6 +25,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.hive.common.StatsSetupConst
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
@@ -149,15 +150,21 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("verify table size calculation is accurate") {
-    // Partitioned table
     val checkSizeTable = "checkSizeTable"
-    withTable(checkSizeTable) {
-      sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
-      sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-01') SELECT * FROM src")
-
-      val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier(checkSizeTable))
-      val size = CommandUtils.calculateTotalSize(spark, tableMeta)
-      assert(size === BigInt(5812))
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2") {
+      withTable(checkSizeTable) {
+          sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+          sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-01') SELECT * FROM src")
+          sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-02') SELECT * FROM src")
+          sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-03') SELECT * FROM src")
+          val tableMeta = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier(checkSizeTable))
+          HiveCatalogMetrics.reset()
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+          val size = CommandUtils.calculateTotalSize(spark, tableMeta)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
+          assert(size === BigInt(17436))
+      }
     }
   }
 
