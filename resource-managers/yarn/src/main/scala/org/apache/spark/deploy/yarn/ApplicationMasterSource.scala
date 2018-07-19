@@ -21,9 +21,10 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.metrics.source.Source
 
-private[spark] class ApplicationMasterSource(yarnAllocator: YarnAllocator) extends Source {
+private[spark] class ApplicationMasterSource(prefix: String, yarnAllocator: YarnAllocator)
+  extends Source {
 
-  override val sourceName: String = "applicationMaster"
+  override val sourceName: String = prefix + ".applicationMaster"
   override val metricRegistry: MetricRegistry = new MetricRegistry()
 
   metricRegistry.register(MetricRegistry.name("numExecutorsFailed"), new Gauge[Int] {

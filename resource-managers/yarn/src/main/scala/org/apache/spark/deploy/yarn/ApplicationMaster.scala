@@ -320,7 +320,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         }
       } catch {
         case e: Exception =>
-          logInfo("Exception during stopping of the metric system: ", e)
+          logWarning("Exception during stopping of the metric system: ", e)
       }
     }
   }
@@ -448,7 +448,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
 
     allocator.allocateResources()
     val ms = MetricsSystem.createMetricsSystem("applicationMaster", sparkConf, securityMgr)
-    ms.registerSource(new ApplicationMasterSource(allocator))
+    val prefix = _sparkConf.get(YARN_METRICS_NAMESPACE).getOrElse(appId)
+    ms.registerSource(new ApplicationMasterSource(prefix, allocator))
     ms.start()
     metricsSystem = Some(ms)
     reporterThread = launchReporterThread()
