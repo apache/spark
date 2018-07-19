@@ -2336,46 +2336,40 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     val sourceDF = spark.createDataFrame(rows, schema)
 
-    val structWhenDF = sourceDF
+    def structWhenDF: DataFrame = sourceDF
       .select(when('cond, struct(lit("a").as("val1"), lit(10).as("val2"))).otherwise('s) as "res")
       .select('res.getField("val1"))
-    val arrayWhenDF = sourceDF
+    def arrayWhenDF: DataFrame = sourceDF
       .select(when('cond, array(lit("a"), lit("b"))).otherwise('a) as "res")
       .select('res.getItem(0))
-    val mapWhenDF = sourceDF
+    def mapWhenDF: DataFrame = sourceDF
       .select(when('cond, map(lit(0), lit("a"))).otherwise('m) as "res")
       .select('res.getItem(0))
 
-    val structIfDF = sourceDF
+    def structIfDF: DataFrame = sourceDF
       .select(expr("if(cond, struct('a' as val1, 10 as val2), s)") as "res")
       .select('res.getField("val1"))
-    val arrayIfDF = sourceDF
+    def arrayIfDF: DataFrame = sourceDF
       .select(expr("if(cond, array('a', 'b'), a)") as "res")
       .select('res.getItem(0))
-    val mapIfDF = sourceDF
+    def mapIfDF: DataFrame = sourceDF
       .select(expr("if(cond, map(0, 'a'), m)") as "res")
       .select('res.getItem(0))
 
-    def checkResult(df: DataFrame, codegenExpected: Boolean): Unit = {
-      assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] == codegenExpected)
-      checkAnswer(df, Seq(Row("a"), Row(null)))
+    def checkResult(): Unit = {
+      checkAnswer(structWhenDF, Seq(Row("a"), Row(null)))
+      checkAnswer(arrayWhenDF, Seq(Row("a"), Row(null)))
+      checkAnswer(mapWhenDF, Seq(Row("a"), Row(null)))
+      checkAnswer(structIfDF, Seq(Row("a"), Row(null)))
+      checkAnswer(arrayIfDF, Seq(Row("a"), Row(null)))
+      checkAnswer(mapIfDF, Seq(Row("a"), Row(null)))
     }
 
-    // without codegen
-    checkResult(structWhenDF, false)
-    checkResult(arrayWhenDF, false)
-    checkResult(mapWhenDF, false)
-    checkResult(structIfDF, false)
-    checkResult(arrayIfDF, false)
-    checkResult(mapIfDF, false)
-
-    // with codegen
-    checkResult(structWhenDF.filter('cond.isNotNull), true)
-    checkResult(arrayWhenDF.filter('cond.isNotNull), true)
-    checkResult(mapWhenDF.filter('cond.isNotNull), true)
-    checkResult(structIfDF.filter('cond.isNotNull), true)
-    checkResult(arrayIfDF.filter('cond.isNotNull), true)
-    checkResult(mapIfDF.filter('cond.isNotNull), true)
+    // Test with local relation, the Project will be evaluated without codegen
+    checkResult()
+    // Test with cached relation, the Project will be evaluated with codegen
+    sourceDF.cache()
+    checkResult()
   }
 
   test("Uuid expressions should produce same results at retries in the same DataFrame") {
