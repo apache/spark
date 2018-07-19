@@ -414,6 +414,7 @@ object FunctionRegistry {
     expression[ArrayJoin]("array_join"),
     expression[ArrayPosition]("array_position"),
     expression[ArraySort]("array_sort"),
+    expression[ArrayUnion]("array_union"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
@@ -438,14 +439,6 @@ object FunctionRegistry {
     expression[ArrayRemove]("array_remove"),
     expression[ArrayDistinct]("array_distinct"),
     CreateStruct.registryEntry,
-
-    // mask functions
-    expression[Mask]("mask"),
-    expression[MaskFirstN]("mask_first_n"),
-    expression[MaskLastN]("mask_last_n"),
-    expression[MaskShowFirstN]("mask_show_first_n"),
-    expression[MaskShowLastN]("mask_show_last_n"),
-    expression[MaskHash]("mask_hash"),
 
     // misc functions
     expression[AssertTrue]("assert_true"),

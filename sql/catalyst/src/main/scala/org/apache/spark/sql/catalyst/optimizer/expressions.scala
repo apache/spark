@@ -218,15 +218,24 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if list.isEmpty && !v.nullable => FalseLiteral
+      case In(v, list) if list.isEmpty =>
+        // When v is not nullable, the following expression will be optimized
+        // to FalseLiteral which is tested in OptimizeInSuite.scala
+        If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
-        if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
+        if (newList.length == 1
+          // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
+          // TODO: we exclude them in this rule.
+          && !v.isInstanceOf[CreateNamedStructLike]
+          && !newList.head.isInstanceOf[CreateNamedStructLike]) {
+          EqualTo(v, newList.head)
+        } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
-        } else if (newList.size < list.size) {
+        } else if (newList.length < list.length) {
           expr.copy(list = newList)
-        } else { // newList.length == list.length
+        } else { // newList.length == list.length && newList.length > 1
           expr
         }
     }
