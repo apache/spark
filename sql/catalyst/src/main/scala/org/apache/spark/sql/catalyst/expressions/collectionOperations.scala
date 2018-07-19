@@ -571,16 +571,25 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
         |$mapDataClass ${ev.value} = null;
       """.stripMargin
 
-    val assignments = mapCodes.zipWithIndex.map { case (m, i) =>
-      s"""
-         |if (!$hasNullName) {
-         |  ${m.code}
-         |  $argsName[$i] = ${m.value};
-         |  if (${m.isNull}) {
-         |    $hasNullName = true;
-         |  }
-         |}
-       """.stripMargin
+    val assignments = mapCodes.zip(children.map(_.nullable)).zipWithIndex.map {
+      case ((m, true), i) =>
+        s"""
+           |if (!$hasNullName) {
+           |  ${m.code}
+           |  if (!${m.isNull}) {
+           |    $argsName[$i] = ${m.value};
+           |  } else {
+           |    $hasNullName = true;
+           |  }
+           |}
+         """.stripMargin
+      case ((m, false), i) =>
+        s"""
+           |if (!$hasNullName) {
+           |  ${m.code}
+           |  $argsName[$i] = ${m.value};
+           |}
+         """.stripMargin
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
@@ -2280,15 +2289,41 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
     val args = ctx.freshName("args")
+    val hasNull = ctx.freshName("hasNull")
 
-    val inputs = evals.zipWithIndex.map { case (eval, index) =>
-      s"""
-        ${eval.code}
-        if (!${eval.isNull}) {
-          $args[$index] = ${eval.value};
-        }
-      """
+    val inputs = evals.zip(children.map(_.nullable)).zipWithIndex.map {
+      case ((eval, true), index) =>
+        s"""
+           |if (!$hasNull) {
+           |  ${eval.code}
+           |  if (!${eval.isNull}) {
+           |    $args[$index] = ${eval.value};
+           |  } else {
+           |    $hasNull = true;
+           |  }
+           |}
+         """.stripMargin
+      case ((eval, false), index) =>
+        s"""
+           |if (!$hasNull) {
+           |  ${eval.code}
+           |  $args[$index] = ${eval.value};
+           |}
+         """.stripMargin
     }
+
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = inputs,
+      funcName = "valueConcat",
+      extraArguments = (s"$javaType[]", args) :: ("boolean", hasNull) :: Nil,
+      returnType = "boolean",
+      makeSplitFunction = body =>
+        s"""
+           |$body
+           |return $hasNull;
+         """.stripMargin,
+      foldFunctions = _.map(funcCall => s"$hasNull = $funcCall;").mkString("\n")
+    )
 
     val (concat, initCode) = dataType match {
       case BinaryType =>
@@ -2303,16 +2338,18 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
         }
         (concat, s"ArrayData[] $args = new ArrayData[${evals.length}];")
     }
-    val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = inputs,
-      funcName = "valueConcat",
-      extraArguments = (s"$javaType[]", args) :: Nil)
-    ev.copy(code"""
-      $initCode
-      $codes
-      $javaType ${ev.value} = $concat($args);
-      boolean ${ev.isNull} = ${ev.value} == null;
-    """)
+
+    ev.copy(code =
+      code"""
+         |boolean $hasNull = false;
+         |$initCode
+         |$codes
+         |$javaType ${ev.value} = null;
+         |if (!$hasNull) {
+         |  ${ev.value} = $concat($args);
+         |}
+         |boolean ${ev.isNull} = ${ev.value} == null;
+       """.stripMargin)
   }
 
   private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
@@ -2330,18 +2367,6 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       """.stripMargin
 
     (code, numElements)
-  }
-
-  private def nullArgumentProtection() : String = {
-    if (nullable) {
-      s"""
-         |for (int z = 0; z < ${children.length}; z++) {
-         |  if (args[z] == null) return null;
-         |}
-       """.stripMargin
-    } else {
-      ""
-    }
   }
 
   private def genCodeForPrimitiveArrays(
@@ -2377,7 +2402,6 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     val concatDef =
       s"""
          |private ArrayData $concat(ArrayData[] args) {
-         |  ${nullArgumentProtection()}
          |  $numElemCode
          |  ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
          |  int $counter = 0;
@@ -2405,7 +2429,6 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     val concatDef =
       s"""
          |private ArrayData $concat(ArrayData[] args) {
-         |  ${nullArgumentProtection()}
          |  $numElemCode
          |  Object[] $arrayData = new Object[(int)$numElemName];
          |  int $counter = 0;

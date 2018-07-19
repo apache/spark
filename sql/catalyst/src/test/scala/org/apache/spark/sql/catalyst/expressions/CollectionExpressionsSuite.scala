@@ -1133,6 +1133,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
     assert(Concat(Seq(aa0, aa2)).dataType ===
       ArrayType(ArrayType(StringType, containsNull = true), containsNull = true))
+
+    // force split expressions for input in generated code
+    checkEvaluation(Concat(Seq.fill(100)(ai0)), Seq.fill(100)(Seq(1, 2, 3)).flatten)
   }
 
   test("Flatten") {
