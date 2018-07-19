@@ -364,7 +364,7 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
 
-      val footerFileMetaData =
+      lazy val footerFileMetaData =
         ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
