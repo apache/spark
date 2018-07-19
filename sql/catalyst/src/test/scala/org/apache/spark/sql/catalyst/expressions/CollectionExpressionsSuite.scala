@@ -1604,8 +1604,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayExcept(aa1, aa0), Seq[Seq[Int]](Seq[Int](2, 1)))
 
     assert(ArrayExcept(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayExcept(a00, a04).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayExcept(a04, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayExcept(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayExcept(a20, a24).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
 }

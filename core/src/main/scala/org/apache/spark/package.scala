@@ -57,7 +57,7 @@ package object spark {
       val resourceStream = Thread.currentThread().getContextClassLoader.
         getResourceAsStream("spark-version-info.properties")
       if (resourceStream == null) {
-   //   throw new SparkException("Could not find spark-version-info.properties")
+        throw new SparkException("Could not find spark-version-info.properties")
       }
 
       try {
@@ -74,9 +74,7 @@ package object spark {
         )
       } catch {
         case e: Exception =>
-          val unknownProp = "<unknown>"
-          (unknownProp, unknownProp, unknownProp, unknownProp, unknownProp, unknownProp)
-    //    throw new SparkException("Error loading properties from spark-version-info.properties", e)
+          throw new SparkException("Error loading properties from spark-version-info.properties", e)
       } finally {
         if (resourceStream != null) {
           try {

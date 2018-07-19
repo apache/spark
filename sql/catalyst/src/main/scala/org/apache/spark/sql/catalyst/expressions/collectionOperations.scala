@@ -3652,11 +3652,6 @@ case class ArrayDistinct(child: Expression)
  * Will become common base class for [[ArrayUnion]], ArrayIntersect, and [[ArrayExcept]].
  */
 abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
-  override def dataType: DataType = {
-    val dataTypes = children.map(_.dataType.asInstanceOf[ArrayType])
-    ArrayType(elementType, dataTypes.exists(_.containsNull))
-  }
-
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
@@ -3700,7 +3695,8 @@ object ArraySetLike {
        array(1, 2, 3, 5)
   """,
   since = "2.4.0")
-case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike {
+case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
+    with ComplexTypeMergingExpression {
   var hsInt: OpenHashSet[Int] = _
   var hsLong: OpenHashSet[Long] = _
 
@@ -3982,6 +3978,10 @@ object ArrayUnion {
   """,
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike {
+  override def dataType: DataType = ArrayType(elementType,
+    left.dataType.asInstanceOf[ArrayType].containsNull &&
+      !right.dataType.asInstanceOf[ArrayType].containsNull)
+
   var hsInt: OpenHashSet[Int] = _
   var hsLong: OpenHashSet[Long] = _
 
