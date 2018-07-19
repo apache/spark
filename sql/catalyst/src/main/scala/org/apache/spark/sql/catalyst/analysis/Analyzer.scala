@@ -442,6 +442,9 @@ class Analyzer(
         child: LogicalPlan): LogicalPlan = {
       val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 
+      // In case of ANSI-SQL compliant syntax for GROUPING SETS, groupByExprs is optional and
+      // can be null. In such case, we derive the groupByExprs from the user supplied values for
+      // grouping sets.
       val finalGroupByExpressions = if (groupByExprs == Nil) {
         selectedGroupByExprs.flatten.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
           // Only unique expressions are included in the group by expressions and is determined
