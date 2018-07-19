@@ -75,9 +75,9 @@ case class AnalyzePartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
-    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    val db = tableIdent.database
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, db)
+    val tableMeta = sessionState.catalog.getTempViewOrPermanentTableMetadata(tableIdentWithDB)
     if (tableMeta.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
@@ -88,7 +88,8 @@ case class AnalyzePartitionCommand(
 
     if (partitions.isEmpty) {
       if (partitionValueSpec.isDefined) {
-        throw new NoSuchPartitionException(db, tableIdent.table, partitionValueSpec.get)
+        throw new NoSuchPartitionException(db.getOrElse(sessionState.catalog.getCurrentDatabase),
+          tableIdent.table, partitionValueSpec.get)
       } else {
         // the user requested to analyze all partitions for a table which has no partitions
         // return normally, since there is nothing to do

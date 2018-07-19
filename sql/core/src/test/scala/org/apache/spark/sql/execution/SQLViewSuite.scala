@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, _}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -160,8 +160,26 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertNoSuchTable(s"TRUNCATE TABLE $viewName")
       assertNoSuchTable(s"SHOW CREATE TABLE $viewName")
       assertNoSuchTable(s"SHOW PARTITIONS $viewName")
-      assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
-      assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+    }
+  }
+
+  test("SPARK-22954 - Issue AnalysisException when ANALYZE is run on view") {
+    val viewName = "testView"
+    val analyzeNotSupportedOnViewsMsg = "ANALYZE TABLE is not supported on views."
+    withTempView(viewName) {
+      spark.range(10).createTempView(viewName)
+
+      assert(intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+      }.getMessage.contains(analyzeNotSupportedOnViewsMsg))
+
+      assert(intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage.contains(analyzeNotSupportedOnViewsMsg))
+
+      assert(intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName PARTITION (a) COMPUTE STATISTICS")
+      }.getMessage.contains(analyzeNotSupportedOnViewsMsg))
     }
   }
 
