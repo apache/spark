@@ -102,20 +102,14 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan, expected)
 
-    val originalPlan2 = GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
-      Nil, r1,
-      Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))))
-    checkAnalysis(originalPlan2, expected)
-
-
     // Computation of grouping expression should remove duplicate expression based on their
     // semantics (semanticEqual).
-    val originalPlan3 = GroupingSets(Seq(Seq(Multiply(unresolved_a, Literal(2))),
+    val originalPlan2 = GroupingSets(Seq(Seq(Multiply(unresolved_a, Literal(2))),
       Seq(Multiply(Literal(2), unresolved_a), unresolved_b)), Nil, r1,
       Seq(UnresolvedAlias(Multiply(unresolved_a, Literal(2))),
         unresolved_b, UnresolvedAlias(count(unresolved_c))))
 
-    val resultPlan = getAnalyzer(true).executeAndCheck(originalPlan3)
+    val resultPlan = getAnalyzer(true).executeAndCheck(originalPlan2)
     val gExpressions = resultPlan.asInstanceOf[Aggregate].groupingExpressions
     assert(gExpressions.size == 3)
     val firstGroupingExprAttrName =
