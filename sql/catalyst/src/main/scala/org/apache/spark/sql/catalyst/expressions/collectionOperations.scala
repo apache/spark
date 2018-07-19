@@ -1251,13 +1251,13 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       s"$rand = new $randomClass(${randomSeed.get}L + partitionIndex);")
 
     val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
-    val arrayDataClass = classOf[GenericArrayData].getName()
 
     val arrayData = ctx.freshName("arrayData")
 
     val initialization = if (isPrimitiveType) {
       s"ArrayData $arrayData = $childName.copy();"
     } else {
+      val arrayDataClass = classOf[GenericArrayData].getName()
       val elementTypeTerm = ctx.addReferenceObj("elementType", elementType)
       s"""
          |$arrayDataClass $arrayData = new $arrayDataClass(
