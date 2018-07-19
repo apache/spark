@@ -62,6 +62,6 @@ case class CatalystDataToAvro(child: Expression) extends UnaryExpression {
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
     defineCodeGen(ctx, ev, input =>
-      s"(${CodeGenerator.boxedType(dataType)})$expr.nullSafeEval($input)")
+      s"(byte[]) $expr.nullSafeEval($input)")
   }
 }
