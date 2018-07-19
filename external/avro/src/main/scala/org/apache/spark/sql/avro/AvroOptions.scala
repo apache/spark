@@ -45,4 +45,12 @@ class AvroOptions(@transient val parameters: CaseInsensitiveMap[String])
    * See Avro spec for details: https://avro.apache.org/docs/1.8.2/spec.html#schema_record .
    */
   val recordNamespace: String = parameters.getOrElse("recordNamespace", "")
+
+  /**
+   * The option controls ignoring of files without `.avro` extensions in read.
+   * If the option is enabled, all files (with and without `.avro` extension) are loaded.
+   * If the option is not set, the Hadoop's config `avro.mapred.ignore.inputs.without.extension`
+   * is taken into account. If the former one is not set too, file extensions are ignored.
+   */
+  val ignoreExtension: Option[Boolean] = parameters.get("ignoreExtension").map(_.toBoolean)
 }
