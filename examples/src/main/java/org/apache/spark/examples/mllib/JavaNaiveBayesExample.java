@@ -32,6 +32,7 @@ import org.apache.spark.SparkConf;
 public class JavaNaiveBayesExample {
   public static void main(String[] args) {
     SparkConf sparkConf = new SparkConf().setAppName("JavaNaiveBayesExample");
+    sparkConf.setMaster("local");
     JavaSparkContext jsc = new JavaSparkContext(sparkConf);
     // $example on$
     String path = "data/mllib/sample_libsvm_data.txt";
