@@ -62,8 +62,8 @@ private[spark] class ActiveJob(
   var numFinished = 0
 
   // Mark all the partitions of the stage to be not finished.
-  def markAllPartitionsAsUnfinished(): Unit = {
-    (0 until numPartitions).map(finished.update(_, false))
+  def resetAllPartitions(): Unit = {
+    (0 until numPartitions).foreach(finished.update(_, false))
     numFinished = 0
   }
 }

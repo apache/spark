@@ -1350,15 +1350,15 @@ class DAGScheduler(
 
           if (failedStage.rdd.isBarrier()) {
             failedStage match {
-              case mapStage: ShuffleMapStage =>
+              case failedMapStage: ShuffleMapStage =>
                 // Mark all the map as broken in the map stage, to ensure retry all the tasks on
                 // resubmitted stage attempt.
-                mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
+                mapOutputTracker.unregisterAllMapOutput(failedMapStage.shuffleDep.shuffleId)
 
-              case resultStage: ResultStage =>
+              case failedResultStage: ResultStage =>
                 // Mark all the partitions of the result stage to be not finished, to ensure retry
                 // all the tasks on resubmitted stage attempt.
-                resultStage.activeJob.map(_.markAllPartitionsAsUnfinished())
+                failedResultStage.activeJob.map(_.resetAllPartitions())
             }
           }
 
@@ -1430,8 +1430,8 @@ class DAGScheduler(
                 sms.pendingPartitions += task.partitionId
 
               case _ =>
-                assert(false, "TaskSetManagers should only send Resubmitted task statuses for " +
-                  "tasks in ShuffleMapStages.")
+                throw new SparkException("TaskSetManagers should only send Resubmitted task " +
+                  "statuses for tasks in ShuffleMapStages.")
             }
 
           case _ => // Do nothing.
@@ -1473,15 +1473,15 @@ class DAGScheduler(
           abortStage(failedStage, abortMessage, None)
         } else {
           failedStage match {
-            case mapStage: ShuffleMapStage =>
+            case failedMapStage: ShuffleMapStage =>
               // Mark all the map as broken in the map stage, to ensure retry all the tasks on
               // resubmitted stage attempt.
-              mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
+              mapOutputTracker.unregisterAllMapOutput(failedMapStage.shuffleDep.shuffleId)
 
-            case resultStage: ResultStage =>
+            case failedResultStage: ResultStage =>
               // Mark all the partitions of the result stage to be not finished, to ensure retry
               // all the tasks on resubmitted stage attempt.
-              resultStage.activeJob.map(_.markAllPartitionsAsUnfinished())
+              failedResultStage.activeJob.map(_.resetAllPartitions())
           }
 
           // update failedStages and make sure a ResubmitFailedStages event is enqueued
@@ -1500,8 +1500,8 @@ class DAGScheduler(
             sms.pendingPartitions += task.partitionId
 
           case _ =>
-            assert(false, "TaskSetManagers should only send Resubmitted task statuses for " +
-              "tasks in ShuffleMapStages.")
+            throw new SparkException("TaskSetManagers should only send Resubmitted task " +
+              "statuses for tasks in ShuffleMapStages.")
         }
 
       case _: TaskCommitDenied =>

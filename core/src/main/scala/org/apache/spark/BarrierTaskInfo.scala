@@ -19,5 +19,6 @@ package org.apache.spark
 
 /**
  * Carries all task infos of a barrier task.
+ * @param address the IPv4 address of the executor that a barrier task is running on
  */
 class BarrierTaskInfo(val address: String)
