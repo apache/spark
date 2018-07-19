@@ -22,13 +22,15 @@ import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.hadoop.fs.Path
-import org.json4s.jackson.JsonMethods._
-import org.scalatest.BeforeAndAfter
-
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.{CompressionCodec, LZ4CompressionCodec}
 import org.apache.spark.util.{JsonProtocol, JsonProtocolSuite, Utils}
+import org.json4s.jackson.JsonMethods._
+import org.scalatest.BeforeAndAfter
+
+import scala.compat.Platform.EOL
+import scala.io.Codec
 
 /**
  * Test whether ReplayListenerBus replays events from logs correctly.
@@ -72,6 +74,24 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     assert(eventMonster.loggedEvents.size === 2)
     assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJson(applicationStart))
     assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJson(applicationEnd))
+  }
+
+  /**
+    * Test the events which encoding by GBK(Chinese charset), but read by default(UTF-8)
+    */
+  test("Read Mixed encoding log") {
+    val logFilePath = new Path("../data/events/mixed-encoding-events.txt")
+    val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
+    val logData = fileSystem.open(logFilePath)
+    val eventMonster = new EventMonster(conf)
+    try {
+      val replayer = new ReplayListenerBus()
+      replayer.addListener(eventMonster)
+      replayer.replay(logData, logFilePath.toString)
+    } finally {
+      logData.close()
+    }
+    assert(eventMonster.loggedEvents.length==2)
   }
 
   /**
