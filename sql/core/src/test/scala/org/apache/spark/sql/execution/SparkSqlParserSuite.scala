@@ -366,4 +366,10 @@ class SparkSqlParserSuite extends AnalysisTest {
       "SELECT a || b || c FROM t",
       Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
   }
+
+  test("reset") {
+    assertEqual("reset", ResetCommand(None))
+    assertEqual("reset spark.test.property", ResetCommand(Some("spark.test.property")))
+    assertEqual("reset #$a!  !a$# \t ", ResetCommand(Some("#$a!  !a$#")))
+  }
 }

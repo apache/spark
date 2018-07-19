@@ -159,12 +159,21 @@ object SetCommand {
  * This command is for resetting SQLConf to the default values. Command that runs
  * {{{
  *   reset;
+ *   reset key;
+ *   reset key1 key2 ...;
  * }}}
  */
-case object ResetCommand extends RunnableCommand with Logging {
+case class ResetCommand(key: Option[String]) extends RunnableCommand with Logging {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.conf.clear()
+    key match {
+      case None =>
+        sparkSession.sessionState.conf.clear()
+      // "RESET key" clear a specific property.
+      case Some(key) =>
+        key.split("\\s+")
+          .foreach(confName => if (!confName.isEmpty) sparkSession.conf.unset(confName))
+    }
     Seq.empty[Row]
   }
 }
