@@ -385,7 +385,9 @@ class ParquetFileFormat
       // *only* if the file was created by something other than "parquet-mr", so check the actual
       // writer here for this file.  We have to do this per-file, as each file in the table may
       // have different writers.
-      val isCreatedByParquetMr = footerFileMetaData.getCreatedBy().startsWith("parquet-mr")
+      // Define isCreatedByParquetMr as function to avoid unnecessary parquet footer reads.
+      def isCreatedByParquetMr: Boolean =
+        footerFileMetaData.getCreatedBy().startsWith("parquet-mr")
 
       val convertTz =
         if (timestampConversion && !isCreatedByParquetMr) {
