@@ -155,7 +155,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
        """.stripMargin
 
     // When read float data as double, avro reader fails(trying to read 8 bytes while the data have
-    // only 4 bytes), `AvroDataToCatalyst` catches the exception and returns null.
+    // only 4 bytes).
     assertFail(data, new Schema.Parser().parse(avroTypeJson))
   }
 
