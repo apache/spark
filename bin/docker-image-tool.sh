@@ -29,10 +29,6 @@ if [ -z "${SPARK_HOME}" ]; then
 fi
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
-if [ -z "${RVERSION}" ]; then
-  RVERSION="3.4.2-r0"
-fi
-
 function image_ref {
   local image="$1"
   local add_repo="${2:-1}"

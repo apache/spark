@@ -21,8 +21,7 @@ WORKDIR /
 RUN mkdir ${SPARK_HOME}/R
 COPY R ${SPARK_HOME}/R
 
-ARG spark_r_version
-RUN apk add --no-cache R=$spark_r_version R-dev=$spark_r_version
+RUN apk add --no-cache R R-dev
 
 ENV R_HOME /usr/lib/R
 
