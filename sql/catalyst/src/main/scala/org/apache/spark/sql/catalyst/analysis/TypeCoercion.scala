@@ -62,6 +62,7 @@ object TypeCoercion {
       new ImplicitTypeCasts(conf) ::
       DateTimeOperations ::
       WindowFrameCoercion ::
+      ReplicateRowsCoercion ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -740,6 +741,20 @@ object TypeCoercion {
             Literal.create(null, s.findDataType(index))
           case (e, _) => e
         })
+    }
+  }
+
+  /**
+   * Coerces first argument in ReplicateRows expression and introduces a cast to Long
+   * if necessary.
+   */
+  object ReplicateRowsCoercion extends TypeCoercionRule {
+    private val acceptedTypes = Seq(IntegerType, ShortType, ByteType)
+    override def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case s @ ReplicateRows(children) if s.children.nonEmpty && s.childrenResolved &&
+        acceptedTypes.contains(s.children.head.dataType) =>
+        val castedExpr = Cast(s.children.head, LongType)
+        ReplicateRows(Seq(castedExpr) ++ s.children.tail)
     }
   }
 

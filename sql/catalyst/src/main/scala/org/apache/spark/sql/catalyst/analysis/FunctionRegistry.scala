@@ -212,6 +212,7 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
+    expression[ReplicateRows]("replicate_rows"),
     expression[CaseWhen]("when"),
 
     // math functions
