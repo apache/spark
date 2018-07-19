@@ -440,19 +440,36 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
+
+
       val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+
+      val finalGroupByExpressions = if (groupByExprs == Nil) {
+        selectedGroupByExprs.flatten.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
+          // Only unique expressions are included in the group by expressions and is determined
+          // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
+          // in grouping expression (a * b)
+          if (result.find(_.semanticEquals(currentExpr)).isDefined) {
+            result
+          } else {
+            result :+ currentExpr
+          }
+        }
+      } else {
+        groupByExprs
+      }
 
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
       // instead of the original value we need to create new aliases for all group by expressions
       // that will only be used for the intended purpose.
-      val groupByAliases = constructGroupByAlias(groupByExprs)
+      val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
 
       val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 
       val aggregations = constructAggregateExprs(
-        groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
+        finalGroupByExpressions, aggregationExprs, groupByAliases, groupingAttrs, gid)
 
       Aggregate(groupingAttrs, aggregations, expand)
     }
