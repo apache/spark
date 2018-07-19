@@ -440,8 +440,6 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
-
-
       val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 
       val finalGroupByExpressions = if (groupByExprs == Nil) {

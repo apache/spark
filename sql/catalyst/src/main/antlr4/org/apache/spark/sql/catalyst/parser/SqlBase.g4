@@ -400,6 +400,7 @@ hintStatement
 fromClause
     : FROM relation (',' relation)* lateralView* pivotClause?
     ;
+
 aggregation
     : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
