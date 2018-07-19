@@ -33,7 +33,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSQLContext {
     val avroTypeLong = new Schema.Parser().parse(
       s"""
          |{
-         |  "type": "long",
+         |  "type": "int",
          |  "name": "id"
          |}
        """.stripMargin)
