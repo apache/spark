@@ -108,7 +108,6 @@ Options:
   -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
   -p file               Dockerfile with Python baked in. By default builds the Dockerfile shipped with Spark.
   -R file               Dockerfile with R baked in. By default builds the Dockerfile shipped with Spark.
-  -v version            Version of R which you wish the Dockerfile to be built with. This defaults to 3.5.0-r1
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
@@ -143,7 +142,6 @@ BASEDOCKERFILE=
 PYDOCKERFILE=
 RDOCKERFILE=
 NOCACHEARG=
-RVERSION=
 while getopts f:mr:t:n:p:R:v option
 do
  case "${option}"
@@ -151,7 +149,6 @@ do
  f) BASEDOCKERFILE=${OPTARG};;
  p) PYDOCKERFILE=${OPTARG};;
  R) RDOCKERFILE=${OPTARG};;
- v) RVERSION=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  n) NOCACHEARG="--no-cache";;
