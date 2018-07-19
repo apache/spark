@@ -285,7 +285,6 @@ class MicroBatchExecution(
               committedOffsets ++= availableOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
-              println(s"Recovered at $currentBatchId with wm ${watermarkTracker.currentWatermark}")
             } else if (latestCommittedBatchId < latestBatchId - 1) {
               logWarning(s"Batch completion log latest batch id is " +
                 s"${latestCommittedBatchId}, which is not trailing " +

@@ -292,7 +292,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   /** Execute arbitrary code */
   object Execute {
     def apply(func: StreamExecution => Any): AssertOnQuery =
-      AssertOnQuery(query => { func(query); true }, "Execute")
+      apply("Execute")(func)
+
+    def apply(name: String)(func: StreamExecution => Any): AssertOnQuery =
+      AssertOnQuery(query => { func(query); true }, "name")
   }
 
   object AwaitEpoch {
@@ -512,7 +515,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       logInfo(s"Processing test stream action: $action")
       action match {
         case StartStream(trigger, triggerClock, additionalConfs, checkpointLocation) =>
-          verify(currentStream == null, "stream already running")
+          verify(currentStream == null || !currentStream.isActive, "stream already running")
           verify(triggerClock.isInstanceOf[SystemClock]
             || triggerClock.isInstanceOf[StreamManualClock],
             "Use either SystemClock or StreamManualClock to start the stream")

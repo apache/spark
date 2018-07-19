@@ -127,29 +127,131 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     testStream(aggWithWatermark)(
       AddData(inputData2, 15),
       CheckAnswer(),
-      assertEventStats { e =>
-        assert(e.get("max") === formatTimestamp(15))
-        assert(e.get("min") === formatTimestamp(15))
-        assert(e.get("avg") === formatTimestamp(15))
-        assert(e.get("watermark") === formatTimestamp(0))
-      },
+      assertEventStats(min = 15, max = 15, avg = 15, wtrmark = 0),
       AddData(inputData2, 10, 12, 14),
       CheckAnswer(),
-      assertEventStats { e =>
-        assert(e.get("max") === formatTimestamp(14))
-        assert(e.get("min") === formatTimestamp(10))
-        assert(e.get("avg") === formatTimestamp(12))
-        assert(e.get("watermark") === formatTimestamp(5))
-      },
+      assertEventStats(min = 10, max = 14, avg = 12, wtrmark = 5),
       AddData(inputData2, 25),
       CheckAnswer((10, 3)),
-      assertEventStats { e =>
-        assert(e.get("max") === formatTimestamp(25))
-        assert(e.get("min") === formatTimestamp(25))
-        assert(e.get("avg") === formatTimestamp(25))
-        assert(e.get("watermark") === formatTimestamp(5))
-      }
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5)
     )
+  }
+
+  test("event time and watermark metrics with Trigger.Once (SPARK-24699)") {
+    // All event time metrics where watermarking is set
+    val inputData = MemoryStream[Int]
+    val aggWithWatermark = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    // Unlike the ProcessingTime trigger, Trigger.Once only runs one trigger every time
+    // the query is started and it does not run no-data batches. Hence the answer generated
+    // by the updated watermark is only generated the next time the query is started.
+    // Also, the data to process in the next trigger is added *before* starting the stream in
+    // Trigger.Once to ensure that first and only trigger picks up the new data.
+
+    testStream(aggWithWatermark)(
+      StartStream(Trigger.Once),  // to make sure the query is not running when adding data 1st time
+      awaitTermination(),
+
+      AddData(inputData, 15),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer(),
+      assertEventStats(min = 15, max = 15, avg = 15, wtrmark = 0),
+      // watermark should be updated to 15 - 10 = 5
+
+      AddData(inputData, 10, 12, 14),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer(),
+      assertEventStats(min = 10, max = 14, avg = 12, wtrmark = 5),
+      // watermark should stay at 5
+
+      AddData(inputData, 25),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer(),
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5),
+      // watermark should be updated to 25 - 10 = 15
+
+      AddData(inputData, 50),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer((10, 3)),   // watermark = 15 is used to generate this
+      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
+      // watermark should be updated to 50 - 10 = 40
+
+      AddData(inputData, 50),
+      StartStream(Trigger.Once),
+      awaitTermination(),
+      CheckNewAnswer((15, 1), (25, 1)), // watermark = 40 is used to generate this
+      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 40))
+  }
+
+  test("recovery from Spark ver 2.3.1 commit log without commit metadata (SPARK-24699)") {
+    // All event time metrics where watermarking is set
+    val inputData = MemoryStream[Int]
+    val aggWithWatermark = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.3.1-without-commit-log-metadata/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    inputData.addData(15)
+    inputData.addData(10, 12, 14)
+
+    testStream(aggWithWatermark)(
+      /*
+
+      Note: The checkpoint was generated using the following input in Spark version 2.3.1
+
+      StartStream(checkpointLocation = "./sql/core/src/test/resources/structured-streaming/" +
+        "checkpoint-version-2.3.1-without-commit-log-metadata/")),
+      AddData(inputData, 15),  // watermark should be updated to 15 - 10 = 5
+      CheckAnswer(),
+      AddData(inputData, 10, 12, 14),  // watermark should stay at 5
+      CheckAnswer(),
+      StopStream,
+
+      // Offset log should have watermark recorded as 5.
+      */
+
+      StartStream(Trigger.Once),
+      awaitTermination(),
+
+      AddData(inputData, 25),
+      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      awaitTermination(),
+      CheckNewAnswer(),
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5),
+      // watermark should be updated to 25 - 10 = 15
+
+      AddData(inputData, 50),
+      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      awaitTermination(),
+      CheckNewAnswer((10, 3)),   // watermark = 15 is used to generate this
+      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
+      // watermark should be updated to 50 - 10 = 40
+
+      AddData(inputData, 50),
+      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      awaitTermination(),
+      CheckNewAnswer((15, 1), (25, 1)), // watermark = 40 is used to generate this
+      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 40))
   }
 
   test("append mode") {
@@ -462,91 +564,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
-  test("SPARK-24699: watermark should behave the same for Trigger ProcessingTime / Once") {
-    val watermarkSeconds = 2
-    val windowSeconds = 5
-    val source = MemoryStream[Int]
-    val df = source
-      .toDF()
-      .withColumn("eventTime", 'value cast "timestamp")
-      .withWatermark("eventTime", s"$watermarkSeconds seconds")
-      .groupBy(window($"eventTime", s"$windowSeconds seconds") as 'window)
-      .count()
-      .select('window.getField("start").cast("long").as[Long], 'count.as[Long])
-
-    val (one, two, three, four) = (
-      Seq(1, 1, 2, 3, 4, 4, 6),
-      Seq(7, 8, 9),
-      Seq(11, 12, 13, 14, 14),
-      Seq(15)
-    )
-    val (resultsAfterOne, resultsAfterTwo, resultsAfterThree, resultsAfterFour) = (
-      CheckAnswer(),
-      CheckAnswer(),
-      CheckAnswer(0 -> 6),
-      CheckAnswer(0 -> 6, 5 -> 4)
-    )
-    val (statsAfterOne, statsAfterTwo, statsAfterThree, statsAfterFour) = (
-      assertEventStats(
-        min = one.min,
-        max = one.max,
-        avg = one.sum.toDouble / one.size,
-        watermark = 0,
-        "first"
-      ),
-      assertEventStats(
-        min = two.min,
-        max = two.max,
-        avg = two.sum.toDouble / two.size,
-        watermark = one.max - watermarkSeconds,
-        "second"
-      ),
-      assertEventStats(
-        min = three.min,
-        max = three.max,
-        avg = three.sum.toDouble / three.size,
-        watermark = two.max - watermarkSeconds,
-        "third"
-      ),
-      assertEventStats(
-        min = four.min,
-        max = four.max,
-        avg = four.sum.toDouble / four.size,
-        watermark = three.max - watermarkSeconds,
-        "fourth"
-      )
-    )
-
-    testStream(df)(
-      StartStream(Trigger.Once),
-      StopStream,
-
-      AddData(source, one: _*),
-      StartStream(Trigger.Once),
-      resultsAfterOne,
-      statsAfterOne,
-      StopStream,
-
-      AddData(source, two: _*),
-      StartStream(Trigger.Once),
-      resultsAfterTwo,
-      statsAfterTwo,
-      StopStream,
-
-      AddData(source, three: _*),
-      StartStream(Trigger.Once),
-      resultsAfterThree,
-      statsAfterThree,
-      StopStream,
-
-      AddData(source, four: _*),
-      StartStream(Trigger.Once),
-      resultsAfterFour,
-      statsAfterFour,
-      StopStream
-    )
-  }
-
   test("test no-data flag") {
     val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 
@@ -710,23 +727,21 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     true
   }
 
+  /** Assert event stats generated on that last batch with data in it */
   private def assertEventStats(body: ju.Map[String, String] => Unit): AssertOnQuery = {
-    AssertOnQuery { q =>
+    Execute("AssertEventStats") { q =>
       body(q.recentProgress.filter(_.numInputRows > 0).lastOption.get.eventTime)
-      true
     }
   }
 
-  private def assertEventStats(
-      min: Long,
-      max: Long,
-      avg: Double,
-      watermark: Long,
-      name: String = "event stats"): AssertOnQuery = assertEventStats { e =>
-    assert(e.get("min") === formatTimestamp(min), s"[$name]: min value")
-    assert(e.get("max") === formatTimestamp(max), s"[$name]: max value")
-    assert(e.get("avg") === formatTimestamp(avg), s"[$name]: avg value")
-    assert(e.get("watermark") === formatTimestamp(watermark), s"[$name]: watermark value")
+  /** Assert event stats generated on that last batch with data in it */
+  private def assertEventStats(min: Long, max: Long, avg: Double, wtrmark: Long): AssertOnQuery = {
+    assertEventStats { e =>
+      assert(e.get("min") === formatTimestamp(min), s"min value mismatch")
+      assert(e.get("max") === formatTimestamp(max), s"max value mismatch")
+      assert(e.get("avg") === formatTimestamp(avg.toLong), s"avg value mismatch")
+      assert(e.get("watermark") === formatTimestamp(wtrmark), s"watermark value mismatch")
+    }
   }
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
@@ -736,7 +751,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     timestampFormat.format(new ju.Date(sec * 1000))
   }
 
-  private def formatTimestamp(sec: Double): String = {
-    timestampFormat.format(new ju.Date((sec * 1000).toLong))
+  private def awaitTermination(): AssertOnQuery = Execute("AwaitTermination") { q =>
+    q.awaitTermination()
   }
 }
