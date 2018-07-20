@@ -64,7 +64,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
         TypeCheckResult.TypeCheckSuccess
       case _ => TypeCheckResult.TypeCheckFailure(s"input to function $prettyName should have " +
         s"been two ${ArrayType.simpleString}s with same element type, but it's " +
-        s"[${left.dataType.simpleString}, ${right.dataType.simpleString}]")
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}]")
     }
   }
 }
@@ -509,7 +509,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     if (children.exists(!_.dataType.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckFailure(
         s"input to $funcName should all be of type map, but it's " +
-          children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+          children.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else {
       TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
     }
@@ -751,7 +751,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
   override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
     case Some(_) => TypeCheckResult.TypeCheckSuccess
     case None => TypeCheckResult.TypeCheckFailure(s"'${child.sql}' is of " +
-      s"${child.dataType.simpleString} type. $prettyName accepts only arrays of pair structs.")
+      s"${child.dataType.catalogString} type. $prettyName accepts only arrays of pair structs.")
   }
 
   override protected def nullSafeEval(input: Any): Any = {
@@ -1118,7 +1118,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
             "Sort order in second argument requires a boolean literal.")
       }
     case ArrayType(dt, _) =>
-      val dtSimple = dt.simpleString
+      val dtSimple = dt.catalogString
       TypeCheckResult.TypeCheckFailure(
         s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
     case _ =>
@@ -1166,7 +1166,7 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
       TypeCheckResult.TypeCheckSuccess
     case ArrayType(dt, _) =>
-      val dtSimple = dt.simpleString
+      val dtSimple = dt.catalogString
       TypeCheckResult.TypeCheckFailure(
         s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
     case _ =>
@@ -2217,7 +2217,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
         return TypeCheckResult.TypeCheckFailure(
           s"input to function $prettyName should have been ${StringType.simpleString}," +
             s" ${BinaryType.simpleString} or ${ArrayType.simpleString}, but it's " +
-            childTypes.map(_.simpleString).mkString("[", ", ", "]"))
+            childTypes.map(_.catalogString).mkString("[", ", ", "]"))
       }
       TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
     }
@@ -2424,7 +2424,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     case _ =>
       TypeCheckResult.TypeCheckFailure(
         s"The argument should be an array of arrays, " +
-        s"but '${child.sql}' is of ${child.dataType.simpleString} type."
+        s"but '${child.sql}' is of ${child.dataType.catalogString} type."
       )
   }
 
