@@ -2380,22 +2380,24 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
-    val setterCode1 =
+    val setterCode =
       s"""
          |$arrayData.set$primitiveValueTypeName(
          |  $counter,
          |  ${CodeGenerator.getValue(s"args[y]", elementType, "z")}
-         |);""".stripMargin
+         |);
+       """.stripMargin
 
-    val setterCode = if (checkForNull) {
+    val nullSafeSetterCode = if (checkForNull) {
       s"""
          |if (args[y].isNullAt(z)) {
          |  $arrayData.setNullAt($counter);
          |} else {
-         |  $setterCode1
-         |}""".stripMargin
+         |  $setterCode
+         |}
+       """.stripMargin
     } else {
-      setterCode1
+      setterCode
     }
 
     val concat = ctx.freshName("concat")
@@ -2407,7 +2409,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
          |  int $counter = 0;
          |  for (int y = 0; y < ${children.length}; y++) {
          |    for (int z = 0; z < args[y].numElements(); z++) {
-         |      $setterCode
+         |      $nullSafeSetterCode
          |      $counter++;
          |    }
          |  }
