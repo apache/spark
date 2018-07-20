@@ -28,6 +28,20 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 
+object LogicalPlan {
+  private val bypassTransformAnalyzerCheckFlag = new ThreadLocal[Boolean] {
+    override def initialValue(): Boolean = false
+  }
+
+  def bypassTransformAnalyzerCheck[T](p: => T): T = {
+    bypassTransformAnalyzerCheckFlag.set(true)
+    try p finally {
+      bypassTransformAnalyzerCheckFlag.set(false)
+    }
+  }
+}
+
+
 abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
   with LogicalPlanStats
@@ -102,9 +116,11 @@ abstract class LogicalPlan
   }
 
   protected def assertNotAnalysisRule(): Unit = {
-    if (Utils.isTesting && getClass.getName.contains("Logical")) {
+    if (Utils.isTesting && !LogicalPlan.bypassTransformAnalyzerCheckFlag.get) {
       if (Thread.currentThread.getStackTrace.exists(_.getClassName.contains("Analyzer"))) {
-        sys.error("This method should not be called in the analyzer")
+        val e = new RuntimeException("This method should not be called in the analyzer")
+        e.printStackTrace()
+        throw e
       }
     }
   }

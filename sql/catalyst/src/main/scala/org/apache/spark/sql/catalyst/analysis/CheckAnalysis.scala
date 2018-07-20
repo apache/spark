@@ -537,7 +537,8 @@ trait CheckAnalysis extends PredicateHelper {
 
     // Simplify the predicates before validating any unsupported correlation patterns
     // in the plan.
-    BooleanSimplification(sub).foreachUp {
+    // TODO(rxin): Why did this need to call BooleanSimplification???
+    sub.foreachUp {
       // Whitelist operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,

@@ -234,7 +234,8 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
       case WithWindowDefinition(windowDefinitions, child) =>
-        child.transform {
+        // TODO(rxin): Check with Herman whether the next line is OK.
+        child.resolveOperators {
           case p => p.transformExpressions {
             case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
               val errorMessage =
@@ -782,14 +783,16 @@ class Analyzer(
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
           // TODO(rxin): Why do we need transformUp here?
-          right transformUp {
-            case r if r == oldRelation => newRelation
-          } transformUp {
-            case other => other transformExpressions {
-              case a: Attribute =>
-                dedupAttr(a, attributeRewrites)
-              case s: SubqueryExpression =>
-                s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
+          LogicalPlan.bypassTransformAnalyzerCheck {
+            right transformUp {
+              case r if r == oldRelation => newRelation
+            } transformUp {
+              case other => other transformExpressions {
+                case a: Attribute =>
+                  dedupAttr(a, attributeRewrites)
+                case s: SubqueryExpression =>
+                  s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
+              }
             }
           }
       }
@@ -2376,8 +2379,12 @@ class Analyzer(
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   // This is actually called in the beginning of the optimization phase, and as a result
   // is using transformUp rather than resolveOperators.
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child) => child
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    LogicalPlan.bypassTransformAnalyzerCheck {
+      plan transformUp {
+        case SubqueryAlias(_, child) => child
+      }
+    }
   }
 }
 
