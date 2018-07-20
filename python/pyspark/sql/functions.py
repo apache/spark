@@ -2554,8 +2554,9 @@ def map_concat(*cols):
 @since(2.4)
 def sequence(start, stop, step=None):
     """
-    Generate a sequence of integers from start to stop, incrementing by step.
-    If step is not set, incrementing by 1 if start is less than or equal to stop, otherwise -1.
+    Generate a sequence of integers from `start` to `stop`, incrementing by `step`.
+    If `step` is not set, incrementing by 1 if `start` is less than or equal to `stop`,
+    otherwise -1.
 
     >>> df1 = spark.createDataFrame([(-2, 2)], ('C1', 'C2'))
     >>> df1.select(sequence('C1', 'C2').alias('r')).collect()
