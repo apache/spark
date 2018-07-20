@@ -256,6 +256,7 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
+      stateFormatVersion: Int,
       child: SparkPlan): Seq[SparkPlan] = {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
@@ -287,7 +288,8 @@ object AggUtils {
         child = partialAggregate)
     }
 
-    val restored = StateStoreRestoreExec(groupingAttributes, None, partialMerged1)
+    val restored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
+      partialMerged1)
 
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
@@ -311,6 +313,7 @@ object AggUtils {
         stateInfo = None,
         outputMode = None,
         eventTimeWatermark = None,
+        stateFormatVersion = stateFormatVersion,
         partialMerged2)
 
     val finalAndCompleteAggregate: SparkPlan = {

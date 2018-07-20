@@ -871,15 +871,15 @@ object SQLConf {
     .intConf
     .createWithDefault(2)
 
-  val ADVANCED_REMOVE_REDUNDANT_IN_STATEFUL_AGGREGATION =
-    buildConf("spark.sql.streaming.advanced.removeRedundantInStatefulAggregation")
+  val STREAMING_AGGREGATION_STATE_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.streamingAggregation.stateFormatVersion")
       .internal()
-      .doc("ADVANCED: When true, stateful aggregation tries to remove redundant data " +
-      "between key and value in state. Enabling this option helps minimizing state size, " +
-      "but no longer be compatible with state with disabling this option." +
-      "You can't change this option after starting the query.")
-      .booleanConf
-      .createWithDefault(false)
+      .doc("State format version used by streaming aggregation operations triggered " +
+        "explicitly or implicitly via agg() in a streaming query. State between versions are " +
+        "tend to be incompatible, so state format version shouldn't be modified after running.")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(2)
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
@@ -1627,9 +1627,6 @@ class SQLConf extends Serializable with Logging {
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
-
-  def advancedRemoveRedundantInStatefulAggregation: Boolean =
-    getConf(ADVANCED_REMOVE_REDUNDANT_IN_STATEFUL_AGGREGATION)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 

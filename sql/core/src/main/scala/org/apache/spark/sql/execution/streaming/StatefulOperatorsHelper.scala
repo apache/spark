@@ -22,10 +22,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, UnsafeRowPair}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 object StatefulOperatorsHelper {
+
+  val supportedVersions = Seq(1, 2)
+  val legacyVersion = 1
+
   sealed trait StreamingAggregationStateManager extends Serializable {
     def extractKey(row: InternalRow): UnsafeRow
     def getValueExpressions: Seq[Attribute]
@@ -35,16 +38,14 @@ object StatefulOperatorsHelper {
   }
 
   object StreamingAggregationStateManager extends Logging {
-    def newImpl(
+    def createStateManager(
         keyExpressions: Seq[Attribute],
         childOutput: Seq[Attribute],
-        conf: SQLConf): StreamingAggregationStateManager = {
-
-      if (conf.advancedRemoveRedundantInStatefulAggregation) {
-        log.info("Advanced option removeRedundantInStatefulAggregation activated!")
-        new StreamingAggregationStateManagerImplV2(keyExpressions, childOutput)
-      } else {
-        new StreamingAggregationStateManagerImplV1(keyExpressions, childOutput)
+        stateFormatVersion: Int): StreamingAggregationStateManager = {
+      stateFormatVersion match {
+        case 1 => new StreamingAggregationStateManagerImplV1(keyExpressions, childOutput)
+        case 2 => new StreamingAggregationStateManagerImplV2(keyExpressions, childOutput)
+        case _ => throw new IllegalArgumentException(s"Version $stateFormatVersion is invalid")
       }
     }
   }

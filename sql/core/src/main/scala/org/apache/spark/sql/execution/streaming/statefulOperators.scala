@@ -200,13 +200,15 @@ object WatermarkSupport {
 case class StateStoreRestoreExec(
     keyExpressions: Seq[Attribute],
     stateInfo: Option[StatefulOperatorStateInfo],
+    stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader {
 
+  private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
+    keyExpressions, child.output, stateFormatVersion)
+
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val stateManager = StreamingAggregationStateManager.newImpl(keyExpressions, child.output,
-      sqlContext.conf)
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
@@ -255,16 +257,17 @@ case class StateStoreSaveExec(
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
+    stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
+    keyExpressions, child.output, stateFormatVersion)
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
     assert(outputMode.nonEmpty,
       "Incorrect planning in IncrementalExecution, outputMode has not been set")
-
-    val stateManager = StreamingAggregationStateManager.newImpl(keyExpressions, child.output,
-      sqlContext.conf)
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
