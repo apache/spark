@@ -164,10 +164,12 @@ case class FileSourceScanExec(
     override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
 
-  override val supportsBatch: Boolean = relation.fileFormat.supportBatch(
+  // Note that some vals referring the file-based relation are lazy intentionally
+  // so that this plan can be canonicalized on executor side too. See SPARK-23731.
+  override lazy val supportsBatch: Boolean = relation.fileFormat.supportBatch(
     relation.sparkSession, StructType.fromAttributes(output))
 
-  override val needsUnsafeRowConversion: Boolean = {
+  override lazy val needsUnsafeRowConversion: Boolean = {
     if (relation.fileFormat.isInstanceOf[ParquetSource]) {
       SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
     } else {
@@ -197,7 +199,7 @@ case class FileSourceScanExec(
     ret
   }
 
-  override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
+  override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
     } else {
@@ -268,7 +270,7 @@ case class FileSourceScanExec(
   private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
   logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
-  override val metadata: Map[String, String] = {
+  override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
     val location = relation.location
     val locationDesc =
