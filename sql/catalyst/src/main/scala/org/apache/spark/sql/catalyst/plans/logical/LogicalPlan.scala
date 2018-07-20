@@ -29,14 +29,14 @@ import org.apache.spark.util.Utils
 
 
 object LogicalPlan {
-  private val bypassTransformAnalyzerCheckFlag = new ThreadLocal[Boolean] {
-    override def initialValue(): Boolean = false
+  private val bypassTransformAnalyzerCheckFlag = new ThreadLocal[Int] {
+    override def initialValue(): Int = 0
   }
 
   def bypassTransformAnalyzerCheck[T](p: => T): T = {
-    bypassTransformAnalyzerCheckFlag.set(true)
+    bypassTransformAnalyzerCheckFlag.set(bypassTransformAnalyzerCheckFlag.get() + 1)
     try p finally {
-      bypassTransformAnalyzerCheckFlag.set(false)
+      bypassTransformAnalyzerCheckFlag.set(bypassTransformAnalyzerCheckFlag.get() - 1)
     }
   }
 }
@@ -72,14 +72,16 @@ abstract class LogicalPlan
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {
-      val afterRuleOnChildren = mapChildren(_.resolveOperators(rule))
-      if (this fastEquals afterRuleOnChildren) {
-        CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(this, identity[LogicalPlan])
-        }
-      } else {
-        CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
+      LogicalPlan.bypassTransformAnalyzerCheck {
+        val afterRuleOnChildren = mapChildren(_.resolveOperators(rule))
+        if (this fastEquals afterRuleOnChildren) {
+          CurrentOrigin.withOrigin(origin) {
+            rule.applyOrElse(this, identity[LogicalPlan])
+          }
+        } else {
+          CurrentOrigin.withOrigin(origin) {
+            rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
+          }
         }
       }
     } else {
@@ -90,15 +92,17 @@ abstract class LogicalPlan
   /** Similar to [[resolveOperators]], but does it top-down. */
   def resolveOperatorsDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {
-      val afterRule = CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(this, identity[LogicalPlan])
-      }
+      LogicalPlan.bypassTransformAnalyzerCheck {
+        val afterRule = CurrentOrigin.withOrigin(origin) {
+          rule.applyOrElse(this, identity[LogicalPlan])
+        }
 
-      // Check if unchanged and then possibly return old copy to avoid gc churn.
-      if (this fastEquals afterRule) {
-        mapChildren(_.resolveOperatorsDown(rule))
-      } else {
-        afterRule.mapChildren(_.resolveOperatorsDown(rule))
+        // Check if unchanged and then possibly return old copy to avoid gc churn.
+        if (this fastEquals afterRule) {
+          mapChildren(_.resolveOperatorsDown(rule))
+        } else {
+          afterRule.mapChildren(_.resolveOperatorsDown(rule))
+        }
       }
     } else {
       this
@@ -116,7 +120,7 @@ abstract class LogicalPlan
   }
 
   protected def assertNotAnalysisRule(): Unit = {
-    if (Utils.isTesting && !LogicalPlan.bypassTransformAnalyzerCheckFlag.get) {
+    if (Utils.isTesting && LogicalPlan.bypassTransformAnalyzerCheckFlag.get == 0) {
       if (Thread.currentThread.getStackTrace.exists(_.getClassName.contains("Analyzer"))) {
         val e = new RuntimeException("This method should not be called in the analyzer")
         e.printStackTrace()
