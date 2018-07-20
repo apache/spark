@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import java.util.Locale
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 import org.apache.spark.sql.internal.SQLConf
