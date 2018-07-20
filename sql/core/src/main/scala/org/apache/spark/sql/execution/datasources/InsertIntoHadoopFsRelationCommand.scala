@@ -94,10 +94,10 @@ case class InsertIntoHadoopFsRelationCommand(
 
     val parameters = CaseInsensitiveMap(options)
 
-    val enableDynamicOverwrite = parameters.get("partitionOverwriteMode")
+    val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
       .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase))
-      .getOrElse(sparkSession.sessionState.conf.partitionOverwriteMode) ==
-      PartitionOverwriteMode.DYNAMIC
+      .getOrElse(sparkSession.sessionState.conf.partitionOverwriteMode)
+    val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
     // This config only makes sense when we are overwriting a partitioned dataset with dynamic
     // partition columns.
     val dynamicPartitionOverwrite = enableDynamicOverwrite && mode == SaveMode.Overwrite &&
