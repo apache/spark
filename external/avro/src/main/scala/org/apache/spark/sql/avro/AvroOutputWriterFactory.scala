@@ -17,14 +17,22 @@
 
 package org.apache.spark.sql.avro
 
+import org.apache.avro.Schema
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
+/**
+ * A factory that produces [[AvroOutputWriter]].
+ * @param catalystSchema Catalyst schema of input data.
+ * @param avroSchemaAsJsonString Avro schema of output result, in JSON string format.
+ */
 private[avro] class AvroOutputWriterFactory(
-    schema: StructType,
-    avroSchema: SerializableSchema) extends OutputWriterFactory {
+    catalystSchema: StructType,
+    avroSchemaAsJsonString: String) extends OutputWriterFactory {
+
+  private lazy val avroSchema = new Schema.Parser().parse(avroSchemaAsJsonString)
 
   override def getFileExtension(context: TaskAttemptContext): String = ".avro"
 
@@ -32,6 +40,6 @@ private[avro] class AvroOutputWriterFactory(
       path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    new AvroOutputWriter(path, context, schema, avroSchema.value)
+    new AvroOutputWriter(path, context, catalystSchema, avroSchema)
   }
 }
