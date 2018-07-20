@@ -781,9 +781,10 @@ class Analyzer(
           right
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-          right resolveOperators {
+          // TODO(rxin): Why do we need transformUp here?
+          right transformUp {
             case r if r == oldRelation => newRelation
-          } resolveOperators {
+          } transformUp {
             case other => other transformExpressions {
               case a: Attribute =>
                 dedupAttr(a, attributeRewrites)
