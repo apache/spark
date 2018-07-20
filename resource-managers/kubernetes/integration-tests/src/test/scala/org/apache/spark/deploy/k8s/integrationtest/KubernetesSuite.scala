@@ -80,7 +80,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 
   override def afterAll(): Unit = {
     testBackend.cleanUp()
-}
+  }
 
   before {
     appLocator = UUID.randomUUID().toString.replaceAll("-", "")
@@ -101,7 +101,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     }
     deleteDriverPod()
   }
-
 
   protected def runSparkPiAndVerifyCompletion(
       appResource: String = containerLocalSparkDistroExamplesJar,
