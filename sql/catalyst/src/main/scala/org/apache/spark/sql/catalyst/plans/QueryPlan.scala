@@ -237,7 +237,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
         // normalize the epxrId too.
         id += 1
-        ar.withExprId(ExprId(id)).withName("").canonicalized
+        ar.withExprId(ExprId(id)).canonicalized
 
       case other => QueryPlan.normalizeExprId(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
@@ -282,9 +282,9 @@ object QueryPlan extends PredicateHelper {
       case ar: AttributeReference =>
         val ordinal = input.indexOf(ar.exprId)
         if (ordinal == -1) {
-          ar.withName("")
+          ar.canonicalized
         } else {
-          ar.withExprId(ExprId(ordinal)).withName("")
+          ar.withExprId(ExprId(ordinal)).canonicalized
         }
     }.canonicalized.asInstanceOf[T]
   }
