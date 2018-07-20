@@ -105,12 +105,12 @@ object JdbcUtils extends Logging {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      if (options.isCascadeTruncate.isDefined) {
-        statement.executeUpdate(dialect.getTruncateQuery(options.table,
-          options.isCascadeTruncate))
+      val truncateQuery = if (options.isCascadeTruncate.isDefined) {
+        dialect.getTruncateQuery(options.table, options.isCascadeTruncate)
       } else {
-        statement.executeUpdate(dialect.getTruncateQuery(options.table))
+        dialect.getTruncateQuery(options.table)
       }
+      statement.executeUpdate(truncateQuery)
     } finally {
       statement.close()
     }
