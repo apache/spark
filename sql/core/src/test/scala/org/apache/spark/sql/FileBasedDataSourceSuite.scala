@@ -312,14 +312,14 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
           .write.mode("overwrite").csv(csvDir)
       }.getMessage
-      assert(msg.contains("CSV data source does not support mydensevector data type"))
+      assert(msg.contains("CSV data source does not support array<double> data type"))
 
       msg = intercept[AnalysisException] {
         val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
         spark.range(1).write.mode("overwrite").csv(csvDir)
         spark.read.schema(schema).csv(csvDir).collect()
       }.getMessage
-      assert(msg.contains("CSV data source does not support mydensevector data type."))
+      assert(msg.contains("CSV data source does not support array<double> data type."))
     }
   }
 
@@ -339,7 +339,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support interval data type."))
+          .contains(s"$format data source does not support calendarinterval data type."))
       }
 
       // read path
@@ -358,7 +358,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           spark.read.schema(schema).format(format).load(tempDir).collect()
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support interval data type."))
+          .contains(s"$format data source does not support calendarinterval data type."))
       }
     }
   }

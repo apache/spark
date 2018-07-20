@@ -183,11 +183,11 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
       TypeCheckResult.TypeCheckFailure(
         "The given keys of function map should all be the same type, but they are " +
-          keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+          keys.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else if (!TypeCoercion.haveSameType(values.map(_.dataType))) {
       TypeCheckResult.TypeCheckFailure(
         "The given values of function map should all be the same type, but they are " +
-          values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+          values.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -388,8 +388,8 @@ trait CreateNamedStructLike extends Expression {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
       if (invalidNames.nonEmpty) {
         TypeCheckResult.TypeCheckFailure(
-          "Only foldable StringType expressions are allowed to appear at odd position, got:" +
-            s" ${invalidNames.mkString(",")}")
+          s"Only foldable ${StringType.catalogString} expressions are allowed to appear at odd" +
+            s" position, got: ${invalidNames.mkString(",")}")
       } else if (!names.contains(null)) {
         TypeCheckResult.TypeCheckSuccess
       } else {

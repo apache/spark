@@ -547,7 +547,7 @@ case class JsonToStructs(
     case _: StructType | ArrayType(_: StructType, _) | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${nullableSchema.simpleString} must be a struct or an array of structs.")
+      s"Input schema ${nullableSchema.catalogString} must be a struct or an array of structs.")
   }
 
   @transient
@@ -729,7 +729,7 @@ case class StructsToJson(
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +
+      s"Input type ${child.dataType.catalogString} must be a struct, array of structs or " +
           "a map or array of map.")
   }
 
@@ -790,7 +790,7 @@ object JsonExprUtils {
       }
     case m: CreateMap =>
       throw new AnalysisException(
-        s"A type of keys and values in map() must be string, but got ${m.dataType}")
+        s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
     case _ =>
       throw new AnalysisException("Must use a map() function for options")
   }

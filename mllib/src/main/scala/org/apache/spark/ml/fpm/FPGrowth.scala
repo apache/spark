@@ -106,7 +106,7 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputType = schema($(itemsCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
-      s"The input column must be ArrayType, but got $inputType.")
+      s"The input column must be ${ArrayType.simpleString}, but got ${inputType.catalogString}.")
     SchemaUtils.appendColumn(schema, $(predictionCol), schema($(itemsCol)).dataType)
   }
 }

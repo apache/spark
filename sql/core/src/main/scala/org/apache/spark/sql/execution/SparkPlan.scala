@@ -47,17 +47,15 @@ import org.apache.spark.util.ThreadUtils
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
   /**
-   * A handle to the SQL Context that was used to create this plan.   Since many operators need
+   * A handle to the SQL Context that was used to create this plan. Since many operators need
    * access to the sqlContext for RDD operations or configuration this field is automatically
    * populated by the query planning infrastructure.
    */
-  @transient
-  final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
+  @transient final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
 
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when SparkPlan nodes are created without the active sessions.
-  // So far, this only happens in the test cases.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.subexpressionEliminationEnabled
   } else {
@@ -69,7 +67,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
-    SparkSession.setActiveSession(sqlContext.sparkSession)
+    if (sqlContext != null) {
+      SparkSession.setActiveSession(sqlContext.sparkSession)
+    }
     super.makeCopy(newArgs)
   }
 
