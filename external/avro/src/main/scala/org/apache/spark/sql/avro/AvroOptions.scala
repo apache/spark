@@ -52,7 +52,7 @@ class AvroOptions(
   val recordNamespace: String = parameters.getOrElse("recordNamespace", "")
 
   /**
-   * The option controls ignoring of files without `.avro` extensions in read.
+   * The `ignoreExtension` option controls ignoring of files without `.avro` extensions in read.
    * If the option is enabled, all files (with and without `.avro` extension) are loaded.
    * If the option is not set, the Hadoop's config `avro.mapred.ignore.inputs.without.extension`
    * is taken into account. If the former one is not set too, file extensions are ignored.
