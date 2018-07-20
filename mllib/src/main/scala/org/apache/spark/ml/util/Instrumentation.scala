@@ -27,7 +27,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{Estimator, Model, PipelineStage}
+import org.apache.spark.ml.PipelineStage
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
@@ -37,26 +37,16 @@ import org.apache.spark.util.Utils
  * A small wrapper that defines a training session for an estimator, and some methods to log
  * useful information during this session.
  */
-private[spark] class Instrumentation extends Logging {
+private[spark] class Instrumentation private () extends Logging {
 
   private val id = UUID.randomUUID()
   private val shortId = id.toString.take(8)
-  private val prefix = s"[$shortId] "
-
-  // TODO: remove stage
-  var stage: Params = _
-  // TODO: update spark.ml to use new Instrumentation APIs and remove this constructor
-  private def this(estimator: Estimator[_], dataset: RDD[_]) = {
-    this()
-    logPipelineStage(estimator)
-    logDataset(dataset)
-  }
+  private[util] val prefix = s"[$shortId] "
 
   /**
    * Log some info about the pipeline stage being fit.
    */
   def logPipelineStage(stage: PipelineStage): Unit = {
-    this.stage = stage
     // estimator.getClass.getSimpleName can cause Malformed class name error,
     // call safer `Utils.getSimpleName` instead
     val className = Utils.getSimpleName(stage.getClass)
@@ -119,13 +109,6 @@ private[spark] class Instrumentation extends Logging {
     logInfo(compact(render(map2jvalue(pairs.toMap))))
   }
 
-  // TODO: remove this
-  def logParams(params: Param[_]*): Unit = {
-    require(stage != null, "`logStageParams` must be called before `logParams` (or an instance of" +
-      " Params must be provided explicitly).")
-    logParams(stage, params: _*)
-  }
-
   def logNumFeatures(num: Long): Unit = {
     logNamedValue(Instrumentation.loggerTags.numFeatures, num)
   }
@@ -166,14 +149,9 @@ private[spark] class Instrumentation extends Logging {
   }
 
 
-  // TODO: Remove this (possibly replace with logModel?)
   /**
    * Logs the successful completion of the training session.
    */
-  def logSuccess(model: Model[_]): Unit = {
-    logInfo(s"training finished")
-  }
-
   def logSuccess(): Unit = {
     logInfo("training finished")
   }
@@ -199,22 +177,6 @@ private[spark] object Instrumentation {
     val meanOfLabels = "meanOfLabels"
     val varianceOfLabels = "varianceOfLabels"
   }
-
-  // TODO: Remove these
-  /**
-   * Creates an instrumentation object for a training session.
-   */
-  def create(estimator: Estimator[_], dataset: Dataset[_]): Instrumentation = {
-    create(estimator, dataset.rdd)
-  }
-
-  /**
-   * Creates an instrumentation object for a training session.
-   */
-  def create(estimator: Estimator[_], dataset: RDD[_]): Instrumentation = {
-    new Instrumentation(estimator, dataset)
-  }
-  // end remove
 
   def instrumented[T](body: (Instrumentation => T)): T = {
     val instr = new Instrumentation()
@@ -268,8 +230,7 @@ private[spark] object OptionalInstrumentation {
    * Creates an `OptionalInstrumentation` object from an existing `Instrumentation` object.
    */
   def create(instr: Instrumentation): OptionalInstrumentation = {
-    new OptionalInstrumentation(Some(instr),
-      instr.stage.getClass.getName.stripSuffix("$"))
+    new OptionalInstrumentation(Some(instr), instr.prefix)
   }
 
   /**
