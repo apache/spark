@@ -26,7 +26,7 @@ GROUP  BY GROUPING SETS ( ( c1 ), ( c2 ) )
 HAVING GROUPING__ID > 1;
 
 -- Group sets without explicit group by
-SELECT grouping(c1) FROM (VALUES ('x', 'a', 10), ('y', 'b', 20)) AS t (c1, c2, c3) GROUP BY c1,c2 GROUPING SETS (c1,c2);
+SELECT grouping(c1) FROM (VALUES ('x', 'a', 10), ('y', 'b', 20)) AS t (c1, c2, c3) GROUP BY GROUPING SETS (c1,c2);
 
 -- Mutiple grouping within a grouping set
 SELECT -c1 AS c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS ((c1), (c1, c2));
@@ -48,4 +48,6 @@ ORDER  BY -col1;
 SELECT a, b, c, count(d) FROM grouping GROUP BY WITH ROLLUP;
 
 SELECT a, b, c, count(d) FROM grouping GROUP BY WITH CUBE;
+
+SELECT c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS (());
 
