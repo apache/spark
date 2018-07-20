@@ -166,7 +166,7 @@ case class FileSourceScanExec(
     override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
 
-  override val supportsBatch: Boolean = relation.fileFormat.supportBatch(
+  override val supportsBatch: Boolean = relation != null && relation.fileFormat.supportBatch(
     relation.sparkSession, StructType.fromAttributes(output))
 
   override val needsUnsafeRowConversion: Boolean = {
