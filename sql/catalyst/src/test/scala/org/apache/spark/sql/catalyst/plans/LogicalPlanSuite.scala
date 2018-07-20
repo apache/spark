@@ -60,31 +60,6 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(invocationCount === 2)
   }
 
-  test("transformUp skips all ready resolved plans wrapped in analysis barrier") {
-    invocationCount = 0
-    val plan = AnalysisBarrier(Project(Nil, Project(Nil, testRelation)))
-    plan transformUp function
-
-    assert(invocationCount === 0)
-
-    invocationCount = 0
-    plan transformDown function
-    assert(invocationCount === 0)
-  }
-
-  test("transformUp skips partially resolved plans wrapped in analysis barrier") {
-    invocationCount = 0
-    val plan1 = AnalysisBarrier(Project(Nil, testRelation))
-    val plan2 = Project(Nil, plan1)
-    plan2 transformUp function
-
-    assert(invocationCount === 1)
-
-    invocationCount = 0
-    plan2 transformDown function
-    assert(invocationCount === 1)
-  }
-
   test("isStreaming") {
     val relation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
     val incrementalRelation = LocalRelation(
