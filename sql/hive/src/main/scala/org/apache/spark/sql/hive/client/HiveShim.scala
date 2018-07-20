@@ -598,6 +598,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     object ExtractableLiteral {
       def unapply(expr: Expression): Option[String] = expr match {
+        case Literal(null, _) => None // `null`s can be cast as other types; we want to avoid NPEs.
         case Literal(value, _: IntegralType) => Some(value.toString)
         case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
         case _ => None

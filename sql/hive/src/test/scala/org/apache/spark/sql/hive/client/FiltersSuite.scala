@@ -73,8 +73,12 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     """stringcol = 'p1" and q="q1' and 'p2" and q="q2' = stringcol""")
 
   filterTest("SPARK-24879 null literals should be ignored for IN constructs",
-    Seq(a("intcol", IntegerType) in (Literal(1), Literal(null))),
+    (a("intcol", IntegerType) in (Literal(1), Literal(null))) :: Nil,
     "(intcol = 1)")
+
+  filterTest("typecast null literals should not be pushed down in simple predicates",
+    (a("intcol", IntegerType) === Literal(null, IntegerType)) :: Nil,
+    "")
 
   private def filterTest(name: String, filters: Seq[Expression], result: String) = {
     test(name) {
