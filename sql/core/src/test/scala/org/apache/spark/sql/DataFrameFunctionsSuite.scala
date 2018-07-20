@@ -918,34 +918,55 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     oneRowDF.cache()
     testString()
 
-    // Array test cases (primitive-type elements)
-    val idf = Seq(
+    // Array test cases (primitive-type elements, containsNull = false)
+    val idfNotContainsNull = Seq(
       Seq(1, 9, 8, 7),
       Seq(5, 8, 9, 7, 2),
       Seq.empty,
       null
     ).toDF("i")
 
-    def testArray(): Unit = {
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
       checkAnswer(
-        idf.select(reverse('i)),
+        idfNotContainsNull.select(reverse('i)),
         Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
       )
       checkAnswer(
-        idf.selectExpr("reverse(i)"),
+        idfNotContainsNull.selectExpr("reverse(i)"),
         Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
-      )
-      checkAnswer(
-        idf.selectExpr("reverse(array(1, null, 2, null))"),
-        Seq.fill(idf.count().toInt)(Row(Seq(null, 2, null, 1)))
       )
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    testArray()
+    testArrayOfPrimitiveTypeNotContainsNull()
     // Test with cached relation, the Project will be evaluated with codegen
-    idf.cache()
-    testArray()
+    idfNotContainsNull.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+
+    // Array test cases (primitive-type elements, containsNull = true)
+    val idfContainsNull = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(null, 5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkAnswer(
+        idfContainsNull.select(reverse('i)),
+        Seq(Row(Seq(7, null, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5, null)), Row(Seq.empty), Row(null))
+      )
+      checkAnswer(
+        idfContainsNull.selectExpr("reverse(i)"),
+        Seq(Row(Seq(7, null, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5, null)), Row(Seq.empty), Row(null))
+      )
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfContainsNull.cache()
+    testArrayOfPrimitiveTypeContainsNull()
 
     // Array test cases (non-primitive-type elements)
     val sdf = Seq(
