@@ -486,25 +486,6 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       }
     }
   }
-  test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
-    withTempPath { path =>
-      Seq((1, 1, 1)).toDF("i", "part1", "part2")
-        .write.partitionBy("part1", "part2")
-        .option("partitionOverwriteMode", "dynamic")
-        .parquet(path.getAbsolutePath)
-      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1, 1))
-
-      Seq((2, 1, 1)).toDF("i", "part1", "part2")
-        .write.partitionBy("part1", "part2").mode("overwrite")
-        .option("partitionOverwriteMode", "dynamic").parquet(path.getAbsolutePath)
-      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1))
-
-      Seq((2, 2, 2)).toDF("i", "part1", "part2")
-        .write.partitionBy("part1", "part2").mode("overwrite")
-        .option("partitionOverwriteMode", "dynamic").parquet(path.getAbsolutePath)
-      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
-    }
-  }
 
   test("SPARK-20236: dynamic partition overwrite") {
     withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
@@ -561,6 +542,26 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
         checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
+    withTempPath { path =>
+      Seq((1, 1), (2, 2)).toDF("i", "part")
+        .write.partitionBy("part")
+        .parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1) :: Row(2, 2) :: Nil)
+
+      Seq((1, 2), (1, 3)).toDF("i", "part")
+        .write.partitionBy("part").mode("overwrite")
+        .option("partitionOverwriteMode", "dynamic").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath),
+        Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
+
+      Seq((1, 2), (1, 3)).toDF("i", "part")
+        .write.partitionBy("part").mode("overwrite")
+        .option("partitionOverwriteMode", "static").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 2) :: Row(1, 3) :: Nil)
     }
   }
 
