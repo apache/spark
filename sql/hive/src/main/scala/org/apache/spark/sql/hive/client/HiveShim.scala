@@ -607,10 +607,18 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     object ExtractableLiterals {
       def unapply(exprs: Seq[Expression]): Option[Seq[String]] = {
-        // SPARK-24879: The Hive filter parser does not support "null", but we still want to push
-        // down as many predicates as we can while still maintaining correctness. "x in (a, b,
-        // null)" can be rewritten as "x in (a, b)" for the purposes of partition pruning, so we
-        // filter out "null" values here to achieve this.
+        // SPARK-24879: The Hive metastore filter parser does not support "null", but we still want
+        // to push down as many predicates as we can while still maintaining correctness.
+        // In SQL, the `IN` expression evaluates as follows:
+        //  > `1 in (2, NULL)` -> NULL
+        //  > `1 in (1, NULL)` -> true
+        //  > `1 in (2)` -> false
+        // Since Hive metastore filters are NULL-intolerant binary operations joined only by
+        // `AND` and `OR`, we can treat `NULL` as `false` and thus rewrite `1 in (2, NULL)` as
+        // `1 in (2)`.
+        // If the Hive metastore begins supporting NULL-tolerant predicates and Spark starts
+        // pushing down these predicates, then this optimization will become incorrect and need
+        // to be changed.
         val extractables = exprs
             .filter {
               case Literal(null, _) => false
