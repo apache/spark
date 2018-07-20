@@ -58,12 +58,12 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val conf = spark.sparkContext.hadoopConfiguration
-    val parsedOptions = new AvroOptions(options)
+    val parsedOptions = new AvroOptions(options, conf)
 
     // Schema evolution is not supported yet. Here we only pick a single random sample file to
     // figure out the schema of the whole dataset.
     val sampleFile =
-      if (AvroFileFormat.ignoreExtension(conf, parsedOptions)) {
+      if (parsedOptions.ignoreExtension) {
         files.headOption.getOrElse {
           throw new FileNotFoundException("Files for schema inferring have been not found.")
         }
@@ -113,7 +113,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val parsedOptions = new AvroOptions(options)
+    val parsedOptions = new AvroOptions(options, spark.sessionState.newHadoopConf())
     val outputAvroSchema = SchemaConverters.toAvroType(
       dataSchema, nullable = false, parsedOptions.recordName, parsedOptions.recordNamespace)
 
@@ -158,7 +158,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
 
     val broadcastedConf =
       spark.sparkContext.broadcast(new AvroFileFormat.SerializableConfiguration(hadoopConf))
-    val parsedOptions = new AvroOptions(options)
+    val parsedOptions = new AvroOptions(options, hadoopConf)
 
     (file: PartitionedFile) => {
       val log = LoggerFactory.getLogger(classOf[AvroFileFormat])
@@ -169,7 +169,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       // Doing input file filtering is improper because we may generate empty tasks that process no
       // input files but stress the scheduler. We should probably add a more general input file
       // filtering mechanism for `FileFormat` data sources. See SPARK-16317.
-      if (AvroFileFormat.ignoreExtension(conf, parsedOptions) || file.filePath.endsWith(".avro")) {
+      if (parsedOptions.ignoreExtension || file.filePath.endsWith(".avro")) {
         val reader = {
           val in = new FsInput(new Path(new URI(file.filePath)), conf)
           try {
@@ -271,14 +271,5 @@ private[avro] object AvroFileFormat {
       value = new Configuration(false)
       value.readFields(new DataInputStream(in))
     }
-  }
-
-  def ignoreExtension(conf: Configuration, options: AvroOptions): Boolean = {
-    val ignoreFilesWithoutExtensionByDefault = false
-    val ignoreFilesWithoutExtension = conf.getBoolean(
-      AvroFileFormat.IgnoreFilesWithoutExtensionProperty,
-      ignoreFilesWithoutExtensionByDefault)
-
-    options.ignoreExtension.getOrElse(!ignoreFilesWithoutExtension)
   }
 }
