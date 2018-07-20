@@ -5471,6 +5471,22 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 self.assertEqual(r.a, 'hi')
                 self.assertEqual(r.b, 1)
 
+    def test_self_join_with_pandas(self):
+        import pyspark.sql.functions as F
+
+        @F.pandas_udf('key long, col string', F.PandasUDFType.GROUPED_MAP)
+        def dummy_pandas_udf(df):
+            return df[['key', 'col']]
+
+        df = self.spark.createDataFrame([Row(key=1, col='A'), Row(key=1, col='B'),
+                                         Row(key=2, col='C')])
+        df_with_pandas = df.groupBy('key').apply(dummy_pandas_udf)
+
+        # this was throwing an AnalysisException before SPARK-24208
+        res = df_with_pandas.alias('temp0').join(df_with_pandas.alias('temp1'),
+                                                 F.col('temp0.key') == F.col('temp1.key'))
+        self.assertEquals(res.count(), 5)
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
@@ -5924,22 +5940,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                     AnalysisException,
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
-
-    def test_self_join_with_pandas(self):
-        import pyspark.sql.functions as F
-
-        @F.pandas_udf('key long, col string', F.PandasUDFType.GROUPED_MAP)
-        def dummy_pandas_udf(df):
-            return df[['key', 'col']]
-
-        df = self.spark.createDataFrame([Row(key=1, col='A'), Row(key=1, col='B'),
-                                         Row(key=2, col='C')])
-        dfWithPandas = df.groupBy('key').apply(dummy_pandas_udf)
-
-        # this was throwing an AnalysisException before SPARK-24208
-        res = dfWithPandas.alias('temp0').join(dfWithPandas.alias('temp1'),
-                                               F.col('temp0.key') == F.col('temp1.key'))
-        self.assertEquals(res.count(), 5)
 
 
 @unittest.skipIf(

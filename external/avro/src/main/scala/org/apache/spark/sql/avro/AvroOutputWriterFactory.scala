@@ -14,9 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.integrationtest
 
-package object constants {
-  val MINIKUBE_TEST_BACKEND = "minikube"
-  val GCE_TEST_BACKEND = "gce"
+package org.apache.spark.sql.avro
+
+import org.apache.hadoop.mapreduce.TaskAttemptContext
+
+import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
+import org.apache.spark.sql.types.StructType
+
+private[avro] class AvroOutputWriterFactory(
+    schema: StructType,
+    avroSchema: SerializableSchema) extends OutputWriterFactory {
+
+  override def getFileExtension(context: TaskAttemptContext): String = ".avro"
+
+  override def newInstance(
+      path: String,
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter = {
+    new AvroOutputWriter(path, context, schema, avroSchema.value)
+  }
 }

@@ -294,8 +294,10 @@ private[sql] object JsonInferSchema {
           // Both fields1 and fields2 should be sorted by name, since inferField performs sorting.
           // Therefore, we can take advantage of the fact that we're merging sorted lists and skip
           // building a hash map or performing additional sorting.
-          assert(isSorted(fields1), s"StructType's fields were not sorted: ${fields1.toSeq}")
-          assert(isSorted(fields2), s"StructType's fields were not sorted: ${fields2.toSeq}")
+          assert(isSorted(fields1),
+            s"${StructType.simpleString}'s fields were not sorted: ${fields1.toSeq}")
+          assert(isSorted(fields2),
+            s"${StructType.simpleString}'s fields were not sorted: ${fields2.toSeq}")
 
           val newFields = new java.util.ArrayList[StructField]()
 

@@ -272,7 +272,7 @@ case class StringSplit(str: Expression, pattern: Expression)
   usage = "_FUNC_(str, regexp, rep) - Replaces all substrings of `str` that match `regexp` with `rep`.",
   examples = """
     Examples:
-      > SELECT _FUNC_('100-200', '(\d+)', 'num');
+      > SELECT _FUNC_('100-200', '(\\d+)', 'num');
        num-num
   """)
 // scalastyle:on line.size.limit
@@ -371,7 +371,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
   examples = """
     Examples:
-      > SELECT _FUNC_('100-200', '(\d+)-(\d+)', 1);
+      > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
        100
   """)
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
