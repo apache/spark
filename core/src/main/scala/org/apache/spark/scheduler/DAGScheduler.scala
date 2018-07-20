@@ -1362,25 +1362,6 @@ class DAGScheduler(
             }
           }
 
-          // TODO: mark the executor as failed only if there were lots of fetch failures on it
-          if (bmAddress != null) {
-            val hostToUnregisterOutputs = if (env.blockManager.externalShuffleServiceEnabled &&
-              unRegisterOutputOnHostOnFetchFailure) {
-              // We had a fetch failure with the external shuffle service, so we
-              // assume all shuffle data on the node is bad.
-              Some(bmAddress.host)
-            } else {
-              // Unregister shuffle data just for one executor (we don't have any
-              // reason to believe shuffle data has been lost for the entire host).
-              None
-            }
-            removeExecutorAndUnregisterOutputs(
-              execId = bmAddress.executorId,
-              fileLost = true,
-              hostToUnregisterOutputs = hostToUnregisterOutputs,
-              maybeEpoch = Some(task.epoch))
-          }
-
           if (shouldAbortStage) {
             val abortMessage = if (disallowStageRetryForTest) {
               "Fetch failure will not retry stage due to testing config"
@@ -1418,21 +1399,32 @@ class DAGScheduler(
               )
             }
           }
+
+          // TODO: mark the executor as failed only if there were lots of fetch failures on it
+          if (bmAddress != null) {
+            val hostToUnregisterOutputs = if (env.blockManager.externalShuffleServiceEnabled &&
+              unRegisterOutputOnHostOnFetchFailure) {
+              // We had a fetch failure with the external shuffle service, so we
+              // assume all shuffle data on the node is bad.
+              Some(bmAddress.host)
+            } else {
+              // Unregister shuffle data just for one executor (we don't have any
+              // reason to believe shuffle data has been lost for the entire host).
+              None
+            }
+            removeExecutorAndUnregisterOutputs(
+              execId = bmAddress.executorId,
+              fileLost = true,
+              hostToUnregisterOutputs = hostToUnregisterOutputs,
+              maybeEpoch = Some(task.epoch))
+          }
         }
 
       case failure: TaskFailedReason if task.isBarrier =>
         // Also handle the task failed reasons here.
         failure match {
           case Resubmitted =>
-            logInfo("Resubmitted " + task + ", so marking it as still running")
-            stage match {
-              case sms: ShuffleMapStage =>
-                sms.pendingPartitions += task.partitionId
-
-              case _ =>
-                throw new SparkException("TaskSetManagers should only send Resubmitted task " +
-                  "statuses for tasks in ShuffleMapStages.")
-            }
+            handleResubmittedFailure(task, stage)
 
           case _ => // Do nothing.
         }
@@ -1449,6 +1441,7 @@ class DAGScheduler(
         } catch {
           case e: UnsupportedOperationException =>
             // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.
+            // TODO SPARK-24877 leave the zombie tasks and ignore their completion events.
             logWarning(s"Could not cancel tasks for stage $stageId", e)
             abortStage(failedStage, "Could not cancel zombie barrier tasks for stage " +
               s"$failedStage (${failedStage.name})", Some(e))
@@ -1456,6 +1449,8 @@ class DAGScheduler(
         markStageAsFinished(failedStage, Some(message))
 
         failedStage.failedAttemptIds.add(task.stageAttemptId)
+        // TODO Refactor the failure handling logic to combine similar code with that of
+        // FetchFailed.
         val shouldAbortStage =
           failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
             disallowStageRetryForTest
@@ -1494,15 +1489,7 @@ class DAGScheduler(
         }
 
       case Resubmitted =>
-        logInfo("Resubmitted " + task + ", so marking it as still running")
-        stage match {
-          case sms: ShuffleMapStage =>
-            sms.pendingPartitions += task.partitionId
-
-          case _ =>
-            throw new SparkException("TaskSetManagers should only send Resubmitted task " +
-              "statuses for tasks in ShuffleMapStages.")
-        }
+        handleResubmittedFailure(task, stage)
 
       case _: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
@@ -1516,6 +1503,18 @@ class DAGScheduler(
       case _: ExecutorLostFailure | UnknownReason =>
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
+    }
+  }
+
+  private def handleResubmittedFailure(task: Task[_], stage: Stage): Unit = {
+    logInfo("Resubmitted " + task + ", so marking it as still running")
+    stage match {
+      case sms: ShuffleMapStage =>
+        sms.pendingPartitions += task.partitionId
+
+      case _ =>
+        throw new SparkException("TaskSetManagers should only send Resubmitted task " +
+          "statuses for tasks in ShuffleMapStages.")
     }
   }
 

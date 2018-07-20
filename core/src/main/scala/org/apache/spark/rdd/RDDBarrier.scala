@@ -27,6 +27,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
 
   /**
+   * :: Experimental ::
    * Maps partitions together with a provided [[BarrierTaskContext]].
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which

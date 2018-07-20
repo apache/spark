@@ -17,12 +17,15 @@
 
 package org.apache.spark
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, Since}
+
 
 /**
+ * :: Experimental ::
  * Carries all task infos of a barrier task.
  *
- * @param address the IPv4 address of the executor that a barrier task is running on
+ * @param address the IPv4 address(host:port) of the executor that a barrier task is running on
  */
-@DeveloperApi
+@Experimental
+@Since("2.4.0")
 class BarrierTaskInfo(val address: String)

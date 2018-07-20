@@ -1648,6 +1648,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * :: Experimental ::
    * Indicates that Spark must launch the tasks together for the current stage.
    */
   @Experimental

@@ -275,8 +275,7 @@ private[spark] class TaskSchedulerImpl(
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
-      addresses: ArrayBuffer[String],
-      taskDescs: ArrayBuffer[TaskDescription]) : Boolean = {
+      addressesWithDescs: ArrayBuffer[(String, TaskDescription)]) : Boolean = {
     var launchedTask = false
     // nodes and executors that are blacklisted for the entire application have already been
     // filtered out by this point
@@ -296,8 +295,7 @@ private[spark] class TaskSchedulerImpl(
             // Only update hosts for a barrier task.
             if (taskSet.isBarrier) {
               // The executor address is expected to be non empty.
-              addresses += shuffledOffers(i).address.get
-              taskDescs += task
+              addressesWithDescs += Tuple2(shuffledOffers(i).address.get, task)
             }
             launchedTask = true
           }
@@ -380,12 +378,11 @@ private[spark] class TaskSchedulerImpl(
         var launchedAnyTask = false
         var launchedTaskAtCurrentMaxLocality = false
         // Record all the executor IDs assigned barrier tasks on.
-        val addresses = ArrayBuffer[String]()
-        val taskDescs = ArrayBuffer[TaskDescription]()
+        val addressesWithDescs = ArrayBuffer[(String, TaskDescription)]()
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           do {
             launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
-              currentMaxLocality, shuffledOffers, availableCpus, tasks, addresses, taskDescs)
+              currentMaxLocality, shuffledOffers, availableCpus, tasks, addressesWithDescs)
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
           } while (launchedTaskAtCurrentMaxLocality)
         }
@@ -396,22 +393,22 @@ private[spark] class TaskSchedulerImpl(
           // Check whether the barrier tasks are partially launched.
           // TODO SPARK-24818 handle the assert failure case (that can happen when some locality
           // requirements are not fulfilled, and we should revert the launched tasks).
-          require(taskDescs.size == taskSet.numTasks,
+          require(addressesWithDescs.size == taskSet.numTasks,
             s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
-              s"because only ${taskDescs.size} out of a total number of ${taskSet.numTasks} " +
-              "tasks got resource offers. The resource offers may have been blacklisted or " +
-              "cannot fulfill task locality requirements.")
+              s"because only ${addressesWithDescs.size} out of a total number of " +
+              s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
+              "been blacklisted or cannot fulfill task locality requirements.")
 
           // Update the taskInfos into all the barrier task properties.
-          val addressesStr = addresses.zip(taskDescs)
+          val addressesStr = addressesWithDescs
             // Addresses ordered by partitionId
             .sortBy(_._2.partitionId)
             .map(_._1)
             .mkString(",")
-          taskDescs.foreach(_.properties.setProperty("addresses", addressesStr))
+          addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
 
-          logInfo(s"Successfully scheduled all the ${taskDescs.size} tasks for barrier stage " +
-            s"${taskSet.stageId}.")
+          logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +
+            s"stage ${taskSet.stageId}.")
         }
       }
     }

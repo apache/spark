@@ -23,6 +23,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 trait BarrierTaskContext extends TaskContext {
 
   /**
+   * :: Experimental ::
    * Sets a global barrier and waits until all tasks in this stage hit this barrier. Similar to
    * MPI_Barrier function in MPI, the barrier() function call blocks until all tasks in the same
    * stage have reached this routine.
@@ -32,6 +33,7 @@ trait BarrierTaskContext extends TaskContext {
   def barrier(): Unit
 
   /**
+   * :: Experimental ::
    * Returns the all task infos in this barrier stage, the task infos are ordered by partitionId.
    */
   @Experimental
