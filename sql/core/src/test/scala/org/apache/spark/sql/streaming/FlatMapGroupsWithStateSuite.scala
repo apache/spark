@@ -19,7 +19,6 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 import java.sql.Date
-import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterAll
@@ -34,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, MemoryStateStore, StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -1285,27 +1284,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
 object FlatMapGroupsWithStateSuite {
 
   var failInTask = true
-
-  class MemoryStateStore extends StateStore() {
-    import scala.collection.JavaConverters._
-    private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
-
-    override def iterator(): Iterator[UnsafeRowPair] = {
-      map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
-    }
-
-    override def get(key: UnsafeRow): UnsafeRow = map.get(key)
-    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = {
-      map.put(key.copy(), newValue.copy())
-    }
-    override def remove(key: UnsafeRow): Unit = { map.remove(key) }
-    override def commit(): Long = version + 1
-    override def abort(): Unit = { }
-    override def id: StateStoreId = null
-    override def version: Long = 0
-    override def metrics: StateStoreMetrics = new StateStoreMetrics(map.size, 0, Map.empty)
-    override def hasCommitted: Boolean = true
-  }
 
   def assertCanGetProcessingTime(predicate: => Boolean): Unit = {
     if (!predicate) throw new TestFailedException("Could not get processing time", 20)
