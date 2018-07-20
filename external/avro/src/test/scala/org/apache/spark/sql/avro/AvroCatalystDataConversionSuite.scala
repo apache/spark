@@ -31,18 +31,18 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
 
   private def roundTripTest(data: Literal): Unit = {
     val avroType = SchemaConverters.toAvroType(data.dataType, data.nullable)
-    checkResult(data, avroType, data.eval())
+    checkResult(data, avroType.toString, data.eval())
   }
 
-  private def checkResult(data: Literal, avroType: Schema, expected: Any): Unit = {
+  private def checkResult(data: Literal, schema: String, expected: Any): Unit = {
     checkEvaluation(
-      AvroDataToCatalyst(CatalystDataToAvro(data), new SerializableSchema(avroType)),
+      AvroDataToCatalyst(CatalystDataToAvro(data), schema),
       prepareExpectedResult(expected))
   }
 
-  private def assertFail(data: Literal, avroType: Schema): Unit = {
+  private def assertFail(data: Literal, schema: String): Unit = {
     intercept[java.io.EOFException] {
-      AvroDataToCatalyst(CatalystDataToAvro(data), new SerializableSchema(avroType)).eval()
+      AvroDataToCatalyst(CatalystDataToAvro(data), schema).eval()
     }
   }
 
@@ -126,7 +126,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
        """.stripMargin
 
     // When read int as string, avro reader is not able to parse the binary and fail.
-    assertFail(data, new Schema.Parser().parse(avroTypeJson))
+    assertFail(data, avroTypeJson)
   }
 
   test("read string as int") {
@@ -141,7 +141,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
 
     // When read string data as int, avro reader is not able to find the type mismatch and read
     // the string length as int value.
-    checkResult(data, new Schema.Parser().parse(avroTypeJson), 3)
+    checkResult(data, avroTypeJson, 3)
   }
 
   test("read float as double") {
@@ -156,7 +156,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
 
     // When read float data as double, avro reader fails(trying to read 8 bytes while the data have
     // only 4 bytes).
-    assertFail(data, new Schema.Parser().parse(avroTypeJson))
+    assertFail(data, avroTypeJson)
   }
 
   test("read double as float") {
@@ -170,6 +170,6 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
        """.stripMargin
 
     // avro reader reads the first 4 bytes of a double as a float, the result is totally undefined.
-    checkResult(data, new Schema.Parser().parse(avroTypeJson), 5.848603E35f)
+    checkResult(data, avroTypeJson, 5.848603E35f)
   }
 }
