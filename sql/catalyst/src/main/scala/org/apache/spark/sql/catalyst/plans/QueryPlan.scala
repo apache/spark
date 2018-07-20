@@ -282,7 +282,7 @@ object QueryPlan extends PredicateHelper {
       case ar: AttributeReference =>
         val ordinal = input.indexOf(ar.exprId)
         if (ordinal == -1) {
-          ar.canonicalized
+          ar
         } else {
           ar.withExprId(ExprId(ordinal)).canonicalized
         }
