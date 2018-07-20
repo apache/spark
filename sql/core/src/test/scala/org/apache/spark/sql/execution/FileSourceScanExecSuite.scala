@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.test.SharedSQLContext
 
 class FileSourceScanExecSuite extends SharedSQLContext {
-  test("FileSourceScanExec should be canonicalizable on executor side") {
+  test("SPARK-23731: FileSourceScanExec should be canonicalizable after being (de)serialized") {
     withTempPath { path =>
       spark.range(1).write.parquet(path.getAbsolutePath)
       val df = spark.read.parquet(path.getAbsolutePath)
       val fileSourceScanExec =
         df.queryExecution.sparkPlan.collectFirst { case p: FileSourceScanExec => p }.get
+      val serializer = SparkEnv.get.serializer.newInstance()
+      val readback =
+        serializer.deserialize[FileSourceScanExec](serializer.serialize(fileSourceScanExec))
       try {
-        spark.range(1).foreach(_ => fileSourceScanExec.canonicalized)
+        readback.canonicalized
       } catch {
         case e: Throwable => fail("FileSourceScanExec was not canonicalizable", e)
       }
