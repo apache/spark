@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 import org.apache.spark.sql.internal.SQLConf
@@ -237,7 +239,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
         // normalize the epxrId too.
         id += 1
-        ar.withExprId(ExprId(id)).canonicalized
+        ar.withExprId(ExprId(id)).withName(ar.name.toLowerCase(Locale.ROOT)).canonicalized
 
       case other => QueryPlan.normalizeExprId(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
@@ -282,9 +284,9 @@ object QueryPlan extends PredicateHelper {
       case ar: AttributeReference =>
         val ordinal = input.indexOf(ar.exprId)
         if (ordinal == -1) {
-          ar
+          ar.withName(ar.name.toLowerCase(Locale.ROOT))
         } else {
-          ar.withExprId(ExprId(ordinal))
+          ar.withExprId(ExprId(ordinal)).withName(ar.name.toLowerCase(Locale.ROOT))
         }
     }.canonicalized.asInstanceOf[T]
   }

@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Range}
+import org.apache.spark.sql.types.LongType
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -49,5 +51,31 @@ class CanonicalizeSuite extends SparkFunSuite {
 
     assert(range.where(arrays1).sameResult(range.where(arrays2)))
     assert(!range.where(arrays1).sameResult(range.where(arrays3)))
+  }
+
+  test("Canonicalized result is not case-insensitive") {
+    val u1 = 'A.string.at(0)
+    val u2 = 'B.string.at(1)
+    val u3 = 'C.string.at(2)
+    val caseA = CaseWhen(Seq((u1, u2)), u3)
+    val otherA = AttributeReference("D", LongType)(exprId = ExprId(3))
+    val aliases = Alias(sum(caseA), "E")() :: Nil
+    val planUppercase = Aggregate(
+      Nil,
+      aliases,
+      LocalRelation(otherA))
+
+    val l1 = 'a.string.at(0)
+    val l2 = 'b.string.at(1)
+    val l3 = 'c.string.at(2)
+    val caseALower = CaseWhen(Seq((l1, l2)), l3)
+    val otherALower = AttributeReference("d", LongType)(exprId = ExprId(3))
+    val aliasesLower = Alias(sum(caseALower), "e")() :: Nil
+    val planLowercase = Aggregate(
+      Nil,
+      aliasesLower,
+      LocalRelation(otherALower))
+
+    assert(planUppercase.canonicalized == planLowercase.canonicalized)
   }
 }
