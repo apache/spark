@@ -146,10 +146,11 @@ owner reference to a pod that is not actually that driver pod, or else the execu
 the wrong pod is terminated.
 
 If your application is not running inside a pod, or if `spark.driver.pod.name` is not set when your application is
-actually running in a pod, keep in mind that the executor pods may not be deleted from the cluster when the application
-exits. The Spark scheduler attempts to delete these pods, but if the network request to the API server fails for any
-reason, these pods will remain in the cluster. The executor processes should exit when they cannot reach the driver, so
-the executor pods should not consume resources in the cluster after your application exits.
+actually running in a pod, keep in mind that the executor pods may not be properly deleted from the cluster when the
+application exits. The Spark scheduler attempts to delete these pods, but if the network request to the API server fails
+for any reason, these pods will remain in the cluster. The executor processes should exit when they cannot reach the
+driver, so the executor pods should not consume compute resources (cpu and memory) in the cluster after your application
+exits.
 
 ### Authentication Parameters
 
