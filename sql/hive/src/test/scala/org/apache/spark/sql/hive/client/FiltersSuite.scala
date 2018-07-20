@@ -72,6 +72,10 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
       (Literal("p2\" and q=\"q2") === a("stringcol", StringType)) :: Nil,
     """stringcol = 'p1" and q="q1' and 'p2" and q="q2' = stringcol""")
 
+  filterTest("SPARK-24879 null literals should be ignored for IN constructs",
+    Seq(a("intcol", IntegerType) in (Literal(1), Literal(null))),
+    "(intcol = 1)")
+
   private def filterTest(name: String, filters: Seq[Expression], result: String) = {
     test(name) {
       withSQLConf(SQLConf.ADVANCED_PARTITION_PREDICATE_PUSHDOWN.key -> "true") {

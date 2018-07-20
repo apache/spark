@@ -606,7 +606,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     object ExtractableLiterals {
       def unapply(exprs: Seq[Expression]): Option[Seq[String]] = {
-        val extractables = exprs.map(ExtractableLiteral.unapply)
+        // SPARK-24879: The Hive filter parser does not support "null", but we still want to push
+        // down as many predicates as we can while still maintaining correctness. "x in (a, b,
+        // null)" can be rewritten as "x in (a, b)" for the purposes of partition pruning, so we
+        // filter out "null" values here to achieve this.
+        val extractables = exprs
+            .filter {
+              case Literal(null, _) => false
+              case _ => true
+            }.map(ExtractableLiteral.unapply)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
