@@ -53,10 +53,12 @@ case class AvroDataToCatalyst(child: Expression, jsonFormatSchema: String)
   }
 
   override def simpleString: String = {
-    s"from_avro(${child.sql}, ${dataType.catalogString})"
+    s"from_avro(${child.sql}, ${dataType.simpleString})"
   }
 
-  override def sql: String = simpleString
+  override def sql: String = {
+    s"from_avro(${child.sql}, ${dataType.catalogString})"
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
