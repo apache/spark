@@ -131,19 +131,19 @@ setup. If you run your driver inside a Kubernetes pod, you can use a
 [headless service](https://kubernetes.io/docs/concepts/services-networking/service/#headless-services) to allow your
 driver pod to be routable from the executors by a stable hostname. When deploying your headless service, ensure that
 the service's label selector will only match the driver pod and no other pods; it is recommended to assign your driver
-pod a sufficiently unique label and to use that label in the node selector of the headless service. Specify the driver's
+pod a sufficiently unique label and to use that label in the label selector of the headless service. Specify the driver's
 hostname via `spark.driver.host` and your spark driver's port to `spark.driver.port`.
 
 ### Client Mode Executor Pod Garbage Collection
 
 If you run your Spark driver in a pod, it is highly recommended to set `spark.driver.pod.name` to the name of that pod.
 When this property is set, the Spark scheduler will deploy the executor pods with an
-[owner reference](https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/), which in turn will
+[OwnerReference](https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/), which in turn will
 ensure that once the driver pod is deleted from the cluster, all of the application's executor pods will also be deleted.
 The driver will look for a pod with the given name in the namespace specified by `spark.kubernetes.namespace`, and
-all executor pods will have their owner reference field set to point to that pod. Be careful to avoid setting the
-owner reference to a pod that is not actually that driver pod, or else the executors may be terminated prematurely when
-the wrong pod is terminated.
+an OwnerReference pointing to that pod will be added to each executor pod's OwnerReferences list. Be careful to avoid
+setting the OwnerReference to a pod that is not actually that driver pod, or else the executors may be terminated
+prematurely when the wrong pod is deleted.
 
 If your application is not running inside a pod, or if `spark.driver.pod.name` is not set when your application is
 actually running in a pod, keep in mind that the executor pods may not be properly deleted from the cluster when the
