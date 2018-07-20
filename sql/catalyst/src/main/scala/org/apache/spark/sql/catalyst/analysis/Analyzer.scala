@@ -2376,9 +2376,12 @@ class Analyzer(
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   // This is actually called in the beginning of the optimization phase, and as a result
-  // is using transformUp rather than resolveOperators.
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child) => child
+  // is using transformUp rather than resolveOperators. This is also often called in the
+  //
+  def apply(plan: LogicalPlan): LogicalPlan = LogicalPlan.allowInvokingTransformsInAnalyzer {
+    plan transformUp {
+      case SubqueryAlias(_, child) => child
+    }
   }
 }
 

@@ -23,20 +23,21 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 
 object LogicalPlan {
-  private val bypassTransformAnalyzerCheckFlag = new ThreadLocal[Int] {
+
+  private val resolveOperatorDepth = new ThreadLocal[Int] {
     override def initialValue(): Int = 0
   }
 
-  def bypassTransformAnalyzerCheck[T](p: => T): T = {
-    bypassTransformAnalyzerCheckFlag.set(bypassTransformAnalyzerCheckFlag.get() + 1)
-    try p finally {
-      bypassTransformAnalyzerCheckFlag.set(bypassTransformAnalyzerCheckFlag.get() - 1)
+  def allowInvokingTransformsInAnalyzer[T](f: => T): T = {
+    resolveOperatorDepth.set(resolveOperatorDepth.get + 1)
+    try f finally {
+      resolveOperatorDepth.set(resolveOperatorDepth.get - 1)
     }
   }
 }
@@ -72,7 +73,7 @@ abstract class LogicalPlan
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {
-      LogicalPlan.bypassTransformAnalyzerCheck {
+      LogicalPlan.allowInvokingTransformsInAnalyzer {
         val afterRuleOnChildren = mapChildren(_.resolveOperators(rule))
         if (this fastEquals afterRuleOnChildren) {
           CurrentOrigin.withOrigin(origin) {
@@ -92,7 +93,7 @@ abstract class LogicalPlan
   /** Similar to [[resolveOperators]], but does it top-down. */
   def resolveOperatorsDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {
-      LogicalPlan.bypassTransformAnalyzerCheck {
+      LogicalPlan.allowInvokingTransformsInAnalyzer {
         val afterRule = CurrentOrigin.withOrigin(origin) {
           rule.applyOrElse(this, identity[LogicalPlan])
         }
@@ -120,7 +121,7 @@ abstract class LogicalPlan
   }
 
   protected def assertNotAnalysisRule(): Unit = {
-    if (Utils.isTesting && LogicalPlan.bypassTransformAnalyzerCheckFlag.get == 0) {
+    if (Utils.isTesting && LogicalPlan.resolveOperatorDepth.get == 0) {
       if (Thread.currentThread.getStackTrace.exists(_.getClassName.contains("Analyzer"))) {
         val e = new RuntimeException("This method should not be called in the analyzer")
         e.printStackTrace()
@@ -129,16 +130,30 @@ abstract class LogicalPlan
     }
   }
 
+  /**
+   * In analyzer, use [[resolveOperatorsDown()]] instead. If this is used in the analyzer,
+   * an exception will be thrown in test mode. It is however OK to call this function within
+   * the scope of a [[resolveOperatorsDown()]] call.
+   * @see [[TreeNode.transformDown()]].
+   */
   override def transformDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     assertNotAnalysisRule()
     super.transformDown(rule)
   }
 
+  /**
+   * Use [[resolveOperators()]] in the analyzer.
+   * @see [[TreeNode.transformUp()]]
+   */
   override def transformUp(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     assertNotAnalysisRule()
     super.transformUp(rule)
   }
 
+  /**
+   * Use [[resolveExpressions()]] in the analyzer.
+   * @see [[QueryPlan.transformAllExpressions()]]
+   */
   override def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     assertNotAnalysisRule()
     super.transformAllExpressions(rule)
