@@ -535,10 +535,8 @@ trait CheckAnalysis extends PredicateHelper {
 
     var foundNonEqualCorrelatedPred: Boolean = false
 
-    // Simplify the predicates before validating any unsupported correlation patterns
-    // in the plan.
-    // TODO(rxin): Why did this need to call BooleanSimplification???
-    sub.foreachUp {
+    // Simplify the predicates before validating any unsupported correlation patterns in the plan.
+    LogicalPlan.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
       // Whitelist operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,
@@ -640,6 +638,6 @@ trait CheckAnalysis extends PredicateHelper {
       // are not allowed to have any correlated expressions.
       case p =>
         failOnOuterReferenceInSubTree(p)
-    }
+    }}
   }
 }
