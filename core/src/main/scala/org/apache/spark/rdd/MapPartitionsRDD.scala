@@ -43,5 +43,5 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     prev = null
   }
 
-  override def isBarrier(): Boolean = isFromBarrier || prev.isBarrier()
+  private[spark] override def isBarrier(): Boolean = isFromBarrier || prev.isBarrier()
 }
