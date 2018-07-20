@@ -120,7 +120,7 @@ select to_json(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query 11 output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got MapType(StringType,IntegerType,false);; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>;; line 1 pos 7
 
 
 -- !query 12
@@ -216,7 +216,7 @@ select from_json('{"a":1}', 'a INT', map('mode', 1))
 struct<>
 -- !query 20 output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got MapType(StringType,IntegerType,false);; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>;; line 1 pos 7
 
 
 -- !query 21

@@ -147,7 +147,7 @@ struct<>
 -- !query 15 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-DecimalType can only support precision up to 38
+decimal can only support precision up to 38
 == SQL ==
 select 1234567890123456789012345678901234567890
 
@@ -159,7 +159,7 @@ struct<>
 -- !query 16 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-DecimalType can only support precision up to 38
+decimal can only support precision up to 38
 == SQL ==
 select 1234567890123456789012345678901234567890.0
 
@@ -379,7 +379,7 @@ struct<>
 -- !query 39 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-DecimalType can only support precision up to 38(line 1, pos 7)
+decimal can only support precision up to 38(line 1, pos 7)
 
 == SQL ==
 select 1.20E-38BD
