@@ -135,7 +135,7 @@ BASEDOCKERFILE=
 PYDOCKERFILE=
 NOCACHEARG=
 BUILD_PARAMS=
-while getopts f:mr:t:n:b: option
+while getopts f:p:mr:t:n:b: option
 do
  case "${option}"
  in
