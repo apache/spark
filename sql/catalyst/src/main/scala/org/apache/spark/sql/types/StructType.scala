@@ -362,19 +362,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
-   * `StructType(Seq(StructField("eventId", IntegerType)))` will be converted to `eventId` INT.
+   * `StructType(Seq(StructField("eventId", IntegerType), StructField("s", StringType)))`
+   * will be converted to `eventId` INT, `s` STRING.
    * The returned DDL schema can be used in a table creation.
    */
-  def toDDL: String = {
-    fields.map { field =>
-      val comment = field
-        .getComment()
-        .map(escapeSingleQuotedString)
-        .map(" COMMENT '" + _ + "'")
-
-      s"${quoteIdentifier(field.name)} ${field.dataType.sql}${comment.getOrElse("")}"
-    }.mkString(",")
-  }
+  def toDDL: String = fields.map(_.toDDL).mkString(",")
 
   private[sql] override def simpleString(maxNumberFields: Int): String = {
     val builder = new StringBuilder
