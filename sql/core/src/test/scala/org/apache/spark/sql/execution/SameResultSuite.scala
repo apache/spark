@@ -65,11 +65,11 @@ class SameResultSuite extends QueryTest with SharedSQLContext {
   test("Canonicalized result is not case-insensitive") {
     val a = AttributeReference("A", IntegerType)()
     val b = AttributeReference("B", IntegerType)()
-    val planUppercase = Project(Seq(a, b), LocalRelation(a))
+    val planUppercase = Project(Seq(a), LocalRelation(a, b))
 
     val c = AttributeReference("a", IntegerType)()
     val d = AttributeReference("b", IntegerType)()
-    val planLowercase = Project(Seq(c, d), LocalRelation(c))
+    val planLowercase = Project(Seq(c), LocalRelation(c, d))
 
     assert(planUppercase.sameResult(planLowercase))
   }
