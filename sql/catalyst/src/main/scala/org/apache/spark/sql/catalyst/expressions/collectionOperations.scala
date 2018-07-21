@@ -21,8 +21,6 @@ import java.util.{Comparator, TimeZone}
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.commons.math3.random.MersenneTwister
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
@@ -1188,9 +1186,6 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
 
 /**
  * Returns a random permutation of the given array.
- *
- * This implementation uses the modern version of Fisher-Yates algorithm.
- * Reference: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#Modern_method
  */
 @ExpressionDescription(
   usage = "_FUNC_(array) - Returns a random permutation of the given array.",
@@ -1215,10 +1210,10 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
 
   @transient lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
-  @transient private[this] var random: MersenneTwister = _
+  @transient private[this] var random: RandomIndicesGenerator = _
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {
-    random = new MersenneTwister(randomSeed.get + partitionIndex)
+    random = RandomIndicesGenerator(randomSeed.get + partitionIndex)
   }
 
   override protected def evalInternal(input: InternalRow): Any = {
@@ -1226,16 +1221,10 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     if (value == null) {
       null
     } else {
-      val arrayData = value.asInstanceOf[ArrayData].toObjectArray(elementType)
-      var k = arrayData.length - 1
-      while (k >= 1) {
-        val l = random.nextInt(k + 1)
-        val element = arrayData(k)
-        arrayData(k) = arrayData(l)
-        arrayData(l) = element
-        k -= 1
-      }
-      new GenericArrayData(arrayData)
+      val source = value.asInstanceOf[ArrayData]
+      val numElements = source.numElements()
+      val indices = random.getNextIndices(numElements)
+      new GenericArrayData(indices.map(source.get(_, elementType)))
     }
   }
 
@@ -1244,7 +1233,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
   }
 
   private def shuffleArrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
-    val randomClass = classOf[MersenneTwister].getName
+    val randomClass = classOf[RandomIndicesGenerator].getName
 
     val rand = ctx.addMutableState(randomClass, "rand", forceInline = true)
     ctx.addPartitionInitializationStatement(
@@ -1252,26 +1241,20 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
 
     val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
 
+    val numElements = ctx.freshName("numElements")
     val arrayData = ctx.freshName("arrayData")
 
     val initialization = if (isPrimitiveType) {
-      s"ArrayData $arrayData = $childName.copy();"
+      ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
     } else {
       val arrayDataClass = classOf[GenericArrayData].getName()
-      val elementTypeTerm = ctx.addReferenceObj("elementType", elementType)
-      s"""
-         |$arrayDataClass $arrayData = new $arrayDataClass(
-         |  $childName.toObjectArray($elementTypeTerm));
-       """.stripMargin
+      s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
     }
 
-    val javaElementType = CodeGenerator.javaType(elementType)
+    val indices = ctx.freshName("indices")
+    val i = ctx.freshName("i")
 
-    val k = ctx.freshName("k")
-    val l = ctx.freshName("l")
-    val valueK = ctx.freshName("valueK")
-    val getValueK = CodeGenerator.getValue(arrayData, elementType, k)
-    val getValueL = CodeGenerator.getValue(arrayData, elementType, l)
+    val getValue = CodeGenerator.getValue(childName, elementType, s"$indices[$i]")
 
     val setFunc = if (isPrimitiveType) {
       s"set${CodeGenerator.primitiveTypeName(elementType)}"
@@ -1279,36 +1262,24 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       "update"
     }
 
-    val swap = if (isPrimitiveType && dataType.asInstanceOf[ArrayType].containsNull) {
+    val assignment = if (isPrimitiveType && dataType.asInstanceOf[ArrayType].containsNull) {
       s"""
-         |if ($arrayData.isNullAt($k)) {
-         |  if (!$arrayData.isNullAt($l)) {
-         |    $arrayData.$setFunc($k, $getValueL);
-         |    $arrayData.setNullAt($l);
-         |  }
+         |if ($childName.isNullAt($indices[$i])) {
+         |  $arrayData.setNullAt($i);
          |} else {
-         |  $javaElementType $valueK = $getValueK;
-         |  if ($arrayData.isNullAt($l)) {
-         |    $arrayData.setNullAt($k);
-         |  } else {
-         |    $arrayData.$setFunc($k, $getValueL);
-         |  }
-         |  $arrayData.$setFunc($l, $valueK);
+         |  $arrayData.$setFunc($i, $getValue);
          |}
        """.stripMargin
     } else {
-      s"""
-         |$javaElementType $valueK = $getValueK;
-         |$arrayData.$setFunc($k, $getValueL);
-         |$arrayData.$setFunc($l, $valueK);
-       """.stripMargin
+      s"$arrayData.$setFunc($i, $getValue);"
     }
 
     s"""
+       |int $numElements = $childName.numElements();
+       |int[] $indices = $rand.getNextIndices($numElements);
        |$initialization
-       |for (int $k = $arrayData.numElements() - 1; $k >= 1; $k--) {
-       |  int $l = $rand.nextInt($k + 1);
-       |  $swap
+       |for (int $i = 0; $i < $numElements; $i++) {
+       |  $assignment
        |}
        |${ev.value} = $arrayData;
      """.stripMargin
