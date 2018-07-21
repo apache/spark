@@ -106,6 +106,10 @@ class JacksonParser(
     val elemConverter = makeConverter(at.elementType)
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, at) {
       case START_ARRAY => Seq(InternalRow(convertArray(parser, elemConverter)))
+      case START_OBJECT if at.elementType.isInstanceOf[StructType] =>
+        val st = at.elementType.asInstanceOf[StructType]
+        val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+        Seq(InternalRow(new GenericArrayData(Seq(convertObject(parser, st, fieldConverters)))))
     }
   }
 

@@ -524,15 +524,6 @@ case class JsonToStructs(
   // can generate incorrect files if values are missing in columns declared as non-nullable.
   val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
 
-  private val caseInsensitiveOptions = CaseInsensitiveMap(options)
-  // The flag allows to specify a schema as an array of structs for an json structs like `{...}`.
-  // For example, if the schema is ArrayType(StructType(...)),
-  // the array type will be unpacked and StructType will be applied to JSON strings.
-  // The behavior is turned on by default.
-  private val unpackArray: Boolean = {
-    caseInsensitiveOptions.get("unpackArray").map(_.toBoolean).getOrElse(true)
-  }
-
   override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
@@ -562,7 +553,6 @@ case class JsonToStructs(
   @transient
   lazy val rowSchema = nullableSchema match {
     case st: StructType => st
-    case ArrayType(st: StructType, _) if unpackArray => st
     case at: ArrayType => at
     case mt: MapType => mt
   }
@@ -572,8 +562,6 @@ case class JsonToStructs(
   lazy val converter = nullableSchema match {
     case _: StructType =>
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
-    case ArrayType(_: StructType, _) if unpackArray =>
-      (rows: Seq[InternalRow]) => new GenericArrayData(rows)
     case _: ArrayType =>
       (rows: Seq[InternalRow]) => rows.head.getArray(0)
     case _: MapType =>
