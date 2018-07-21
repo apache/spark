@@ -36,10 +36,7 @@ case class ProjectionOverSchema(schema: StructType) {
       case a @ AttributeReference(name, _, _, _) if (fieldNames.contains(name)) =>
         Some(a.copy(dataType = schema(name).dataType)(a.exprId, a.qualifier))
       case GetArrayItem(child, arrayItemOrdinal) =>
-        getProjection(child).map {
-          case projection =>
-            GetArrayItem(projection, arrayItemOrdinal)
-        }
+        getProjection(child).map { projection => GetArrayItem(projection, arrayItemOrdinal) }
       case GetArrayStructFields(child, StructField(name, _, _, _), _, numFields, containsNull) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>
@@ -47,10 +44,7 @@ case class ProjectionOverSchema(schema: StructType) {
               projSchema(name), projSchema.fieldIndex(name), projSchema.size, containsNull)
         }
       case GetMapValue(child, key) =>
-        getProjection(child).map {
-          case projection =>
-            GetMapValue(projection, key)
-        }
+        getProjection(child).map { projection => GetMapValue(projection, key) }
       case GetStructFieldObject(child, StructField(name, _, _, _)) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema @ StructType(_)) =>

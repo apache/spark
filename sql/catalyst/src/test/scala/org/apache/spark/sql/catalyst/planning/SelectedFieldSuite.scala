@@ -352,7 +352,7 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
   // defined by the given field
   private def testSelect(selectExpr: String, otherSelectExprs: String*)(expected: StructField) {
     val selectExprs = selectExpr +: otherSelectExprs
-    test(s"SELECT " + selectExprs.map(s => s""""$s"""").mkString(", ") + " should select the schema\n" +
+    test(s"SELECT ${selectExprs.map(s => s""""$s"""").mkString(", ")} should select the schema\n" +
         indent(StructType(expected :: Nil).treeString)) {
       for (selectExpr <- selectExprs) {
         assertSelect(selectExpr, expected)
@@ -383,5 +383,6 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
     SelectedField.unapply(analyzed.expressions.head)
   }
 
+  // Indent every line in `string` by four spaces
   private def indent(string: String) = string.replaceAll("(?m)^", "   ")
 }
