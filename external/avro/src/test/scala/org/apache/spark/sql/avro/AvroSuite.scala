@@ -630,10 +630,21 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
           spark.read.avro(dir.toString)
         } finally {
-          hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)        }
+          hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+        }
       }
     }
 
+    intercept[FileNotFoundException] {
+      withTempPath { dir =>
+        FileUtils.touch(new File(dir, "test"))
+
+        spark
+          .read
+          .option("ignoreExtension", false)
+          .avro(dir.toString)
+      }
+    }
   }
 
   test("SQL test insert overwrite") {
@@ -702,7 +713,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       } finally {
         hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
       }
-
       assert(count == 8)
     }
   }
@@ -836,6 +846,47 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .add("doctor", IntegerType)
       val df2 = spark.read.schema(schema).avro(fileWithoutExtension)
       assert(df2.count == 8)
+    }
+  }
+
+  test("SPARK-24836: checking the ignoreExtension option") {
+    withTempPath { tempDir =>
+      val df = spark.read.avro(episodesAvro)
+      assert(df.count == 8)
+
+      val tempSaveDir = s"$tempDir/save/"
+      df.write.avro(tempSaveDir)
+
+      Files.createFile(new File(tempSaveDir, "non-avro").toPath)
+
+      val newDf = spark
+        .read
+        .option("ignoreExtension", false)
+        .avro(tempSaveDir)
+
+      assert(newDf.count == 8)
+    }
+  }
+
+  test("SPARK-24836: ignoreExtension must override hadoop's config") {
+    withTempDir { dir =>
+      Files.copy(
+        Paths.get(new URL(episodesAvro).toURI),
+        Paths.get(dir.getCanonicalPath, "episodes"))
+
+      val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
+      val count = try {
+        hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+        val newDf = spark
+          .read
+          .option("ignoreExtension", "true")
+          .avro(s"${dir.getCanonicalPath}/episodes")
+        newDf.count()
+      } finally {
+        hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+      }
+
+      assert(count == 8)
     }
   }
 }
