@@ -67,7 +67,7 @@ class OptimizerRuleExclusionSuite extends PlanTest {
         "DummyRuleName"))
   }
 
-  test("Exclude rules from a non-excluable batch") {
+  test("Try to exclude a non-excludable rule") {
     val excludedRules = Seq(
       ReplaceIntersectWithSemiJoin.ruleName,
       PullupCorrelatedPredicates.ruleName)
