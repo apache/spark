@@ -355,7 +355,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("write with compression") {
+  test("write with compression - sql configs") {
     withTempPath { dir =>
       val AVRO_COMPRESSION_CODEC = "spark.sql.avro.compression.codec"
       val AVRO_DEFLATE_LEVEL = "spark.sql.avro.deflate.level"
@@ -887,6 +887,32 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }
 
       assert(count == 8)
+    }
+  }
+
+  test("write with compression - avro options") {
+    withTempPath { dir =>
+      val uncompressDir = s"$dir/uncompress"
+      val deflateDir = s"$dir/deflate"
+      val snappyDir = s"$dir/snappy"
+
+      val df = spark.read.avro(testAvro)
+      df.write
+        .option("compression", "uncompressed")
+        .avro(uncompressDir)
+      df.write
+        .options(Map("compression" -> "deflate", "compressionLevel" -> "9"))
+        .avro(deflateDir)
+      df.write
+        .option("compression", "snappy")
+        .avro(snappyDir)
+
+      val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
+      val deflateSize = FileUtils.sizeOfDirectory(new File(deflateDir))
+      val snappySize = FileUtils.sizeOfDirectory(new File(snappyDir))
+
+      assert(uncompressSize > deflateSize)
+      assert(snappySize > deflateSize)
     }
   }
 }
