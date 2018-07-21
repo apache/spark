@@ -1636,6 +1636,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       df9.selectExpr("array_except(a, b)")
     }
+
+    val df10 = Seq(
+      (Array[Integer](1, 2), Array[Integer](2)),
+      (Array[Integer](1, 2), Array[Integer](1, null)),
+      (Array[Integer](1, null, 3) , Array[Integer](1, 2)),
+      (Array[Integer](1, null), Array[Integer](2, null))
+    ).toDF("a", "b")
+    val result10 = df10.select(array_except($"a", $"b"))
+    val expectedType10 = ArrayType(IntegerType, containsNull = true)
+    assert(result10.first.schema(0).dataType === expectedType10)
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

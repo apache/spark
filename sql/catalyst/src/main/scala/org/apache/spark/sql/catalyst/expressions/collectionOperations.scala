@@ -3972,15 +3972,14 @@ object ArrayUnion {
     without duplicates.
   """,
   examples = """
-    Examples:Fun
+    Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
        array(2)
   """,
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike {
-  override def dataType: DataType = ArrayType(elementType,
-    left.dataType.asInstanceOf[ArrayType].containsNull &&
-      !right.dataType.asInstanceOf[ArrayType].containsNull)
+  override def dataType: DataType =
+    ArrayType(elementType, left.dataType.asInstanceOf[ArrayType].containsNull)
 
   var hsInt: OpenHashSet[Int] = _
   var hsLong: OpenHashSet[Long] = _

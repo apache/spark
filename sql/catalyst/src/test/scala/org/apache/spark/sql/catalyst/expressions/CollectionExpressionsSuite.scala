@@ -1605,7 +1605,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     assert(ArrayExcept(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayExcept(a04, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
-    assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
     assert(ArrayExcept(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
