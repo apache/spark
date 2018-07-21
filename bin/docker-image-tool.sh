@@ -143,7 +143,7 @@ PYDOCKERFILE=
 RDOCKERFILE=
 NOCACHEARG=
 BUILD_PARAMS=
-while getopts f:mr:t:n:p:R:b: option
+while getopts f:p:R:mr:t:n:b: option
 do
  case "${option}"
  in

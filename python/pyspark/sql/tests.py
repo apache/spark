@@ -3595,7 +3595,7 @@ class UDFInitializationTests(unittest.TestCase):
             SparkSession._instantiatedSession.stop()
 
         if SparkContext._active_spark_context is not None:
-            SparkContext._active_spark_contex.stop()
+            SparkContext._active_spark_context.stop()
 
     def test_udf_init_shouldnt_initalize_context(self):
         from pyspark.sql.functions import UserDefinedFunction

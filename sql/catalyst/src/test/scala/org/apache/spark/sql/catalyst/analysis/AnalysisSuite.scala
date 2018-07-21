@@ -575,4 +575,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
+
+  test("SPARK-24488 Generator with multiple aliases") {
+    assertAnalysisSuccess(
+      listRelation.select(Explode('list).as("first_alias").as("second_alias")))
+    assertAnalysisSuccess(
+      listRelation.select(MultiAlias(MultiAlias(
+        PosExplode('list), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
+  }
 }

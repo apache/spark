@@ -442,17 +442,35 @@ class Analyzer(
         child: LogicalPlan): LogicalPlan = {
       val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 
+      // In case of ANSI-SQL compliant syntax for GROUPING SETS, groupByExprs is optional and
+      // can be null. In such case, we derive the groupByExprs from the user supplied values for
+      // grouping sets.
+      val finalGroupByExpressions = if (groupByExprs == Nil) {
+        selectedGroupByExprs.flatten.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
+          // Only unique expressions are included in the group by expressions and is determined
+          // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
+          // in grouping expression (a * b)
+          if (result.find(_.semanticEquals(currentExpr)).isDefined) {
+            result
+          } else {
+            result :+ currentExpr
+          }
+        }
+      } else {
+        groupByExprs
+      }
+
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
       // instead of the original value we need to create new aliases for all group by expressions
       // that will only be used for the intended purpose.
-      val groupByAliases = constructGroupByAlias(groupByExprs)
+      val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
 
       val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 
       val aggregations = constructAggregateExprs(
-        groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
+        finalGroupByExpressions, aggregationExprs, groupByAliases, groupingAttrs, gid)
 
       Aggregate(groupingAttrs, aggregations, expand)
     }
@@ -1642,11 +1660,13 @@ class Analyzer(
       expr.find(_.isInstanceOf[Generator]).isDefined
     }
 
-    private def hasNestedGenerator(expr: NamedExpression): Boolean = expr match {
-      case UnresolvedAlias(_: Generator, _) => false
-      case Alias(_: Generator, _) => false
-      case MultiAlias(_: Generator, _) => false
-      case other => hasGenerator(other)
+    private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      CleanupAliases.trimNonTopLevelAliases(expr) match {
+        case UnresolvedAlias(_: Generator, _) => false
+        case Alias(_: Generator, _) => false
+        case MultiAlias(_: Generator, _) => false
+        case other => hasGenerator(other)
+      }
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
@@ -1687,24 +1707,26 @@ class Analyzer(
         // Holds the resolved generator, if one exists in the project list.
         var resolvedGenerator: Generate = null
 
-        val newProjectList = projectList.flatMap {
-          case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
-            // It's a sanity check, this should not happen as the previous case will throw
-            // exception earlier.
-            assert(resolvedGenerator == null, "More than one generator found in SELECT.")
+        val newProjectList = projectList
+          .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          .flatMap {
+            case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
+              // It's a sanity check, this should not happen as the previous case will throw
+              // exception earlier.
+              assert(resolvedGenerator == null, "More than one generator found in SELECT.")
 
-            resolvedGenerator =
-              Generate(
-                generator,
-                unrequiredChildIndex = Nil,
-                outer = outer,
-                qualifier = None,
-                generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
-                child)
+              resolvedGenerator =
+                Generate(
+                  generator,
+                  unrequiredChildIndex = Nil,
+                  outer = outer,
+                  qualifier = None,
+                  generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
+                  child)
 
-            resolvedGenerator.generatorOutput
-          case other => other :: Nil
-        }
+              resolvedGenerator.generatorOutput
+            case other => other :: Nil
+          }
 
         if (resolvedGenerator != null) {
           Project(newProjectList, resolvedGenerator)
@@ -2273,7 +2295,7 @@ class Analyzer(
                   }
                   expr
                 case other =>
-                  throw new AnalysisException("need an array field but got " + other.simpleString)
+                  throw new AnalysisException("need an array field but got " + other.catalogString)
               }
           }
           validateNestedTupleFields(result)
@@ -2282,8 +2304,8 @@ class Analyzer(
     }
 
     private def fail(schema: StructType, maxOrdinal: Int): Unit = {
-      throw new AnalysisException(s"Try to map ${schema.simpleString} to Tuple${maxOrdinal + 1}, " +
-        "but failed as the number of fields does not line up.")
+      throw new AnalysisException(s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}" +
+        ", but failed as the number of fields does not line up.")
     }
 
     /**
@@ -2362,7 +2384,7 @@ class Analyzer(
         case e => e.sql
       }
       throw new AnalysisException(s"Cannot up cast $fromStr from " +
-        s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
+        s"${from.dataType.catalogString} to ${to.catalogString} as it may truncate\n" +
         "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")
@@ -2415,6 +2437,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
   private def trimAliases(e: Expression): Expression = {
     e.transformDown {
       case Alias(child, _) => child
+      case MultiAlias(child, _) => child
     }
   }
 
@@ -2424,6 +2447,8 @@ object CleanupAliases extends Rule[LogicalPlan] {
         exprId = a.exprId,
         qualifier = a.qualifier,
         explicitMetadata = Some(a.metadata))
+    case a: MultiAlias =>
+      a.copy(child = trimAliases(a.child))
     case other => trimAliases(other)
   }
 
