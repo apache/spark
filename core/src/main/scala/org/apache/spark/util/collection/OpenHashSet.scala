@@ -89,13 +89,9 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   protected var _capacity = nextPowerOf2(initialCapacity)
   protected var _mask = _capacity - 1
   protected var _size = 0
-  protected var _occupied = 0
   protected var _growThreshold = (loadFactor * _capacity).toInt
-  def g: Int = _growThreshold
-  def o: Int = _occupied
 
   protected var _bitset = new BitSet(_capacity)
-  protected var _bitsetDeleted: BitSet = null
 
   def getBitSet: BitSet = _bitset
 
@@ -122,21 +118,6 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     rehashIfNeeded(k, grow, move)
   }
 
-  /**
-   * Remove an element from the set. If an element does not exists in the set, nothing is done.
-   */
-  def remove(k: T): Unit = {
-    if (_bitsetDeleted == null) {
-      _bitsetDeleted = new BitSet(_capacity)
-    }
-    val pos = getPos(k)
-    if (pos != INVALID_POS) {
-      _bitset.unset(pos)
-      _bitsetDeleted.set(pos)
-      _size -= 1
-    }
-  }
-
   def union(other: OpenHashSet[T]): OpenHashSet[T] = {
     val iterator = other.iterator
     while (iterator.hasNext) {
@@ -160,24 +141,19 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     var delta = 1
     while (true) {
       if (!_bitset.get(pos)) {
-        if (_bitsetDeleted == null || !_bitsetDeleted.get(pos)) {
-          // This is a new key.
-          _data(pos) = k
-          _bitset.set(pos)
-          if (_bitsetDeleted != null) {
-            _bitsetDeleted.unset(pos)
-          }
-          _size += 1
-          _occupied += 1
-          return pos | NONEXISTENCE_MASK
-        }
+        // This is a new key.
+        _data(pos) = k
+        _bitset.set(pos)
+        _size += 1
+        return pos | NONEXISTENCE_MASK
       } else if (_data(pos) == k) {
         // Found an existing key.
         return pos
+      } else {
+        // quadratic probing with values increase by 1, 2, 3, ...
+        pos = (pos + delta) & _mask
+        delta += 1
       }
-      // quadratic probing with values increase by 1, 2, 3, ...
-      pos = (pos + delta) & _mask
-      delta += 1
     }
     throw new RuntimeException("Should never reach here.")
   }
@@ -191,7 +167,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
    *                 to a new position (in the new data array).
    */
   def rehashIfNeeded(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
-    if (_occupied > _growThreshold) {
+    if (_size > _growThreshold) {
       rehash(k, allocateFunc, moveFunc)
     }
   }
@@ -204,15 +180,14 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     var delta = 1
     while (true) {
       if (!_bitset.get(pos)) {
-        if (_bitsetDeleted == null || !_bitsetDeleted.get(pos)) {
-          return INVALID_POS
-        }
+        return INVALID_POS
       } else if (k == _data(pos)) {
         return pos
+      } else {
+        // quadratic probing with values increase by 1, 2, 3, ...
+        pos = (pos + delta) & _mask
+        delta += 1
       }
-      // quadratic probing with values increase by 1, 2, 3, ...
-      pos = (pos + delta) & _mask
-      delta += 1
     }
     throw new RuntimeException("Should never reach here.")
   }
@@ -233,7 +208,6 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   /** Return the value at the specified position. */
   def getValueSafe(pos: Int): T = {
     assert(_bitset.get(pos))
-    assert(_bitsetDeleted == null || !_bitsetDeleted.get(pos))
     _data(pos)
   }
 
@@ -289,7 +263,6 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     }
 
     _bitset = newBitset
-    _bitsetDeleted = null
     _data = newData
     _capacity = newCapacity
     _mask = newMask
@@ -303,7 +276,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
 
   private def nextPowerOf2(n: Int): Int = {
     if (n == 0) {
-      1
+      2
     } else {
       val highBit = Integer.highestOneBit(n)
       if (highBit == n) n else highBit << 1

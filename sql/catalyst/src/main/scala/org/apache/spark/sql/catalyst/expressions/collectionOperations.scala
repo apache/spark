@@ -3981,19 +3981,21 @@ object ArrayUnion {
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetLike {
   override def dataType: DataType = ArrayType(elementType,
-    left.dataType.asInstanceOf[ArrayType].containsNull &&
+    left.dataType.asInstanceOf[ArrayType].containsNull ||
       right.dataType.asInstanceOf[ArrayType].containsNull)
 
   var hsInt: OpenHashSet[Int] = _
+  var hsResultInt: OpenHashSet[Int] = _
   var hsLong: OpenHashSet[Long] = _
+  var hsResultLong: OpenHashSet[Long] = _
 
   def assignInt(array: ArrayData, idx: Int, resultArray: ArrayData, pos: Int): Boolean = {
     val elem = array.getInt(idx)
-    if (hsInt.contains(elem)) {
+    if (hsInt.contains(elem) && !hsResultInt.contains(elem)) {
       if (resultArray != null) {
         resultArray.setInt(pos, elem)
       }
-      hsInt.remove(elem)
+      hsResultInt.add(elem)
       true
     } else {
       false
@@ -4002,11 +4004,11 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
 
   def assignLong(array: ArrayData, idx: Int, resultArray: ArrayData, pos: Int): Boolean = {
     val elem = array.getLong(idx)
-    if (hsLong.contains(elem)) {
+    if (hsLong.contains(elem) && !hsResultLong.contains(elem)) {
       if (resultArray != null) {
         resultArray.setLong(pos, elem)
       }
-      hsLong.remove(elem)
+      hsResultLong.add(elem)
       true
     } else {
       false
@@ -4017,32 +4019,37 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
       array1: ArrayData,
       array2: ArrayData,
       resultArray: ArrayData,
-      isLongType: Boolean): Int = {
+      initFoundNullElement: Boolean,
+      isLongType: Boolean): (Int, Boolean) = {
     // store elements into resultArray
-    var foundNullElement = false
     var i = 0
-    while (i < array1.numElements()) {
-      if (array1.isNullAt(i)) {
-        foundNullElement = true
-      } else {
-        val assigned = if (!isLongType) {
-          hsInt.add(array1.getInt(i))
+    var foundNullElement = initFoundNullElement
+    if (resultArray == null) {
+      // hsInt or hsLong is updated only once since it is not changed
+      while (i < array1.numElements()) {
+        if (array1.isNullAt(i)) {
+          foundNullElement = true
         } else {
-          hsLong.add(array1.getLong(i))
+          val assigned = if (!isLongType) {
+            hsInt.add(array1.getInt(i))
+          } else {
+            hsLong.add(array1.getLong(i))
+          }
         }
+        i += 1
       }
-      i += 1
     }
     var pos = 0
     i = 0
+    var foundNullElementForResult = foundNullElement
     while (i < array2.numElements()) {
       if (array2.isNullAt(i)) {
-        if (foundNullElement) {
+        if (foundNullElementForResult) {
           if (resultArray != null) {
             resultArray.setNullAt(pos)
           }
           pos += 1
-          foundNullElement = false
+          foundNullElementForResult = false
         }
       } else {
         val assigned = if (!isLongType) {
@@ -4056,7 +4063,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
       }
       i += 1
     }
-    pos
+    (pos, foundNullElement)
   }
 
   override def nullSafeEval(input1: Any, input2: Any): Any = {
@@ -4069,9 +4076,11 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
           // avoid boxing of primitive int array elements
           // calculate result array size
           hsInt = new OpenHashSet[Int]
-          val elements = evalIntLongPrimitiveType(array1, array2, null, false)
+          hsResultInt = new OpenHashSet[Int]
+          val (elements, foundNullElement) =
+            evalIntLongPrimitiveType(array1, array2, null, false, false)
           // allocate result array
-          hsInt = new OpenHashSet[Int]
+          hsResultInt = new OpenHashSet[Int]
           val resultArray = if (UnsafeArrayData.shouldUseGenericArrayData(
             IntegerType.defaultSize, elements)) {
             new GenericArrayData(new Array[Any](elements))
@@ -4080,15 +4089,17 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
               Platform.INT_ARRAY_OFFSET, elements, IntegerType.defaultSize)
           }
           // assign elements into the result array
-          evalIntLongPrimitiveType(array1, array2, resultArray, false)
+          evalIntLongPrimitiveType(array1, array2, resultArray, foundNullElement, false)
           resultArray
         case LongType =>
           // avoid boxing of primitive long array elements
           // calculate result array size
           hsLong = new OpenHashSet[Long]
-          val elements = evalIntLongPrimitiveType(array1, array2, null, true)
+          hsResultLong = new OpenHashSet[Long]
+          val (elements, foundNullElement) =
+            evalIntLongPrimitiveType(array1, array2, null, false, true)
           // allocate result array
-          hsLong = new OpenHashSet[Long]
+          hsResultLong = new OpenHashSet[Long]
           val resultArray = if (UnsafeArrayData.shouldUseGenericArrayData(
             LongType.defaultSize, elements)) {
             new GenericArrayData(new Array[Any](elements))
@@ -4097,10 +4108,11 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
               Platform.LONG_ARRAY_OFFSET, elements, LongType.defaultSize)
           }
           // assign elements into the result array
-          evalIntLongPrimitiveType(array1, array2, resultArray, true)
+          evalIntLongPrimitiveType(array1, array2, resultArray, foundNullElement, true)
           resultArray
         case _ =>
           val hs = new OpenHashSet[Any]
+          val hsResult = new OpenHashSet[Any]
           var foundNullElement = false
           var i = 0
           while (i < array1.numElements()) {
@@ -4122,9 +4134,9 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
               }
             } else {
               val elem = array2.get(i, elementType)
-              if (hs.contains(elem)) {
+              if (hs.contains(elem) && !hsResult.contains(elem)) {
                 arrayBuffer += elem
-                hs.remove(elem)
+                hsResult.add(elem)
               }
             }
             i += 1
@@ -4170,15 +4182,18 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
       if (openHashElementType != "") {
         // Here, we ensure elementTypeSupportEquals is true
         val foundNullElement = ctx.freshName("foundNullElement")
+        val foundNullElementForSize = ctx.freshName("foundNullElementForSize")
         val openHashSet = classOf[OpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$openHashElementType()"
         val hs = ctx.freshName("hs")
+        val hsResult = ctx.freshName("hsResult")
         val arrayData = classOf[ArrayData].getName
         val arrays = ctx.freshName("arrays")
         val array = ctx.freshName("array")
         val arrayDataIdx = ctx.freshName("arrayDataIdx")
         s"""
            |$openHashSet $hs = new $openHashSet$postFix($classTag);
+           |$openHashSet $hsResult = new $openHashSet$postFix($classTag);
            |boolean $foundNullElement = false;
            |int $size = 0;
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
@@ -4188,31 +4203,24 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
            |    $hs.add$postFix($array1.$getter);
            |  }
            |}
+           |boolean $foundNullElementForSize = $foundNullElement;
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
            |  if ($array2.isNullAt($i)) {
-           |    if ($foundNullElement) {
+           |    if ($foundNullElementForSize) {
            |      $size++;
-           |      $foundNullElement = false;
+           |      $foundNullElementForSize = false;
            |    }
            |  } else {
            |    $javaTypeName $value = $array2.$getter;
-           |    if ($hs.contains($castOp $value)) {
-           |      $hs.remove$postFix($value);
+           |    if ($hs.contains($castOp $value) && !$hsResult.contains($castOp $value)) {
+           |      $hsResult.add$postFix($value);
            |      $size++;
            |    }
            |  }
            |}
            |$arrayBuilder
-           |$hs = new $openHashSet$postFix($classTag);
-           |$foundNullElement = false;
+           |$hsResult = new $openHashSet$postFix($classTag);
            |int $pos = 0;
-           |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  if ($array1.isNullAt($i)) {
-           |    $foundNullElement = true;
-           |  } else {
-           |    $hs.add$postFix($array1.$getter);
-           |  }
-           |}
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
            |  if ($array2.isNullAt($i)) {
            |    if ($foundNullElement) {
@@ -4221,8 +4229,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
            |    }
            |  } else {
            |    $javaTypeName $value = $array2.$getter;
-           |    if ($hs.contains($castOp $value)) {
-           |      $hs.remove$postFix($value);
+           |    if ($hs.contains($castOp $value) && !$hsResult.contains($castOp $value)) {
+           |      $hsResult.add$postFix($value);
            |      ${ev.value}.$setter;
            |      $pos++;
            |    }

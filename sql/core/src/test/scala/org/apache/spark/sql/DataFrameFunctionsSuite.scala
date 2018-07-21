@@ -1699,6 +1699,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       df8.selectExpr("array_intersect(a, b)")
     }
+
+    val df9 = Seq(
+      (Array[Integer](1, 2), Array[Integer](2)),
+      (Array[Integer](1, 2), Array[Integer](1, null)),
+      (Array[Integer](1, null, 3), Array[Integer](1, 2)),
+      (Array[Integer](1, null), Array[Integer](2, null))
+    ).toDF("a", "b")
+    val result9 = df9.select(array_intersect($"a", $"b"))
+    val expectedType9 = ArrayType(IntegerType, containsNull = true)
+    assert(result9.first.schema(0).dataType === expectedType9)
   }
 
   test("transform function - array for primitive type not containing null") {
