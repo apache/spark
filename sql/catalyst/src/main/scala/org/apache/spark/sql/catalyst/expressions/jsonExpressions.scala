@@ -550,13 +550,6 @@ case class JsonToStructs(
       s"Input schema ${nullableSchema.catalogString} must be a struct or an array of structs.")
   }
 
-  @transient
-  lazy val rowSchema = nullableSchema match {
-    case st: StructType => st
-    case at: ArrayType => at
-    case mt: MapType => mt
-  }
-
   // This converts parsed rows to the desired output by the given schema.
   @transient
   lazy val converter = nullableSchema match {
@@ -571,7 +564,7 @@ case class JsonToStructs(
   @transient
   lazy val parser =
     new JacksonParser(
-      rowSchema,
+      nullableSchema,
       new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
 
   override def dataType: DataType = nullableSchema
