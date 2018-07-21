@@ -28,6 +28,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.execution.datasources.InMemoryFileIndex
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.SessionState
 
 
@@ -60,9 +61,8 @@ object CommandUtils extends Logging {
       val pathFilter = new PathFilter with Serializable {
         override def accept(path: Path): Boolean = {
           val fileName = path.getName
-          (!fileName.startsWith(stagingDir) &&
-            // Ignore metadata files starting with "_"
-            !fileName.startsWith("_"))
+          (// Ignore metadata files starting with "_"
+            DataSourceV2Utils.isDataPath(path) && !fileName.startsWith(stagingDir))
         }
       }
       val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,

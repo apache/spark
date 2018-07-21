@@ -27,6 +27,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
@@ -59,14 +60,15 @@ abstract class PartitioningAwareFileIndex(
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      PartitionDirectory(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
+      PartitionDirectory(InternalRow.empty,
+        allFiles().filter(f => DataSourceV2Utils.isDataPath(f.getPath))) :: Nil
     } else {
       prunePartitions(partitionFilters, partitionSpec()).map {
         case PartitionPath(values, path) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filter(f => isDataPath(f.getPath))
+              existingDir.filter(f => DataSourceV2Utils.isDataPath(f.getPath))
 
             case None =>
               // Directory does not exist, or has no children files
@@ -120,7 +122,7 @@ abstract class PartitioningAwareFileIndex(
   protected def inferPartitioning(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
-      files.exists(f => isDataPath(f.getPath))
+      files.exists(f => DataSourceV2Utils.isDataPath(f.getPath))
     }.keys.toSeq
 
     val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
@@ -225,13 +227,6 @@ abstract class PartitioningAwareFileIndex(
           val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
           if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
     }
-  }
-
-  // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
-  // counted as data files, so that they shouldn't participate partition discovery.
-  private def isDataPath(path: Path): Boolean = {
-    val name = path.getName
-    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
   }
 
   /**
