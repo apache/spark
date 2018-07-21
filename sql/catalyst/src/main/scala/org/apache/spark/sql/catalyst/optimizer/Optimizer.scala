@@ -160,12 +160,24 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       UpdateNullabilityInAttributeReferences)
   }
 
-  def nonExcludableBatches: Seq[String] =
-    "Eliminate Distinct" ::
-      "Finish Analysis" ::
-      "Replace Operators" ::
-      "Pullup Correlated Expressions" ::
-      "RewriteSubquery" :: Nil
+  def nonExcludableRules: Seq[String] =
+    EliminateDistinct.ruleName ::
+      EliminateSubqueryAliases.ruleName ::
+      EliminateView.ruleName ::
+      ReplaceExpressions.ruleName ::
+      ComputeCurrentTime.ruleName ::
+      GetCurrentDatabase(sessionCatalog).ruleName ::
+      RewriteDistinctAggregates.ruleName ::
+      ReplaceDeduplicateWithAggregate.ruleName ::
+      ReplaceIntersectWithSemiJoin.ruleName ::
+      ReplaceExceptWithFilter.ruleName ::
+      ReplaceExceptWithAntiJoin.ruleName ::
+      ReplaceDistinctWithAggregate.ruleName ::
+      PullupCorrelatedPredicates.ruleName ::
+      RewritePredicateSubquery.ruleName ::
+      ColumnPruning.ruleName ::
+      CollapseProject.ruleName ::
+      RemoveRedundantProject.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -184,38 +196,35 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
 
   override def batches: Seq[Batch] = {
-    val excludedRules =
-      SQLConf.get.optimizerExcludedRules.toSeq.flatMap(_.split(",").map(_.trim).filter(!_.isEmpty))
+    val excludedRulesConf =
+      SQLConf.get.optimizerExcludedRules.toSeq.flatMap(_.split(",").map(_.trim).filter(_.nonEmpty))
+    val excludedRules = excludedRulesConf.filter { ruleName =>
+      val nonExcludable = nonExcludableRules.contains(ruleName)
+      if (nonExcludable) {
+        logWarning(s"Optimization rule '${ruleName}' was not excluded from the optimizer " +
+          s"because this rule is a non-excludable rule.")
+      }
+      !nonExcludable
+    }
     if (excludedRules.isEmpty) {
       defaultBatches
     } else {
       defaultBatches.flatMap { batch =>
-        if (nonExcludableBatches.contains(batch.name)) {
-          batch.rules.foreach { rule =>
-            if (excludedRules.contains(rule.ruleName)) {
-              logWarning(s"Optimization rule '${rule.ruleName}' cannot be excluded from the " +
-                s"non-excludable batch ${batch.name}.")
-            }
+        val filteredRules = batch.rules.filter { rule =>
+          val exclude = excludedRules.contains(rule.ruleName)
+          if (exclude) {
+            logInfo(s"Optimization rule '${rule.ruleName}' is excluded from the optimizer.")
           }
+          !exclude
+        }
+        if (batch.rules == filteredRules) {
           Some(batch)
+        } else if (filteredRules.nonEmpty) {
+          Some(Batch(batch.name, batch.strategy, filteredRules: _*))
         } else {
-          val filteredRules =
-            batch.rules.filter { rule =>
-              val exclude = excludedRules.contains(rule.ruleName)
-              if (exclude) {
-                logInfo(s"Optimization rule '${rule.ruleName}' is excluded from the optimizer.")
-              }
-              !exclude
-            }
-          if (batch.rules == filteredRules) {
-            Some(batch)
-          } else if (filteredRules.nonEmpty) {
-            Some(Batch(batch.name, batch.strategy, filteredRules: _*))
-          } else {
-            logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
-              s"as all enclosed rules have been excluded.")
-            None
-          }
+          logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
+            s"as all enclosed rules have been excluded.")
+          None
         }
       }
     }
