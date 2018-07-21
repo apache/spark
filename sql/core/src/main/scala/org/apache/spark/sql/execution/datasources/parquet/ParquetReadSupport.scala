@@ -47,25 +47,16 @@ import org.apache.spark.sql.types._
  *
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
- *
- * @param parquetMrCompatibility support reading with parquet-mr or Spark's built-in Parquet reader
  */
-private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
-    parquetMrCompatibility: Boolean)
+private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
     extends ReadSupport[UnsafeRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
-  /**
-   * Construct a [[ParquetReadSupport]] with [[convertTz]] set to [[None]] and
-   * [[parquetMrCompatibility]] set to [[false]].
-   *
-   * We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
-   * used in the vectorized reader, where we get the convertTz value directly, and the value here
-   * is ignored. Further, we set [[parquetMrCompatibility]] to [[false]] as this constructor is only
-   * called by the Spark reader.
-   */
   def this() {
-    this(None, false)
+    // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
+    // used in the vectorized reader, where we get the convertTz value directly, and the value here
+    // is ignored.
+    this(None)
   }
 
   /**
@@ -80,21 +71,8 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
       StructType.fromString(schemaString)
     }
 
-    val clippedParquetSchema =
+    val parquetRequestedSchema =
       ParquetReadSupport.clipParquetSchema(context.getFileSchema, catalystRequestedSchema)
-
-    val parquetRequestedSchema = if (parquetMrCompatibility) {
-      // Parquet-mr will throw an exception if we try to read a superset of the file's schema.
-      // Therefore, we intersect our clipped schema with the underlying file's schema
-      ParquetReadSupport.intersectParquetGroups(clippedParquetSchema, context.getFileSchema)
-        .map(intersectionGroup =>
-          new MessageType(intersectionGroup.getName, intersectionGroup.getFields))
-        .getOrElse(ParquetSchemaConverter.EMPTY_MESSAGE)
-    } else {
-      // Spark's built-in Parquet reader will throw an exception in some cases if the requested
-      // schema is not the same as the clipped schema
-      clippedParquetSchema
-    }
 
     new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
   }
@@ -118,7 +96,7 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
          |Parquet form:
          |$parquetRequestedSchema
          |Catalyst form:
-         |${catalystRequestedSchema.prettyJson}
+         |$catalystRequestedSchema
        """.stripMargin
     }
 
@@ -307,27 +285,6 @@ private[parquet] object ParquetReadSupport {
         .get(f.name)
         .map(clipParquetType(_, f.dataType))
         .getOrElse(toParquet.convertField(f))
-    }
-  }
-
-  /**
-   * Computes the structural intersection between two Parquet group types.
-   */
-  private def intersectParquetGroups(
-      groupType1: GroupType, groupType2: GroupType): Option[GroupType] = {
-    val fields =
-      groupType1.getFields.asScala
-        .filter(field => groupType2.containsField(field.getName))
-        .flatMap {
-          case field1: GroupType =>
-            intersectParquetGroups(field1, groupType2.getType(field1.getName).asGroupType)
-          case field1 => Some(field1)
-        }
-
-    if (fields.nonEmpty) {
-      Some(groupType1.withNewFields(fields.asJava))
-    } else {
-      None
     }
   }
 
