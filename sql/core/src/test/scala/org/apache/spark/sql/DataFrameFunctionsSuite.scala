@@ -1640,7 +1640,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df10 = Seq(
       (Array[Integer](1, 2), Array[Integer](2)),
       (Array[Integer](1, 2), Array[Integer](1, null)),
-      (Array[Integer](1, null, 3) , Array[Integer](1, 2)),
+      (Array[Integer](1, null, 3), Array[Integer](1, 2)),
       (Array[Integer](1, null), Array[Integer](2, null))
     ).toDF("a", "b")
     val result10 = df10.select(array_except($"a", $"b"))
