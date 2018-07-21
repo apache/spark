@@ -1,0 +1,31 @@
+{
+  "name": "MultipleRecordTypesUnion",
+  "namespace": "com.apple.siri.loggingSchemas.schemas",
+  "type": "record",
+  "fields": [
+    {
+          "name": "testField",
+          "type": [
+            {
+                "type": "record",
+                "name": "MulitpleRecordTypesUnionRecord1",
+                "namespace": "com.apple.siri.loggingSchemas.schemas",
+                "fields": [
+                    { "name": "requiredField", "type": "string" },
+                    { "name": "optionalField", "type": [ "null", "string" ], "default": null }
+                ]
+            },
+            {
+                "type": "record",
+                "name": "MulitpleRecordTypesUnionRecord2",
+                "namespace": "com.apple.siri.loggingSchemas.schemas",
+                "fields": [
+                    { "name": "requiredField", "type": "long" },
+                    { "name": "optionalField", "type": [ "null", "long" ], "default": null }
+                ]
+            }
+          ]
+        }
+  ]
+}
+

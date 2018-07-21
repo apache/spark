@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "episodes",
+  "namespace": "testing.hive.avro.serde",
+  "fields": [
+    {
+      "name": "title",
+      "type": "string",
+      "doc": "episode title"
+    },
+    {
+      "name": "air_date",
+      "type": "string",
+      "doc": "initial date"
+    },
+    {
+      "name": "doctor",
+      "type": "int",
+      "doc": "main actor playing the Doctor in episode"
+    }
+  ]
+}

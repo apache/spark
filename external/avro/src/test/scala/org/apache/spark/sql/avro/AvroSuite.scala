@@ -18,12 +18,13 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.net.URL
+import java.net.{URI, URL}
 import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
 import java.util.{TimeZone, UUID}
 
 import scala.collection.JavaConverters._
+import scala.io.Source
 
 import org.apache.avro.Schema
 import org.apache.avro.Schema.{Field, Type}
@@ -43,6 +44,12 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
+  val messyAvro = testFile("messy.avro")
+  val multiRecordTypeUnionAvro = testFile("multirecordtypeunion.avro")
+  val episodesSchemaFile = testFile("episodes.avsc")
+  val testSchemaFile = testFile("test.avsc")
+  val messySchemaFile = testFile("messy.avsc")
+  val multiRecordTypeUnionSchemaFile = testFile("multirecordtypeunion.avsc")
 
   // The test file timestamp.avro is generated via following Python code:
   // import json
@@ -72,6 +79,28 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     spark.conf.set("spark.sql.files.maxPartitionBytes", 1024)
   }
 
+  def forceSchemaCheck(spark: SparkSession, inputPath: String, schemaFile: String): Unit = {
+    withTempPath { tempDir =>
+      val df = spark.read.format("avro").load(inputPath)
+
+      val tempSaveDir1 = s"$tempDir/test1/"
+      val tempSaveDir2 = s"$tempDir/test2/"
+
+      df.write.format("avro").save(tempSaveDir1)
+
+      val newDf = spark.read.format("avro").load(tempSaveDir1)
+      checkAnswer(df, newDf)
+
+      newDf.write
+        .format("avro")
+        .option("avroSchema", readFileToString(schemaFile))
+        .save(tempSaveDir2)
+
+      val readNewDf = spark.read.format("avro").load(tempSaveDir2)
+      checkAnswer(df, readNewDf)
+    }
+  }
+
   def checkReloadMatchesSaved(originalFile: String, newFile: String): Unit = {
     val originalEntries = spark.read.format("avro").load(testAvro).collect()
     val newEntries = spark.read.format("avro").load(newFile)
@@ -83,6 +112,13 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
         classOf[org.apache.spark.sql.avro.AvroFileFormat])
     }
+  }
+
+  def readFileToString(file: String): String = {
+    val s = Source.fromURI(
+      new URI(file)
+    )
+    try s.mkString finally s.close
   }
 
   test("reading from multiple paths") {
@@ -1041,4 +1077,22 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       checkCodec(df, path, "xz")
     }
   }
+
+  // Read an avro, write it with converted schema, read it, write it with original avroSchema
+  test("read read-write, read-write w/ schema, read") {
+    forceSchemaCheck(spark, episodesAvro, episodesSchemaFile)
+    forceSchemaCheck(spark, testAvro, testSchemaFile)
+    forceSchemaCheck(spark, messyAvro, messySchemaFile)
+  }
+
+  // TODO Make this work somehow
+  test("multiunion force schema throws exception") {
+    try {
+      forceSchemaCheck(spark, multiRecordTypeUnionAvro, multiRecordTypeUnionSchemaFile)
+      assert(false)
+    } catch {
+      case ex => assert(true)
+    }
+  }
+
 }

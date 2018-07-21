@@ -1,0 +1,140 @@
+{
+  "type": "record",
+  "name": "MessyRecord",
+  "namespace": "foo.bar.baz",
+  "doc": "This record encapsulates many failure cases for forceSchema support",
+  "fields": [
+    {
+      "name": "someEnumField",
+      "type": {
+        "type": "enum",
+        "name": "someEnum",
+        "symbols": [
+          "string1",
+          "string2",
+          "string3"
+        ]
+      }
+    },
+    {
+      "name": "someString",
+      "type": "string"
+    },
+    {
+      "name": "someArrayOfStrings",
+      "type": "string"
+    },
+    {
+      "name": "someNullUnionString",
+      "doc": "Make sure null/type unions resolve back correctly",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "someRecordField",
+      "doc": "Field contains a record (or null) with crazy nested stuff",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "someRecord",
+          "fields": [
+            {
+              "name": "someSubRecordField",
+              "type": {
+                "type": "record",
+                "name": "someSubRecords",
+                "fields": [
+                  {
+                    "name": "someSubRecordsField",
+                    "type": {
+                      "type": "array",
+                      "items": {
+                        "type": "record",
+                        "name": "someSubSubRecords",
+                        "fields": [
+                          {
+                            "name": "notQuiteDeepEnoughRecordsField",
+                            "type": {
+                              "type": "array",
+                              "items": {
+                                "type": "record",
+                                "name": "notQuiteDeepEnoughRecord",
+                                "fields": [
+                                  {
+                                    "name": "notQuiteDeepEnoughRecords",
+                                    "type": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "record",
+                                        "name": "okDeepEnoughRecord",
+                                        "fields": [
+                                          {
+                                            "name": "someReallyDeepString",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "name": "someReallyDeepInt",
+                                            "type": "int"
+                                          },
+                                          {
+                                            "name": "someReallyDeepBooleanWithDefault",
+                                            "type": "boolean",
+                                            "default": false
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "default": null
+    },
+    {
+      "name": "someIntWithDefault",
+      "type": "int",
+      "default": 0
+    },
+    {
+      "name": "someFloatWithDefault",
+      "type": "float",
+      "default": 3.14159
+    },
+    {
+      "name": "someLongWithDefault",
+      "type": "long",
+      "default": 9999999999999
+    },
+    {
+      "name": "someDoubleWithDefault",
+      "type": "double",
+      "default": 3.141592654
+    },
+    {
+      "name": "someStringMap",
+      "doc": "This will make sure order: ignore is preseved, null values are defaulted, etc.",
+      "type": {
+        "type": "map",
+        "values": "string"
+      },
+      "order": "ignore",
+      "default": {
+      }
+    }
+  ]
+}
+
