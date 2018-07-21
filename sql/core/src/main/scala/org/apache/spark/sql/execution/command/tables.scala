@@ -982,7 +982,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showHiveTableHeader(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.filterNot { column =>
       metadata.partitionColumnNames.contains(column.name)
-    }.map(columnToDDLFragment)
+    }.map(_.toDDL)
 
     if (columns.nonEmpty) {
       builder ++= columns.mkString("(", ", ", ")\n")
@@ -994,14 +994,10 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       .foreach(builder.append)
   }
 
-  private def columnToDDLFragment(column: StructField): String = {
-    val comment = column.getComment().map(escapeSingleQuotedString).map(" COMMENT '" + _ + "'")
-    s"${quoteIdentifier(column.name)} ${column.dataType.catalogString}${comment.getOrElse("")}"
-  }
 
   private def showHiveTableNonDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.partitionColumnNames.nonEmpty) {
-      val partCols = metadata.partitionSchema.map(columnToDDLFragment)
+      val partCols = metadata.partitionSchema.map(_.toDDL)
       builder ++= partCols.mkString("PARTITIONED BY (", ", ", ")\n")
     }
 
