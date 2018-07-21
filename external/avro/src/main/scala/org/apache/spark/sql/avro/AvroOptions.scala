@@ -21,16 +21,18 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
  */
 class AvroOptions(
     @transient val parameters: CaseInsensitiveMap[String],
-    @transient val conf: Configuration) extends Logging with Serializable {
+    @transient val conf: Configuration,
+    @transient val sqlConf: SQLConf) extends Logging with Serializable {
 
-  def this(parameters: Map[String, String], conf: Configuration) = {
-    this(CaseInsensitiveMap(parameters), conf)
+  def this(parameters: Map[String, String], conf: Configuration, sqlConf: SQLConf) = {
+    this(CaseInsensitiveMap(parameters), conf, sqlConf)
   }
 
   /**
@@ -67,5 +69,25 @@ class AvroOptions(
       .get("ignoreExtension")
       .map(_.toBoolean)
       .getOrElse(!ignoreFilesWithoutExtension)
+  }
+
+  /**
+   * The `compression` option allows to specify a compression codec used in write.
+   * Currently supported codecs are `uncompressed`, `snappy` and `deflate`.
+   * If the option is not set, the `snappy` compression is used by default.
+   */
+  val compression: String = parameters.get("compression").getOrElse(sqlConf.avroCompressionCodec)
+
+
+  /**
+   * Level of compression in the range of 1..9 inclusive. 1 - for fast, 9 - for best compression.
+   * If the compression level is not set for `deflate` compression, the current value of SQL
+   * config `spark.sql.avro.deflate.level` is used by default. For other compressions, the default
+   * value is `6`.
+   */
+  val compressionLevel: Int = {
+    parameters.get("compressionLevel").map(_.toInt).getOrElse {
+      if (compression.toLowerCase == "deflate") sqlConf.avroDeflateLevel else 6
+    }
   }
 }

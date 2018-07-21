@@ -1422,6 +1422,17 @@ object SQLConf {
       "This only takes effect when spark.sql.repl.eagerEval.enabled is set to true.")
     .intConf
     .createWithDefault(20)
+
+  val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
+    .doc("Compression codec used in writing of AVRO files.")
+    .stringConf
+    .createWithDefault("snappy")
+
+  val AVRO_DEFLATE_LEVEL = buildConf("spark.sql.avro.deflate.level")
+    .doc("Compression level for the deflate codec used in writing of AVRO files. " +
+      "Valid value must be in the range of from 1 to 9 inclusive. Default value is 6.")
+    .intConf
+    .createWithDefault(6)
 }
 
 /**
@@ -1805,6 +1816,10 @@ class SQLConf extends Serializable with Logging {
   def replEagerEvalMaxNumRows: Int = getConf(SQLConf.REPL_EAGER_EVAL_MAX_NUM_ROWS)
 
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
+
+  def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
+
+  def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
 
   /** ********************** SQLConf functionality methods ************ */
 
