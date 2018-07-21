@@ -442,17 +442,35 @@ class Analyzer(
         child: LogicalPlan): LogicalPlan = {
       val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 
+      // In case of ANSI-SQL compliant syntax for GROUPING SETS, groupByExprs is optional and
+      // can be null. In such case, we derive the groupByExprs from the user supplied values for
+      // grouping sets.
+      val finalGroupByExpressions = if (groupByExprs == Nil) {
+        selectedGroupByExprs.flatten.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
+          // Only unique expressions are included in the group by expressions and is determined
+          // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
+          // in grouping expression (a * b)
+          if (result.find(_.semanticEquals(currentExpr)).isDefined) {
+            result
+          } else {
+            result :+ currentExpr
+          }
+        }
+      } else {
+        groupByExprs
+      }
+
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
       // instead of the original value we need to create new aliases for all group by expressions
       // that will only be used for the intended purpose.
-      val groupByAliases = constructGroupByAlias(groupByExprs)
+      val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
 
       val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 
       val aggregations = constructAggregateExprs(
-        groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
+        finalGroupByExpressions, aggregationExprs, groupByAliases, groupingAttrs, gid)
 
       Aggregate(groupingAttrs, aggregations, expand)
     }
@@ -509,17 +527,39 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case p: Pivot if !p.childrenResolved || !p.aggregates.forall(_.resolved)
         || (p.groupByExprsOpt.isDefined && !p.groupByExprsOpt.get.forall(_.resolved))
-        || !p.pivotColumn.resolved => p
+        || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
       case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         // Check all aggregate expressions.
         aggregates.foreach(checkValidAggregateExpression)
+        // Check all pivot values are literal and match pivot column data type.
+        val evalPivotValues = pivotValues.map { value =>
+          val foldable = value match {
+            case Alias(v, _) => v.foldable
+            case _ => value.foldable
+          }
+          if (!foldable) {
+            throw new AnalysisException(
+              s"Literal expressions required for pivot values, found '$value'")
+          }
+          if (!Cast.canCast(value.dataType, pivotColumn.dataType)) {
+            throw new AnalysisException(s"Invalid pivot value '$value': " +
+              s"value data type ${value.dataType.simpleString} does not match " +
+              s"pivot column data type ${pivotColumn.dataType.catalogString}")
+          }
+          Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
+        }
         // Group-by expressions coming from SQL are implicit and need to be deduced.
         val groupByExprs = groupByExprsOpt.getOrElse(
           (child.outputSet -- aggregates.flatMap(_.references) -- pivotColumn.references).toSeq)
         val singleAgg = aggregates.size == 1
-        def outputName(value: Literal, aggregate: Expression): String = {
-          val utf8Value = Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
-          val stringValue: String = Option(utf8Value).map(_.toString).getOrElse("null")
+        def outputName(value: Expression, aggregate: Expression): String = {
+          val stringValue = value match {
+            case n: NamedExpression => n.name
+            case _ =>
+              val utf8Value =
+                Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
+              Option(utf8Value).map(_.toString).getOrElse("null")
+          }
           if (singleAgg) {
             stringValue
           } else {
@@ -534,15 +574,10 @@ class Analyzer(
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
           // alternate plan that instead uses two steps of aggregation.
           val namedAggExps: Seq[NamedExpression] = aggregates.map(a => Alias(a, a.sql)())
-          val namedPivotCol = pivotColumn match {
-            case n: NamedExpression => n
-            case _ => Alias(pivotColumn, "__pivot_col")()
-          }
-          val bigGroup = groupByExprs :+ namedPivotCol
+          val bigGroup = groupByExprs ++ pivotColumn.references
           val firstAgg = Aggregate(bigGroup, bigGroup ++ namedAggExps, child)
-          val castPivotValues = pivotValues.map(Cast(_, pivotColumn.dataType).eval(EmptyRow))
           val pivotAggs = namedAggExps.map { a =>
-            Alias(PivotFirst(namedPivotCol.toAttribute, a.toAttribute, castPivotValues)
+            Alias(PivotFirst(pivotColumn, a.toAttribute, evalPivotValues)
               .toAggregateExpression()
             , "__pivot_" + a.sql)()
           }
@@ -557,8 +592,12 @@ class Analyzer(
           Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
         } else {
           val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
-            def ifExpr(expr: Expression) = {
-              If(EqualNullSafe(pivotColumn, value), expr, Literal(null))
+            def ifExpr(e: Expression) = {
+              If(
+                EqualNullSafe(
+                  pivotColumn,
+                  Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone))),
+                e, Literal(null))
             }
             aggregates.map { aggregate =>
               val filteredAggregate = aggregate.transformDown {
@@ -1621,11 +1660,13 @@ class Analyzer(
       expr.find(_.isInstanceOf[Generator]).isDefined
     }
 
-    private def hasNestedGenerator(expr: NamedExpression): Boolean = expr match {
-      case UnresolvedAlias(_: Generator, _) => false
-      case Alias(_: Generator, _) => false
-      case MultiAlias(_: Generator, _) => false
-      case other => hasGenerator(other)
+    private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      CleanupAliases.trimNonTopLevelAliases(expr) match {
+        case UnresolvedAlias(_: Generator, _) => false
+        case Alias(_: Generator, _) => false
+        case MultiAlias(_: Generator, _) => false
+        case other => hasGenerator(other)
+      }
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
@@ -1666,24 +1707,26 @@ class Analyzer(
         // Holds the resolved generator, if one exists in the project list.
         var resolvedGenerator: Generate = null
 
-        val newProjectList = projectList.flatMap {
-          case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
-            // It's a sanity check, this should not happen as the previous case will throw
-            // exception earlier.
-            assert(resolvedGenerator == null, "More than one generator found in SELECT.")
+        val newProjectList = projectList
+          .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          .flatMap {
+            case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
+              // It's a sanity check, this should not happen as the previous case will throw
+              // exception earlier.
+              assert(resolvedGenerator == null, "More than one generator found in SELECT.")
 
-            resolvedGenerator =
-              Generate(
-                generator,
-                unrequiredChildIndex = Nil,
-                outer = outer,
-                qualifier = None,
-                generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
-                child)
+              resolvedGenerator =
+                Generate(
+                  generator,
+                  unrequiredChildIndex = Nil,
+                  outer = outer,
+                  qualifier = None,
+                  generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
+                  child)
 
-            resolvedGenerator.generatorOutput
-          case other => other :: Nil
-        }
+              resolvedGenerator.generatorOutput
+            case other => other :: Nil
+          }
 
         if (resolvedGenerator != null) {
           Project(newProjectList, resolvedGenerator)
@@ -2252,7 +2295,7 @@ class Analyzer(
                   }
                   expr
                 case other =>
-                  throw new AnalysisException("need an array field but got " + other.simpleString)
+                  throw new AnalysisException("need an array field but got " + other.catalogString)
               }
           }
           validateNestedTupleFields(result)
@@ -2261,8 +2304,8 @@ class Analyzer(
     }
 
     private def fail(schema: StructType, maxOrdinal: Int): Unit = {
-      throw new AnalysisException(s"Try to map ${schema.simpleString} to Tuple${maxOrdinal + 1}, " +
-        "but failed as the number of fields does not line up.")
+      throw new AnalysisException(s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}" +
+        ", but failed as the number of fields does not line up.")
     }
 
     /**
@@ -2341,7 +2384,7 @@ class Analyzer(
         case e => e.sql
       }
       throw new AnalysisException(s"Cannot up cast $fromStr from " +
-        s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
+        s"${from.dataType.catalogString} to ${to.catalogString} as it may truncate\n" +
         "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")
@@ -2394,6 +2437,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
   private def trimAliases(e: Expression): Expression = {
     e.transformDown {
       case Alias(child, _) => child
+      case MultiAlias(child, _) => child
     }
   }
 
@@ -2403,6 +2447,8 @@ object CleanupAliases extends Rule[LogicalPlan] {
         exprId = a.exprId,
         qualifier = a.qualifier,
         explicitMetadata = Some(a.metadata))
+    case a: MultiAlias =>
+      a.copy(child = trimAliases(a.child))
     case other => trimAliases(other)
   }
 

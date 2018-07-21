@@ -156,8 +156,8 @@ case class Stack(children: Seq[Expression]) extends Generator {
         val j = (i - 1) % numFields
         if (children(i).dataType != elementSchema.fields(j).dataType) {
           return TypeCheckResult.TypeCheckFailure(
-            s"Argument ${j + 1} (${elementSchema.fields(j).dataType.simpleString}) != " +
-              s"Argument $i (${children(i).dataType.simpleString})")
+            s"Argument ${j + 1} (${elementSchema.fields(j).dataType.catalogString}) != " +
+              s"Argument $i (${children(i).dataType.catalogString})")
         }
       }
       TypeCheckResult.TypeCheckSuccess
@@ -251,7 +251,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
     case _ =>
       TypeCheckResult.TypeCheckFailure(
         "input to function explode should be array or map type, " +
-          s"not ${child.dataType.simpleString}")
+          s"not ${child.dataType.catalogString}")
   }
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
@@ -381,7 +381,7 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
     case _ =>
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName should be array of struct type, " +
-          s"not ${child.dataType.simpleString}")
+          s"not ${child.dataType.catalogString}")
   }
 
   override def elementSchema: StructType = child.dataType match {

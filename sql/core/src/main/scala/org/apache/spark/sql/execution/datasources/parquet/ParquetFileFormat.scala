@@ -334,17 +334,17 @@ class ParquetFileFormat
     val enableVectorizedReader: Boolean =
       sqlConf.parquetVectorizedReaderEnabled &&
       resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
-    val enableRecordFilter: Boolean =
-      sparkSession.sessionState.conf.parquetRecordFilterEnabled
-    val timestampConversion: Boolean =
-      sparkSession.sessionState.conf.isParquetINT96TimestampConversion
+    val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
+    val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
     val capacity = sqlConf.parquetVectorizedReaderBatchSize
-    val enableParquetFilterPushDown: Boolean =
-      sparkSession.sessionState.conf.parquetFilterPushDown
+    val enableParquetFilterPushDown: Boolean = sqlConf.parquetFilterPushDown
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
     val pushDownDate = sqlConf.parquetFilterPushDownDate
+    val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
+    val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+    val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
@@ -364,16 +364,18 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
 
+      lazy val footerFileMetaData =
+        ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
-        val parquetSchema = ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS)
-          .getFileMetaData.getSchema
+        val parquetSchema = footerFileMetaData.getSchema
+        val parquetFilters = new ParquetFilters(pushDownDate, pushDownTimestamp, pushDownDecimal,
+          pushDownStringStartWith, pushDownInFilterThreshold)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.
-          .flatMap(new ParquetFilters(pushDownDate, pushDownStringStartWith)
-          .createFilter(parquetSchema, _))
+          .flatMap(parquetFilters.createFilter(parquetSchema, _))
           .reduceOption(FilterApi.and)
       } else {
         None
@@ -383,12 +385,12 @@ class ParquetFileFormat
       // *only* if the file was created by something other than "parquet-mr", so check the actual
       // writer here for this file.  We have to do this per-file, as each file in the table may
       // have different writers.
-      def isCreatedByParquetMr(): Boolean = {
-        val footer = ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS)
-        footer.getFileMetaData().getCreatedBy().startsWith("parquet-mr")
-      }
+      // Define isCreatedByParquetMr as function to avoid unnecessary parquet footer reads.
+      def isCreatedByParquetMr: Boolean =
+        footerFileMetaData.getCreatedBy().startsWith("parquet-mr")
+
       val convertTz =
-        if (timestampConversion && !isCreatedByParquetMr()) {
+        if (timestampConversion && !isCreatedByParquetMr) {
           Some(DateTimeUtils.getTimeZone(sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
         } else {
           None

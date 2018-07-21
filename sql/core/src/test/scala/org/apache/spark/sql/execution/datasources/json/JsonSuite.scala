@@ -48,10 +48,6 @@ class TestFileFilter extends PathFilter {
 class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   import testImplicits._
 
-  def testFile(fileName: String): String = {
-    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
-  }
-
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any) {
       assert(expected.getClass == actual.getClass,

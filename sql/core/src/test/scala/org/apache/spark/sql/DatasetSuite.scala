@@ -1296,7 +1296,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       new java.sql.Timestamp(100000))
   }
 
-  test("SPARK-19896: cannot have circular references in in case class") {
+  test("SPARK-19896: cannot have circular references in case class") {
     val errMsg1 = intercept[UnsupportedOperationException] {
       Seq(CircularReferenceClassA(null)).toDS
     }

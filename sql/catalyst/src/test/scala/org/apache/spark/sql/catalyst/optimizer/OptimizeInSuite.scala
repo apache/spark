@@ -176,6 +176,21 @@ class OptimizeInSuite extends PlanTest {
     }
   }
 
+  test("OptimizedIn test: one element in list gets transformed to EqualTo.") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      testRelation
+        .where(EqualTo(UnresolvedAttribute("a"), Literal(1)))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("OptimizedIn test: In empty list gets transformed to FalseLiteral " +
     "when value is not nullable") {
     val originalQuery =
@@ -187,6 +202,23 @@ class OptimizeInSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .where(Literal(false))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("OptimizedIn test: In empty list gets transformed to `If` expression " +
+    "when value is nullable") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Nil))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      testRelation
+        .where(If(IsNotNull(UnresolvedAttribute("a")),
+          Literal(false), Literal.create(null, BooleanType)))
         .analyze
 
     comparePlans(optimized, correctAnswer)

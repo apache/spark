@@ -334,14 +334,28 @@ class AnalysisErrorSuite extends AnalysisTest {
     "start time greater than slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 minute").as("window")),
-      "The start time " :: " must be less than the slideDuration " :: Nil
+      "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
   )
 
   errorTest(
     "start time equal to slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 second").as("window")),
-      "The start time " :: " must be less than the slideDuration " :: Nil
+      "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+  )
+
+  errorTest(
+    "SPARK-21590: absolute value of start time greater than slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 minute").as("window")),
+    "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+  )
+
+  errorTest(
+    "SPARK-21590: absolute value of start time equal to slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 second").as("window")),
+    "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
   )
 
   errorTest(
@@ -370,13 +384,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
       "The slide duration" :: " must be greater than 0." :: Nil
-  )
-
-  errorTest(
-    "negative start time in time window",
-    testRelation.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-5 second").as("window")),
-      "The start time" :: "must be greater than or equal to 0." :: Nil
   )
 
   errorTest(
@@ -514,7 +521,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       right,
       joinType = Cross,
       condition = Some('b === 'd))
-    assertAnalysisError(plan2, "EqualTo does not support ordering on type MapType" :: Nil)
+    assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
   }
 
   test("PredicateSubQuery is used outside of a filter") {
