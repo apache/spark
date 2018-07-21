@@ -63,4 +63,11 @@ class StructTypeSuite extends SparkFunSuite {
 
     assert(struct.toDDL == "`metaData` STRUCT<`eventId`: STRING>")
   }
+
+  test("SPARK-24849: toDDL should output field's comment") {
+    val struct = StructType(Seq(
+      StructField("b", BooleanType).withComment("Field's comment")))
+
+    assert(struct.toDDL == """`b` BOOLEAN COMMENT 'Field\'s comment'""")
+  }
 }

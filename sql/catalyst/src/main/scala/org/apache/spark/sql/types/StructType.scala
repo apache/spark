@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.util.Utils
 
 /**
@@ -366,7 +366,14 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * The returned DDL schema can be used in a table creation.
    */
   def toDDL: String = {
-    fields.map(field => s"${quoteIdentifier(field.name)} ${field.dataType.sql}").mkString(",")
+    fields.map { field =>
+      val comment = field
+        .getComment()
+        .map(escapeSingleQuotedString)
+        .map(" COMMENT '" + _ + "'")
+
+      s"${quoteIdentifier(field.name)} ${field.dataType.sql}${comment.getOrElse("")}"
+    }.mkString(",")
   }
 
   private[sql] override def simpleString(maxNumberFields: Int): String = {
