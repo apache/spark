@@ -80,6 +80,11 @@ NULL
 #'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: time zone to use.
 #'          \item \code{next_day}: day of the week string.
 #'          }
+#' @param ... additional argument(s).
+#'          \itemize{
+#'          \item \code{months_between}, this contains an optional parameter to specify the
+#'              the result is rounded off to 8 digits.
+#'          }
 #'
 #' @name column_datetime_diff_functions
 #' @rdname column_datetime_diff_functions
@@ -217,6 +222,9 @@ NULL
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
+#'          \item \code{sequence}, this contains an optional parameter to specify the step of
+#'              the range in sequence.
+#'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }
 #' @name column_collection_functions
 #' @rdname column_collection_functions
@@ -229,7 +237,7 @@ NULL
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1), shuffle(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
-#' head(select(tmp, flatten(tmp$v1), reverse(tmp$v1), array_remove(tmp$v1, 21)))
+#' head(select(tmp, reverse(tmp$v1), array_remove(tmp$v1, 21)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
@@ -238,15 +246,23 @@ NULL
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
 #' head(select(tmp3, map_entries(tmp3$v3), map_keys(tmp3$v3), map_values(tmp3$v3)))
-#' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
+#' head(select(tmp3, element_at(tmp3$v3, "Valiant"), map_concat(tmp3$v3, tmp3$v3)))
 #' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
 #' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, array_except(tmp4$v4, tmp4$v5), array_intersect(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, array_union(tmp4$v4, tmp4$v5)))
-#' head(select(tmp4, arrays_zip(tmp4$v4, tmp4$v5), map_from_arrays(tmp4$v4, tmp4$v5)))
+#' head(select(tmp4, arrays_zip(tmp4$v4, tmp4$v5)))
 #' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))
 #' tmp5 <- mutate(df, v6 = create_array(df$model, df$model))
-#' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))}
+#' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))
+#' tmp6 <- mutate(df, v7 = create_array(create_array(df$model, df$model)))
+#' head(select(tmp6, flatten(tmp6$v7)))
+#' tmp7 <- mutate(df, v8 = create_array(df$model, df$cyl), v9 = create_array(df$model, df$hp))
+#' head(select(tmp7, map_from_arrays(tmp7$v8, tmp7$v9)))
+#' tmp8 <- mutate(df, v10 = create_array(struct(df$model, df$cyl)))
+#' head(select(tmp8, map_from_entries(tmp8$v10)))
+#' df2 <- createDataFrame(list(list(-2L, 2L)))
+#' head(select(df2, sequence(df2[[1]], df2[[2]])))}
 NULL
 
 #' Window functions for Column operations
@@ -2074,15 +2090,21 @@ setMethod("levenshtein", signature(y = "Column"),
 #' are on the same day of month, or both are the last day of month, time of day will be ignored.
 #' Otherwise, the difference is calculated based on 31 days per month, and rounded to 8 digits.
 #'
+#' @param roundOff an optional parameter to specify if the result is rounded off to 8 digits
 #' @rdname column_datetime_diff_functions
 #' @aliases months_between months_between,Column-method
 #' @note months_between since 1.5.0
 setMethod("months_between", signature(y = "Column"),
-          function(y, x) {
+          function(y, x, roundOff = NULL) {
             if (class(x) == "Column") {
               x <- x@jc
             }
-            jc <- callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x)
+            jc <- if (is.null(roundOff)) {
+              callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x)
+            } else {
+              callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x,
+                           as.logical(roundOff))
+            }
             column(jc)
           })
 
@@ -3449,6 +3471,23 @@ setMethod("flatten",
           })
 
 #' @details
+#' \code{map_concat}: Returns the union of all the given maps.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_concat map_concat,Column-method
+#' @note map_concat since 2.4.0
+setMethod("map_concat",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(arg) {
+              stopifnot(class(arg) == "Column")
+              arg@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_concat", jcols)
+            column(jc)
+          })
+
+#' @details
 #' \code{map_entries}: Returns an unordered array of all entries in the given map.
 #'
 #' @rdname column_collection_functions
@@ -3473,6 +3512,19 @@ setMethod("map_from_arrays",
           signature(x = "Column", y = "Column"),
           function(x, y) {
             jc <- callJStatic("org.apache.spark.sql.functions", "map_from_arrays", x@jc, y@jc)
+            column(jc)
+         })
+
+#' @details
+#' \code{map_from_entries}: Returns a map created from the given array of entries.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_from_entries map_from_entries,Column-method
+#' @note map_from_entries since 2.4.0
+setMethod("map_from_entries",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_from_entries", x@jc)
             column(jc)
          })
 
@@ -3530,6 +3582,26 @@ setMethod("explode",
             jc <- callJStatic("org.apache.spark.sql.functions", "explode", x@jc)
             column(jc)
           })
+
+#' @details
+#' \code{sequence}: Generate a sequence of integers from start to stop, incrementing by step.
+#' If step is not set, incrementing by 1 if start is less than or equal to stop, otherwise -1.
+#'
+#' @param step an optional parameter to specify the step of the range.
+#' @rdname column_collection_functions
+#' @aliases sequence sequence,Column-method
+#' @note sequence since 2.4.0
+setMethod("sequence",
+         signature(),
+         function(x, y, step = NULL) {
+           jc <- if (is.null(step)) {
+             callJStatic("org.apache.spark.sql.functions", "sequence", x@jc, y@jc)
+           } else {
+             stopifnot(class(step) == "Column")
+             callJStatic("org.apache.spark.sql.functions", "sequence", x@jc, y@jc, step@jc)
+           }
+           column(jc)
+         })
 
 #' @details
 #' \code{size}: Returns length of array or map.
