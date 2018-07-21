@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.StructType.{fromDDL, toDDL}
+import org.apache.spark.sql.types.StructType.fromDDL
 
 class StructTypeSuite extends SparkFunSuite {
 
@@ -42,25 +42,25 @@ class StructTypeSuite extends SparkFunSuite {
   test("SPARK-24849: toDDL - simple struct") {
     val struct = StructType(Seq(StructField("a", IntegerType)))
 
-    assert(toDDL(struct) == "`a` INT")
+    assert(struct.toDDL == "`a` INT")
   }
 
   test("SPARK-24849: round trip toDDL - fromDDL") {
     val struct = new StructType().add("a", IntegerType).add("b", StringType)
 
-    assert(fromDDL(toDDL(struct)) === struct)
+    assert(fromDDL(struct.toDDL) === struct)
   }
 
   test("SPARK-24849: round trip fromDDL - toDDL") {
     val struct = "`a` MAP<INT, STRING>,`b` INT"
 
-    assert(toDDL(fromDDL(struct)) === struct)
+    assert(fromDDL(struct).toDDL === struct)
   }
 
-  test("SPARK-24849: toDDL must take into account case") {
+  test("SPARK-24849: toDDL must take into account case of fields.") {
     val struct = new StructType()
       .add("metaData", new StructType().add("eventId", StringType))
 
-    assert(toDDL(struct) == "`metaData` STRUCT<`eventId`: STRING>")
+    assert(struct.toDDL == "`metaData` STRUCT<`eventId`: STRING>")
   }
 }

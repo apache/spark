@@ -360,6 +360,15 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     s"STRUCT<${fieldTypes.mkString(", ")}>"
   }
 
+  /**
+   * Returns a string containing a schema in DDL format. For example, the following value:
+   * `StructType(Seq(StructField("eventId", IntegerType)))` will be converted to `eventId` INT.
+   * The returned DDL schema can be used in a table creation.
+   */
+  def toDDL: String = {
+    fields.map(field => s"${quoteIdentifier(field.name)} ${field.dataType.sql}").mkString(",")
+  }
+
   private[sql] override def simpleString(maxNumberFields: Int): String = {
     val builder = new StringBuilder
     val fieldTypes = fields.take(maxNumberFields).map {
@@ -435,14 +444,6 @@ object StructType extends AbstractDataType {
    * definitions, e.g., a INT, b STRING.
    */
   def fromDDL(ddl: String): StructType = CatalystSqlParser.parseTableSchema(ddl)
-
-  /**
-   * Converts a value of StructType to a string in DDL format. For example:
-   * `StructType(Seq(StructField("a", IntegerType)))` should be converted to `a int`
-   */
-  def toDDL(struct: StructType): String = {
-    struct.map(field => s"${quoteIdentifier(field.name)} ${field.dataType.sql}").mkString(",")
-  }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
