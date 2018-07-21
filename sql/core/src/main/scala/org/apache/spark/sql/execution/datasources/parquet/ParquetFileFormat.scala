@@ -424,12 +424,11 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns UnsafeRow
-        val readSupport = new ParquetReadSupport(convertTz, true)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
-          new ParquetRecordReader[UnsafeRow](readSupport, parquetFilter)
+          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz), parquetFilter)
         } else {
-          new ParquetRecordReader[UnsafeRow](readSupport)
+          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz))
         }
         val iter = new RecordReaderIterator(reader)
         // SPARK-23457 Register a task completion lister before `initialization`.
