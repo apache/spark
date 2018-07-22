@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.optim
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
@@ -538,5 +538,21 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
       }
       idx += 1
     }
+  }
+
+  test("number of features more than MAX_NUM_FEATURES") {
+    // Evaluate with an Instances RDD, that contains more than the maximum number of features.
+    val numFeatures = WeightedLeastSquares.MAX_NUM_FEATURES + 1
+    val inst = sc.parallelize(Seq(
+      Instance(17.0, 1.0, Vectors.sparse(numFeatures, Array(0, 4), Array(3.0, 8.0))),
+      Instance(17.0, 2.0, Vectors.sparse(numFeatures, Array(1, 5), Array(3.0, 8.0)))), 2)
+
+    val wls = new WeightedLeastSquares(fitIntercept = true, regParam = 0.5, elasticNetParam = 0.0,
+      standardizeFeatures = false, standardizeLabel = false)
+
+    intercept[SparkException] {
+      wls.fit(inst)
+    }.getMessage.contains(s"we set the max number of features to " +
+      s"${WeightedLeastSquares.MAX_NUM_FEATURES} but got $numFeatures.")
   }
 }

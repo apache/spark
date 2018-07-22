@@ -19,11 +19,12 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.feature.{LabeledPoint, RFormula}
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors}
+import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -1662,6 +1663,23 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with regParam = $regParam.")
       idx += 1
     }
+  }
+
+  test("number of features more than MAX_NUM_FEATURES") {
+    // Evaluate with a dataset that contains more than the maximum number of features.
+    val numFeatues = WeightedLeastSquares.MAX_NUM_FEATURES + 1
+    val dataset = Seq(
+      Instance(17.0, 1.0, Vectors.sparse(numFeatues, Array(0, 4), Array(3.0, 8.0))),
+      Instance(19.0, 1.0, Vectors.sparse(numFeatues, Array(1, 5), Array(4.0, 9.0))))
+      .toDF()
+
+    val trainer = new GeneralizedLinearRegression()
+      .setMaxIter(1)
+
+    intercept[SparkException] {
+      trainer.fit(dataset)
+    }.getMessage.contains(s"GeneralizedLinearRegression only supports number of features <=" +
+      s" ${WeightedLeastSquares.MAX_NUM_FEATURES}.")
   }
 
   test("evaluate with labels that are not doubles") {
