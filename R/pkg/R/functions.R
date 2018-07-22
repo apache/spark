@@ -3740,8 +3740,7 @@ setMethod("collect_set",
 
 #' @details
 #' \code{split_string}: Splits string on regular expression.
-#' Equivalent to \code{split} SQL function. Optionally a
-#' \code{limit} can be specified
+#' Equivalent to \code{split} SQL function.
 #'
 #' @rdname column_string_functions
 #' @param limit determines the length of the returned array.
