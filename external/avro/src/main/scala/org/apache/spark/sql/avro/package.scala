@@ -17,30 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.avro.Schema
-
 import org.apache.spark.annotation.Experimental
 
 package object avro {
-  /**
-   * Adds a method, `avro`, to DataFrameWriter that allows you to write avro files using
-   * the DataFileWriter
-   */
-  implicit class AvroDataFrameWriter[T](writer: DataFrameWriter[T]) {
-    def avro: String => Unit = writer.format("avro").save
-  }
-
-  /**
-   * Adds a method, `avro`, to DataFrameReader that allows you to read avro files using
-   * the DataFileReader
-   */
-  implicit class AvroDataFrameReader(reader: DataFrameReader) {
-    def avro: String => DataFrame = reader.format("avro").load
-
-    @scala.annotation.varargs
-    def avro(sources: String*): DataFrame = reader.format("avro").load(sources: _*)
-  }
-
   /**
    * Converts a binary column of avro format into its corresponding catalyst value. The specified
    * schema must match the read data, otherwise the behavior is undefined: it may fail or return
