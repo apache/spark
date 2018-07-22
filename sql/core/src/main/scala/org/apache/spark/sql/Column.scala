@@ -1234,6 +1234,8 @@ class Column(val expr: Expression) extends Logging {
    */
   def over(): Column = over(Window.spec)
 
+  def copy(field: String, value: Column): Column = withExpr(StructCopy(expr, field, value.expr))
+
 }
 
 

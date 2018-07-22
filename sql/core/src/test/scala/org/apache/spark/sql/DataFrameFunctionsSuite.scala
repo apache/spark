@@ -1565,6 +1565,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex.getMessage.contains("Cannot use null as map key"))
   }
+
+  test("copy") {
+    val input = spark.range(1, 10, 1)
+    val df = input.selectExpr("id",
+      """named_struct(
+        |'c0', id - 1,
+        |'c1', named_struct(
+        |   'c11', id+1,
+        |   'c12', 2*id
+        |)) as s""".stripMargin)
+
+    df.printSchema()
+    df.show(false)
+    val res = df.withColumn("s",
+      $"s".copy("c1", $"s.c1".copy("c12", $"id"*3))
+    )
+    res.show(false)
+  }
 }
 
 object DataFrameFunctionsSuite {

@@ -3858,3 +3858,29 @@ object ArrayUnion {
     new GenericArrayData(arrayBuffer)
   }
 }
+
+case class StructCopy(
+    struct: Expression,
+    fieldName: String,
+    fieldValue: Expression) extends Expression with CodegenFallback {
+
+  override def children: Seq[Expression] = Seq(struct, fieldValue)
+  override def nullable: Boolean = struct.nullable
+
+  lazy val fieldIndex = struct.dataType.asInstanceOf[StructType].fieldIndex(fieldName)
+
+  override def dataType: DataType = {
+    val structType = struct.dataType.asInstanceOf[StructType]
+    val field = structType.fields(fieldIndex).copy(dataType = fieldValue.dataType)
+
+    structType.copy(fields = structType.fields.updated(fieldIndex, field))
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val newFieldValue = fieldValue.eval(input)
+    val structValue = struct.eval(input).asInstanceOf[GenericInternalRow]
+
+    structValue.update(fieldIndex, newFieldValue)
+    structValue
+  }
+}
