@@ -890,7 +890,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("write with compression - avro options") {
+  test("SPARK-24881: write with compression - avro options") {
     withTempPath { dir =>
       val uncompressDir = s"$dir/uncompress"
       val deflateDir = s"$dir/deflate"
