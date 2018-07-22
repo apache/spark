@@ -52,6 +52,14 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   // Ignore this wrapper for canonicalizing.
   override def doCanonicalize(): SparkPlan = child.canonicalized
 
+  override protected def doPrepare(): Unit = {
+    child match {
+      case shuffleExchange @ ShuffleExchangeExec(_, _, Some(coordinator)) =>
+        coordinator.registerExchange(shuffleExchange)
+      case _ =>
+    }
+  }
+
   def doExecute(): RDD[InternalRow] = {
     child.execute()
   }
@@ -85,33 +93,46 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
  */
 case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
 
-  private def supportReuseExchange(exchange: Exchange): Boolean = exchange match {
-    // If a coordinator defined in an exchange operator, the exchange cannot be reused
-    case ShuffleExchangeExec(_, _, Some(coordinator)) => false
-    case _ => true
-  }
-
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.exchangeReuseEnabled) {
       return plan
     }
+
     // Build a hash map using schema of exchanges to avoid O(N*N) sameResult calls.
     val exchanges = mutable.HashMap[StructType, ArrayBuffer[Exchange]]()
+
+    def tryReuseExchange(exchange: Exchange, filterCondition: Exchange => Boolean): SparkPlan = {
+      // the exchanges that have same results usually also have same schemas (same column names).
+      val sameSchema = exchanges.getOrElseUpdate(exchange.schema, ArrayBuffer[Exchange]())
+      val samePlan = sameSchema.filter(filterCondition).find { e =>
+        exchange.sameResult(e)
+      }
+      if (samePlan.isDefined) {
+        // Keep the output of this exchange, the following plans require that to resolve
+        // attributes.
+        ReusedExchangeExec(exchange.output, samePlan.get)
+      } else {
+        sameSchema += exchange
+        exchange
+      }
+    }
+
     plan.transformUp {
-      case exchange: Exchange if supportReuseExchange(exchange) =>
-        // the exchanges that have same results usually also have same schemas (same column names).
-        val sameSchema = exchanges.getOrElseUpdate(exchange.schema, ArrayBuffer[Exchange]())
-        val samePlan = sameSchema.find { e =>
-          exchange.sameResult(e)
-        }
-        if (samePlan.isDefined) {
-          // Keep the output of this exchange, the following plans require that to resolve
-          // attributes.
-          ReusedExchangeExec(exchange.output, samePlan.get)
-        } else {
-          sameSchema += exchange
-          exchange
-        }
+      // For coordinated exchange
+      case exchange @ ShuffleExchangeExec(_, _, Some(coordinator)) =>
+        tryReuseExchange(exchange, {
+          // We can reuse an exchange with the same coordinator only
+          case ShuffleExchangeExec(_, _, Some(c)) => coordinator == c
+          case _ => false
+        })
+
+      // For non-coordinated exchange
+      case exchange: Exchange =>
+        tryReuseExchange(exchange, {
+          // Coordinated exchange cannot be reused in this case
+          case ShuffleExchangeExec(_, _, Some(coordinator)) => false
+          case _ => true
+        })
     }
   }
 }

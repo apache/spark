@@ -200,14 +200,18 @@ class ExchangeCoordinator(
       // Make sure we have the expected number of registered Exchange operators.
       assert(exchanges.length == numExchanges)
 
-      val newPostShuffleRDDs = new JHashMap[ShuffleExchangeExec, ShuffledRowRDD](numExchanges)
+      val distinctExchanges = exchanges.distinct
+      val numDistinctExchanges = distinctExchanges.length
+
+      val newPostShuffleRDDs =
+        new JHashMap[ShuffleExchangeExec, ShuffledRowRDD](numDistinctExchanges)
 
       // Submit all map stages
       val shuffleDependencies = ArrayBuffer[ShuffleDependency[Int, InternalRow, InternalRow]]()
       val submittedStageFutures = ArrayBuffer[SimpleFutureAction[MapOutputStatistics]]()
       var i = 0
-      while (i < numExchanges) {
-        val exchange = exchanges(i)
+      while (i < numDistinctExchanges) {
+        val exchange = distinctExchanges(i)
         val shuffleDependency = exchange.prepareShuffleDependency()
         shuffleDependencies += shuffleDependency
         if (shuffleDependency.rdd.partitions.length != 0) {
@@ -238,8 +242,8 @@ class ExchangeCoordinator(
         }
 
       var k = 0
-      while (k < numExchanges) {
-        val exchange = exchanges(k)
+      while (k < numDistinctExchanges) {
+        val exchange = distinctExchanges(k)
         val rdd =
           exchange.preparePostShuffleRDD(shuffleDependencies(k), Some(partitionStartIndices))
         newPostShuffleRDDs.put(exchange, rdd)
@@ -249,7 +253,7 @@ class ExchangeCoordinator(
 
       // Finally, we set postShuffleRDDs and estimated.
       assert(postShuffleRDDs.isEmpty)
-      assert(newPostShuffleRDDs.size() == numExchanges)
+      assert(newPostShuffleRDDs.size() == numDistinctExchanges)
       postShuffleRDDs.putAll(newPostShuffleRDDs)
       estimated = true
     }

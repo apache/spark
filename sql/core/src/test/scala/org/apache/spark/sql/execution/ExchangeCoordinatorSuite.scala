@@ -21,7 +21,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -503,7 +503,35 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("SPARK-24705 adaptive query execution works when plan having duplicate exchanges") {
     withSparkSession(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") { spark =>
       val df = spark.range(1).selectExpr("id AS key", "id AS value")
-      checkAnswer(df.join(df, "key"), Row(0, 0, 0) :: Nil)
+      val resultDf = df.join(df, "key").join(df, "key")
+      // If both adaptive execution and exchange reuse enabled, Spark tries to reuse exchanges
+      // in the same coordinator group. In this test, `resultDf` joins the same three input (`df`).
+      // In the first join, the exchange of one side input is reused because the other side
+      // exchange has the same coordinator. But, in the second join, the reuse doesn't happen
+      // because of a different coordinator group as follows;
+      //
+      // == Physical Plan ==
+      // *(9) Project [key#344L, value#345L, value#349L, value#354L]
+      // +- *(9) SortMergeJoin [key#344L], [key#353L], Inner
+      //    :- *(6) Sort [key#344L ASC NULLS FIRST], false, 0
+      //    :  +- Exchange(coordinator id: 738381688) hashpartitioning(key#344L, 5), ...
+      //    :     +- *(5) Project [key#344L, value#345L, value#349L]
+      //    :        +- *(5) SortMergeJoin [key#344L], [key#348L], Inner
+      //    :           :- *(2) Sort [key#344L ASC NULLS FIRST], false, 0
+      //    :           :  +- Exchange(coordinator id: 1048559742) ...
+      //    :           :     +- *(1) Project [id#342L AS key#344L, id#342L AS value#345L]
+      //    :           :        +- *(1) Range (0, 1, step=1, splits=4)
+      //    :           +- *(4) Sort [key#348L ASC NULLS FIRST], false, 0
+      //    :              +- ReusedExchange [key#348L, value#349L],
+      //                         Exchange(coordinator id: 1048559742) ...
+      //    +- *(8) Sort [key#353L ASC NULLS FIRST], false, 0
+      //       +- Exchange(coordinator id: 738381688) hashpartitioning(key#353L, 5), ...
+      //          +- *(7) Project [id#342L AS key#353L, id#342L AS value#354L]
+      //             +- *(7) Range (0, 1, step=1, splits=4)
+      val sparkPlan = resultDf.queryExecution.executedPlan
+      assert(sparkPlan.collect { case p: ReusedExchangeExec => p }.length == 1)
+      assert(sparkPlan.collect { case p @ ShuffleExchangeExec(_, _, Some(c)) => p }.length == 3)
+      checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
     }
   }
 }
