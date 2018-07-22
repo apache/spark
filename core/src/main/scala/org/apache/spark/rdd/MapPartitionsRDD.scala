@@ -43,5 +43,6 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     prev = null
   }
 
-  private[spark] override def isBarrier(): Boolean = isFromBarrier || prev.isBarrier()
+  @transient protected lazy override val isBarrier_ : Boolean =
+    isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 }
