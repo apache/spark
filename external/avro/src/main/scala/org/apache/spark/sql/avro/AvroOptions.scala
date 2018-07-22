@@ -86,8 +86,9 @@ class AvroOptions(
    * value is `6`.
    */
   val compressionLevel: Int = {
+    val defaultLevel = 6
     parameters.get("compressionLevel").map(_.toInt).getOrElse {
-      if (compression.toLowerCase == "deflate") sqlConf.avroDeflateLevel else 6
+      if (compression == "deflate") sqlConf.avroDeflateLevel else defaultLevel
     }
   }
 }
