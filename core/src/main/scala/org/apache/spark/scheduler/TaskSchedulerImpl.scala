@@ -373,13 +373,13 @@ private[spark] class TaskSchedulerImpl(
         // slots), fail the job on submit.
         logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
           s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
-          s"number of available slots is ${availableSlots}.")
+          s"number of available slots is $availableSlots.")
       } else {
         var launchedAnyTask = false
-        var launchedTaskAtCurrentMaxLocality = false
         // Record all the executor IDs assigned barrier tasks on.
         val addressesWithDescs = ArrayBuffer[(String, TaskDescription)]()
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
+          var launchedTaskAtCurrentMaxLocality = false
           do {
             launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
               currentMaxLocality, shuffledOffers, availableCpus, tasks, addressesWithDescs)

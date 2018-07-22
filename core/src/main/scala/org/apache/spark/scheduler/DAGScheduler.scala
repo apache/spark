@@ -1462,8 +1462,7 @@ class DAGScheduler(
             s"""$failedStage (${failedStage.name})
                |has failed the maximum allowable number of
                |times: $maxConsecutiveStageAttempts.
-               |Most recent failure reason: $message
-          """.stripMargin.replaceAll("\n", " ")
+               |Most recent failure reason: $message""".stripMargin.replaceAll("\n", " ")
           }
           abortStage(failedStage, abortMessage, None)
         } else {
@@ -1507,7 +1506,7 @@ class DAGScheduler(
   }
 
   private def handleResubmittedFailure(task: Task[_], stage: Stage): Unit = {
-    logInfo("Resubmitted " + task + ", so marking it as still running")
+    logInfo(s"Resubmitted $task, so marking it as still running.")
     stage match {
       case sms: ShuffleMapStage =>
         sms.pendingPartitions += task.partitionId

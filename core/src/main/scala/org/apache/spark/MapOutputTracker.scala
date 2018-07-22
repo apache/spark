@@ -442,7 +442,7 @@ private[spark] class MapOutputTrackerMaster(
         incrementEpoch()
       case None =>
         throw new SparkException(
-          s"unregisterAllMapOutput called for nonexistent shuffle ID ${shuffleId}.")
+          s"unregisterAllMapOutput called for nonexistent shuffle ID $shuffleId.")
     }
   }
 
