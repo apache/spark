@@ -3981,7 +3981,7 @@ object ArrayUnion {
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetLike {
   override def dataType: DataType = ArrayType(elementType,
-    left.dataType.asInstanceOf[ArrayType].containsNull ||
+    left.dataType.asInstanceOf[ArrayType].containsNull &&
       right.dataType.asInstanceOf[ArrayType].containsNull)
 
   var hsInt: OpenHashSet[Int] = _

@@ -1716,7 +1716,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayIntersect(aa1, aa0), Seq[Seq[Int]](Seq[Int](3, 4)))
 
     assert(ArrayIntersect(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayIntersect(a00, a04).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayIntersect(a00, a04).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayIntersect(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
     assert(ArrayIntersect(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayIntersect(a23, a24).dataType.asInstanceOf[ArrayType].containsNull === true)
