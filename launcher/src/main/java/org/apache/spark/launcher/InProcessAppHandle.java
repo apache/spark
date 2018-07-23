@@ -63,7 +63,9 @@ class InProcessAppHandle extends AbstractAppHandle {
 
     Map<String, String> mdcContextMap = MDC.getCopyOfContextMap();
     app = new Thread(() -> {
-      MDC.setContextMap(mdcContextMap);
+      if (mdcContextMap != null) {
+        MDC.setContextMap(mdcContextMap);
+      }
       try {
         main.invoke(null, (Object) args);
       } catch (Throwable t) {
