@@ -1434,7 +1434,7 @@ class DAGScheduler(
         logInfo(s"Marking $failedStage (${failedStage.name}) as failed due to a barrier task " +
           "failed.")
         val message = s"Stage failed because barrier task $task finished unsuccessfully. " +
-          s"${failure.toErrorString}"
+          failure.toErrorString
         try {
           // cancelTasks will fail if a SchedulerBackend does not implement killTask
           taskScheduler.cancelTasks(stageId, interruptThread = false)
