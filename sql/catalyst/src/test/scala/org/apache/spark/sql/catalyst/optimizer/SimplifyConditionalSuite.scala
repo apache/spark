@@ -44,7 +44,8 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   }
 
   private val trueBranch = (TrueLiteral, Literal(5))
-  private val normalBranch = (NonFoldableLiteral(true), Literal(10))
+  private val normalBranch1 = (NonFoldableLiteral(true), Literal(10))
+  private val normalBranch2 = (NonFoldableLiteral(false), Literal(3))
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, BooleanType), Literal(30))
 
@@ -82,8 +83,23 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   test("remove unreachable branches") {
     // i.e. removing branches whose conditions are always false
     assertEquivalent(
-      CaseWhen(unreachableBranch :: normalBranch :: unreachableBranch :: nullBranch :: Nil, None),
-      CaseWhen(normalBranch :: Nil, None))
+      CaseWhen(unreachableBranch :: normalBranch1 :: unreachableBranch ::
+        normalBranch2 :: nullBranch :: Nil, None),
+      CaseWhen(normalBranch1 :: normalBranch2 :: Nil, None))
+  }
+
+  test("simplify CaseWhen to If when there is only one branch") {
+    assertEquivalent(
+      CaseWhen(normalBranch1 :: Nil, Some(Literal(30))),
+      If(normalBranch1._1, normalBranch1._2, Literal(30)))
+
+    assertEquivalent(
+      CaseWhen(normalBranch1 :: Nil, None),
+      If(normalBranch1._1, normalBranch1._2, Literal(null, normalBranch1._2.dataType)))
+
+    assertEquivalent(
+      CaseWhen(unreachableBranch :: normalBranch1 :: unreachableBranch :: nullBranch :: Nil, None),
+      If(normalBranch1._1, normalBranch1._2, Literal(null, normalBranch1._2.dataType)))
   }
 
   test("remove entire CaseWhen if only the else branch is reachable") {
@@ -98,29 +114,29 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
 
   test("remove entire CaseWhen if the first branch is always true") {
     assertEquivalent(
-      CaseWhen(trueBranch :: normalBranch :: nullBranch :: Nil, None),
+      CaseWhen(trueBranch :: normalBranch1 :: nullBranch :: Nil, None),
       Literal(5))
 
     // Test branch elimination and simplification in combination
     assertEquivalent(
-      CaseWhen(unreachableBranch :: unreachableBranch :: nullBranch :: trueBranch :: normalBranch
+      CaseWhen(unreachableBranch :: unreachableBranch :: nullBranch :: trueBranch :: normalBranch1
         :: Nil, None),
       Literal(5))
 
     // Make sure this doesn't trigger if there is a non-foldable branch before the true branch
     assertEquivalent(
-      CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None),
-      CaseWhen(normalBranch :: trueBranch :: Nil, None))
+      CaseWhen(normalBranch1 :: trueBranch :: normalBranch1 :: Nil, None),
+      CaseWhen(normalBranch1 :: trueBranch :: Nil, None))
   }
 
   test("simplify CaseWhen, prune branches following a definite true") {
     assertEquivalent(
-      CaseWhen(normalBranch :: unreachableBranch ::
+      CaseWhen(normalBranch1 :: unreachableBranch ::
         unreachableBranch :: nullBranch ::
-        trueBranch :: normalBranch ::
+        trueBranch :: normalBranch1 ::
         Nil,
         None),
-      CaseWhen(normalBranch :: trueBranch :: Nil, None))
+      CaseWhen(normalBranch1 :: trueBranch :: Nil, None))
   }
 
   test("simplify CaseWhen if all the outputs are semantic equivalence") {

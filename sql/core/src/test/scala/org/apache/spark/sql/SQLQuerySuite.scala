@@ -3582,6 +3582,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
       "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
   }
+
+  test("SPARK-24892: simplify `CaseWhen` to `If` when there is only one branch") {
+    withTable("t") {
+      Seq(Some(1), null, Some(3)).toDF("a").write.saveAsTable("t")
+
+      val plan1 = sql("select case when a is null then 1 end col1 from t")
+      val plan2 = sql("select if(a is null, 1, null) col1 from t")
+
+      checkAnswer(plan1, Row(null) :: Row(1) :: Row(null) :: Nil)
+      comparePlans(plan1.queryExecution.optimizedPlan, plan2.queryExecution.optimizedPlan)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
