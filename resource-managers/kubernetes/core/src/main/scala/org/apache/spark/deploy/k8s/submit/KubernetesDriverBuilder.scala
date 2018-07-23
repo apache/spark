@@ -40,6 +40,9 @@ private[spark] class KubernetesDriverBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
+    provideHostAliasesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => HostAliasesFeatureStep) =
+      new HostAliasesFeatureStep(_),
     provideJavaStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
@@ -66,6 +69,9 @@ private[spark] class KubernetesDriverBuilder(
     val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
+    val hostAliasesFeature = if (kubernetesConf.roleHostAliases.nonEmpty) {
+      Seq(provideHostAliasesStep(kubernetesConf))
+    } else Nil
 
     val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
         case JavaMainAppResource(_) =>
@@ -75,7 +81,7 @@ private[spark] class KubernetesDriverBuilder(
       .getOrElse(provideJavaStep(kubernetesConf))
 
     val allFeatures = (baseFeatures :+ bindingsStep) ++
-      secretFeature ++ envSecretFeature ++ volumesFeature
+      secretFeature ++ envSecretFeature ++ volumesFeature ++ hostAliasesFeature
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {

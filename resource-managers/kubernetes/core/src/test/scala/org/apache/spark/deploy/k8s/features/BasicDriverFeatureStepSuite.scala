@@ -77,6 +77,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
+      Map.empty, // TODO Add host aliases to test
       Seq.empty[String])
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
@@ -147,6 +148,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
+      Map.empty,
       Seq.empty[String])
     val pythonKubernetesConf = KubernetesConf(
       pythonSparkConf,
@@ -163,6 +165,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
+      Map.empty,
       Seq.empty[String])
     val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf)
     val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf)
@@ -190,6 +193,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
+      Map.empty,
       allFiles)
 
     val step = new BasicDriverFeatureStep(kubernetesConf)

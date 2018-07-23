@@ -28,6 +28,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
   private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
   private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
+  private val HOST_ALIASES_STEP_TYPE = "host-aliases"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
@@ -39,13 +40,16 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
   private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
+  private val hostAliasesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    HOST_ALIASES_STEP_TYPE, classOf[HostAliasesFeatureStep])
 
   private val builderUnderTest = new KubernetesExecutorBuilder(
     _ => basicFeatureStep,
     _ => mountSecretsStep,
     _ => envSecretsStep,
     _ => localDirsStep,
-    _ => mountVolumesStep)
+    _ => mountVolumesStep,
+    _ => hostAliasesStep)
 
   test("Basic steps are consistently applied.") {
     val conf = KubernetesConf(
@@ -60,6 +64,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
+      Map.empty,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
@@ -78,6 +83,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map("secret-name" -> "secret-key"),
       Map.empty,
       Nil,
+      Map.empty,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -85,6 +91,28 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       LOCAL_DIRS_STEP_TYPE,
       SECRETS_STEP_TYPE,
       ENV_SECRETS_STEP_TYPE)
+  }
+
+  test("Apply host aliases step if host aliases are present.") {
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesExecutorSpecificConf(
+        "executor-id", new PodBuilder().build()),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Map("192.168.0.1" -> Seq("foo", "bar")),
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      HOST_ALIASES_STEP_TYPE)
   }
 
   test("Apply volumes step if mounts are present.") {
@@ -105,6 +133,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       volumeSpec :: Nil,
+      Map.empty,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),

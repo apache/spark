@@ -16,22 +16,23 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.PodBuilder
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SecretVolumeUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
 
-class MountSecretsFeatureStepSuite extends SparkFunSuite {
+class HostAliasesFeatureStepSuite extends SparkFunSuite {
 
-  private val SECRET_FOO = "foo"
-  private val SECRET_BAR = "bar"
-  private val SECRET_MOUNT_PATH = "/etc/secrets/driver"
+  private val IP = "192.168.0.1"
+  private val HOSTNAME_A = "login"
+  private val HOSTNAME_B = "gateway"
 
-  test("mounts all given secrets") {
+  test("mounts all given host aliases") {
     val baseDriverPod = SparkPod.initialPod()
-    val secretNamesToMountPaths = Map(
-      SECRET_FOO -> SECRET_MOUNT_PATH,
-      SECRET_BAR -> SECRET_MOUNT_PATH)
+    val hostAliases = Map(
+      IP -> Seq(HOSTNAME_A, HOSTNAME_B))
     val sparkConf = new SparkConf(false)
     val kubernetesConf = KubernetesConf(
       sparkConf,
@@ -40,23 +41,22 @@ class MountSecretsFeatureStepSuite extends SparkFunSuite {
       "app-id",
       Map.empty,
       Map.empty,
-      secretNamesToMountPaths,
+      Map.empty,
       Map.empty,
       Map.empty,
       Nil,
-      Map.empty,
+      hostAliases,
       Seq.empty[String])
 
-    val step = new MountSecretsFeatureStep(kubernetesConf)
-    val driverPodWithSecretsMounted = step.configurePod(baseDriverPod).pod
-    val driverContainerWithSecretsMounted = step.configurePod(baseDriverPod).container
+    val step = new HostAliasesFeatureStep(kubernetesConf)
+    val driverPodWithHostAliases = step.configurePod(baseDriverPod).pod
 
-    Seq(s"$SECRET_FOO-volume", s"$SECRET_BAR-volume").foreach { volumeName =>
-      assert(SecretVolumeUtils.podHasVolume(driverPodWithSecretsMounted, volumeName))
-    }
-    Seq(s"$SECRET_FOO-volume", s"$SECRET_BAR-volume").foreach { volumeName =>
-      assert(SecretVolumeUtils.containerHasVolume(
-        driverContainerWithSecretsMounted, volumeName, SECRET_MOUNT_PATH))
+    assert(podHasHostAliases(driverPodWithHostAliases, IP, Seq(HOSTNAME_A, HOSTNAME_B)))
+  }
+  
+  def podHasHostAliases(pod: Pod, ip: String, hostnames: Seq[String]): Boolean = {
+    pod.getSpec.getHostAliases.asScala.exists { alias =>
+      alias.getIp == ip && hostnames.forall(hostname => alias.getHostnames().contains(hostname))
     }
   }
 }
