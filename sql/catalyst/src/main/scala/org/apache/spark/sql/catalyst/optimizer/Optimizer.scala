@@ -458,7 +458,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
     case s @ ScriptTransformation(_, _, _, child, _)
-      if (child.outputSet -- s.references).nonEmpty =>
+        if (child.outputSet -- s.references).nonEmpty =>
       s.copy(child = prunedChild(child, s.references))
 
     // prune unrequired references
