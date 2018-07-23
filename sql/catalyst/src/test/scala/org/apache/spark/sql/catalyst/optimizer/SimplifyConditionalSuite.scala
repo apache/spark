@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -55,6 +56,14 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     assertEquivalent(
       If(Literal.create(null, NullType), Literal(10), Literal(20)),
       Literal(20))
+  }
+
+  test("remove unnecessary if when the outputs are semantic equivalence") {
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")),
+        Subtract(Literal(10), Literal(1)),
+        Add(Literal(6), Literal(3))),
+      Literal(9))
   }
 
   test("remove unreachable branches") {
