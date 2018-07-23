@@ -1253,7 +1253,7 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     val initialization = if (isPrimitiveType) {
       ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
     } else {
-      val arrayDataClass = classOf[GenericArrayData].getName()
+      val arrayDataClass = classOf[GenericArrayData].getName
       s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
     }
 

@@ -901,8 +901,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("reverse function") {
-    // String test cases
+  test("reverse function - string") {
     val oneRowDF = Seq(("Spark", 3215)).toDF("s", "i")
     def testString(): Unit = {
       checkAnswer(oneRowDF.select(reverse('s)), Seq(Row("krapS")))
@@ -917,8 +916,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Test with cached relation, the Project will be evaluated with codegen
     oneRowDF.cache()
     testString()
+  }
 
-    // Array test cases (primitive-type elements, containsNull = false)
+  test("reverse function - array for primitive type not containing null") {
     val idfNotContainsNull = Seq(
       Seq(1, 9, 8, 7),
       Seq(5, 8, 9, 7, 2),
@@ -942,8 +942,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Test with cached relation, the Project will be evaluated with codegen
     idfNotContainsNull.cache()
     testArrayOfPrimitiveTypeNotContainsNull()
+  }
 
-    // Array test cases (primitive-type elements, containsNull = true)
+  test("reverse function - array for primitive type containing null") {
     val idfContainsNull = Seq[Seq[Integer]](
       Seq(1, 9, 8, null, 7),
       Seq(null, 5, 8, 9, 7, 2),
@@ -967,8 +968,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Test with cached relation, the Project will be evaluated with codegen
     idfContainsNull.cache()
     testArrayOfPrimitiveTypeContainsNull()
+  }
 
-    // Array test cases (non-primitive-type elements)
+  test("reverse function - array for non-primitive type") {
     val sdf = Seq(
       Seq("c", "a", "b"),
       Seq("b", null, "c", null),
@@ -996,14 +998,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Test with cached relation, the Project will be evaluated with codegen
     sdf.cache()
     testArrayOfNonPrimitiveType()
+  }
 
-    // Error test cases
-    intercept[AnalysisException] {
-      oneRowDF.selectExpr("reverse(struct(1, 'a'))")
+  test("reverse function - data type mismatch") {
+    val ex1 = intercept[AnalysisException] {
+      sql("select reverse(struct(1, 'a'))")
     }
-    intercept[AnalysisException] {
-      oneRowDF.selectExpr("reverse(map(1, 'a'))")
+    assert(ex1.getMessage.contains("data type mismatch"))
+
+    val ex2 = intercept[AnalysisException] {
+      sql("select reverse(map(1, 'a'))")
     }
+    assert(ex2.getMessage.contains("data type mismatch"))
   }
 
   test("array position function") {
