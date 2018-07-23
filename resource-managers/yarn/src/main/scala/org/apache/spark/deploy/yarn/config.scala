@@ -334,4 +334,9 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val SPARK_YARN_LOG_APPLICATION_REPORT = ConfigBuilder("spark.yarn.log.application.report")
+    .doc("Whether to show the interaction reports with yarn.")
+    .booleanConf
+    .createWithDefault(true)
+
 }

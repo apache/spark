@@ -112,7 +112,7 @@ private[spark] class YarnClientSchedulerBackend(
       try {
         val YarnAppReport(_, state, diags) =
           client.monitorApplication(appId.get,
-            logApplicationReport = conf.getBoolean("spark.yarn.log.application.report", true))
+            logApplicationReport = conf.getBoolean(SPARK_YARN_LOG_APPLICATION_REPORT, true))
         logError(s"YARN application has exited unexpectedly with state $state! " +
           "Check the YARN application logs for more details.")
         diags.foreach { err =>

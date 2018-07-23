@@ -500,6 +500,13 @@ providers can be disabled individually by setting `spark.security.credentials.{s
   The default value should be enough for most deployments.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.log.application.report</code></td>
+  <td>true</td>
+  <td>
+  Whether to show the interaction reports with yarn.
+  </td>
+</tr>
 </table>
 
 ## Troubleshooting Kerberos
