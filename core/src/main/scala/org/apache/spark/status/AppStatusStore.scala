@@ -94,11 +94,10 @@ private[spark] class AppStatusStore(
       }.toSeq
   }
 
-  def getJobIdsAssociatedWithStage(stageId: Int): Seq[Set[Int]] = {
-    store.view(classOf[StageDataWrapper]).index("stageId").first(stageId).last(stageId)
-      .asScala.map { s =>
-        s.jobIds
-    }.toSeq
+  def getJobIdsAssociatedWithStage(stageId: Int, stageAttemptId: Int): Seq[Int] = {
+    val stageKey = Array(stageId, stageAttemptId)
+    val jobIds = store.read(classOf[StageDataWrapper], stageKey).jobIds.toSeq
+    jobIds
   }
 
   def lastStageAttempt(stageId: Int): v1.StageData = {

@@ -115,7 +115,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         return UIUtils.headerSparkPage(request, stageHeader, content, parent)
       }
 
-    val stageJobIds = parent.store.getJobIdsAssociatedWithStage(stageId)
+    val stageJobIds = parent.store.getJobIdsAssociatedWithStage(stageId, stageAttemptId)
 
     val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
 
