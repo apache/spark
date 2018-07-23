@@ -16,23 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import java.io.File
-
-import com.google.common.base.Charsets
-import com.google.common.io.Files
-
-package object config {
-  def getTestImageTag: String = {
-    val imageTagFileProp = System.getProperty("spark.kubernetes.test.imageTagFile")
-    require(imageTagFileProp != null, "Image tag file must be provided in system properties.")
-    val imageTagFile = new File(imageTagFileProp)
-    require(imageTagFile.isFile, s"No file found for image tag at ${imageTagFile.getAbsolutePath}.")
-    Files.toString(imageTagFile, Charsets.UTF_8).trim
-  }
-
-  def getTestImageRepo: String = {
-    val imageRepo = System.getProperty("spark.kubernetes.test.imageRepo")
-    require(imageRepo != null, "Image repo must be provided in system properties.")
-    imageRepo
-  }
+object TestConstants {
+  val MINIKUBE_TEST_BACKEND = "minikube"
+  val GCE_TEST_BACKEND = "gce"
 }
