@@ -111,5 +111,5 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     prev = null
   }
 
-  @transient protected lazy override val isBarrier_ : Boolean = false
+  private[spark] override def isBarrier(): Boolean = false
 }

@@ -295,7 +295,7 @@ private[spark] class TaskSchedulerImpl(
             // Only update hosts for a barrier task.
             if (taskSet.isBarrier) {
               // The executor address is expected to be non empty.
-              addressesWithDescs += Tuple2(shuffledOffers(i).address.get, task)
+              addressesWithDescs += (shuffledOffers(i).address.get -> task)
             }
             launchedTask = true
           }
