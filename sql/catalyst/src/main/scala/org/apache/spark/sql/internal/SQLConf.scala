@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.Deflater
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -1438,9 +1439,10 @@ object SQLConf {
 
   val AVRO_DEFLATE_LEVEL = buildConf("spark.sql.avro.deflate.level")
     .doc("Compression level for the deflate codec used in writing of AVRO files. " +
-      "Valid value must be in the range of from 1 to 9 inclusive. Default value is 6.")
+      "Valid value must be in the range of from 1 to 9 inclusive. " +
+      "The default value is -1 which corresponds to 6 level in the current implementation.")
     .intConf
-    .createWithDefault(6)
+    .createWithDefault(Deflater.DEFAULT_COMPRESSION)
 }
 
 /**
