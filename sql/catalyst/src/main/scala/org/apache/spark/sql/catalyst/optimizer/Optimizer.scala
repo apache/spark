@@ -174,10 +174,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ReplaceExceptWithAntiJoin.ruleName ::
       ReplaceDistinctWithAggregate.ruleName ::
       PullupCorrelatedPredicates.ruleName ::
-      RewritePredicateSubquery.ruleName ::
-      ColumnPruning.ruleName ::
-      CollapseProject.ruleName ::
-      RemoveRedundantProject.ruleName :: Nil
+      RewritePredicateSubquery.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
