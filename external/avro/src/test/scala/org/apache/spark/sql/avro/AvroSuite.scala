@@ -903,16 +903,19 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val deflateDir = s"$dir/deflate"
       val snappyDir = s"$dir/snappy"
 
-      val df = spark.read.avro(testAvro)
+      val df = spark.read.format("avro").load(testAvro)
       df.write
         .option("compression", "uncompressed")
-        .avro(uncompressDir)
+        .format("avro")
+        .save(uncompressDir)
       df.write
         .options(Map("compression" -> "deflate", "compressionLevel" -> "9"))
-        .avro(deflateDir)
+        .format("avro")
+        .save(deflateDir)
       df.write
         .option("compression", "snappy")
-        .avro(snappyDir)
+        .format("avro")
+        .save(snappyDir)
 
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
       val deflateSize = FileUtils.sizeOfDirectory(new File(deflateDir))
