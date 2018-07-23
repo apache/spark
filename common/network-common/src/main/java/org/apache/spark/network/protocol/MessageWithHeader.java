@@ -47,7 +47,7 @@ class MessageWithHeader extends AbstractFileRegion {
   /**
    * When the write buffer size is larger than this limit, I/O will be done in chunks of this size.
    * The size should not be too large as it will waste underlying memory copy. e.g. If network
-   * avaliable buffer is smaller than this limit, the data cannot be sent within one single write
+   * available buffer is smaller than this limit, the data cannot be sent within one single write
    * operation while it still will make memory copy with this size.
    */
   private static final int NIO_BUFFER_LIMIT = 256 * 1024;
@@ -100,7 +100,7 @@ class MessageWithHeader extends AbstractFileRegion {
    * transferTo invocations in order to transfer a single MessageWithHeader to avoid busy waiting.
    *
    * The contract is that the caller will ensure position is properly set to the total number
-   * of bytes transferred so far (i.e. value returned by transfered()).
+   * of bytes transferred so far (i.e. value returned by transferred()).
    */
   @Override
   public long transferTo(final WritableByteChannel target, final long position) throws IOException {
@@ -137,28 +137,13 @@ class MessageWithHeader extends AbstractFileRegion {
   }
 
   private int copyByteBuf(ByteBuf buf, WritableByteChannel target) throws IOException {
-    ByteBuffer buffer = buf.nioBuffer();
-    int written = (buffer.remaining() <= NIO_BUFFER_LIMIT) ?
-      target.write(buffer) : writeNioBuffer(target, buffer);
+    // SPARK-24578: cap the sub-region's size of returned nio buffer to improve the performance
+    // for the case that the passed-in buffer has too many components.
+    int length = Math.min(buf.readableBytes(), NIO_BUFFER_LIMIT);
+    ByteBuffer buffer = buf.nioBuffer(buf.readerIndex(), length);
+    int written = target.write(buffer);
     buf.skipBytes(written);
     return written;
-  }
-
-  private int writeNioBuffer(
-      WritableByteChannel writeCh,
-      ByteBuffer buf) throws IOException {
-    int originalLimit = buf.limit();
-    int ret = 0;
-
-    try {
-      int ioSize = Math.min(buf.remaining(), NIO_BUFFER_LIMIT);
-      buf.limit(buf.position() + ioSize);
-      ret = writeCh.write(buf);
-    } finally {
-      buf.limit(originalLimit);
-    }
-
-    return ret;
   }
 
   @Override

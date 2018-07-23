@@ -21,16 +21,14 @@ import scala.beans.BeanInfo
 
 import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.Row
 
 @BeanInfo
 case class DCTTestData(vec: Vector, wantedVec: Vector)
 
-class DCTSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class DCTSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -72,11 +70,9 @@ class DCTSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       .setOutputCol("resultVec")
       .setInverse(inverse)
 
-    transformer.transform(dataset)
-      .select("resultVec", "wantedVec")
-      .collect()
-      .foreach { case Row(resultVec: Vector, wantedVec: Vector) =>
-      assert(Vectors.sqdist(resultVec, wantedVec) < 1e-6)
+    testTransformer[(Vector, Vector)](dataset, transformer, "resultVec", "wantedVec") {
+      case Row(resultVec: Vector, wantedVec: Vector) =>
+        assert(Vectors.sqdist(resultVec, wantedVec) < 1e-6)
     }
   }
 }

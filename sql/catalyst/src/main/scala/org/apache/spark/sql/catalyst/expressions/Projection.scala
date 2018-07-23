@@ -108,7 +108,31 @@ abstract class UnsafeProjection extends Projection {
   override def apply(row: InternalRow): UnsafeRow
 }
 
-object UnsafeProjection {
+/**
+ * The factory object for `UnsafeProjection`.
+ */
+object UnsafeProjection
+    extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
+
+  override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
+    GenerateUnsafeProjection.generate(in)
+  }
+
+  override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
+    InterpretedUnsafeProjection.createProjection(in)
+  }
+
+  protected def toBoundExprs(
+      exprs: Seq[Expression],
+      inputSchema: Seq[Attribute]): Seq[Expression] = {
+    exprs.map(BindReferences.bindReference(_, inputSchema))
+  }
+
+  protected def toUnsafeExprs(exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.map(_ transform {
+      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+    })
+  }
 
   /**
    * Returns an UnsafeProjection for given StructType.
@@ -127,13 +151,10 @@ object UnsafeProjection {
   }
 
   /**
-   * Returns an UnsafeProjection for given sequence of Expressions (bounded).
+   * Returns an UnsafeProjection for given sequence of bound Expressions.
    */
   def create(exprs: Seq[Expression]): UnsafeProjection = {
-    val unsafeExprs = exprs.map(_ transform {
-      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-    })
-    GenerateUnsafeProjection.generate(unsafeExprs)
+    createObject(toUnsafeExprs(exprs))
   }
 
   def create(expr: Expression): UnsafeProjection = create(Seq(expr))
@@ -143,22 +164,24 @@ object UnsafeProjection {
    * `inputSchema`.
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
-    create(exprs.map(BindReferences.bindReference(_, inputSchema)))
+    create(toBoundExprs(exprs, inputSchema))
   }
 
   /**
    * Same as other create()'s but allowing enabling/disabling subexpression elimination.
-   * TODO: refactor the plumbing and clean this up.
+   * The param `subexpressionEliminationEnabled` doesn't guarantee to work. For example,
+   * when fallbacking to interpreted execution, it is not supported.
    */
   def create(
       exprs: Seq[Expression],
       inputSchema: Seq[Attribute],
       subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
-    val e = exprs.map(BindReferences.bindReference(_, inputSchema))
-      .map(_ transform {
-        case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-    })
-    GenerateUnsafeProjection.generate(e, subexpressionEliminationEnabled)
+    val unsafeExprs = toUnsafeExprs(toBoundExprs(exprs, inputSchema))
+    try {
+      GenerateUnsafeProjection.generate(unsafeExprs, subexpressionEliminationEnabled)
+    } catch {
+      case CodegenError(_) => InterpretedUnsafeProjection.createProjection(unsafeExprs)
+    }
   }
 }
 

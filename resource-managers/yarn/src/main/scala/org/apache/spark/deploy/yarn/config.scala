@@ -231,16 +231,6 @@ package object config {
 
   /* Security configuration. */
 
-  private[spark] val CREDENTIAL_FILE_MAX_COUNT =
-    ConfigBuilder("spark.yarn.credentials.file.retention.count")
-      .intConf
-      .createWithDefault(5)
-
-  private[spark] val CREDENTIALS_FILE_MAX_RETENTION =
-    ConfigBuilder("spark.yarn.credentials.file.retention.days")
-      .intConf
-      .createWithDefault(5)
-
   private[spark] val NAMENODES_TO_ACCESS = ConfigBuilder("spark.yarn.access.namenodes")
     .doc("Extra NameNode URLs for which to request delegation tokens. The NameNode that hosts " +
       "fs.defaultFS does not need to be listed here.")
@@ -270,11 +260,6 @@ package object config {
       .createOptional
 
   /* Private configs. */
-
-  private[spark] val CREDENTIALS_FILE_PATH = ConfigBuilder("spark.yarn.credentials.file")
-    .internal()
-    .stringConf
-    .createWithDefault(null)
 
   // Internal config to propagate the location of the user's jar to the driver/executors
   private[spark] val APP_JAR = ConfigBuilder("spark.yarn.user.jar")
@@ -329,16 +314,6 @@ package object config {
     .stringConf
     .createOptional
 
-  private[spark] val CREDENTIALS_RENEWAL_TIME = ConfigBuilder("spark.yarn.credentials.renewalTime")
-    .internal()
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createWithDefault(Long.MaxValue)
-
-  private[spark] val CREDENTIALS_UPDATE_TIME = ConfigBuilder("spark.yarn.credentials.updateTime")
-    .internal()
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createWithDefault(Long.MaxValue)
-
   private[spark] val KERBEROS_RELOGIN_PERIOD = ConfigBuilder("spark.yarn.kerberos.relogin.period")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("1m")
@@ -352,5 +327,11 @@ package object config {
     CACHED_FILES_VISIBILITIES,
     CACHED_FILES_TYPES,
     CACHED_CONF_ARCHIVE)
+
+  /* YARN allocator-level blacklisting related config entries. */
+  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
+    ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
+      .booleanConf
+      .createWithDefault(false)
 
 }

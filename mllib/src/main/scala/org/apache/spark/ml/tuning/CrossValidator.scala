@@ -94,7 +94,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * Set the mamixum level of parallelism to evaluate models in parallel.
+   * Set the maximum level of parallelism to evaluate models in parallel.
    * Default is 1 for serial evaluation
    *
    * @group expertSetParam
@@ -144,7 +144,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
-      logDebug(s"Train split $splitIndex with multiple sets of parameters.")
+      instr.logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       // Fit models in a Future for training in parallel
       val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
@@ -155,24 +155,26 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
           }
           // TODO: duplicate evaluator to take extra params from input
           val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-          logDebug(s"Got metric $metric for model trained with $paramMap.")
+          instr.logDebug(s"Got metric $metric for model trained with $paramMap.")
           metric
         } (executionContext)
       }
 
-      // Wait for metrics to be calculated before unpersisting validation dataset
+      // Wait for metrics to be calculated
       val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+
+      // Unpersist training & validation set once all metrics have been produced
       trainingDataset.unpersist()
       validationDataset.unpersist()
       foldMetrics
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
 
-    logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
+    instr.logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
-    logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
-    logInfo(s"Best cross-validation metric: $bestMetric.")
+    instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
+    instr.logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     instr.logSuccess(bestModel)
     copyValues(new CrossValidatorModel(uid, bestModel, metrics)
@@ -232,8 +234,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
         .setEstimator(estimator)
         .setEvaluator(evaluator)
         .setEstimatorParamMaps(estimatorParamMaps)
-      DefaultParamsReader.getAndSetParams(cv, metadata,
-        skipParams = Option(List("estimatorParamMaps")))
+      metadata.getAndSetParams(cv, skipParams = Option(List("estimatorParamMaps")))
       cv
     }
   }
@@ -265,6 +266,17 @@ class CrossValidatorModel private[ml] (
   private[tuning] def setSubModels(subModels: Option[Array[Array[Model[_]]]])
     : CrossValidatorModel = {
     _subModels = subModels
+    this
+  }
+
+  // A Python-friendly auxiliary method
+  private[tuning] def setSubModels(subModels: JList[JList[Model[_]]])
+    : CrossValidatorModel = {
+    _subModels = if (subModels != null) {
+      Some(subModels.asScala.toArray.map(_.asScala.toArray))
+    } else {
+      None
+    }
     this
   }
 
@@ -418,8 +430,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       model.set(model.estimator, estimator)
         .set(model.evaluator, evaluator)
         .set(model.estimatorParamMaps, estimatorParamMaps)
-      DefaultParamsReader.getAndSetParams(model, metadata,
-        skipParams = Option(List("estimatorParamMaps")))
+      metadata.getAndSetParams(model, skipParams = Option(List("estimatorParamMaps")))
       model
     }
   }

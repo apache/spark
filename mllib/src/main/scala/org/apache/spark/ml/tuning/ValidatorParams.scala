@@ -89,8 +89,8 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
 
 
   /**
-   * Summary of grid search tuning in the format of DataFrame. Each row contains one candidate
-   * paramMap and the corresponding metric of trained model.
+   * @return Summary of grid search tuning in the format of DataFrame. Each row contains one
+   *         candidate paramMap and the corresponding metric of trained model.
    */
   protected def getTuningSummaryDF(metrics: Array[Double]): DataFrame = {
     val paramMaps = $(estimatorParamMaps)

@@ -20,16 +20,16 @@ package test.org.apache.spark.sql.sources.v2;
 import java.util.List;
 
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.ReadSupportWithSchema;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
-import org.apache.spark.sql.sources.v2.reader.ReadTask;
+import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
+import org.apache.spark.sql.sources.v2.reader.InputPartition;
 import org.apache.spark.sql.types.StructType;
 
 public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupportWithSchema {
 
-  class Reader implements DataSourceV2Reader {
+  class Reader implements DataSourceReader {
     private final StructType schema;
 
     Reader(StructType schema) {
@@ -42,13 +42,13 @@ public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupportWi
     }
 
     @Override
-    public List<ReadTask<Row>> createReadTasks() {
+    public List<InputPartition<Row>> planInputPartitions() {
       return java.util.Collections.emptyList();
     }
   }
 
   @Override
-  public DataSourceV2Reader createReader(StructType schema, DataSourceV2Options options) {
+  public DataSourceReader createReader(StructType schema, DataSourceOptions options) {
     return new Reader(schema);
   }
 }

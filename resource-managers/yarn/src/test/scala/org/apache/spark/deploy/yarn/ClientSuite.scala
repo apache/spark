@@ -357,6 +357,39 @@ class ClientSuite extends SparkFunSuite with Matchers {
     sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
+  private val matching = Seq(
+    ("files URI match test1", "file:///file1", "file:///file2"),
+    ("files URI match test2", "file:///c:file1", "file://c:file2"),
+    ("files URI match test3", "file://host/file1", "file://host/file2"),
+    ("wasb URI match test", "wasb://bucket1@user", "wasb://bucket1@user/"),
+    ("hdfs URI match test", "hdfs:/path1", "hdfs:/path1")
+  )
+
+  matching.foreach { t =>
+      test(t._1) {
+        assert(Client.compareUri(new URI(t._2), new URI(t._3)),
+          s"No match between ${t._2} and ${t._3}")
+      }
+  }
+
+  private val unmatching = Seq(
+    ("files URI unmatch test1", "file:///file1", "file://host/file2"),
+    ("files URI unmatch test2", "file://host/file1", "file:///file2"),
+    ("files URI unmatch test3", "file://host/file1", "file://host2/file2"),
+    ("wasb URI unmatch test1", "wasb://bucket1@user", "wasb://bucket2@user/"),
+    ("wasb URI unmatch test2", "wasb://bucket1@user", "wasb://bucket1@user2/"),
+    ("s3 URI unmatch test", "s3a://user@pass:bucket1/", "s3a://user2@pass2:bucket1/"),
+    ("hdfs URI unmatch test1", "hdfs://namenode1/path1", "hdfs://namenode1:8080/path2"),
+    ("hdfs URI unmatch test2", "hdfs://namenode1:8020/path1", "hdfs://namenode1:8080/path2")
+  )
+
+  unmatching.foreach { t =>
+      test(t._1) {
+        assert(!Client.compareUri(new URI(t._2), new URI(t._3)),
+          s"match between ${t._2} and ${t._3}")
+      }
+  }
+
   object Fixtures {
 
     val knownDefYarnAppCP: Seq[String] =

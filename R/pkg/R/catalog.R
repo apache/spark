@@ -34,7 +34,6 @@
 #' @return A SparkDataFrame.
 #' @rdname createExternalTable-deprecated
 #' @seealso \link{createTable}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -71,7 +70,6 @@ createExternalTable <- function(x, ...) {
 #' @return A SparkDataFrame.
 #' @rdname createTable
 #' @seealso \link{createExternalTable}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -110,7 +108,6 @@ createTable <- function(tableName, path = NULL, source = NULL, schema = NULL, ..
 #'                  identifier is provided, it refers to a table in the current database.
 #' @return SparkDataFrame
 #' @rdname cacheTable
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -140,7 +137,6 @@ cacheTable <- function(x, ...) {
 #'                  identifier is provided, it refers to a table in the current database.
 #' @return SparkDataFrame
 #' @rdname uncacheTable
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -167,7 +163,6 @@ uncacheTable <- function(x, ...) {
 #' Removes all cached tables from the in-memory cache.
 #'
 #' @rdname clearCache
-#' @export
 #' @examples
 #' \dontrun{
 #' clearCache()
@@ -193,7 +188,6 @@ clearCache <- function() {
 #' @param tableName The name of the SparkSQL table to be dropped.
 #' @seealso \link{dropTempView}
 #' @rdname dropTempTable-deprecated
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -225,7 +219,6 @@ dropTempTable <- function(x, ...) {
 #' @return TRUE if the view is dropped successfully, FALSE otherwise.
 #' @rdname dropTempView
 #' @name dropTempView
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -251,7 +244,6 @@ dropTempView <- function(viewName) {
 #' @return a SparkDataFrame
 #' @rdname tables
 #' @seealso \link{listTables}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -276,7 +268,6 @@ tables <- function(x, ...) {
 #' @param databaseName (optional) name of the database
 #' @return a list of table names
 #' @rdname tableNames
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -304,7 +295,6 @@ tableNames <- function(x, ...) {
 #' @return name of the current default database.
 #' @rdname currentDatabase
 #' @name currentDatabase
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -324,7 +314,6 @@ currentDatabase <- function() {
 #' @param databaseName name of the database
 #' @rdname setCurrentDatabase
 #' @name setCurrentDatabase
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -347,7 +336,6 @@ setCurrentDatabase <- function(databaseName) {
 #' @return a SparkDataFrame of the list of databases.
 #' @rdname listDatabases
 #' @name listDatabases
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -370,7 +358,6 @@ listDatabases <- function() {
 #' @rdname listTables
 #' @name listTables
 #' @seealso \link{tables}
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -403,7 +390,6 @@ listTables <- function(databaseName = NULL) {
 #' @return a SparkDataFrame of the list of column descriptions.
 #' @rdname listColumns
 #' @name listColumns
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -433,7 +419,6 @@ listColumns <- function(tableName, databaseName = NULL) {
 #' @return a SparkDataFrame of the list of function descriptions.
 #' @rdname listFunctions
 #' @name listFunctions
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -463,7 +448,6 @@ listFunctions <- function(databaseName = NULL) {
 #'                  identifier is provided, it refers to a table in the current database.
 #' @rdname recoverPartitions
 #' @name recoverPartitions
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -490,7 +474,6 @@ recoverPartitions <- function(tableName) {
 #'                  identifier is provided, it refers to a table in the current database.
 #' @rdname refreshTable
 #' @name refreshTable
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -512,7 +495,6 @@ refreshTable <- function(tableName) {
 #' @param path the path of the data source.
 #' @rdname refreshByPath
 #' @name refreshByPath
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()

@@ -38,7 +38,7 @@ import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
- * Provides SASL-based encription for transport channels. The single method exposed by this
+ * Provides SASL-based encryption for transport channels. The single method exposed by this
  * class installs the needed channel handlers on a connected channel.
  */
 class SaslEncryption {
@@ -166,7 +166,7 @@ class SaslEncryption {
      * This makes assumptions about how netty treats FileRegion instances, because there's no way
      * to know beforehand what will be the size of the encrypted message. Namely, it assumes
      * that netty will try to transfer data from this message while
-     * <code>transfered() < count()</code>. So these two methods return, technically, wrong data,
+     * <code>transferred() < count()</code>. So these two methods return, technically, wrong data,
      * but netty doesn't know better.
      */
     @Override

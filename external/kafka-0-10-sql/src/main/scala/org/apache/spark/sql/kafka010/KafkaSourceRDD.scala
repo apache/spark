@@ -52,7 +52,7 @@ private[kafka010] case class KafkaSourceRDDPartition(
  * An RDD that reads data from Kafka based on offset ranges across multiple partitions.
  * Additionally, it allows preferred locations to be set for each topic + partition, so that
  * the [[KafkaSource]] can ensure the same executor always reads the same topic + partition
- * and cached KafkaConsuemrs (see [[CachedKafkaConsumer]] can be used read data efficiently.
+ * and cached KafkaConsumers (see [[KafkaDataConsumer]] can be used read data efficiently.
  *
  * @param sc the [[SparkContext]]
  * @param executorKafkaParams Kafka configuration for creating KafkaConsumer on the executors
@@ -126,14 +126,9 @@ private[kafka010] class KafkaSourceRDD(
     val sourcePartition = thePart.asInstanceOf[KafkaSourceRDDPartition]
     val topic = sourcePartition.offsetRange.topic
     val kafkaPartition = sourcePartition.offsetRange.partition
-    val consumer =
-      if (!reuseKafkaConsumer) {
-        // If we can't reuse CachedKafkaConsumers, creating a new CachedKafkaConsumer. As here we
-        // uses `assign`, we don't need to worry about the "group.id" conflicts.
-        CachedKafkaConsumer.createUncached(topic, kafkaPartition, executorKafkaParams)
-      } else {
-        CachedKafkaConsumer.getOrCreate(topic, kafkaPartition, executorKafkaParams)
-      }
+    val consumer = KafkaDataConsumer.acquire(
+      sourcePartition.offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
+
     val range = resolveRange(consumer, sourcePartition.offsetRange)
     assert(
       range.fromOffset <= range.untilOffset,
@@ -167,13 +162,7 @@ private[kafka010] class KafkaSourceRDD(
         }
 
         override protected def close(): Unit = {
-          if (!reuseKafkaConsumer) {
-            // Don't forget to close non-reuse KafkaConsumers. You may take down your cluster!
-            consumer.close()
-          } else {
-            // Indicate that we're no longer using this consumer
-            CachedKafkaConsumer.releaseKafkaConsumer(topic, kafkaPartition, executorKafkaParams)
-          }
+          consumer.release()
         }
       }
       // Release consumer, either by removing it or indicating we're no longer using it
@@ -184,7 +173,7 @@ private[kafka010] class KafkaSourceRDD(
     }
   }
 
-  private def resolveRange(consumer: CachedKafkaConsumer, range: KafkaSourceRDDOffsetRange) = {
+  private def resolveRange(consumer: KafkaDataConsumer, range: KafkaSourceRDDOffsetRange) = {
     if (range.fromOffset < 0 || range.untilOffset < 0) {
       // Late bind the offset range
       val availableOffsetRange = consumer.getAvailableOffsetRange()

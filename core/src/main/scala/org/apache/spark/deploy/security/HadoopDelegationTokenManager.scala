@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
  *
  * Also, each HadoopDelegationTokenProvider is controlled by
  * spark.security.credentials.{service}.enabled, and will not be loaded if this config is set to
- * false.  For example, Hive's delegation token provider [[HiveDelegationTokenProvider]] can be
+ * false. For example, Hive's delegation token provider [[HiveDelegationTokenProvider]] can be
  * enabled/disabled by the configuration spark.security.credentials.hive.enabled.
  *
  * @param sparkConf Spark configuration
@@ -52,7 +52,7 @@ private[spark] class HadoopDelegationTokenManager(
 
   // Maintain all the registered delegation token providers
   private val delegationTokenProviders = getDelegationTokenProviders
-  logDebug(s"Using the following delegation token providers: " +
+  logDebug("Using the following builtin delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
   /** Construct a [[HadoopDelegationTokenManager]] for the default Hadoop filesystem */
@@ -64,15 +64,26 @@ private[spark] class HadoopDelegationTokenManager(
   }
 
   private def getDelegationTokenProviders: Map[String, HadoopDelegationTokenProvider] = {
-    val providers = List(new HadoopFSDelegationTokenProvider(fileSystems),
-      new HiveDelegationTokenProvider,
-      new HBaseDelegationTokenProvider)
+    val providers = Seq(new HadoopFSDelegationTokenProvider(fileSystems)) ++
+      safeCreateProvider(new HiveDelegationTokenProvider) ++
+      safeCreateProvider(new HBaseDelegationTokenProvider)
 
     // Filter out providers for which spark.security.credentials.{service}.enabled is false.
     providers
       .filter { p => isServiceEnabled(p.serviceName) }
       .map { p => (p.serviceName, p) }
       .toMap
+  }
+
+  private def safeCreateProvider(
+      createFn: => HadoopDelegationTokenProvider): Option[HadoopDelegationTokenProvider] = {
+    try {
+      Some(createFn)
+    } catch {
+      case t: Throwable =>
+        logDebug(s"Failed to load built in provider.", t)
+        None
+    }
   }
 
   def isServiceEnabled(serviceName: String): Boolean = {

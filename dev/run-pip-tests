@@ -25,10 +25,10 @@ shopt -s nullglob
 FWDIR="$(cd "$(dirname "$0")"/..; pwd)"
 cd "$FWDIR"
 
-echo "Constucting virtual env for testing"
+echo "Constructing virtual env for testing"
 VIRTUALENV_BASE=$(mktemp -d)
 
-# Clean up the virtual env enviroment used if we created one.
+# Clean up the virtual env environment used if we created one.
 function delete_virtualenv() {
   echo "Cleaning up temporary directory - $VIRTUALENV_BASE"
   rm -rf "$VIRTUALENV_BASE"
@@ -89,7 +89,7 @@ for python in "${PYTHON_EXECS[@]}"; do
       source "$VIRTUALENV_PATH"/bin/activate
     fi
     # Upgrade pip & friends if using virutal env
-    if [ ! -n "USE_CONDA" ]; then
+    if [ ! -n "$USE_CONDA" ]; then
       pip install --upgrade pip pypandoc wheel numpy
     fi
 

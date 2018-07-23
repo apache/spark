@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Counts words in UTF8 encoded, '\n' delimited text received from the network over a
  sliding window of configurable duration. Each line from the network is tagged
  with a timestamp that is used to determine the windows into which it falls.
@@ -53,7 +53,7 @@ if __name__ == "__main__":
         msg = ("Usage: structured_network_wordcount_windowed.py <hostname> <port> "
                "<window duration in seconds> [<slide duration in seconds>]")
         print(msg, file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     host = sys.argv[1]
     port = int(sys.argv[2])

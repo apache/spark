@@ -87,7 +87,8 @@ private[v1] class StagesResource extends BaseAppResource {
       }
     }
 
-    ui.store.taskSummary(stageId, stageAttemptId, quantiles)
+    ui.store.taskSummary(stageId, stageAttemptId, quantiles).getOrElse(
+      throw new NotFoundException(s"No tasks reported metrics for $stageId / $stageAttemptId yet."))
   }
 
   @GET

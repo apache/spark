@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.server;
 
+import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
@@ -28,20 +29,10 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
-import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.protocol.ChunkFetchRequest;
-import org.apache.spark.network.protocol.ChunkFetchFailure;
-import org.apache.spark.network.protocol.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.Encodable;
-import org.apache.spark.network.protocol.OneWayMessage;
-import org.apache.spark.network.protocol.RequestMessage;
-import org.apache.spark.network.protocol.RpcFailure;
-import org.apache.spark.network.protocol.RpcRequest;
-import org.apache.spark.network.protocol.RpcResponse;
-import org.apache.spark.network.protocol.StreamFailure;
-import org.apache.spark.network.protocol.StreamRequest;
-import org.apache.spark.network.protocol.StreamResponse;
+import org.apache.spark.network.client.*;
+import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.util.TransportFrameDecoder;
+
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
@@ -52,6 +43,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * The messages should have been processed by the pipeline setup by {@link TransportServer}.
  */
 public class TransportRequestHandler extends MessageHandler<RequestMessage> {
+
   private static final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
 
   /** The Netty channel that this handler is associated with. */
@@ -113,6 +105,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       processOneWayMessage((OneWayMessage) request);
     } else if (request instanceof StreamRequest) {
       processStreamRequest((StreamRequest) request);
+    } else if (request instanceof UploadStream) {
+      processStreamUpload((UploadStream) request);
     } else {
       throw new IllegalArgumentException("Unknown request type: " + request);
     }
@@ -200,6 +194,79 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
     } finally {
       req.body().release();
+    }
+  }
+
+  /**
+   * Handle a request from the client to upload a stream of data.
+   */
+  private void processStreamUpload(final UploadStream req) {
+    assert (req.body() == null);
+    try {
+      RpcResponseCallback callback = new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+          respond(new RpcResponse(req.requestId, new NioManagedBuffer(response)));
+        }
+
+        @Override
+        public void onFailure(Throwable e) {
+          respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+        }
+      };
+      TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
+          channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
+      ByteBuffer meta = req.meta.nioByteBuffer();
+      StreamCallbackWithID streamHandler = rpcHandler.receiveStream(reverseClient, meta, callback);
+      if (streamHandler == null) {
+        throw new NullPointerException("rpcHandler returned a null streamHandler");
+      }
+      StreamCallbackWithID wrappedCallback = new StreamCallbackWithID() {
+        @Override
+        public void onData(String streamId, ByteBuffer buf) throws IOException {
+          streamHandler.onData(streamId, buf);
+        }
+
+        @Override
+        public void onComplete(String streamId) throws IOException {
+           try {
+             streamHandler.onComplete(streamId);
+             callback.onSuccess(ByteBuffer.allocate(0));
+           } catch (Exception ex) {
+             IOException ioExc = new IOException("Failure post-processing complete stream;" +
+               " failing this rpc and leaving channel active");
+             callback.onFailure(ioExc);
+             streamHandler.onFailure(streamId, ioExc);
+           }
+        }
+
+        @Override
+        public void onFailure(String streamId, Throwable cause) throws IOException {
+          callback.onFailure(new IOException("Destination failed while reading stream", cause));
+          streamHandler.onFailure(streamId, cause);
+        }
+
+        @Override
+        public String getID() {
+          return streamHandler.getID();
+        }
+      };
+      if (req.bodyByteCount > 0) {
+        StreamInterceptor interceptor = new StreamInterceptor(this, wrappedCallback.getID(),
+          req.bodyByteCount, wrappedCallback);
+        frameDecoder.setInterceptor(interceptor);
+      } else {
+        wrappedCallback.onComplete(wrappedCallback.getID());
+      }
+    } catch (Exception e) {
+      logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
+      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+      // We choose to totally fail the channel, rather than trying to recover as we do in other
+      // cases.  We don't know how many bytes of the stream the client has already sent for the
+      // stream, it's not worth trying to recover.
+      channel.pipeline().fireExceptionCaught(e);
+    } finally {
+      req.meta.release();
     }
   }
 
