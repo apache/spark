@@ -208,18 +208,13 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
   }
 
   test("SPARK-24850 InMemoryRelation string representation does not include cached plan") {
-    val dummyQueryExecution = spark.range(0, 1).toDF().queryExecution
-    val inMemoryRelation = InMemoryRelation(
-      true,
-      1000,
-      StorageLevel.MEMORY_ONLY,
-      dummyQueryExecution.sparkPlan,
-      Some("test-relation"),
-      dummyQueryExecution.logical)
-
-    assert(!inMemoryRelation.simpleString.contains(dummyQueryExecution.sparkPlan.toString))
-    assert(inMemoryRelation.simpleString ==
-      s"InMemoryRelation(${inMemoryRelation.output},"
-      + " StorageLevel(memory, deserialized, 1 replicas))")
+    val df = Seq(1).toDF("a").cache()
+    val outputStream = new java.io.ByteArrayOutputStream()
+    Console.withOut(outputStream) {
+      df.explain(false)
+    }
+    assert(outputStream.toString.replaceAll("#\\d+", "#x").contains(
+      "InMemoryRelation [a#x], StorageLevel(disk, memory, deserialized, 1 replicas)"
+    ))
   }
 }
