@@ -50,8 +50,6 @@ case class CachedRDDBuilder(
     tableName: Option[String])(
     @transient private var _cachedColumnBuffers: RDD[CachedBatch] = null) {
 
-  override def toString: String = s"CachedRDDBuilder($useCompression, $batchSize, $storageLevel)"
-
   val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
 
   def cachedColumnBuffers: RDD[CachedBatch] = {
@@ -209,4 +207,7 @@ case class InMemoryRelation(
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(statsOfPlanToCache)
+
+  override def simpleString: String = s"InMemoryRelation(${output}, ${cacheBuilder.storageLevel})"
+
 }

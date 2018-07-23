@@ -218,7 +218,8 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
       dummyQueryExecution.logical)
 
     assert(!inMemoryRelation.simpleString.contains(dummyQueryExecution.sparkPlan.toString))
-    assert(inMemoryRelation.simpleString.contains(
-      "CachedRDDBuilder(true, 1000, StorageLevel(memory, deserialized, 1 replicas))"))
+    assert(inMemoryRelation.simpleString ==
+      s"InMemoryRelation(${inMemoryRelation.output},"
+      + " StorageLevel(memory, deserialized, 1 replicas))")
   }
 }
