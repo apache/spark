@@ -67,18 +67,4 @@ class JdbcConnectionUriSuite extends HiveThriftServer2Test {
       connection.close()
     }
   }
-
-  test("Checks cast as float") {
-    val jdbcUri = s"jdbc:hive2://localhost:$serverPort/$JDBC_TEST_DATABASE"
-    val connection = DriverManager.getConnection(jdbcUri, USER, PASSWORD)
-    val statement = connection.createStatement()
-    try {
-      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
-      resultSet.next()
-      assert(resultSet.getString(1) === "4.56")
-    } finally {
-      statement.close()
-      connection.close()
-    }
-  }
 }
