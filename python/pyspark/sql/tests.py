@@ -5051,7 +5051,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     def test_mixed_udf(self):
         import pandas as pd
-        from pyspark.sql.functions import udf, pandas_udf
+        from pyspark.sql.functions import col, udf, pandas_udf
 
         df = self.spark.range(0, 1).toDF('v')
 
@@ -5078,55 +5078,58 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return x + 1000
 
         # Test mixed udfs in a single projection
-        df1 = df.withColumn('f1', f1(df['v']))
-        df1 = df1.withColumn('f2', f2(df1['v']))
-        df1 = df1.withColumn('f3', f3(df1['v']))
-        df1 = df1.withColumn('f4', f4(df1['v']))
-        df1 = df1.withColumn('f2_f1', f2(df1['f1']))
-        df1 = df1.withColumn('f3_f1', f3(df1['f1']))
-        df1 = df1.withColumn('f4_f1', f4(df1['f1']))
-        df1 = df1.withColumn('f3_f2', f3(df1['f2']))
-        df1 = df1.withColumn('f4_f2', f4(df1['f2']))
-        df1 = df1.withColumn('f4_f3', f4(df1['f3']))
-        df1 = df1.withColumn('f3_f2_f1', f3(df1['f2_f1']))
-        df1 = df1.withColumn('f4_f2_f1', f4(df1['f2_f1']))
-        df1 = df1.withColumn('f4_f3_f1', f4(df1['f3_f1']))
-        df1 = df1.withColumn('f4_f3_f2', f4(df1['f3_f2']))
-        df1 = df1.withColumn('f4_f3_f2_f1', f4(df1['f3_f2_f1']))
+        df1 = df \
+            .withColumn('f1', f1(col('v'))) \
+            .withColumn('f2', f2(col('v'))) \
+            .withColumn('f3', f3(col('v'))) \
+            .withColumn('f4', f4(col('v'))) \
+            .withColumn('f2_f1', f2(col('f1'))) \
+            .withColumn('f3_f1', f3(col('f1'))) \
+            .withColumn('f4_f1', f4(col('f1'))) \
+            .withColumn('f3_f2', f3(col('f2'))) \
+            .withColumn('f4_f2', f4(col('f2'))) \
+            .withColumn('f4_f3', f4(col('f3'))) \
+            .withColumn('f3_f2_f1', f3(col('f2_f1'))) \
+            .withColumn('f4_f2_f1', f4(col('f2_f1'))) \
+            .withColumn('f4_f3_f1', f4(col('f3_f1'))) \
+            .withColumn('f4_f3_f2', f4(col('f3_f2'))) \
+            .withColumn('f4_f3_f2_f1', f4(col('f3_f2_f1')))
 
         # Test mixed udfs in a single expression
-        df2 = df.withColumn('f1', f1(df['v']))
-        df2 = df2.withColumn('f2', f2(df['v']))
-        df2 = df2.withColumn('f3', f3(df['v']))
-        df2 = df2.withColumn('f4', f4(df['v']))
-        df2 = df2.withColumn('f2_f1', f2(f1(df['v'])))
-        df2 = df2.withColumn('f3_f1', f3(f1(df['v'])))
-        df2 = df2.withColumn('f4_f1', f4(f1(df['v'])))
-        df2 = df2.withColumn('f3_f2', f3(f2(df['v'])))
-        df2 = df2.withColumn('f4_f2', f4(f2(df['v'])))
-        df2 = df2.withColumn('f4_f3', f4(f3(df['v'])))
-        df2 = df2.withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
-        df2 = df2.withColumn('f4_f2_f1', f4(f2(f1(df['v']))))
-        df2 = df2.withColumn('f4_f3_f1', f4(f3(f1(df['v']))))
-        df2 = df2.withColumn('f4_f3_f2', f4(f3(f2(df['v']))))
-        df2 = df2.withColumn('f4_f3_f2_f1', f4(f3(f2(f1(df['v'])))))
+        df2 = df \
+            .withColumn('f1', f1(col('v'))) \
+            .withColumn('f2', f2(col('v'))) \
+            .withColumn('f3', f3(col('v'))) \
+            .withColumn('f4', f4(col('v'))) \
+            .withColumn('f2_f1', f2(f1(col('v')))) \
+            .withColumn('f3_f1', f3(f1(col('v')))) \
+            .withColumn('f4_f1', f4(f1(col('v')))) \
+            .withColumn('f3_f2', f3(f2(col('v')))) \
+            .withColumn('f4_f2', f4(f2(col('v')))) \
+            .withColumn('f4_f3', f4(f3(col('v')))) \
+            .withColumn('f3_f2_f1', f3(f2(f1(col('v'))))) \
+            .withColumn('f4_f2_f1', f4(f2(f1(col('v'))))) \
+            .withColumn('f4_f3_f1', f4(f3(f1(col('v'))))) \
+            .withColumn('f4_f3_f2', f4(f3(f2(col('v'))))) \
+            .withColumn('f4_f3_f2_f1', f4(f3(f2(f1(col('v'))))))
 
         # expected result
-        df3 = df.withColumn('f1', df['v'] + 1)
-        df3 = df3.withColumn('f2', df['v'] + 10)
-        df3 = df3.withColumn('f3', df['v'] + 100)
-        df3 = df3.withColumn('f4', df['v'] + 1000)
-        df3 = df3.withColumn('f2_f1', df['v'] + 11)
-        df3 = df3.withColumn('f3_f1', df['v'] + 101)
-        df3 = df3.withColumn('f4_f1', df['v'] + 1001)
-        df3 = df3.withColumn('f3_f2', df['v'] + 110)
-        df3 = df3.withColumn('f4_f2', df['v'] + 1010)
-        df3 = df3.withColumn('f4_f3', df['v'] + 1100)
-        df3 = df3.withColumn('f3_f2_f1', df['v'] + 111)
-        df3 = df3.withColumn('f4_f2_f1', df['v'] + 1011)
-        df3 = df3.withColumn('f4_f3_f1', df['v'] + 1101)
-        df3 = df3.withColumn('f4_f3_f2', df['v'] + 1110)
-        df3 = df3.withColumn('f4_f3_f2_f1', df['v'] + 1111)
+        df3 = df \
+            .withColumn('f1', df['v'] + 1) \
+            .withColumn('f2', df['v'] + 10) \
+            .withColumn('f3', df['v'] + 100) \
+            .withColumn('f4', df['v'] + 1000) \
+            .withColumn('f2_f1', df['v'] + 11) \
+            .withColumn('f3_f1', df['v'] + 101) \
+            .withColumn('f4_f1', df['v'] + 1001) \
+            .withColumn('f3_f2', df['v'] + 110) \
+            .withColumn('f4_f2', df['v'] + 1010) \
+            .withColumn('f4_f3', df['v'] + 1100) \
+            .withColumn('f3_f2_f1', df['v'] + 111) \
+            .withColumn('f4_f2_f1', df['v'] + 1011) \
+            .withColumn('f4_f3_f1', df['v'] + 1101) \
+            .withColumn('f4_f3_f2', df['v'] + 1110) \
+            .withColumn('f4_f3_f2_f1', df['v'] + 1111)
 
         self.assertEquals(df3.collect(), df1.collect())
         self.assertEquals(df3.collect(), df2.collect())
@@ -5152,38 +5155,38 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             assert type(x) == pd.Series
             return x + 100
 
-        df1 = df.withColumn('f1', f1(df['v']))
-        df1 = df1.withColumn('f2', f2(df['v']))
-        df1 = df1.withColumn('f3', f3(df['v']))
-        df1 = df1.withColumn('f1_f2', f1(f2(df['v'])))
-        df1 = df1.withColumn('f1_f3', f1(f3(df['v'])))
-        df1 = df1.withColumn('f2_f1', f2(f1(df['v'])))
-        df1 = df1.withColumn('f2_f3', f2(f3(df['v'])))
-        df1 = df1.withColumn('f3_f1', f3(f1(df['v'])))
-        df1 = df1.withColumn('f3_f2', f3(f2(df['v'])))
-        df1 = df1.withColumn('f1_f2_f3', f1(f2(f3(df['v']))))
-        df1 = df1.withColumn('f1_f3_f2', f1(f3(f2(df['v']))))
-        df1 = df1.withColumn('f2_f1_f3', f2(f1(f3(df['v']))))
-        df1 = df1.withColumn('f2_f3_f1', f2(f3(f1(df['v']))))
-        df1 = df1.withColumn('f3_f1_f2', f3(f1(f2(df['v']))))
-        df1 = df1.withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
+        df1 = df.withColumn('f1', f1(df['v'])) \
+            .withColumn('f2', f2(df['v'])) \
+            .withColumn('f3', f3(df['v'])) \
+            .withColumn('f1_f2', f1(f2(df['v']))) \
+            .withColumn('f1_f3', f1(f3(df['v']))) \
+            .withColumn('f2_f1', f2(f1(df['v']))) \
+            .withColumn('f2_f3', f2(f3(df['v']))) \
+            .withColumn('f3_f1', f3(f1(df['v']))) \
+            .withColumn('f3_f2', f3(f2(df['v']))) \
+            .withColumn('f1_f2_f3', f1(f2(f3(df['v'])))) \
+            .withColumn('f1_f3_f2', f1(f3(f2(df['v'])))) \
+            .withColumn('f2_f1_f3', f2(f1(f3(df['v'])))) \
+            .withColumn('f2_f3_f1', f2(f3(f1(df['v'])))) \
+            .withColumn('f3_f1_f2', f3(f1(f2(df['v'])))) \
+            .withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
 
         # expected result
-        df2 = df.withColumn('f1', df['v'] + 1)
-        df2 = df2.withColumn('f2', df['v'] + 10)
-        df2 = df2.withColumn('f3', df['v'] + 100)
-        df2 = df2.withColumn('f1_f2', df['v'] + 11)
-        df2 = df2.withColumn('f1_f3', df['v'] + 101)
-        df2 = df2.withColumn('f2_f1', df['v'] + 11)
-        df2 = df2.withColumn('f2_f3', df['v'] + 110)
-        df2 = df2.withColumn('f3_f1', df['v'] + 101)
-        df2 = df2.withColumn('f3_f2', df['v'] + 110)
-        df2 = df2.withColumn('f1_f2_f3', df['v'] + 111)
-        df2 = df2.withColumn('f1_f3_f2', df['v'] + 111)
-        df2 = df2.withColumn('f2_f1_f3', df['v'] + 111)
-        df2 = df2.withColumn('f2_f3_f1', df['v'] + 111)
-        df2 = df2.withColumn('f3_f1_f2', df['v'] + 111)
-        df2 = df2.withColumn('f3_f2_f1', df['v'] + 111)
+        df2 = df.withColumn('f1', df['v'] + 1) \
+            .withColumn('f2', df['v'] + 10) \
+            .withColumn('f3', df['v'] + 100) \
+            .withColumn('f1_f2', df['v'] + 11) \
+            .withColumn('f1_f3', df['v'] + 101) \
+            .withColumn('f2_f1', df['v'] + 11) \
+            .withColumn('f2_f3', df['v'] + 110) \
+            .withColumn('f3_f1', df['v'] + 101) \
+            .withColumn('f3_f2', df['v'] + 110) \
+            .withColumn('f1_f2_f3', df['v'] + 111) \
+            .withColumn('f1_f3_f2', df['v'] + 111) \
+            .withColumn('f2_f1_f3', df['v'] + 111) \
+            .withColumn('f2_f3_f1', df['v'] + 111) \
+            .withColumn('f3_f1_f2', df['v'] + 111) \
+            .withColumn('f3_f2_f1', df['v'] + 111)
 
         self.assertEquals(df2.collect(), df1.collect())
 
@@ -5614,14 +5617,14 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                                                  F.col('temp0.key') == F.col('temp1.key'))
         self.assertEquals(res.count(), 5)
 
-    def test_mixed_udf(self):
+    def test_mixed_scalar_udfs_followed_by_grouby_apply(self):
         # Test Pandas UDF and scalar Python UDF followed by groupby apply
         from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
         import pandas as pd
 
         df = self.spark.range(0, 10).toDF('v1')
-        df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1']))
-        df = df.withColumn('v3', pandas_udf(lambda x: x + 2, 'int')(df['v1']))
+        df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1'])) \
+            .withColumn('v3', pandas_udf(lambda x: x + 2, 'int')(df['v1']))
 
         result = df.groupby() \
             .apply(pandas_udf(lambda x: pd.DataFrame([x.sum().sum()]),

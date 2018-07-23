@@ -192,7 +192,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
               BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
             case _ =>
               throw new AnalysisException(
-                "Mixed Python and Scalar Pandas UDFs are not expected here")
+                "Expected either Scalar Pandas UDFs or Batched UDFs but got both")
           }
 
           attributeMap ++= validUdfs.zip(resultAttrs)
