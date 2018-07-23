@@ -414,6 +414,15 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         // these branches can be pruned away
         val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
+
+      case CaseWhen(branches, Some(elseValue)) if {
+        // With previous rules, it's guaranteed that `branches.length >= 2`
+        val list = branches.map(_._2) :+ elseValue
+        list.tail.forall(list.head.semanticEquals)
+      } =>
+        // If all the values in the branches and elseValue are the same,
+        // `CaseWhen` condition can be removed.
+        elseValue
     }
   }
 }

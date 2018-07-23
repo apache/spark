@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -29,7 +31,8 @@ import org.apache.spark.sql.types.{IntegerType, NullType}
 class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("SimplifyConditionals", FixedPoint(50), SimplifyConditionals) :: Nil
+    val batches = Batch("SimplifyConditionals", FixedPoint(50),
+      BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
@@ -42,6 +45,12 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, NullType), Literal(30))
+
+  private val testRelation = LocalRelation('a.int, 'b.string, 'c.boolean)
+
+  val isNotNullCond = IsNotNull(UnresolvedAttribute(Seq("a")))
+  val isNullCond = IsNull(UnresolvedAttribute("b"))
+  val notCond = Not(UnresolvedAttribute("c"))
 
   test("simplify if") {
     assertEquivalent(
@@ -99,5 +108,26 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Nil,
         None),
       CaseWhen(normalBranch :: trueBranch :: Nil, None))
+  }
+
+  test("remove entire CaseWhen if all the outputs are semantic equivalence") {
+    val originalQuery =
+      testRelation
+        .select(
+          CaseWhen((isNotNullCond, Subtract(Literal(3), Literal(2))) ::
+            (isNullCond, Literal(1)) ::
+            (notCond, Add(Literal(6), Literal(-5))) ::
+            Nil,
+            Add(Literal(2), Literal(-1))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze).canonicalized
+    val correctAnswer =
+      testRelation
+        .select(Literal(1))
+        .analyze
+        .canonicalized
+
+    comparePlans(optimized, correctAnswer)
   }
 }
