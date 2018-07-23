@@ -106,7 +106,10 @@ object MimaExcludes {
     ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasValidationIndicatorCol.validationIndicatorCol"),
 
     // [SPARK-23042] Use OneHotEncoderModel to encode labels in MultilayerPerceptronClassifier
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.classification.LabelConverter")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.classification.LabelConverter"),
+
+    // [SPARK-24243][CORE] Expose exceptions from InProcessAppHandle
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.launcher.SparkAppHandle.getError")
   )
 
   // Exclude rules for 2.3.x
