@@ -268,7 +268,7 @@ class MicroBatchExecution(
          * latest batch id in the offset log, then we can safely move to the next batch
          * i.e., committedBatchId + 1 */
         commitLog.getLatest() match {
-          case Some((latestCommittedBatchId, _)) =>
+          case Some((latestCommittedBatchId, commitMetadata)) =>
             if (latestBatchId == latestCommittedBatchId) {
               /* The last batch was successfully committed, so we can safely process a
                * new next batch but first:
@@ -286,7 +286,8 @@ class MicroBatchExecution(
               currentBatchId = latestCommittedBatchId + 1
               isCurrentBatchConstructed = false
               committedOffsets ++= availableOffsets
-              // Construct a new batch be recomputing availableOffsets
+              watermarkTracker.setWatermark(
+                math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
             } else if (latestCommittedBatchId < latestBatchId - 1) {
               logWarning(s"Batch completion log latest batch id is " +
                 s"${latestCommittedBatchId}, which is not trailing " +
@@ -536,11 +537,11 @@ class MicroBatchExecution(
     }
 
     withProgressLocked {
-      commitLog.add(currentBatchId)
+      watermarkTracker.updateWatermark(lastExecution.executedPlan)
+      commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
       committedOffsets ++= availableOffsets
       awaitProgressLockCondition.signalAll()
     }
-    watermarkTracker.updateWatermark(lastExecution.executedPlan)
     logDebug(s"Completed batch ${currentBatchId}")
   }
 
