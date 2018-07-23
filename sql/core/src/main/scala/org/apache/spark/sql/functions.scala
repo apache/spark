@@ -2935,6 +2935,17 @@ object functions {
   }
 
   /**
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+   * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+   * '2017-07-14 03:40:00.0'.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
+    FromUTCTimestamp(ts.expr, tz.expr)
+  }
+
+  /**
    * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
    * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
    * '2017-07-14 01:40:00.0'.
@@ -2943,6 +2954,17 @@ object functions {
    */
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
+  }
+
+  /**
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
+   * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+   * '2017-07-14 01:40:00.0'.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
+    ToUTCTimestamp(ts.expr, tz.expr)
   }
 
   /**
@@ -3182,6 +3204,7 @@ object functions {
 
   /**
    * Remove all elements that equal to element from the given array.
+   *
    * @group collection_funcs
    * @since 2.4.0
    */
@@ -3195,6 +3218,16 @@ object functions {
    * @since 2.4.0
    */
   def array_distinct(e: Column): Column = withExpr { ArrayDistinct(e.expr) }
+
+  /**
+   * Returns an array of the elements in the union of the given two arrays, without duplicates.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_union(col1: Column, col2: Column): Column = withExpr {
+    ArrayUnion(col1.expr, col2.expr)
+  }
 
   /**
    * Creates a new row for each element in the given array or map column.
@@ -3282,7 +3315,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    new JsonToStructs(schema, options, e.expr)
+    JsonToStructs(schema, options, e.expr)
   }
 
   /**
@@ -3382,6 +3415,48 @@ object functions {
   }
 
   /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column): Column = {
+    from_json(e, schema, Map.empty[String, String].asJava)
+  }
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(new JsonToStructs(e.expr, schema.expr, options.asScala.toMap))
+  }
+
+  /**
+   * Parses a column containing a JSON string and infers its schema.
+   *
+   * @param e a string column containing JSON data.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def schema_of_json(e: Column): Column = withExpr(new SchemaOfJson(e.expr))
+
+  /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
    * a `MapType` or `ArrayType` of `MapType`s into a JSON string with the specified schema.
    * Throws an exception, in the case of an unsupported type.
@@ -3431,7 +3506,7 @@ object functions {
    * @group collection_funcs
    * @since 1.5.0
    */
-  def size(e: Column): Column = withExpr { new Size(e.expr) }
+  def size(e: Column): Column = withExpr { Size(e.expr) }
 
   /**
    * Sorts the input array for the given column in ascending order,
@@ -3563,124 +3638,13 @@ object functions {
   @scala.annotation.varargs
   def arrays_zip(e: Column*): Column = withExpr { ArraysZip(e.map(_.expr)) }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Mask functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
   /**
-   * Returns a string which is the masked representation of the input.
-   * @group mask_funcs
+   * Returns the union of all the given maps.
+   * @group collection_funcs
    * @since 2.4.0
    */
-  def mask(e: Column): Column = withExpr { new Mask(e.expr) }
-
-  /**
-   * Returns a string which is the masked representation of the input, using `upper`, `lower` and
-   * `digit` as replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask(e: Column, upper: String, lower: String, digit: String): Column = withExpr {
-    Mask(e.expr, upper, lower, digit)
-  }
-
-  /**
-   * Returns a string with the first `n` characters masked.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_first_n(e: Column, n: Int): Column = withExpr { new MaskFirstN(e.expr, Literal(n)) }
-
-  /**
-   * Returns a string with the first `n` characters masked, using `upper`, `lower` and `digit` as
-   * replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_first_n(
-      e: Column,
-      n: Int,
-      upper: String,
-      lower: String,
-      digit: String): Column = withExpr {
-    MaskFirstN(e.expr, n, upper, lower, digit)
-  }
-
-  /**
-   * Returns a string with the last `n` characters masked.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_last_n(e: Column, n: Int): Column = withExpr { new MaskLastN(e.expr, Literal(n)) }
-
-  /**
-   * Returns a string with the last `n` characters masked, using `upper`, `lower` and `digit` as
-   * replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_last_n(
-      e: Column,
-      n: Int,
-      upper: String,
-      lower: String,
-      digit: String): Column = withExpr {
-    MaskLastN(e.expr, n, upper, lower, digit)
-  }
-
-  /**
-   * Returns a string with all but the first `n` characters masked.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_show_first_n(e: Column, n: Int): Column = withExpr {
-    new MaskShowFirstN(e.expr, Literal(n))
-  }
-
-  /**
-   * Returns a string with all but the first `n` characters masked, using `upper`, `lower` and
-   * `digit` as replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_show_first_n(
-      e: Column,
-      n: Int,
-      upper: String,
-      lower: String,
-      digit: String): Column = withExpr {
-    MaskShowFirstN(e.expr, n, upper, lower, digit)
-  }
-
-  /**
-   * Returns a string with all but the last `n` characters masked.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_show_last_n(e: Column, n: Int): Column = withExpr {
-    new MaskShowLastN(e.expr, Literal(n))
-  }
-
-  /**
-   * Returns a string with all but the last `n` characters masked, using `upper`, `lower` and
-   * `digit` as replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_show_last_n(
-      e: Column,
-      n: Int,
-      upper: String,
-      lower: String,
-      digit: String): Column = withExpr {
-    MaskShowLastN(e.expr, n, upper, lower, digit)
-  }
-
-  /**
-   * Returns a hashed value based on the input column.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_hash(e: Column): Column = withExpr { MaskHash(e.expr) }
+  @scala.annotation.varargs
+  def map_concat(cols: Column*): Column = withExpr { MapConcat(cols.map(_.expr)) }
 
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number

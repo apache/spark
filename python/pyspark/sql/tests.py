@@ -3595,7 +3595,7 @@ class UDFInitializationTests(unittest.TestCase):
             SparkSession._instantiatedSession.stop()
 
         if SparkContext._active_spark_context is not None:
-            SparkContext._active_spark_contex.stop()
+            SparkContext._active_spark_context.stop()
 
     def test_udf_init_shouldnt_initalize_context(self):
         from pyspark.sql.functions import UserDefinedFunction
@@ -5470,6 +5470,22 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             for r in result:
                 self.assertEqual(r.a, 'hi')
                 self.assertEqual(r.b, 1)
+
+    def test_self_join_with_pandas(self):
+        import pyspark.sql.functions as F
+
+        @F.pandas_udf('key long, col string', F.PandasUDFType.GROUPED_MAP)
+        def dummy_pandas_udf(df):
+            return df[['key', 'col']]
+
+        df = self.spark.createDataFrame([Row(key=1, col='A'), Row(key=1, col='B'),
+                                         Row(key=2, col='C')])
+        df_with_pandas = df.groupBy('key').apply(dummy_pandas_udf)
+
+        # this was throwing an AnalysisException before SPARK-24208
+        res = df_with_pandas.alias('temp0').join(df_with_pandas.alias('temp1'),
+                                                 F.col('temp0.key') == F.col('temp1.key'))
+        self.assertEquals(res.count(), 5)
 
 
 @unittest.skipIf(

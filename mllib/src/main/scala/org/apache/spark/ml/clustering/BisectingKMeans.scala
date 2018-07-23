@@ -26,6 +26,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
   BisectingKMeansModel => MLlibBisectingKMeansModel}
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -257,12 +258,13 @@ class BisectingKMeans @Since("2.0.0") (
   def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
+  override def fit(dataset: Dataset[_]): BisectingKMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
     val rdd = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(featuresCol, predictionCol, k, maxIter, seed,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, featuresCol, predictionCol, k, maxIter, seed,
       minDivisibleClusterSize, distanceMeasure)
 
     val bkm = new MLlibBisectingKMeans()
@@ -274,11 +276,9 @@ class BisectingKMeans @Since("2.0.0") (
     val parentModel = bkm.run(rdd)
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    model.setSummary(Some(summary))
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k), $(maxIter))
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    instr.logSuccess(model)
-    model
+    model.setSummary(Some(summary))
   }
 
   @Since("2.0.0")
@@ -304,6 +304,7 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param numIter  Number of iterations.
  */
 @Since("2.1.0")
 @Experimental
@@ -311,4 +312,5 @@ class BisectingKMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
+    k: Int,
+    numIter: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)

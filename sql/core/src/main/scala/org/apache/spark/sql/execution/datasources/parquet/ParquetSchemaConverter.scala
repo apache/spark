@@ -555,7 +555,7 @@ class SparkToParquetSchemaConverter(
         convertField(field.copy(dataType = udt.sqlType))
 
       case _ =>
-        throw new AnalysisException(s"Unsupported data type $field.dataType")
+        throw new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
     }
   }
 }

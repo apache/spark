@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
@@ -48,7 +48,8 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def dataType: ArrayType = {
     ArrayType(
-      children.headOption.map(_.dataType).getOrElse(StringType),
+      TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
+        .getOrElse(StringType),
       containsNull = children.exists(_.nullable))
   }
 
@@ -179,14 +180,14 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure(
         s"$prettyName expects a positive even number of arguments.")
-    } else if (keys.map(_.dataType).distinct.length > 1) {
+    } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
       TypeCheckResult.TypeCheckFailure(
         "The given keys of function map should all be the same type, but they are " +
-          keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else if (values.map(_.dataType).distinct.length > 1) {
+          keys.map(_.dataType.catalogString).mkString("[", ", ", "]"))
+    } else if (!TypeCoercion.haveSameType(values.map(_.dataType))) {
       TypeCheckResult.TypeCheckFailure(
         "The given values of function map should all be the same type, but they are " +
-          values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+          values.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -194,8 +195,10 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def dataType: DataType = {
     MapType(
-      keyType = keys.headOption.map(_.dataType).getOrElse(StringType),
-      valueType = values.headOption.map(_.dataType).getOrElse(StringType),
+      keyType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(keys.map(_.dataType))
+        .getOrElse(StringType),
+      valueType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(values.map(_.dataType))
+        .getOrElse(StringType),
       valueContainsNull = values.exists(_.nullable))
   }
 
@@ -385,8 +388,8 @@ trait CreateNamedStructLike extends Expression {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
       if (invalidNames.nonEmpty) {
         TypeCheckResult.TypeCheckFailure(
-          "Only foldable StringType expressions are allowed to appear at odd position, got:" +
-            s" ${invalidNames.mkString(",")}")
+          s"Only foldable ${StringType.catalogString} expressions are allowed to appear at odd" +
+            s" position, got: ${invalidNames.mkString(",")}")
       } else if (!names.contains(null)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
