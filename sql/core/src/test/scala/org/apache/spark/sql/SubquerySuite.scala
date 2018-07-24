@@ -1131,11 +1131,11 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
            |SELECT c1
            |FROM   t1
            |WHERE  EXISTS (SELECT c1
-           |               FROM   (SELECT *
-           |                      FROM   t2
-           |                      WHERE t2.c1 = t1.c1
-           |                      ORDER  BY t2.c2) t2
-           |              ORDER  BY t2.c1)
+           |               FROM (SELECT *
+           |                     FROM   t2
+           |                     WHERE t2.c1 = t1.c1
+           |                     ORDER  BY t2.c2) t2
+           |               ORDER BY t2.c1)
         """.stripMargin
       assert(getNumSortsInQuery(query2) == 0)
 
@@ -1145,13 +1145,13 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
            |SELECT c1
            |FROM   t1
            |WHERE  EXISTS (SELECT c1
-           |              FROM   t2
-           |              WHERE  EXISTS (SELECT c1
-           |                            FROM   t3
-           |                            WHERE  t3.c1 = t2.c1
-           |                            ORDER  BY c3)
-           |              AND t2.c1 = t1.c1
-           |              ORDER  BY c2)
+           |               FROM t2
+           |               WHERE EXISTS (SELECT c1
+           |                             FROM   t3
+           |                             WHERE  t3.c1 = t2.c1
+           |                             ORDER  BY c3)
+           |               AND t2.c1 = t1.c1
+           |               ORDER BY c2)
         """.stripMargin
       assert(getNumSortsInQuery(query3) == 0)
 
@@ -1174,13 +1174,13 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
            |        SELECT c1 FROM t2
            |        WHERE t2.c1 = 1
            |        ORDER BY t2.c1
-           |       )
-           |       UNION
-           |       (
+           |        )
+           |        UNION
+           |        (
            |         SELECT c1 FROM t2
            |         WHERE t2.c1 = 2
            |         ORDER BY t2.c1
-           |       ))
+           |        ))
         """.stripMargin
       assert(getNumSortsInQuery(query5) == 2)
     }
@@ -1212,10 +1212,10 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |SELECT *
           |FROM   t1
           |WHERE  c1 = (SELECT   max(t2.c1)
-          |              FROM     t2
-          |              GROUP BY t2.c1
-          |              HAVING   count(*) >= 1
-          |              ORDER BY max(t2.c1))
+          |             FROM     t2
+          |             GROUP BY t2.c1
+          |             HAVING   count(*) >= 1
+          |             ORDER BY max(t2.c1))
         """.stripMargin
       assert(getNumSortsInQuery(query2) == 0)
 
@@ -1225,13 +1225,13 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |SELECT *
           |FROM   t1
           |WHERE  c1 = (SELECT   max(t2.c1)
-          |              FROM     t2
-          |              WHERE c1 = (SELECT max(t3.c1)
-          |                          FROM t3
-          |                          WHERE t3.c1 = 1
-          |                          GROUP BY t3.c1
-          |                          ORDER BY max(t3.c1)
-          |                          )
+          |             FROM     t2
+          |             WHERE c1 = (SELECT max(t3.c1)
+          |                         FROM t3
+          |                         WHERE t3.c1 = 1
+          |                         GROUP BY t3.c1
+          |                         ORDER BY max(t3.c1)
+          |                        )
           |              GROUP BY t2.c1
           |              HAVING   count(*) >= 1
           |              ORDER BY max(t2.c1))
@@ -1260,13 +1260,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |                         GROUP BY t3.c1
           |                         ORDER BY max(t3.c1)
           |                         )
-          |              GROUP BY t2.c1
-          |              HAVING   count(*) >= 1
-          |              ORDER BY max(t2.c1)
-          |              LIMIT 1)
+          |             GROUP BY t2.c1
+          |             HAVING   count(*) >= 1
+          |             ORDER BY max(t2.c1)
+          |             LIMIT 1)
         """.stripMargin
       assert(getNumSortsInQuery(query5) == 1)
     }
   }
 }
-

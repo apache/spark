@@ -164,10 +164,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
    * Optimize all the subqueries inside expression.
    */
   object OptimizeSubqueries extends Rule[LogicalPlan] {
-    private def removeTopLevelSorts(plan: LogicalPlan): LogicalPlan = {
+    private def removeTopLevelSort(plan: LogicalPlan): LogicalPlan = {
       plan match {
         case Sort(_, _, child) => child
-        case Project(fields, child) => Project(fields, removeTopLevelSorts(child))
+        case Project(fields, child) => Project(fields, removeTopLevelSort(child))
         case other => other
       }
     }
@@ -175,9 +175,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       case s: SubqueryExpression =>
         val Subquery(newPlan) = Optimizer.this.execute(Subquery(s.plan))
         // At this point we have an optimized subquery plan that we are going to attach
-        // to this subquery expression. Here we can safely remove any top level sorts
+        // to this subquery expression. Here we can safely remove any top level sort
         // in the plan as tuples produced by a subquery are un-ordered.
-        s.withNewPlan(removeTopLevelSorts(newPlan))
+        s.withNewPlan(removeTopLevelSort(newPlan))
     }
   }
 
