@@ -46,7 +46,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
-  def batches: Seq[Batch] = {
+  def defaultBatches: Seq[Batch] = {
     val operatorOptimizationRuleSet =
       Seq(
         // Operator push down
@@ -160,6 +160,22 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       UpdateNullabilityInAttributeReferences)
   }
 
+  def nonExcludableRules: Seq[String] =
+    EliminateDistinct.ruleName ::
+      EliminateSubqueryAliases.ruleName ::
+      EliminateView.ruleName ::
+      ReplaceExpressions.ruleName ::
+      ComputeCurrentTime.ruleName ::
+      GetCurrentDatabase(sessionCatalog).ruleName ::
+      RewriteDistinctAggregates.ruleName ::
+      ReplaceDeduplicateWithAggregate.ruleName ::
+      ReplaceIntersectWithSemiJoin.ruleName ::
+      ReplaceExceptWithFilter.ruleName ::
+      ReplaceExceptWithAntiJoin.ruleName ::
+      ReplaceDistinctWithAggregate.ruleName ::
+      PullupCorrelatedPredicates.ruleName ::
+      RewritePredicateSubquery.ruleName :: Nil
+
   /**
    * Optimize all the subqueries inside expression.
    */
@@ -175,6 +191,41 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
    * Override to provide additional rules for the operator optimization batch.
    */
   def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
+
+  override def batches: Seq[Batch] = {
+    val excludedRulesConf =
+      SQLConf.get.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
+    val excludedRules = excludedRulesConf.filter { ruleName =>
+      val nonExcludable = nonExcludableRules.contains(ruleName)
+      if (nonExcludable) {
+        logWarning(s"Optimization rule '${ruleName}' was not excluded from the optimizer " +
+          s"because this rule is a non-excludable rule.")
+      }
+      !nonExcludable
+    }
+    if (excludedRules.isEmpty) {
+      defaultBatches
+    } else {
+      defaultBatches.flatMap { batch =>
+        val filteredRules = batch.rules.filter { rule =>
+          val exclude = excludedRules.contains(rule.ruleName)
+          if (exclude) {
+            logInfo(s"Optimization rule '${rule.ruleName}' is excluded from the optimizer.")
+          }
+          !exclude
+        }
+        if (batch.rules == filteredRules) {
+          Some(batch)
+        } else if (filteredRules.nonEmpty) {
+          Some(Batch(batch.name, batch.strategy, filteredRules: _*))
+        } else {
+          logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
+            s"as all enclosed rules have been excluded.")
+          None
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -450,13 +501,16 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case d @ DeserializeToObject(_, _, child) if (child.outputSet -- d.references).nonEmpty =>
       d.copy(child = prunedChild(child, d.references))
 
-    // Prunes the unused columns from child of Aggregate/Expand/Generate
+    // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = prunedChild(child, a.references))
     case f @ FlatMapGroupsInPandas(_, _, _, child) if (child.outputSet -- f.references).nonEmpty =>
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
+    case s @ ScriptTransformation(_, _, _, child, _)
+        if (child.outputSet -- s.references).nonEmpty =>
+      s.copy(child = prunedChild(child, s.references))
 
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>

@@ -21,7 +21,7 @@ import java.io.File
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
-package object config {
+object TestConfig {
   def getTestImageTag: String = {
     val imageTagFileProp = System.getProperty("spark.kubernetes.test.imageTagFile")
     require(imageTagFileProp != null, "Image tag file must be provided in system properties.")

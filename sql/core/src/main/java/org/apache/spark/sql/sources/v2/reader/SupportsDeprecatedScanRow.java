@@ -14,9 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.integrationtest
 
-package object constants {
-  val MINIKUBE_TEST_BACKEND = "minikube"
-  val GCE_TEST_BACKEND = "gce"
+package org.apache.spark.sql.sources.v2.reader;
+
+import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
+
+import java.util.List;
+
+/**
+ * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
+ * interface to output {@link Row} instead of {@link InternalRow}.
+ * This is an experimental and unstable interface.
+ */
+@InterfaceStability.Unstable
+public interface SupportsDeprecatedScanRow extends DataSourceReader {
+  default List<InputPartition<InternalRow>> planInputPartitions() {
+    throw new IllegalStateException(
+        "planInputPartitions not supported by default within SupportsDeprecatedScanRow");
+  }
+
+  List<InputPartition<Row>> planRowInputPartitions();
 }

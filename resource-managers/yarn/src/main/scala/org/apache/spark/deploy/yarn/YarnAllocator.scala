@@ -150,13 +150,15 @@ private[yarn] class YarnAllocator(
   private var hostToLocalTaskCounts: Map[String, Int] = Map.empty
 
   // Number of tasks that have locality preferences in active stages
-  private var numLocalityAwareTasks: Int = 0
+  private[yarn] var numLocalityAwareTasks: Int = 0
 
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource, resolver)
 
   def getNumExecutorsRunning: Int = runningExecutors.size()
+
+  def getNumReleasedContainers: Int = releasedContainers.size()
 
   def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
@@ -166,6 +168,10 @@ private[yarn] class YarnAllocator(
    * A sequence of pending container requests that have not yet been fulfilled.
    */
   def getPendingAllocate: Seq[ContainerRequest] = getPendingAtLocation(ANY_HOST)
+
+  def numContainersPendingAllocate: Int = synchronized {
+    getPendingAllocate.size
+  }
 
   /**
    * A sequence of pending container requests at the given location that have not yet been
