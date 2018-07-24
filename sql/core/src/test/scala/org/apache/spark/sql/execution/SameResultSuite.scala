@@ -62,7 +62,7 @@ class SameResultSuite extends QueryTest with SharedSQLContext {
     assert(df3.queryExecution.executedPlan.sameResult(df4.queryExecution.executedPlan))
   }
 
-  test("Canonicalized result is not case-insensitive") {
+  test("Canonicalized result is case-insensitive") {
     val a = AttributeReference("A", IntegerType)()
     val b = AttributeReference("B", IntegerType)()
     val planUppercase = Project(Seq(a), LocalRelation(a, b))
