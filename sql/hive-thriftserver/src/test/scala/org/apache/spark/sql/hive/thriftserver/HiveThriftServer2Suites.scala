@@ -636,6 +636,14 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(pipeoutFileList(sessionID).length == 0)
     }
   }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
@@ -766,6 +774,14 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
 }
 
 object ServerMode extends Enumeration {
@@ -804,14 +820,6 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
 
   def withJdbcStatement(tableNames: String*)(f: Statement => Unit) {
     withMultipleConnectionJdbcStatement(tableNames: _*)(f)
-  }
-
-  test("SPARK-24829 Checks cast as float") {
-    withJdbcStatement() { statement =>
-      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
-      resultSet.next()
-      assert(resultSet.getString(1) === "4.56")
-    }
   }
 }
 
