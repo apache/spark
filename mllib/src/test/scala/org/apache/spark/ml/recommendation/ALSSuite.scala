@@ -612,7 +612,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       estimator.fit(strDF)
     }
     assert(thrown.getMessage.contains(
-      s"$column must be of type NumericType but was actually of type StringType"))
+      s"$column must be of type numeric but was actually of type string"))
   }
 
   private class NumericTypeWithEncoder[A](val numericType: NumericType)

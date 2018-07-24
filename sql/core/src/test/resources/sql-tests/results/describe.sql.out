@@ -282,6 +282,8 @@ Table               	t
 Partition Values    	[c=Us, d=1]         	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
 Storage Properties  	[a=1, b=2]          	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
                     	                    	                    
 # Storage Information	                    	                    
 Num Buckets         	2                   	                    
@@ -311,6 +313,8 @@ Table               	t
 Partition Values    	[c=Us, d=1]         	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
 Storage Properties  	[a=1, b=2]          	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
                     	                    	                    
 # Storage Information	                    	                    
 Num Buckets         	2                   	                    

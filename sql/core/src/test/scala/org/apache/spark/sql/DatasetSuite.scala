@@ -1296,7 +1296,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       new java.sql.Timestamp(100000))
   }
 
-  test("SPARK-19896: cannot have circular references in in case class") {
+  test("SPARK-19896: cannot have circular references in case class") {
     val errMsg1 = intercept[UnsupportedOperationException] {
       Seq(CircularReferenceClassA(null)).toDS
     }
@@ -1467,6 +1467,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     intercept[NullPointerException](ds.as[(Int, Int)].collect())
   }
 
+  test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val a = Seq(Some(1)).toDS
+      val b = Seq(Some(1.2)).toDS
+      val expected = Seq((Some(1), Some(1.2))).toDS
+      val joined = a.joinWith(b, lit(true))
+      assert(joined.schema == expected.schema)
+      checkDataset(joined, expected.collect: _*)
+    }
+  }
+
   test("SPARK-24548: Dataset with tuple encoders should have correct schema") {
     val encoder = Encoders.tuple(newStringEncoder,
       Encoders.tuple(newStringEncoder, newStringEncoder))
@@ -1478,6 +1489,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = spark.createDataset(rdd)(encoder)
     assert(ds1.schema == ds2.schema)
     checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
+  }
+
+  test("SPARK-24571: filtering of string values by char literal") {
+    val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
+    checkAnswer(df.where('city === 'X'), Seq(Row("X")))
+    checkAnswer(
+      df.where($"city".contains(new java.lang.Character('A'))),
+      Seq(Row("Amsterdam")))
   }
 }
 

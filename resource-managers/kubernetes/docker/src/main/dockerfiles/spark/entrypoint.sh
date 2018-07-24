@@ -37,20 +37,24 @@ if [ -z "$uidentry" ] ; then
 fi
 
 SPARK_K8S_CMD="$1"
-if [ -z "$SPARK_K8S_CMD" ]; then
-  echo "No command to execute has been provided." 1>&2
-  exit 1
-fi
-shift 1
+case "$SPARK_K8S_CMD" in
+    driver | driver-py | executor)
+      shift 1
+      ;;
+    "")
+      ;;
+    *)
+      echo "Non-spark-on-k8s command provided, proceeding in pass-through mode..."
+      exec /sbin/tini -s -- "$@"
+      ;;
+esac
 
 SPARK_CLASSPATH="$SPARK_CLASSPATH:${SPARK_HOME}/jars/*"
 env | grep SPARK_JAVA_OPT_ | sort -t_ -k4 -n | sed 's/[^=]*=\(.*\)/\1/g' > /tmp/java_opts.txt
-readarray -t SPARK_JAVA_OPTS < /tmp/java_opts.txt
-if [ -n "$SPARK_MOUNTED_CLASSPATH" ]; then
-  SPARK_CLASSPATH="$SPARK_CLASSPATH:$SPARK_MOUNTED_CLASSPATH"
-fi
-if [ -n "$SPARK_MOUNTED_FILES_DIR" ]; then
-  cp -R "$SPARK_MOUNTED_FILES_DIR/." .
+readarray -t SPARK_EXECUTOR_JAVA_OPTS < /tmp/java_opts.txt
+
+if [ -n "$SPARK_EXTRA_CLASSPATH" ]; then
+  SPARK_CLASSPATH="$SPARK_CLASSPATH:$SPARK_EXTRA_CLASSPATH"
 fi
 
 if [ -n "$PYSPARK_FILES" ]; then
@@ -92,11 +96,10 @@ case "$SPARK_K8S_CMD" in
       "$@" $PYSPARK_PRIMARY $PYSPARK_ARGS
     )
     ;;
-
   executor)
     CMD=(
       ${JAVA_HOME}/bin/java
-      "${SPARK_JAVA_OPTS[@]}"
+      "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
       -Xms$SPARK_EXECUTOR_MEMORY
       -Xmx$SPARK_EXECUTOR_MEMORY
       -cp "$SPARK_CLASSPATH"

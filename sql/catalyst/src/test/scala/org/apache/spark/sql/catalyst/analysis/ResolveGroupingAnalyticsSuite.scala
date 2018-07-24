@@ -91,6 +91,34 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     assertAnalysisError(originalPlan3, Seq("doesn't show up in the GROUP BY list"))
   }
 
+  test("grouping sets with no explicit group by expressions") {
+    val originalPlan = GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
+      Nil, r1,
+      Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))))
+    val expected = Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
+      Expand(
+        Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
+        Seq(a, b, c, a, b, gid),
+        Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
+    checkAnalysis(originalPlan, expected)
+
+    // Computation of grouping expression should remove duplicate expression based on their
+    // semantics (semanticEqual).
+    val originalPlan2 = GroupingSets(Seq(Seq(Multiply(unresolved_a, Literal(2))),
+      Seq(Multiply(Literal(2), unresolved_a), unresolved_b)), Nil, r1,
+      Seq(UnresolvedAlias(Multiply(unresolved_a, Literal(2))),
+        unresolved_b, UnresolvedAlias(count(unresolved_c))))
+
+    val resultPlan = getAnalyzer(true).executeAndCheck(originalPlan2)
+    val gExpressions = resultPlan.asInstanceOf[Aggregate].groupingExpressions
+    assert(gExpressions.size == 3)
+    val firstGroupingExprAttrName =
+      gExpressions(0).asInstanceOf[AttributeReference].name.replaceAll("#[0-9]*", "#0")
+    assert(firstGroupingExprAttrName == "(a#0 * 2)")
+    assert(gExpressions(1).asInstanceOf[AttributeReference].name == "b")
+    assert(gExpressions(2).asInstanceOf[AttributeReference].name == VirtualColumn.groupingIdName)
+  }
+
   test("cube") {
     val originalPlan = Aggregate(Seq(Cube(Seq(unresolved_a, unresolved_b))),
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)

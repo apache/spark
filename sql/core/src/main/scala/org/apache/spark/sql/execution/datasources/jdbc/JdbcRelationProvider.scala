@@ -48,8 +48,10 @@ class JdbcRelationProvider extends CreatableRelationProvider
       JDBCPartitioningInfo(
         partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
-    val parts = JDBCRelation.columnPartition(partitionInfo)
-    JDBCRelation(parts, jdbcOptions)(sqlContext.sparkSession)
+    val resolver = sqlContext.conf.resolver
+    val schema = JDBCRelation.getSchema(resolver, jdbcOptions)
+    val parts = JDBCRelation.columnPartition(schema, partitionInfo, resolver, jdbcOptions)
+    JDBCRelation(schema, parts, jdbcOptions)(sqlContext.sparkSession)
   }
 
   override def createRelation(
@@ -57,7 +59,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       mode: SaveMode,
       parameters: Map[String, String],
       df: DataFrame): BaseRelation = {
-    val options = new JDBCOptions(parameters)
+    val options = new JdbcOptionsInWrite(parameters)
     val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
 
     val conn = JdbcUtils.createConnectionFactory(options)()
@@ -84,7 +86,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
-              s"Table or view '${options.table}' already exists. SaveMode: ErrorIfExists.")
+              s"Table or view '${options.table}' already exists. " +
+                s"SaveMode: ErrorIfExists.")
 
           case SaveMode.Ignore =>
             // With `SaveMode.Ignore` mode, if table already exists, the save operation is expected

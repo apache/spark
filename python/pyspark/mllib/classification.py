@@ -258,6 +258,9 @@ class LogisticRegressionModel(LinearClassificationModel):
         model.setThreshold(threshold)
         return model
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 class LogisticRegressionWithSGD(object):
     """

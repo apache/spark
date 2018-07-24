@@ -61,7 +61,7 @@ class MicroBatchExecution(
     case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
   }
 
-  private val watermarkTracker = new WatermarkTracker()
+  private var watermarkTracker: WatermarkTracker = _
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -184,6 +184,9 @@ class MicroBatchExecution(
             isCurrentBatchConstructed = constructNextBatch(noDataBatchesEnabled)
           }
 
+          // Record the trigger offset range for progress reporting *before* processing the batch
+          recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
+
           // Remember whether the current batch has data or not. This will be required later
           // for bookkeeping after running the batch, when `isNewDataAvailable` will have changed
           // to false as the batch would have already processed the available data.
@@ -257,6 +260,7 @@ class MicroBatchExecution(
           OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.conf)
           offsetSeqMetadata = OffsetSeqMetadata(
             metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
+          watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
           watermarkTracker.setWatermark(metadata.batchWatermarkMs)
         }
 
@@ -264,7 +268,7 @@ class MicroBatchExecution(
          * latest batch id in the offset log, then we can safely move to the next batch
          * i.e., committedBatchId + 1 */
         commitLog.getLatest() match {
-          case Some((latestCommittedBatchId, _)) =>
+          case Some((latestCommittedBatchId, commitMetadata)) =>
             if (latestBatchId == latestCommittedBatchId) {
               /* The last batch was successfully committed, so we can safely process a
                * new next batch but first:
@@ -282,7 +286,8 @@ class MicroBatchExecution(
               currentBatchId = latestCommittedBatchId + 1
               isCurrentBatchConstructed = false
               committedOffsets ++= availableOffsets
-              // Construct a new batch be recomputing availableOffsets
+              watermarkTracker.setWatermark(
+                math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
             } else if (latestCommittedBatchId < latestBatchId - 1) {
               logWarning(s"Batch completion log latest batch id is " +
                 s"${latestCommittedBatchId}, which is not trailing " +
@@ -295,6 +300,7 @@ class MicroBatchExecution(
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
+        watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
     }
   }
 
@@ -531,11 +537,11 @@ class MicroBatchExecution(
     }
 
     withProgressLocked {
-      commitLog.add(currentBatchId)
+      watermarkTracker.updateWatermark(lastExecution.executedPlan)
+      commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
       committedOffsets ++= availableOffsets
       awaitProgressLockCondition.signalAll()
     }
-    watermarkTracker.updateWatermark(lastExecution.executedPlan)
     logDebug(s"Completed batch ${currentBatchId}")
   }
 

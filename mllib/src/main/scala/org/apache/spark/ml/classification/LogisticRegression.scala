@@ -35,6 +35,7 @@ import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
@@ -490,7 +491,7 @@ class LogisticRegression @Since("1.2.0") (
 
   protected[spark] def train(
       dataset: Dataset[_],
-      handlePersistence: Boolean): LogisticRegressionModel = {
+      handlePersistence: Boolean): LogisticRegressionModel = instrumented { instr =>
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
@@ -500,8 +501,9 @@ class LogisticRegression @Since("1.2.0") (
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(regParam, elasticNetParam, standardization, threshold,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, regParam, elasticNetParam, standardization, threshold,
       maxIter, tol, fitIntercept)
 
     val (summarizer, labelSummarizer) = {
@@ -905,8 +907,6 @@ class LogisticRegression @Since("1.2.0") (
         objectiveHistory)
     }
     model.setSummary(Some(logRegSummary))
-    instr.logSuccess(model)
-    model
   }
 
   @Since("1.4.0")
@@ -1202,6 +1202,11 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("1.6.0")
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
+
+  override def toString: String = {
+    s"LogisticRegressionModel: " +
+    s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures"
+  }
 }
 
 

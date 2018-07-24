@@ -222,12 +222,13 @@ case class Elt(children: Seq[Expression]) extends Expression {
       val (indexType, inputTypes) = (indexExpr.dataType, inputExprs.map(_.dataType))
       if (indexType != IntegerType) {
         return TypeCheckResult.TypeCheckFailure(s"first input to function $prettyName should " +
-          s"have IntegerType, but it's $indexType")
+          s"have ${IntegerType.catalogString}, but it's ${indexType.catalogString}")
       }
       if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
         return TypeCheckResult.TypeCheckFailure(
-          s"input to function $prettyName should have StringType or BinaryType, but it's " +
-            inputTypes.map(_.simpleString).mkString("[", ", ", "]"))
+          s"input to function $prettyName should have ${StringType.catalogString} or " +
+            s"${BinaryType.catalogString}, but it's " +
+            inputTypes.map(_.catalogString).mkString("[", ", ", "]"))
       }
       TypeUtils.checkForSameTypeInputExpr(inputTypes, s"function $prettyName")
     }

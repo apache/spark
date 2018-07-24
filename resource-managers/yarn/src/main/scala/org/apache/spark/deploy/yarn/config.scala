@@ -152,6 +152,11 @@ package object config {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("100s")
 
+  private[spark] val YARN_METRICS_NAMESPACE = ConfigBuilder("spark.yarn.metrics.namespace")
+    .doc("The root namespace for AM metrics reporting.")
+    .stringConf
+    .createOptional
+
   private[spark] val AM_NODE_LABEL_EXPRESSION = ConfigBuilder("spark.yarn.am.nodeLabelExpression")
     .doc("Node label expression for the AM.")
     .stringConf
@@ -327,5 +332,11 @@ package object config {
     CACHED_FILES_VISIBILITIES,
     CACHED_FILES_TYPES,
     CACHED_CONF_ARCHIVE)
+
+  /* YARN allocator-level blacklisting related config entries. */
+  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
+    ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
+      .booleanConf
+      .createWithDefault(false)
 
 }
