@@ -1403,7 +1403,7 @@ object ResolvedUuidExpressionsForStreaming extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
     case p => p transformExpressionsUp {
-      case Uuid(_) if p.isStreaming => Uuid(Some(random.nextLong()))
+      case _: Uuid if p.isStreaming => Uuid(Some(random.nextLong()))
     }
   }
 }
