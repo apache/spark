@@ -1068,7 +1068,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val columns = metadata.schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
+    val columns = metadata.schema.fields.map(_.toDDL)
     builder ++= columns.mkString("(", ", ", ")\n")
   }
 
