@@ -772,7 +772,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     array = readLongArray(readBuffer, length)
     val pageLength = readLong().toInt
     page = readLongArray(readBuffer, pageLength)
-    // Set cursor because cursor is used in write function.
+    // Restore cursor variable to make this map able to be serialized again on executors.
     cursor = pageLength * 8 + Platform.LONG_ARRAY_OFFSET
   }
 
