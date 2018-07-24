@@ -353,8 +353,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         return
       }
 
-      if (numExecutors >= executorLimit) {
-        logDebug("Executor limit reached. numExecutors: " + numExecutors +
+      if (executorsCount >= executorLimit) {
+        logDebug("Executor limit reached. executorsCount: " + executorsCount +
           " executorLimit: " + executorLimit)
         offers.asScala.map(_.getId).foreach(d.declineOffer)
         launchingExecutors = false
@@ -572,7 +572,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus <= offerCPUs &&
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
-      numExecutors < executorLimit &&
+      executorsCount < executorLimit &&
       slaves.get(slaveId).map(_.taskFailures).getOrElse(0) < MAX_SLAVE_FAILURES &&
       meetsPortRequirements &&
       satisfiesLocality(offerHostname)
@@ -693,13 +693,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val startTime = System.nanoTime()
 
     // slaveIdsWithExecutors has no memory barrier, so this is eventually consistent
-    while (numExecutors() > 0 &&
+    while (executorsCount() > 0 &&
       System.nanoTime() - startTime < shutdownTimeoutMS * 1000L * 1000L) {
       Thread.sleep(100)
     }
 
-    if (numExecutors() > 0) {
-      logWarning(s"Timed out waiting for ${numExecutors()} remaining executors "
+    if (executorsCount() > 0) {
+      logWarning(s"Timed out waiting for ${executorsCount()} remaining executors "
         + s"to terminate within $shutdownTimeoutMS ms. This may leave temporary files "
         + "on the mesos nodes.")
     }
@@ -776,7 +776,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  private def numExecutors(): Int = {
+  private def executorsCount(): Int = {
     slaves.values.map(_.taskIDs.size).sum
   }
 

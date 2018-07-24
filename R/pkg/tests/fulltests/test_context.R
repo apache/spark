@@ -240,3 +240,15 @@ test_that("add and get file to be downloaded with Spark job on every node", {
   unlink(path, recursive = TRUE)
   sparkR.session.stop()
 })
+
+test_that("getting number of cores and executors in the cluster", {
+  sparkR.sparkContext(master = sparkRTestMaster)
+
+  cores <- spark.numCores()
+  expect_true(cores > 0)
+
+  executors <- spark.numExecutors()
+  expect_true(executors > 0)
+
+  sparkR.session.stop()
+})

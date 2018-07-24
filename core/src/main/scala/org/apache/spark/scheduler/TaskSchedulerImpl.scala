@@ -515,6 +515,10 @@ private[spark] class TaskSchedulerImpl(
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
 
+  override def numCores(): Int = backend.numCores()
+
+  override def numExecutors(): Int = backend.numExecutors()
+
   // Check for speculatable tasks in all our active jobs.
   def checkSpeculatableTasks() {
     var shouldRevive = false
