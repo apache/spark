@@ -1,7 +1,7 @@
 CREATE TEMPORARY VIEW tab1 AS SELECT * FROM VALUES
-    (0),(1),(2),(2),(2),(2),(3),(null),(null) AS tab1(c1) ;
+    (0), (1), (2), (2), (2), (2), (3), (null), (null) AS tab1(c1);
 CREATE TEMPORARY VIEW tab2 AS SELECT * FROM VALUES
-    (1),(2),(2),(3),(5),(5),(null) AS tab2(c1) ;
+    (1), (2), (2), (3), (5), (5), (null) AS tab2(c1);
 CREATE TEMPORARY VIEW tab3 AS SELECT * FROM VALUES
     (1, 2), 
     (1, 2),
