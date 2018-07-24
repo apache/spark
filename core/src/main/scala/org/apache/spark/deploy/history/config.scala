@@ -64,4 +64,9 @@ private[spark] object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
 
+  val HISTORY_CLEANER_AT_START_ENABLED = ConfigBuilder("spark.history.cleaner.cleanAtStart.enabled")
+    .doc("Specifies whether the History Server should clean outdated logs at start " +
+      "when `spark.history.fs.cleaner.enabled` is on, no need to wait replay all events")
+    .booleanConf
+    .createWithDefault(false)
 }

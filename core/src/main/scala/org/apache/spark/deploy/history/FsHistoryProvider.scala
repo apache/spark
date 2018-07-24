@@ -130,6 +130,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val storePath = conf.get(LOCAL_STORE_DIR).map(new File(_))
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
 
+  private val logCleanAtStartEnabled = conf.get(HISTORY_CLEANER_AT_START_ENABLED)
+
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val perms = PosixFilePermissions.fromString("rwx------")
@@ -461,7 +463,22 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logDebug(s"New/updated attempts found: ${updated.size} ${updated.map(_.getPath)}")
       }
 
-      val tasks = updated.map { entry =>
+      val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
+      val tasks = updated.filter { entry =>
+        // if cleaner is enabled and eventLog is outdated,
+        // delete it directly and no need add to listing
+        val isCompleted = !entry.getPath.getName().endsWith(EventLoggingListener.IN_PROGRESS)
+        if (conf.getBoolean("spark.history.fs.cleaner.enabled", false)
+          && logCleanAtStartEnabled
+          && isCompleted && entry.getModificationTime < maxTime) {
+          logInfo(s"Deleting expired event log for ${entry.getPath}, " +
+            s"time:${entry.getModificationTime}, maxTime:${maxTime}")
+          deleteLog(entry.getPath)
+          false
+        } else {
+          true
+        }
+      }.map { entry =>
         try {
           replayExecutor.submit(new Runnable {
             override def run(): Unit = mergeApplicationListing(entry, newLastScanTime, true)
