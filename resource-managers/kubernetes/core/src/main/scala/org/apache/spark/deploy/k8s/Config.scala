@@ -42,6 +42,12 @@ private[spark] object Config extends Logging {
       .doc("Container image to use for the driver.")
       .fallbackConf(CONTAINER_IMAGE)
 
+  val DRIVER_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.driver.container.name")
+      .doc("Container name to use for hte driver")
+      .stringConf
+      .createOptional
+
   val EXECUTOR_CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.executor.container.image")
       .doc("Container image to use for the executors.")

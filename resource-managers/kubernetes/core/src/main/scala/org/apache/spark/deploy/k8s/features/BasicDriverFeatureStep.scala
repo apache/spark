@@ -40,6 +40,10 @@ private[spark] class BasicDriverFeatureStep(
     .get(DRIVER_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
+  private val driverContainerName = conf
+    .get(DRIVER_CONTAINER_NAME)
+    .getOrElse("spark-kubernetes-driver")
+
   // CPU settings
   private val driverCpuCores = conf.get("spark.driver.cores", "1")
   private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
@@ -73,7 +77,7 @@ private[spark] class BasicDriverFeatureStep(
     }
 
     val driverContainer = new ContainerBuilder(pod.container)
-      .withName(DRIVER_CONTAINER_NAME)
+      .withName(driverContainerName)
       .withImage(driverContainerImage)
       .withImagePullPolicy(conf.imagePullPolicy())
       .addAllToEnv(driverCustomEnvs.asJava)
