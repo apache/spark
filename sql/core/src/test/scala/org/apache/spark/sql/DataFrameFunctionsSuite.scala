@@ -1444,14 +1444,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("shuffle function") {
-    // Shuffle expressions should produce same results at retries in the same DataFrame.
-    def checkResult(df: DataFrame): Unit = {
-      df.queryExecution.debug.codegen()
-      checkAnswer(df, df.collect())
-    }
+  // Shuffle expressions should produce same results at retries in the same DataFrame.
+  private def checkShuffleResult(df: DataFrame): Unit = {
+    checkAnswer(df, df.collect())
+  }
 
-    // primitive-type elements, containsNull = false
+  test("shuffle function - array for primitive type not containing null") {
     val idfNotContainsNull = Seq(
       Seq(1, 9, 8, 7),
       Seq(5, 8, 9, 7, 2),
@@ -1460,8 +1458,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("i")
 
     def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
-      checkResult(idfNotContainsNull.select(shuffle('i)))
-      checkResult(idfNotContainsNull.selectExpr("shuffle(i)"))
+      checkShuffleResult(idfNotContainsNull.select(shuffle('i)))
+      checkShuffleResult(idfNotContainsNull.selectExpr("shuffle(i)"))
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -1469,8 +1467,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Test with cached relation, the Project will be evaluated with codegen
     idfNotContainsNull.cache()
     testArrayOfPrimitiveTypeNotContainsNull()
+  }
 
-    // primitive-type elements, containsNull = true
+  test("shuffle function - array for primitive type containing null") {
     val idfContainsNull = Seq[Seq[Integer]](
       Seq(1, 9, 8, null, 7),
       Seq(null, 5, 8, 9, 7, 2),
@@ -1479,8 +1478,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("i")
 
     def testArrayOfPrimitiveTypeContainsNull(): Unit = {
-      checkResult(idfContainsNull.select(shuffle('i)))
-      checkResult(idfContainsNull.selectExpr("shuffle(i)"))
+      checkShuffleResult(idfContainsNull.select(shuffle('i)))
+      checkShuffleResult(idfContainsNull.selectExpr("shuffle(i)"))
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -1488,8 +1487,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Test with cached relation, the Project will be evaluated with codegen
     idfContainsNull.cache()
     testArrayOfPrimitiveTypeContainsNull()
+  }
 
-    // Array test cases (non-primitive-type elements)
+  test("shuffle function - array for non-primitive type") {
     val sdf = Seq(
       Seq("c", "a", "b"),
       Seq("b", null, "c", null),
@@ -1498,8 +1498,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("s")
 
     def testNonPrimitiveType(): Unit = {
-      checkResult(sdf.select(shuffle('s)))
-      checkResult(sdf.selectExpr("shuffle(s)"))
+      checkShuffleResult(sdf.select(shuffle('s)))
+      checkShuffleResult(sdf.selectExpr("shuffle(s)"))
     }
 
     // Test with local relation, the Project will be evaluated without codegen
