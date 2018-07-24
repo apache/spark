@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
@@ -109,6 +110,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       EliminateSubqueryAliases,
       EliminateView,
       ReplaceExpressions,
+      ResolvedUuidExpressionsForStreaming,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
       RewriteDistinctAggregates,
@@ -1392,3 +1394,17 @@ object UpdateNullabilityInAttributeReferences extends Rule[LogicalPlan] {
       }
   }
 }
+
+/**
+ * Set the seed for random number generation in Uuid expressions for streaming query.
+ */
+object ResolvedUuidExpressionsForStreaming extends Rule[LogicalPlan] {
+  private lazy val random = new Random()
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+    case p => p transformExpressionsUp {
+      case Uuid(_) if p.isStreaming => Uuid(Some(random.nextLong()))
+    }
+  }
+}
+
