@@ -3978,8 +3978,7 @@ object ArrayUnion {
   """,
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike {
-  override def dataType: DataType =
-    ArrayType(elementType, left.dataType.asInstanceOf[ArrayType].containsNull)
+  override def dataType: DataType = left.dataType
 
   var hsInt: OpenHashSet[Int] = _
   var hsLong: OpenHashSet[Long] = _
@@ -4016,11 +4015,11 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
       resultArray: ArrayData,
       isLongType: Boolean): Int = {
     // store elements into resultArray
-    var exceptNullElement = true
+    var notFoundNullElement = true
     var i = 0
     while (i < array2.numElements()) {
       if (array2.isNullAt(i)) {
-        exceptNullElement = false
+        notFoundNullElement = false
       } else {
         val assigned = if (!isLongType) {
           hsInt.add(array2.getInt(i))
@@ -4034,12 +4033,12 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
     i = 0
     while (i < array1.numElements()) {
       if (array1.isNullAt(i)) {
-        if (exceptNullElement) {
+        if (notFoundNullElement) {
           if (resultArray != null) {
             resultArray.setNullAt(pos)
           }
           pos += 1
-          exceptNullElement = false
+          notFoundNullElement = false
         }
       } else {
         val assigned = if (!isLongType) {
