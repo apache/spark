@@ -73,13 +73,13 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     """stringcol = 'p1" and q="q1' and 'p2" and q="q2' = stringcol""")
 
   filterTest("SPARK-24879 null literals should be ignored for IN constructs",
-    (a("intcol", IntegerType) in (Literal(1), Literal(null))) :: Nil,
+    (InValues(Seq(a("intcol", IntegerType))) in (Literal(1), Literal(null))) :: Nil,
     "(intcol = 1)")
 
   // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
   // will be applied by Catalyst, this filter converter does not need to account for this.
   filterTest("SPARK-24879 IN predicates with only NULLs will not cause a NPE",
-    (a("intcol", IntegerType) in Literal(null)) :: Nil,
+    (InValues(Seq(a("intcol", IntegerType))) in Literal(null)) :: Nil,
     "")
 
   filterTest("typecast null literals should not be pushed down in simple predicates",
