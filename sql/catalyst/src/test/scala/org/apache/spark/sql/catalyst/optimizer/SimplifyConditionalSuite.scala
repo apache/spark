@@ -77,25 +77,6 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
       If(GreaterThan(Rand(0), Literal(0.5)),
         Literal(9),
         Literal(9)))
-
-    // For non-deterministic condition, we don't remove the `If` statement.
-    val originalQuery =
-      testRelation
-        .select(If(AssertTrue(IsNull(UnresolvedAttribute("a"))),
-          Subtract(Literal(10), Literal(1)),
-          Add(Literal(6), Literal(3)))).analyze
-
-    val optimized = Optimize.execute(originalQuery.analyze).canonicalized
-
-    val correctAnswer =
-      testRelation
-        .select(If(AssertTrue(IsNull(UnresolvedAttribute("a"))),
-          Literal(9),
-          Literal(9)))
-        .analyze
-        .canonicalized
-
-    comparePlans(optimized, correctAnswer)
   }
 
   test("remove unreachable branches") {
